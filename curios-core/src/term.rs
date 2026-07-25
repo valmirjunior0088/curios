@@ -1473,22 +1473,6 @@ impl Term {
         B: Into<Term>,
         U: Into<Term>,
     {
-        Self::let_scheme(label, type_, body, UniverseContext::empty(), tail)
-    }
-
-    pub(crate) fn let_scheme<L, T, B, U>(
-        label: L,
-        type_: T,
-        body: B,
-        universe_context: UniverseContext,
-        tail: U,
-    ) -> Self
-    where
-        L: Into<String>,
-        T: Into<Term>,
-        B: Into<Term>,
-        U: Into<Term>,
-    {
         let label = label.into();
         let type_ = type_.into();
         let body = body.into();
@@ -1497,12 +1481,11 @@ impl Term {
         match Term::unwrap_or_clone(tail) {
             Subterm::Let(Let { bindings, tail }) => {
                 let mut merged = Vec::with_capacity(bindings.len() + 1);
-                merged.push(LetBinding::new(universe_context, type_, body));
+                merged.push(LetBinding::new(type_, body));
 
                 for binding in bindings {
-                    let (context, binding_type, binding_value) = binding.into_parts();
+                    let (binding_type, binding_value) = binding.into_parts();
                     merged.push(LetBinding::new(
-                        context,
                         binding_type.capture(&[label.as_str()]),
                         binding_value.capture(&[label.as_str()]),
                     ));
@@ -1514,7 +1497,7 @@ impl Term {
                 }))
             }
             other => Self::from(Subterm::Let(Let {
-                bindings: vec![LetBinding::new(universe_context, type_, body)],
+                bindings: vec![LetBinding::new(type_, body)],
                 tail: Scope::close(Many(1), &[label.as_str()], Term::from(other)),
             })),
         }
@@ -1522,21 +1505,6 @@ impl Term {
 
     /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
     pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
-    where
-        I: IntoIterator<Item = (L, T, U)>,
-        L: Into<String>,
-        T: Into<Term>,
-        U: Into<Term>,
-        V: Into<Term>,
-    {
-        Self::rec_scheme(items, UniverseContext::empty(), tail)
-    }
-
-    pub(crate) fn rec_scheme<I, L, T, U, V>(
-        items: I,
-        universe_context: UniverseContext,
-        tail: V,
-    ) -> Self
     where
         I: IntoIterator<Item = (L, T, U)>,
         L: Into<String>,
@@ -1569,8 +1537,7 @@ impl Term {
                     )
                 })
                 .collect(),
-        )
-        .with_universe_context(universe_context);
+        );
 
         Self::from(Subterm::Rec(Rec {
             group,
@@ -2278,48 +2245,39 @@ pub struct Let {
     pub tail: Scope<Many>,
 }
 
-/// One non-recursive local binding under its inferred universe scheme.
+/// One non-recursive local binding: its declared type and its value.
 ///
-/// The wrapper keeps the scheme context, declared type, and value
-/// structurally inseparable while exposing names meaningful to binding
-/// consumers instead of the generic scheme's tuple positions.
+/// A local binding is monomorphic. Universe polymorphism is a property of
+/// *declarations*, which are frozen into the prelude archive and re-instantiated
+/// by later programs; a local binding has no such use sites, and cumulativity
+/// already admits the uses a local scheme once served — for `let id : (@A :
+/// Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1`
+/// accepts both, and the level order is linear so a sup always exists.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct LetBinding {
-    scheme: UniverseScheme<(Term, Term)>,
+    type_: Term,
+    value: Term,
 }
 
 impl LetBinding {
-    pub(crate) fn new(context: UniverseContext, type_: Term, value: Term) -> Self {
-        Self {
-            scheme: UniverseScheme {
-                context,
-                value: (type_, value),
-            },
-        }
-    }
-
-    pub fn universe_context(&self) -> &UniverseContext {
-        &self.scheme.context
+    pub(crate) fn new(type_: Term, value: Term) -> Self {
+        Self { type_, value }
     }
 
     pub fn type_(&self) -> &Term {
-        &self.scheme.value.0
+        &self.type_
     }
 
     pub fn value(&self) -> &Term {
-        &self.scheme.value.1
+        &self.value
     }
 
-    pub(crate) fn into_parts(self) -> (UniverseContext, Term, Term) {
-        (
-            self.scheme.context,
-            self.scheme.value.0,
-            self.scheme.value.1,
-        )
+    pub(crate) fn into_parts(self) -> (Term, Term) {
+        (self.type_, self.value)
     }
 }
 
@@ -2655,9 +2613,6 @@ impl Subterm {
             | Subterm::Struct(Struct {
                 universes: levels, ..
             }) => levels.iter().any(level_matches),
-            Subterm::Let(Let { bindings, .. }) => bindings
-                .iter()
-                .any(|binding| context_matches(binding.universe_context(), &mut level_matches)),
             Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
                 context_matches(group.universe_context(), &mut level_matches)
             }
@@ -3112,12 +3067,6 @@ impl Subterm {
             | Subterm::Struct(Struct { universes, .. }) => {
                 !universes.is_empty() || self.any_child_term(&mut |term| term.has_universe_data())
             }
-            Subterm::Let(Let { bindings, .. }) => {
-                bindings
-                    .iter()
-                    .any(|binding| binding.universe_context() != &UniverseContext::empty())
-                    || self.any_child_term(&mut |term| term.has_universe_data())
-            }
             Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
                 group.universe_context() != &UniverseContext::empty()
                     || self.any_child_term(&mut |term| term.has_universe_data())
@@ -3362,21 +3311,10 @@ impl Bound for Subterm {
                     .enumerate()
                     .map(|(i, binding)| {
                         visit.enter_scope(i);
-                        let universe_arity = binding.universe_context().parameter_count;
-                        visit.enter_universe_scope(universe_arity);
-                        let context = if visit.erases_universes() {
-                            UniverseContext::empty()
-                        } else {
-                            binding
-                                .universe_context()
-                                .map_levels(|level| visit.visit_level(level))
-                        };
                         let out = LetBinding::new(
-                            context,
                             visit.visit_subterm(binding.type_()),
                             visit.visit_subterm(binding.value()),
                         );
-                        visit.leave_universe_scope(universe_arity);
                         visit.leave_scope(i);
                         out
                     })

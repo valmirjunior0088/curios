@@ -437,9 +437,6 @@ impl UniverseConstraint {
 )]
 pub struct UniverseContext {
     pub parameter_count: usize,
-    /// Number of enclosing universe parameters referenced by this nested
-    /// scheme after its own innermost parameters.
-    pub outer_parameter_count: usize,
     pub constraints: Vec<UniverseConstraint>,
 }
 
@@ -448,8 +445,27 @@ impl UniverseContext {
         Self::default()
     }
 
+    /// Validate that every constraint mentions only this context's own
+    /// parameters and no metavariable.
+    ///
+    /// A context is always closed. Universe polymorphism belongs to
+    /// declarations, so there is no enclosing scheme whose parameters a
+    /// context could still reference.
     pub fn validate(&self) -> Result<(), UniverseError> {
-        self.validate_shape(false)
+        for constraint in &self.constraints {
+            let valid = |level: &Level| {
+                level.params().all(|param| param.0 < self.parameter_count)
+                    && level.metas().next().is_none()
+            };
+            if !valid(&constraint.lower) || !valid(&constraint.upper) {
+                return Err(UniverseError::EscapingLevel);
+            }
+        }
+        let mut solver = UniverseSolver::new(0);
+        for constraint in &self.constraints {
+            solver.add_constraint(constraint.clone())?;
+        }
+        Ok(())
     }
 
     /// This context's own parameters as an argument vector: the one instance
@@ -464,45 +480,6 @@ impl UniverseContext {
             .map(UniverseParam)
             .map(Level::param)
             .collect()
-    }
-
-    /// Validate a scheme still nested in an elaborating declaration. Such a
-    /// scheme may retain ambient metas that the enclosing finalization will
-    /// rewrite to outer parameters.
-    fn validate_open(&self) -> Result<(), UniverseError> {
-        self.validate_shape(true)
-    }
-
-    fn validate_shape(&self, allow_metas: bool) -> Result<(), UniverseError> {
-        self.validate_in(self.outer_parameter_count, allow_metas)
-    }
-
-    /// Validate a scheme nested beneath `outer_parameter_count` enclosing
-    /// universe binders. This context's own parameters are innermost; outer
-    /// references begin at `self.parameter_count`.
-    fn validate_in(
-        &self,
-        outer_parameter_count: usize,
-        allow_metas: bool,
-    ) -> Result<(), UniverseError> {
-        let visible = self
-            .parameter_count
-            .checked_add(outer_parameter_count)
-            .ok_or(UniverseError::OffsetOverflow)?;
-        for constraint in &self.constraints {
-            let valid = |level: &Level| {
-                level.params().all(|param| param.0 < visible)
-                    && (allow_metas || level.metas().next().is_none())
-            };
-            if !valid(&constraint.lower) || !valid(&constraint.upper) {
-                return Err(UniverseError::EscapingLevel);
-            }
-        }
-        let mut solver = UniverseSolver::new(0);
-        for constraint in &self.constraints {
-            solver.add_constraint(constraint.clone())?;
-        }
-        Ok(())
     }
 
     pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
@@ -520,15 +497,8 @@ impl UniverseContext {
     }
 
     fn from_constraints(parameter_count: usize, constraints: Vec<UniverseConstraint>) -> Self {
-        let outer_parameter_count = constraints
-            .iter()
-            .flat_map(|constraint| constraint.lower.params().chain(constraint.upper.params()))
-            .map(|param| param.0.saturating_add(1).saturating_sub(parameter_count))
-            .max()
-            .unwrap_or(0);
         Self {
             parameter_count,
-            outer_parameter_count,
             constraints,
         }
     }
@@ -1456,14 +1426,6 @@ impl UniverseSolver {
         &self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<(UniverseContext, BTreeMap<UniverseMetaId, Level>), UniverseError> {
-        self.generalize_with_ambient(metas, BTreeSet::new())
-    }
-
-    fn generalize_with_ambient(
-        &self,
-        metas: impl IntoIterator<Item = UniverseMetaId>,
-        ambient: BTreeSet<UniverseMetaId>,
-    ) -> Result<(UniverseContext, BTreeMap<UniverseMetaId, Level>), UniverseError> {
         let metas = metas
             .into_iter()
             .filter(|meta| self.solution(*meta).is_none())
@@ -1498,10 +1460,7 @@ impl UniverseSolver {
             if mentioned.is_disjoint(&metas) {
                 continue;
             }
-            if mentioned
-                .iter()
-                .all(|meta| metas.contains(meta) || ambient.contains(meta))
-            {
+            if mentioned.iter().all(|meta| metas.contains(meta)) {
                 constraints.push(UniverseConstraint {
                     lower: rewrite(&constraint.lower)?,
                     upper: rewrite(&constraint.upper)?,
@@ -1516,11 +1475,7 @@ impl UniverseSolver {
         constraints.dedup_by(|left, right| left.lower == right.lower && left.upper == right.upper);
         constraints.retain(|constraint| !constraint.is_tautology());
         let context = UniverseContext::from_constraints(replacement.len(), constraints);
-        if ambient.is_empty() {
-            context.validate()?;
-        } else {
-            context.validate_open()?;
-        }
+        context.validate()?;
         Ok((context, replacement))
     }
 
@@ -1726,60 +1681,6 @@ impl UniverseSolver {
             .iter()
             .copied()
             .filter(|meta| self.solution(*meta).is_none())
-    }
-
-    /// Generalize declaration-local metas while retaining relations to
-    /// enclosing metas in the nested residual context. The enclosing
-    /// declaration's later scoped zonk rewrites those ambient metas to outer
-    /// parameters inside both this context and its value.
-    pub fn finalize_excluding(
-        &mut self,
-        interface: impl IntoIterator<Item = UniverseMetaId>,
-        internal: impl IntoIterator<Item = UniverseMetaId>,
-        protected: impl IntoIterator<Item = UniverseMetaId>,
-    ) -> Result<UniverseContext, UniverseError> {
-        let mut protected = protected.into_iter().collect::<BTreeSet<_>>();
-        loop {
-            let mut dependencies = BTreeSet::new();
-            for meta in &protected {
-                if let Some(solution) = self.solution(*meta) {
-                    dependencies.extend(self.zonk(solution)?.metas());
-                }
-            }
-            let old_len = protected.len();
-            protected.extend(dependencies);
-            if protected.len() == old_len {
-                break;
-            }
-        }
-        let interface = interface.into_iter().collect::<BTreeSet<_>>();
-        let internal = internal
-            .into_iter()
-            .filter(|meta| !interface.contains(meta))
-            .collect::<BTreeSet<_>>();
-        let relevant = self.connected_metas(interface.iter().chain(&internal).copied());
-        let local = relevant
-            .difference(&protected)
-            .copied()
-            .collect::<BTreeSet<_>>();
-        let minimized = internal.intersection(&local).copied().collect();
-        self.minimize(&minimized, &local)?;
-        let local = local
-            .into_iter()
-            .filter(|meta| self.solution(*meta).is_none())
-            .collect::<BTreeSet<_>>();
-        let ambient = relevant
-            .difference(&local)
-            .copied()
-            .collect::<BTreeSet<_>>();
-        let (context, replacement) =
-            self.generalize_with_ambient(local.iter().copied(), ambient)?;
-        for (meta, level) in replacement {
-            self.assign(meta, level)?;
-        }
-        self.check_consistent()?;
-        self.discard_constraints(&local);
-        Ok(context)
     }
 
     /// Close a non-reusable result (the module entrypoint) at its least

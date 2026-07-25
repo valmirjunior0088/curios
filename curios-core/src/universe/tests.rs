@@ -332,7 +332,6 @@ fn flexible_dependency_chain_propagates_after_defaulting_its_floor() {
 fn contexts_are_alpha_stable_and_instances_are_fresh() {
     let context = UniverseContext {
         parameter_count: 2,
-        outer_parameter_count: 0,
         constraints: vec![UniverseConstraint {
             lower: Level::param(UniverseParam(0)).succ().unwrap(),
             upper: Level::param(UniverseParam(1)),
@@ -419,28 +418,12 @@ fn non_principal_flexible_levels_are_promoted_to_residual_parameters() {
     context.validate().unwrap();
 }
 
+/// A declaration context is closed: universe polymorphism belongs to
+/// declarations, and there is no enclosing scheme whose parameters a
+/// constraint could still mention. A parameter reaching finalization is
+/// therefore an escape, not an outer reference to be recorded.
 #[test]
-fn local_finalization_follows_solved_dependencies_to_protected_metas() {
-    let mut solver = UniverseSolver::new(0);
-    let local = solver.fresh(UniverseRole::Generalizable, None);
-    let protected = solver.fresh(UniverseRole::Flexible, None);
-    solver
-        .add_leq(
-            Level::meta(local),
-            Level::meta(protected),
-            origin("ambient dependency"),
-        )
-        .unwrap();
-    solver.solve_flexible().unwrap();
-    assert_eq!(solver.solution(protected), Some(&Level::meta(local)));
-
-    let context = solver.finalize_excluding([local], [], [protected]).unwrap();
-    assert_eq!(context, UniverseContext::empty());
-    assert!(solver.solution(local).is_none());
-}
-
-#[test]
-fn generalization_preserves_scoped_parameter_constraints() {
+fn generalization_rejects_a_constraint_mentioning_an_enclosing_parameter() {
     let mut solver = UniverseSolver::new(0);
     let outer = solver.fresh(UniverseRole::Generalizable, None);
     solver
@@ -450,23 +433,11 @@ fn generalization_preserves_scoped_parameter_constraints() {
             origin("scoped upper"),
         )
         .unwrap();
-    solver
-        .add_leq(
-            Level::param(UniverseParam(1)),
-            Level::meta(outer),
-            origin("scoped lower"),
-        )
-        .unwrap();
 
-    let context = solver.finalize([outer], []).unwrap();
-    assert_eq!(context.parameter_count, 1);
-    assert_eq!(context.constraints.len(), 2);
-    assert_eq!(context.constraints[0].lower, Level::param(UniverseParam(0)));
-    assert_eq!(context.constraints[0].upper, Level::param(UniverseParam(1)));
-    assert_eq!(context.constraints[1].lower, Level::param(UniverseParam(2)));
-    assert_eq!(context.constraints[1].upper, Level::param(UniverseParam(0)));
-    assert_eq!(context.outer_parameter_count, 2);
-    context.validate().unwrap();
+    assert!(matches!(
+        solver.finalize([outer], []),
+        Err(UniverseError::EscapingLevel)
+    ));
 }
 
 #[test]

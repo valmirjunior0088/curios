@@ -1,7 +1,4 @@
-use {
-    super::*,
-    crate::{UniverseContext, instantiate_universe_levels_scoped},
-};
+use super::*;
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node,
 /// so this loops over them — elaborating each binding's type/body, minting its
@@ -19,8 +16,7 @@ pub(super) fn elaborate_let(
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
-        let mut triples =
-            Vec::<(String, UniverseContext, Term, Term)>::with_capacity(let_.bindings.len());
+        let mut triples = Vec::<(String, Term, Term)>::with_capacity(let_.bindings.len());
 
         for (index, binding) in let_.bindings.iter().enumerate() {
             let (type_, body) = {
@@ -30,9 +26,6 @@ pub(super) fn elaborate_let(
                     binding.value().release(&refs),
                 )
             };
-            let universe_context = binding.universe_context();
-            let (type_, levels) = context.instantiate_universe_bound(universe_context, &type_)?;
-            let body = instantiate_universe_levels_scoped(&body, &levels)?;
 
             // A bare metavar annotation is the lowering of a typeless local
             // `let x = e` (equivalently `let x : _ = e`): infer the body's type
@@ -55,32 +48,15 @@ pub(super) fn elaborate_let(
                     (type_elaborated, body_elaborated)
                 }
             };
-            // A local binding never crosses a boundary of separate
-            // elaboration: it is elaborated in the same run as every one of
-            // its uses, inside a declaration that already carries a scheme.
-            // Instantiating that declaration rewrites levels through the whole
-            // term, nested bindings included, so a local binding is already
-            // effectively polymorphic without a context of its own.
-            //
-            // Closing one here is also *wrong*: an unannotated binding whose
-            // type is pinned by a later use in the same block would have its
-            // levels sealed before that evidence arrives.
-            let universe_context = UniverseContext::empty();
-
             let label = context.fresh(let_.tail.label_iter().nth(index).flatten());
 
             // Define the binding with the *rebuilt* body so the tail's
             // type-level evaluation does not reduce through the lowered
             // (under-applied) original.
-            context.define_assuming_scheme(
-                &label,
-                &type_elaborated,
-                &body_elaborated,
-                universe_context.clone(),
-            );
+            context.define_assuming(&label, &type_elaborated, &body_elaborated);
 
             label_terms.push(Term::free_var(&label));
-            triples.push((label, universe_context, type_elaborated, body_elaborated));
+            triples.push((label, type_elaborated, body_elaborated));
         }
 
         // Propagate `mode` into the tail: a `Check(expected)` turnaround happens
@@ -90,12 +66,12 @@ pub(super) fn elaborate_let(
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        let rebuilt = triples.into_iter().rev().fold(
-            tail_elaborated,
-            |tail, (label, universe_context, type_, body)| {
-                Term::let_scheme(label, type_, body, universe_context, tail)
-            },
-        );
+        let rebuilt = triples
+            .into_iter()
+            .rev()
+            .fold(tail_elaborated, |tail, (label, type_, body)| {
+                Term::let_(label, type_, body, tail)
+            });
 
         Ok((rebuilt, tail_type))
     })
@@ -110,9 +86,7 @@ pub(super) fn elaborate_rec(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
-        let enclosing_universes = context.ambient_universe_metas();
-        let (_, levels) = context.instantiate_universe_bound(rec.group.universe_context(), &())?;
-        let group = rec.group.instantiate_universes(&levels)?;
+        let group = &rec.group;
         let labels = rec
             .tail
             .label_iter()
@@ -168,19 +142,6 @@ pub(super) fn elaborate_rec(
         }
         context.retry_parked()?;
 
-        let (universe_context, types_elaborated, bodies_elaborated) = context
-            .finalize_local_universes(
-                &types_elaborated.iter().collect::<Vec<_>>(),
-                &bodies_elaborated.iter().collect::<Vec<_>>(),
-                &enclosing_universes,
-            )
-            .map_err(|error| match error {
-                Error::UniverseInvariant(message) => Error::UniverseInvariant(format!(
-                    "finalizing local recursive universe context failed: {message}"
-                )),
-                other => other,
-            })?;
-
         let triples = labels
             .iter()
             .cloned()
@@ -189,28 +150,23 @@ pub(super) fn elaborate_rec(
             .map(|((label, type_), body)| (label, type_, body))
             .collect::<Vec<_>>();
 
-        let group = match Term::unwrap_or_clone(Term::rec_scheme(
+        let group = match Term::unwrap_or_clone(Term::rec(
             triples.clone(),
-            universe_context.clone(),
             Term::tuple(Vec::<Term>::new()),
         )) {
             Subterm::Rec(rec) => rec.group,
-            _ => unreachable!("rec_scheme constructs a recursive block"),
+            _ => unreachable!("rec constructs a recursive block"),
         };
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
             context.define(label, &Term::rec_member(group.clone(), index));
-            context.set_assumption_universe_context(label, universe_context.clone());
         }
 
         let tail = rec.tail.open(&label_refs);
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        Ok((
-            Term::rec_scheme(triples, universe_context, tail_elaborated),
-            tail_type,
-        ))
+        Ok((Term::rec(triples, tail_elaborated), tail_type))
     })
 }
 

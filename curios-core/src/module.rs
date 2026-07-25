@@ -375,7 +375,6 @@ mod tests {
     fn recursive_members_cannot_silently_discard_different_universe_contexts() {
         let polymorphic = UniverseContext {
             parameter_count: 1,
-            outer_parameter_count: 0,
             constraints: Vec::new(),
         };
 

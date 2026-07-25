@@ -726,13 +726,6 @@ impl Context {
             .find_map(|assumptions| assumptions.get(label))
     }
 
-    pub(crate) fn ambient_universe_metas(&self) -> BTreeSet<UniverseMetaId> {
-        self.local
-            .iter()
-            .flat_map(|(_, type_)| self.universe_metas_in(type_))
-            .collect()
-    }
-
     /// Collect universe metas reachable through a term and through any solved
     /// term metavariables it names. Declaration finalization runs before the
     /// final term-zonk pass, so a level occurring only in a solved hole must
@@ -765,72 +758,6 @@ impl Context {
                 }
             }
         }
-        universes
-    }
-
-    /// Universe metas retained solely by work that may be retried after the
-    /// current local declaration finalizes. This is the precise protection set
-    /// for placeholders that no longer occur in the rebuilt term; scanning
-    /// every unsolved metavariable here would make a flat let block quadratic.
-    fn pending_universe_metas(&self) -> BTreeSet<UniverseMetaId> {
-        let mut universes = BTreeSet::new();
-        let mut extend_term = |term: &Term| {
-            universes.extend(self.universe_metas_in(term));
-        };
-
-        for parked in self.parked.iter().chain(&self.deferred_witnesses) {
-            match &parked.work {
-                ParkedWork::Conversion(goal) => {
-                    extend_term(&goal.type_);
-                    extend_term(&goal.this);
-                    extend_term(&goal.that);
-                }
-                ParkedWork::Checking {
-                    term,
-                    expected,
-                    placeholder,
-                } => {
-                    extend_term(term);
-                    extend_term(expected);
-                    if let Some(entry) = self.metavar_entry(*placeholder) {
-                        extend_term(&entry.result);
-                    }
-                }
-                ParkedWork::Witness { slot, goal, .. } => {
-                    extend_term(goal);
-                    if let Some(entry) = self.metavar_entry(*slot) {
-                        extend_term(&entry.result);
-                    }
-                }
-            }
-            extend_term(&parked.origin);
-            for (_, term) in &parked.frame.assumptions {
-                extend_term(term);
-            }
-            for (_, definition) in &parked.frame.definitions {
-                extend_term(&definition.term);
-            }
-            for (_, term) in &parked.frame.refinements {
-                extend_term(term);
-            }
-            for ((base, _), value) in &parked.frame.refinement_projections {
-                extend_term(base);
-                extend_term(value);
-            }
-            for (scrutinee, value) in &parked.frame.refinement_scrutinees {
-                extend_term(scrutinee);
-                extend_term(value);
-            }
-            for (_, type_) in &parked.frame.witness_binders {
-                extend_term(type_);
-            }
-            for watched in &parked.watching {
-                if let Some(entry) = self.metavar_entry(*watched) {
-                    extend_term(&entry.result);
-                }
-            }
-        }
-
         universes
     }
 
@@ -1948,60 +1875,6 @@ impl Context {
         );
         self.universe_solver.seed(seeds);
         self.universe_mutation_stamp.fresh();
-    }
-
-    /// Finalize a local binding's universes beneath an enclosing declaration.
-    ///
-    /// `interface` holds the signatures a later binding or the tail can
-    /// instantiate; `internal` holds the values, whose levels no use site can
-    /// choose. The split is the local counterpart of
-    /// [`UniverseSolver::finalize`]'s: without it a local binding acquires one
-    /// scheme parameter per written `Type` anywhere in its value.
-    pub(crate) fn finalize_local_universes(
-        &mut self,
-        interface: &[&Term],
-        internal: &[&Term],
-        protected: &BTreeSet<UniverseMetaId>,
-    ) -> Result<(UniverseContext, Vec<Term>, Vec<Term>), Error> {
-        // `universe_metas_in` follows solved term-meta entries, so their hidden
-        // levels participate in finalization without eagerly rebuilding the
-        // whole term here. Ordinary final zonking materializes those term
-        // solutions against the finalized universe solver.
-        let interface = interface
-            .iter()
-            .map(|term| (*term).clone())
-            .collect::<Vec<_>>();
-        let internal = internal
-            .iter()
-            .map(|term| (*term).clone())
-            .collect::<Vec<_>>();
-        let mut protected = protected.clone();
-        protected.extend(self.pending_universe_metas());
-        let interface_metas = interface
-            .iter()
-            .flat_map(|term| self.universe_metas_in(term))
-            .collect::<BTreeSet<_>>();
-        let internal_metas = internal
-            .iter()
-            .flat_map(|term| self.universe_metas_in(term))
-            .collect::<BTreeSet<_>>();
-        let universe_context = self
-            .universes_mut()
-            .finalize_excluding(interface_metas, internal_metas, protected)
-            .map_err(Error::from)?;
-        let solver = self.universe_solver.clone();
-        let zonk = |terms: &[Term]| {
-            terms
-                .iter()
-                .map(|term| super::zonk_universe_levels_scoped(term, &solver).map_err(Error::from))
-                .collect::<Result<Vec<_>, Error>>()
-        };
-        let interface = zonk(&interface)?;
-        let internal = zonk(&internal)?;
-        if universe_context != UniverseContext::empty() {
-            self.elaboration_cache.clear();
-        }
-        Ok((universe_context, interface, internal))
     }
 
     pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {

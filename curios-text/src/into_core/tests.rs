@@ -303,8 +303,15 @@ fn inductive_constructor_ownership_is_explicit() {
     );
 }
 
+/// `id` is applied at two different levels in one block, which a local
+/// universe scheme once served. Cumulativity carries it instead: `Prop : Type
+/// 0` and `Type 0 : Type 1`, so a single monomorphic `A : Type 1` accepts
+/// both, and the level order is linear so a sup always exists. The binding
+/// therefore carries no scheme of its own — universe polymorphism belongs to
+/// declarations, which are frozen into the prelude archive and re-instantiated
+/// by later programs.
 #[test]
-fn a_local_polymorphic_definition_instantiates_independently() {
+fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
     let module = elaborate_source(
         "let outer : {Type, Type} = let id : (@A : Type, A) -> A = (x) => x; (id(Prop), id(Type)); outer",
     );
@@ -319,11 +326,13 @@ fn a_local_polymorphic_definition_instantiates_independently() {
     let curios_core::Subterm::Let(let_) = &*definition.body else {
         panic!("outer contains the local let");
     };
-    assert_eq!(let_.bindings[0].universe_context().parameter_count, 1);
+    assert_eq!(let_.bindings.len(), 1);
 }
 
+/// The same, one indirection further: `alias` has no annotation at all, so its
+/// type is inferred from `id` and then used at both levels.
 #[test]
-fn an_inferred_local_alias_remains_universe_polymorphic() {
+fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
     let module = elaborate_source(
         "let outer : {Type, Type} = let id : (@A : Type, A) -> A = (x) => x; let alias = id; (alias(Prop), alias(Type)); outer",
     );
@@ -339,7 +348,6 @@ fn an_inferred_local_alias_remains_universe_polymorphic() {
         panic!("outer contains the local lets");
     };
     assert_eq!(let_.bindings.len(), 2);
-    assert_eq!(let_.bindings[1].universe_context().parameter_count, 1);
 }
 
 fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
@@ -350,6 +358,13 @@ fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
             curios_core::Item::Let(definition) if definition.name == name => {
                 Some(definition.universe_context.parameter_count)
             }
+            // An inductive and its constructors are one recursive group, so a
+            // lookup restricted to `Let` would miss every one of them.
+            curios_core::Item::Rec(rec) => rec
+                .definitions()
+                .iter()
+                .find(|definition| definition.name == name)
+                .map(|definition| definition.universe_context.parameter_count),
             _ => None,
         })
         .unwrap_or_else(|| panic!("{name} is declared"))

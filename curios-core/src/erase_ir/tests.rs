@@ -203,7 +203,6 @@ fn universe_erasure_is_a_validated_structural_projection() {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
-            outer_parameter_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::empty(),

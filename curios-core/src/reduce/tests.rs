@@ -184,7 +184,6 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
         "poly",
         UniverseContext {
             parameter_count: 1,
-            outer_parameter_count: 0,
             constraints: Vec::new(),
         },
     );

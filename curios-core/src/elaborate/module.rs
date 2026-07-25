@@ -18,11 +18,16 @@ use {
 /// The universe arguments `value` applies to `name`'s declaration, at the first
 /// occurrence that carries them.
 ///
-/// A concept application reaches finalization in either of two forms: the
-/// nominal normal form, which carries its instance in [`StructType`]'s own
-/// universe vector, or an explicit instance on an unreduced occurrence of the
-/// type-former. Both name the same levels in the same order, so either answers
-/// the question.
+/// An application reaches finalization in either of two forms: the nominal
+/// normal form, which carries its instance in [`StructType`]'s or
+/// [`InductType`]'s own universe vector, or an explicit instance on an
+/// unreduced occurrence of the type-former. Both name the same levels in the
+/// same order, so either answers the question.
+///
+/// The two nominal cases are separate arms rather than one, because the node a
+/// declaration normalizes to is what distinguishes a concept from an inductive
+/// here. Nothing about the *name* does — deciding by inspecting `name` would be
+/// guessing at a fact the term already states.
 fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
     let found = Rc::new(RefCell::new(None));
     let sink = Rc::clone(&found);
@@ -33,6 +38,9 @@ fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
             let levels = match &**term {
                 Subterm::StructType(struct_type) if struct_type.name == name => {
                     Some(struct_type.universes.clone())
+                }
+                Subterm::InductType(induct_type) if induct_type.name == name => {
+                    Some(induct_type.universes.clone())
                 }
                 Subterm::UniverseInst(instance)
                     if instance.head.head_label() == Some(name.as_str()) =>
@@ -358,6 +366,47 @@ fn finalize_definition(
                 "{name}: method wrapper does not apply its concept '{owner}'"
             ))
         })?;
+        let mut metas = context.universe_metas_in(&type_);
+        metas.extend(context.universe_metas_in(&body));
+        context.finalize_universe_metas_at_instance(
+            metas,
+            &instance,
+            universe_context.parameter_count,
+        )?;
+        let type_ = context.zonk_universe_levels(&type_)?;
+        let body = context.zonk_universe_levels(&body)?;
+        return Ok((universe_context, type_, body));
+    }
+    // A value constructor stands in the same relation to its inductive as a
+    // method wrapper does to its concept, and fails the same way. `Result(S, F)`
+    // has two universe parameters; `success` mentions only `S` in its payload,
+    // so generalizing it alone mints its own `Param(0..1)` in meta-id order and
+    // displaces the inductive's — which `generalize` then shifts up past the
+    // declared count, leaving `Param(2)`/`Param(3)` with nothing to name them.
+    // A constructor is not independently polymorphic: its universes *are* the
+    // inductive's, so it inherits that context and binds its instance to those
+    // parameters positionally.
+    //
+    // Like `ConceptMethod`, the owner is a field `into_core` records where the
+    // constructor is generated, not something recovered from `name`.
+    if let DefinitionKind::InductiveConstructor { owner } = kind {
+        let universe_context = context
+            .induct_decl(owner)
+            .ok_or_else(|| {
+                Error::UniverseInvariant(format!(
+                    "{name}: constructor names an unregistered inductive '{owner}'"
+                ))
+            })?
+            .universe_context
+            .clone();
+        // A constructor of a *parameterless* inductive results in a bare
+        // self-reference: an occurrence inside the group is monomorphic in the
+        // group's own universes, and `stamp_declaration_instance` only gives it
+        // an explicit instance after this finalization runs. So a missing
+        // instance is not a malformed constructor — it denotes the identity
+        // instance, which is what the stamp would write.
+        let instance = declaration_instance(&type_, owner)
+            .unwrap_or_else(|| universe_context.identity_instance());
         let mut metas = context.universe_metas_in(&type_);
         metas.extend(context.universe_metas_in(&body));
         context.finalize_universe_metas_at_instance(

@@ -233,11 +233,6 @@ pub(crate) fn validate_bound_universes<B: Bound>(
         |_, _| None,
         Box::new(move |_, term| {
             let contexts: Vec<&UniverseContext> = match &**term {
-                Subterm::Let(let_) => let_
-                    .bindings
-                    .iter()
-                    .map(super::LetBinding::universe_context)
-                    .collect(),
                 Subterm::Rec(rec) => vec![rec.group.universe_context()],
                 Subterm::RecMember(member) => vec![member.group.universe_context()],
                 _ => Vec::new(),
@@ -1051,7 +1046,6 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 .iter()
                 .map(|binding| {
                     Ok(super::LetBinding::new(
-                        binding.universe_context().clone(),
                         zonk_term(context, binding.type_())?,
                         zonk_term(context, binding.value())?,
                     ))

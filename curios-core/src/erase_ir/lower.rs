@@ -333,12 +333,7 @@ impl Lowering {
                 // `erase_apply` and `erase_proj`).
                 let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
-                context.define_assuming_scheme(
-                    &name,
-                    &type_,
-                    &value,
-                    local.universe_context().clone(),
-                );
+                context.define_assuming(&name, &type_, &value);
                 self.environment.bind(&name, atom);
                 label_terms.push(Term::free_var(&name));
             }
