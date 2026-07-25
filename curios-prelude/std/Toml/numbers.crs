@@ -1,0 +1,272 @@
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/Toml/{Toml};
+use /std/Toml/scan/{byte_at_is, hex_val};
+
+let dec_digit(n : Nat) -> Option(Nat) =
+    match Nat/in_range(n, 0x30, 0x39)
+    | true => Option/some(n - 0x30)
+    | false => Option/none()
+    end;
+
+let oct_digit(n : Nat) -> Option(Nat) =
+    match Nat/in_range(n, 0x30, 0x37)
+    | true => Option/some(n - 0x30)
+    | false => Option/none()
+    end;
+
+let bin_digit(n : Nat) -> Option(Nat) =
+    match Nat/in_range(n, 0x30, 0x31)
+    | true => Option/some(n - 0x30)
+    | false => Option/none()
+    end;
+
+-- run boundary for magnitude_scan, kept out of its loop body so each
+-- per-digit recursion frame stays small
+let magnitude_stop(cur : Nat, acc : Nat, seen : Bool, pend : Bool) -> Result({Nat, Nat}, Str) =
+    match pend
+    | true => Result/failure("malformed underscore")
+    | false =>
+        match seen
+        | true => Result/success((cur, acc))
+        | false => Result/failure("expected digit")
+        end
+    end;
+
+-- digit run with TOML underscore placement; `guard` is the per-radix
+-- wrap-safety ceiling checked before each multiply
+let magnitude_scan(input : Bytes, start : Nat, radix : Nat, guard : Nat,
+    digit_of : (Nat) -> Option(Nat)) -> Result({Nat, Nat}, Str) =
+    rec go(cur : Nat, acc : Nat, seen : Bool, pend : Bool) -> Result({Nat, Nat}, Str) =
+        match Bytes/get(input, cur)
+        | none() => magnitude_stop(cur, acc, seen, pend)
+        | some(b) =>
+            let n = Byte/to_nat(b);
+            match n == 0x5F
+            | true =>
+                match seen && Bool/not(pend)
+                | true => go(cur + 1, acc, seen, true)
+                | false => Result/failure("malformed underscore")
+                end
+            | false =>
+                match digit_of(n)
+                | some(d) =>
+                    match acc > guard
+                    | true => Result/failure("integer out of range")
+                    | false => go(cur + 1, acc * radix + d, true, false)
+                    end
+                | none() => magnitude_stop(cur, acc, seen, pend)
+                end
+            end
+        end;
+    go(start, 0, false, false);
+
+let dec_leading_zero(input : Bytes, cur : Nat) -> Bool =
+    byte_at_is(input, cur, (n) => n == 0x30)
+        && byte_at_is(input, cur + 1, (n) => Nat/in_range(n, 0x30, 0x39) || n == 0x5F);
+
+let sign_read(input : Bytes, pos : Nat) -> {Nat, Bool, Bool} =
+    match Bytes/get(input, pos)
+    | some(b) =>
+        match Byte/to_nat(b)
+        | 0x2B => (pos + 1, false, true)
+        | 0x2D => (pos + 1, true, true)
+        | _ => (pos, false, false)
+        end
+    | none() => (pos, false, false)
+    end;
+
+pub let int_value : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            let (cur, negative, signed) = sign_read(input, pos);
+            let prefixed : Option(Result({Nat, Nat}, Str)) =
+                match signed
+                | true => Option/none()
+                | false =>
+                    match byte_at_is(input, cur, (n) => n == 0x30)
+                    | true =>
+                        match Bytes/get(input, cur + 1)
+                        | none() => Option/none()
+                        | some(b) =>
+                            match Byte/to_nat(b)
+                            | 0x78 => Option/some(magnitude_scan(input, cur + 2, 16, 268435455, hex_val))
+                            | 0x6F => Option/some(magnitude_scan(input, cur + 2, 8, 536870911, oct_digit))
+                            | 0x62 => Option/some(magnitude_scan(input, cur + 2, 2, 2147483647, bin_digit))
+                            | _ => Option/none()
+                            end
+                        end
+                    | false => Option/none()
+                    end
+                end;
+            let scanned : Result({Nat, Nat}, Str) =
+                match prefixed
+                | some(r) => r
+                | none() =>
+                    match dec_leading_zero(input, cur)
+                    | true => Result/failure("leading zero")
+                    | false => magnitude_scan(input, cur, 10, 429496728, dec_digit)
+                    end
+                end;
+            match scanned
+            | failure(msg) => Result/failure(msg)
+            | success((next, mag)) =>
+                match negative
+                | true =>
+                    choose
+                    | mag > 1073741824 => Result/failure("integer out of range")
+                    | mag == 1073741824 => Result/success((next, Toml/int(+0 - Nat/to_int(1073741823) - +1)))
+                    | _ => Result/success((next, Toml/int(+0 - Nat/to_int(mag))))
+                    end
+                | false =>
+                    match mag > 1073741823
+                    | true => Result/failure("integer out of range")
+                    | false => Result/success((next, Toml/int(Nat/to_int(mag))))
+                    end
+                end
+            end
+    };
+
+-- significand digits: at most nine significant decimal digits are kept exactly;
+-- `frac` selects whether consumed digits shift the decimal point down (fraction)
+-- or dropped digits shift it up (integer part past nine digits)
+rec flt_digits(input : Bytes, cur : Nat, sig : Nat, count : Nat, shift : Nat,
+    frac : Bool, seen : Bool, pend : Bool) -> Result({Nat, Nat, Nat, Nat}, Str) =
+    let stop : Result({Nat, Nat, Nat, Nat}, Str) =
+        match pend
+        | true => Result/failure("malformed underscore")
+        | false =>
+            match seen
+            | true => Result/success((cur, sig, count, shift))
+            | false => Result/failure("expected digit")
+            end
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        choose
+        | n == 0x5F =>
+            match seen && Bool/not(pend)
+            | true => flt_digits(input, cur + 1, sig, count, shift, frac, seen, true)
+            | false => Result/failure("malformed underscore")
+            end
+        | Nat/in_range(n, 0x30, 0x39) =>
+            let d = n - 0x30;
+            choose
+            | sig == 0 && d == 0 =>
+                let shift2 = match frac | true => shift + 1 | false => shift end;
+                flt_digits(input, cur + 1, 0, 0, shift2, frac, true, false)
+            | count < 9 =>
+                let shift2 = match frac | true => shift + 1 | false => shift end;
+                flt_digits(input, cur + 1, sig * 10 + d, count + 1, shift2, frac, true, false)
+            | _ =>
+                let shift2 = match frac | true => shift | false => shift + 1 end;
+                flt_digits(input, cur + 1, sig, count, shift2, frac, true, false)
+            end
+        | _ => stop
+        end
+    end;
+
+-- exponent digits saturate at 2000: binary32 scaling is pinned to infinity or
+-- zero long before that bound, so saturation cannot change any result
+rec exp_digits(input : Bytes, cur : Nat, acc : Nat, seen : Bool, pend : Bool) -> Result({Nat, Nat}, Str) =
+    let stop : Result({Nat, Nat}, Str) =
+        match pend
+        | true => Result/failure("malformed underscore")
+        | false =>
+            match seen
+            | true => Result/success((cur, acc))
+            | false => Result/failure("expected digit")
+            end
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        choose
+        | n == 0x5F =>
+            match seen && Bool/not(pend)
+            | true => exp_digits(input, cur + 1, acc, seen, true)
+            | false => Result/failure("malformed underscore")
+            end
+        | Nat/in_range(n, 0x30, 0x39) =>
+            exp_digits(input, cur + 1, Nat/min(acc * 10 + (n - 0x30), 2000), true, false)
+        | _ => stop
+        end
+    end;
+
+pub let flt_special : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            let (cur, negative, _) = sign_read(input, pos);
+            match Parse/take_literal("inf").run(input, cur)
+            | success((next, _)) =>
+                let bits : Bytes =
+                    match negative
+                    | true => x\00\00\80\ff
+                    | false => x\00\00\80\7f
+                    end;
+                Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
+            | failure(_) =>
+                match Parse/take_literal("nan").run(input, cur)
+                | success((next, _)) => Result/success((next, Toml/flt(Flt/of_le_bytes(x\00\00\c0\7f))))
+                | failure(msg) => Result/failure(msg)
+                end
+            end
+    };
+
+pub let flt_number : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            let (cur0, negative, _) = sign_read(input, pos);
+            match dec_leading_zero(input, cur0)
+            | true => Result/failure("leading zero")
+            | false =>
+                match flt_digits(input, cur0, 0, 0, 0, false, false, false)
+                | failure(msg) => Result/failure(msg)
+                | success((cur1, sig1, count1, up1)) =>
+                    let frac_res : Result({Nat, Nat, Nat, Bool}, Str) =
+                        match byte_at_is(input, cur1, (n) => n == 0x2E)
+                        | true =>
+                            match flt_digits(input, cur1 + 1, sig1, count1, 0, true, false, false)
+                            | success((c, s, k, down)) => Result/success((c, s, down, true))
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        | false => Result/success((cur1, sig1, 0, false))
+                        end;
+                    match frac_res
+                    | failure(msg) => Result/failure(msg)
+                    | success((cur2, sig2, down2, has_frac)) =>
+                        let exp_res : Result({Nat, Nat, Bool, Bool}, Str) =
+                            match byte_at_is(input, cur2, (n) => n == 0x65 || n == 0x45)
+                            | true =>
+                                let (ce, eneg, _) = sign_read(input, cur2 + 1);
+                                match exp_digits(input, ce, 0, false, false)
+                                | success((c, e)) => Result/success((c, e, eneg, true))
+                                | failure(msg) => Result/failure(msg)
+                                end
+                            | false => Result/success((cur2, 0, false, false))
+                            end;
+                        match exp_res
+                        | failure(msg) => Result/failure(msg)
+                        | success((next, emag, eneg, has_exp)) =>
+                            match has_frac || has_exp
+                            | true =>
+                                let up = match eneg | true => up1 | false => up1 + emag end;
+                                let down = match eneg | true => down2 + emag | false => down2 end;
+                                let scaled =
+                                    Nat/to_flt(sig2) * Flt/pow10(Nat/min(up, 2000)) / Flt/pow10(Nat/min(down, 2000));
+                                let value =
+                                    match negative
+                                    | true => Flt/neg(scaled)
+                                    | false => scaled
+                                    end;
+                                Result/success((next, Toml/flt(value)))
+                            | false => Result/failure("expected float")
+                            end
+                        end
+                    end
+                end
+            end
+    };
+

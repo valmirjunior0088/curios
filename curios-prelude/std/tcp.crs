@@ -1,20 +1,11 @@
-use /std/{Handle};
-
 pub mod Settings;
 pub use Settings/{let Settings};
 
 pub mod resolve;
 pub use resolve/{let resolve};
 
--- The connection type is declared here rather than in `Socket`, so that its
--- representation is transparent throughout this subtree: `Socket` implements the
--- operations and `Listener` builds one per accepted connection, without a public
--- constructor standing in for the representation they both need.
-pub struct Socket : Type {
-    Handle
-}
-
 pub mod Socket;
+pub use Socket/{let Socket};
 
 pub mod Listener;
 pub use Listener/{let Listener};

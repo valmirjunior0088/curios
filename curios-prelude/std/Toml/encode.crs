@@ -1,0 +1,209 @@
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/Toml/{Toml, Date, Time};
+use /std/Toml/calendar/{date_ok, offset_ok, time_ok};
+use /std/Toml/scan/{is_bare_byte};
+
+let bare_ok(s : Str) -> Bool =
+    let bs = Str/to_bytes(s);
+    match Bytes/len(bs) == 0
+    | true => false
+    | false => Bytes/fold(bs, true, (b, ok) => ok && is_bare_byte(b))
+    end;
+
+let escape_content(byte : Byte) -> Bytes =
+    let n = Byte/to_nat(byte);
+    match n
+    | 0x22 => Str/to_bytes("\\\"")
+    | 0x5C => Str/to_bytes("\\\\")
+    | 0x08 => Str/to_bytes("\\b")
+    | 0x09 => Str/to_bytes("\\t")
+    | 0x0A => Str/to_bytes("\\n")
+    | 0x0C => Str/to_bytes("\\f")
+    | 0x0D => Str/to_bytes("\\r")
+    | _ =>
+        match n < 0x20 || n == 0x7F
+        | true =>
+            Bytes/append(
+                Bytes/append(Str/to_bytes("\\u00"), Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0)),
+                Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0))
+        | false => Bytes/append(x\, byte)
+        end
+    end;
+
+let quote_str(s : Str) -> Str =
+    let body = Bytes/fold(Str/to_bytes(s), x\, (byte, acc) => x\..acc\..escape_content(byte));
+    Str/flatten(["\"", Option/unwrap_or(Str/of_bytes(body), ""), "\""]);
+
+let spell_key(kb : Bytes) -> Result(Str, Str) =
+    match Str/of_bytes(kb)
+    | none() => Result/failure("map key is not valid UTF-8")
+    | some(s) =>
+        match bare_ok(s)
+        | true => Result/success(s)
+        | false => Result/success(quote_str(s))
+        end
+    end;
+
+let pad(n : Nat, width : Nat) -> Str =
+    let s = Nat/to_str(n);
+    Str/concat(Str/repeat("0", width - Str/len(s)), s);
+
+let ns_str(ns : Nat) -> Str =
+    match ns == 0
+    | true => ""
+    | false =>
+        let digits = pad(ns, 9);
+        rec keep(k : Nat) -> Nat =
+            match k <= 1
+            | true => 1
+            | false =>
+                match Option/unwrap_or(Str/get(digits, k - 1), '1') == '0'
+                | true => keep(k - 1)
+                | false => k
+                end
+            end;
+        Str/concat(".", Str/slice(digits, 0, keep(9)))
+    end;
+
+let date_str(d : Date) -> Str =
+    Str/flatten([pad(d.year, 4), "-", pad(d.month, 2), "-", pad(d.day, 2)]);
+
+let time_str(t : Time) -> Str =
+    Str/flatten([pad(t.hour, 2), ":", pad(t.minute, 2), ":", pad(t.second, 2), ns_str(t.nanosecond)]);
+
+let offset_str(mins : Int) -> Str =
+    match mins == +0
+    | true => "Z"
+    | false =>
+        let mag = Int/abs(mins);
+        let sign =
+            match mins > +0
+            | true => "+"
+            | false => "-"
+            end;
+        Str/flatten([sign, pad(mag / 60, 2), ":", pad(mag % 60, 2)])
+    end;
+
+-- Codec-owned rendering: `Int/to_str` negates through `Int/abs`, which sends the
+-- minimum value's magnitude (+2^30) outside the boxed envelope; render the
+-- minimum from its literal spelling instead of negating it.
+let int_str(n : Int) -> Str =
+    choose
+    | n >= +0 => Nat/to_str(Int/to_nat(n))
+    | n == -1073741824 => "-1073741824"
+    | _ => Str/concat("-", Nat/to_str(Int/to_nat(+0 - n)))
+    end;
+
+let flt_str(f : Flt) -> Str =
+    let b = Flt/to_le_bytes(f);
+    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 0), 0));
+    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 1), 0));
+    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
+    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 3), 0));
+    let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
+    choose
+    | exp_field == 0xFF && b0 == 0 && b1 == 0 && b2 % 0x80 == 0 =>
+        match b3 >= 0x80
+        | true => "-inf"
+        | false => "inf"
+        end
+    | exp_field == 0xFF => "nan"
+    | _ =>
+        let raw = Flt/to_str(f);
+        let unsigned =
+            match Option/unwrap_or(Str/get(raw, 0), '0') == '+'
+            | true => Str/slice(raw, 1, Str/len(raw))
+            | false => raw
+            end;
+        match Option/is_some(Str/find(unsigned, '.')) || Option/is_some(Str/find(unsigned, 'e'))
+        | true => unsigned
+        | false => Str/concat(unsigned, ".0")
+        end
+    end;
+
+rec value_str(v : Toml) -> Result(Str, Str) =
+    match v
+    | str(s) => Result/success(quote_str(s))
+    | int(n) => Result/success(int_str(n))
+    | flt(f) => Result/success(flt_str(f))
+    | bool(x) => Result/success(Bool/to_str(x))
+    | offset_date_time(odt) =>
+        match date_ok(odt.date) && time_ok(odt.time) && offset_ok(odt.offset_minutes)
+        | true =>
+            Result/success(Str/flatten([
+                date_str(odt.date), "T", time_str(odt.time), offset_str(odt.offset_minutes)]))
+        | false => Result/failure("invalid date-time value")
+        end
+    | local_date_time(ldt) =>
+        match date_ok(ldt.date) && time_ok(ldt.time)
+        | true => Result/success(Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)]))
+        | false => Result/failure("invalid date-time value")
+        end
+    | local_date(d) =>
+        match date_ok(d)
+        | true => Result/success(date_str(d))
+        | false => Result/failure("invalid date value")
+        end
+    | local_time(t) =>
+        match time_ok(t)
+        | true => Result/success(time_str(t))
+        | false => Result/failure("invalid time value")
+        end
+    | arr(items) =>
+        let start : Result(Lst(Str), Str) = Result/success([]);
+        match Lst/fold(items, start, (item, acc) =>
+            Result/bind(acc, (parts) =>
+                Result/map_success(value_str(item), (s) => [..parts, s])))
+        | success(parts) => Result/success(Str/flatten(["[", Str/join(", ", parts), "]"]))
+        | failure(msg) => Result/failure(msg)
+        end
+    | table(m) =>
+        match Lst/len(Map/entries(m)) == 0
+        | true => Result/success("{}")
+        | false =>
+            match pairs_str(Map/entries(m))
+            | success(body) => Result/success(Str/flatten(["{ ", body, " }"]))
+            | failure(msg) => Result/failure(msg)
+            end
+        end
+    end
+and pairs_str(entries : Lst({Bytes, Toml})) -> Result(Str, Str) =
+    let start : Result(Lst(Str), Str) = Result/success([]);
+    match Lst/fold(entries, start, (entry, acc) =>
+        Result/bind(acc, (parts) =>
+            Result/bind(spell_key(entry.0), (k) =>
+                Result/map_success(value_str(entry.1), (vs) => [..parts, Str/flatten([k, " = ", vs])]))))
+    | success(parts) => Result/success(Str/join(", ", parts))
+    | failure(msg) => Result/failure(msg)
+    end;
+
+rec encode_table(prefix : Lst(Str), m : Map(Toml)) -> Result(Str, Str) =
+    let entries = Map/entries(m);
+    let start : Result(Lst(Str), Str) = Result/success([]);
+    match Lst/fold(entries, start, (entry, acc) =>
+        Result/bind(acc, (lines) =>
+            match entry.1
+            | table(_) => Result/success(lines)
+            | _ =>
+                Result/bind(spell_key(entry.0), (k) =>
+                    Result/map_success(value_str(entry.1), (vs) => [..lines, Str/flatten([k, " = ", vs, "\n"])]))
+            end))
+    | failure(msg) => Result/failure(msg)
+    | success(lines) =>
+        match Lst/fold(entries, start, (entry, acc) =>
+            Result/bind(acc, (blocks) =>
+                match entry.1
+                | table(sub) =>
+                    Result/bind(spell_key(entry.0), (k) =>
+                        Result/bind(encode_table([..prefix, k], sub), (body) =>
+                            Result/success([..blocks, Str/flatten([
+                                "[", Str/join(".", [..prefix, k]), "]\n", body])])))
+                | _ => Result/success(blocks)
+                end))
+        | failure(msg) => Result/failure(msg)
+        | success(blocks) => Result/success(Str/concat(Str/flatten(lines), Str/flatten(blocks)))
+        end
+    end;
+
+pub let encode(m : Map(Toml)) -> Result(Str, Str) =
+    encode_table([], m);

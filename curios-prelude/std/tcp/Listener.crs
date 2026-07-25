@@ -67,7 +67,7 @@ pub let serve(host : Str, port : Nat, handler : (Socket) -> Async({})) -> Async(
                 let _ = /sys/close(h);
                 Async/pure(())
             | success(_) =>
-                Async/go(() => Async/using(h, () => /sys/close(h), handler(Socket { h })))
+                Async/go(() => Async/using(h, () => /sys/close(h), handler(Socket/new(h))))
             end));
 
 pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (Socket) -> Async({})) -> Async(Result({}, Handle/Error)) =
@@ -79,7 +79,7 @@ pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (
                 listen_loop(host, port, (h) =>
                     let status = /sys/start_tls_server(h, cfg.handle);
                     match status == /sys/Status/ok
-                    | true => Async/using(h, () => /sys/close(h), handler(Socket { h }))
+                    | true => Async/using(h, () => /sys/close(h), handler(Socket/new(h)))
                     | false =>
                         let _ = /sys/close(h);
                         Async/pure(())

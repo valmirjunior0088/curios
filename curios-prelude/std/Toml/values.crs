@@ -1,0 +1,130 @@
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/Toml/{Toml};
+use /std/Toml/build/{inline_fold};
+use /std/Toml/scan/{byte_at_is, trivia, ws};
+use /std/Toml/strings/{str_basic, str_literal, str_ml_basic, str_ml_literal};
+use /std/Toml/keys/{key_dotted};
+use /std/Toml/numbers/{flt_number, flt_special, int_value};
+use /std/Toml/datetime/{datetime_value};
+
+let val_str_basic : Parse(Toml) =
+    Parse/map(Parse/or(str_ml_basic, str_basic), (s) => Toml/str(s));
+
+let val_str_literal : Parse(Toml) =
+    Parse/map(Parse/or(str_ml_literal, str_literal), (s) => Toml/str(s));
+
+let val_true : Parse(Toml) =
+    Parse/map(Parse/take_literal("true"), (_) => Toml/bool(true));
+
+let val_false : Parse(Toml) =
+    Parse/map(Parse/take_literal("false"), (_) => Toml/bool(false));
+
+let val_number_signed : Parse(Toml) =
+    Parse/or(flt_special, Parse/or(flt_number, int_value));
+
+let val_number_digit : Parse(Toml) =
+    Parse/or(datetime_value, Parse/or(flt_number, int_value));
+
+rec array_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+    rec go(cur : Nat, acc : Lst(Toml)) -> Result({Nat, Toml}, Str) =
+        match trivia.run(input, cur)
+        | failure(msg) => Result/failure(msg)
+        | success((c1, _)) =>
+            match byte_at_is(input, c1, (n) => n == 0x5D)
+            | true => Result/success((c1 + 1, Toml/arr(acc)))
+            | false =>
+                match value_scan(input, c1)
+                | failure(msg) => Result/failure(msg)
+                | success((c2, v)) =>
+                    match trivia.run(input, c2)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c3, _)) =>
+                        match byte_at_is(input, c3, (n) => n == 0x2C)
+                        | true => go(c3 + 1, [..acc, v])
+                        | false =>
+                            match byte_at_is(input, c3, (n) => n == 0x5D)
+                            | true => Result/success((c3 + 1, Toml/arr([..acc, v])))
+                            | false => Result/failure("expected ',' or ']' in array")
+                            end
+                        end
+                    end
+                end
+            end
+        end;
+    match byte_at_is(input, pos, (n) => n == 0x5B)
+    | true => go(pos + 1, [])
+    | false => Result/failure("expected array")
+    end
+and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+    rec go(cur : Nat, acc : Lst({Lst(Str), Toml})) -> Result({Nat, Toml}, Str) =
+        match key_dotted.run(input, cur)
+        | failure(msg) => Result/failure(msg)
+        | success((c1, path)) =>
+            match ws.run(input, c1)
+            | failure(msg) => Result/failure(msg)
+            | success((c2, _)) =>
+                match byte_at_is(input, c2, (n) => n == 0x3D)
+                | true =>
+                    match ws.run(input, c2 + 1)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c3, _)) =>
+                        match value_scan(input, c3)
+                        | failure(msg) => Result/failure(msg)
+                        | success((c4, v)) =>
+                            match ws.run(input, c4)
+                            | failure(msg) => Result/failure(msg)
+                            | success((c5, _)) =>
+                                let acc2 = [..acc, (path, v)];
+                                match byte_at_is(input, c5, (n) => n == 0x2C)
+                                | true =>
+                                    match ws.run(input, c5 + 1)
+                                    | failure(msg) => Result/failure(msg)
+                                    | success((c6, _)) => go(c6, acc2)
+                                    end
+                                | false =>
+                                    match byte_at_is(input, c5, (n) => n == 0x7D)
+                                    | true =>
+                                        match inline_fold(acc2)
+                                        | success(m) => Result/success((c5 + 1, Toml/table(m)))
+                                        | failure(msg) => Result/failure(msg)
+                                        end
+                                    | false => Result/failure("expected ',' or '}' in inline table")
+                                    end
+                                end
+                            end
+                        end
+                    end
+                | false => Result/failure("expected '=' in inline table")
+                end
+            end
+        end;
+    match byte_at_is(input, pos, (n) => n == 0x7B)
+    | true =>
+        match ws.run(input, pos + 1)
+        | failure(msg) => Result/failure(msg)
+        | success((c1, _)) =>
+            match byte_at_is(input, c1, (n) => n == 0x7D)
+            | true => Result/success((c1 + 1, Toml/table(Map/empty())))
+            | false => go(c1, [])
+            end
+        end
+    | false => Result/failure("expected inline table")
+    end
+pub and value_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+    match Bytes/get(input, pos)
+    | none() => Result/failure("expected value")
+    | some(b) =>
+        match Byte/to_nat(b)
+        | 0x22 => val_str_basic.run(input, pos)
+        | 0x27 => val_str_literal.run(input, pos)
+        | 0x74 => val_true.run(input, pos)
+        | 0x66 => val_false.run(input, pos)
+        | 0x5B => array_scan(input, pos)
+        | 0x7B => inline_scan(input, pos)
+        | 0x2B => val_number_signed.run(input, pos)
+        | 0x2D => val_number_signed.run(input, pos)
+        | 0x69 => flt_special.run(input, pos)
+        | 0x6E => flt_special.run(input, pos)
+        | _ => val_number_digit.run(input, pos)
+        end
+    end;

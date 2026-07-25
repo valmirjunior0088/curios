@@ -14,8 +14,8 @@ pub use Json/*;
 -- The two halves are private modules: their scanners, escape tables, and
 -- intermediate parsers are implementation, visible throughout this subtree and
 -- nowhere else. Only the two entry points are re-exported.
-mod Encode;
-pub use Encode/{encode};
+mod encode;
+pub use encode/{encode};
 
-mod Decode;
-pub use Decode/{decode};
+mod decode;
+pub use decode/{decode};

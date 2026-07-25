@@ -1,0 +1,31 @@
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/Toml/{Date, Time};
+
+let leap(year : Nat) -> Bool =
+    choose
+    | year % 400 == 0 => true
+    | year % 100 == 0 => false
+    | year % 4 == 0 => true
+    | _ => false
+    end;
+
+let days_in(year : Nat, month : Nat) -> Nat =
+    match month
+    | 2 => match leap(year) | true => 29 | false => 28 end
+    | 4 => 30
+    | 6 => 30
+    | 9 => 30
+    | 11 => 30
+    | _ => 31
+    end;
+
+pub let date_ok(d : Date) -> Bool =
+    d.year <= 9999 && Nat/in_range(d.month, 1, 12) && Nat/in_range(d.day, 1, days_in(d.year, d.month));
+
+-- second 60 is admitted for RFC 3339 leap seconds
+pub let time_ok(t : Time) -> Bool =
+    t.hour <= 23 && t.minute <= 59 && t.second <= 60 && t.nanosecond <= 999999999;
+
+pub let offset_ok(mins : Int) -> Bool =
+    Int/abs(mins) <= 1439;
+

@@ -1,0 +1,187 @@
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
+use /std/Toml/calendar/{date_ok, time_ok};
+use /std/Toml/scan/{byte_at_is};
+
+rec fixed_scan(input : Bytes, cur : Nat, count : Nat, acc : Nat) -> Result({Nat, Nat}, Str) =
+    match count
+    | 0 => Result/success((cur, acc))
+    | pred + 1 =>
+        match Bytes/get(input, cur)
+        | none() => Result/failure("expected digit")
+        | some(b) =>
+            let n = Byte/to_nat(b);
+            match Nat/in_range(n, 0x30, 0x39)
+            | true => fixed_scan(input, cur + 1, pred, acc * 10 + (n - 0x30))
+            | false => Result/failure("expected digit")
+            end
+        end
+    end;
+
+let expect_byte(input : Bytes, cur : Nat, want : Nat) -> Result(Nat, Str) =
+    match byte_at_is(input, cur, (n) => n == want)
+    | true => Result/success(cur + 1)
+    | false => Result/failure("malformed date-time")
+    end;
+
+let date_scan(input : Bytes, pos : Nat) -> Result({Nat, Date}, Str) =
+    match fixed_scan(input, pos, 4, 0)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, y)) =>
+        match expect_byte(input, c1, 0x2D)
+        | failure(msg) => Result/failure(msg)
+        | success(c2) =>
+            match fixed_scan(input, c2, 2, 0)
+            | failure(msg) => Result/failure(msg)
+            | success((c3, mo)) =>
+                match expect_byte(input, c3, 0x2D)
+                | failure(msg) => Result/failure(msg)
+                | success(c4) =>
+                    match fixed_scan(input, c4, 2, 0)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c5, d)) =>
+                        let date = Date { year = y, month = mo, day = d };
+                        match date_ok(date)
+                        | true => Result/success((c5, date))
+                        | false => Result/failure("invalid date")
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+let nat_pow10(n : Nat) -> Nat =
+    match n
+    | 0 => 1
+    | pred + 1; ih => ih * 10
+    end;
+
+-- fractional seconds: at most nine digits honored, further digits truncated
+rec frac_ns(input : Bytes, cur : Nat, taken : Nat, acc : Nat, seen : Bool) -> Result({Nat, Nat}, Str) =
+    let stop : Result({Nat, Nat}, Str) =
+        match seen
+        | true => Result/success((cur, acc * nat_pow10(9 - taken)))
+        | false => Result/failure("expected digit")
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        match Nat/in_range(n, 0x30, 0x39)
+        | true =>
+            match taken < 9
+            | true => frac_ns(input, cur + 1, taken + 1, acc * 10 + (n - 0x30), true)
+            | false => frac_ns(input, cur + 1, taken, acc, true)
+            end
+        | false => stop
+        end
+    end;
+
+let time_scan(input : Bytes, pos : Nat) -> Result({Nat, Time}, Str) =
+    match fixed_scan(input, pos, 2, 0)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, h)) =>
+        match expect_byte(input, c1, 0x3A)
+        | failure(msg) => Result/failure(msg)
+        | success(c2) =>
+            match fixed_scan(input, c2, 2, 0)
+            | failure(msg) => Result/failure(msg)
+            | success((c3, mi)) =>
+                match expect_byte(input, c3, 0x3A)
+                | failure(msg) => Result/failure(msg)
+                | success(c4) =>
+                    match fixed_scan(input, c4, 2, 0)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c5, s)) =>
+                        let ns_res : Result({Nat, Nat}, Str) =
+                            match byte_at_is(input, c5, (n) => n == 0x2E)
+                            | true => frac_ns(input, c5 + 1, 0, 0, false)
+                            | false => Result/success((c5, 0))
+                            end;
+                        match ns_res
+                        | failure(msg) => Result/failure(msg)
+                        | success((c6, ns)) =>
+                            let time = Time { hour = h, minute = mi, second = s, nanosecond = ns };
+                            match time_ok(time)
+                            | true => Result/success((c6, time))
+                            | false => Result/failure("invalid time")
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+let offset_scan(input : Bytes, pos : Nat) -> Result({Nat, Int}, Str) =
+    match byte_at_is(input, pos, (n) => n == 0x5A || n == 0x7A)
+    | true => Result/success((pos + 1, +0))
+    | false =>
+        match Bytes/get(input, pos)
+        | none() => Result/failure("expected offset")
+        | some(b) =>
+            let n = Byte/to_nat(b);
+            match n == 0x2B || n == 0x2D
+            | true =>
+                match fixed_scan(input, pos + 1, 2, 0)
+                | failure(msg) => Result/failure(msg)
+                | success((c1, oh)) =>
+                    match expect_byte(input, c1, 0x3A)
+                    | failure(msg) => Result/failure(msg)
+                    | success(c2) =>
+                        match fixed_scan(input, c2, 2, 0)
+                        | failure(msg) => Result/failure(msg)
+                        | success((c3, om)) =>
+                            match oh <= 23 && om <= 59
+                            | true =>
+                                let mins = oh * 60 + om;
+                                let value : Int =
+                                    match n == 0x2D
+                                    | true => +0 - Nat/to_int(mins)
+                                    | false => Nat/to_int(mins)
+                                    end;
+                                Result/success((c3, value))
+                            | false => Result/failure("invalid offset")
+                            end
+                        end
+                    end
+                end
+            | false => Result/failure("expected offset")
+            end
+        end
+    end;
+
+pub let datetime_value : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            match date_scan(input, pos)
+            | success((c1, date)) =>
+                let sep : Option(Nat) =
+                    match byte_at_is(input, c1, (n) => n == 0x54 || n == 0x74 || n == 0x20)
+                    | true => Option/some(c1 + 1)
+                    | false => Option/none()
+                    end;
+                match sep
+                | none() => Result/success((c1, Toml/local_date(date)))
+                | some(c2) =>
+                    match time_scan(input, c2)
+                    | failure(_) => Result/success((c1, Toml/local_date(date)))
+                    | success((c3, time)) =>
+                        match offset_scan(input, c3)
+                        | success((c4, off)) =>
+                            Result/success((c4, Toml/offset_date_time(OffsetDateTime {
+                                date = date, time = time, offset_minutes = off })))
+                        | failure(_) =>
+                            Result/success((c3, Toml/local_date_time(LocalDateTime { date = date, time = time })))
+                        end
+                    end
+                end
+            | failure(_) =>
+                match time_scan(input, pos)
+                | success((c, time)) => Result/success((c, Toml/local_time(time)))
+                | failure(msg) => Result/failure(msg)
+                end
+            end
+    };
+
