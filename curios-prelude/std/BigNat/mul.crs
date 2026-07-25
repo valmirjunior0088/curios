@@ -1,0 +1,296 @@
+use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
+use /std/Bool/{false_neq_true};
+use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/Bits/{cons};
+use /std/BigNat/{BigNat, combine, dbl, dbl_raw, of_bits, of_nat, refl_at, trim, trim_is_trimmed};
+use /std/BigNat/add/{add, add_assoc_raw, add_comm_raw, add_raw, add_raw_zero_l, cong_add_raw_l, cong_add_raw_r, cong_combine, eq, maj3, trim_of_trimmed, xor3};
+
+pub rec mul_raw(x : Bits, y : Bits) -> Bits =
+    match x
+    | b\ => b\
+    | b\xh\..xt =>
+        match xh
+        | true => add_raw(y, cons(false, mul_raw(xt, y)), false)
+        | false => cons(false, mul_raw(xt, y))
+        end
+    end;
+
+pub let mul(a : BigNat, b : BigNat) -> BigNat =
+    of_bits(mul_raw(a.rep, b.rep));
+
+pub rec mul_pow2(a : BigNat, k : Nat) -> BigNat =
+    match k
+    | 0 => a
+    | kp + 1; ih => dbl(ih)
+    end;
+
+pub let mul_small(a : BigNat, c : Nat) -> BigNat =
+    mul(a, of_nat(c));
+
+let cong_trim(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(trim(s), trim(t)) =
+    Eq/cong(trim, p);
+
+let trim_idem(w : Bits) -> Eq(trim(trim(w)), trim(w)) =
+    trim_of_trimmed(trim(w), trim_is_trimmed(w));
+
+let of_bits_eq(u : Bits, v : Bits, p : Eq(trim(u), trim(v))) -> Eq(of_bits(u), of_bits(v)) =
+    eq(of_bits(u), of_bits(v), p);
+
+let add_combine_l(h : Bool, w : Bits, v : Bits, c : Bool)
+    -> Eq(trim(add_raw(combine(h, w), v, c)), trim(add_raw(cons(h, w), v, c))) =
+    match w : (a) => Eq(trim(add_raw(combine(h, a), v, c)), trim(add_raw(cons(h, a), v, c)))
+    | b\ =>
+        match h
+        | true => Eq/refl()
+        | false =>
+            match v : (b) => Eq(trim(add_raw(b\, b, c)), trim(add_raw(cons(false, b\), b, c)))
+            | b\ => match c | true => Eq/refl() | false => Eq/refl() end
+            | b\_\.._ => Eq/refl()
+            end
+        end
+    | b\_\.._ => Eq/refl()
+    end;
+
+rec trim_add_raw_trim_l(u : Bits, v : Bits, c : Bool)
+    -> Eq(trim(add_raw(trim(u), v, c)), trim(add_raw(u, v, c))) =
+    match u : (a) => Eq(trim(add_raw(trim(a), v, c)), trim(add_raw(a, v, c)))
+    | b\ => Eq/refl()
+    | b\uh\..ut =>
+        match v : (b) => Eq(trim(add_raw(trim(cons(uh, ut)), b, c)), trim(add_raw(cons(uh, ut), b, c)))
+        | b\ => Eq/trans(add_combine_l(uh, trim(ut), b\, c),
+            cong_combine(xor3(uh, false, c),
+                trim_add_raw_trim_l(ut, b\, maj3(uh, false, c))))
+        | b\vh\..vt => Eq/trans(add_combine_l(uh, trim(ut), cons(vh, vt), c),
+            cong_combine(xor3(uh, vh, c),
+                trim_add_raw_trim_l(ut, vt, maj3(uh, vh, c))))
+        end
+    end;
+
+let trim_add_raw_trim_r(u : Bits, v : Bits, c : Bool)
+    -> Eq(trim(add_raw(u, trim(v), c)), trim(add_raw(u, v, c))) =
+    Eq/trans(cong_trim(add_comm_raw(u, trim(v), c)),
+        Eq/trans(trim_add_raw_trim_l(v, u, c), cong_trim(add_comm_raw(v, u, c))));
+
+let mul_combine_l(h : Bool, w : Bits, v : Bits)
+    -> Eq(trim(mul_raw(combine(h, w), v)), trim(mul_raw(cons(h, w), v))) =
+    match w : (a) => Eq(trim(mul_raw(combine(h, a), v)), trim(mul_raw(cons(h, a), v)))
+    | b\ =>
+        match h
+        | true => Eq/refl()
+        | false => Eq/refl()
+        end
+    | b\_\.._ => Eq/refl()
+    end;
+
+rec trim_mul_raw_trim_l(u : Bits, v : Bits)
+    -> Eq(trim(mul_raw(trim(u), v)), trim(mul_raw(u, v))) =
+    match u : (a) => Eq(trim(mul_raw(trim(a), v)), trim(mul_raw(a, v)))
+    | b\ => Eq/refl()
+    | b\uh\..ut =>
+        match uh
+        | true => Eq/trans(mul_combine_l(true, trim(ut), v),
+            Eq/trans(Eq/sym(trim_add_raw_trim_r(v, cons(false, mul_raw(trim(ut), v)), false)),
+                Eq/trans(cong_trim(cong_add_raw_r(v, cong_combine(false, trim_mul_raw_trim_l(ut, v)), false)),
+                    trim_add_raw_trim_r(v, cons(false, mul_raw(ut, v)), false))))
+        | false => Eq/trans(mul_combine_l(false, trim(ut), v),
+            cong_combine(false, trim_mul_raw_trim_l(ut, v)))
+        end
+    end;
+
+rec trim_mul_raw_trim_r(u : Bits, v : Bits)
+    -> Eq(trim(mul_raw(u, trim(v))), trim(mul_raw(u, v))) =
+    match u : (a) => Eq(trim(mul_raw(a, trim(v))), trim(mul_raw(a, v)))
+    | b\ => Eq/refl()
+    | b\uh\..ut =>
+        match uh
+        | true => Eq/trans(trim_add_raw_trim_l(v, cons(false, mul_raw(ut, trim(v))), false),
+            Eq/trans(Eq/sym(trim_add_raw_trim_r(v, cons(false, mul_raw(ut, trim(v))), false)),
+                Eq/trans(cong_trim(cong_add_raw_r(v, cong_combine(false, trim_mul_raw_trim_r(ut, v)), false)),
+                    trim_add_raw_trim_r(v, cons(false, mul_raw(ut, v)), false))))
+        | false => cong_combine(false, trim_mul_raw_trim_r(ut, v))
+        end
+    end;
+
+let trim_cons_cong(h : Bool, @s : Bits, @t : Bits, p : Eq(trim(s), trim(t)))
+    -> Eq(trim(cons(h, s)), trim(cons(h, t))) =
+    cong_combine(h, p);
+
+let trim_add_raw_l_cong(@s : Bits, @t : Bits, p : Eq(trim(s), trim(t)), v : Bits, c : Bool)
+    -> Eq(trim(add_raw(s, v, c)), trim(add_raw(t, v, c))) =
+    Eq/trans(Eq/sym(trim_add_raw_trim_l(s, v, c)),
+        Eq/trans(cong_trim(cong_add_raw_l(p, v, c)), trim_add_raw_trim_l(t, v, c)));
+
+let trim_add_raw_r_cong(u : Bits, @s : Bits, @t : Bits, p : Eq(trim(s), trim(t)), c : Bool)
+    -> Eq(trim(add_raw(u, s, c)), trim(add_raw(u, t, c))) =
+    Eq/trans(Eq/sym(trim_add_raw_trim_r(u, s, c)),
+        Eq/trans(cong_trim(cong_add_raw_r(u, p, c)), trim_add_raw_trim_r(u, t, c)));
+
+rec trim_mul_zero_r(y : Bits) -> Eq(trim(mul_raw(y, b\)), b\) =
+    match y : (a) => Eq(trim(mul_raw(a, b\)), b\)
+    | b\ => Eq/refl()
+    | b\yh\..yt =>
+        match yh
+        | true => Eq/trans(cong_trim(add_raw_zero_l(cons(false, mul_raw(yt, b\)))),
+            cong_combine(false, trim_mul_zero_r(yt)))
+        | false => cong_combine(false, trim_mul_zero_r(yt))
+        end
+    end;
+
+pub rec trim_mul_one_r(x : Bits) -> Eq(trim(mul_raw(x, cons(true, b\))), trim(x)) =
+    match x : (a) => Eq(trim(mul_raw(a, cons(true, b\))), trim(a))
+    | b\ => Eq/refl()
+    | b\xh\..xt =>
+        match xh
+        | true => cong_combine(true, Eq/trans(
+            cong_trim(add_raw_zero_l(mul_raw(xt, cons(true, b\)))),
+            trim_mul_one_r(xt)))
+        | false => cong_combine(false, trim_mul_one_r(xt))
+        end
+    end;
+
+pub rec trim_mul_bit0_r(x : Bits, y : Bits)
+    -> Eq(trim(mul_raw(x, cons(false, y))), trim(cons(false, mul_raw(x, y)))) =
+    match x : (a) => Eq(trim(mul_raw(a, cons(false, y))), trim(cons(false, mul_raw(a, y))))
+    | b\ => Eq/refl()
+    | b\xh\..xt =>
+        match xh
+        | true => cong_combine(false, trim_add_raw_r_cong(y, trim_mul_bit0_r(xt, y), false))
+        | false => cong_combine(false, trim_mul_bit0_r(xt, y))
+        end
+    end;
+
+pub rec trim_mul_bit1_r(x : Bits, y : Bits)
+    -> Eq(trim(mul_raw(x, cons(true, y))), trim(add_raw(x, cons(false, mul_raw(x, y)), false))) =
+    match x : (a) => Eq(trim(mul_raw(a, cons(true, y))), trim(add_raw(a, cons(false, mul_raw(a, y)), false)))
+    | b\ => Eq/sym(cong_trim(add_raw_zero_l(cons(false, b\))))
+    | b\xh\..xt =>
+        match xh
+        | true => cong_combine(true, Eq/trans(
+            trim_add_raw_r_cong(y, trim_mul_bit1_r(xt, y), false),
+            cong_trim(Eq/trans(
+                Eq/sym(add_assoc_raw(y, xt, cons(false, mul_raw(xt, y)), false, false)),
+                Eq/trans(
+                    cong_add_raw_l(add_comm_raw(y, xt, false), cons(false, mul_raw(xt, y)), false),
+                    add_assoc_raw(xt, y, cons(false, mul_raw(xt, y)), false, false))))))
+        | false => cong_combine(false, trim_mul_bit1_r(xt, y))
+        end
+    end;
+
+pub rec trim_mul_comm(x : Bits, y : Bits) -> Eq(trim(mul_raw(x, y)), trim(mul_raw(y, x))) =
+    match x : (a) => Eq(trim(mul_raw(a, y)), trim(mul_raw(y, a)))
+    | b\ => Eq/sym(trim_mul_zero_r(y))
+    | b\xh\..xt =>
+        match xh
+        | true => Eq/trans(
+            trim_add_raw_r_cong(y, trim_cons_cong(false, trim_mul_comm(xt, y)), false),
+            Eq/sym(trim_mul_bit1_r(y, xt)))
+        | false => Eq/trans(cong_combine(false, trim_mul_comm(xt, y)), Eq/sym(trim_mul_bit0_r(y, xt)))
+        end
+    end;
+
+let add_raw_medial(a : Bits, b : Bits, c : Bits, d : Bits)
+    -> Eq(add_raw(add_raw(a, b, false), add_raw(c, d, false), false),
+          add_raw(add_raw(a, c, false), add_raw(b, d, false), false)) =
+    Eq/trans(add_assoc_raw(a, b, add_raw(c, d, false), false, false),
+    Eq/trans(cong_add_raw_r(a, Eq/sym(add_assoc_raw(b, c, d, false, false)), false),
+    Eq/trans(cong_add_raw_r(a, cong_add_raw_l(add_comm_raw(b, c, false), d, false), false),
+    Eq/trans(cong_add_raw_r(a, add_assoc_raw(c, b, d, false, false), false),
+    Eq/sym(add_assoc_raw(a, c, add_raw(b, d, false), false, false))))));
+
+pub rec trim_distrib_l(x : Bits, y : Bits, z : Bits)
+    -> Eq(trim(mul_raw(x, add_raw(y, z, false))), trim(add_raw(mul_raw(x, y), mul_raw(x, z), false))) =
+    match x : (a) => Eq(trim(mul_raw(a, add_raw(y, z, false))), trim(add_raw(mul_raw(a, y), mul_raw(a, z), false)))
+    | b\ => Eq/refl()
+    | b\xh\..xt =>
+        match xh
+        | true => Eq/trans(
+            trim_add_raw_r_cong(add_raw(y, z, false), trim_cons_cong(false, trim_distrib_l(xt, y, z)), false),
+            Eq/sym(cong_trim(add_raw_medial(y, cons(false, mul_raw(xt, y)), z, cons(false, mul_raw(xt, z))))))
+        | false => cong_combine(false, trim_distrib_l(xt, y, z))
+        end
+    end;
+
+pub let trim_distrib_r(x : Bits, y : Bits, z : Bits)
+    -> Eq(trim(mul_raw(add_raw(y, z, false), x)), trim(add_raw(mul_raw(y, x), mul_raw(z, x), false))) =
+    Eq/trans(trim_mul_comm(add_raw(y, z, false), x),
+    Eq/trans(trim_distrib_l(x, y, z),
+    Eq/trans(trim_add_raw_l_cong(trim_mul_comm(x, y), mul_raw(x, z), false),
+        trim_add_raw_r_cong(mul_raw(y, x), trim_mul_comm(x, z), false))));
+
+pub rec trim_mul_assoc(x : Bits, y : Bits, z : Bits)
+    -> Eq(trim(mul_raw(mul_raw(x, y), z)), trim(mul_raw(x, mul_raw(y, z)))) =
+    match x : (a) => Eq(trim(mul_raw(mul_raw(a, y), z)), trim(mul_raw(a, mul_raw(y, z))))
+    | b\ => Eq/refl()
+    | b\xh\..xt =>
+        match xh
+        | true => Eq/trans(trim_distrib_r(z, y, cons(false, mul_raw(xt, y))),
+            trim_add_raw_r_cong(mul_raw(y, z), trim_cons_cong(false, trim_mul_assoc(xt, y, z)), false))
+        | false => cong_combine(false, trim_mul_assoc(xt, y, z))
+        end
+    end;
+
+pub let mul_comm(a : BigNat, b : BigNat) -> Eq(mul(a, b), mul(b, a)) =
+    of_bits_eq(mul_raw(a.rep, b.rep), mul_raw(b.rep, a.rep), trim_mul_comm(a.rep, b.rep));
+
+pub let mul_assoc(a : BigNat, b : BigNat, c : BigNat) -> Eq(mul(mul(a, b), c), mul(a, mul(b, c))) =
+    of_bits_eq(mul_raw(trim(mul_raw(a.rep, b.rep)), c.rep),
+        mul_raw(a.rep, trim(mul_raw(b.rep, c.rep))),
+        Eq/trans(trim_mul_raw_trim_l(mul_raw(a.rep, b.rep), c.rep),
+        Eq/trans(trim_mul_assoc(a.rep, b.rep, c.rep),
+            Eq/sym(trim_mul_raw_trim_r(a.rep, mul_raw(b.rep, c.rep))))));
+
+pub let distrib_l(a : BigNat, b : BigNat, c : BigNat) -> Eq(mul(a, add(b, c)), add(mul(a, b), mul(a, c))) =
+    of_bits_eq(mul_raw(a.rep, trim(add_raw(b.rep, c.rep, false))),
+        add_raw(trim(mul_raw(a.rep, b.rep)), trim(mul_raw(a.rep, c.rep)), false),
+        Eq/trans(trim_mul_raw_trim_r(a.rep, add_raw(b.rep, c.rep, false)),
+        Eq/trans(trim_distrib_l(a.rep, b.rep, c.rep),
+        Eq/trans(Eq/sym(trim_add_raw_trim_l(mul_raw(a.rep, b.rep), mul_raw(a.rep, c.rep), false)),
+            Eq/sym(trim_add_raw_trim_r(trim(mul_raw(a.rep, b.rep)), mul_raw(a.rep, c.rep), false))))));
+
+pub let distrib_r(a : BigNat, b : BigNat, c : BigNat) -> Eq(mul(add(b, c), a), add(mul(b, a), mul(c, a))) =
+    of_bits_eq(mul_raw(trim(add_raw(b.rep, c.rep, false)), a.rep),
+        add_raw(trim(mul_raw(b.rep, a.rep)), trim(mul_raw(c.rep, a.rep)), false),
+        Eq/trans(trim_mul_raw_trim_l(add_raw(b.rep, c.rep, false), a.rep),
+        Eq/trans(trim_distrib_r(a.rep, b.rep, c.rep),
+        Eq/trans(Eq/sym(trim_add_raw_trim_l(mul_raw(b.rep, a.rep), mul_raw(c.rep, a.rep), false)),
+            Eq/sym(trim_add_raw_trim_r(trim(mul_raw(b.rep, a.rep)), mul_raw(c.rep, a.rep), false))))));
+
+let cong_dbl(@s : BigNat, @t : BigNat, p : Eq(s, t)) -> Eq(dbl(s), dbl(t)) =
+    Eq/cong(dbl, p);
+
+let dbl_add(a : BigNat, b : BigNat) -> Eq(dbl(add(a, b)), add(dbl(a), dbl(b))) =
+    of_bits_eq(dbl_raw(trim(add_raw(a.rep, b.rep, false))),
+        add_raw(trim(dbl_raw(a.rep)), trim(dbl_raw(b.rep)), false),
+        Eq/trans(cong_combine(false, trim_idem(add_raw(a.rep, b.rep, false))),
+        Eq/trans(Eq/sym(trim_add_raw_trim_l(dbl_raw(a.rep), dbl_raw(b.rep), false)),
+            Eq/sym(trim_add_raw_trim_r(trim(dbl_raw(a.rep)), dbl_raw(b.rep), false)))));
+
+let dbl_mul_l(a : BigNat, b : BigNat) -> Eq(dbl(mul(a, b)), mul(dbl(a), b)) =
+    of_bits_eq(dbl_raw(trim(mul_raw(a.rep, b.rep))),
+        mul_raw(trim(dbl_raw(a.rep)), b.rep),
+        Eq/trans(cong_combine(false, trim_idem(mul_raw(a.rep, b.rep))),
+            Eq/sym(trim_mul_raw_trim_l(dbl_raw(a.rep), b.rep))));
+
+pub let mul_pow2_add(a : BigNat, b : BigNat, k : Nat)
+    -> Eq(mul_pow2(add(a, b), k), add(mul_pow2(a, k), mul_pow2(b, k))) =
+    match k : (n) => Eq(mul_pow2(add(a, b), n), add(mul_pow2(a, n), mul_pow2(b, n)))
+    | 0 => refl_at(add(a, b))
+    | pred + 1; ih =>
+        Eq/trans(cong_dbl(ih), dbl_add(mul_pow2(a, pred), mul_pow2(b, pred)))
+    end;
+
+pub let mul_pow2_mul_l(a : BigNat, b : BigNat, k : Nat)
+    -> Eq(mul_pow2(mul(a, b), k), mul(mul_pow2(a, k), b)) =
+    match k : (n) => Eq(mul_pow2(mul(a, b), n), mul(mul_pow2(a, n), b))
+    | 0 => refl_at(mul(a, b))
+    | pred + 1; ih =>
+        Eq/trans(cong_dbl(ih), dbl_mul_l(mul_pow2(a, pred), b))
+    end;
+
+pub let mul_pow2_compose(a : BigNat, j : Nat, k : Nat)
+    -> Eq(mul_pow2(mul_pow2(a, j), k), mul_pow2(a, j + k)) =
+    match k : (n) => Eq(mul_pow2(mul_pow2(a, j), n), mul_pow2(a, j + n))
+    | 0 => refl_at(mul_pow2(a, j))
+    | pred + 1; ih => cong_dbl(ih)
+    end;
+
