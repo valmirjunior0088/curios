@@ -2034,6 +2034,20 @@ impl Context {
         Ok(universe_context)
     }
 
+    pub(crate) fn finalize_universe_metas_at_instance(
+        &mut self,
+        metas: BTreeSet<UniverseMetaId>,
+        instance: &[Level],
+        parameter_count: usize,
+    ) -> Result<(), Error> {
+        self.universes_mut()
+            .finalize_at_instance(metas, instance, parameter_count)
+            .map_err(Error::from)?;
+        self.reduction_cache.clear();
+        self.elaboration_cache.clear();
+        Ok(())
+    }
+
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
         super::zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
     }

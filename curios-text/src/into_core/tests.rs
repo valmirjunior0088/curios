@@ -342,6 +342,49 @@ fn an_inferred_local_alias_remains_universe_polymorphic() {
     assert_eq!(let_.bindings[1].universe_context().parameter_count, 1);
 }
 
+fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
+    module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(definition) if definition.name == name => {
+                Some(definition.universe_context.parameter_count)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("{name} is declared"))
+}
+
+/// A generated method wrapper belongs to *its concept's* universe context, not
+/// to one generalized from its own signature. The wrapper's type names only the
+/// levels its own field needs, yet it also carries `use w : C(…)` applied at all
+/// of the concept's; a level outside the wrapper's own generalized set would
+/// then have nothing to denote it.
+#[test]
+fn a_concept_method_wrapper_shares_its_concept_universe_context() {
+    let module = elaborate_source("pub concept C(A : Type) : pub Type { f(A) -> A, } C");
+    assert_eq!(universe_parameters(&module, "/C"), 1);
+    assert_eq!(universe_parameters(&module, "/C/f"), 1);
+}
+
+/// The same rule where the concept's levels genuinely exceed any one wrapper's:
+/// `pure` names a strict subset of `M`'s and `bind` a different subset, so
+/// generalizing either alone comes out short.
+#[test]
+fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
+    let module = elaborate_source(
+        "pub concept M(F : (Type) -> Type) : pub Type {
+             pure(@A : Type, value : A) -> F(A),
+             bind(@A : Type, @B : Type, action : F(A), next : (A) -> F(B)) -> F(B),
+         } M",
+    );
+    // Five, against `pure`'s own two and `bind`'s one: the point of the test is
+    // lost if the concept ever stops outrunning its wrappers.
+    assert_eq!(universe_parameters(&module, "/M"), 5);
+    assert_eq!(universe_parameters(&module, "/M/pure"), 5);
+    assert_eq!(universe_parameters(&module, "/M/bind"), 5);
+}
+
 #[test]
 fn single_let_binding() {
     assert_eq!(

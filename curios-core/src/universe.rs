@@ -1591,6 +1591,69 @@ impl UniverseSolver {
         Ok(context)
     }
 
+    /// Issue a declaration into an *inherited* context, binding `instance` to
+    /// that context's parameters by position.
+    ///
+    /// A concept method wrapper is not independently polymorphic. It is issued
+    /// in its concept's context, and the levels its `use w : C(…)` binder
+    /// carries are that context's parameters in declaration order, so solving
+    /// position `i` to `Param(i)` is the identity substitution. Every level the
+    /// instance does not name directly is related to one that it does by the
+    /// constraints unification already recorded, and minimizing from those
+    /// lower bounds settles it at the parameter that forced it.
+    ///
+    /// This is deliberately not [`Self::finalize`]: finalization mints
+    /// parameters for the metas it finds in ascending meta-id order, and a
+    /// wrapper's own binder metas are minted before its instance metas, so
+    /// that order need not agree with the concept's.
+    pub fn finalize_at_instance(
+        &mut self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+        instance: &[Level],
+        parameter_count: usize,
+    ) -> Result<(), UniverseError> {
+        if instance.len() != parameter_count {
+            return Err(UniverseError::InstanceArity {
+                expected: parameter_count,
+                got: instance.len(),
+            });
+        }
+        let relevant = self.connected_metas(metas);
+        for (index, level) in instance.iter().enumerate() {
+            let parameter = Level::param(UniverseParam(index));
+            let level = self.zonk(level)?;
+            if level == parameter {
+                continue;
+            }
+            let mut atoms = level.atoms();
+            match (level.constant_part(), atoms.next(), atoms.next()) {
+                (0, Some((LevelHead::Meta(meta), 0)), None) => self.assign(meta, parameter)?,
+                // An argument that is neither the parameter itself nor an open
+                // meta was already forced elsewhere, and nothing in the
+                // declaration can denote the concept's parameter in its place.
+                _ => return Err(UniverseError::EscapingLevel),
+            }
+        }
+        let open = self.relevant_open_metas(&relevant).collect::<BTreeSet<_>>();
+        self.minimize(&open, &relevant)?;
+        if self.relevant_open_metas(&relevant).next().is_some() {
+            return Err(UniverseError::EscapingLevel);
+        }
+        self.check_consistent()?;
+        self.discard_constraints(&relevant);
+        Ok(())
+    }
+
+    fn relevant_open_metas<'a>(
+        &'a self,
+        relevant: &'a BTreeSet<UniverseMetaId>,
+    ) -> impl Iterator<Item = UniverseMetaId> + 'a {
+        relevant
+            .iter()
+            .copied()
+            .filter(|meta| self.solution(*meta).is_none())
+    }
+
     /// Generalize declaration-local metas while retaining relations to
     /// enclosing metas in the nested residual context. The enclosing
     /// declaration's later scoped zonk rewrites those ambient metas to outer

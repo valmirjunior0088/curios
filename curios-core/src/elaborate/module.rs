@@ -2,15 +2,57 @@ use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
         Concept, Definition, DefinitionKind, InductDecl, InductParam, Item, Level, Module, RecItem,
-        SelfReference,
-        StructDecl, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
-        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
-        zonk_solved_term_metas,
+        SelfReference, StructDecl, Subterm, Telescope, Term, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, Visit, check_concept_registry,
+        finish_deferred_witnesses, is_prop, reduce_with, register_witness,
+        retry_deferred_witnesses, sort_term, zonk, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
+
+/// The universe arguments `value` applies to `name`'s declaration, at the first
+/// occurrence that carries them.
+///
+/// A concept application reaches finalization in either of two forms: the
+/// nominal normal form, which carries its instance in [`StructType`]'s own
+/// universe vector, or an explicit instance on an unreduced occurrence of the
+/// type-former. Both name the same levels in the same order, so either answers
+/// the question.
+fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
+    let found = Rc::new(RefCell::new(None));
+    let sink = Rc::clone(&found);
+    let name = name.to_string();
+    let mut visit = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term: &Term| {
+            let levels = match &**term {
+                Subterm::StructType(struct_type) if struct_type.name == name => {
+                    Some(struct_type.universes.clone())
+                }
+                Subterm::UniverseInst(instance)
+                    if instance.head.head_label() == Some(name.as_str()) =>
+                {
+                    Some(instance.levels.clone())
+                }
+                _ => None,
+            };
+            if let Some(levels) = levels
+                && sink.borrow().is_none()
+            {
+                *sink.borrow_mut() = Some(levels);
+            }
+            None
+        }),
+    );
+    let _: Term = value.traverse(&mut visit);
+    let levels = found.borrow_mut().take();
+    levels
+}
 
 /// Walk a (params-first) telescope, checking each binder's type against `Type`
 /// under the earlier binders (fresh-gensym, assume), and return the rebuilt
@@ -297,6 +339,11 @@ fn finalize_definition(
     // The owner comes from `into_core`, which records it where the wrapper is
     // generated; re-deriving it by splitting `name` would misread an ordinary
     // definition that merely happens to sit under a concept's namespace.
+    // Inheriting the context is only half the work: those levels are still
+    // metas, and ordinary finalization — the one thing that would solve them —
+    // is exactly what must not run here, because it would mint the wrapper's
+    // own parameters in its own order. `finalize_at_instance` binds the concept
+    // application's arguments to the inherited parameters positionally instead.
     if let DefinitionKind::ConceptMethod { owner } = kind {
         let universe_context = context
             .concept(owner)
@@ -307,6 +354,18 @@ fn finalize_definition(
             })?
             .universe_context
             .clone();
+        let instance = declaration_instance(&type_, owner).ok_or_else(|| {
+            Error::UniverseInvariant(format!(
+                "{name}: method wrapper does not apply its concept '{owner}'"
+            ))
+        })?;
+        let mut metas = context.universe_metas_in(&type_);
+        metas.extend(context.universe_metas_in(&body));
+        context.finalize_universe_metas_at_instance(
+            metas,
+            &instance,
+            universe_context.parameter_count,
+        )?;
         let type_ = context.zonk_universe_levels(&type_)?;
         let body = context.zonk_universe_levels(&body)?;
         return Ok((universe_context, type_, body));
