@@ -1793,6 +1793,7 @@ impl Context {
             .split_off(mark.term_solution_log_len.min(self.solved_log.len()));
 
         for id in &unwound {
+            eprintln!("[unsolve] ?{}", id.0);
             if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
                 entry.solution = None;
             }
