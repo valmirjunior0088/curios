@@ -221,26 +221,35 @@ impl Sort {
             // (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is
             // kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
-                let mut tele = telescope.clone();
-                let mut levels = Vec::new();
-                loop {
-                    match tele {
-                        Telescope::Cons(ty, rest) => {
-                            if let Sort::Type(level) = Sort::of(context, &ty)? {
-                                levels.push(level);
+                let tele = telescope.clone();
+                // A later field may mention an earlier one, so each opened
+                // binder is *assumed* at its type before the walk descends. See
+                // the `FuncType` arm below for why leaving it unbound is not
+                // merely imprecise but silently wrong.
+                context.with_frame(|context| {
+                    let mut tele = tele;
+                    let mut levels = Vec::new();
+                    loop {
+                        match tele {
+                            Telescope::Cons(ty, rest) => {
+                                if let Sort::Type(level) = Sort::of(context, &ty)? {
+                                    levels.push(level);
+                                }
+                                let label = context.fresh(rest.first_label());
+                                context.assume(label.as_str(), &ty);
+                                let v = Term::free_var(label);
+                                tele = rest.open(&[&v]);
                             }
-                            let v = Term::free_var(context.fresh(rest.first_label()));
-                            tele = rest.open(&[&v]);
-                        }
-                        Telescope::Done(_) => {
-                            break if levels.is_empty() {
-                                Sort::Prop
-                            } else {
-                                Sort::Type(Level::max(levels))
-                            };
+                            Telescope::Done(_) => {
+                                break Ok(if levels.is_empty() {
+                                    Sort::Prop
+                                } else {
+                                    Sort::Type(Level::max(levels))
+                                });
+                            }
                         }
                     }
-                }
+                })?
             }
             Subterm::TupleType(_) => {
                 probe_level_fallback("empty tuple type", &reduced);
@@ -248,28 +257,42 @@ impl Sort {
             }
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                let mut telescope = telescope.clone();
-                let mut domains = Vec::new();
-                loop {
-                    match telescope {
-                        Telescope::Cons(domain, rest) => {
-                            if let Sort::Type(level) = Sort::of(context, &domain)? {
-                                domains.push(level);
-                            }
-                            let var = Term::free_var(context.fresh(rest.first_label()));
-                            telescope = rest.open(&[&var]);
-                        }
-                        Telescope::Done(output) => {
-                            break match Sort::of(context, &output)? {
-                                Sort::Prop => Sort::Prop,
-                                Sort::Type(output) => {
-                                    domains.push(output);
-                                    Sort::Type(Level::max(domains))
+                let telescope = telescope.clone();
+                // Each opened binder must be *assumed* at its domain type, not
+                // merely substituted in. Opening with a free variable the
+                // context does not know leaves `synth_neutral` unable to type
+                // any occurrence of it in the codomain, and the resulting
+                // `None` is read as level 0 — so the sort of every dependent
+                // codomain collapsed to `Type 0` regardless of the binder's
+                // real level. That silently under-generalized exactly the
+                // declarations whose codomain mentions a binder: every concept
+                // wrapper, and every higher-order polymorphic function.
+                context.with_frame(|context| {
+                    let mut telescope = telescope;
+                    let mut domains = Vec::new();
+                    loop {
+                        match telescope {
+                            Telescope::Cons(domain, rest) => {
+                                if let Sort::Type(level) = Sort::of(context, &domain)? {
+                                    domains.push(level);
                                 }
-                            };
+                                let label = context.fresh(rest.first_label());
+                                context.assume(label.as_str(), &domain);
+                                let var = Term::free_var(label);
+                                telescope = rest.open(&[&var]);
+                            }
+                            Telescope::Done(output) => {
+                                break match Sort::of(context, &output)? {
+                                    Sort::Prop => Ok(Sort::Prop),
+                                    Sort::Type(output) => {
+                                        domains.push(output);
+                                        Ok(Sort::Type(Level::max(domains)))
+                                    }
+                                };
+                            }
                         }
                     }
-                }
+                })?
             }
             // A type-valued match (`Lt = match _ : Prop | ..`): its sort is the
             // motive — a constant `Prop` when the result is a proposition.
