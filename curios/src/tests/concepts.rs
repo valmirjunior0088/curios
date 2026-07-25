@@ -890,5 +890,8 @@ fn missing_witness_in_constructor_index_names_the_concept() {
 
     let message = error(source);
     assert!(message.contains("witness"), "got: {message}");
-    assert!(message.contains("Add(Wrap)"), "got: {message}");
+    assert!(
+        message.contains("Add.{") && message.contains("}(Wrap)"),
+        "got: {message}"
+    );
 }
