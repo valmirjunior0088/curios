@@ -891,6 +891,14 @@ impl Context {
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
                 got = levels.len(),
+                frames = self.assumption_universes.len(),
+                holders = ?self
+                    .assumption_universes
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, contexts)| contexts.contains_key(label))
+                    .map(|(index, contexts)| (index, contexts[label].parameter_count))
+                    .collect::<Vec<_>>(),
                 "assumption instance arity mismatch",
             );
         }
@@ -1012,7 +1020,32 @@ impl Context {
             .rev()
             .find(|contexts| contexts.contains_key(label))
             .unwrap_or_else(|| panic!("'{label}' has no assumption universe context to replace"));
+        #[cfg(feature = "profile")]
+        tracing::debug!(
+            target: "curios_core::universe",
+            %label,
+            params = universe_context.parameter_count,
+            was = contexts[label].parameter_count,
+            "assumption scheme written",
+        );
         contexts.insert(label.to_string(), universe_context);
+        #[cfg(feature = "profile")]
+        {
+            let holders = self
+                .assumption_universes
+                .iter()
+                .enumerate()
+                .filter(|(_, contexts)| contexts.contains_key(label))
+                .map(|(index, contexts)| (index, contexts[label].parameter_count))
+                .collect::<Vec<_>>();
+            tracing::debug!(
+                target: "curios_core::universe",
+                %label,
+                frames = self.assumption_universes.len(),
+                ?holders,
+                "assumption scheme frames",
+            );
+        }
         self.mutation_stamp.fresh();
         self.reduction_cache.clear();
         self.elaboration_cache.clear();
@@ -2020,7 +2053,14 @@ impl Context {
         }
 
         FrozenFrame {
-            assumptions: self.local.clone(),
+            // Past `base_locals`, exactly as `identity_snapshot` slices Γ. The
+            // whole of `local` would also carry the top-level binders, and
+            // `restore_frame` re-`assume`s whatever it is given — which stamps
+            // each restored name with an *empty* universe context in the new
+            // frame. A polymorphic global would then be shadowed by a
+            // monomorphic copy of itself, and instantiating it at its real
+            // levels fails the arity check against the wrong scheme.
+            assumptions: self.local[self.base_locals()..].to_vec(),
             definitions: flatten_frames(&self.definitions),
             refinements: flatten_frames(&self.refinements),
             refinement_projections: flatten_frames(&self.refinement_projections),
