@@ -370,6 +370,30 @@ fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
         .unwrap_or_else(|| panic!("{name} is declared"))
 }
 
+/// A level a caller supplies stays a parameter: `@A : Type` puts the level in
+/// an argument position, so each occurrence chooses it.
+#[test]
+fn a_level_in_argument_position_stays_a_parameter() {
+    let module = elaborate_source("pub let pick(@A : Type, x : A) -> A = x; pick");
+    assert_eq!(universe_parameters(&module, "/pick"), 1);
+}
+
+/// A level occurring *only* in the result is determined, not chosen: no
+/// occurrence of `Holds` can supply it, so generalizing would mint a parameter
+/// every use site has to instantiate for nothing. Minimizing it instead is what
+/// keeps a literal's per-byte constructor applications from each minting fresh
+/// levels — see `result_sort_only_metas`.
+#[test]
+fn a_level_only_in_the_result_is_minimized_away() {
+    let module = elaborate_source(
+        "pub induct Unit : pub Type | only() end
+         pub let Holds(x : Unit) -> Type = Unit;
+         Holds",
+    );
+    assert_eq!(universe_parameters(&module, "/Unit"), 0);
+    assert_eq!(universe_parameters(&module, "/Holds"), 0);
+}
+
 /// A generated method wrapper belongs to *its concept's* universe context, not
 /// to one generalized from its own signature. The wrapper's type names only the
 /// levels its own field needs, yet it also carries `use w : C(…)` applied at all

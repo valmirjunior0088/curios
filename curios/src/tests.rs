@@ -22,6 +22,7 @@ mod scheduler;
 mod strings;
 mod structs;
 mod toml;
+mod universes;
 
 use {curios_runtime::MockHost, std::time::Duration};
 
