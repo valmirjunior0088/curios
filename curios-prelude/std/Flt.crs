@@ -3,7 +3,7 @@ pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte,
 use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, Lst, Order, BigNat, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
 let pow2(k : Nat) -> BigNat =
-    BigNat/mul_pow2(BigNat/of_nat(1), k);
+    BigNat/mul/pow2(BigNat/of_nat(1), k);
 
 rec divmod(r : BigNat, s : BigNat, d : Nat) -> {Nat, BigNat} =
     match r < s
@@ -13,26 +13,26 @@ rec divmod(r : BigNat, s : BigNat, d : Nat) -> {Nat, BigNat} =
 
 rec scale_up(rpm : BigNat, s : BigNat, k : Int) -> {BigNat, Int} =
     match rpm > s
-    | true => scale_up(rpm, BigNat/mul_small(s, 10), k + 1)
+    | true => scale_up(rpm, BigNat/mul/small(s, 10), k + 1)
     | false => (s, k)
     end;
 
 rec scale_down(r : BigNat, mp : BigNat, mm : BigNat, s : BigNat, k : Int) -> {BigNat, BigNat, BigNat, Int} =
-    match BigNat/mul_small(r + mp, 10) <= s
+    match BigNat/mul/small(r + mp, 10) <= s
     | true =>
         scale_down(
-            BigNat/mul_small(r, 10),
-            BigNat/mul_small(mp, 10),
-            BigNat/mul_small(mm, 10),
+            BigNat/mul/small(r, 10),
+            BigNat/mul/small(mp, 10),
+            BigNat/mul/small(mm, 10),
             s,
             k - 1)
     | false => (r, mp, mm, k)
     end;
 
 rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> Lst(Nat) =
-    let r10 = BigNat/mul_small(r, 10);
-    let mp10 = BigNat/mul_small(mp, 10);
-    let mm10 = BigNat/mul_small(mm, 10);
+    let r10 = BigNat/mul/small(r, 10);
+    let mp10 = BigNat/mul/small(mp, 10);
+    let mm10 = BigNat/mul/small(mm, 10);
     let (d, rem) = divmod(r10, s, 0);
     let low =
         match even
@@ -50,7 +50,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
             choose
             | Bool/not(low) => d + 1
             | Bool/not(high) => d
-            | BigNat/mul_small(rem, 2) < s => d
+            | BigNat/mul/small(rem, 2) < s => d
             | _ => d + 1
             end;
         [last]
@@ -86,12 +86,12 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
         let ep = exp_field - 150;
         match f_mant == 0x800000
         | true =>
-            (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 2),
+            (BigNat/mul/pow2(BigNat/of_nat(f_mant), ep + 2),
                 BigNat/of_nat(4),
                 pow2(ep + 1),
                 pow2(ep))
         | false =>
-            (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 1),
+            (BigNat/mul/pow2(BigNat/of_nat(f_mant), ep + 1),
                 BigNat/of_nat(2),
                 pow2(ep),
                 pow2(ep))
@@ -100,12 +100,12 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
         let abs_e = 150 - Nat/max(exp_field, 1);
         match exp_field < 2 || Bool/not(f_mant == 0x800000)
         | true =>
-            (BigNat/mul_small(BigNat/of_nat(f_mant), 2),
+            (BigNat/mul/small(BigNat/of_nat(f_mant), 2),
                 pow2(abs_e + 1),
                 BigNat/of_nat(1),
                 BigNat/of_nat(1))
         | false =>
-            (BigNat/mul_small(BigNat/of_nat(f_mant), 4),
+            (BigNat/mul/small(BigNat/of_nat(f_mant), 4),
                 pow2(abs_e + 2),
                 BigNat/of_nat(2),
                 BigNat/of_nat(1))

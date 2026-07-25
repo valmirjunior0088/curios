@@ -2,164 +2,112 @@ use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul,
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/Bits/{cons};
-use /std/BigNat/{BigNat, Canonical, combine, is_trimmed, is_trimmed_of_canonical, of_bits, refl_at, tail_is_trimmed, trim};
+use /std/BigNat/{BigNat, cong_cons2, cong_is_trimmed, cong_maj3_mid, cong_of_bits, cong_rep, cons_inj_head, cons_inj_tail, eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, maj3_comm, nonempty, of_bits, refl_at, tail_is_trimmed, trim_of_trimmed, xor3, xor3_comm, xor3_inj_mid, mod succ};
 
-pub rec succ_raw(x : Bits) -> Bits =
-    match x
-    | b\ => cons(true, b\)
-    | b\h\..t =>
-        match h
-        | true => cons(false, succ_raw(t))
-        | false => cons(true, t)
-        end
-    end;
-
-pub let succ(a : BigNat) -> BigNat =
-    of_bits(succ_raw(a.rep));
-
-pub let xor3(a : Bool, b : Bool, c : Bool) -> Bool =
-    match a
-    | true => match b | true => c | false => match c | true => false | false => true end end
-    | false => match b | true => match c | true => false | false => true end | false => c end
-    end;
-
-pub let maj3(a : Bool, b : Bool, c : Bool) -> Bool =
-    match a
-    | true => match b | true => true | false => c end
-    | false => match b | true => c | false => false end
-    end;
-
-pub rec add_raw(x : Bits, y : Bits, carry : Bool) -> Bits =
+pub rec raw(x : Bits, y : Bits, carry : Bool) -> Bits =
     match x
     | b\ =>
         match y
         | b\ => match carry | true => cons(true, b\) | false => b\ end
-        | b\yh\..yt => cons(xor3(false, yh, carry), add_raw(b\, yt, maj3(false, yh, carry)))
+        | b\yh\..yt => cons(xor3(false, yh, carry), raw(b\, yt, maj3(false, yh, carry)))
         end
     | b\xh\..xt =>
         match y
-        | b\ => cons(xor3(xh, false, carry), add_raw(xt, b\, maj3(xh, false, carry)))
-        | b\yh\..yt => cons(xor3(xh, yh, carry), add_raw(xt, yt, maj3(xh, yh, carry)))
+        | b\ => cons(xor3(xh, false, carry), raw(xt, b\, maj3(xh, false, carry)))
+        | b\yh\..yt => cons(xor3(xh, yh, carry), raw(xt, yt, maj3(xh, yh, carry)))
         end
     end;
 
 pub let add(a : BigNat, b : BigNat) -> BigNat =
-    of_bits(add_raw(a.rep, b.rep, false));
+    of_bits(raw(a.rep, b.rep, false));
 
-pub let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
-    -> Eq(cons(h1, t1), cons(h2, t2)) =
-    match ph : (a, b, q) => Eq(cons(a, t1), cons(b, t2))
-    | refl(@z) =>
-        match pt : (a2, b2, q2) => Eq(cons(h1, a2), cons(h1, b2))
-        | refl(@z2) => Eq/refl()
-        end
-    end;
+let cong_raw_c(x : Bits, y : Bits, @c1 : Bool, @c2 : Bool, p : Eq(c1, c2))
+    -> Eq(raw(x, y, c1), raw(x, y, c2)) =
+    Eq/cong((c) => raw(x, y, c), p);
 
-let cong_add_raw_c(x : Bits, y : Bits, @c1 : Bool, @c2 : Bool, p : Eq(c1, c2))
-    -> Eq(add_raw(x, y, c1), add_raw(x, y, c2)) =
-    Eq/cong((c) => add_raw(x, y, c), p);
-
-let cong_of_bits(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(of_bits(s), of_bits(t)) =
-    Eq/cong(of_bits, p);
-
-let xor3_comm(a : Bool, b : Bool, c : Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
-    match a
-    | true => match b | true => refl_at(xor3(true, true, c)) | false => refl_at(xor3(true, false, c)) end
-    | false => match b | true => refl_at(xor3(false, true, c)) | false => refl_at(xor3(false, false, c)) end
-    end;
-
-let maj3_comm(a : Bool, b : Bool, c : Bool) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
-    match a
-    | true => match b | true => refl_at(maj3(true, true, c)) | false => refl_at(maj3(true, false, c)) end
-    | false => match b | true => refl_at(maj3(false, true, c)) | false => refl_at(maj3(false, false, c)) end
-    end;
-
-pub rec add_comm_raw(x : Bits, y : Bits, c : Bool) -> Eq(add_raw(x, y, c), add_raw(y, x, c)) =
-    match x : (a) => Eq(add_raw(a, y, c), add_raw(y, a, c))
+pub rec raw_comm(x : Bits, y : Bits, c : Bool) -> Eq(raw(x, y, c), raw(y, x, c)) =
+    match x : (a) => Eq(raw(a, y, c), raw(y, a, c))
     | b\ =>
-        match y : (b) => Eq(add_raw(b\, b, c), add_raw(b, b\, c))
-        | b\ => refl_at(add_raw(b\, b\, c))
-        | b\yh\..yt => add_raw_swap_step(b\, yt, false, yh, c)
+        match y : (b) => Eq(raw(b\, b, c), raw(b, b\, c))
+        | b\ => refl_at(raw(b\, b\, c))
+        | b\yh\..yt => raw_swap_step(b\, yt, false, yh, c)
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(add_raw(cons(xh, xt), b, c), add_raw(b, cons(xh, xt), c))
-        | b\ => add_raw_swap_step(xt, b\, xh, false, c)
-        | b\yh\..yt => add_raw_swap_step(xt, yt, xh, yh, c)
+        match y : (b) => Eq(raw(cons(xh, xt), b, c), raw(b, cons(xh, xt), c))
+        | b\ => raw_swap_step(xt, b\, xh, false, c)
+        | b\yh\..yt => raw_swap_step(xt, yt, xh, yh, c)
         end
     end
-and add_raw_swap_step(x : Bits, y : Bits, h1 : Bool, h2 : Bool, c : Bool)
-    -> Eq(cons(xor3(h1, h2, c), add_raw(x, y, maj3(h1, h2, c))),
-          cons(xor3(h2, h1, c), add_raw(y, x, maj3(h2, h1, c)))) =
+and raw_swap_step(x : Bits, y : Bits, h1 : Bool, h2 : Bool, c : Bool)
+    -> Eq(cons(xor3(h1, h2, c), raw(x, y, maj3(h1, h2, c))),
+          cons(xor3(h2, h1, c), raw(y, x, maj3(h2, h1, c)))) =
     cong_cons2(xor3_comm(h1, h2, c),
-        Eq/trans(add_comm_raw(x, y, maj3(h1, h2, c)), cong_add_raw_c(y, x, maj3_comm(h1, h2, c))));
+        Eq/trans(raw_comm(x, y, maj3(h1, h2, c)), cong_raw_c(y, x, maj3_comm(h1, h2, c))));
 
-let cong_succ_raw(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(succ_raw(s), succ_raw(t)) =
-    Eq/cong(succ_raw, p);
+pub let cong_raw_l(@s : Bits, @t : Bits, p : Eq(s, t), y : Bits, c : Bool)
+    -> Eq(raw(s, y, c), raw(t, y, c)) =
+    Eq/cong((w) => raw(w, y, c), p);
 
-pub let cong_add_raw_l(@s : Bits, @t : Bits, p : Eq(s, t), y : Bits, c : Bool)
-    -> Eq(add_raw(s, y, c), add_raw(t, y, c)) =
-    Eq/cong((w) => add_raw(w, y, c), p);
+pub let cong_raw_r(x : Bits, @s : Bits, @t : Bits, p : Eq(s, t), c : Bool)
+    -> Eq(raw(x, s, c), raw(x, t, c)) =
+    Eq/cong((w) => raw(x, w, c), p);
 
-pub let cong_add_raw_r(x : Bits, @s : Bits, @t : Bits, p : Eq(s, t), c : Bool)
-    -> Eq(add_raw(x, s, c), add_raw(x, t, c)) =
-    Eq/cong((w) => add_raw(x, w, c), p);
-
-rec add_raw_zero_r(x : Bits) -> Eq(add_raw(x, b\, false), x) =
-    match x : (a) => Eq(add_raw(a, b\, false), a)
+rec raw_zero_r(x : Bits) -> Eq(raw(x, b\, false), x) =
+    match x : (a) => Eq(raw(a, b\, false), a)
     | b\ => Eq/refl()
     | b\h\..t =>
         match h
-        | true => cong_cons2(refl_at(true), add_raw_zero_r(t))
-        | false => cong_cons2(refl_at(false), add_raw_zero_r(t))
+        | true => cong_cons2(refl_at(true), raw_zero_r(t))
+        | false => cong_cons2(refl_at(false), raw_zero_r(t))
         end
     end;
 
-pub rec add_raw_zero_l(y : Bits) -> Eq(add_raw(b\, y, false), y) =
-    match y : (b) => Eq(add_raw(b\, b, false), b)
+pub rec raw_zero_l(y : Bits) -> Eq(raw(b\, y, false), y) =
+    match y : (b) => Eq(raw(b\, b, false), b)
     | b\ => Eq/refl()
     | b\h\..t =>
         match h
-        | true => cong_cons2(refl_at(true), add_raw_zero_l(t))
-        | false => cong_cons2(refl_at(false), add_raw_zero_l(t))
+        | true => cong_cons2(refl_at(true), raw_zero_l(t))
+        | false => cong_cons2(refl_at(false), raw_zero_l(t))
         end
     end;
 
-rec add_raw_succ_r(x : Bits) -> Eq(add_raw(x, b\, true), succ_raw(x)) =
-    match x : (a) => Eq(add_raw(a, b\, true), succ_raw(a))
+rec raw_succ_r(x : Bits) -> Eq(raw(x, b\, true), succ/raw(x)) =
+    match x : (a) => Eq(raw(a, b\, true), succ/raw(a))
     | b\ => Eq/refl()
     | b\h\..t =>
         match h
-        | true => cong_cons2(refl_at(false), add_raw_succ_r(t))
-        | false => cong_cons2(refl_at(true), add_raw_zero_r(t))
+        | true => cong_cons2(refl_at(false), raw_succ_r(t))
+        | false => cong_cons2(refl_at(true), raw_zero_r(t))
         end
     end;
 
-rec add_raw_succ_l(y : Bits) -> Eq(add_raw(b\, y, true), succ_raw(y)) =
-    match y : (b) => Eq(add_raw(b\, b, true), succ_raw(b))
+rec raw_succ_l(y : Bits) -> Eq(raw(b\, y, true), succ/raw(y)) =
+    match y : (b) => Eq(raw(b\, b, true), succ/raw(b))
     | b\ => Eq/refl()
     | b\h\..t =>
         match h
-        | true => cong_cons2(refl_at(false), add_raw_succ_l(t))
-        | false => cong_cons2(refl_at(true), add_raw_zero_l(t))
+        | true => cong_cons2(refl_at(false), raw_succ_l(t))
+        | false => cong_cons2(refl_at(true), raw_zero_l(t))
         end
     end;
 
-pub rec add_raw_carry_spec(x : Bits, y : Bits) -> Eq(add_raw(x, y, true), succ_raw(add_raw(x, y, false))) =
-    match x : (a) => Eq(add_raw(a, y, true), succ_raw(add_raw(a, y, false)))
+pub rec raw_carry_spec(x : Bits, y : Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
+    match x : (a) => Eq(raw(a, y, true), succ/raw(raw(a, y, false)))
     | b\ =>
-        match y : (b) => Eq(add_raw(b\, b, true), succ_raw(add_raw(b\, b, false)))
+        match y : (b) => Eq(raw(b\, b, true), succ/raw(raw(b\, b, false)))
         | b\ => Eq/refl()
         | b\yh\..yt =>
             match yh
-            | true => cong_cons2(refl_at(false), add_raw_carry_spec(b\, yt))
+            | true => cong_cons2(refl_at(false), raw_carry_spec(b\, yt))
             | false => Eq/refl()
             end
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(add_raw(cons(xh, xt), b, true), succ_raw(add_raw(cons(xh, xt), b, false)))
+        match y : (b) => Eq(raw(cons(xh, xt), b, true), succ/raw(raw(cons(xh, xt), b, false)))
         | b\ =>
             match xh
-            | true => cong_cons2(refl_at(false), add_raw_carry_spec(xt, b\))
+            | true => cong_cons2(refl_at(false), raw_carry_spec(xt, b\))
             | false => Eq/refl()
             end
         | b\yh\..yt =>
@@ -167,22 +115,22 @@ pub rec add_raw_carry_spec(x : Bits, y : Bits) -> Eq(add_raw(x, y, true), succ_r
             | true =>
                 match yh
                 | true => Eq/refl()
-                | false => cong_cons2(refl_at(false), add_raw_carry_spec(xt, yt))
+                | false => cong_cons2(refl_at(false), raw_carry_spec(xt, yt))
                 end
             | false =>
                 match yh
-                | true => cong_cons2(refl_at(false), add_raw_carry_spec(xt, yt))
+                | true => cong_cons2(refl_at(false), raw_carry_spec(xt, yt))
                 | false => Eq/refl()
                 end
             end
         end
     end;
 
-pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bool)
-    -> Eq(add_raw(succ_raw(u), v, c), succ_raw(add_raw(u, v, c))) =
-    match u : (a) => Eq(add_raw(succ_raw(a), v, c), succ_raw(add_raw(a, v, c)))
+pub rec raw_succ_out_l(u : Bits, v : Bits, c : Bool)
+    -> Eq(raw(succ/raw(u), v, c), succ/raw(raw(u, v, c))) =
+    match u : (a) => Eq(raw(succ/raw(a), v, c), succ/raw(raw(a, v, c)))
     | b\ =>
-        match v : (b) => Eq(add_raw(succ_raw(b\), b, c), succ_raw(add_raw(b\, b, c)))
+        match v : (b) => Eq(raw(succ/raw(b\), b, c), succ/raw(raw(b\, b, c)))
         | b\ =>
             match c
             | true => Eq/refl()
@@ -193,11 +141,11 @@ pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bool)
             | true =>
                 match c
                 | true => Eq/refl()
-                | false => cong_cons2(refl_at(false), add_raw_carry_spec(b\, vt))
+                | false => cong_cons2(refl_at(false), raw_carry_spec(b\, vt))
                 end
             | false =>
                 match c
-                | true => cong_cons2(refl_at(false), add_raw_carry_spec(b\, vt))
+                | true => cong_cons2(refl_at(false), raw_carry_spec(b\, vt))
                 | false => Eq/refl()
                 end
             end
@@ -205,31 +153,31 @@ pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bool)
     | b\uh\..ut =>
         match uh
         | true =>
-            match v : (b) => Eq(add_raw(succ_raw(cons(true, ut)), b, c), succ_raw(add_raw(cons(true, ut), b, c)))
+            match v : (b) => Eq(raw(succ/raw(cons(true, ut)), b, c), succ/raw(raw(cons(true, ut), b, c)))
             | b\ =>
                 match c
-                | true => cong_cons2(refl_at(true), Eq/trans(add_raw_succ_out_l(ut, b\, false), Eq/sym(add_raw_carry_spec(ut, b\))))
-                | false => cong_cons2(refl_at(false), add_raw_succ_out_l(ut, b\, false))
+                | true => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_l(ut, b\, false), Eq/sym(raw_carry_spec(ut, b\))))
+                | false => cong_cons2(refl_at(false), raw_succ_out_l(ut, b\, false))
                 end
             | b\vh\..vt =>
                 match vh
                 | true =>
                     match c
-                    | true => cong_cons2(refl_at(false), add_raw_succ_out_l(ut, vt, true))
-                    | false => cong_cons2(refl_at(true), Eq/trans(add_raw_succ_out_l(ut, vt, false), Eq/sym(add_raw_carry_spec(ut, vt))))
+                    | true => cong_cons2(refl_at(false), raw_succ_out_l(ut, vt, true))
+                    | false => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_l(ut, vt, false), Eq/sym(raw_carry_spec(ut, vt))))
                     end
                 | false =>
                     match c
-                    | true => cong_cons2(refl_at(true), Eq/trans(add_raw_succ_out_l(ut, vt, false), Eq/sym(add_raw_carry_spec(ut, vt))))
-                    | false => cong_cons2(refl_at(false), add_raw_succ_out_l(ut, vt, false))
+                    | true => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_l(ut, vt, false), Eq/sym(raw_carry_spec(ut, vt))))
+                    | false => cong_cons2(refl_at(false), raw_succ_out_l(ut, vt, false))
                     end
                 end
             end
         | false =>
-            match v : (b) => Eq(add_raw(succ_raw(cons(false, ut)), b, c), succ_raw(add_raw(cons(false, ut), b, c)))
+            match v : (b) => Eq(raw(succ/raw(cons(false, ut)), b, c), succ/raw(raw(cons(false, ut), b, c)))
             | b\ =>
                 match c
-                | true => cong_cons2(refl_at(false), add_raw_carry_spec(ut, b\))
+                | true => cong_cons2(refl_at(false), raw_carry_spec(ut, b\))
                 | false => Eq/refl()
                 end
             | b\vh\..vt =>
@@ -237,11 +185,11 @@ pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bool)
                 | true =>
                     match c
                     | true => Eq/refl()
-                    | false => cong_cons2(refl_at(false), add_raw_carry_spec(ut, vt))
+                    | false => cong_cons2(refl_at(false), raw_carry_spec(ut, vt))
                     end
                 | false =>
                     match c
-                    | true => cong_cons2(refl_at(false), add_raw_carry_spec(ut, vt))
+                    | true => cong_cons2(refl_at(false), raw_carry_spec(ut, vt))
                     | false => Eq/refl()
                     end
                 end
@@ -249,11 +197,11 @@ pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bool)
         end
     end;
 
-pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bool)
-    -> Eq(add_raw(u, succ_raw(v), c), succ_raw(add_raw(u, v, c))) =
-    match v : (b) => Eq(add_raw(u, succ_raw(b), c), succ_raw(add_raw(u, b, c)))
+pub rec raw_succ_out_r(u : Bits, v : Bits, c : Bool)
+    -> Eq(raw(u, succ/raw(v), c), succ/raw(raw(u, v, c))) =
+    match v : (b) => Eq(raw(u, succ/raw(b), c), succ/raw(raw(u, b, c)))
     | b\ =>
-        match u : (a) => Eq(add_raw(a, succ_raw(b\), c), succ_raw(add_raw(a, b\, c)))
+        match u : (a) => Eq(raw(a, succ/raw(b\), c), succ/raw(raw(a, b\, c)))
         | b\ =>
             match c
             | true => Eq/refl()
@@ -264,11 +212,11 @@ pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bool)
             | true =>
                 match c
                 | true => Eq/refl()
-                | false => cong_cons2(refl_at(false), add_raw_carry_spec(ut, b\))
+                | false => cong_cons2(refl_at(false), raw_carry_spec(ut, b\))
                 end
             | false =>
                 match c
-                | true => cong_cons2(refl_at(false), add_raw_carry_spec(ut, b\))
+                | true => cong_cons2(refl_at(false), raw_carry_spec(ut, b\))
                 | false => Eq/refl()
                 end
             end
@@ -276,31 +224,31 @@ pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bool)
     | b\vh\..vt =>
         match vh
         | true =>
-            match u : (a) => Eq(add_raw(a, succ_raw(cons(true, vt)), c), succ_raw(add_raw(a, cons(true, vt), c)))
+            match u : (a) => Eq(raw(a, succ/raw(cons(true, vt)), c), succ/raw(raw(a, cons(true, vt), c)))
             | b\ =>
                 match c
-                | true => cong_cons2(refl_at(true), Eq/trans(add_raw_succ_out_r(b\, vt, false), Eq/sym(add_raw_carry_spec(b\, vt))))
-                | false => cong_cons2(refl_at(false), add_raw_succ_out_r(b\, vt, false))
+                | true => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_r(b\, vt, false), Eq/sym(raw_carry_spec(b\, vt))))
+                | false => cong_cons2(refl_at(false), raw_succ_out_r(b\, vt, false))
                 end
             | b\uh\..ut =>
                 match uh
                 | true =>
                     match c
-                    | true => cong_cons2(refl_at(false), add_raw_succ_out_r(ut, vt, true))
-                    | false => cong_cons2(refl_at(true), Eq/trans(add_raw_succ_out_r(ut, vt, false), Eq/sym(add_raw_carry_spec(ut, vt))))
+                    | true => cong_cons2(refl_at(false), raw_succ_out_r(ut, vt, true))
+                    | false => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_r(ut, vt, false), Eq/sym(raw_carry_spec(ut, vt))))
                     end
                 | false =>
                     match c
-                    | true => cong_cons2(refl_at(true), Eq/trans(add_raw_succ_out_r(ut, vt, false), Eq/sym(add_raw_carry_spec(ut, vt))))
-                    | false => cong_cons2(refl_at(false), add_raw_succ_out_r(ut, vt, false))
+                    | true => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_r(ut, vt, false), Eq/sym(raw_carry_spec(ut, vt))))
+                    | false => cong_cons2(refl_at(false), raw_succ_out_r(ut, vt, false))
                     end
                 end
             end
         | false =>
-            match u : (a) => Eq(add_raw(a, succ_raw(cons(false, vt)), c), succ_raw(add_raw(a, cons(false, vt), c)))
+            match u : (a) => Eq(raw(a, succ/raw(cons(false, vt)), c), succ/raw(raw(a, cons(false, vt), c)))
             | b\ =>
                 match c
-                | true => cong_cons2(refl_at(false), add_raw_carry_spec(b\, vt))
+                | true => cong_cons2(refl_at(false), raw_carry_spec(b\, vt))
                 | false => Eq/refl()
                 end
             | b\uh\..ut =>
@@ -308,11 +256,11 @@ pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bool)
                 | true =>
                     match c
                     | true => Eq/refl()
-                    | false => cong_cons2(refl_at(false), add_raw_carry_spec(ut, vt))
+                    | false => cong_cons2(refl_at(false), raw_carry_spec(ut, vt))
                     end
                 | false =>
                     match c
-                    | true => cong_cons2(refl_at(false), add_raw_carry_spec(ut, vt))
+                    | true => cong_cons2(refl_at(false), raw_carry_spec(ut, vt))
                     | false => Eq/refl()
                     end
                 end
@@ -320,13 +268,13 @@ pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bool)
         end
     end;
 
-pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
-    -> Eq(add_raw(add_raw(x, y, c1), z, c2), add_raw(x, add_raw(y, z, c1), c2)) =
-    match x : (xv) => Eq(add_raw(add_raw(xv, y, c1), z, c2), add_raw(xv, add_raw(y, z, c1), c2))
+pub rec raw_assoc(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
+    -> Eq(raw(raw(x, y, c1), z, c2), raw(x, raw(y, z, c1), c2)) =
+    match x : (xv) => Eq(raw(raw(xv, y, c1), z, c2), raw(xv, raw(y, z, c1), c2))
     | b\ =>
-        match y : (yv) => Eq(add_raw(add_raw(b\, yv, c1), z, c2), add_raw(b\, add_raw(yv, z, c1), c2))
+        match y : (yv) => Eq(raw(raw(b\, yv, c1), z, c2), raw(b\, raw(yv, z, c1), c2))
         | b\ =>
-            match z : (zv) => Eq(add_raw(add_raw(b\, b\, c1), zv, c2), add_raw(b\, add_raw(b\, zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(b\, b\, c1), zv, c2), raw(b\, raw(b\, zv, c1), c2))
             | b\ =>
                 match c1
                 | true =>
@@ -346,12 +294,12 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                 end
             | b\zh\..zt =>
                 match c1
-                | true => Eq/trans(add_raw_succ_out_l(b\, cons(zh, zt), c2), Eq/sym(Eq/trans(cong_add_raw_r(b\, add_raw_carry_spec(b\, cons(zh, zt)), c2), Eq/trans(add_raw_succ_out_r(b\, add_raw(b\, cons(zh, zt), false), c2), cong_succ_raw(cong_add_raw_r(b\, add_raw_zero_l(cons(zh, zt)), c2))))))
-                | false => Eq/sym(cong_add_raw_r(b\, add_raw_zero_l(cons(zh, zt)), c2))
+                | true => Eq/trans(raw_succ_out_l(b\, cons(zh, zt), c2), Eq/sym(Eq/trans(cong_raw_r(b\, raw_carry_spec(b\, cons(zh, zt)), c2), Eq/trans(raw_succ_out_r(b\, raw(b\, cons(zh, zt), false), c2), succ/cong_raw(cong_raw_r(b\, raw_zero_l(cons(zh, zt)), c2))))))
+                | false => Eq/sym(cong_raw_r(b\, raw_zero_l(cons(zh, zt)), c2))
                 end
             end
         | b\yh\..yt =>
-            match z : (zv) => Eq(add_raw(add_raw(b\, cons(yh, yt), c1), zv, c2), add_raw(b\, add_raw(cons(yh, yt), zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(b\, cons(yh, yt), c1), zv, c2), raw(b\, raw(cons(yh, yt), zv, c1), c2))
             | b\ =>
                 match yh
                 | true =>
@@ -359,16 +307,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                     | true =>
                         match c2
                         | true =>
-                            cong_cons2(refl_at(true), add_assoc_raw(b\, yt, b\, true, false))
+                            cong_cons2(refl_at(true), raw_assoc(b\, yt, b\, true, false))
                         | false =>
-                            cong_cons2(refl_at(false), add_assoc_raw(b\, yt, b\, true, false))
+                            cong_cons2(refl_at(false), raw_assoc(b\, yt, b\, true, false))
                         end
                     | false =>
                         match c2
                         | true =>
-                            cong_cons2(refl_at(false), add_assoc_raw(b\, yt, b\, false, true))
+                            cong_cons2(refl_at(false), raw_assoc(b\, yt, b\, false, true))
                         | false =>
-                            cong_cons2(refl_at(true), add_assoc_raw(b\, yt, b\, false, false))
+                            cong_cons2(refl_at(true), raw_assoc(b\, yt, b\, false, false))
                         end
                     end
                 | false =>
@@ -376,16 +324,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                     | true =>
                         match c2
                         | true =>
-                            cong_cons2(refl_at(false), add_assoc_raw(b\, yt, b\, false, true))
+                            cong_cons2(refl_at(false), raw_assoc(b\, yt, b\, false, true))
                         | false =>
-                            cong_cons2(refl_at(true), add_assoc_raw(b\, yt, b\, false, false))
+                            cong_cons2(refl_at(true), raw_assoc(b\, yt, b\, false, false))
                         end
                     | false =>
                         match c2
                         | true =>
-                            cong_cons2(refl_at(true), add_assoc_raw(b\, yt, b\, false, false))
+                            cong_cons2(refl_at(true), raw_assoc(b\, yt, b\, false, false))
                         | false =>
-                            cong_cons2(refl_at(false), add_assoc_raw(b\, yt, b\, false, false))
+                            cong_cons2(refl_at(false), raw_assoc(b\, yt, b\, false, false))
                         end
                     end
                 end
@@ -398,16 +346,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(b\, yt, zt, true, true))
+                                cong_cons2(refl_at(false), raw_assoc(b\, yt, zt, true, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(b\, yt, zt, true, false))
+                                cong_cons2(refl_at(true), raw_assoc(b\, yt, zt, true, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), Eq/trans(add_assoc_raw(b\, yt, zt, false, true), Eq/trans(add_raw_carry_spec(b\, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(b\, add_raw(yt, zt, false), false)), cong_add_raw_r(b\, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                cong_cons2(refl_at(true), Eq/trans(raw_assoc(b\, yt, zt, false, true), Eq/trans(raw_carry_spec(b\, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(b\, raw(yt, zt, false), false)), cong_raw_r(b\, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                             | false =>
-                                cong_cons2(refl_at(false), Eq/trans(add_assoc_raw(b\, yt, zt, false, true), Eq/trans(add_raw_carry_spec(b\, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(b\, add_raw(yt, zt, false), false)), cong_add_raw_r(b\, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                cong_cons2(refl_at(false), Eq/trans(raw_assoc(b\, yt, zt, false, true), Eq/trans(raw_carry_spec(b\, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(b\, raw(yt, zt, false), false)), cong_raw_r(b\, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                             end
                         end
                     | false =>
@@ -415,16 +363,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), add_assoc_raw(b\, yt, zt, true, false))
+                                cong_cons2(refl_at(true), raw_assoc(b\, yt, zt, true, false))
                             | false =>
-                                cong_cons2(refl_at(false), add_assoc_raw(b\, yt, zt, true, false))
+                                cong_cons2(refl_at(false), raw_assoc(b\, yt, zt, true, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(b\, yt, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(b\, yt, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(b\, yt, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(b\, yt, zt, false, false))
                             end
                         end
                     end
@@ -435,16 +383,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), Eq/trans(add_assoc_raw(b\, yt, zt, false, true), Eq/trans(add_raw_carry_spec(b\, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(b\, add_raw(yt, zt, false), false)), cong_add_raw_r(b\, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                cong_cons2(refl_at(true), Eq/trans(raw_assoc(b\, yt, zt, false, true), Eq/trans(raw_carry_spec(b\, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(b\, raw(yt, zt, false), false)), cong_raw_r(b\, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                             | false =>
-                                cong_cons2(refl_at(false), Eq/trans(add_assoc_raw(b\, yt, zt, false, true), Eq/trans(add_raw_carry_spec(b\, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(b\, add_raw(yt, zt, false), false)), cong_add_raw_r(b\, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                cong_cons2(refl_at(false), Eq/trans(raw_assoc(b\, yt, zt, false, true), Eq/trans(raw_carry_spec(b\, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(b\, raw(yt, zt, false), false)), cong_raw_r(b\, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(b\, yt, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(b\, yt, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(b\, yt, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(b\, yt, zt, false, false))
                             end
                         end
                     | false =>
@@ -452,16 +400,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(b\, yt, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(b\, yt, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(b\, yt, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(b\, yt, zt, false, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), add_assoc_raw(b\, yt, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(b\, yt, zt, false, false))
                             | false =>
-                                cong_cons2(refl_at(false), add_assoc_raw(b\, yt, zt, false, false))
+                                cong_cons2(refl_at(false), raw_assoc(b\, yt, zt, false, false))
                             end
                         end
                     end
@@ -469,13 +417,13 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
             end
         end
     | b\xh\..xt =>
-        match y : (yv) => Eq(add_raw(add_raw(cons(xh, xt), yv, c1), z, c2), add_raw(cons(xh, xt), add_raw(yv, z, c1), c2))
+        match y : (yv) => Eq(raw(raw(cons(xh, xt), yv, c1), z, c2), raw(cons(xh, xt), raw(yv, z, c1), c2))
         | b\ =>
-            match z : (zv) => Eq(add_raw(add_raw(cons(xh, xt), b\, c1), zv, c2), add_raw(cons(xh, xt), add_raw(b\, zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(cons(xh, xt), b\, c1), zv, c2), raw(cons(xh, xt), raw(b\, zv, c1), c2))
             | b\ =>
                 match c1
-                | true => Eq/trans(cong_add_raw_l(add_raw_succ_r(cons(xh, xt)), b\, c2), Eq/trans(add_raw_succ_out_l(cons(xh, xt), b\, c2), Eq/sym(add_raw_succ_out_r(cons(xh, xt), b\, c2))))
-                | false => cong_add_raw_l(add_raw_zero_r(cons(xh, xt)), b\, c2)
+                | true => Eq/trans(cong_raw_l(raw_succ_r(cons(xh, xt)), b\, c2), Eq/trans(raw_succ_out_l(cons(xh, xt), b\, c2), Eq/sym(raw_succ_out_r(cons(xh, xt), b\, c2))))
+                | false => cong_raw_l(raw_zero_r(cons(xh, xt)), b\, c2)
                 end
             | b\zh\..zt =>
                 match xh
@@ -486,16 +434,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, b\, zt, true, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, b\, zt, true, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, b\, zt, true, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, b\, zt, true, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, b\, zt, false, true))
+                                cong_cons2(refl_at(true), raw_assoc(xt, b\, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, b\, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, b\, zt, false, true))
                             end
                         end
                     | false =>
@@ -503,16 +451,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, b\), zt, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, b\, false), zt, false), Eq/sym(add_raw_carry_spec(add_raw(xt, b\, false), zt)))), add_assoc_raw(xt, b\, zt, false, true)))
+                                cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, b\), zt, false), Eq/trans(raw_succ_out_l(raw(xt, b\, false), zt, false), Eq/sym(raw_carry_spec(raw(xt, b\, false), zt)))), raw_assoc(xt, b\, zt, false, true)))
                             | false =>
-                                cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, b\), zt, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, b\, false), zt, false), Eq/sym(add_raw_carry_spec(add_raw(xt, b\, false), zt)))), add_assoc_raw(xt, b\, zt, false, true)))
+                                cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, b\), zt, false), Eq/trans(raw_succ_out_l(raw(xt, b\, false), zt, false), Eq/sym(raw_carry_spec(raw(xt, b\, false), zt)))), raw_assoc(xt, b\, zt, false, true)))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, b\, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, b\, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, b\, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, b\, zt, false, false))
                             end
                         end
                     end
@@ -523,16 +471,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), Eq/trans(add_assoc_raw(xt, b\, zt, false, true), Eq/trans(add_raw_carry_spec(xt, add_raw(b\, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(xt, add_raw(b\, zt, false), false)), cong_add_raw_r(xt, Eq/sym(add_raw_carry_spec(b\, zt)), false)))))
+                                cong_cons2(refl_at(true), Eq/trans(raw_assoc(xt, b\, zt, false, true), Eq/trans(raw_carry_spec(xt, raw(b\, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(xt, raw(b\, zt, false), false)), cong_raw_r(xt, Eq/sym(raw_carry_spec(b\, zt)), false)))))
                             | false =>
-                                cong_cons2(refl_at(false), Eq/trans(add_assoc_raw(xt, b\, zt, false, true), Eq/trans(add_raw_carry_spec(xt, add_raw(b\, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(xt, add_raw(b\, zt, false), false)), cong_add_raw_r(xt, Eq/sym(add_raw_carry_spec(b\, zt)), false)))))
+                                cong_cons2(refl_at(false), Eq/trans(raw_assoc(xt, b\, zt, false, true), Eq/trans(raw_carry_spec(xt, raw(b\, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(xt, raw(b\, zt, false), false)), cong_raw_r(xt, Eq/sym(raw_carry_spec(b\, zt)), false)))))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, b\, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, b\, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, b\, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, b\, zt, false, false))
                             end
                         end
                     | false =>
@@ -540,23 +488,23 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, b\, zt, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, b\, zt, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, b\, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, b\, zt, false, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, b\, zt, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, b\, zt, false, false))
                             | false =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, b\, zt, false, false))
+                                cong_cons2(refl_at(false), raw_assoc(xt, b\, zt, false, false))
                             end
                         end
                     end
                 end
             end
         | b\yh\..yt =>
-            match z : (zv) => Eq(add_raw(add_raw(cons(xh, xt), cons(yh, yt), c1), zv, c2), add_raw(cons(xh, xt), add_raw(cons(yh, yt), zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(cons(xh, xt), cons(yh, yt), c1), zv, c2), raw(cons(xh, xt), raw(cons(yh, yt), zv, c1), c2))
             | b\ =>
                 match xh
                 | true =>
@@ -566,16 +514,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, yt, b\, true, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, yt, b\, true, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, yt, b\, true, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, yt, b\, true, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), b\, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), b\, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), b\)))), add_assoc_raw(xt, yt, b\, false, true)))
+                                cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), b\, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), b\, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), b\)))), raw_assoc(xt, yt, b\, false, true)))
                             | false =>
-                                cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), b\, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), b\, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), b\)))), add_assoc_raw(xt, yt, b\, false, true)))
+                                cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), b\, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), b\, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), b\)))), raw_assoc(xt, yt, b\, false, true)))
                             end
                         end
                     | false =>
@@ -583,16 +531,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), b\, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), b\, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), b\)))), add_assoc_raw(xt, yt, b\, false, true)))
+                                cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), b\, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), b\, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), b\)))), raw_assoc(xt, yt, b\, false, true)))
                             | false =>
-                                cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), b\, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), b\, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), b\)))), add_assoc_raw(xt, yt, b\, false, true)))
+                                cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), b\, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), b\, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), b\)))), raw_assoc(xt, yt, b\, false, true)))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, yt, b\, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, yt, b\, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, yt, b\, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, yt, b\, false, false))
                             end
                         end
                     end
@@ -603,16 +551,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, yt, b\, true, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, yt, b\, true, false))
                             | false =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, yt, b\, true, false))
+                                cong_cons2(refl_at(false), raw_assoc(xt, yt, b\, true, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, yt, b\, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, yt, b\, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, yt, b\, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, yt, b\, false, false))
                             end
                         end
                     | false =>
@@ -620,16 +568,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                         | true =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, yt, b\, false, true))
+                                cong_cons2(refl_at(false), raw_assoc(xt, yt, b\, false, true))
                             | false =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, yt, b\, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, yt, b\, false, false))
                             end
                         | false =>
                             match c2
                             | true =>
-                                cong_cons2(refl_at(true), add_assoc_raw(xt, yt, b\, false, false))
+                                cong_cons2(refl_at(true), raw_assoc(xt, yt, b\, false, false))
                             | false =>
-                                cong_cons2(refl_at(false), add_assoc_raw(xt, yt, b\, false, false))
+                                cong_cons2(refl_at(false), raw_assoc(xt, yt, b\, false, false))
                             end
                         end
                     end
@@ -645,16 +593,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, true, true))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, true, true))
                                 | false =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, true, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, true, true))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, true, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, true, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, true, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, true, false))
                                 end
                             end
                         | false =>
@@ -662,16 +610,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, true, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, true, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, true, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, true, false))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), zt, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), zt, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), zt)))), add_assoc_raw(xt, yt, zt, false, true)))
+                                    cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), zt, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), zt, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), zt)))), raw_assoc(xt, yt, zt, false, true)))
                                 | false =>
-                                    cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), zt, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), zt, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), zt)))), add_assoc_raw(xt, yt, zt, false, true)))
+                                    cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), zt, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), zt, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), zt)))), raw_assoc(xt, yt, zt, false, true)))
                                 end
                             end
                         end
@@ -682,16 +630,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, true, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, true, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, true, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, true, false))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, false, true))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, false, true))
                                 | false =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, false, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, false, true))
                                 end
                             end
                         | false =>
@@ -699,16 +647,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), zt, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), zt, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), zt)))), add_assoc_raw(xt, yt, zt, false, true)))
+                                    cong_cons2(refl_at(true), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), zt, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), zt, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), zt)))), raw_assoc(xt, yt, zt, false, true)))
                                 | false =>
-                                    cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_add_raw_l(add_raw_carry_spec(xt, yt), zt, false), Eq/trans(add_raw_succ_out_l(add_raw(xt, yt, false), zt, false), Eq/sym(add_raw_carry_spec(add_raw(xt, yt, false), zt)))), add_assoc_raw(xt, yt, zt, false, true)))
+                                    cong_cons2(refl_at(false), Eq/trans(Eq/trans(cong_raw_l(raw_carry_spec(xt, yt), zt, false), Eq/trans(raw_succ_out_l(raw(xt, yt, false), zt, false), Eq/sym(raw_carry_spec(raw(xt, yt, false), zt)))), raw_assoc(xt, yt, zt, false, true)))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, false, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, false, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, false, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, false, false))
                                 end
                             end
                         end
@@ -722,16 +670,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, true, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, true, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, true, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, true, false))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), Eq/trans(add_assoc_raw(xt, yt, zt, false, true), Eq/trans(add_raw_carry_spec(xt, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(xt, add_raw(yt, zt, false), false)), cong_add_raw_r(xt, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                    cong_cons2(refl_at(true), Eq/trans(raw_assoc(xt, yt, zt, false, true), Eq/trans(raw_carry_spec(xt, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(xt, raw(yt, zt, false), false)), cong_raw_r(xt, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                                 | false =>
-                                    cong_cons2(refl_at(false), Eq/trans(add_assoc_raw(xt, yt, zt, false, true), Eq/trans(add_raw_carry_spec(xt, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(xt, add_raw(yt, zt, false), false)), cong_add_raw_r(xt, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                    cong_cons2(refl_at(false), Eq/trans(raw_assoc(xt, yt, zt, false, true), Eq/trans(raw_carry_spec(xt, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(xt, raw(yt, zt, false), false)), cong_raw_r(xt, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                                 end
                             end
                         | false =>
@@ -739,16 +687,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, true, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, true, false))
                                 | false =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, true, false))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, true, false))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, false, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, false, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, false, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, false, false))
                                 end
                             end
                         end
@@ -759,16 +707,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), Eq/trans(add_assoc_raw(xt, yt, zt, false, true), Eq/trans(add_raw_carry_spec(xt, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(xt, add_raw(yt, zt, false), false)), cong_add_raw_r(xt, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                    cong_cons2(refl_at(true), Eq/trans(raw_assoc(xt, yt, zt, false, true), Eq/trans(raw_carry_spec(xt, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(xt, raw(yt, zt, false), false)), cong_raw_r(xt, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                                 | false =>
-                                    cong_cons2(refl_at(false), Eq/trans(add_assoc_raw(xt, yt, zt, false, true), Eq/trans(add_raw_carry_spec(xt, add_raw(yt, zt, false)), Eq/trans(Eq/sym(add_raw_succ_out_r(xt, add_raw(yt, zt, false), false)), cong_add_raw_r(xt, Eq/sym(add_raw_carry_spec(yt, zt)), false)))))
+                                    cong_cons2(refl_at(false), Eq/trans(raw_assoc(xt, yt, zt, false, true), Eq/trans(raw_carry_spec(xt, raw(yt, zt, false)), Eq/trans(Eq/sym(raw_succ_out_r(xt, raw(yt, zt, false), false)), cong_raw_r(xt, Eq/sym(raw_carry_spec(yt, zt)), false)))))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, false, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, false, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, false, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, false, false))
                                 end
                             end
                         | false =>
@@ -776,16 +724,16 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                             | true =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, false, true))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, false, true))
                                 | false =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, false, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, false, false))
                                 end
                             | false =>
                                 match c2
                                 | true =>
-                                    cong_cons2(refl_at(true), add_assoc_raw(xt, yt, zt, false, false))
+                                    cong_cons2(refl_at(true), raw_assoc(xt, yt, zt, false, false))
                                 | false =>
-                                    cong_cons2(refl_at(false), add_assoc_raw(xt, yt, zt, false, false))
+                                    cong_cons2(refl_at(false), raw_assoc(xt, yt, zt, false, false))
                                 end
                             end
                         end
@@ -795,113 +743,51 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
         end
     end;
 
-pub rec add_raw_one_r(x : Bits) -> Eq(add_raw(x, cons(true, b\), false), succ_raw(x)) =
-    match x : (a) => Eq(add_raw(a, cons(true, b\), false), succ_raw(a))
+pub rec raw_one_r(x : Bits) -> Eq(raw(x, cons(true, b\), false), succ/raw(x)) =
+    match x : (a) => Eq(raw(a, cons(true, b\), false), succ/raw(a))
     | b\ => Eq/refl()
     | b\h\..t =>
         match h
-        | true => cong_cons2(refl_at(false), add_raw_succ_r(t))
-        | false => cong_cons2(refl_at(true), add_raw_zero_r(t))
+        | true => cong_cons2(refl_at(false), raw_succ_r(t))
+        | false => cong_cons2(refl_at(true), raw_zero_r(t))
         end
     end;
 
-let nonempty(x : Bits) -> Bool =
-    match x
-    | b\ => false
-    | b\_\.._ => true
-    end;
-
-pub let cong_combine(h : Bool, @s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
-    Eq/cong((w) => combine(h, w), p);
-
-let cong_is_trimmed(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(is_trimmed(s), is_trimmed(t)) =
-    Eq/cong(is_trimmed, p);
-
-pub rec trim_of_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
-    match x : (a) => Eq(trim(a), a)
-    | b\ => Eq/refl()
-    | b\h\..t =>
-        match t : (u) => Eq(trim(cons(h, u)), cons(h, u))
-        | b\ =>
-            match h : (g) => Eq(trim(cons(g, b\)), cons(g, b\))
-            | true => Eq/refl()
-            | false => False/absurd(false_neq_true(p))
-            end
-        | b\th\..tt => cong_combine(h, trim_of_trimmed(cons(th, tt), p))
-        end
-    end;
-
-let is_trimmed_cons(head : Bool, u : Bits, pt : Eq(is_trimmed(u), true), pn : Eq(nonempty(u), true))
-    -> Eq(is_trimmed(cons(head, u)), true) =
-    match u : (v) => Eq(is_trimmed(cons(head, v)), true)
-    | b\ => False/absurd(false_neq_true(pn))
-    | b\_\.._ => pt
-    end;
-
-let succ_raw_nonempty(x : Bits) -> Eq(nonempty(succ_raw(x)), true) =
-    match x : (a) => Eq(nonempty(succ_raw(a)), true)
-    | b\ => Eq/refl()
-    | b\h\..t =>
-        match h
-        | true => Eq/refl()
-        | false => Eq/refl()
-        end
-    end;
-
-pub rec succ_raw_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(is_trimmed(succ_raw(x)), true) =
-    match x : (a) => Eq(is_trimmed(succ_raw(a)), true)
-    | b\ => Eq/refl()
-    | b\h\..t =>
-        match h
-        | true =>
-            match t : (u) => Eq(is_trimmed(succ_raw(cons(true, u))), true)
-            | b\ => Eq/refl()
-            | b\th\..tt => is_trimmed_cons(false, succ_raw(cons(th, tt)),
-                succ_raw_trimmed(cons(th, tt), p), succ_raw_nonempty(cons(th, tt)))
-            end
-        | false =>
-            match t : (u) => Eq(is_trimmed(succ_raw(cons(false, u))), true)
-            | b\ => Eq/refl()
-            | b\_\.._ => p
-            end
-        end
-    end;
-
-let add_raw_nonempty_l(xh : Bool, xt : Bits, y : Bits, c : Bool)
-    -> Eq(nonempty(add_raw(cons(xh, xt), y, c)), true) =
-    match y : (b) => Eq(nonempty(add_raw(cons(xh, xt), b, c)), true)
+let raw_nonempty_l(xh : Bool, xt : Bits, y : Bits, c : Bool)
+    -> Eq(nonempty(raw(cons(xh, xt), y, c)), true) =
+    match y : (b) => Eq(nonempty(raw(cons(xh, xt), b, c)), true)
     | b\ => Eq/refl()
     | b\_\.._ => Eq/refl()
     end;
 
-let add_raw_nonempty_r(x : Bits, yh : Bool, yt : Bits, c : Bool)
-    -> Eq(nonempty(add_raw(x, cons(yh, yt), c)), true) =
-    match x : (a) => Eq(nonempty(add_raw(a, cons(yh, yt), c)), true)
+let raw_nonempty_r(x : Bits, yh : Bool, yt : Bits, c : Bool)
+    -> Eq(nonempty(raw(x, cons(yh, yt), c)), true) =
+    match x : (a) => Eq(nonempty(raw(a, cons(yh, yt), c)), true)
     | b\ => Eq/refl()
     | b\_\.._ => Eq/refl()
     end;
 
-pub rec add_raw_trimmed(x : Bits, y : Bits, c : Bool,
+pub rec raw_trimmed(x : Bits, y : Bits, c : Bool,
     px : Eq(is_trimmed(x), true), py : Eq(is_trimmed(y), true))
-    -> Eq(is_trimmed(add_raw(x, y, c)), true) =
-    match x : (a) => Eq(is_trimmed(add_raw(a, y, c)), true)
+    -> Eq(is_trimmed(raw(x, y, c)), true) =
+    match x : (a) => Eq(is_trimmed(raw(a, y, c)), true)
     | b\ =>
         match c
-        | true => Eq/trans(cong_is_trimmed(add_raw_succ_l(y)), succ_raw_trimmed(y, py))
-        | false => Eq/trans(cong_is_trimmed(add_raw_zero_l(y)), py)
+        | true => Eq/trans(cong_is_trimmed(raw_succ_l(y)), succ/raw_trimmed(y, py))
+        | false => Eq/trans(cong_is_trimmed(raw_zero_l(y)), py)
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(is_trimmed(add_raw(cons(xh, xt), b, c)), true)
+        match y : (b) => Eq(is_trimmed(raw(cons(xh, xt), b, c)), true)
         | b\ =>
             match c
-            | true => Eq/trans(cong_is_trimmed(add_raw_succ_r(cons(xh, xt))),
-                succ_raw_trimmed(cons(xh, xt), px))
-            | false => Eq/trans(cong_is_trimmed(add_raw_zero_r(cons(xh, xt))), px)
+            | true => Eq/trans(cong_is_trimmed(raw_succ_r(cons(xh, xt))),
+                succ/raw_trimmed(cons(xh, xt), px))
+            | false => Eq/trans(cong_is_trimmed(raw_zero_r(cons(xh, xt))), px)
             end
         | b\yh\..yt =>
-            match xt : (u) => Eq(is_trimmed(add_raw(cons(xh, u), cons(yh, yt), c)), true)
+            match xt : (u) => Eq(is_trimmed(raw(cons(xh, u), cons(yh, yt), c)), true)
             | b\ =>
-                match yt : (v) => Eq(is_trimmed(add_raw(cons(xh, b\), cons(yh, v), c)), true)
+                match yt : (v) => Eq(is_trimmed(raw(cons(xh, b\), cons(yh, v), c)), true)
                 | b\ =>
                     match xh
                     | true =>
@@ -911,224 +797,113 @@ pub rec add_raw_trimmed(x : Bits, y : Bits, c : Bool,
                         end
                     | false => False/absurd(false_neq_true(px))
                     end
-                | b\a2\..b2 => is_trimmed_cons(xor3(xh, yh, c), add_raw(b\, cons(a2, b2), maj3(xh, yh, c)),
-                    add_raw_trimmed(b\, cons(a2, b2), maj3(xh, yh, c), refl_at(true), py),
-                    add_raw_nonempty_r(b\, a2, b2, maj3(xh, yh, c)))
+                | b\a2\..b2 => is_trimmed_cons(xor3(xh, yh, c), raw(b\, cons(a2, b2), maj3(xh, yh, c)),
+                    raw_trimmed(b\, cons(a2, b2), maj3(xh, yh, c), refl_at(true), py),
+                    raw_nonempty_r(b\, a2, b2, maj3(xh, yh, c)))
                 end
             | b\a2\..b2 =>
-                match yt : (v) => Eq(is_trimmed(add_raw(cons(xh, cons(a2, b2)), cons(yh, v), c)), true)
-                | b\ => is_trimmed_cons(xor3(xh, yh, c), add_raw(cons(a2, b2), b\, maj3(xh, yh, c)),
-                    add_raw_trimmed(cons(a2, b2), b\, maj3(xh, yh, c), px, refl_at(true)),
-                    add_raw_nonempty_l(a2, b2, b\, maj3(xh, yh, c)))
-                | b\d2\..e2 => is_trimmed_cons(xor3(xh, yh, c), add_raw(cons(a2, b2), cons(d2, e2), maj3(xh, yh, c)),
-                    add_raw_trimmed(cons(a2, b2), cons(d2, e2), maj3(xh, yh, c), px, py),
-                    add_raw_nonempty_l(a2, b2, cons(d2, e2), maj3(xh, yh, c)))
+                match yt : (v) => Eq(is_trimmed(raw(cons(xh, cons(a2, b2)), cons(yh, v), c)), true)
+                | b\ => is_trimmed_cons(xor3(xh, yh, c), raw(cons(a2, b2), b\, maj3(xh, yh, c)),
+                    raw_trimmed(cons(a2, b2), b\, maj3(xh, yh, c), px, refl_at(true)),
+                    raw_nonempty_l(a2, b2, b\, maj3(xh, yh, c)))
+                | b\d2\..e2 => is_trimmed_cons(xor3(xh, yh, c), raw(cons(a2, b2), cons(d2, e2), maj3(xh, yh, c)),
+                    raw_trimmed(cons(a2, b2), cons(d2, e2), maj3(xh, yh, c), px, py),
+                    raw_nonempty_l(a2, b2, cons(d2, e2), maj3(xh, yh, c)))
                 end
             end
         end
     end;
 
-pub let eq(a : BigNat, b : BigNat, p : Eq(a.rep, b.rep)) -> Eq(a, b) =
-    Eq/subst((r : Bits) => (c : Canonical(r)) -> Eq(a, BigNat { rep = r, canonical = c }),
-             p,
-             (c : Canonical(a.rep)) => Eq/refl())(b.canonical);
+pub let comm(a : BigNat, b : BigNat) -> Eq(add(a, b), add(b, a)) =
+    cong_of_bits(raw_comm(a.rep, b.rep, false));
 
-pub let add_comm(a : BigNat, b : BigNat) -> Eq(add(a, b), add(b, a)) =
-    cong_of_bits(add_comm_raw(a.rep, b.rep, false));
-
-pub let add_assoc(a : BigNat, b : BigNat, c : BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
+pub let assoc(a : BigNat, b : BigNat, c : BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
     cong_of_bits(
         Eq/trans(
-            cong_add_raw_l(
-                trim_of_trimmed(add_raw(a.rep, b.rep, false),
-                    add_raw_trimmed(a.rep, b.rep, false,
+            cong_raw_l(
+                trim_of_trimmed(raw(a.rep, b.rep, false),
+                    raw_trimmed(a.rep, b.rep, false,
                         is_trimmed_of_canonical(a.rep, a.canonical),
                         is_trimmed_of_canonical(b.rep, b.canonical))),
                 c.rep, false),
             Eq/trans(
-                add_assoc_raw(a.rep, b.rep, c.rep, false, false),
-                cong_add_raw_r(a.rep,
-                    Eq/sym(trim_of_trimmed(add_raw(b.rep, c.rep, false),
-                        add_raw_trimmed(b.rep, c.rep, false,
+                raw_assoc(a.rep, b.rep, c.rep, false, false),
+                cong_raw_r(a.rep,
+                    Eq/sym(trim_of_trimmed(raw(b.rep, c.rep, false),
+                        raw_trimmed(b.rep, c.rep, false,
                             is_trimmed_of_canonical(b.rep, b.canonical),
                             is_trimmed_of_canonical(c.rep, c.canonical)))),
                     false))));
 
-let head_of(x : Bits) -> Bool =
-    match x
-    | b\ => false
-    | b\h\.._ => h
-    end;
-
-let tail_of(x : Bits) -> Bits =
-    match x
-    | b\ => b\
-    | b\_\..t => t
-    end;
-
-let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
-    -> Eq(h1, h2) =
-    match p : (s, t, q) => Eq(head_of(s), head_of(t))
-    | refl(@z) => Eq/refl()
-    end;
-
-let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
-    -> Eq(t1, t2) =
-    match p : (s, t, q) => Eq(tail_of(s), tail_of(t))
-    | refl(@z) => Eq/refl()
-    end;
-
-let xor3_inj_mid(a : Bool, @b1 : Bool, @b2 : Bool, c : Bool, p : Eq(xor3(a, b1, c), xor3(a, b2, c)))
-    -> Eq(b1, b2) =
-    match a
-    | true =>
-        match c
-        | true =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
-            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
-            end
-        | false =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
-            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
-            end
-        end
-    | false =>
-        match c
-        | true =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
-            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
-            end
-        | false =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
-            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
-            end
-        end
-    end;
-
-let cong_maj3_mid(a : Bool, @b1 : Bool, @b2 : Bool, p : Eq(b1, b2), c : Bool)
-    -> Eq(maj3(a, b1, c), maj3(a, b2, c)) =
-    Eq/cong((w) => maj3(a, w, c), p);
-
-let succ_raw_inj_absurd(zh : Bool, zt : Bits, pz : Eq(is_trimmed(cons(zh, zt)), true),
-    p : Eq(succ_raw(b\), succ_raw(cons(zh, zt)))) -> False =
-    match zh
-    | true => false_neq_true(Eq/sym(cons_inj_head(@true, @(b\), @false, @(succ_raw(zt)), p)))
-    | false =>
-        let shifted : Eq(is_trimmed(cons(false, b\)), true) =
-            Eq/subst((w : Bits) => Eq(is_trimmed(w), true),
-                cong_cons2(refl_at(false), Eq/sym(cons_inj_tail(@true, @(b\), @true, @zt, p))),
-                pz);
-        false_neq_true(shifted)
-    end;
-
-rec succ_raw_inj(y : Bits, z : Bits,
+pub rec raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bool,
     py : Eq(is_trimmed(y), true), pz : Eq(is_trimmed(z), true),
-    p : Eq(succ_raw(y), succ_raw(z))) -> Eq(y, z) =
-    match y : (b) => Eq(b, z)
-    | b\ =>
-        match z : (d) => Eq(b\, d)
-        | b\ => Eq/refl()
-        | b\zh\..zt => False/absurd(succ_raw_inj_absurd(zh, zt, pz, p))
-        end
-    | b\yh\..yt =>
-        match z : (d) => Eq(cons(yh, yt), d)
-        | b\ => False/absurd(succ_raw_inj_absurd(yh, yt, py, Eq/sym(p)))
-        | b\zh\..zt =>
-            match yh
-            | true =>
-                match zh
-                | true => cong_cons2(refl_at(true), succ_raw_inj(yt, zt,
-                    tail_is_trimmed(true, yt, py), tail_is_trimmed(true, zt, pz),
-                    cons_inj_tail(@false, @(succ_raw(yt)), @false, @(succ_raw(zt)), p)))
-                | false => False/absurd(false_neq_true(
-                    cons_inj_head(p)))
-                end
-            | false =>
-                match zh
-                | true => False/absurd(false_neq_true(Eq/sym(
-                    cons_inj_head(p))))
-                | false => cong_cons2(refl_at(false), cons_inj_tail(@true, @yt, @true, @zt, p))
-                end
-            end
-        end
-    end;
-
-pub rec add_raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bool,
-    py : Eq(is_trimmed(y), true), pz : Eq(is_trimmed(z), true),
-    p : Eq(add_raw(x, y, c), add_raw(x, z, c))) -> Eq(y, z) =
+    p : Eq(raw(x, y, c), raw(x, z, c))) -> Eq(y, z) =
     match x
     | b\ =>
         match c
-        | true => succ_raw_inj(y, z, py, pz,
-            Eq/trans(Eq/sym(add_raw_succ_l(y)), Eq/trans(p, add_raw_succ_l(z))))
-        | false => Eq/trans(Eq/sym(add_raw_zero_l(y)), Eq/trans(p, add_raw_zero_l(z)))
+        | true => succ/raw_inj(y, z, py, pz,
+            Eq/trans(Eq/sym(raw_succ_l(y)), Eq/trans(p, raw_succ_l(z))))
+        | false => Eq/trans(Eq/sym(raw_zero_l(y)), Eq/trans(p, raw_zero_l(z)))
         end
     | b\xh\..xt =>
         match y : (b) => Eq(b, z)
         | b\ =>
             match z : (d) => Eq(b\, d)
             | b\ => Eq/refl()
-            | b\zh\..zt => False/absurd(add_raw_cancel_absurd(xh, xt, zh, zt, c, pz, p))
+            | b\zh\..zt => False/absurd(raw_cancel_absurd(xh, xt, zh, zt, c, pz, p))
             end
         | b\yh\..yt =>
             match z : (d) => Eq(cons(yh, yt), d)
-            | b\ => False/absurd(add_raw_cancel_absurd(xh, xt, yh, yt, c, py, Eq/sym(p)))
+            | b\ => False/absurd(raw_cancel_absurd(xh, xt, yh, yt, c, py, Eq/sym(p)))
             | b\zh\..zt =>
                 cong_cons2(xor3_inj_mid(xh, c, cons_inj_head(p)),
-                    add_raw_cancel_l(xt, yt, zt, maj3(xh, zh, c),
+                    raw_cancel_l(xt, yt, zt, maj3(xh, zh, c),
                         tail_is_trimmed(yh, yt, py), tail_is_trimmed(zh, zt, pz),
                         Eq/trans(
-                            Eq/sym(cong_add_raw_c(xt, yt,
+                            Eq/sym(cong_raw_c(xt, yt,
                                 cong_maj3_mid(xh, xor3_inj_mid(xh, c, cons_inj_head(p)), c))),
                             cons_inj_tail(p))))
             end
         end
     end
-and add_raw_cancel_absurd(xh : Bool, xt : Bits, zh : Bool, zt : Bits, c : Bool,
+and raw_cancel_absurd(xh : Bool, xt : Bits, zh : Bool, zt : Bits, c : Bool,
     pz : Eq(is_trimmed(cons(zh, zt)), true),
-    p : Eq(add_raw(cons(xh, xt), b\, c), add_raw(cons(xh, xt), cons(zh, zt), c))) -> False =
+    p : Eq(raw(cons(xh, xt), b\, c), raw(cons(xh, xt), cons(zh, zt), c))) -> False =
     let shifted : Eq(is_trimmed(cons(false, b\)), true) =
         Eq/subst((w : Bits) => Eq(is_trimmed(w), true),
             cong_cons2(
                 Eq/sym(xor3_inj_mid(xh, @false, @zh, c, cons_inj_head(p))),
-                Eq/sym(add_raw_cancel_l(xt, b\, zt, maj3(xh, zh, c),
+                Eq/sym(raw_cancel_l(xt, b\, zt, maj3(xh, zh, c),
                     refl_at(true), tail_is_trimmed(zh, zt, pz),
                     Eq/trans(
-                        Eq/sym(cong_add_raw_c(xt, b\,
+                        Eq/sym(cong_raw_c(xt, b\,
                             cong_maj3_mid(xh, xor3_inj_mid(xh, @false, @zh, c, cons_inj_head(p)), c))),
                         cons_inj_tail(p))))),
             pz);
     false_neq_true(shifted);
 
-pub let add_raw_cancel_r(x : Bits, y : Bits, z : Bits, c : Bool,
+pub let raw_cancel_r(x : Bits, y : Bits, z : Bits, c : Bool,
     py : Eq(is_trimmed(y), true), pz : Eq(is_trimmed(z), true),
-    p : Eq(add_raw(y, x, c), add_raw(z, x, c))) -> Eq(y, z) =
-    add_raw_cancel_l(x, y, z, c, py, pz,
-        Eq/trans(add_comm_raw(x, y, c), Eq/trans(p, add_comm_raw(z, x, c))));
+    p : Eq(raw(y, x, c), raw(z, x, c))) -> Eq(y, z) =
+    raw_cancel_l(x, y, z, c, py, pz,
+        Eq/trans(raw_comm(x, y, c), Eq/trans(p, raw_comm(z, x, c))));
 
-let cong_rep(@s : BigNat, @t : BigNat, p : Eq(s, t)) -> Eq(s.rep, t.rep) =
-    Eq/cong((n : BigNat) => n.rep, p);
-
-pub let add_cancel_l(a : BigNat, b : BigNat, c : BigNat, p : Eq(add(a, b), add(a, c))) -> Eq(b, c) =
+pub let cancel_l(a : BigNat, b : BigNat, c : BigNat, p : Eq(add(a, b), add(a, c))) -> Eq(b, c) =
     eq(b, c,
-        add_raw_cancel_l(a.rep, b.rep, c.rep, false,
+        raw_cancel_l(a.rep, b.rep, c.rep, false,
             is_trimmed_of_canonical(b.rep, b.canonical),
             is_trimmed_of_canonical(c.rep, c.canonical),
             Eq/trans(
-                Eq/sym(trim_of_trimmed(add_raw(a.rep, b.rep, false),
-                    add_raw_trimmed(a.rep, b.rep, false,
+                Eq/sym(trim_of_trimmed(raw(a.rep, b.rep, false),
+                    raw_trimmed(a.rep, b.rep, false,
                         is_trimmed_of_canonical(a.rep, a.canonical),
                         is_trimmed_of_canonical(b.rep, b.canonical)))),
                 Eq/trans(cong_rep(p),
-                    trim_of_trimmed(add_raw(a.rep, c.rep, false),
-                        add_raw_trimmed(a.rep, c.rep, false,
+                    trim_of_trimmed(raw(a.rep, c.rep, false),
+                        raw_trimmed(a.rep, c.rep, false,
                             is_trimmed_of_canonical(a.rep, a.canonical),
                             is_trimmed_of_canonical(c.rep, c.canonical)))))));
 
-pub let add_cancel_r(a : BigNat, b : BigNat, c : BigNat, p : Eq(add(b, a), add(c, a))) -> Eq(b, c) =
-    add_cancel_l(a, b, c, Eq/trans(add_comm(a, b), Eq/trans(p, add_comm(c, a))));
+pub let cancel_r(a : BigNat, b : BigNat, c : BigNat, p : Eq(add(b, a), add(c, a))) -> Eq(b, c) =
+    cancel_l(a, b, c, Eq/trans(comm(a, b), Eq/trans(p, comm(c, a))));
 

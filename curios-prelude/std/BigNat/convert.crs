@@ -2,11 +2,7 @@ use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul,
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/Bits/{cons};
-use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, view, zero};
-use /std/BigNat/add/{add, succ};
-use /std/BigNat/cmp/{cmp, eql, gt, gte, lt, lte};
-use /std/BigNat/sub/{sub};
-use /std/BigNat/mul/{mul};
+use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, view, zero, mod add, mod cmp, mod mul, mod sub};
 
 pub rec bit_len(a : BigNat) -> Nat =
     match view(a)
@@ -41,26 +37,26 @@ pub let to_str(a : BigNat) -> Str =
     end;
 
 satisfy Eql(BigNat) {
-    eql(a, b) = eql(a, b)
+    eql(a, b) = cmp/eql(a, b)
 }
 
 satisfy Cmp(BigNat) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt(a, b) = cmp/lt(a, b),
+    lte(a, b) = cmp/lte(a, b),
+    gt(a, b) = cmp/gt(a, b),
+    gte(a, b) = cmp/gte(a, b)
 }
 
 satisfy Add(BigNat) {
-    add(a, b) = add(a, b)
+    add(a, b) = add/add(a, b)
 }
 
 satisfy Sub(BigNat) {
-    sub(a, b) = sub(a, b)
+    sub(a, b) = sub/sub(a, b)
 }
 
 satisfy Mul(BigNat) {
-    mul(a, b) = mul(a, b)
+    mul(a, b) = mul/mul(a, b)
 }
 
 satisfy Show(BigNat) {
@@ -68,5 +64,5 @@ satisfy Show(BigNat) {
 }
 
 satisfy Ord(BigNat) {
-    cmp(a, b) = cmp(a, b)
+    cmp(a, b) = cmp/cmp(a, b)
 }

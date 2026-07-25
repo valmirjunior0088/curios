@@ -11,8 +11,8 @@ use /std/Bool/{false_neq_true};
 use /std/Bits/{cons};
 use /std/Order/{cong_flip};
 use /std/BigNat/{of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_canonical,
-    trim, trim_of_trimmed, view, add_raw, add_raw_trimmed, succ_raw, succ_raw_trimmed,
-    mul_raw, combine, xor3, maj3};
+    trim, trim_of_trimmed, view, combine, xor3, maj3,
+    mod add, mod succ, mod mul};
 
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold),
 -- so it reduces on any cons-headed rep, even one with an opaque tail.
@@ -41,20 +41,20 @@ pub let raw_non_zero(rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(re
     -> is_cons(of_bits(rep).rep) =
     Eq/subst((w : Bits) => is_cons(w), Eq/sym(trim_of_trimmed(rep, tr)), ne);
 
--- add_raw of a cons-headed left operand is cons-headed
-let add_raw_cons(x : Bits, y : Bits, c : Bool, ne : is_cons(x)) -> is_cons(add_raw(x, y, c)) =
-    match x : (r) => is_cons(add_raw(r, y, c))
+-- add/raw of a cons-headed left operand is cons-headed
+let add_raw_cons(x : Bits, y : Bits, c : Bool, ne : is_cons(x)) -> is_cons(add/raw(x, y, c)) =
+    match x : (r) => is_cons(add/raw(r, y, c))
     | b\ => False/absurd(ne)
     | b\xh\..xt =>
-        match y : (yy) => is_cons(add_raw(cons(xh, xt), yy, c))
+        match y : (yy) => is_cons(add/raw(cons(xh, xt), yy, c))
         | b\ => True/qed()
         | b\_\.._ => True/qed()
         end
     end;
 
--- succ_raw is always cons-headed (succ_raw(b\) = cons(true, b\))
-let succ_raw_cons(x : Bits) -> is_cons(succ_raw(x)) =
-    match x : (r) => is_cons(succ_raw(r))
+-- succ/raw is always cons-headed (succ/raw(b\) = cons(true, b\))
+let succ_raw_cons(x : Bits) -> is_cons(succ/raw(x)) =
+    match x : (r) => is_cons(succ/raw(r))
     | b\ => True/qed()
     | b\xh\..xt => match xh | true => True/qed() | false => True/qed() end
     end;
@@ -72,18 +72,18 @@ let trim_head_non_zero(h : Bool, r : Bits, ne : is_cons(trim(r))) -> is_cons(tri
 let trim_head_true(r : Bits) -> is_cons(trim(cons(true, r))) =
     combine_true_non_zero(trim(r));
 
-rec carry_non_zero(x : Bits) -> is_cons(trim(add_raw(b\, x, true))) =
+rec carry_non_zero(x : Bits) -> is_cons(trim(add/raw(b\, x, true))) =
     match x
     | b\ => True/qed()
     | b\xh\..xt =>
         match xh
-        | true => trim_head_non_zero(false, add_raw(b\, xt, true), carry_non_zero(xt))
-        | false => trim_head_true(add_raw(b\, xt, false))
+        | true => trim_head_non_zero(false, add/raw(b\, xt, true), carry_non_zero(xt))
+        | false => trim_head_true(add/raw(b\, xt, false))
         end
     end;
 
 rec add_trim_non_zero(a : Bits, b : Bits, c : Bool,
-    tr : Eq(is_trimmed(a), true), ne : is_cons(a)) -> is_cons(trim(add_raw(a, b, c))) =
+    tr : Eq(is_trimmed(a), true), ne : is_cons(a)) -> is_cons(trim(add/raw(a, b, c))) =
     match a
     | b\ => False/absurd(ne)
     | b\ah\..at =>
@@ -97,13 +97,13 @@ rec add_trim_non_zero(a : Bits, b : Bits, c : Bool,
                     match bh
                     | true =>
                         match c
-                        | true => trim_head_true(add_raw(b\, bt, true))
-                        | false => trim_head_non_zero(false, add_raw(b\, bt, true), carry_non_zero(bt))
+                        | true => trim_head_true(add/raw(b\, bt, true))
+                        | false => trim_head_non_zero(false, add/raw(b\, bt, true), carry_non_zero(bt))
                         end
                     | false =>
                         match c
-                        | true => trim_head_non_zero(false, add_raw(b\, bt, true), carry_non_zero(bt))
-                        | false => trim_head_true(add_raw(b\, bt, false))
+                        | true => trim_head_non_zero(false, add/raw(b\, bt, true), carry_non_zero(bt))
+                        | false => trim_head_true(add/raw(b\, bt, false))
                         end
                     end
                 end
@@ -111,9 +111,9 @@ rec add_trim_non_zero(a : Bits, b : Bits, c : Bool,
             end
         | b\ath\..att =>
             match b
-            | b\ => trim_head_non_zero(xor3(ah, false, c), add_raw(at, b\, maj3(ah, false, c)),
+            | b\ => trim_head_non_zero(xor3(ah, false, c), add/raw(at, b\, maj3(ah, false, c)),
                 add_trim_non_zero(at, b\, maj3(ah, false, c), tr, True/qed()))
-            | b\bh\..bt => trim_head_non_zero(xor3(ah, bh, c), add_raw(at, bt, maj3(ah, bh, c)),
+            | b\bh\..bt => trim_head_non_zero(xor3(ah, bh, c), add/raw(at, bt, maj3(ah, bh, c)),
                 add_trim_non_zero(at, bt, maj3(ah, bh, c), tr, True/qed()))
             end
         end
@@ -121,16 +121,16 @@ rec add_trim_non_zero(a : Bits, b : Bits, c : Bool,
 
 rec mul_raw_trim_cons(p : Bits, q : Bits,
     tp : Eq(is_trimmed(p), true), np : is_cons(p),
-    tq : Eq(is_trimmed(q), true), nq : is_cons(q)) -> is_cons(trim(mul_raw(p, q))) =
+    tq : Eq(is_trimmed(q), true), nq : is_cons(q)) -> is_cons(trim(mul/raw(p, q))) =
     match p
     | b\ => False/absurd(np)
     | b\ph\..pt =>
         match ph
-        | true => add_trim_non_zero(q, cons(false, mul_raw(pt, q)), false, tq, nq)
+        | true => add_trim_non_zero(q, cons(false, mul/raw(pt, q)), false, tq, nq)
         | false =>
             match pt
             | b\ => False/absurd(false_neq_true(tp))
-            | b\_\.._ => trim_head_non_zero(false, mul_raw(pt, q),
+            | b\_\.._ => trim_head_non_zero(false, mul/raw(pt, q),
                 mul_raw_trim_cons(pt, q, tp, True/qed(), tq, nq))
             end
         end
@@ -159,14 +159,14 @@ pub let dbl_succ(t : NonZero) -> NonZero =
 
 pub let add(p : NonZero, q : NonZero) -> NonZero =
     NonZero { magnitude = p.magnitude + q.magnitude,
-        non_zero = raw_non_zero(add_raw(p.magnitude.rep, q.magnitude.rep, false),
-            add_raw_trimmed(p.magnitude.rep, q.magnitude.rep, false, nz_trimmed(p), nz_trimmed(q)),
+        non_zero = raw_non_zero(add/raw(p.magnitude.rep, q.magnitude.rep, false),
+            add/raw_trimmed(p.magnitude.rep, q.magnitude.rep, false, nz_trimmed(p), nz_trimmed(q)),
             add_raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)) };
 
 pub let succ(p : NonZero) -> NonZero =
-    NonZero { magnitude = BigNat/succ(p.magnitude),
-        non_zero = raw_non_zero(succ_raw(p.magnitude.rep),
-            succ_raw_trimmed(p.magnitude.rep, nz_trimmed(p)), succ_raw_cons(p.magnitude.rep)) };
+    NonZero { magnitude = BigNat/succ/succ(p.magnitude),
+        non_zero = raw_non_zero(succ/raw(p.magnitude.rep),
+            succ/raw_trimmed(p.magnitude.rep, nz_trimmed(p)), succ_raw_cons(p.magnitude.rep)) };
 
 pub let mul(p : NonZero, q : NonZero) -> NonZero =
     NonZero { magnitude = p.magnitude * q.magnitude,
@@ -174,7 +174,7 @@ pub let mul(p : NonZero, q : NonZero) -> NonZero =
             nz_trimmed(p), p.non_zero, nz_trimmed(q), q.non_zero) };
 
 pub let cmp(p : NonZero, q : NonZero) -> Order =
-    BigNat/cmp(p.magnitude, q.magnitude);
+    BigNat/cmp/cmp(p.magnitude, q.magnitude);
 
 -- ===================== BigNat bridge =====================
 
@@ -202,41 +202,41 @@ pub rec of_big_nat(a : BigNat) -> Split =
 -- ===================== ring / order lemma corpus (delegation) =====================
 
 pub let add_comm(p : NonZero, q : NonZero) -> Eq(add(p, q), add(q, p)) =
-    eq(add(p, q), add(q, p), BigNat/add_comm(p.magnitude, q.magnitude));
+    eq(add(p, q), add(q, p), BigNat/add/comm(p.magnitude, q.magnitude));
 
 pub let add_assoc(p : NonZero, q : NonZero, r : NonZero)
     -> Eq(add(add(p, q), r), add(p, add(q, r))) =
     eq(add(add(p, q), r), add(p, add(q, r)),
-        BigNat/add_assoc(p.magnitude, q.magnitude, r.magnitude));
+        BigNat/add/assoc(p.magnitude, q.magnitude, r.magnitude));
 
 pub let mul_comm(p : NonZero, q : NonZero) -> Eq(mul(p, q), mul(q, p)) =
-    eq(mul(p, q), mul(q, p), BigNat/mul_comm(p.magnitude, q.magnitude));
+    eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.magnitude, q.magnitude));
 
 pub let mul_assoc(p : NonZero, q : NonZero, r : NonZero)
     -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
     eq(mul(mul(p, q), r), mul(p, mul(q, r)),
-        BigNat/mul_assoc(p.magnitude, q.magnitude, r.magnitude));
+        BigNat/mul/assoc(p.magnitude, q.magnitude, r.magnitude));
 
 pub let distrib_l(p : NonZero, q : NonZero, r : NonZero)
     -> Eq(mul(p, add(q, r)), add(mul(p, q), mul(p, r))) =
     eq(mul(p, add(q, r)),
         add(mul(p, q), mul(p, r)),
-        BigNat/distrib_l(p.magnitude, q.magnitude, r.magnitude));
+        BigNat/mul/distrib_l(p.magnitude, q.magnitude, r.magnitude));
 
 pub let cmp_refl(p : NonZero) -> Eq(cmp(p, p), Order/eq()) =
-    BigNat/cmp_refl(p.magnitude);
+    BigNat/cmp/refl(p.magnitude);
 
 pub let cmp_eq(p : NonZero, q : NonZero, w : Eq(cmp(p, q), Order/eq())) -> Eq(p, q) =
-    eq(p, q, BigNat/cmp_eq(p.magnitude, q.magnitude, w));
+    eq(p, q, BigNat/cmp/to_eq(p.magnitude, q.magnitude, w));
 
 pub let cmp_flip(p : NonZero, q : NonZero)
     -> Eq(cmp(q, p), Order/flip(cmp(p, q))) =
-    BigNat/cmp_flip(p.magnitude, q.magnitude);
+    BigNat/cmp/flip(p.magnitude, q.magnitude);
 
 pub let cmp_trans(p : NonZero, q : NonZero, r : NonZero,
     u : Eq(cmp(p, q), Order/lt()), v : Eq(cmp(q, r), Order/lt()))
     -> Eq(cmp(p, r), Order/lt()) =
-    BigNat/cmp_trans(p.magnitude, q.magnitude, r.magnitude, u, v);
+    BigNat/cmp/trans(p.magnitude, q.magnitude, r.magnitude, u, v);
 
 pub let cmp_gt_to_lt(p : NonZero, q : NonZero, w : Eq(cmp(p, q), Order/gt()))
     -> Eq(cmp(q, p), Order/lt()) =

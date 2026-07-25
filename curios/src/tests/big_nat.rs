@@ -31,7 +31,7 @@ fn big_nat_mul_small_propagates_carry() {
     // the shift-and-add recursion has to land.
     let source = r#"
         use /std/{Handle, Str, BigNat};
-        /std/print(BigNat/to_str(BigNat/mul_small(BigNat/of_nat(9999), 99999)))
+        /std/print(BigNat/to_str(BigNat/mul/small(BigNat/of_nat(9999), 99999)))
         "#;
     assert_eq!(run(source), b"999890001");
 }
@@ -55,7 +55,7 @@ fn big_nat_mul_pow2_builds_large_powers() {
     // doubling is a low-bit prepend on the numeral, not native arithmetic.
     let source = r#"
         use /std/{Handle, Str, BigNat};
-        /std/print(BigNat/to_str(BigNat/mul_pow2(BigNat/of_nat(1), 40)))
+        /std/print(BigNat/to_str(BigNat/mul/pow2(BigNat/of_nat(1), 40)))
         "#;
     assert_eq!(run(source), b"1099511627776");
 }

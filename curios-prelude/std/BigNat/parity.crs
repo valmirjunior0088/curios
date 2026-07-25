@@ -3,7 +3,6 @@ use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/Bits/{cons};
 use /std/BigNat/{BigNat, view, zero};
-use /std/BigNat/add/{succ};
 
 pub rec is_even(a : BigNat) -> Bool =
     match view(a)

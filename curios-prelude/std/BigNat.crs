@@ -131,26 +131,165 @@ pub rec of_nat(n : Nat) -> BigNat =
     | false => of_bits(combine(n % 2 == 1, of_nat(n / 2).rep))
     end;
 
+pub let xor3(a : Bool, b : Bool, c : Bool) -> Bool =
+    match a
+    | true => match b | true => c | false => match c | true => false | false => true end end
+    | false => match b | true => match c | true => false | false => true end | false => c end
+    end;
 
--- Each operation family is a private module: the raw-`Bits` ladders and their
--- proof developments are implementation, visible throughout this subtree and
--- nowhere else. The public surface is unchanged — every name that was
--- reachable as `/std/BigNat/x` still is.
+pub let maj3(a : Bool, b : Bool, c : Bool) -> Bool =
+    match a
+    | true => match b | true => true | false => c end
+    | false => match b | true => c | false => false end
+    end;
 
-mod add;
-pub use add/{add, add_assoc, add_assoc_raw, add_cancel_l, add_cancel_r, add_comm, add_comm_raw, add_raw, add_raw_cancel_l, add_raw_cancel_r, add_raw_carry_spec, add_raw_one_r, add_raw_succ_out_l, add_raw_succ_out_r, add_raw_trimmed, eq, maj3, succ, succ_raw, succ_raw_trimmed, trim_of_trimmed, xor3};
+let xor3_comm(a : Bool, b : Bool, c : Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
+    match a
+    | true => match b | true => refl_at(xor3(true, true, c)) | false => refl_at(xor3(true, false, c)) end
+    | false => match b | true => refl_at(xor3(false, true, c)) | false => refl_at(xor3(false, false, c)) end
+    end;
 
-mod cmp;
-pub use cmp/{cmp, cmp_eq, cmp_flip, cmp_raw, cmp_raw_eq, cmp_raw_flip, cmp_raw_refl, cmp_raw_trans, cmp_refl, cmp_trans, eql, gt, gte, lt, lte};
+let maj3_comm(a : Bool, b : Bool, c : Bool) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
+    match a
+    | true => match b | true => refl_at(maj3(true, true, c)) | false => refl_at(maj3(true, false, c)) end
+    | false => match b | true => refl_at(maj3(false, true, c)) | false => refl_at(maj3(false, false, c)) end
+    end;
 
-mod sub;
-pub use sub/{sub, sub_raw};
+let xor3_inj_mid(a : Bool, @b1 : Bool, @b2 : Bool, c : Bool, p : Eq(xor3(a, b1, c), xor3(a, b2, c)))
+    -> Eq(b1, b2) =
+    match a
+    | true =>
+        match c
+        | true =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
+            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
+            end
+        | false =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
+            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
+            end
+        end
+    | false =>
+        match c
+        | true =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
+            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
+            end
+        | false =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
+            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
+            end
+        end
+    end;
 
-mod mul;
-pub use mul/{distrib_l, distrib_r, mul, mul_assoc, mul_comm, mul_pow2, mul_pow2_add, mul_pow2_compose, mul_pow2_mul_l, mul_raw, mul_small, trim_distrib_l, trim_distrib_r, trim_mul_assoc, trim_mul_bit0_r, trim_mul_bit1_r, trim_mul_comm, trim_mul_one_r};
+let cong_maj3_mid(a : Bool, @b1 : Bool, @b2 : Bool, p : Eq(b1, b2), c : Bool)
+    -> Eq(maj3(a, b1, c), maj3(a, b2, c)) =
+    Eq/cong((w) => maj3(a, w, c), p);
+
+pub let eq(a : BigNat, b : BigNat, p : Eq(a.rep, b.rep)) -> Eq(a, b) =
+    Eq/subst((r : Bits) => (c : Canonical(r)) -> Eq(a, BigNat { rep = r, canonical = c }),
+             p,
+             (c : Canonical(a.rep)) => Eq/refl())(b.canonical);
+
+pub let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
+    -> Eq(cons(h1, t1), cons(h2, t2)) =
+    match ph : (a, b, q) => Eq(cons(a, t1), cons(b, t2))
+    | refl(@z) =>
+        match pt : (a2, b2, q2) => Eq(cons(h1, a2), cons(h1, b2))
+        | refl(@z2) => Eq/refl()
+        end
+    end;
+
+pub let cong_combine(h : Bool, @s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
+    Eq/cong((w) => combine(h, w), p);
+
+let cong_of_bits(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(of_bits(s), of_bits(t)) =
+    Eq/cong(of_bits, p);
+
+let cong_rep(@s : BigNat, @t : BigNat, p : Eq(s, t)) -> Eq(s.rep, t.rep) =
+    Eq/cong((n : BigNat) => n.rep, p);
+
+let head_of(x : Bits) -> Bool =
+    match x
+    | b\ => false
+    | b\h\.._ => h
+    end;
+
+let tail_of(x : Bits) -> Bits =
+    match x
+    | b\ => b\
+    | b\_\..t => t
+    end;
+
+let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
+    -> Eq(h1, h2) =
+    match p : (s, t, q) => Eq(head_of(s), head_of(t))
+    | refl(@z) => Eq/refl()
+    end;
+
+let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
+    -> Eq(t1, t2) =
+    match p : (s, t, q) => Eq(tail_of(s), tail_of(t))
+    | refl(@z) => Eq/refl()
+    end;
+
+let nonempty(x : Bits) -> Bool =
+    match x
+    | b\ => false
+    | b\_\.._ => true
+    end;
+
+let cong_is_trimmed(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(is_trimmed(s), is_trimmed(t)) =
+    Eq/cong(is_trimmed, p);
+
+let is_trimmed_cons(head : Bool, u : Bits, pt : Eq(is_trimmed(u), true), pn : Eq(nonempty(u), true))
+    -> Eq(is_trimmed(cons(head, u)), true) =
+    match u : (v) => Eq(is_trimmed(cons(head, v)), true)
+    | b\ => False/absurd(false_neq_true(pn))
+    | b\_\.._ => pt
+    end;
+
+pub rec trim_of_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
+    match x : (a) => Eq(trim(a), a)
+    | b\ => Eq/refl()
+    | b\h\..t =>
+        match t : (u) => Eq(trim(cons(h, u)), cons(h, u))
+        | b\ =>
+            match h : (g) => Eq(trim(cons(g, b\)), cons(g, b\))
+            | true => Eq/refl()
+            | false => False/absurd(false_neq_true(p))
+            end
+        | b\th\..tt => cong_combine(h, trim_of_trimmed(cons(th, tt), p))
+        end
+    end;
+
+
+-- Each operation family is a facade: the module's namesake binding is the
+-- operation, and the laws about it nest underneath — `BigNat/add` adds,
+-- `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the
+-- untrimmed `Bits` ladder it is built from.
+
+pub mod add;
+pub use add/{let add};
+
+pub mod succ;
+pub use succ/{let succ};
+
+pub mod cmp;
+pub use cmp/{let cmp};
+
+pub mod mul;
+pub use mul/{let mul};
+
+pub mod sub;
+pub use sub/{let sub};
 
 mod parity;
-pub use parity/{div2, is_even};
+pub use parity/{is_even, div2};
 
 mod convert;
-pub use convert/{bit_len, to_str};
+pub use convert/{to_str, bit_len};
