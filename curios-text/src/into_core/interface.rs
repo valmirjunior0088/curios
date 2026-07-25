@@ -1,7 +1,7 @@
 use {
     super::ModuleInfo,
     crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
-    curios_base::{Entropy, Qualifier, RootId},
+    curios_base::{Qualifier, RootId},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
@@ -38,23 +38,10 @@ impl PublicInterface {
 )]
 pub(super) struct Entry {
     pub target: Qualifier,
-    pub source: Source,
     /// The nominal declaration whose representation this export exposes. Kept
     /// distinct from `target` so re-exports cannot manufacture representation
     /// visibility and aliases can inherit it during the post-lowering audit.
     pub representation: Option<Qualifier>,
-}
-
-// Provenance of an export entry. A slot may be claimed by at most one source; a
-// re-derivation by the same source is idempotent, a different source conflicts.
-#[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
-pub(super) enum Source {
-    Direct,
-    ReExport(usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -63,14 +50,195 @@ enum Ns {
     Binding,
 }
 
-// A `pub use` lifted out of the syntax tree, tagged with the module it lives in
-// and a stable id (its `ReExport` source). Collected once; the fixed point reads
-// only these plus the interface map.
+// A `pub use` lifted out of the syntax tree, tagged with the module it lives in.
+// Collected once; the fixed point reads only these plus the interface map.
 struct PubUse {
     module: Qualifier,
-    id: usize,
     name: Name,
     group: UseGroup,
+}
+
+// === Visibility ==============================================================
+//
+// One rule governs both namespaces: a declaration written without `pub` in
+// module `M` is visible exactly within `M`'s subtree, and a `pub` one is
+// additionally visible wherever `M` itself is. Reachability is therefore the
+// conjunction along a path, which the callers obtain by walking hop by hop.
+//
+// The public interface is consulted first, so a `pub` declaration and a
+// re-export target resolve identically for every consumer. The subtree fallback
+// covers only what the interface deliberately omits: the module's own
+// non-`pub` declarations, visible to itself and its descendants.
+//
+// Globs are deliberately *not* relaxed — `resolvable` reads the public
+// interface alone, so `use M/*` imports M's exported surface and `pub use M/*`
+// can never widen a subtree-private item's audience. Reaching a non-`pub`
+// declaration always requires naming it.
+
+/// Who can see each declaration, as a set of subtree roots: a declaration is
+/// visible to consumer `C` when `C` lies within any of them.
+///
+/// The audience of a non-`pub` declaration in `M` is `M` itself. The audience
+/// of anything the interface graph exposes at `M` — a `pub` declaration or a
+/// re-export target — is `M`'s own audience, so `pub` inside a private module
+/// reaches exactly that module's audience and no further. Re-exports can expose
+/// one declaration at several unrelated points, which is why an audience is a
+/// set rather than a single qualifier.
+///
+/// Module audiences are a fixed point (a `pub use` chain may cycle, and cyclic
+/// module dependencies are supported); binding audiences read off the converged
+/// module map in one pass.
+pub(super) struct Audiences {
+    modules: HashMap<Qualifier, Vec<Qualifier>>,
+    bindings: HashMap<Qualifier, Vec<Qualifier>>,
+}
+
+impl Audiences {
+    pub(super) fn compute(
+        public: &HashMap<Qualifier, PublicInterface>,
+        table: &HashMap<Qualifier, ModuleInfo>,
+    ) -> Self {
+        let mut modules: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
+        // The compilation root is visible to the whole program.
+        modules.insert(Qualifier::empty(), vec![Qualifier::empty()]);
+
+        for (module, info) in table {
+            for (label, vis_pub) in info.children() {
+                if !vis_pub {
+                    widen(&mut modules, module.with(label), module.clone());
+                }
+            }
+        }
+
+        loop {
+            let mut changed = false;
+            for (module, interface) in public {
+                let exposure = modules.get(module).cloned().unwrap_or_default();
+                for entry in interface.children.values() {
+                    for root in &exposure {
+                        changed |= widen(&mut modules, entry.target.clone(), root.clone());
+                    }
+                }
+            }
+
+            if !changed {
+                break;
+            }
+        }
+
+        let mut bindings: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
+
+        for (module, info) in table {
+            for (label, vis_pub) in info.bindings() {
+                if !vis_pub {
+                    widen(&mut bindings, module.with(label), module.clone());
+                }
+            }
+        }
+
+        for (module, interface) in public {
+            let exposure = modules.get(module).cloned().unwrap_or_default();
+            for entry in interface.bindings.values() {
+                for root in &exposure {
+                    widen(&mut bindings, entry.target.clone(), root.clone());
+                }
+            }
+        }
+
+        Self { modules, bindings }
+    }
+
+    /// The audience of the module `qualifier` names. A namespace the interface
+    /// never mentions (a synthetic one built during lowering) inherits its
+    /// parent's audience.
+    pub(super) fn module(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
+        match self.modules.get(qualifier) {
+            Some(audience) => audience.clone(),
+            None if qualifier.segments().is_empty() => vec![Qualifier::empty()],
+            None => self.module(&qualifier.without_last()),
+        }
+    }
+
+    /// The audience of the binding `qualifier` names, falling back to its
+    /// namespace for compiler-built bindings the interface never registered.
+    pub(super) fn binding(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
+        match self.bindings.get(qualifier) {
+            Some(audience) => audience.clone(),
+            None => self.module(&qualifier.without_last()),
+        }
+    }
+
+    /// Whether everything that can see `audience` can also see `referent`:
+    /// every root of the exposed audience must lie within some root of the
+    /// referent's. An empty referent audience is nobody, so nothing covers it.
+    pub(super) fn covers(audience: &[Qualifier], referent: &[Qualifier]) -> bool {
+        audience
+            .iter()
+            .all(|root| referent.iter().any(|reach| root.is_within(reach)))
+    }
+}
+
+// Add `root` to `key`'s audience unless an existing root already contains it,
+// dropping any it subsumes so the set stays an antichain and the fixed point
+// terminates. Returns whether the audience grew.
+fn widen(
+    audiences: &mut HashMap<Qualifier, Vec<Qualifier>>,
+    key: Qualifier,
+    root: Qualifier,
+) -> bool {
+    let audience = audiences.entry(key).or_default();
+
+    if audience.iter().any(|existing| root.is_within(existing)) {
+        return false;
+    }
+
+    audience.retain(|existing| !existing.is_within(&root));
+    audience.push(root);
+    true
+}
+
+/// The target of `parent`'s child module `label` as seen from `consumer`, or
+/// `None` when it is absent or out of view.
+pub(super) fn visible_child(
+    public: &HashMap<Qualifier, PublicInterface>,
+    table: &HashMap<Qualifier, ModuleInfo>,
+    consumer: &Qualifier,
+    parent: &Qualifier,
+    label: &str,
+) -> Option<Qualifier> {
+    if let Some(entry) = public.get(parent).and_then(|i| i.children.get(label)) {
+        return Some(entry.target.clone());
+    }
+
+    let within = consumer.is_within(parent);
+    let declared = table
+        .get(parent)
+        .and_then(|info| info.get_child(label))
+        .is_some();
+
+    (within && declared).then(|| parent.with(label))
+}
+
+/// The target of `parent`'s binding `label` as seen from `consumer`, or `None`
+/// when it is absent or out of view.
+pub(super) fn visible_binding(
+    public: &HashMap<Qualifier, PublicInterface>,
+    table: &HashMap<Qualifier, ModuleInfo>,
+    consumer: &Qualifier,
+    parent: &Qualifier,
+    label: &str,
+) -> Option<Qualifier> {
+    if let Some(entry) = public.get(parent).and_then(|i| i.bindings.get(label)) {
+        return Some(entry.target.clone());
+    }
+
+    let within = consumer.is_within(parent);
+    let declared = table
+        .get(parent)
+        .and_then(|info| info.get_binding(label))
+        .is_some();
+
+    (within && declared).then(|| parent.with(label))
 }
 
 // Phase 2 + 3 entry point: seed direct public interfaces (including inductive
@@ -92,7 +260,6 @@ pub(super) fn resolve(
 ) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
     let mut public = HashMap::new();
     let mut pub_uses = Vec::new();
-    let counter = Entropy::<usize>::new();
 
     seed(
         &entrypoint.module.items,
@@ -101,7 +268,6 @@ pub(super) fn resolve(
         table,
         &mut public,
         &mut pub_uses,
-        &counter,
     )?;
 
     fixed_point(&mut public, table, &pub_uses)?;
@@ -114,10 +280,9 @@ pub(super) fn resolve_prelude(
     roots: &[(String, RootId)],
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut HashMap<Qualifier, ModuleInfo>,
-) -> Result<(HashMap<Qualifier, PublicInterface>, usize), Error> {
+) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
     let mut public = HashMap::new();
     let mut pub_uses = Vec::new();
-    let counter = Entropy::<usize>::new();
 
     // Seed the synthetic compilation root as well: its public children are the
     // explicitly mounted `/sys`, `/syn`, and `/std` roots. Absolute references
@@ -129,7 +294,6 @@ pub(super) fn resolve_prelude(
         table,
         &mut public,
         &mut pub_uses,
-        &counter,
     )?;
 
     for (name, _) in roots {
@@ -144,13 +308,12 @@ pub(super) fn resolve_prelude(
             table,
             &mut public,
             &mut pub_uses,
-            &counter,
         )?;
     }
 
     fixed_point(&mut public, table, &pub_uses)?;
     classify_dead(&public, table, &pub_uses)?;
-    Ok((public, counter.count()))
+    Ok(public)
 }
 
 pub(super) fn resolve_with_prelude(
@@ -158,12 +321,9 @@ pub(super) fn resolve_with_prelude(
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut HashMap<Qualifier, ModuleInfo>,
     prepared: HashMap<Qualifier, PublicInterface>,
-    interface_floor: usize,
 ) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
     let mut public = prepared;
     let mut pub_uses = Vec::new();
-    let counter = Entropy::<usize>::new();
-    counter.seed(interface_floor);
 
     seed(
         &entrypoint.module.items,
@@ -172,7 +332,6 @@ pub(super) fn resolve_with_prelude(
         table,
         &mut public,
         &mut pub_uses,
-        &counter,
     )?;
     fixed_point(&mut public, table, &pub_uses)?;
     classify_dead(&public, table, &pub_uses)?;
@@ -190,7 +349,6 @@ fn seed(
     table: &mut HashMap<Qualifier, ModuleInfo>,
     public: &mut HashMap<Qualifier, PublicInterface>,
     pub_uses: &mut Vec<PubUse>,
-    counter: &Entropy,
 ) -> Result<(), Error> {
     let mut interface = PublicInterface::new();
     let info = table
@@ -203,7 +361,6 @@ fn seed(
             label,
             Entry {
                 target,
-                source: Source::Direct,
                 representation: None,
             },
         );
@@ -215,7 +372,6 @@ fn seed(
             label,
             Entry {
                 target,
-                source: Source::Direct,
                 representation: None,
             },
         );
@@ -261,7 +417,6 @@ fn seed(
             TopItem::Use(use_item) if use_item.vis_pub => {
                 pub_uses.push(PubUse {
                     module: prefix.clone(),
-                    id: counter.fresh(),
                     name: use_item.name.clone(),
                     group: use_item.group.clone(),
                 });
@@ -287,7 +442,6 @@ fn seed(
                             case.label.clone(),
                             Entry {
                                 target,
-                                source: Source::Direct,
                                 representation: None,
                             },
                         );
@@ -317,7 +471,6 @@ fn seed(
                         field.label.clone(),
                         Entry {
                             target,
-                            source: Source::Direct,
                             representation: None,
                         },
                     );
@@ -336,7 +489,7 @@ fn seed(
                     }
                 };
 
-                seed(child, &path, modules, table, public, pub_uses, counter)?;
+                seed(child, &path, modules, table, public, pub_uses)?;
             }
             _ => {}
         }
@@ -359,7 +512,6 @@ fn fixed_point(
             for (ns, label, target, representation) in resolvable(public, table, use_) {
                 let entry = Entry {
                     target,
-                    source: Source::ReExport(use_.id),
                     representation,
                 };
                 changed |= insert(public, &use_.module, ns, label, entry)?;
@@ -472,8 +624,14 @@ fn insert(
         Ns::Binding => &mut interface.bindings,
     };
 
+    // Conflict is about *what* a slot exports, not which `pub use` claimed it:
+    // two selectors (a glob and a named item, or two paths through different
+    // re-export chains) that land on the same declaration agree, so re-deriving
+    // one is idempotent. Only genuinely divergent targets are ambiguous. Keeping
+    // the first entry preserves its representation provenance, which is derived
+    // from the target and therefore identical across the agreeing paths.
     match slot.get(&label) {
-        Some(existing) if existing.source == entry.source => Ok(false),
+        Some(existing) if existing.target == entry.target => Ok(false),
         Some(_) => Err(Error::ExportConflict { label }),
         None => {
             slot.insert(label, entry);
@@ -621,32 +779,37 @@ fn resolve_provider(
         (Qualifier::empty(), segments)
     } else {
         let first = &segments[0];
-        let start = match public.get(module).and_then(|i| i.children.get(first)) {
-            Some(entry) => entry.target.clone(),
-            None => match table.get(module) {
-                Some(info) if info.is_opaque_constructor_child(first) => {
-                    return Err(Error::OpaqueConstructorsCannotBeReExported {
-                        induct_decl: module.with(first).join(),
-                    });
-                }
-                // Own direct child (any visibility) is a valid start; only an
-                // outright non-child fails here.
-                Some(info) if info.get_child(first).is_some() => module.with(first),
-                _ => {
-                    return Err(Error::ChildModuleNotFound {
-                        segment: first.clone(),
-                    });
-                }
-            },
-        };
+
+        // An opaque constructor namespace is never in the public interface, and
+        // re-exporting one would widen its audience past the subtree that owns
+        // the representation — so it is refused before the subtree fallback can
+        // offer it.
+        if public
+            .get(module)
+            .and_then(|i| i.children.get(first))
+            .is_none()
+            && table
+                .get(module)
+                .is_some_and(|info| info.is_opaque_constructor_child(first))
+        {
+            return Err(Error::OpaqueConstructorsCannotBeReExported {
+                induct_decl: module.with(first).join(),
+            });
+        }
+
+        let start = visible_child(public, table, module, module, first).ok_or_else(|| {
+            Error::ChildModuleNotFound {
+                segment: first.clone(),
+            }
+        })?;
 
         (start, &segments[1..])
     };
 
     super::guard_internal_root(table, module, current.segments())?;
     for segment in walk {
-        match public.get(&current).and_then(|i| i.children.get(segment)) {
-            Some(entry) => current = entry.target.clone(),
+        match visible_child(public, table, module, &current, segment) {
+            Some(target) => current = target,
             None => return Err(segment_error(table, &current, segment)),
         }
         super::guard_internal_root(table, module, current.segments())?;

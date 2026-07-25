@@ -288,13 +288,13 @@ pub enum Error {
         order: Vec<String>,
     },
     /// Projecting a field of a struct whose representation is private, from
-    /// outside the declaring module (§7).
+    /// outside the declaring module's subtree (§7).
     PrivateField {
         name: String,
         field: String,
     },
     /// Constructing or eliminating a nominal type whose representation is
-    /// private, from outside the declaring module (§7).
+    /// private, from outside the declaring module's subtree (§7).
     PrivateRepresentation {
         name: String,
     },
@@ -1216,13 +1216,13 @@ impl fmt::Display for Error {
             Error::PrivateField { name, field } => {
                 write!(
                     f,
-                    "field '{field}' of struct '{name}' is private to its declaring module"
+                    "field '{field}' of struct '{name}' is private to its declaring module and its descendants"
                 )
             }
             Error::PrivateRepresentation { name } => {
                 write!(
                     f,
-                    "the representation of type '{name}' is private to its declaring module"
+                    "the representation of type '{name}' is private to its declaring module and its descendants"
                 )
             }
             Error::CtorArityMismatch {

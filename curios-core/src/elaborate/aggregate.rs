@@ -64,13 +64,15 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             };
 
             // The use-site module is the enclosing item's qualifier prefix
-            // (`Context::island`, set per item by `elaborate_module`);
-            // the island model grants no descendant access, so the check is
-            // exact qualifier equality.
+            // (`Context::island`, set per item by `elaborate_module`). A
+            // private representation is transparent within its declaring
+            // module's subtree, so the check is containment, not equality: the
+            // declaring module and its descendants may open it, its ancestors
+            // and siblings may not.
             if !struct_decl.rep_public
                 && context
                     .island()
-                    .is_some_and(|island| *island != struct_decl.module)
+                    .is_some_and(|island| !island.is_within(&struct_decl.module))
             {
                 let field = match field {
                     Field::Index(index) => index.to_string(),
@@ -192,7 +194,7 @@ pub(super) fn elaborate_variant(
     if !induct_decl.rep_public
         && context
             .island()
-            .is_some_and(|island| *island != induct_decl.module)
+            .is_some_and(|island| !island.is_within(&induct_decl.module))
     {
         return Err(Error::private_representation(name.clone()));
     }

@@ -103,6 +103,23 @@ impl Qualifier {
     pub fn root_segment(&self) -> &str {
         self.segments.first().map(String::as_str).unwrap_or("")
     }
+
+    /// Whether this qualifier lies within `ancestor`'s subtree — equal to it,
+    /// or nested below it at any depth. The comparison is segment-wise, not
+    /// textual, so `/Foobar` is not within `/Foo`; the empty qualifier is the
+    /// root, and every qualifier lies within it.
+    ///
+    /// This is the module system's visibility primitive: a declaration written
+    /// without `pub` in module `M` is visible exactly to the qualifiers within
+    /// `M`.
+    pub fn is_within(&self, ancestor: &Qualifier) -> bool {
+        self.segments.len() >= ancestor.segments.len()
+            && self
+                .segments
+                .iter()
+                .zip(&ancestor.segments)
+                .all(|(here, there)| here == there)
+    }
 }
 
 impl<S, I> From<I> for Qualifier

@@ -147,7 +147,6 @@ pub struct PreparedPrelude {
     core: curios_core::Module,
     metavariable_floor: usize,
     binder_floor: usize,
-    interface_floor: usize,
 }
 
 impl PreparedPrelude {
@@ -161,10 +160,6 @@ impl PreparedPrelude {
 
     pub fn binder_floor(&self) -> usize {
         self.binder_floor
-    }
-
-    pub fn interface_floor(&self) -> usize {
-        self.interface_floor
     }
 }
 
@@ -550,10 +545,6 @@ fn process_items(
             TopItem::Let(let_item) => {
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
-                if let_item.vis_pub {
-                    context.check_public_interface(&let_item.label, &type_)?;
-                }
-
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
                     island: context.island(),
@@ -572,10 +563,6 @@ fn process_items(
 
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
-                if f.vis_pub {
-                    context.check_public_interface(&f.label, &type_)?;
-                }
-
                 flat_items.push(FlatItem::Let(FlatLet {
                     name,
                     island: context.island(),
@@ -590,10 +577,6 @@ fn process_items(
                     .map(|let_item| {
                         let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
-                        if let_item.vis_pub {
-                            context.check_public_interface(&let_item.label, &type_)?;
-                        }
-
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
                             island: context.island(),
@@ -1432,7 +1415,6 @@ fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<String> {
 #[derive(Clone)]
 struct AliasEdge {
     target: String,
-    module: Qualifier,
     dependencies: Option<BTreeSet<String>>,
 }
 
@@ -1453,7 +1435,6 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
             let_.name.join(),
             AliasEdge {
                 target,
-                module: let_.island.clone(),
                 dependencies: direct.map(|_| let_.body.free_vars()),
             },
         ))
@@ -1490,89 +1471,141 @@ fn exposed_nominal(
     }
 }
 
-fn target_reachable(
-    public: &HashMap<Qualifier, PublicInterface>,
-    start: &Qualifier,
-    target: &str,
-    aliases: &HashMap<String, AliasEdge>,
-) -> bool {
-    let mut pending = vec![start.clone()];
-    let mut visited = HashSet::new();
+/// Invert the alias map to its transitive closure: for each canonical name, the
+/// bare transparent aliases that reach it. A name is as visible as the widest
+/// alias that stands for it, so an exported alias carries its target's audience
+/// even when the target itself is never exported.
+fn alias_sources(aliases: &HashMap<String, AliasEdge>) -> HashMap<String, HashSet<String>> {
+    let mut sources: HashMap<String, HashSet<String>> = HashMap::new();
 
-    while let Some(module) = pending.pop() {
-        if !visited.insert(module.clone()) {
-            continue;
-        }
-        let Some(interface) = public.get(&module) else {
-            continue;
-        };
-        for entry in interface.bindings.values() {
-            let mut candidate = entry.target.join();
-            let mut aliases_seen = HashSet::new();
-            loop {
-                if candidate == target {
-                    return true;
-                }
-                if !aliases_seen.insert(candidate.clone()) {
-                    break;
-                }
-                let Some(next) = aliases.get(&candidate) else {
-                    break;
-                };
-                candidate = next.target.clone();
-            }
-        }
-        pending.extend(
-            interface
-                .children
-                .values()
-                .map(|entry| entry.target.clone()),
-        );
+    for (name, edge) in aliases {
+        sources
+            .entry(edge.target.clone())
+            .or_default()
+            .insert(name.clone());
     }
 
-    false
+    loop {
+        let mut changed = false;
+        let pairs: Vec<(String, Vec<String>)> = sources
+            .iter()
+            .map(|(target, names)| (target.clone(), names.iter().cloned().collect()))
+            .collect();
+
+        for (target, names) in pairs {
+            for name in names {
+                let Some(indirect) = sources.get(&name).cloned() else {
+                    continue;
+                };
+                let direct = sources.entry(target.clone()).or_default();
+                for hop in indirect {
+                    changed |= direct.insert(hop);
+                }
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    sources
 }
 
+/// Everyone who can see `referent`, whether by its own name or through a
+/// transparent alias that stands for it.
+fn referent_audience(
+    audiences: &Audiences,
+    sources: &HashMap<String, HashSet<String>>,
+    referent: &str,
+) -> Vec<Qualifier> {
+    let mut audience = audiences.binding(&Qualifier::from(
+        referent.trim_start_matches('/').split('/'),
+    ));
+
+    for alias in sources.get(referent).into_iter().flatten() {
+        let Some(path) = alias.strip_prefix('/') else {
+            continue;
+        };
+        audience.extend(audiences.binding(&Qualifier::from(path.split('/'))));
+    }
+
+    audience
+}
+
+/// Every consumer of `item` — an item exposed to `exposure` — must be able to
+/// see everything `item`'s signature names. Checked against audiences rather
+/// than the declaration path, so an item re-exported out of a private module
+/// counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
-    public: &HashMap<Qualifier, PublicInterface>,
-    exposure: &Qualifier,
+    audiences: &Audiences,
+    sources: &HashMap<String, HashSet<String>>,
+    exposure: &[Qualifier],
     item: &str,
-    owner: &Qualifier,
-    aliases: &HashMap<String, AliasEdge>,
     dependencies: impl IntoIterator<Item = String>,
 ) -> Result<(), Error> {
-    let owner = owner.join();
     for referent in dependencies {
         if !referent.starts_with('/') {
             continue;
         }
-        let owned = owner.is_empty()
-            || referent == owner
-            || referent
-                .strip_prefix(&owner)
-                .is_some_and(|suffix| suffix.starts_with('/'));
-        if owned && !target_reachable(public, exposure, &referent, aliases) {
+
+        let reach = referent_audience(audiences, sources, &referent);
+        if !Audiences::covers(exposure, &reach) {
             return Err(Error::PrivateItemInPublicInterface {
                 item: item.to_string(),
                 referent,
             });
         }
     }
+
     Ok(())
 }
 
-/// Audit the exact representation exposed by every resolved public interface.
-/// This runs after lowering because registry telescopes contain the complete
-/// signatures and transparent aliases have become canonical free-variable
-/// references. Re-export entries retain their representation provenance through
-/// the fixed point, so no `pub use` can upgrade an opaque declaration.
+/// Audit every declared signature and every exposed representation against the
+/// audience of the item carrying it. This runs after lowering because registry
+/// telescopes contain the complete signatures and transparent aliases have
+/// become canonical free-variable references. Re-export entries retain their
+/// representation provenance through the fixed point, so no `pub use` can
+/// upgrade an opaque declaration.
+///
+/// The declared type of every definition is audited here rather than during
+/// lowering: only the converged interface graph knows where a name ends up
+/// visible, so a signature naming an item re-exported out of a private child is
+/// accepted, while one naming something its own consumers cannot reach is not.
 fn audit_public_exposures(
     public: &HashMap<Qualifier, PublicInterface>,
+    table: &HashMap<Qualifier, ModuleInfo>,
     items: &[FlatItem],
     induct_decls: &BTreeMap<String, curios_core::InductDecl>,
     struct_decls: &BTreeMap<String, curios_core::StructDecl>,
 ) -> Result<(), Error> {
     let aliases = flat_aliases(items);
+    let sources = alias_sources(&aliases);
+    let audiences = Audiences::compute(public, table);
+
+    for let_ in items.iter().flat_map(|item| match item {
+        FlatItem::Let(let_) => std::slice::from_ref(let_),
+        FlatItem::Rec(lets) => lets.as_slice(),
+    }) {
+        // Only definitions the source actually wrote. A member synthesized into
+        // a nested namespace — an inductive's constructor, a concept's method
+        // wrapper — sits below its declaring module rather than in it, and its
+        // signature is the declaration's business, not an interface the author
+        // wrote: a constructor facade may legitimately hand out values of a
+        // type the consumer cannot name.
+        if let_.name.without_last() != let_.island {
+            continue;
+        }
+
+        let exposure = audiences.binding(&let_.name);
+        audit_dependencies(
+            &audiences,
+            &sources,
+            &exposure,
+            &let_.name.join(),
+            let_.type_.free_vars(),
+        )?;
+    }
 
     for (module, interface) in public {
         for (label, entry) in &interface.bindings {
@@ -1582,17 +1615,11 @@ fn audit_public_exposures(
                 continue;
             };
             let item = module.with(label).join();
+            let exposure = audiences.module(module);
 
             for alias in traversed {
                 if let Some(dependencies) = alias.dependencies {
-                    audit_dependencies(
-                        public,
-                        module,
-                        &item,
-                        &alias.module,
-                        &aliases,
-                        dependencies,
-                    )?;
+                    audit_dependencies(&audiences, &sources, &exposure, &item, dependencies)?;
                 }
             }
 
@@ -1602,22 +1629,14 @@ fn audit_public_exposures(
                     .free_vars()
                     .into_iter()
                     .chain(induct_decl.indices.free_vars());
-                audit_dependencies(
-                    public,
-                    module,
-                    &item,
-                    &induct_decl.module,
-                    &aliases,
-                    nominal_dependencies,
-                )?;
+                audit_dependencies(&audiences, &sources, &exposure, &item, nominal_dependencies)?;
 
                 if induct_decl.rep_public {
                     audit_dependencies(
-                        public,
-                        module,
+                        &audiences,
+                        &sources,
+                        &exposure,
                         &item,
-                        &induct_decl.module,
-                        &aliases,
                         induct_decl
                             .constructors
                             .values()
@@ -1626,21 +1645,19 @@ fn audit_public_exposures(
                 }
             } else if let Some(struct_decl) = struct_decls.get(&nominal) {
                 audit_dependencies(
-                    public,
-                    module,
+                    &audiences,
+                    &sources,
+                    &exposure,
                     &item,
-                    &struct_decl.module,
-                    &aliases,
                     struct_decl.params.free_vars(),
                 )?;
 
                 if struct_decl.rep_public {
                     audit_dependencies(
-                        public,
-                        module,
+                        &audiences,
+                        &sources,
+                        &exposure,
                         &item,
-                        &struct_decl.module,
-                        &aliases,
                         struct_decl.fields.free_vars(),
                     )?;
                 }
@@ -1701,7 +1718,7 @@ pub fn into_core(
         .transpose()?;
     let tail = lower.value(&entrypoint.tail)?;
 
-    audit_public_exposures(&public, &flat_items, &induct_decls, &struct_decls)?;
+    audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
 
     // Emit the program as a flat list of named top-level definitions rather than
     // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references
@@ -1736,7 +1753,7 @@ pub fn prepare_prelude(
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedPrelude, Error> {
     let (Resolved { mut table, modules }, roots) = Resolved::for_prelude(input)?;
-    let (public, interface_floor) = interface::resolve_prelude(&roots, &modules, &mut table)?;
+    let public = interface::resolve_prelude(&roots, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
     let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
@@ -1769,7 +1786,7 @@ pub fn prepare_prelude(
         )?;
     }
 
-    audit_public_exposures(&public, &flat_items, &induct_decls, &struct_decls)?;
+    audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
     let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
@@ -1791,7 +1808,6 @@ pub fn prepare_prelude(
         core,
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
-        interface_floor,
     })
 }
 
@@ -1814,7 +1830,6 @@ pub fn into_core_with_prelude(
         &modules,
         &mut table,
         prepared.public.clone().into_iter().collect(),
-        prepared.interface_floor,
     )?;
 
     let metavars = Entropy::<usize>::new();
@@ -1851,7 +1866,7 @@ pub fn into_core_with_prelude(
         .map(|type_| lower.term(type_))
         .transpose()?;
     let body = lower.value(&entrypoint.tail)?;
-    audit_public_exposures(&public, &flat_items, &induct_decls, &struct_decls)?;
+    audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
 
     let mut items = prepared.core.items.clone();
     items.extend(

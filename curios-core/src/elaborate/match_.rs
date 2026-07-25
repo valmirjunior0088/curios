@@ -628,7 +628,7 @@ fn elaborate_induct_match(
     if !induct_decl.rep_public
         && context
             .island()
-            .is_some_and(|island| *island != induct_decl.module)
+            .is_some_and(|island| !island.is_within(&induct_decl.module))
     {
         return Err(Error::private_representation(name));
     }

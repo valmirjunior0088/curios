@@ -612,16 +612,24 @@ use Package/{mod Syntax, let parse};
 
 ### Visibility
 
-An outer `pub` makes a declaration's name reachable outside its module. `struct`, `induct`, and `concept` have a second, declaration-local `pub` before their result sort; this independently exposes their representation.
+One rule governs every declaration, in both namespaces:
 
-A public interface cannot mention a private item. The interface includes:
+> A declaration written **without** `pub` in module `M` is visible exactly within `M`'s subtree — `M` itself and its descendants at any depth. A declaration written **with** `pub` is additionally visible wherever `M` itself is visible.
+
+Reachability along a path is the conjunction of that rule at each hop, and the root's subtree is the whole program. So a descendant may name its ancestors' private declarations, while ancestors and siblings may not: `Owner/Worker` can reach a private binding of `Owner`, but neither `Owner` nor a sibling `Owner/Other` can reach a private binding of `Owner/Worker`. `pub` inside a private module means "wherever this module is visible", which is that module's own audience rather than the whole program — the facade pattern, where a public module re-exports selected names out of a private child.
+
+`struct`, `induct`, and `concept` have a second, declaration-local `pub` before their result sort; this independently exposes their representation, under the same subtree rule. A private representation is transparent throughout its declaring module's subtree, so an abstraction can be implemented across several files without exporting how it is built.
+
+Globs are the exception: `use M/*` and `pub use M/*` import the exported surface only, never a subtree-private declaration. Reaching one always requires naming it.
+
+A public interface cannot mention an item its own consumers cannot reach. The interface includes:
 
 - parameters, indices, and result sorts of publicly reachable nominal declarations;
 - struct and concept fields when the representation is public;
 - inductive constructor signatures when the inductive representation is public;
-- declared types of public definitions.
+- declared types of definitions.
 
-The check follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Ordinary definition bodies are not part of the public interface.
+The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item that reaches only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Ordinary definition bodies are not part of the public interface, and neither are the signatures of members synthesized into a nested namespace — an inductive's constructors and a concept's method wrappers — so a constructor facade may hand out values of a type the consumer cannot name.
 
 ## Inductive declarations
 
@@ -655,7 +663,7 @@ pub induct Eq(@A : Type) : (left : A, right : A) -> pub Prop
 end
 ```
 
-The outer `pub` exports the family name. The inner `pub` exports construction and every form of elimination. Without the inner marker, constructor access and pattern matching are restricted to the exact declaring module.
+The outer `pub` exports the family name. The inner `pub` exports construction and every form of elimination. Without the inner marker, constructor access and pattern matching are restricted to the declaring module's subtree.
 
 Mutually recursive inductives are separated by `and` within one block. Each member has its own outer and representation visibility markers.
 
@@ -676,7 +684,7 @@ A single unlabeled field defines a newtype-like structure and is projected with 
 pub struct Meters : pub Type { Nat }
 ```
 
-The outer `pub` exports the type name. The inner `pub` exports construction and projection. Without the inner marker, those operations are restricted to the exact declaring module.
+The outer `pub` exports the type name. The inner `pub` exports construction and projection. Without the inner marker, those operations are restricted to the declaring module's subtree.
 
 A `Prop` structure may contain only non-informative fields.
 
@@ -713,7 +721,7 @@ Concepts provide ad-hoc polymorphism. A concept is a record-shaped interface, a 
 
 ### Concept declarations
 
-A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, and `: Type` a *sealed* one, whose representation is private to its declaring module — witness declarations, dictionary literals, structure updates, and raw field projections are then permitted only there. Resolution, `use` parameters, and the generated method wrappers work the same either way, and visibility of the concept's name remains independent of its representation.
+A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, and `: Type` a *sealed* one, whose representation is private to its declaring module's subtree — witness declarations, dictionary literals, structure updates, and raw field projections are then permitted only there. Resolution, `use` parameters, and the generated method wrappers work the same either way, and visibility of the concept's name remains independent of its representation.
 
 ```crs
 pub concept Show(A : Type) : pub Type {
@@ -767,7 +775,7 @@ A globally registered witness therefore requires a concept with at least one par
 
 For example, witnesses for `Into(Nat, Str)` and `Into(Nat, Bool)` have distinct keys. A call must determine both parameters from its explicit arguments, expected result, or an explicitly supplied witness before automatic lookup can proceed.
 
-Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared in the concept's declaring module.
+Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared within the concept's declaring module's subtree.
 
 To use a second dictionary for the same key on a *transparent* concept, construct an ordinary concept value and supply it explicitly (a sealed concept forbids the literal outside its module):
 

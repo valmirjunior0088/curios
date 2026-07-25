@@ -319,7 +319,9 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
 
 // The other privately-resolvable path: an item inside the module's own
 // private child (the head segment resolves lexically, so resolution never
-// checked the child's visibility).
+// checked the child's visibility). `T` reaches only `M`'s subtree while `g`
+// reaches the whole program, so the audit names `T` itself rather than the
+// first private hop on the way to it.
 #[test]
 fn pub_signature_exposing_private_child_module_is_rejected() {
     let source = r#"
@@ -338,7 +340,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
-        error.contains("exposes private item '/M/Inner'"),
+        error.contains("exposes private item '/M/Inner/T'"),
         "unexpected error: {error}"
     );
 }
@@ -751,6 +753,109 @@ fn struct_spread_private_outside_module_rejected() {
     let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("representation"),
+        "unexpected error: {error}"
+    );
+}
+
+// A private representation is transparent within its declaring module's
+// subtree: a descendant may construct and project it, so an abstraction can be
+// implemented across several files without exporting its representation.
+#[test]
+fn struct_private_representation_open_in_descendant() {
+    let source = r#"
+        use /std/{Nat, Handle};
+        mod Celsius
+            use /std/{Nat};
+            pub struct Celsius : Type { Nat }
+            pub mod Build
+                use /std/{Nat};
+                use /Celsius/{Celsius};
+                pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+                pub let to_nat(c : Celsius) -> Nat = c.0;
+            end
+        end
+        /std/print(Nat/to_str(Celsius/Build/to_nat(Celsius/Build/of_nat(42))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"42");
+}
+
+// The relaxation is downward only. A sibling subtree is outside the declaring
+// module, so its representation stays opaque there.
+#[test]
+fn struct_private_representation_closed_to_siblings() {
+    let source = r#"
+        use /std/{Nat, Handle};
+        mod Owner
+            pub mod Celsius
+                use /std/{Nat};
+                pub struct Celsius : Type { Nat }
+            end
+            pub mod Other
+                use /std/{Nat};
+                use /Owner/Celsius/{Celsius};
+                pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+            end
+        end
+        /std/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("representation"),
+        "unexpected error: {error}"
+    );
+}
+
+// An opaque inductive is eliminable throughout its declaring subtree, matching
+// the struct rule — the whole family of eliminators moves together.
+#[test]
+fn opaque_inductive_is_eliminable_in_a_descendant() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle};
+        mod Flag
+            use /std/{Nat, Bool};
+            pub induct Flag : Type
+            | on()
+            | off()
+            end
+            pub let on : Flag = Flag/on();
+            pub mod Read
+                use /std/{Nat};
+                use /Flag/{Flag};
+                pub let to_nat(f : Flag) -> Nat =
+                    match f
+                    | on() => 42
+                    | off() => 0
+                    end;
+            end
+        end
+        /std/print(Nat/to_str(Flag/Read/to_nat(Flag/on)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"42");
+}
+
+// `/std/Async` keeps `Future` and `Waker` as private child modules and
+// re-exports only the two type names, so a program can name a `Future` but
+// cannot reach the scheduler plumbing that drives one.
+#[test]
+fn async_future_plumbing_is_not_reachable_from_user_code() {
+    let source = r#"
+        use /std/{Nat, Handle, Async};
+        let f = /std/Async/Future/new();
+        /std/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("private child module"),
         "unexpected error: {error}"
     );
 }

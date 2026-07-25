@@ -183,6 +183,22 @@ impl ModuleInfo {
         self.bindings.get(label).copied()
     }
 
+    /// Every declared child module with its own visibility bit, for the
+    /// audience fixed point — which needs the private ones too, since they are
+    /// visible within this module's subtree.
+    pub(super) fn children(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.children
+            .iter()
+            .map(|(label, info)| (label.as_str(), info.is_public()))
+    }
+
+    /// Every declared binding with its own visibility bit. See [`Self::children`].
+    pub(super) fn bindings(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.bindings
+            .iter()
+            .map(|(label, vis_pub)| (label.as_str(), *vis_pub))
+    }
+
     pub(super) fn public_children(&self) -> Vec<String> {
         self.children
             .iter()
@@ -319,76 +335,6 @@ impl<'a> Context<'a> {
         &self.bindings
     }
 
-    /// A `pub` item's declared signature must not reference an item that is
-    /// not itself publicly reachable. Cross-module references were already
-    /// vetted by resolution (every module hop and the final binding walk the
-    /// public tables), so the only privately-resolvable references a lowered
-    /// signature can carry are (1) the item's own module's bindings (lexical
-    /// scope) and (2) items inside the item's own child modules (the head
-    /// segment resolves lexically). Those are what this audits: `signature` is
-    /// the item's lowered type, whose free variables are exactly its resolved
-    /// global references.
-    pub(super) fn check_public_interface(
-        &self,
-        item: &str,
-        signature: &curios_core::Term,
-    ) -> Result<(), Error> {
-        for reference in signature.free_vars() {
-            // Only canonical (absolute) names refer to module items; bare
-            // names are local binders or unresolved (reported later by core).
-            let Some(path) = reference.strip_prefix('/') else {
-                continue;
-            };
-            let segments: Vec<&str> = path.split('/').collect();
-            let Some((label, parents)) = segments.split_last() else {
-                continue;
-            };
-
-            // Skip foreign referents: only names at or below the current
-            // module can have resolved through a private path.
-            let prefix = self.prefix.segments();
-            if parents.len() < prefix.len()
-                || parents.iter().zip(prefix).any(|(a, b)| *a != b.as_str())
-            {
-                continue;
-            }
-
-            // Every child-module hop below the current module must be public...
-            let mut module = self.prefix.clone();
-            let mut referent = None;
-            for hop in &parents[prefix.len()..] {
-                if referent.is_none()
-                    && self.table.get(&module).and_then(|info| info.get_child(hop)) == Some(false)
-                {
-                    referent = Some(module.with(hop).join());
-                }
-                module = module.with(hop);
-            }
-
-            // ...and so must the binding itself. Namespaces without a module
-            // table entry (constructor and concept-method namespaces) share
-            // their parent's visibility, which the hop walk already covered.
-            if referent.is_none()
-                && self
-                    .table
-                    .get(&module)
-                    .and_then(|info| info.get_binding(label))
-                    == Some(false)
-            {
-                referent = Some(reference.clone());
-            }
-
-            if let Some(referent) = referent {
-                return Err(Error::PrivateItemInPublicInterface {
-                    item: self.prefixed(item).join(),
-                    referent,
-                });
-            }
-        }
-
-        Ok(())
-    }
-
     pub(super) fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
         if self.qualifiers.contains_key(&qualifier) {
             return Err(Error::QualifierConflict { qualifier });
@@ -407,19 +353,21 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    // Walk from `start` through `segments` as public child modules, following
-    // each entry's re-export target. A failing segment is classified against the
-    // direct table: present-but-private vs. absent.
+    // Walk from `start` through `segments` as child modules visible to this
+    // module, following each entry's re-export target. A failing segment is
+    // classified against the direct table: present-but-private vs. absent.
     fn walk_children(&self, start: Qualifier, segments: &[String]) -> Result<Qualifier, Error> {
         let mut current = start;
 
         for segment in segments {
-            match self
-                .public
-                .get(&current)
-                .and_then(|i| i.children.get(segment))
-            {
-                Some(entry) => current = entry.target.clone(),
+            match super::interface::visible_child(
+                self.public,
+                self.table,
+                &self.prefix,
+                &current,
+                segment,
+            ) {
+                Some(target) => current = target,
                 None => return Err(self.child_error(&current, segment)),
             }
         }
@@ -479,9 +427,9 @@ impl<'a> Context<'a> {
     // Import the module child `label` out of `parent`, registering it as a
     // qualifier in the current lexical scope.
     fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
-        match self.public.get(parent).and_then(|i| i.children.get(label)) {
-            Some(entry) => {
-                let target = entry.target.clone();
+        match super::interface::visible_child(self.public, self.table, &self.prefix, parent, label)
+        {
+            Some(target) => {
                 self.insert_scope(label.to_string(), target.clone())?;
                 Ok(target)
             }
@@ -506,9 +454,14 @@ impl<'a> Context<'a> {
         parent: &Qualifier,
         label: &str,
     ) -> Result<Qualifier, Error> {
-        match self.public.get(parent).and_then(|i| i.bindings.get(label)) {
-            Some(entry) => {
-                let target = entry.target.clone();
+        match super::interface::visible_binding(
+            self.public,
+            self.table,
+            &self.prefix,
+            parent,
+            label,
+        ) {
+            Some(target) => {
                 self.insert_binding(label.to_string(), target.clone())?;
                 Ok(target)
             }
@@ -529,17 +482,11 @@ impl<'a> Context<'a> {
     // Import both the module and binding slots of `label` — used by glob and the
     // `Both` group item. Either or both may be absent.
     fn import_dual_label(&mut self, parent: &Qualifier, label: &str) -> Result<UseResolved, Error> {
-        let module = self
-            .public
-            .get(parent)
-            .and_then(|i| i.children.get(label))
-            .map(|entry| entry.target.clone());
+        let module =
+            super::interface::visible_child(self.public, self.table, &self.prefix, parent, label);
 
-        let binding = self
-            .public
-            .get(parent)
-            .and_then(|i| i.bindings.get(label))
-            .map(|entry| entry.target.clone());
+        let binding =
+            super::interface::visible_binding(self.public, self.table, &self.prefix, parent, label);
 
         let mut result = UseResolved {
             module: None,
@@ -579,14 +526,22 @@ impl<'a> Context<'a> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 
-            let has_module = self
-                .public
-                .get(&parent)
-                .is_some_and(|i| i.children.contains_key(&label));
-            let has_binding = self
-                .public
-                .get(&parent)
-                .is_some_and(|i| i.bindings.contains_key(&label));
+            let has_module = super::interface::visible_child(
+                self.public,
+                self.table,
+                &self.prefix,
+                &parent,
+                &label,
+            )
+            .is_some();
+            let has_binding = super::interface::visible_binding(
+                self.public,
+                self.table,
+                &self.prefix,
+                &parent,
+                &label,
+            )
+            .is_some();
 
             if !has_module && !has_binding {
                 let child = self.table.get(&parent).and_then(|i| i.get_child(&label));
@@ -653,12 +608,14 @@ impl<'a> Context<'a> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 
-            match self
-                .public
-                .get(&parent)
-                .and_then(|i| i.bindings.get(&label))
-            {
-                Some(entry) => Ok(entry.target.clone()),
+            match super::interface::visible_binding(
+                self.public,
+                self.table,
+                &self.prefix,
+                &parent,
+                &label,
+            ) {
+                Some(target) => Ok(target),
                 None => Err(
                     match self.table.get(&parent).and_then(|i| i.get_binding(&label)) {
                         Some(false) => Error::PrivateBinding { binding: label },

@@ -221,12 +221,12 @@ fn constructing_a_leaf_task_performs_no_effect() {
 }
 
 #[test]
-fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
+fn finalizer_runs_for_a_child_parked_on_an_unwoken_fiber() {
     // The previously-leaking path, now closed. A `go` child acquires a resource via
-    // `using` (its finalizer writes "released;"), then `await`s a future that nothing
-    // ever fulfils — so it parks in the scheduler's `parked` registry and is never
-    // woken. The root writes "root;" and finishes. Because the scheduler now retains
-    // ownership of every parked fiber (rather than handing it off to the future's
+    // `using` (its finalizer writes "released;"), then `park`s with a register that
+    // drops its waker — so it lands in the scheduler's `parked` registry and nothing
+    // can ever wake it. The root writes "root;" and finishes. Because the scheduler
+    // now retains ownership of every parked fiber (rather than handing it off to a
     // waker list, where it was invisible), `block_on`'s shutdown drains the registry
     // and runs the child's finalizer exactly once. Before the fix the "released;"
     // marker leaked and the output was just "root;".
@@ -235,11 +235,11 @@ fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
         Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str};
+        use /std/Async/{Waker};
         let main : Async({}) =
-            let f : Async/Future({}) = Async/Future/new(@{});
             let started = Async/go(() =>
                 Async/using(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
-                    Async/await(f)))!;
+                    Async/park((w : Waker) => ())))!;
             let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
             Async/pure(());
         Async/run(main)

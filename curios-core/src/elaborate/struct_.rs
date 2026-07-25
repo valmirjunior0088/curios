@@ -138,13 +138,13 @@ pub(super) fn elaborate_struct(
     };
 
     // Construction privacy (§7): a private-representation struct may be built
-    // only within its declaring module. Checked here (alongside projection
-    // privacy in `elaborate_proj`) via `island`, set per item by
+    // only within its declaring module's subtree. Checked here (alongside
+    // projection privacy in `elaborate_proj`) via `island`, set per item by
     // `elaborate_module`.
     if !struct_decl.rep_public
         && context
             .island()
-            .is_some_and(|island| *island != struct_decl.module)
+            .is_some_and(|island| !island.is_within(&struct_decl.module))
     {
         return Err(Error::private_representation(name.clone()));
     }

@@ -1,10 +1,14 @@
 use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad};
 use /std/time/{Duration};
 
-pub mod Waker;
+-- Both are scheduler plumbing: their operations exist so this module and its
+-- descendants can drive a fiber, not so a program can complete someone else's
+-- future. The modules stay private and only the two type names are re-exported,
+-- which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
+mod Waker;
 pub use Waker/{let Waker};
 
-pub mod Future;
+mod Future;
 pub use Future/{let Future};
 
 struct Token : Type {

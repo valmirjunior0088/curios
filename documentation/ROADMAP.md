@@ -72,7 +72,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Module System
 
 - [x] Cyclic module dependency resolution
-- [x] Exact private-item-in-public-interface audit (signature-only; representation signatures checked only where exposed, through re-exports, identity aliases, and structurally direct-headed type-family aliases; opaque constructor namespaces cannot be re-exported)
+- [x] Subtree-scoped privacy: a declaration without `pub` is visible within its declaring module's subtree, in both namespaces and for the declaration-local representation marker, so an abstraction can span several files without exporting how it is built
+- [x] Exact private-item-in-public-interface audit (signature-only; audiences rather than declaration paths, so re-exports widen and a subtree-scoped item may name its own subtree; representation signatures checked only where exposed, through re-exports, identity aliases, and structurally direct-headed type-family aliases; opaque constructor namespaces cannot be re-exported)
 
 ## Compiler Pipeline
 

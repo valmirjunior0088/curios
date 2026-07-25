@@ -27,7 +27,8 @@ pub struct Definition {
     /// This definition's declaring module — `name`'s qualifier prefix,
     /// precomputed once by `into_core` (before `name` was flattened) rather
     /// than re-derived from it later. Stamped into `Context::island` per item
-    /// by `elaborate_module` for the struct representation-privacy check (§7);
+    /// by `elaborate_module` for the representation-privacy checks (§7), which
+    /// test subtree containment against it rather than equality;
     /// the same value `Structure::module` carries for type declarations.
     /// Islands are surface-elaboration state: erasure re-derives types with
     /// privacy suppressed and never stamps them.
