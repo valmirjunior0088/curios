@@ -286,6 +286,32 @@ fn non_principal_flexible_bound_is_not_arbitrarily_defaulted() {
     assert_eq!(solver.solution(right), None);
 }
 
+/// The companion to [`non_principal_flexible_bound_is_not_arbitrarily_defaulted`].
+///
+/// Mutual bounds force an equality and therefore *do* have a least solution,
+/// so leaving them open is not conservatism — it is a level that never gets
+/// solved. Witness dispatch emits exactly this shape, and every `%` slot in a
+/// module body failed to elaborate while propagation stalled on it: each level
+/// waits for the other, and neither is defaultable because both occur above.
+#[test]
+fn mutually_bounded_flexible_levels_close_at_their_floor() {
+    let mut solver = UniverseSolver::new(0);
+    let left = solver.fresh(UniverseRole::Flexible, None);
+    let right = solver.fresh(UniverseRole::Flexible, None);
+    let guarded = |meta| Level::max([Level::constant(1), Level::meta(meta)]);
+    solver
+        .add_leq(guarded(left), guarded(right), origin("dispatch"))
+        .unwrap();
+    solver
+        .add_leq(guarded(right), guarded(left), origin("dispatch"))
+        .unwrap();
+
+    solver.solve_flexible().unwrap();
+
+    assert_eq!(solver.solution(left), Some(&Level::zero()));
+    assert_eq!(solver.solution(right), Some(&Level::zero()));
+}
+
 #[test]
 fn constraint_identity_ignores_diagnostic_provenance() {
     let semantic = || UniverseConstraint {

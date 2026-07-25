@@ -1179,6 +1179,50 @@ impl UniverseSolver {
         Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
     }
 
+    /// The least level satisfying the *currently known* part of every
+    /// `lower ≤ meta + k` bound, reading each still-open flexible level in a
+    /// lower position as its least value, zero.
+    ///
+    /// [`Self::principal_lower_bound`] refuses to answer while any lower bound
+    /// mentions an open level, because the answer could still grow. That is the
+    /// right rule while propagation can still make progress, but a cycle of
+    /// mutual bounds never does: every level in it is waiting for another.
+    /// Weakening the open atoms to zero yields an *implied* bound — a level is
+    /// monotone in its atoms, so the result is a sound floor rather than a
+    /// guess — which is enough to break the tie and resume propagation.
+    fn grounded_lower_bound(&self, meta: UniverseMetaId) -> Result<Option<Level>, UniverseError> {
+        let head = LevelHead::Meta(meta);
+        let mut lowers = Vec::new();
+        for position in self.constraints.mentioning(head).collect::<Vec<_>>() {
+            let constraint = self
+                .constraints
+                .get(position)
+                .expect("the occurrence index names a live constraint");
+            if constraint.upper.atoms.len() != 1 || constraint.upper.constant != 0 {
+                continue;
+            }
+            let Some(&upper_offset) = constraint.upper.atoms.get(&head) else {
+                continue;
+            };
+            let lower = constraint.lower.substitute(|lower_head| {
+                if lower_head == head {
+                    return Some(Level::zero());
+                }
+                match lower_head {
+                    LevelHead::Meta(other) if self.is_open_flexible(other) => Some(Level::zero()),
+                    _ => None,
+                }
+            })?;
+            let Some(lower) = lower.cancel_offset(upper_offset) else {
+                continue;
+            };
+            if !lower.is_zero() {
+                lowers.push(lower);
+            }
+        }
+        Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
+    }
+
     /// Whether any constraint genuinely bounds `meta` from above. A level with
     /// no such bound has the unconditional least solution zero.
     fn is_upper_bounded(&self, meta: UniverseMetaId) -> bool {
@@ -1234,26 +1278,111 @@ impl UniverseSolver {
 
             // A flexible level that occurs only in lower positions is zero.
             // Default the lowest such id, then resume propagation: for
-            // `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. A level on a
-            // non-principal right-hand side is left unsolved so declaration
-            // finalization can promote it into the residual scheme rather than
-            // arbitrarily restricting its inputs.
-            let Some(meta) = metas
+            // `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. Taking these
+            // before the stalled levels below is what keeps that derivation
+            // available, since a level nothing bounds from above can never be
+            // the one holding a cycle together.
+            if let Some(meta) = metas
                 .iter()
                 .copied()
                 .find(|meta| self.is_open_flexible(*meta) && !self.is_upper_bounded(*meta))
-            else {
+            {
+                let dependents = self.dependents_of(meta);
+                self.assign(meta, Level::zero())?;
+                for other in dependents {
+                    if metas.contains(&other) && queued.insert(other) {
+                        queue.push_back(other);
+                    }
+                }
+                continue;
+            }
+
+            // Everything still open is now bounded above by a level that is
+            // itself unsolved, so propagation alone will never resume: each
+            // member is waiting on another.
+            let stalled = metas
+                .iter()
+                .copied()
+                .filter(|meta| self.is_open_flexible(*meta))
+                .collect::<BTreeSet<_>>();
+            if stalled.is_empty() {
                 break;
-            };
-            let dependents = self.dependents_of(meta);
-            self.assign(meta, Level::zero())?;
-            for other in dependents {
+            }
+            let woken = self.close_stalled_components(&stalled)?;
+            if stalled.iter().all(|meta| self.is_open_flexible(*meta)) {
+                break;
+            }
+            for other in woken {
                 if metas.contains(&other) && queued.insert(other) {
                     queue.push_back(other);
                 }
             }
         }
         self.check_consistent()
+    }
+
+    /// Break a stalled set by closing each of its components at the grounded
+    /// floor, keeping only the closures that survive a consistency check.
+    /// Returns the levels whose bounds mentioned a committed one.
+    ///
+    /// A stall has two shapes, and only one of them may be closed. A *cycle* of
+    /// mutual bounds — `max(1, ?u) ≤ max(1, ?v)` with its converse, which is
+    /// what witness dispatch emits — has a least solution, and the floor
+    /// assignment witnesses it. A *disjunction* like `1 ≤ max(?u, ?v)` has
+    /// none: either level may carry the bound, so choosing one is arbitrary and
+    /// would silently strip a declaration of polymorphism it is entitled to
+    /// keep. Attempting the floor and rolling back on inconsistency
+    /// distinguishes them without either shape having to be recognized
+    /// syntactically: the disjunction's floor reduces to `1 ≤ 0` and fails,
+    /// while the cycle's reduces to `1 ≤ 1` and holds.
+    ///
+    /// Components are closed independently so that one unresolvable
+    /// disjunction cannot veto an unrelated cycle elsewhere in the same
+    /// declaration.
+    fn close_stalled_components(
+        &mut self,
+        stalled: &BTreeSet<UniverseMetaId>,
+    ) -> Result<BTreeSet<UniverseMetaId>, UniverseError> {
+        let mut remaining = stalled.clone();
+        let mut woken = BTreeSet::new();
+        while let Some(&seed) = remaining.iter().next() {
+            let component = self
+                .connected_metas([seed])
+                .intersection(&remaining)
+                .copied()
+                .collect::<BTreeSet<_>>();
+            remaining = remaining.difference(&component).copied().collect();
+
+            // Every floor is read from the same pre-assignment state, so the
+            // component closes simultaneously rather than each member seeing
+            // the levels committed before it.
+            let floors = component
+                .iter()
+                .map(|meta| {
+                    let floor = self
+                        .grounded_lower_bound(*meta)?
+                        .unwrap_or_else(Level::zero);
+                    Ok((*meta, floor))
+                })
+                .collect::<Result<Vec<_>, UniverseError>>()?;
+            let dependents = component
+                .iter()
+                .flat_map(|meta| self.dependents_of(*meta))
+                .collect::<BTreeSet<_>>();
+
+            let mark = self.mark();
+            let committed = floors
+                .into_iter()
+                .try_for_each(|(meta, floor)| self.assign(meta, floor))
+                .and_then(|()| self.check_consistent())
+                .is_ok();
+            if committed {
+                woken.extend(dependents);
+            } else {
+                self.rollback(mark);
+            }
+        }
+        Ok(woken)
     }
 
     /// Collapse exact bidirectional atom inequalities before allocating
