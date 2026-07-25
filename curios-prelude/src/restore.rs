@@ -135,6 +135,71 @@ mod tests {
         validate_archive().unwrap();
     }
 
+    /// The declarations a string or character literal expands into are
+    /// monomorphic, so no occurrence mints universe metavariables.
+    ///
+    /// A literal's type is `Str` at a single level, but it expands into one
+    /// constructor application per byte. When these carried universe
+    /// parameters, every one of those applications instantiated fresh levels,
+    /// so a declaration's level count grew with literal *length* and
+    /// elaboration went quartic in it: a 500-byte literal took 50s in release
+    /// and put `long_str_literal_compiles_on_the_default_test_stack` beyond any
+    /// test budget. Pinning these at zero is what keeps that linear.
+    #[test]
+    fn string_literal_machinery_is_monomorphic() {
+        // Selected by name because these are exactly the hidden lowering
+        // targets `curios-prelude/src/syntax.rs` registers; nothing infers
+        // behavior from the spelling.
+        let lowering_targets = [
+            "/syn/Str",
+            "/syn/Str/step",
+            "/syn/Str/Utf8",
+            "/syn/Str/Utf8/stop",
+            "/syn/Str/Utf8/more",
+            "/syn/Char",
+        ];
+
+        with_prelude(|prelude| {
+            let mut parameters = std::collections::BTreeMap::new();
+            for item in &prelude.core().items {
+                match item {
+                    curios_core::Item::Let(definition) => {
+                        parameters.insert(
+                            definition.name.clone(),
+                            definition.universe_context.parameter_count,
+                        );
+                    }
+                    curios_core::Item::Rec(rec) => {
+                        for definition in rec.definitions() {
+                            parameters.insert(
+                                definition.name.clone(),
+                                definition.universe_context.parameter_count,
+                            );
+                        }
+                    }
+                }
+            }
+
+            let mut checked = 0;
+            for target in lowering_targets {
+                let Some(count) = parameters.get(target) else {
+                    continue;
+                };
+                checked += 1;
+                assert_eq!(
+                    *count, 0,
+                    "{target} is universe-polymorphic; every literal byte will mint levels"
+                );
+            }
+            // Without this the test passes vacuously if `/syn` is renamed.
+            assert!(
+                checked >= lowering_targets.len() / 2,
+                "found only {checked} of the expected lowering targets; \
+                 the `/syn` names this pins have moved"
+            );
+        });
+    }
+
     #[test]
     fn truncated_archive_is_rejected() {
         let truncated = &BYTES[..BYTES.len() / 2];

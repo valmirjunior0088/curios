@@ -1,10 +1,10 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Concept, Definition, DefinitionKind, InductDecl, InductParam, Item, Level, Module, RecItem,
-        SelfReference, StructDecl, Subterm, Telescope, Term, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, Visit, check_concept_registry,
-        finish_deferred_witnesses, is_prop, reduce_with, register_witness,
+        Concept, Definition, DefinitionKind, FuncType, InductDecl, InductParam, Item, Level,
+        Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
+        check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
         retry_deferred_witnesses, sort_term, zonk, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
@@ -323,6 +323,56 @@ fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// The levels of a declaration's result sort that occur nowhere a use site can
+/// reach — the levels no occurrence could ever choose.
+///
+/// `id : (A : Type u) -> A -> A` is genuinely polymorphic: a caller picks `A`,
+/// and with it `u`. `Lte : Nat -> Nat -> Type u` is not. Nothing at a use site
+/// supplies that `u`, so generalizing it mints a parameter every occurrence
+/// must instantiate for no benefit — which is how a proof about naturals ends
+/// up universe-polymorphic, and how a string literal's per-byte constructor
+/// applications each mint fresh levels.
+///
+/// Minimizing instead is sound for two reasons. Cumulativity already lets a
+/// declaration sitting at `Type 0` be used where a higher universe is expected,
+/// so the parameter buys no expressiveness. And `minimize` takes least
+/// solutions *subject to the recorded constraints*, so a level that genuinely
+/// depends on an argument still lands there: `List(A : Type u) : Type v` keeps
+/// `v = u`, because constructor sizing constrains it, rather than collapsing to
+/// zero.
+///
+/// A level occurring in both a binder domain and the result sort stays in the
+/// interface — the caller chooses it, and the result merely mentions it.
+fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
+    fn peel<'a>(term: &'a Term, domains: &mut Vec<&'a Term>) -> &'a Term {
+        match &**term {
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                let mut current = telescope;
+                loop {
+                    match current {
+                        Telescope::Cons(domain, rest) => {
+                            domains.push(domain);
+                            current = rest.body();
+                        }
+                        Telescope::Done(body) => return peel(body, domains),
+                    }
+                }
+            }
+            _ => term,
+        }
+    }
+
+    let mut domains = Vec::new();
+    let terminal = peel(type_, &mut domains);
+    let mut result = context.universe_metas_in(terminal);
+    for domain in domains {
+        for meta in context.universe_metas_in(domain) {
+            result.remove(&meta);
+        }
+    }
+    result
+}
+
 fn finalize_definition(
     context: &mut Context,
     name: &str,
@@ -450,8 +500,11 @@ fn finalize_definition(
 
     // The signature and any registry telescope form the declaration's
     // interface: a use site instantiates exactly these. Levels reachable only
-    // through the body are internal classifiers and are minimized instead.
+    // through the body are internal classifiers and are minimized instead, as
+    // are the levels of the result sort — see [`result_sort_only_metas`].
+    let determined = result_sort_only_metas(context, &type_);
     let mut interface = context.universe_metas_in(&type_);
+    interface.retain(|meta| !determined.contains(meta));
     if let Some(struct_decl) = context.struct_decl(name) {
         interface.extend(crate::universe_metas(&struct_decl.params));
         interface.extend(crate::universe_metas(&struct_decl.fields));
@@ -460,7 +513,8 @@ fn finalize_definition(
     if let Some(concept) = context.concept(name) {
         interface.extend(crate::universe_metas(&concept.params));
     }
-    let internal = context.universe_metas_in(&body);
+    let mut internal = context.universe_metas_in(&body);
+    internal.extend(determined);
 
     let universe_context = context.finalize_universe_metas(interface, internal)?;
     let levels = universe_context.identity_instance();
