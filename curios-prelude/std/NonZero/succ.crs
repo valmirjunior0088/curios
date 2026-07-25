@@ -1,0 +1,17 @@
+-- Successor of a strictly-positive natural. `BigNat/succ/raw` is cons-headed on
+-- every input, so the certificate needs no hypothesis about the operand.
+
+use /std/{Bits, True, BigNat, NonZero};
+use /std/NonZero/{is_cons, nz_trimmed, raw_non_zero};
+
+-- the raw successor is always cons-headed (`BigNat/succ/raw(b\) = cons(true, b\)`)
+let raw_cons(x : Bits) -> is_cons(BigNat/succ/raw(x)) =
+    match x : (r) => is_cons(BigNat/succ/raw(r))
+    | b\ => True/qed()
+    | b\xh\..xt => match xh | true => True/qed() | false => True/qed() end
+    end;
+
+pub let succ(p : NonZero) -> NonZero =
+    NonZero { magnitude = BigNat/succ/succ(p.magnitude),
+        non_zero = raw_non_zero(BigNat/succ/raw(p.magnitude.rep),
+            BigNat/succ/raw_trimmed(p.magnitude.rep, nz_trimmed(p)), raw_cons(p.magnitude.rep)) };
