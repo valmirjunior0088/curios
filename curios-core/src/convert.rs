@@ -78,19 +78,42 @@ pub(crate) enum Outcome {
     Blocked(Vec<Goal>),
 }
 
+/// Binders opened locally by [`Sort::of`] while walking a telescope, innermost last.
+///
+/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every
+/// conversion goal (through `is_prop`), and `Context::assume` bumps
+/// `mutation_stamp`, which is what validates the memoization caches — assuming
+/// here would invalidate them continuously and starve a coinductive comparison
+/// of its deadline. Keeping the binders local also keeps `Sort::of`
+/// observationally read-only, which the conversion history relies on: labels
+/// minted here are never recorded in `Convert::minted`, so they must never
+/// reach a goal. They cannot, because `Sort::of` returns a `Sort`.
+type Opened = [(String, Term)];
+
 /// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating
 /// its subterms. Returns `None` when the head is out of scope or the spine is not a
 /// typeable neutral — callers fall back conservatively. Built only from the same
 /// primitives `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so
 /// there is no duplicated typing judgment to drift from `infer`.
-fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, ReduceError> {
+fn synth_neutral(
+    context: &mut Context,
+    opened: &Opened,
+    term: &Term,
+) -> Result<Option<Term>, ReduceError> {
     match &**term {
-        Subterm::Var(var) => context
-            .instantiate_assumption_universes(var.unwrap())
-            .map(|instance| instance.map(|(type_, _)| type_))
-            .map_err(ReduceError::Universe),
+        Subterm::Var(var) => {
+            let label = var.unwrap();
+            // Locally opened binders shadow the context, innermost first.
+            if let Some((_, type_)) = opened.iter().rev().find(|(name, _)| name == label) {
+                return Ok(Some(type_.clone()));
+            }
+            context
+                .instantiate_assumption_universes(label)
+                .map(|instance| instance.map(|(type_, _)| type_))
+                .map_err(ReduceError::Universe)
+        }
         Subterm::Apply(Apply { head, params, .. }) => {
-            let Some(head_type) = synth_neutral(context, head)? else {
+            let Some(head_type) = synth_neutral(context, opened, head)? else {
                 return Ok(None);
             };
 
@@ -108,7 +131,7 @@ fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, Red
             head,
             field: Field::Index(index),
         }) => {
-            let Some(head_type) = synth_neutral(context, head)? else {
+            let Some(head_type) = synth_neutral(context, opened, head)? else {
                 return Ok(None);
             };
 
@@ -132,7 +155,7 @@ fn apply_param_types(
     head: &Term,
     params: &[Term],
 ) -> Result<Option<Vec<Term>>, ReduceError> {
-    let Some(head_type) = synth_neutral(context, head)? else {
+    let Some(head_type) = synth_neutral(context, &[], head)? else {
         return Ok(None);
     };
 
@@ -185,6 +208,17 @@ impl Sort {
     /// the reverse (a non-prop reported as a prop) is the unsound direction and
     /// never happens.
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
+        Sort::of_in(context, &mut Vec::new(), type_)
+    }
+
+    /// [`Sort::of`] under the binders a surrounding telescope walk has opened.
+    /// The `opened` scope is threaded rather than installed on the [`Context`] —
+    /// see [`Opened`] for why that distinction is load-bearing.
+    fn of_in(
+        context: &mut Context,
+        opened: &mut Vec<(String, Term)>,
+        type_: &Term,
+    ) -> Result<Sort, ReduceError> {
         let reduced = reduce_forced(context, type_.clone())?;
 
         Ok(match &*reduced {
@@ -221,35 +255,35 @@ impl Sort {
             // (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is
             // kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
-                let tele = telescope.clone();
                 // A later field may mention an earlier one, so each opened
-                // binder is *assumed* at its type before the walk descends. See
-                // the `FuncType` arm below for why leaving it unbound is not
-                // merely imprecise but silently wrong.
-                context.with_frame(|context| {
-                    let mut tele = tele;
-                    let mut levels = Vec::new();
-                    loop {
-                        match tele {
-                            Telescope::Cons(ty, rest) => {
-                                if let Sort::Type(level) = Sort::of(context, &ty)? {
-                                    levels.push(level);
-                                }
-                                let label = context.fresh(rest.first_label());
-                                context.assume(label.as_str(), &ty);
-                                let v = Term::free_var(label);
-                                tele = rest.open(&[&v]);
+                // binder joins `opened` before the walk descends. See the
+                // `FuncType` arm below for why leaving it out is not merely
+                // imprecise but silently wrong.
+                let mut tele = telescope.clone();
+                let mut levels = Vec::new();
+                let mark = opened.len();
+                let sort = loop {
+                    match tele {
+                        Telescope::Cons(ty, rest) => {
+                            if let Sort::Type(level) = Sort::of_in(context, opened, &ty)? {
+                                levels.push(level);
                             }
-                            Telescope::Done(_) => {
-                                break Ok(if levels.is_empty() {
-                                    Sort::Prop
-                                } else {
-                                    Sort::Type(Level::max(levels))
-                                });
-                            }
+                            let label = context.fresh(rest.first_label());
+                            let v = Term::free_var(label.clone());
+                            opened.push((label, ty));
+                            tele = rest.open(&[&v]);
+                        }
+                        Telescope::Done(_) => {
+                            break if levels.is_empty() {
+                                Sort::Prop
+                            } else {
+                                Sort::Type(Level::max(levels))
+                            };
                         }
                     }
-                })?
+                };
+                opened.truncate(mark);
+                sort
             }
             Subterm::TupleType(_) => {
                 probe_level_fallback("empty tuple type", &reduced);
@@ -257,42 +291,42 @@ impl Sort {
             }
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                let telescope = telescope.clone();
-                // Each opened binder must be *assumed* at its domain type, not
-                // merely substituted in. Opening with a free variable the
-                // context does not know leaves `synth_neutral` unable to type
-                // any occurrence of it in the codomain, and the resulting
-                // `None` is read as level 0 — so the sort of every dependent
-                // codomain collapsed to `Type 0` regardless of the binder's
-                // real level. That silently under-generalized exactly the
-                // declarations whose codomain mentions a binder: every concept
-                // wrapper, and every higher-order polymorphic function.
-                context.with_frame(|context| {
-                    let mut telescope = telescope;
-                    let mut domains = Vec::new();
-                    loop {
-                        match telescope {
-                            Telescope::Cons(domain, rest) => {
-                                if let Sort::Type(level) = Sort::of(context, &domain)? {
-                                    domains.push(level);
+                // Each opened binder must carry its domain type, not merely be
+                // substituted in. Opening with a free variable nothing can type
+                // leaves `synth_neutral` returning `None` for every occurrence
+                // of it in the codomain, and that `None` is read as level 0 —
+                // so the sort of every dependent codomain collapsed to `Type 0`
+                // regardless of the binder's real level. That silently
+                // under-generalized exactly the declarations whose codomain
+                // mentions a binder: every concept wrapper, and every
+                // higher-order polymorphic function.
+                let mut telescope = telescope.clone();
+                let mut domains = Vec::new();
+                let mark = opened.len();
+                let sort = loop {
+                    match telescope {
+                        Telescope::Cons(domain, rest) => {
+                            if let Sort::Type(level) = Sort::of_in(context, opened, &domain)? {
+                                domains.push(level);
+                            }
+                            let label = context.fresh(rest.first_label());
+                            let var = Term::free_var(label.clone());
+                            opened.push((label, domain));
+                            telescope = rest.open(&[&var]);
+                        }
+                        Telescope::Done(output) => {
+                            break match Sort::of_in(context, opened, &output)? {
+                                Sort::Prop => Sort::Prop,
+                                Sort::Type(output) => {
+                                    domains.push(output);
+                                    Sort::Type(Level::max(domains))
                                 }
-                                let label = context.fresh(rest.first_label());
-                                context.assume(label.as_str(), &domain);
-                                let var = Term::free_var(label);
-                                telescope = rest.open(&[&var]);
-                            }
-                            Telescope::Done(output) => {
-                                break match Sort::of(context, &output)? {
-                                    Sort::Prop => Ok(Sort::Prop),
-                                    Sort::Type(output) => {
-                                        domains.push(output);
-                                        Ok(Sort::Type(Level::max(domains)))
-                                    }
-                                };
-                            }
+                            };
                         }
                     }
-                })?
+                };
+                opened.truncate(mark);
+                sort
             }
             // A type-valued match (`Lt = match _ : Prop | ..`): its sort is the
             // motive — a constant `Prop` when the result is a proposition.
@@ -307,7 +341,7 @@ impl Sort {
             // A neutral type (a `Prop` hypothesis, or a stuck family
             // application): its synthesized type is its sort.
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
-                match synth_neutral(context, &reduced)? {
+                match synth_neutral(context, opened, &reduced)? {
                     Some(sort) => Sort::from_universe(context, &sort)?,
                     None => {
                         probe_level_fallback("neutral type unsynthesizable", &reduced);
@@ -316,7 +350,7 @@ impl Sort {
                 }
             }
             Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
-            Subterm::UniverseInst(instance) => Sort::of(context, &instance.head)?,
+            Subterm::UniverseInst(instance) => Sort::of_in(context, opened, &instance.head)?,
             // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so
             // it is not a fallback and is not worth reporting. A `Metavar` is
             // the opposite: an unsolved type pinned to level 0 is precisely the
