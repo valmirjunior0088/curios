@@ -2235,3 +2235,28 @@ fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
         .contains("exposes private item"),
     );
 }
+
+// `/std/Async/block_on` pins an unannotated local binding through a *type
+// alias* — `let Slot : Type = Cell(Option(Job));` — whose bare written `Type`
+// mints a generalizable level while its value sits at one fixed level.
+#[test]
+fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
+    let module = elaborate_source(
+        "induct Box(A : Type) : Type | empty() | wrap(A) end \
+         induct Job : Type | job() end \
+         let Slot : Type = Box(Job); \
+         let outer(@A : Type, x : A) -> A = \
+             let slot = Box/empty(); \
+             let force(b : Slot) -> {} = (); \
+             let _ = force(slot); \
+             x; \
+         outer",
+    );
+    assert!(
+        module
+            .items
+            .iter()
+            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name == "/outer")),
+        "outer elaborated"
+    );
+}

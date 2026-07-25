@@ -238,7 +238,8 @@ impl Context {
                                     origin.binder,
                                 )
                                 .at_opt(parked.origin.span()),
-                                None => display_mismatch(self, &goal.this, &goal.that),
+                                None => display_mismatch(self, &goal.this, &goal.that)
+                                    .at_opt(parked.origin.span()),
                             }
                         }
                         super::ParkedWork::Checking { .. } => Error::CannotInfer,
@@ -316,7 +317,10 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
 
     match outcome {
         Retry::Converts => Ok(()),
-        Retry::Mismatch(this, that) => Err(Error::type_mismatch(this, that)),
+        // Locate the mismatch at the construct that parked it, as every
+        // sibling arm of the drain does. A parked goal outlives the frame it
+        // came from, so without this the only surviving clue is the module.
+        Retry::Mismatch(this, that) => Err(Error::type_mismatch(this, that).at_opt(origin.span())),
         Retry::Blocked(goals) => {
             for goal in goals {
                 context.repark(

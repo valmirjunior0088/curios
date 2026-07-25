@@ -18,7 +18,6 @@ pub(super) fn elaborate_let(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
-        let enclosing_universes = context.ambient_universe_metas();
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
         let mut triples =
             Vec::<(String, UniverseContext, Term, Term)>::with_capacity(let_.bindings.len());
@@ -56,15 +55,17 @@ pub(super) fn elaborate_let(
                     (type_elaborated, body_elaborated)
                 }
             };
-            let (universe_context, types, bodies) = context.finalize_local_universes(
-                &[&type_elaborated],
-                &[&body_elaborated],
-                &enclosing_universes,
-            )?;
-            let [type_elaborated]: [Term; 1] =
-                types.try_into().expect("one finalized local-let signature");
-            let [body_elaborated]: [Term; 1] =
-                bodies.try_into().expect("one finalized local-let value");
+            // A local binding never crosses a boundary of separate
+            // elaboration: it is elaborated in the same run as every one of
+            // its uses, inside a declaration that already carries a scheme.
+            // Instantiating that declaration rewrites levels through the whole
+            // term, nested bindings included, so a local binding is already
+            // effectively polymorphic without a context of its own.
+            //
+            // Closing one here is also *wrong*: an unannotated binding whose
+            // type is pinned by a later use in the same block would have its
+            // levels sealed before that evidence arrives.
+            let universe_context = UniverseContext::empty();
 
             let label = context.fresh(let_.tail.label_iter().nth(index).flatten());
 
