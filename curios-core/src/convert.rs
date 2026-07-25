@@ -1273,6 +1273,18 @@ impl Convert {
             .iter()
             .any(|other| context.metavar_solution(*other).is_none())
         {
+            let blocking = metavars
+                .iter()
+                .filter(|other| context.metavar_solution(**other).is_none())
+                .map(|other| {
+                    let result = context
+                        .metavar_entry(*other)
+                        .map(|entry| format!("{}", entry.result))
+                        .unwrap_or_else(|| "<no birth record>".into());
+                    format!("?{} : {result}", other.0)
+                })
+                .collect::<Vec<_>>();
+            eprintln!("[block] ?{} blocked by {}", id.0, blocking.join(", "));
             return Ok(Solved::Postponed);
         }
 
