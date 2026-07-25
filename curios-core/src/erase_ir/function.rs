@@ -154,6 +154,17 @@ impl Lowering {
             return Ok(Outcome::Emitted(self.unit()));
         }
 
+        // A `Prop` family's constructor is the one direct call that *is* safe to
+        // drop: it is pure, so no host effect rides on it, and its layout keeps
+        // no payload (see `induct_row`). Its arguments exist only to fill fields
+        // erasure has already removed — and they may mention binders erasure
+        // dropped, so walking them would compute over placeholder units. The
+        // never-returning host effects the check above protects are foreign
+        // definitions, never constructors.
+        if is_proof_constructor(context, head)? {
+            return Ok(Outcome::Emitted(self.unit()));
+        }
+
         // The drop decision is the signature mask (opaque-opened), so it
         // agrees with the function's fixed runtime arity even when a
         // polymorphic domain is instantiated at a prop here; the kept walk
@@ -203,4 +214,30 @@ impl Lowering {
             false => self.walk(context, value, type_, hint),
         }
     }
+}
+
+/// Whether `head` names a constructor of a `Prop`-sorted inductive. Constructor
+/// functions are generated per case into their family's namespace, so the
+/// family is the name's qualifier prefix and the case is its last segment.
+fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Error> {
+    let Subterm::Var(var) = &**head else {
+        return Ok(false);
+    };
+    let Some(name) = var.as_free() else {
+        return Ok(false);
+    };
+    let Some((family, tag)) = name.rsplit_once('/') else {
+        return Ok(false);
+    };
+    let Some(declaration) = context.induct_decl(family).cloned() else {
+        return Ok(false);
+    };
+
+    Ok(declaration
+        .constructor_order()
+        .any(|case| case.as_str() == tag)
+        && matches!(
+            &*reduce_with(context, &declaration.result_sort)?,
+            Subterm::Prop
+        ))
 }

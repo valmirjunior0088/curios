@@ -252,3 +252,39 @@ fn erased_index_in_type_valued_arg() {
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
+
+// Regression: a `Prop` family is proof-irrelevant, so erasure drops its
+// inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own
+// abstract `A` used to keep it, so rebuilding the constructor computed the
+// field from binders the same erasure had dropped — `Eq/cong` erased to
+// `apply f(unit)`, and a proof bound in a statement position (which the design
+// runs regardless of sort) fed that unit to a `Bits` fold and trapped.
+#[test]
+fn proof_bound_as_a_statement_does_not_run_its_certificate() {
+    let source = r#"
+        use /std/{BigNat, Nat, Str, Eq, Handle};
+        let a : BigNat = BigNat/of_nat(6);
+        let b : BigNat = BigNat/of_nat(7);
+        let p : Eq(BigNat/add(a, b), BigNat/add(b, a)) = BigNat/add/comm(a, b);
+        /std/print("ok")
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
+// The same law in an erased position stays non-strict: it is never evaluated,
+// and the consumer still typechecks against it.
+#[test]
+fn proof_in_an_erased_position_is_not_evaluated() {
+    let source = r#"
+        use /std/{BigNat, Nat, Str, Eq, Handle};
+        let a : BigNat = BigNat/of_nat(6);
+        let b : BigNat = BigNat/of_nat(7);
+        let consume(x : BigNat, y : BigNat, p : Eq(BigNat/add(x, y), BigNat/add(y, x))) -> Nat = 42;
+        /std/print(Nat/to_str(consume(a, b, BigNat/add/comm(a, b))))
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"42");
+}

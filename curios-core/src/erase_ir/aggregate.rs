@@ -109,6 +109,18 @@ impl Lowering {
             .cloned()
             .expect("erase_ir: a registered inductive");
         let family = self.builder.family(Some(name.to_string()));
+        // A `Prop`-sorted family is proof-irrelevant, so erasure drops its
+        // inhabitants wholesale — payloads included. Classifying each payload
+        // on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)`
+        // has an abstract `A`, which is neither prop nor universe), leaving a
+        // live field inside an erased proof: rebuilding the constructor would
+        // then compute that field from binders the same erasure had dropped.
+        // `Prop` structures already guarantee this by declaration — their
+        // fields must be non-informative — so this aligns inductives with them.
+        let proof_family = matches!(
+            &*reduce_with(context, &induct_decl.result_sort)?,
+            Subterm::Prop
+        );
         let mut constructors = Vec::new();
         for tag in induct_decl.constructor_order() {
             let entries = context.with_frame(|context| {
@@ -118,6 +130,10 @@ impl Lowering {
                     .expect("erase_ir: constructor instantiates at its inductive's parameters");
                 signature_entries(context, telescope)
             })?;
+            let entries: Vec<(Option<String>, bool)> = entries
+                .into_iter()
+                .map(|(label, erased)| (label, erased || proof_family))
+                .collect();
             let mask: Vec<bool> = entries.iter().map(|(_, erased)| *erased).collect();
             let relevant: Vec<Option<String>> = entries
                 .into_iter()
