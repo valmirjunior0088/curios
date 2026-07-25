@@ -1,7 +1,8 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Concept, Definition, InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference,
+        Concept, Definition, DefinitionKind, InductDecl, InductParam, Item, Level, Module, RecItem,
+        SelfReference,
         StructDecl, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
         register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
@@ -276,11 +277,37 @@ fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
 fn finalize_definition(
     context: &mut Context,
     name: &str,
+    kind: &DefinitionKind,
     type_: Term,
     body: Term,
 ) -> Result<(UniverseContext, Term, Term), Error> {
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
+
+    // A method wrapper is not independently polymorphic: it is spelled in its
+    // concept's universe parameters, and its own type variables are *forced* by
+    // them — `pure(@A : Type, A) -> M(A)` only types when `A` sits at `M`'s
+    // domain level. Generalizing the wrapper on its own can therefore only
+    // invent parameters no application can satisfy, or renumber the concept's
+    // and leave its indices dangling in the stored type. Lean and Rocq both
+    // hand a projection its structure's universe parameters verbatim.
+    // The owner comes from `into_core`, which records it where the wrapper is
+    // generated; re-deriving it by splitting `name` would misread an ordinary
+    // definition that merely happens to sit under a concept's namespace.
+    if let DefinitionKind::ConceptMethod { owner } = kind {
+        let universe_context = context
+            .concept(owner)
+            .ok_or_else(|| {
+                Error::UniverseInvariant(format!(
+                    "{name}: method wrapper names an unregistered concept '{owner}'"
+                ))
+            })?
+            .universe_context
+            .clone();
+        let type_ = context.zonk_universe_levels(&type_)?;
+        let body = context.zonk_universe_levels(&body)?;
+        return Ok((universe_context, type_, body));
+    }
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
         let params = struct_decl.params.zonk(context)?;
         let fields = struct_decl.fields.zonk(context)?;
@@ -434,7 +461,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // telescopes now that the former is defined (no-op for an ordinary let).
     elaborate_struct(context, &def.name)?;
 
-    let (universe_context, type_, body) = finalize_definition(context, &def.name, type_, body)?;
+    let (universe_context, type_, body) =
+        finalize_definition(context, &def.name, &def.kind, type_, body)?;
     context.reassume(&def.name, &type_);
     context.define(&def.name, &body);
     context.set_assumption_universe_context(&def.name, universe_context.clone());
