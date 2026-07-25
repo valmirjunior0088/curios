@@ -267,8 +267,29 @@ pub(crate) fn validate_bound_universes<B: Bound>(
         if level.is_closed(visible_parameter_count) {
             Ok(level.clone())
         } else {
+            // Name the numbers. A level prints its parameters as letters that
+            // cycle (`u`..`z`, then `u1`), so neither the offending index nor
+            // the bound it broke can be read off `{level}`, and the bound
+            // itself is a sum: a nested scheme's own parameters sit innermost
+            // and the enclosing binders it may still reference follow. Which
+            // of the two is short is the whole diagnosis, and recovering it
+            // otherwise costs a rebuild.
+            let detail = if level.metas().next().is_some() {
+                "it still holds an unsolved universe metavariable".to_string()
+            } else {
+                let escaping = level
+                    .params()
+                    .filter(|param| param.0 >= visible_parameter_count)
+                    .map(|param| param.0.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(
+                    "parameter index {escaping} is not below {visible_parameter_count} \
+                     ({parameter_count} declared, {depth} from enclosing universe binders)"
+                )
+            };
             Err(format!(
-                "{owner}: level {level} escapes its universe parameter context"
+                "{owner}: level {level} escapes its universe parameter context: {detail}"
             ))
         }
     })
