@@ -187,8 +187,8 @@ fn str_of_bytes_rejects_truncated_multibyte() {
 fn utf8_decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Handle};
-        let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/peel_byte,
-            Nat/Lte/trans, Nat/Lt/of_lte_succ, Nat/Lte/add_mono_l, Str/count_scalars, Str/cont0_uninhabited, Str/take_continuations, Str/decode_head);
+        let lemmas = (Str/utf8/bad_uninhabited, Str/utf8/cont_len, Str/utf8/peel_byte,
+            Nat/Lte/trans, Nat/Lt/of_lte_succ, Nat/Lte/add_mono_l, Str/utf8/count_scalars, Str/utf8/cont0_uninhabited, Str/utf8/take_continuations, Str/utf8/decode_head);
         /std/print("ok")
         "#;
 

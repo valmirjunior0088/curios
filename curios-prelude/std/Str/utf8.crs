@@ -1,0 +1,197 @@
+-- Why `Str`'s operations are sound. Every function here manipulates a `Utf8`
+-- scan witness rather than bytes alone: `check` decides one, `seq` concatenates
+-- two, `drop_valid`/`take_valid` transport one across a slice, and the
+-- `*_uninhabited` lemmas rule out the states a well-formed scan cannot reach.
+-- `Str` is the parent, not a descendant, so it cannot see a private name in
+-- here — everything the public API calls is exported.
+
+use /syn/Str/{classify, Scan, step, Utf8, Valid};
+use /syn/{True, False};
+use /std/{Char, Nat, Byte, Bytes, Option};
+
+rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
+    -> Utf8(s, x\..a\..b) =
+    match va : (q, x, w) => Utf8(q, x\..x\..b)
+    | stop() => vb
+    | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(@step(c, st), @t, @b, rest, vb))
+    end;
+
+pub let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
+    -> Valid(x\..a\..b) =
+    seq(va, vb);
+
+pub let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =
+    match b
+    | x\ => (s) =>
+        match s
+        | lead() => Option/some(Utf8/stop())
+        | cont(rem, lo, hi) => Option/none()
+        | bad() => Option/none()
+        end
+    | x\h\..t; ih => (s) =>
+        match ih(step(h, s))
+        | some(rest) => Option/some(Utf8/more(h, s, t, rest))
+        | none() => Option/none()
+        end
+    end;
+
+pub rec drop_width(n : Nat, s : Scan, b : Bytes) -> Nat =
+    match b
+    | x\ => 0
+    | x\h\..t =>
+        match s
+        | lead() =>
+            match n
+            | 0 => 0
+            | pred + 1 => 1 + drop_width(pred, step(h, Scan/lead()), t)
+            end
+        | cont(rem, lo, hi) => 1 + drop_width(n, step(h, Scan/cont(rem, lo, hi)), t)
+        | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
+        end
+    end;
+
+pub rec drop_valid(n : Nat, s : Scan, @b : Bytes, d : Utf8(s, b))
+    -> Valid(Bytes/slice(b, drop_width(n, s, b), Bytes/len(b))) =
+    match s
+    | lead() =>
+        match d
+        | stop() => Utf8/stop()
+        | more(c, st, t, rest) =>
+            match n
+            | 0 => Utf8/more(c, Scan/lead(), t, rest)
+            | pred + 1 => drop_valid(pred, step(c, Scan/lead()), rest)
+            end
+        end
+    | cont(rem, lo, hi) =>
+        match d
+        | more(c, st, t, rest) => drop_valid(n, step(c, Scan/cont(rem, lo, hi)), rest)
+        end
+    | bad() =>
+        match d
+        | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), rest)
+        end
+    end;
+
+pub rec take_valid(n : Nat, s : Scan, @b : Bytes, d : Utf8(s, b))
+    -> Utf8(s, Bytes/slice(b, 0, drop_width(n, s, b))) =
+    match s
+    | lead() =>
+        match d
+        | stop() => Utf8/stop()
+        | more(c, st, t, rest) =>
+            match n
+            | 0 => Utf8/stop()
+            | pred + 1 =>
+                Utf8/more(c, Scan/lead(), Bytes/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
+                    take_valid(pred, step(c, Scan/lead()), rest))
+            end
+        end
+    | cont(rem, lo, hi) =>
+        match d
+        | more(c, st, t, rest) =>
+            Utf8/more(c, Scan/cont(rem, lo, hi),
+                Bytes/slice(t, 0, drop_width(n, step(c, Scan/cont(rem, lo, hi)), t)),
+                take_valid(n, step(c, Scan/cont(rem, lo, hi)), rest))
+        end
+    | bad() =>
+        match d
+        | more(c, st, t, rest) =>
+            Utf8/more(c, Scan/bad(),
+                Bytes/slice(t, 0, drop_width(n, step(c, Scan/bad()), t)),
+                take_valid(n, step(c, Scan/bad()), rest))
+        end
+    end;
+
+pub rec bad_uninhabited(@x : Bytes, w : Utf8(Scan/bad(), x)) -> False =
+    match w : (q, y, w) => False
+    | more(c, st, t, rest) => bad_uninhabited(rest)
+    end;
+
+pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(k, lo, hi), t))
+    -> Nat/Lte(k, Bytes/len(t)) =
+    match k
+    | 0 => Nat/Lte/z()
+    | kp + 1 =>
+        match w
+        | more(c, st, tt, rest) =>
+            match kp
+            | 0 => Nat/Lte/s(Nat/Lte/z())
+            | kpp + 1 =>
+                Nat/Lte/s(
+                    match Nat/in_range(Byte/to_nat(c), lo, hi)
+                    | true => cont_len(kpp + 1, rest)
+                    | false =>
+                        False/absurd(
+                            bad_uninhabited(rest))
+                    end)
+            end
+        end
+    end;
+
+pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(0, lo, hi), t)) -> False =
+    match w : (q, y, w) => False
+    | more(c, st, t2, rest) =>
+        match Nat/in_range(Byte/to_nat(c), lo, hi)
+        | true => cont0_uninhabited(rest)
+        | false => bad_uninhabited(rest)
+        end
+    end;
+
+pub rec take_continuations(b : Bytes, off : Nat, remaining : Nat, acc : Nat,
+    bound : Nat/Lte(off + remaining, Bytes/len(b))) -> {Nat, Nat} =
+    match remaining
+    | 0 => (acc, off)
+    | pred + 1 =>
+        take_continuations(b, off + 1, pred,
+            acc * 0x40 + (Byte/to_nat(Bytes/at(b, off,
+                Nat/Lt/of_lte_succ(Nat/Lte/trans(Nat/Lte/s(Nat/Lte/add_r(off, pred)), bound)))) - 0x80),
+            bound)
+    end;
+
+pub rec peel_byte(@s : Scan, @b : Bytes, nz : Nat/Lt(0, Bytes/len(b)), w : Utf8(s, b))
+    -> Utf8(step(Bytes/at(b, 0, nz), s), Bytes/slice(b, 1, Bytes/len(b))) =
+    match w
+    | stop() =>
+        False/absurd(@Utf8(step(Bytes/at(x\, 0, nz), Scan/lead()), Bytes/slice(x\, 1, Bytes/len(x\))), nz)
+    | more(c, st, t, rest) => rest
+    end;
+
+pub rec count_scalars(s : Scan, b : Bytes) -> Nat =
+    match b
+    | x\ => 0
+    | x\h\..t =>
+        match s
+        | lead() => count_scalars(step(h, Scan/lead()), t) + 1
+        | cont(rem, lo, hi) => count_scalars(step(h, Scan/cont(rem, lo, hi)), t)
+        | bad() => count_scalars(step(h, Scan/bad()), t)
+        end
+    end;
+
+pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Nat =
+    match classify(c)
+    | ascii() => Byte/to_nat(c)
+    | lead(k, lo, hi, payload) =>
+        take_continuations(t, 0, k, payload,
+            cont_len(k, 
+                peel_byte(@Scan/lead(), @Bytes/cons(c, t), True/qed(), w))).0
+    | bad() =>
+        False/absurd(
+            bad_uninhabited(
+                peel_byte(@Scan/lead(), @Bytes/cons(c, t), True/qed(), w)))
+    end;
+
+pub let certify_decoded(code : Nat) -> Char =
+    Option/unwrap_or(Char/of_nat(code), '?');
+
+pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Char =
+    certify_decoded(decode_head_raw(c, w));
+
+pub rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
+    match n
+    | 0 => False/absurd(p)
+    | np + 1 =>
+        match i
+        | 0 => Nat/Lte/s(Nat/Lte/z())
+        | ip + 1 => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
+        end
+    end;
