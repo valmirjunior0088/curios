@@ -192,7 +192,7 @@ pub rec take_continuations(b : Bytes, off : Nat, remaining : Nat, acc : Nat,
     | pred + 1 =>
         take_continuations(b, off + 1, pred,
             acc * 0x40 + (Byte/to_nat(Bytes/at(b, off,
-                Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound)))) - 0x80),
+                Nat/Lt/of_lte_succ(Nat/Lte/trans(Nat/Lte/s(Nat/Lte/add_r(off, pred)), bound)))) - 0x80),
             bound)
     end;
 

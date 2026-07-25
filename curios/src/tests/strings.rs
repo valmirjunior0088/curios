@@ -188,7 +188,7 @@ fn utf8_decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Handle};
         let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/peel_byte,
-            Nat/lte_trans, Nat/lt_of_lte_succ, Nat/lte_add_mono_l, Str/count_scalars, Str/cont0_uninhabited, Str/take_continuations, Str/decode_head);
+            Nat/Lte/trans, Nat/Lt/of_lte_succ, Nat/Lte/add_mono_l, Str/count_scalars, Str/cont0_uninhabited, Str/take_continuations, Str/decode_head);
         /std/print("ok")
         "#;
 
@@ -231,9 +231,9 @@ fn str_at_reads_codepoints_with_the_proof() {
         match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : (_) => {}
         | some(s) =>
             let out =
-                let r0 = Nat/try_lt(0, Str/len(s));
-                let r1 = Nat/try_lt(1, Str/len(s));
-                let r2 = Nat/try_lt(2, Str/len(s));
+                let r0 = Nat/Lt/try(0, Str/len(s));
+                let r1 = Nat/Lt/try(1, Str/len(s));
+                let r2 = Nat/Lt/try(2, Str/len(s));
                 match r0 : (_) => Option(Str)
                 | none() => Option/none()
                 | some(p0) => match r1 : (_) => Option(Str)

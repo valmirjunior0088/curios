@@ -431,7 +431,7 @@ let cancel_all(ts : Lst(Token)) -> {} =
 
 pub let join_all(@A : Type, tasks : Lst(() -> Async(A))) -> Async(Lst(A)) =
     rec go(i : Nat) -> Async(Lst(A)) =
-        match Nat/try_lt(i, Lst/len(tasks))
+        match Nat/Lt/try(i, Lst/len(tasks))
         | none() => pure(Lst/nil())
         | some(ok) =>
             let h = spawn(Lst/at(tasks, i, ok))!;
@@ -445,7 +445,7 @@ pub let select(@A : Type, tasks : Lst(() -> Async(A))) -> Async({Nat, A}) =
     defer(() =>
         let winner = Future/new();
         rec arm(i : Nat) -> Async(Lst(Token)) =
-            match Nat/try_lt(i, Lst/len(tasks))
+            match Nat/Lt/try(i, Lst/len(tasks))
             | none() => pure(Lst/nil())
             | some(ok) =>
                 let t = Token { Cell/new(false) };

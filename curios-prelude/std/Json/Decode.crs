@@ -136,7 +136,7 @@ pub rec decode : Parse(Json) =
             match ws.run(input, pos)
             | failure(msg) => Result/failure(msg)
             | success((start, _)) =>
-                match Nat/try_lt(start, Bytes/len(input))
+                match Nat/Lt/try(start, Bytes/len(input))
                 | none() => Result/failure("unexpected end of input")
                 | some(ok) =>
                     match Byte/to_nat(Bytes/at(input, start, ok))

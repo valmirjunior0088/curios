@@ -124,7 +124,7 @@ let rest : Parse(Bytes) =
 let guard_header : Parse({}) =
     Parse {
         run(input, pos) =
-            match Nat/try_lt(pos, Bytes/len(input))
+            match Nat/Lt/try(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of headers")
             | some(ok) =>
                 match Bytes/at(input, pos, ok) == 0x0D

@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Order, True, False, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
+use /std/{Str, Option, Char, Bool, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
 let single_digit(d : Nat) -> Str =
     match d
@@ -102,63 +102,13 @@ satisfy Ord(Nat) {
     cmp(a, b) = cmp(a, b)
 }
 
-pub let Lt(a : Nat, b : Nat) -> Prop =
-    match a < b
-    | true => True
-    | false => False
-    end;
+-- The two ordering propositions are facades: the module's namesake binding is
+-- the proposition and the laws about it nest underneath — `Nat/Lte` is the
+-- `a <= b` family and `Nat/Lte/trans` its transitivity, `Nat/Lt` is the decided
+-- `a < b` and `Nat/Lt/try` the procedure that decides it.
 
-pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
-    match a < b : (r) => Option(match r : (_) => Prop | true => True | false => False end)
-    | true => Option/some(True/qed())
-    | false => Option/none()
-    end;
+pub mod Lte;
+pub use Lte/{let Lte};
 
-pub induct Lte : (a : Nat, b : Nat) -> pub Prop
-| z(@n : Nat) : (0, n)
-| s(@a : Nat, @b : Nat, prev : Lte(a, b)) : (a + 1, b + 1)
-end
-
-pub let lte_refl(n : Nat) -> Lte(n, n) =
-    match n : (m) => Lte(m, m)
-    | 0 => Lte/z()
-    | pred + 1; ih => Lte/s(ih)
-    end;
-
-pub rec lte_succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
-    match p : (x, y, w) => Lte(x, y + 1)
-    | z(@_) => Lte/z()
-    | s(@_, @_, prev) => Lte/s(lte_succ_r(prev))
-    end;
-
-pub let lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
-    match k : (m) => Lte(a, a + m)
-    | 0 => lte_refl(a)
-    | pred + 1; ih => lte_succ_r(ih)
-    end;
-
-pub rec lt_succ_of_lte(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
-    match p : (x, y, w) => Lt(x, y + 1)
-    | z(@_) => True/qed()
-    | s(@_, @_, prev) => lt_succ_of_lte(prev)
-    end;
-
-pub rec lte_trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) -> Lte(a, c) =
-    match p
-    | z(@_) => Lte/z()
-    | s(@a2, @b2, prev) =>
-        match q
-        | s(@b3, @c3, q2) => Lte/s(lte_trans(prev, q2))
-        end
-    end;
-
-pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
-    match p : (x, y, w) => Lt(x - 1, y)
-    | s(@a2, @b2, prev) => lt_succ_of_lte(prev)
-    end;
-
-pub let lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =
-    match n : (m) => Lte(m + a, m + b)
-    | 0 => p
-    | m + 1; ih => Lte/s(ih)
-    end;
+pub mod Lt;
+pub use Lt/{let Lt};
