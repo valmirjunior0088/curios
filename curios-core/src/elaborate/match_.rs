@@ -598,12 +598,18 @@ fn elaborate_induct_match(
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let (name, params, indices) = match &*head_type {
+    let (name, universes, params, indices) = match &*head_type {
         Subterm::InductType(InductType {
             name,
+            universes,
             params,
             indices,
-        }) => (name.clone(), params.clone(), indices.clone()),
+        }) => (
+            name.clone(),
+            universes.clone(),
+            params.clone(),
+            indices.clone(),
+        ),
         other => return Err(Error::not_a_induct_type(other.clone())),
     };
 
@@ -621,6 +627,7 @@ fn elaborate_induct_match(
     let Some(induct_decl) = context.induct_decl(&name).cloned() else {
         return Err(Error::unbound_variable(Term::free_var(&name)));
     };
+    let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
 
     // Opacity covers every eliminator, including defaults and vacuous or
     // inversion-discharged matches. Check before motives, coverage, or index
@@ -637,6 +644,7 @@ fn elaborate_induct_match(
     // actual parameters, then the scrutinee.
     let shape = MotiveShape::Induct {
         name: &name,
+        universes: &universes,
         params: &params,
         indices: induct_decl.indices.clone().open_params(&params),
     };

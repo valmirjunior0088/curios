@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Module, Term},
+    super::{Atom, Level, Module, Term, UniverseConstraintOrigin, UniverseError},
     curios_base::{Int, Plicity, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
@@ -44,6 +44,7 @@ pub(crate) enum ReduceError {
         kind: &'static str,
         span: Option<Span>,
     },
+    Universe(UniverseError),
 }
 
 impl ReduceError {
@@ -72,6 +73,7 @@ impl ReduceError {
                 Error::EffectAtTypeLevel { kind }.at_opt(span)
             }
             Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
+            Self::Universe(error) => Error::from(error),
         }
     }
 }
@@ -113,6 +115,12 @@ pub enum Error {
     DivisionByZero {
         kind: &'static str,
     },
+    UniverseInconsistency {
+        lower: Level,
+        upper: Level,
+        path: Vec<UniverseConstraintOrigin>,
+    },
+    UniverseInvariant(String),
     ByteLiteralOutOfRange {
         value: String,
     },
@@ -445,6 +453,16 @@ pub enum Error {
     },
     Located {
         span: Span,
+        error: Box<Error>,
+    },
+    /// The declaration whose elaboration raised `error`.
+    ///
+    /// A sibling of [`Error::Located`] rather than a message prefix: the
+    /// context is structured, so a consumer can still match on the underlying
+    /// error, and every failure gains a name without each raising site
+    /// formatting one.
+    InDeclaration {
+        name: String,
         error: Box<Error>,
     },
 }
@@ -862,6 +880,18 @@ impl Error {
         Self::MissingArmNotImpossible { tag }
     }
 
+    /// Name the declaration this error arose in. Innermost wins, matching
+    /// [`Error::at`]: a nested item keeps its own attribution.
+    pub(crate) fn in_declaration(self, name: &str) -> Self {
+        match self {
+            Self::InDeclaration { .. } => self,
+            error => Self::InDeclaration {
+                name: name.to_string(),
+                error: Box::new(error),
+            },
+        }
+    }
+
     pub(crate) fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } => self,
@@ -912,6 +942,9 @@ impl Error {
             Self::Located { span, error } => {
                 format!("{error}\n\n{}", span.render_snippet())
             }
+            Self::InDeclaration { name, error } => {
+                format!("while elaborating {name}:\n{}", error.render())
+            }
             error => error.to_string(),
         }
     }
@@ -921,7 +954,9 @@ impl Error {
     /// wrapper; variants carrying no term contribute nothing.
     fn collect_terms<'a>(&'a self, out: &mut Vec<&'a Term>) {
         match self {
-            Self::Located { error, .. } => error.collect_terms(out),
+            Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
+                error.collect_terms(out)
+            }
             Self::ReducePreempted { term } => out.push(term),
             Self::ConvertPreempted { this, that } => {
                 out.push(this);
@@ -977,6 +1012,17 @@ impl Error {
     }
 }
 
+impl From<UniverseError> for Error {
+    fn from(error: UniverseError) -> Self {
+        match error {
+            UniverseError::Inconsistency { lower, upper, path } => {
+                Self::UniverseInconsistency { lower, upper, path }
+            }
+            other => Self::UniverseInvariant(other.to_string()),
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -991,6 +1037,19 @@ impl fmt::Display for Error {
                     f,
                     "type mismatch\n  inferred: {inferred}\n  expected: {expected}"
                 )
+            }
+            Error::UniverseInconsistency { lower, upper, path } => {
+                write!(
+                    f,
+                    "this Type would need to be strictly below itself\n  required constraint: {lower} ≤ {upper}"
+                )?;
+                if path.len() > 1 {
+                    write!(f, "\n  inconsistency path has {} steps", path.len())?;
+                }
+                Ok(())
+            }
+            Error::UniverseInvariant(message) => {
+                write!(f, "invalid inferred universe state: {message}")
             }
             Error::NotAFunction { head_type } => {
                 write!(f, "applied a non-function\n  head has type: {head_type}")
@@ -1446,6 +1505,9 @@ impl fmt::Display for Error {
             }
             Error::ByteLiteralOutOfRange { value } => {
                 write!(f, "Byte literal {value} is out of range (expected 0..=255)")
+            }
+            Error::InDeclaration { name, error } => {
+                write!(f, "while elaborating {name}:\n{error}")
             }
             Error::Located { error, .. } => {
                 write!(f, "{error}")

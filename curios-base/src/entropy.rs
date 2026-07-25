@@ -15,7 +15,7 @@ impl Mint for usize {
 /// A deterministic gensym source: a monotonic counter, `Cell`-backed so that
 /// fresh values can be minted under shared borrows. `T` is what one tick
 /// mints — raw `usize` ids by default, or any name type implementing [`Mint`].
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entropy<T = usize> {
     counter: Cell<usize>,
     marker: PhantomData<T>,

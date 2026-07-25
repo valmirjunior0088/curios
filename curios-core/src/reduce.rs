@@ -8,7 +8,8 @@ use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductType,
         Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
+        instantiate_universe_levels_scoped,
     },
     crate::Instant,
     num_traits::ToPrimitive,
@@ -147,7 +148,7 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 /// avoids forcing effects at elaboration and still matches. A `Preempted`
 /// deadline is the one error that propagates.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
-    match &**term {
+    let canonical = match &**term {
         Subterm::Apply(Apply {
             head,
             params,
@@ -170,7 +171,12 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
             .into())
         }
         _ => Ok(term.clone()),
-    }
+    }?;
+    // Universe arguments cannot affect computation: Curios has no universe
+    // reflection and erasure removes them. Refinement keys therefore compare
+    // the same applied definition across independently fresh scheme instances
+    // by its computational spelling, not by inference-local level ids.
+    Ok(super::project_erased_universes(&canonical))
 }
 
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
@@ -445,8 +451,8 @@ fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
         .collect::<Vec<_>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
 
-    for (i, (label, (_, value))) in labels.iter().zip(let_.bindings.iter()).enumerate() {
-        context.define(label, &value.release(&label_refs[..i]));
+    for (i, (label, binding)) in labels.iter().zip(&let_.bindings).enumerate() {
+        context.define(label, &binding.value().release(&label_refs[..i]));
     }
 
     Reduce::Continue(let_.tail.open(&label_refs))
@@ -467,6 +473,33 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
         Some(solution) => Reduce::Continue(solution),
         None => Reduce::Break(Term::from(Subterm::Metavar(metavar))),
     }
+}
+
+fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Reduce, ReduceError> {
+    let reduct = match &*instance.head {
+        Subterm::Var(var) => context.var_reduct_at(var.unwrap()).cloned(),
+        Subterm::RecMember(_) => Some(instance.head.clone()),
+        _ => Some(instance.head.clone()),
+    };
+    let Some(reduct) = reduct else {
+        return Ok(Reduce::Break(Term::universe_inst(
+            instance.head,
+            instance.levels,
+        )));
+    };
+    let arguments = instance.levels;
+    let reduct = match &*reduct {
+        Subterm::RecMember(member) => Term::rec_member(
+            member
+                .group
+                .instantiate_universes(&arguments)
+                .map_err(ReduceError::Universe)?,
+            member.index,
+        ),
+        _ => instantiate_universe_levels_scoped(&reduct, &arguments)
+            .map_err(ReduceError::Universe)?,
+    };
+    Ok(Reduce::Continue(reduct))
 }
 
 pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
@@ -537,6 +570,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
                 Subterm::Let(let_) => reduce_let(context, let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
+                Subterm::UniverseInst(instance) => reduce_universe_inst(context, instance)?,
                 // `InductType`/`Variant` and `StructType`/`Struct` are primitive
                 // normal forms, like `Tuple`: their sub-terms are not reduced
                 // in WHNF.
@@ -605,38 +639,53 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
         }),
         Subterm::InductType(InductType {
             name,
+            universes,
             params,
             indices,
         }) => Subterm::InductType(InductType {
             name,
+            universes,
             params: normalize_each(context, params)?,
             indices: normalize_each(context, indices)?,
         }),
-        Subterm::StructType(StructType { name, params }) => Subterm::StructType(StructType {
+        Subterm::StructType(StructType {
             name,
+            universes,
+            params,
+        }) => Subterm::StructType(StructType {
+            name,
+            universes,
             params: normalize_each(context, params)?,
         }),
         Subterm::Variant(Variant {
             name,
+            universes,
             params,
             tag,
             payload,
         }) => Subterm::Variant(Variant {
             name,
+            universes,
             params: normalize_each(context, params)?,
             tag,
             payload: normalize_each(context, payload)?,
         }),
         Subterm::Struct(Struct {
             name,
+            universes,
             params,
             fields,
             entries,
         }) => Subterm::Struct(Struct {
             name,
+            universes,
             params: normalize_each(context, params)?,
             fields: normalize_each(context, fields)?,
             entries,
+        }),
+        Subterm::UniverseInst(instance) => Subterm::UniverseInst(UniverseInst {
+            head: normalize(context, instance.head)?,
+            levels: instance.levels,
         }),
         Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
             fields: normalize_each(context, fields)?,

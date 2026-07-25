@@ -27,6 +27,7 @@ use {
         Match, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
         expect_prim_head, infer, is_erasable, reduce_with, refine_head,
     },
+    crate::Level,
     curios_base::{Grain, PackedBin},
 };
 
@@ -129,6 +130,7 @@ struct InductMatch<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
     name: &'a str,
+    universes: &'a [Level],
     params: &'a [Term],
     actual_indices: &'a [Term],
 }
@@ -557,23 +559,31 @@ impl Lowering {
 
         let head_type = infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
-        let (name, params, actual_indices) = match &*head_type {
+        let (name, universes, params, actual_indices) = match &*head_type {
             Subterm::InductType(InductType {
                 name,
+                universes,
                 params,
                 indices,
-            }) => (name.clone(), params.clone(), indices.clone()),
+            }) => (
+                name.clone(),
+                universes.clone(),
+                params.clone(),
+                indices.clone(),
+            ),
             _ => unreachable!("erase_ir: inductive match scrutinee checked by elaborate"),
         };
         let induct_decl = context
             .induct_decl(&name)
             .cloned()
             .expect("erase_ir: scrutinee type names a registered inductive");
+        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
 
         let m = InductMatch {
             head,
             motive,
             name: &name,
+            universes: &universes,
             params: &params,
             actual_indices: &actual_indices,
         };
@@ -783,8 +793,9 @@ fn refine_arm(
         Telescope::Cons(..) => unreachable!("erase_ir: constructor arity checked by elaborate"),
     };
 
-    let constructor_value = Term::variant(
+    let constructor_value = Term::variant_at(
         m.name.to_string(),
+        m.universes.to_vec(),
         m.params.to_vec(),
         tag.clone(),
         vars.to_vec(),

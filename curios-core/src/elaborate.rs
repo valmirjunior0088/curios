@@ -27,10 +27,11 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Context, ElabProbe, Error, Field, Func, FuncType, ImplicitOrigin, InductType,
-        Infix, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, ParkedWork, Prim, Proj, Rec,
-        Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Var, Variant, WitnessOrigin, attempt_witness_goal, check, expect, reduce_with, sort_term,
+        Apply, Bound, Context, ElabProbe, ElaborationStamp, Error, Field, Func, FuncType,
+        ImplicitOrigin, InductType, Infix, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit,
+        ParkedWork, Prim, Proj, Rec, Struct, StructDecl, StructEntry, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Var, Variant, WitnessOrigin, attempt_witness_goal,
+        check, expect, instantiate_universe_levels_scoped, reduce_with, sort_term,
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
     num_bigint::BigInt,
@@ -98,7 +99,6 @@ pub(crate) fn elaborate(
             Ok(step) => step,
             Err(error) => return Err(error.locate(work_term.span(), &frames)),
         };
-
         // Drain: a settled result takes its own span (innermost-wins), then
         // returns (no frame left) or resolves against the innermost pending
         // frame, which itself settles or descends again.
@@ -195,8 +195,35 @@ fn elaborate_subterm(
     // consume `mode` directly and return early. Every arm returns the rebuilt
     // term — binders re-closed, lambda domains solved (§9).
     let (rebuilt, type_) = match &**term {
-        Subterm::Type => (term.clone(), Term::type_()),
-        Subterm::Prop => (term.clone(), Term::type_()),
+        Subterm::Type(level) => (
+            term.clone(),
+            Term::type_at(level.succ().map_err(Error::from)?),
+        ),
+        Subterm::Prop => (term.clone(), Term::type_ground()),
+        Subterm::UniverseInst(instance) => {
+            let type_ = match &*instance.head {
+                Subterm::Var(var) => context
+                    .instantiate_assumption_at(var.unwrap(), &instance.levels)?
+                    .ok_or_else(|| Error::unbound_variable(instance.head.clone()))?,
+                Subterm::RecMember(member) => {
+                    context
+                        .universes_mut()
+                        .instantiate_at(member.group.universe_context(), &instance.levels)
+                        .map_err(Error::from)?;
+                    instantiate_universe_levels_scoped(
+                        &member.group.member_type(member.index),
+                        &instance.levels,
+                    )
+                    .map_err(Error::from)?
+                }
+                _ => {
+                    return Err(Error::UniverseInvariant(
+                        "a universe instance must wrap a variable or recursive member".into(),
+                    ));
+                }
+            };
+            (term.clone(), type_)
+        }
         Subterm::Prim(prim) => return elaborate_prim(context, term, prim, mode),
         Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
@@ -206,8 +233,15 @@ fn elaborate_subterm(
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::RecMember(member) => (term.clone(), member.group.member_type(member.index)),
-        Subterm::Var(var) => match context.assumption(var.unwrap()) {
-            Some(type_) => (term.clone(), type_.clone()),
+        Subterm::Var(var) => match context.instantiate_assumption(var.unwrap())? {
+            Some((type_, levels)) => {
+                let rebuilt = if levels.is_empty() {
+                    term.clone()
+                } else {
+                    Term::universe_inst(term.clone(), levels)
+                };
+                (rebuilt, type_)
+            }
             None => return Err(Error::unbound_variable(Term::var(var.clone()))),
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),

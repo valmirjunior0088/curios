@@ -58,7 +58,7 @@ impl Lowering {
         let mut params = Vec::new();
         let mut dropped = Vec::new();
 
-        let body = context.with_frame(|context| {
+        let body = context.with_frame(|context| -> Result<_, Error> {
             // Walk the lambda's telescope (whose `Done` is the body) alongside
             // the checked function type's telescope (whose `Done` is the
             // output type), opening both with one fresh variable per binder.

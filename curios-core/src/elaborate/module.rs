@@ -1,12 +1,14 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Definition, InductDecl, InductParam, Item, Module, RecItem, StructDecl, Subterm, Telescope,
-        Term, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
-        register_witness, retry_deferred_witnesses, zonk, zonk_module,
+        Concept, Definition, InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference,
+        StructDecl, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
+        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
+        zonk_solved_term_metas,
     },
     curios_base::Qualifier,
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// Walk a (params-first) telescope, checking each binder's type against `Type`
@@ -23,7 +25,7 @@ fn check_telescope_entries<B: Bound>(
         match telescope {
             Telescope::Done(body) => break Ok((entries, *body)),
             Telescope::Cons(ty, rest) => {
-                let rebuilt = check(context, &ty, Term::type_())?;
+                let rebuilt = crate::check_is_sort(context, &ty)?.0;
                 let label = context.fresh(rest.first_label());
                 context.assume(&label, &rebuilt);
                 telescope = rest.open(&[&Term::free_var(&label)]);
@@ -31,6 +33,55 @@ fn check_telescope_entries<B: Bound>(
             }
         }
     }
+}
+
+fn add_declaration_sizing<B: Bound>(
+    context: &mut Context,
+    declaration: &str,
+    telescope: &Telescope<B>,
+    uniform_count: usize,
+    result_sort: &Term,
+    kind: UniverseConstraintKind,
+) -> Result<(), Error> {
+    let Subterm::Type(result_level) = &*reduce_with(context, result_sort)? else {
+        return Ok(());
+    };
+    let result_level = result_level.clone();
+
+    context.with_frame(|context| {
+        let mut position = 0;
+        let mut telescope = telescope.clone();
+        while let Telescope::Cons(domain, rest) = telescope {
+            let domain_sort = sort_term(context, &domain)?;
+            let domain_sort = reduce_with(context, &domain_sort)?;
+            if let Subterm::Type(domain_level) = &*domain_sort {
+                let upper = if position < uniform_count {
+                    result_level.checked_add(1).map_err(Error::from)?
+                } else {
+                    result_level.clone()
+                };
+                context
+                    .universes_mut()
+                    .add_leq(
+                        domain_level.clone(),
+                        upper,
+                        UniverseConstraintOrigin {
+                            span: domain.span(),
+                            kind: kind.clone(),
+                            declaration: Some(declaration.to_string()),
+                            binder: rest.first_label().map(str::to_string),
+                        },
+                    )
+                    .map_err(Error::from)?;
+            }
+
+            let label = context.fresh(rest.first_label());
+            context.assume(&label, &domain);
+            telescope = rest.open(&[&Term::free_var(label)]);
+            position += 1;
+        }
+        Ok(())
+    })
 }
 
 /// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
@@ -72,6 +123,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &str) -> Result<(), Err
     context.update_induct(
         name,
         InductDecl {
+            universe_context: induct_decl.universe_context,
             params,
             indices,
             constructors: induct_decl.constructors,
@@ -110,7 +162,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
 
         let (entries, terminal) = context.with_frame(|context| {
             let (entries, terminal) = check_telescope_entries(context, signature.clone())?;
-            let terminal = check(context, &terminal, Term::type_())?;
+            let terminal = crate::check_is_sort(context, &terminal)?.0;
             Ok::<_, Error>((entries, terminal))
         })?;
 
@@ -129,6 +181,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
     context.update_induct(
         name,
         InductDecl {
+            universe_context: induct_decl.universe_context,
             params: induct_decl.params,
             indices: induct_decl.indices,
             constructors,
@@ -195,10 +248,19 @@ fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
     let params =
         Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
     let fields = Telescope::build(entries, ()).relabel(&label_refs);
+    add_declaration_sizing(
+        context,
+        name,
+        &fields,
+        n_params,
+        &struct_decl.result_sort,
+        UniverseConstraintKind::FieldSizing,
+    )?;
 
     context.update_struct(
         name,
         StructDecl {
+            universe_context: struct_decl.universe_context,
             params,
             fields,
             result_sort: struct_decl.result_sort,
@@ -211,6 +273,128 @@ fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn finalize_definition(
+    context: &mut Context,
+    name: &str,
+    type_: Term,
+    body: Term,
+) -> Result<(UniverseContext, Term, Term), Error> {
+    let type_ = zonk_solved_term_metas(context, &type_);
+    let body = zonk_solved_term_metas(context, &body);
+    if let Some(struct_decl) = context.struct_decl(name).cloned() {
+        let params = struct_decl.params.zonk(context)?;
+        let fields = struct_decl.fields.zonk(context)?;
+        let result_sort = zonk(context, &struct_decl.result_sort)?;
+        context.update_struct(
+            name,
+            StructDecl {
+                universe_context: struct_decl.universe_context,
+                params,
+                fields,
+                result_sort,
+                module: struct_decl.module,
+                root: struct_decl.root,
+                rep_public: struct_decl.rep_public,
+            },
+        );
+    }
+    if let Some(concept) = context.concept(name).cloned() {
+        context.update_concept(
+            name,
+            Concept {
+                universe_context: concept.universe_context,
+                params: zonk_solved_term_metas(context, &concept.params),
+                fields: concept.fields,
+                supers: concept.supers,
+                root: concept.root,
+            },
+        );
+    }
+
+    // The signature and any registry telescope form the declaration's
+    // interface: a use site instantiates exactly these. Levels reachable only
+    // through the body are internal classifiers and are minimized instead.
+    let mut interface = context.universe_metas_in(&type_);
+    if let Some(struct_decl) = context.struct_decl(name) {
+        interface.extend(crate::universe_metas(&struct_decl.params));
+        interface.extend(crate::universe_metas(&struct_decl.fields));
+        interface.extend(struct_decl.result_sort.universe_metas());
+    }
+    if let Some(concept) = context.concept(name) {
+        interface.extend(crate::universe_metas(&concept.params));
+    }
+    let internal = context.universe_metas_in(&body);
+
+    let universe_context = context.finalize_universe_metas(interface, internal)?;
+    let levels = universe_context.identity_instance();
+    let owned = BTreeSet::from([name.to_string()]);
+    // A non-recursive definition's own name stays free in its signature, body,
+    // and registry entry: nothing captures it, so each occurrence carries the
+    // instance itself.
+    let free = SelfReference::Free;
+    let type_ = crate::stamp_declaration_instance(
+        &context.zonk_universe_levels(&type_)?,
+        &owned,
+        free,
+        &levels,
+    );
+    let body = crate::stamp_declaration_instance(
+        &context.zonk_universe_levels(&body)?,
+        &owned,
+        free,
+        &levels,
+    );
+
+    if let Some(struct_decl) = context.struct_decl(name).cloned() {
+        context.update_struct(
+            name,
+            StructDecl {
+                universe_context: universe_context.clone(),
+                params: crate::stamp_declaration_instance(
+                    &context.zonk_universe_levels(&struct_decl.params)?,
+                    &owned,
+                    free,
+                    &levels,
+                ),
+                fields: crate::stamp_declaration_instance(
+                    &context.zonk_universe_levels(&struct_decl.fields)?,
+                    &owned,
+                    free,
+                    &levels,
+                ),
+                result_sort: crate::stamp_declaration_instance(
+                    &context.zonk_universe_levels(&struct_decl.result_sort)?,
+                    &owned,
+                    free,
+                    &levels,
+                ),
+                module: struct_decl.module,
+                root: struct_decl.root,
+                rep_public: struct_decl.rep_public,
+            },
+        );
+    }
+    if let Some(concept) = context.concept(name).cloned() {
+        context.update_concept(
+            name,
+            Concept {
+                universe_context: universe_context.clone(),
+                params: crate::stamp_declaration_instance(
+                    &context.zonk_universe_levels(&concept.params)?,
+                    &owned,
+                    free,
+                    &levels,
+                ),
+                fields: concept.fields,
+                supers: concept.supers,
+                root: concept.root,
+            },
+        );
+    }
+
+    Ok((universe_context, type_, body))
+}
+
 /// Type-check a single non-recursive top-level definition, `define` it into the
 /// *current* (persistent base) frame, and return its rebuilt form. The flat
 /// analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail
@@ -219,18 +403,25 @@ fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
 /// the lowered one no longer interchangeable; see the comment below), and the
 /// rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
-    let type_ = check(context, &def.type_, Term::type_())?;
+    let type_ = crate::check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as
     // its signature is known — *before* its body elaborates, so a recursive
     // witness (a `Show(Tree)` whose fields show subtrees) can resolve through
     // its own entry.
     if context.is_witness_declaration(&def.name) {
-        register_witness(context, &def.name, &type_, def.root)
-            .map_err(|error| error.at_opt(def.type_.span()))?;
+        register_witness(
+            context,
+            &def.name,
+            &type_,
+            def.universe_context.clone(),
+            def.root,
+        )
+        .map_err(|error| error.at_opt(def.type_.span()))?;
     }
 
     let body = check(context, &def.body, type_.clone())?;
+    context.sweep_parked()?;
 
     // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones:
     // implicit-argument insertion saturates applications during elaboration,
@@ -243,8 +434,18 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // telescopes now that the former is defined (no-op for an ordinary let).
     elaborate_struct(context, &def.name)?;
 
+    let (universe_context, type_, body) = finalize_definition(context, &def.name, type_, body)?;
+    context.reassume(&def.name, &type_);
+    context.define(&def.name, &body);
+    context.set_assumption_universe_context(&def.name, universe_context.clone());
+    if context.is_witness_declaration(&def.name) {
+        context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
+    }
+
     Ok(Definition {
         name: def.name.clone(),
+        kind: def.kind.clone(),
+        universe_context,
         island: def.island.clone(),
         root: def.root,
         type_,
@@ -264,7 +465,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
     let mut types = Vec::with_capacity(defs.len());
     for def in &defs {
-        types.push(check(context, &def.type_, Term::type_())?);
+        types.push(crate::check_is_sort(context, &def.type_)?.0);
     }
 
     // Upgrade the assumptions to the *rebuilt* signatures before any body is
@@ -307,6 +508,164 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     for def in &defs {
         elaborate_induct_constructors(context, &def.name)?;
     }
+    for def in &defs {
+        if let Some(induct_decl) = context.induct_decl(&def.name).cloned() {
+            for constructor in induct_decl.constructors.values() {
+                add_declaration_sizing(
+                    context,
+                    &def.name,
+                    &constructor.telescope,
+                    induct_decl.params.len(),
+                    &induct_decl.result_sort,
+                    UniverseConstraintKind::ConstructorSizing,
+                )?;
+            }
+        }
+    }
+    context.sweep_parked()?;
+
+    let types = types
+        .iter()
+        .map(|type_| zonk_solved_term_metas(context, type_))
+        .collect::<Vec<_>>();
+    let bodies = bodies
+        .iter()
+        .map(|body| zonk_solved_term_metas(context, body))
+        .collect::<Vec<_>>();
+    for def in &defs {
+        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
+            continue;
+        };
+        context.update_induct(
+            &def.name,
+            InductDecl {
+                universe_context: induct_decl.universe_context,
+                params: zonk_solved_term_metas(context, &induct_decl.params),
+                indices: zonk_solved_term_metas(context, &induct_decl.indices),
+                constructors: induct_decl
+                    .constructors
+                    .into_iter()
+                    .map(|(tag, constructor)| {
+                        (
+                            tag,
+                            InductParam {
+                                telescope: zonk_solved_term_metas(context, &constructor.telescope),
+                                plicities: constructor.plicities,
+                            },
+                        )
+                    })
+                    .collect(),
+                result_sort: zonk_solved_term_metas(context, &induct_decl.result_sort),
+                module: induct_decl.module,
+                root: induct_decl.root,
+                rep_public: induct_decl.rep_public,
+            },
+        );
+    }
+
+    // As for a single definition, the group's interface is its member
+    // signatures and registry telescopes; levels reachable only through a
+    // member body are internal and minimized rather than generalized.
+    let mut interface = types
+        .iter()
+        .flat_map(|type_| context.universe_metas_in(type_))
+        .collect::<BTreeSet<_>>();
+    for def in &defs {
+        if let Some(induct_decl) = context.induct_decl(&def.name) {
+            interface.extend(crate::universe_metas(&induct_decl.params));
+            interface.extend(crate::universe_metas(&induct_decl.indices));
+            interface.extend(induct_decl.result_sort.universe_metas());
+            for constructor in induct_decl.constructors.values() {
+                interface.extend(crate::universe_metas(&constructor.telescope));
+            }
+        }
+    }
+    let internal = bodies
+        .iter()
+        .flat_map(|body| context.universe_metas_in(body))
+        .collect::<BTreeSet<_>>();
+    let universe_context = context.finalize_universe_metas(interface, internal)?;
+
+    // The group's members are monomorphic in their own universes, so every
+    // occurrence of one member inside the group — in a signature, a body, or a
+    // rebuilt registry telescope — denotes the group's own instance. Those
+    // occurrences were elaborated before the parameters existed and carry no
+    // instance at all until this rewrite gives them one.
+    let instance = universe_context.identity_instance();
+    let owned = defs
+        .iter()
+        .map(|def| def.name.clone())
+        .collect::<BTreeSet<_>>();
+    fn stamp<B: Bound>(
+        context: &Context,
+        value: &B,
+        owned: &BTreeSet<String>,
+        self_reference: SelfReference,
+        instance: &[Level],
+    ) -> Result<B, Error> {
+        Ok(crate::stamp_declaration_instance(
+            &context.zonk_universe_levels(value)?,
+            owned,
+            self_reference,
+            instance,
+        ))
+    }
+
+    // `RecItem::try_new` captures the member names into the group's binder, so
+    // the signatures and bodies reach it with their self-references bound.
+    let types = types
+        .iter()
+        .map(|type_| stamp(context, type_, &owned, SelfReference::Bound, &instance))
+        .collect::<Result<Vec<_>, _>>()?;
+    let bodies = bodies
+        .iter()
+        .map(|body| stamp(context, body, &owned, SelfReference::Bound, &instance))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for def in &defs {
+        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
+            continue;
+        };
+        let constructors = induct_decl
+            .constructors
+            .into_iter()
+            .map(|(tag, constructor)| {
+                Ok((
+                    tag,
+                    InductParam {
+                        // A registry telescope is stored outside the group and
+                        // instantiated per use site, so its self-references
+                        // are free and must carry the instance themselves.
+                        telescope: stamp(
+                            context,
+                            &constructor.telescope,
+                            &owned,
+                            SelfReference::Free,
+                            &instance,
+                        )?,
+                        plicities: constructor.plicities,
+                    },
+                ))
+            })
+            .collect::<Result<_, Error>>()?;
+        let free = SelfReference::Free;
+        let params = stamp(context, &induct_decl.params, &owned, free, &instance)?;
+        let indices = stamp(context, &induct_decl.indices, &owned, free, &instance)?;
+        let result_sort = stamp(context, &induct_decl.result_sort, &owned, free, &instance)?;
+        context.update_induct(
+            &def.name,
+            InductDecl {
+                universe_context: universe_context.clone(),
+                params,
+                indices,
+                constructors,
+                result_sort,
+                module: induct_decl.module,
+                root: induct_decl.root,
+                rep_public: induct_decl.rep_public,
+            },
+        );
+    }
 
     let definitions = defs
         .iter()
@@ -314,22 +673,54 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .zip(bodies)
         .map(|((def, type_), body)| Definition {
             name: def.name.clone(),
+            kind: def.kind.clone(),
+            universe_context: universe_context.clone(),
             island: def.island.clone(),
             root: def.root,
             type_,
             body,
         })
         .collect();
-    let rec = RecItem::new(definitions);
+    let rec = RecItem::try_new(definitions)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
+        context.reassume(&definition.name, &rec.group.member_type(index));
         context.define(
             &definition.name,
             &Term::rec_member(rec.group.clone(), index),
         );
+        context.set_assumption_universe_context(&definition.name, universe_context.clone());
     }
 
     Ok(rec)
+}
+
+/// Elaborate one persistent module item and perform every item-boundary
+/// obligation. Both module drivers use this path so universe transactions,
+/// parked work, witnesses, privacy islands, and error attribution cannot
+/// drift.
+fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Error> {
+    let item_module = match item {
+        Item::Let(definition) => definition.island.clone(),
+        Item::Rec(rec) => rec.island(),
+    };
+    context.set_island(item_module);
+
+    let item_names = item.declared_names().join(", ");
+    let elaborated = match item {
+        Item::Let(definition) => elaborate_module_let(context, definition).map(Item::Let),
+        Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
+    }
+    // Attribute *every* failure to the item that caused it, not only universe
+    // invariants. A whole-module diagnostic with no declaration name — a bare
+    // deadline or an effect reduced at the type level — costs a full prelude
+    // rebuild to localize, which is the expensive way to learn one string.
+    .map_err(|error| error.in_declaration(&item_names))?;
+
+    retry_deferred_witnesses(context)?;
+    context.drain_parked()?;
+    context.finish_universe_transaction();
+    Ok(elaborated)
 }
 
 /// Elaborate a whole [`Module`] (§9). Each top-level item is checked and `define`d
@@ -346,6 +737,7 @@ pub fn elaborate_module(
     context: &mut Context,
     module: &Module,
     metavar_floor: usize,
+    universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     // Seed the context's inductive registry before any item is checked: an
@@ -377,30 +769,11 @@ pub fn elaborate_module(
     // floor the counter above `into_core`'s (which returns the count alongside
     // the lowered module) so the id spaces never collide.
     context.seed_metavars(metavar_floor);
+    context.seed_universes(&module.universe_seeds, universe_floor);
 
     let mut items = Vec::with_capacity(module.items.len());
     for item in &module.items {
-        // The use-site module for the struct projection privacy check (§7) is
-        // the qualifier prefix of the item's name (a `rec` group shares one);
-        // the entrypoint body below runs under the root module.
-        let item_module = match item {
-            Item::Let(def) => def.island.clone(),
-            Item::Rec(rec) => rec.island(),
-        };
-        context.set_island(item_module);
-
-        items.push(match item {
-            Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
-            Item::Rec(rec) => Item::Rec(elaborate_module_rec(context, rec)?),
-        });
-        // Witness goals deferred on a missing table entry may be unblocked by
-        // a witness this item registered — retry them before the drain, so
-        // their solutions wake any constraints parked on them.
-        retry_deferred_witnesses(context)?;
-        // Constraints parked during this item must resolve within it: drain
-        // here so an unresolvable one is attributed to its own definition and
-        // frozen frames do not accumulate across items (§8).
-        context.drain_parked()?;
+        items.push(elaborate_module_item(context, item)?);
     }
 
     context.set_island(Qualifier::empty());
@@ -443,9 +816,10 @@ pub fn elaborate_module(
 
     let module = Module {
         items,
+        universe_seeds: module.universe_seeds.clone(),
         induct_decls,
         struct_decls,
-        concepts: module.concepts.clone(),
+        concepts: context.concepts().clone(),
         witnesses: module.witnesses.clone(),
         type_: module.type_.clone(),
         body,
@@ -462,9 +836,25 @@ pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
     metavar_floor: usize,
+    universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
-    let (module, body_type) = elaborate_module(context, module, metavar_floor, mode)?;
+    let (mut module, body_type) =
+        elaborate_module(context, module, metavar_floor, universe_floor, mode)?;
+    let mut entry_terms = vec![module.body.clone()];
+    let has_annotation = module.type_.is_some();
+    if let Some(type_) = &module.type_ {
+        entry_terms.push(type_.clone());
+    }
+    entry_terms.push(body_type);
+    let mut entry_terms = context
+        .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
+        .into_iter();
+    module.body = entry_terms.next().expect("entry body was finalized");
+    if has_annotation {
+        module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
+    }
+    let body_type = entry_terms.next().expect("entry body type was finalized");
     let module = zonk_module(context, &module)?;
     let body_type = zonk(context, &body_type)?;
     Ok((module, body_type))
@@ -498,6 +888,7 @@ pub fn elaborate_and_zonk_with_prelude(
     prelude: &Module,
     module: &Module,
     metavar_floor: usize,
+    universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     // Seed the registries — cached prelude entries verbatim, then the user's
@@ -550,14 +941,29 @@ pub fn elaborate_and_zonk_with_prelude(
     for item in &prelude.items {
         match item {
             Item::Let(def) => {
-                context.define_assuming(&def.name, &def.type_, &def.body);
+                context.define_assuming_scheme(
+                    &def.name,
+                    &def.type_,
+                    &def.body,
+                    def.universe_context.clone(),
+                );
                 if prelude.witnesses.contains(&def.name) {
-                    register_witness(context, &def.name, &def.type_, def.root)?;
+                    register_witness(
+                        context,
+                        &def.name,
+                        &def.type_,
+                        def.universe_context.clone(),
+                        def.root,
+                    )?;
                 }
             }
             Item::Rec(rec) => {
                 for (index, definition) in rec.definitions.iter().enumerate() {
                     context.assume(&definition.name, &rec.group.member_type(index));
+                    context.set_assumption_universe_context(
+                        &definition.name,
+                        rec.group.universe_context().clone(),
+                    );
                     context.define(
                         &definition.name,
                         &Term::rec_member(rec.group.clone(), index),
@@ -571,22 +977,12 @@ pub fn elaborate_and_zonk_with_prelude(
     // include the prelude's range); the cached prelude is meta-free, so nothing
     // collides.
     context.seed_metavars(metavar_floor);
+    context.seed_universes(&module.universe_seeds, universe_floor);
 
     // Elaborate only the user items — everything past the cached prelude prefix.
     let mut user_items = Vec::new();
     for item in module.items.iter().skip(prelude.items.len()) {
-        let item_module = match item {
-            Item::Let(def) => def.island.clone(),
-            Item::Rec(rec) => rec.island(),
-        };
-        context.set_island(item_module);
-
-        user_items.push(match item {
-            Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
-            Item::Rec(rec) => Item::Rec(elaborate_module_rec(context, rec)?),
-        });
-        retry_deferred_witnesses(context)?;
-        context.drain_parked()?;
+        user_items.push(elaborate_module_item(context, item)?);
     }
 
     context.set_island(Qualifier::empty());
@@ -621,9 +1017,17 @@ pub fn elaborate_and_zonk_with_prelude(
     // splice: cached prelude prefix ++ zonked user items / registries.
     let user_concepts = module
         .concepts
-        .iter()
-        .filter(|(name, _)| !prelude.concepts.contains_key(*name))
-        .map(|(name, concept)| (name.clone(), concept.clone()))
+        .keys()
+        .filter(|name| !prelude.concepts.contains_key(*name))
+        .map(|name| {
+            (
+                name.clone(),
+                context
+                    .concept(name)
+                    .expect("user concept registered")
+                    .clone(),
+            )
+        })
         .collect();
     let user_witnesses = module
         .witnesses
@@ -632,8 +1036,9 @@ pub fn elaborate_and_zonk_with_prelude(
         .cloned()
         .collect();
 
-    let user_module = Module {
+    let mut user_module = Module {
         items: user_items,
+        universe_seeds: module.universe_seeds.clone(),
         induct_decls: user_induct_decls,
         struct_decls: user_struct_decls,
         concepts: user_concepts,
@@ -641,6 +1046,20 @@ pub fn elaborate_and_zonk_with_prelude(
         type_: module.type_.clone(),
         body,
     };
+    let mut entry_terms = vec![user_module.body.clone()];
+    let has_annotation = user_module.type_.is_some();
+    if let Some(type_) = &user_module.type_ {
+        entry_terms.push(type_.clone());
+    }
+    entry_terms.push(body_type);
+    let mut entry_terms = context
+        .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
+        .into_iter();
+    user_module.body = entry_terms.next().expect("entry body was finalized");
+    if has_annotation {
+        user_module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
+    }
+    let body_type = entry_terms.next().expect("entry body type was finalized");
     let user_module = zonk_module(context, &user_module)?;
     let body_type = zonk(context, &body_type)?;
 
@@ -657,6 +1076,7 @@ pub fn elaborate_and_zonk_with_prelude(
 
     let module = Module {
         items,
+        universe_seeds: user_module.universe_seeds,
         induct_decls,
         struct_decls,
         concepts,

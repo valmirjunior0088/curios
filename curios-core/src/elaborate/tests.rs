@@ -27,6 +27,7 @@ fn register_opt(context: &mut Context) {
         .register_induct(
             "Opt",
             InductDecl {
+                universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
                 indices: Telescope::done(()),
                 constructors: BTreeMap::from([
@@ -48,7 +49,7 @@ fn register_opt(context: &mut Context) {
                         },
                     ),
                 ]),
-                result_sort: Term::type_(),
+                result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
@@ -232,7 +233,7 @@ fn annotated_func_infers_a_function_type() {
     assert!(
         convert_at(
             &mut context,
-            &Term::type_(),
+            &Term::type_ground(),
             &type_,
             &Term::func_type([("x", nat())], nat())
         )
@@ -266,7 +267,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     );
     assert_eq!(type_, nat());
 
-    let entry = context.metavar_entry(MetavarId(0)).expect("hole was born");
+    let entry = context.metavar_entry(MetaId(0)).expect("hole was born");
     assert_eq!(entry.result, nat());
     assert_eq!(*entry.telescope, vec![("x".to_string(), nat())]);
 }
@@ -292,10 +293,10 @@ fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     // birthed under it so zonk can report it.
     let (term, type_) = elaborate(&mut context, &Term::goal(0), Mode::Infer).unwrap();
 
-    assert!(matches!(&*term, Subterm::Metavar(m) if m.id == MetavarId(0)));
-    assert!(matches!(&*type_, Subterm::Metavar(m) if m.id == MetavarId(1)));
+    assert!(matches!(&*term, Subterm::Metavar(m) if m.id == MetaId(0)));
+    assert!(matches!(&*type_, Subterm::Metavar(m) if m.id == MetaId(1)));
 
-    let entry = context.metavar_entry(MetavarId(0)).expect("goal was born");
+    let entry = context.metavar_entry(MetaId(0)).expect("goal was born");
     assert_eq!(entry.result, type_);
 }
 
@@ -347,6 +348,7 @@ fn register_flag(context: &mut Context) {
         .register_induct(
             "Flag",
             InductDecl {
+                universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
                 indices: Telescope::build([("b", nat())], ()),
                 constructors: BTreeMap::from([
@@ -365,7 +367,7 @@ fn register_flag(context: &mut Context) {
                         },
                     ),
                 ]),
-                result_sort: Term::type_(),
+                result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,

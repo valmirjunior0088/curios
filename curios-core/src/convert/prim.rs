@@ -15,7 +15,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Peel::Equal => return Ok(true),
             Peel::Clash => return Ok(false),
             Peel::Continue(left, right) => {
-                cmp.enqueue(Term::type_(), left, right);
+                cmp.enqueue(Term::type_ground(), left, right);
                 return Ok(true);
             }
             Peel::Stuck => {}
@@ -37,7 +37,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Peel::Equal => true,
             Peel::Clash | Peel::Stuck => false,
             Peel::Continue(left, right) => {
-                cmp.enqueue(Term::type_(), left, right);
+                cmp.enqueue(Term::type_ground(), left, right);
                 true
             }
         }),
@@ -119,8 +119,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Prim::BinAppend(Grain::X, this_left, this_right),
             Prim::BinAppend(Grain::X, that_left, that_right),
         ) => {
-            cmp.enqueue(Term::type_(), this_left, that_left);
-            cmp.enqueue(Term::type_(), this_right, that_right);
+            cmp.enqueue(Term::type_ground(), this_left, that_left);
+            cmp.enqueue(Term::type_ground(), this_right, that_right);
 
             Ok(true)
         }
@@ -136,8 +136,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Prim::BinAppend(Grain::B, this_left, this_right),
             Prim::BinAppend(Grain::B, that_left, that_right),
         ) => {
-            cmp.enqueue(Term::type_(), this_left, that_left);
-            cmp.enqueue(Term::type_(), this_right, that_right);
+            cmp.enqueue(Term::type_ground(), this_left, that_left);
+            cmp.enqueue(Term::type_ground(), this_right, that_right);
             Ok(true)
         }
         (Prim::FltNeg(this), Prim::FltNeg(that))
@@ -167,7 +167,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::BinLen(Grain::B, this), Prim::BinLen(Grain::B, that))
         | (Prim::LstType(this), Prim::LstType(that))
         | (Prim::CellType(this), Prim::CellType(that)) => {
-            cmp.enqueue(Term::type_(), this, that);
+            cmp.enqueue(Term::type_ground(), this, that);
 
             Ok(true)
         }
@@ -175,9 +175,9 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Prim::BinSlice(Grain::X, this_bin, this_start, this_end),
             Prim::BinSlice(Grain::X, that_bin, that_start, that_end),
         ) => {
-            cmp.enqueue(Term::type_(), this_bin, that_bin);
-            cmp.enqueue(Term::type_(), this_start, that_start);
-            cmp.enqueue(Term::type_(), this_end, that_end);
+            cmp.enqueue(Term::type_ground(), this_bin, that_bin);
+            cmp.enqueue(Term::type_ground(), this_start, that_start);
+            cmp.enqueue(Term::type_ground(), this_end, that_end);
 
             Ok(true)
         }
@@ -185,19 +185,19 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Prim::BinSlice(Grain::B, this_bin, this_start, this_end),
             Prim::BinSlice(Grain::B, that_bin, that_start, that_end),
         ) => {
-            cmp.enqueue(Term::type_(), this_bin, that_bin);
-            cmp.enqueue(Term::type_(), this_start, that_start);
-            cmp.enqueue(Term::type_(), this_end, that_end);
+            cmp.enqueue(Term::type_ground(), this_bin, that_bin);
+            cmp.enqueue(Term::type_ground(), this_start, that_start);
+            cmp.enqueue(Term::type_ground(), this_end, that_end);
             Ok(true)
         }
         (
             Prim::LstSlice(this_ty, this_list, this_start, this_end),
             Prim::LstSlice(that_ty, that_list, that_start, that_end),
         ) => {
-            cmp.enqueue(Term::type_(), this_ty, that_ty);
-            cmp.enqueue(Term::type_(), this_list, that_list);
-            cmp.enqueue(Term::type_(), this_start, that_start);
-            cmp.enqueue(Term::type_(), this_end, that_end);
+            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
+            cmp.enqueue(Term::type_ground(), this_list, that_list);
+            cmp.enqueue(Term::type_ground(), this_start, that_start);
+            cmp.enqueue(Term::type_ground(), this_end, that_end);
 
             Ok(true)
         }
@@ -205,15 +205,15 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Prim::LstGet(this_ty, this_list, this_index),
             Prim::LstGet(that_ty, that_list, that_index),
         ) => {
-            cmp.enqueue(Term::type_(), this_ty, that_ty);
-            cmp.enqueue(Term::type_(), this_list, that_list);
-            cmp.enqueue(Term::type_(), this_index, that_index);
+            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
+            cmp.enqueue(Term::type_ground(), this_list, that_list);
+            cmp.enqueue(Term::type_ground(), this_index, that_index);
 
             Ok(true)
         }
         (Prim::LstLen(this_ty, this_list), Prim::LstLen(that_ty, that_list)) => {
-            cmp.enqueue(Term::type_(), this_ty, that_ty);
-            cmp.enqueue(Term::type_(), this_list, that_list);
+            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
+            cmp.enqueue(Term::type_ground(), this_list, that_list);
 
             Ok(true)
         }
@@ -221,9 +221,9 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Prim::LstAppend(this_ty, this_list, this_elem),
             Prim::LstAppend(that_ty, that_list, that_elem),
         ) => {
-            cmp.enqueue(Term::type_(), this_ty, that_ty);
-            cmp.enqueue(Term::type_(), this_list, that_list);
-            cmp.enqueue(Term::type_(), this_elem, that_elem);
+            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
+            cmp.enqueue(Term::type_ground(), this_list, that_list);
+            cmp.enqueue(Term::type_ground(), this_elem, that_elem);
 
             Ok(true)
         }
@@ -235,7 +235,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             }
 
             for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Term::type_(), this, that);
+                cmp.enqueue(Term::type_ground(), this, that);
             }
 
             Ok(true)
@@ -244,9 +244,9 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             if this_ops.len() != that_ops.len() {
                 return Ok(false);
             }
-            cmp.enqueue(Term::type_(), this_ty, that_ty);
+            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
             for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Term::type_(), this, that);
+                cmp.enqueue(Term::type_ground(), this, that);
             }
             Ok(true)
         }

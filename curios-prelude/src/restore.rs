@@ -99,8 +99,21 @@ fn archived() -> &'static ArchivedPreludeArchive {
 
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn restore_archive() -> PreludeArchive {
-    rkyv::deserialize::<PreludeArchive, rkyv::rancor::Error>(archived())
-        .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"))
+    let image = rkyv::deserialize::<PreludeArchive, rkyv::rancor::Error>(archived())
+        .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"));
+    assert_eq!(
+        image.prepared.core().universe_seeds.len(),
+        image.prepared.universe_floor(),
+        "restored Text universe floor does not match its seed table"
+    );
+    curios_core::validate_lowered_universe_seeds(
+        image.prepared.core(),
+        image.prepared.universe_floor(),
+    )
+    .unwrap_or_else(|error| panic!("restored Text universe seeds are invalid: {error}"));
+    curios_core::validate_universes(&image.core)
+        .unwrap_or_else(|error| panic!("restored Core universe schemes are invalid: {error}"));
+    image
 }
 
 fn hex(bytes: &[u8]) -> String {

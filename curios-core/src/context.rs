@@ -1,13 +1,16 @@
 use {
     super::{
-        Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, InductDecl, Metavar, MetavarId,
-        MetavarOrigin, StructDecl, Subterm, Term, Witness, WitnessKey, WitnessOrigin,
+        Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, InductDecl, Level, MetaId, Metavar,
+        MetavarOrigin, StructDecl, Subterm, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed,
+        UniverseSolver, UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
     curios_base::{Entropy, Qualifier, RootId, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
+        ops::{Deref, DerefMut},
         rc::Rc,
         time::Duration,
     },
@@ -42,10 +45,45 @@ pub(crate) struct MetaEntry {
     pub kind: MetaKind,
 }
 
+pub(crate) struct UniverseMutation<'a> {
+    solver: &'a mut UniverseSolver,
+    stamp: &'a Entropy,
+    before: UniverseStateToken,
+}
+
+impl Deref for UniverseMutation<'_> {
+    type Target = UniverseSolver;
+
+    fn deref(&self) -> &Self::Target {
+        self.solver
+    }
+}
+
+impl DerefMut for UniverseMutation<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.solver
+    }
+}
+
+impl Drop for UniverseMutation<'_> {
+    fn drop(&mut self) {
+        if self.solver.state_token() != self.before {
+            self.stamp.fresh();
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MetaKind {
     Inference,
     RecSlot,
+}
+
+/// A transaction watermark spanning both unification stores.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SolutionMark {
+    term_solution_log_len: usize,
+    universe: UniverseMark,
 }
 
 /// Flat, frame-independent store of metavariable records, indexed by
@@ -99,14 +137,14 @@ pub(crate) enum ParkedWork {
     Checking {
         term: Term,
         expected: Term,
-        placeholder: MetavarId,
+        placeholder: MetaId,
     },
     /// A witness-resolution goal whose key type is not yet rigid: `slot` is
     /// the metavariable standing in the omitted `use`-argument's place, `goal`
     /// its (concept application) type. Woken when a watched metavariable
     /// solves; resolution then retries under the frozen frame.
     Witness {
-        slot: MetavarId,
+        slot: MetaId,
         goal: Term,
         provenance: WitnessOrigin,
     },
@@ -124,7 +162,7 @@ pub(crate) struct ParkedGoal {
     pub frame: FrozenFrame,
     /// The unsolved metavariables whose solutions could unblock this —
     /// solving any of them is the wake signal.
-    pub watching: BTreeSet<MetavarId>,
+    pub watching: BTreeSet<MetaId>,
 }
 
 /// Key of one memoized `elaborate` call in `Context::get_or_init_elaborated`:
@@ -145,14 +183,20 @@ struct ElaborationKey {
 /// iterative `elaborate` driver can probe at a frame push and record at the
 /// matching pop (the reduction cache's `cached_reduced`/`reduce` split, one
 /// level up). `Hit` carries the memoized, un-span-stamped `(rebuilt, type)`;
-/// `Miss` carries the `mutation_stamp` snapshot the caller threads back into
+/// `Miss` carries the state snapshot the caller threads back into
 /// [`Context::record_elaborated`] as its purity witness; `Uncacheable` marks a
 /// term the groundness gate excludes — the caller elaborates it but records
 /// nothing.
 pub(crate) enum ElabProbe {
     Hit((Term, Term)),
-    Miss(usize),
+    Miss(ElaborationStamp),
     Uncacheable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ElaborationStamp {
+    terms: Entropy,
+    universes: Entropy,
 }
 
 /// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. The single deadline fixed at construction bounds *total* work across every call sharing the context — see [`Context::new`].
@@ -170,6 +214,7 @@ pub struct Context {
     // `Context::get_or_init_elaborated` for the exact gates and clear sites.
     elaboration_cache: HashMap<ElaborationKey, (Term, Term)>,
     assumptions: Vec<HashMap<String, Term>>,
+    assumption_universes: Vec<HashMap<String, UniverseContext>>,
     definitions: Vec<HashMap<String, DefEntry>>,
     // Counterfactual match-arm refinements (`refine_head`), kept parallel to
     // `definitions` but suppressible: re-validation of a metavariable
@@ -193,12 +238,12 @@ pub struct Context {
     // Parked conversion constraints (§8) — frame-independent, like `metas`.
     parked: Vec<ParkedGoal>,
     // Ids solved since the last `wake_parked` sweep: the wake signal.
-    newly_solved: Vec<MetavarId>,
+    newly_solved: Vec<MetaId>,
     // Journal of every committed solution id, in commit order — never
     // consumed, only marked and rolled back. The watermark/rollback pair lets
     // re-validation (§7.4) unwind solutions that landed while validating a
     // candidate it then rejected.
-    solved_log: Vec<MetavarId>,
+    solved_log: Vec<MetaId>,
     // While set, `expect` may not park: conversion is being used as a yes/no
     // oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
@@ -215,11 +260,17 @@ pub struct Context {
     // pure (replaying it would be the identity on the context), which is what
     // makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
+    // Monotonic universe-solver writes are tracked separately. Cache entries
+    // may survive them only when their keys and results contain no
+    // transitively unresolved universe meta; rollback/finalization clears the
+    // cache at the non-monotonic boundaries.
+    universe_mutation_stamp: Entropy,
     metas: MetaStore,
+    universe_solver: UniverseSolver,
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` with its `metavar_floor`
     // argument so core-minted ids sit strictly above `into_core`'s.
-    next_metavar: Entropy<MetavarId>,
+    next_metavar: Entropy<MetaId>,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
@@ -278,6 +329,7 @@ impl Context {
             reduction_cache: HashMap::new(),
             elaboration_cache: HashMap::new(),
             assumptions: vec![HashMap::new()],
+            assumption_universes: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
             refinements: vec![HashMap::new()],
             refinement_projections: vec![HashMap::new()],
@@ -286,7 +338,8 @@ impl Context {
             local: Vec::new(),
             local_marks: Vec::new(),
             metas: MetaStore::default(),
-            next_metavar: Entropy::<MetavarId>::new(),
+            universe_solver: UniverseSolver::new(0),
+            next_metavar: Entropy::<MetaId>::new(),
             induct_decls: BTreeMap::new(),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -303,11 +356,11 @@ impl Context {
             locals_stamp: Entropy::new(),
             identity_cache: None,
             mutation_stamp: Entropy::new(),
+            universe_mutation_stamp: Entropy::new(),
         }
     }
 
     pub(crate) fn fresh(&mut self, hint: Option<&str>) -> String {
-        self.mutation_stamp.fresh();
         let counter = self.fresh_names.fresh();
 
         match hint {
@@ -324,6 +377,9 @@ impl Context {
     /// term's reduction begins — at entry, and at the scrutinee stack's frame
     /// push, where a warm scrutinee dispatches in place instead of framing.
     pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
+        if term.has_universe_meta() {
+            return None;
+        }
         self.reduction_cache.get(term).cloned()
     }
 
@@ -340,8 +396,10 @@ impl Context {
     /// (re-validation's `rollback_solutions`, which *un*-solves, clears
     /// separately).
     pub(crate) fn reduce(&mut self, term: Term, result: &Term) {
-        let cacheable =
-            term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
+        let cacheable = term.closed()
+            && !term.has_universe_meta()
+            && !result.has_universe_meta()
+            && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
         if cacheable {
             self.reduction_cache.insert(term, result.clone());
@@ -424,7 +482,9 @@ impl Context {
     /// back into [`record_elaborated`] (`Miss`). Pure: it never mutates the
     /// context, so a driver may probe speculatively at a frame push.
     pub(crate) fn probe_elaborated(&self, term: &Term, expected: Option<&Term>) -> ElabProbe {
-        let ground = |t: &Term| !t.has_metavar() && !t.has_local_free();
+        let ground = |t: &Term| {
+            !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
+        };
         if !ground(term) || !expected.is_none_or(ground) {
             return ElabProbe::Uncacheable;
         }
@@ -441,7 +501,10 @@ impl Context {
         };
         match self.elaboration_cache.get(&key) {
             Some((rebuilt, type_)) => ElabProbe::Hit((rebuilt.clone(), type_.clone())),
-            None => ElabProbe::Miss(self.mutation_stamp.count()),
+            None => ElabProbe::Miss(ElaborationStamp {
+                terms: self.mutation_stamp.clone(),
+                universes: self.universe_mutation_stamp.clone(),
+            }),
         }
     }
 
@@ -457,7 +520,7 @@ impl Context {
         &mut self,
         term: &Term,
         expected: Option<&Term>,
-        stamp: usize,
+        stamp: ElaborationStamp,
         result: &(Term, Term),
     ) {
         let key = ElaborationKey {
@@ -465,7 +528,7 @@ impl Context {
             expected: expected.cloned(),
             privacy_checked: self.island.is_some(),
         };
-        self.insert_elaborated(key, stamp, result);
+        self.insert_elaborated(key, &stamp, result);
     }
 
     /// Insert-side tail of [`Context::get_or_init_elaborated`], kept out of
@@ -473,7 +536,12 @@ impl Context {
     /// term level with `get_or_init_elaborated` on the stack, so the insert
     /// path's locals must not ride along on every level.
     #[inline(never)]
-    fn insert_elaborated(&mut self, key: ElaborationKey, stamp: usize, result: &(Term, Term)) {
+    fn insert_elaborated(
+        &mut self,
+        key: ElaborationKey,
+        stamp: &ElaborationStamp,
+        result: &(Term, Term),
+    ) {
         if self.elaboration_cacheable(stamp, key.expected.as_ref(), result) {
             self.elaboration_cache.insert(key, result.clone());
         }
@@ -498,13 +566,16 @@ impl Context {
     /// [`define_entry`]: Context::define_entry
     fn elaboration_cacheable(
         &self,
-        stamp: usize,
+        stamp: &ElaborationStamp,
         expected: Option<&Term>,
         result: &(Term, Term),
     ) -> bool {
-        let ground = |t: &Term| !t.has_metavar() && !t.has_local_free();
+        let ground = |t: &Term| {
+            !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
+        };
         let settled = |t: &Term| t.free_vars().iter().all(|name| self.is_defined(name));
-        self.mutation_stamp.count() == stamp
+        self.mutation_stamp == stamp.terms
+            && self.universe_mutation_stamp == stamp.universes
             && ground(&result.0)
             && ground(&result.1)
             && settled(&result.0)
@@ -512,8 +583,16 @@ impl Context {
             && expected.is_none_or(settled)
     }
 
+    fn has_unsolved_universe_meta(&self, term: &Term) -> bool {
+        term.any_universe_meta(|meta| match self.universe_solver.zonk(&Level::meta(meta)) {
+            Ok(level) => level.metas().next().is_some(),
+            Err(_) => true,
+        })
+    }
+
     fn enter_frame(&mut self) {
         self.assumptions.push(HashMap::new());
+        self.assumption_universes.push(HashMap::new());
         self.definitions.push(HashMap::new());
         self.refinements.push(HashMap::new());
         self.refinement_projections.push(HashMap::new());
@@ -525,6 +604,7 @@ impl Context {
     fn leave_frame(&mut self) {
         self.locals_stamp.fresh();
         self.assumptions.pop().unwrap();
+        self.assumption_universes.pop().unwrap();
         let definitions = self.definitions.pop().unwrap();
         let refinements = self.refinements.pop().unwrap();
         let refinement_projections = self.refinement_projections.pop().unwrap();
@@ -577,7 +657,11 @@ impl Context {
         self.assumptions
             .last_mut()
             .unwrap()
-            .insert(label, type_.clone());
+            .insert(label.clone(), type_.clone());
+        self.assumption_universes
+            .last_mut()
+            .unwrap()
+            .insert(label, UniverseContext::empty());
     }
 
     /// Assume `label : type_` as a `use`-plicity binder: an ordinary
@@ -642,6 +726,255 @@ impl Context {
             .find_map(|assumptions| assumptions.get(label))
     }
 
+    pub(crate) fn ambient_universe_metas(&self) -> BTreeSet<UniverseMetaId> {
+        self.local
+            .iter()
+            .flat_map(|(_, type_)| self.universe_metas_in(type_))
+            .collect()
+    }
+
+    /// Collect universe metas reachable through a term and through any solved
+    /// term metavariables it names. Declaration finalization runs before the
+    /// final term-zonk pass, so a level occurring only in a solved hole must
+    /// still join the declaration's universe closure. Recursive slots may
+    /// point back to themselves; `seen` keeps this analysis finite.
+    pub(crate) fn universe_metas_in(&self, term: &Term) -> BTreeSet<UniverseMetaId> {
+        let mut universes = BTreeSet::new();
+        let mut seen_metas = BTreeSet::new();
+        let mut pending = vec![term.clone()];
+        while let Some(term) = pending.pop() {
+            let mut term_metas = BTreeSet::new();
+            term.collect_universe_dependencies(&mut universes, &mut term_metas);
+            for meta in term_metas {
+                if !seen_metas.insert(meta) {
+                    continue;
+                }
+                if let Some(entry) = self.metavar_entry(meta) {
+                    match &entry.solution {
+                        Some(solution) => pending.push(solution.clone()),
+                        None => {
+                            // An unsolved meta may survive into parked work, so
+                            // keep every universe dependency needed to solve it
+                            // later. A solved meta materializes only its
+                            // solution through the occurrence spine; its birth
+                            // result/telescope do not survive zonking.
+                            pending.push(entry.result.clone());
+                            pending.extend(entry.telescope.iter().map(|(_, type_)| type_.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        universes
+    }
+
+    /// Universe metas retained solely by work that may be retried after the
+    /// current local declaration finalizes. This is the precise protection set
+    /// for placeholders that no longer occur in the rebuilt term; scanning
+    /// every unsolved metavariable here would make a flat let block quadratic.
+    fn pending_universe_metas(&self) -> BTreeSet<UniverseMetaId> {
+        let mut universes = BTreeSet::new();
+        let mut extend_term = |term: &Term| {
+            universes.extend(self.universe_metas_in(term));
+        };
+
+        for parked in self.parked.iter().chain(&self.deferred_witnesses) {
+            match &parked.work {
+                ParkedWork::Conversion(goal) => {
+                    extend_term(&goal.type_);
+                    extend_term(&goal.this);
+                    extend_term(&goal.that);
+                }
+                ParkedWork::Checking {
+                    term,
+                    expected,
+                    placeholder,
+                } => {
+                    extend_term(term);
+                    extend_term(expected);
+                    if let Some(entry) = self.metavar_entry(*placeholder) {
+                        extend_term(&entry.result);
+                    }
+                }
+                ParkedWork::Witness { slot, goal, .. } => {
+                    extend_term(goal);
+                    if let Some(entry) = self.metavar_entry(*slot) {
+                        extend_term(&entry.result);
+                    }
+                }
+            }
+            extend_term(&parked.origin);
+            for (_, term) in &parked.frame.assumptions {
+                extend_term(term);
+            }
+            for (_, definition) in &parked.frame.definitions {
+                extend_term(&definition.term);
+            }
+            for (_, term) in &parked.frame.refinements {
+                extend_term(term);
+            }
+            for ((base, _), value) in &parked.frame.refinement_projections {
+                extend_term(base);
+                extend_term(value);
+            }
+            for (scrutinee, value) in &parked.frame.refinement_scrutinees {
+                extend_term(scrutinee);
+                extend_term(value);
+            }
+            for (_, type_) in &parked.frame.witness_binders {
+                extend_term(type_);
+            }
+            for watched in &parked.watching {
+                if let Some(entry) = self.metavar_entry(*watched) {
+                    extend_term(&entry.result);
+                }
+            }
+        }
+
+        universes
+    }
+
+    pub(crate) fn instantiate_assumption_universes(
+        &mut self,
+        label: &str,
+    ) -> Result<Option<(Term, Vec<Level>)>, UniverseError> {
+        let Some(type_) = self.assumption(label).cloned() else {
+            return Ok(None);
+        };
+        let universe_context = self
+            .assumption_universes
+            .iter()
+            .rev()
+            .find_map(|contexts| contexts.get(label))
+            .cloned()
+            .unwrap_or_default();
+        if universe_context.parameter_count == 0 {
+            return Ok(Some((type_, Vec::new())));
+        }
+        let levels = self
+            .universes_mut()
+            .instantiate(&universe_context, UniverseRole::Generalizable)?;
+        let type_ = super::instantiate_universe_levels_scoped(&type_, &levels)?;
+        Ok(Some((type_, levels)))
+    }
+
+    pub(crate) fn instantiate_assumption(
+        &mut self,
+        label: &str,
+    ) -> Result<Option<(Term, Vec<Level>)>, Error> {
+        self.instantiate_assumption_universes(label)
+            .map_err(Error::from)
+    }
+
+    pub(crate) fn instantiate_assumption_at(
+        &mut self,
+        label: &str,
+        levels: &[Level],
+    ) -> Result<Option<Term>, Error> {
+        let Some(type_) = self.assumption(label).cloned() else {
+            return Ok(None);
+        };
+        let universe_context = self
+            .assumption_universes
+            .iter()
+            .rev()
+            .find_map(|contexts| contexts.get(label))
+            .cloned()
+            .unwrap_or_default();
+        self.universes_mut()
+            .instantiate_at(&universe_context, levels)
+            .map_err(Error::from)?;
+        let type_ =
+            super::instantiate_universe_levels_scoped(&type_, levels).map_err(Error::from)?;
+        Ok(Some(type_))
+    }
+
+    pub(crate) fn instantiate_universe_bound<B: Bound>(
+        &mut self,
+        universe_context: &UniverseContext,
+        value: &B,
+    ) -> Result<(B, Vec<Level>), Error> {
+        if universe_context.parameter_count == 0 {
+            return Ok((value.clone(), Vec::new()));
+        }
+        let levels = self
+            .universes_mut()
+            .instantiate(universe_context, UniverseRole::Generalizable)
+            .map_err(Error::from)?;
+        let value =
+            super::instantiate_universe_levels_scoped(value, &levels).map_err(Error::from)?;
+        Ok((value, levels))
+    }
+
+    pub(crate) fn instantiate_universe_bound_at<B: Bound>(
+        &mut self,
+        universe_context: &UniverseContext,
+        value: &B,
+        levels: &[Level],
+    ) -> Result<B, UniverseError> {
+        self.universes_mut()
+            .instantiate_at(universe_context, levels)?;
+        super::instantiate_universe_levels_scoped(value, levels)
+    }
+
+    pub(crate) fn instantiate_induct_decl_at(
+        &mut self,
+        induct_decl: &InductDecl,
+        levels: &[Level],
+    ) -> Result<InductDecl, UniverseError> {
+        fn rewrite<B: Bound>(value: &B, levels: &[Level]) -> Result<B, UniverseError> {
+            super::instantiate_universe_levels_scoped(value, levels)
+        }
+
+        self.universes_mut()
+            .instantiate_at(&induct_decl.universe_context, levels)?;
+        let mut instantiated = induct_decl.clone();
+        instantiated.params = rewrite(&instantiated.params, levels)?;
+        instantiated.indices = rewrite(&instantiated.indices, levels)?;
+        instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
+        for constructor in instantiated.constructors.values_mut() {
+            constructor.telescope = rewrite(&constructor.telescope, levels)?;
+        }
+        instantiated.universe_context = UniverseContext::empty();
+        Ok(instantiated)
+    }
+
+    pub(crate) fn instantiate_struct_decl_at(
+        &mut self,
+        struct_decl: &StructDecl,
+        levels: &[Level],
+    ) -> Result<StructDecl, UniverseError> {
+        fn rewrite<B: Bound>(value: &B, levels: &[Level]) -> Result<B, UniverseError> {
+            super::instantiate_universe_levels_scoped(value, levels)
+        }
+
+        self.universes_mut()
+            .instantiate_at(&struct_decl.universe_context, levels)?;
+        let mut instantiated = struct_decl.clone();
+        instantiated.params = rewrite(&instantiated.params, levels)?;
+        instantiated.fields = rewrite(&instantiated.fields, levels)?;
+        instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
+        instantiated.universe_context = UniverseContext::empty();
+        Ok(instantiated)
+    }
+
+    pub(crate) fn set_assumption_universe_context(
+        &mut self,
+        label: &str,
+        universe_context: UniverseContext,
+    ) {
+        let contexts = self
+            .assumption_universes
+            .iter_mut()
+            .rev()
+            .find(|contexts| contexts.contains_key(label))
+            .unwrap_or_else(|| panic!("'{label}' has no assumption universe context to replace"));
+        contexts.insert(label.to_string(), universe_context);
+        self.mutation_stamp.fresh();
+        self.reduction_cache.clear();
+        self.elaboration_cache.clear();
+    }
+
     /// Whether `label` currently has a definition entry in some frame — the
     /// settled-globals gate for [`Context::elaboration_cacheable`]. A name
     /// defined here will only ever be *re*defined (which clears both caches
@@ -664,8 +997,6 @@ impl Context {
     }
 
     fn define_entry(&mut self, label: String, entry: DefEntry) {
-        self.mutation_stamp.fresh();
-
         // A *fresh* definition can only unstick reductions that read this
         // name's absence, and a stuck read always leaves the name free in the
         // WHNF (the name analogue of the unsolved-metavariable argument in
@@ -696,6 +1027,7 @@ impl Context {
             .iter()
             .any(|frame| frame.contains_key(&label));
         if redefinition {
+            self.mutation_stamp.fresh();
             self.reduction_cache.clear();
             self.elaboration_cache.clear();
         } else {
@@ -720,6 +1052,20 @@ impl Context {
         let label = label.into();
         self.assume(label.as_str(), type_);
         self.define(label, term);
+    }
+
+    pub(crate) fn define_assuming_scheme<A>(
+        &mut self,
+        label: A,
+        type_: &Term,
+        term: &Term,
+        universe_context: UniverseContext,
+    ) where
+        A: Into<String>,
+    {
+        let label = label.into();
+        self.define_assuming(label.as_str(), type_, term);
+        self.set_assumption_universe_context(&label, universe_context);
     }
 
     // === Refinements ========================================================
@@ -748,7 +1094,7 @@ impl Context {
         self.refinement_projections
             .last_mut()
             .unwrap()
-            .insert((base, index), value);
+            .insert((super::project_erased_universes(&base), index), value);
 
         self.reduction_cache.clear();
         self.elaboration_cache.clear();
@@ -758,7 +1104,7 @@ impl Context {
     /// suppressed — its counterfactual refinement. Labels never appear in both
     /// stores (definitions name `let`/`rec` binders; refinements name assumed
     /// scrutinee heads), so the order between them is immaterial.
-    pub(crate) fn var_reduct(&self, label: &str) -> Option<&Term> {
+    fn raw_var_reduct(&self, label: &str) -> Option<&Term> {
         if !self.suppress_refinements
             && let Some(term) = self.refinements.iter().rev().find_map(|r| r.get(label))
         {
@@ -772,6 +1118,30 @@ impl Context {
             .map(|entry| &entry.term)
     }
 
+    /// Reduce a bare variable only when its definition is monomorphic.
+    ///
+    /// A polymorphic definition's stored body is scoped by its universe
+    /// context: its parameter levels are not meaningful at an occurrence until
+    /// elaboration has rebuilt that occurrence as a [`UniverseInst`]. Letting a
+    /// raw variable unfold would leak those bound parameters into the ambient
+    /// solver. The explicit-instance reducer uses [`Self::var_reduct_at`] after
+    /// it has the occurrence's level arguments.
+    pub(crate) fn var_reduct(&self, label: &str) -> Option<&Term> {
+        let is_polymorphic = self
+            .assumption_universes
+            .iter()
+            .rev()
+            .find_map(|contexts| contexts.get(label))
+            .is_some_and(|context| context.parameter_count != 0);
+        (!is_polymorphic)
+            .then(|| self.raw_var_reduct(label))
+            .flatten()
+    }
+
+    pub(crate) fn var_reduct_at(&self, label: &str) -> Option<&Term> {
+        self.raw_var_reduct(label)
+    }
+
     /// The reduct of a projection: its counterfactual match-arm refinement,
     /// unless refinements are suppressed (re-validation, §7.4).
     pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
@@ -779,6 +1149,7 @@ impl Context {
             return None;
         }
 
+        let base = super::project_erased_universes(base);
         self.refinement_projections
             .iter()
             .rev()
@@ -1029,6 +1400,18 @@ impl Context {
         self.concepts.get(name)
     }
 
+    pub(crate) fn update_concept<N>(&mut self, name: N, concept: Concept)
+    where
+        N: Into<String>,
+    {
+        let name = name.into();
+        assert!(
+            self.concepts.contains_key(&name),
+            "update_concept: '{name}' is not already registered"
+        );
+        self.concepts.insert(name, concept);
+    }
+
     /// The registered concepts, for whole-registry validation (superclass
     /// acyclicity) at seed time.
     pub(crate) fn concepts(&self) -> &BTreeMap<String, Concept> {
@@ -1084,6 +1467,22 @@ impl Context {
         }
     }
 
+    pub(crate) fn update_witness_scheme(
+        &mut self,
+        name: &str,
+        universe_context: UniverseContext,
+        signature: Term,
+    ) {
+        let witness = self
+            .witness_table
+            .values_mut()
+            .find(|witness| witness.name == name)
+            .unwrap_or_else(|| panic!("witness '{name}' was not registered"));
+        witness.universe_context = universe_context;
+        witness.signature = signature;
+        self.mutation_stamp.fresh();
+    }
+
     /// Defer a witness goal whose key is rigid but has no table entry yet —
     /// retried after later items register witnesses, reported only at the end
     /// of the module.
@@ -1137,7 +1536,7 @@ impl Context {
     /// once).
     pub(crate) fn birth_metavar(
         &mut self,
-        id: MetavarId,
+        id: MetaId,
         telescope: impl Into<SharedTelescope>,
         result: Term,
     ) {
@@ -1158,7 +1557,7 @@ impl Context {
     /// group. It has the same contextual spine as an inference metavariable so
     /// parked work can carry it across a popped local frame, but only
     /// `fill_rec_slot` may solve it.
-    pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetavarId, Term) {
+    pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetaId, Term) {
         self.mutation_stamp.fresh();
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
@@ -1174,12 +1573,12 @@ impl Context {
         (id, Term::metavar_birthed(id, None, spine))
     }
 
-    pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
+    pub(crate) fn is_rec_slot(&self, id: MetaId) -> bool {
         self.metavar_entry(id)
             .is_some_and(|entry| entry.kind == MetaKind::RecSlot)
     }
 
-    pub(crate) fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
+    pub(crate) fn fill_rec_slot(&mut self, id: MetaId, term: Term) {
         let entry = self
             .metas
             .entries
@@ -1278,7 +1677,7 @@ impl Context {
         result: Term,
         span: Option<Span>,
         origin: WitnessOrigin,
-    ) -> (MetavarId, Term) {
+    ) -> (MetaId, Term) {
         self.fresh_metavar_with(result, span, Some(MetavarOrigin::Witness(origin)))
     }
 
@@ -1294,7 +1693,7 @@ impl Context {
         result: Term,
         span: Option<Span>,
         origin: Option<MetavarOrigin>,
-    ) -> (MetavarId, Term) {
+    ) -> (MetaId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
@@ -1308,7 +1707,7 @@ impl Context {
         (id, metavar)
     }
 
-    pub(crate) fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
+    pub(crate) fn metavar_entry(&self, id: MetaId) -> Option<&MetaEntry> {
         self.metas.entries.get(id.0).and_then(Option::as_ref)
     }
 
@@ -1327,7 +1726,7 @@ impl Context {
         Some((origin.clone(), goal))
     }
 
-    pub(crate) fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
+    pub(crate) fn metavar_solution(&self, id: MetaId) -> Option<&Term> {
         self.metavar_entry(id).and_then(|e| e.solution.as_ref())
     }
 
@@ -1363,7 +1762,7 @@ impl Context {
     /// [`Context::rollback_solutions`], which *un*-solves, does clear.) Records
     /// the id as newly solved — the wake signal for parked constraints (§8) —
     /// and journals it for [`Context::rollback_solutions`].
-    pub(crate) fn solve_metavar(&mut self, id: MetavarId, term: Term) {
+    pub(crate) fn solve_metavar(&mut self, id: MetaId, term: Term) {
         self.mutation_stamp.fresh();
         if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
             entry.solution = Some(term);
@@ -1374,8 +1773,11 @@ impl Context {
 
     /// Watermark for [`Context::rollback_solutions`]: how many solutions have
     /// been committed so far.
-    pub(crate) fn solution_mark(&self) -> usize {
-        self.solved_log.len()
+    pub(crate) fn solution_mark(&self) -> SolutionMark {
+        SolutionMark {
+            term_solution_log_len: self.solved_log.len(),
+            universe: self.universe_solver.mark(),
+        }
     }
 
     /// Unwind every solution committed since `mark` — the transactional
@@ -1385,12 +1787,10 @@ impl Context {
     /// derived from an equation that never held and must not survive the
     /// verdict. Removes the unwound ids from the wake signals and clears the
     /// reduction cache, which may have cached reducts through them.
-    pub(crate) fn rollback_solutions(&mut self, mark: usize) {
-        if self.solved_log.len() <= mark {
-            return;
-        }
-
-        let unwound = self.solved_log.split_off(mark);
+    pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
+        let unwound = self
+            .solved_log
+            .split_off(mark.term_solution_log_len.min(self.solved_log.len()));
 
         for id in &unwound {
             if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
@@ -1398,13 +1798,158 @@ impl Context {
             }
         }
 
+        self.universe_solver.rollback(mark.universe);
         self.mutation_stamp.fresh();
+        self.universe_mutation_stamp.fresh();
         self.newly_solved.retain(|id| !unwound.contains(id));
         self.reduction_cache.clear();
         // Entries are metavar-free on both key and value, so an un-solve
         // cannot invalidate them in principle; cleared anyway while the
         // rollback bracket is young — conservative and cheap.
         self.elaboration_cache.clear();
+    }
+
+    pub(crate) fn universes(&self) -> &UniverseSolver {
+        &self.universe_solver
+    }
+
+    /// Mutably borrow the universe solver and advance the authoritative
+    /// [`Entropy`] stamp on guard drop only if solver state actually changed.
+    /// Normalized ground/reflexive comparisons are read-equivalent and must
+    /// not make an otherwise pure elaboration-cache computation look impure.
+    /// Rollback performs the conservative cache clear separately.
+    pub(crate) fn universes_mut(&mut self) -> UniverseMutation<'_> {
+        let before = self.universe_solver.state_token();
+        UniverseMutation {
+            solver: &mut self.universe_solver,
+            stamp: &self.universe_mutation_stamp,
+            before,
+        }
+    }
+
+    pub(crate) fn finish_universe_transaction(&mut self) {
+        let before = self.universe_solver.state_token();
+        self.universes_mut().clear_constraints();
+        if self.universe_solver.state_token() != before {
+            self.elaboration_cache.clear();
+        }
+    }
+
+    pub(crate) fn fresh_universe(
+        &mut self,
+        role: UniverseRole,
+        origin: Option<UniverseConstraintOrigin>,
+    ) -> Level {
+        let meta = self.universes_mut().fresh(role, origin);
+        Level::meta(meta)
+    }
+
+    pub(crate) fn fresh_classifier_type(&mut self, kind: &str) -> Term {
+        let level = self.fresh_universe(
+            UniverseRole::Flexible,
+            Some(UniverseConstraintOrigin::new(
+                UniverseConstraintKind::Other(kind.into()),
+            )),
+        );
+        Term::type_at(level)
+    }
+
+    pub(crate) fn seed_universes(&mut self, seeds: &[UniverseSeed], floor: usize) {
+        assert_eq!(
+            seeds.len(),
+            floor,
+            "the universe floor must equal the lowering seed table length"
+        );
+        self.universe_solver.seed(seeds);
+        self.universe_mutation_stamp.fresh();
+    }
+
+    /// Finalize a local binding's universes beneath an enclosing declaration.
+    ///
+    /// `interface` holds the signatures a later binding or the tail can
+    /// instantiate; `internal` holds the values, whose levels no use site can
+    /// choose. The split is the local counterpart of
+    /// [`UniverseSolver::finalize`]'s: without it a local binding acquires one
+    /// scheme parameter per written `Type` anywhere in its value.
+    pub(crate) fn finalize_local_universes(
+        &mut self,
+        interface: &[&Term],
+        internal: &[&Term],
+        protected: &BTreeSet<UniverseMetaId>,
+    ) -> Result<(UniverseContext, Vec<Term>, Vec<Term>), Error> {
+        // `universe_metas_in` follows solved term-meta entries, so their hidden
+        // levels participate in finalization without eagerly rebuilding the
+        // whole term here. Ordinary final zonking materializes those term
+        // solutions against the finalized universe solver.
+        let interface = interface
+            .iter()
+            .map(|term| (*term).clone())
+            .collect::<Vec<_>>();
+        let internal = internal
+            .iter()
+            .map(|term| (*term).clone())
+            .collect::<Vec<_>>();
+        let mut protected = protected.clone();
+        protected.extend(self.pending_universe_metas());
+        let interface_metas = interface
+            .iter()
+            .flat_map(|term| self.universe_metas_in(term))
+            .collect::<BTreeSet<_>>();
+        let internal_metas = internal
+            .iter()
+            .flat_map(|term| self.universe_metas_in(term))
+            .collect::<BTreeSet<_>>();
+        let universe_context = self
+            .universes_mut()
+            .finalize_excluding(interface_metas, internal_metas, protected)
+            .map_err(Error::from)?;
+        let solver = self.universe_solver.clone();
+        let zonk = |terms: &[Term]| {
+            terms
+                .iter()
+                .map(|term| super::zonk_universe_levels_scoped(term, &solver).map_err(Error::from))
+                .collect::<Result<Vec<_>, Error>>()
+        };
+        let interface = zonk(&interface)?;
+        let internal = zonk(&internal)?;
+        if universe_context != UniverseContext::empty() {
+            self.elaboration_cache.clear();
+        }
+        Ok((universe_context, interface, internal))
+    }
+
+    pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
+        let metas = terms
+            .iter()
+            .flat_map(|term| self.universe_metas_in(term))
+            .collect::<BTreeSet<_>>();
+        self.universes_mut().default(metas).map_err(Error::from)?;
+        let solver = self.universe_solver.clone();
+        let terms = terms
+            .iter()
+            .map(|term| super::zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.reduction_cache.clear();
+        self.elaboration_cache.clear();
+        Ok(terms)
+    }
+
+    pub(crate) fn finalize_universe_metas(
+        &mut self,
+        interface: BTreeSet<UniverseMetaId>,
+        internal: BTreeSet<UniverseMetaId>,
+    ) -> Result<UniverseContext, Error> {
+        let universe_context = self
+            .universes_mut()
+            .finalize(interface, internal)
+            .map_err(Error::from)?;
+        self.reduction_cache.clear();
+        self.elaboration_cache.clear();
+        Ok(universe_context)
+    }
+
+    pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
+        super::zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
     }
 
     // === Parked constraints (§8) ============================================
@@ -1504,11 +2049,7 @@ impl Context {
     /// birthed like any hole — frozen Γ, identity spine — with no insertion
     /// provenance. If it survives unsolved, the item drain reports the parked
     /// problem at its origin before zonk could ever meet the placeholder.
-    pub(crate) fn fresh_placeholder(
-        &mut self,
-        result: Term,
-        span: Option<Span>,
-    ) -> (MetavarId, Term) {
+    pub(crate) fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (MetaId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);

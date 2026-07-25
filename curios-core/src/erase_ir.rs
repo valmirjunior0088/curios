@@ -21,6 +21,11 @@
 //! compilation erases the fixed prelude once at compiler build time
 //! ([`erase_prelude_to_ir_prefix`], archived by `curios-prelude`) and replays
 //! it under each program's user suffix ([`erase_module_with_prelude_to_ir`]).
+//! Each entrypoint first validates the universe-closed Core module and projects
+//! it through the private `UniverseErased<Module>` boundary. That projection
+//! removes universe instances, declaration contexts, and nominal vectors once;
+//! no universe data reaches Ersd and reduction never specializes runtime code
+//! by universe instance.
 
 use {
     super::{

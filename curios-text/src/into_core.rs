@@ -17,8 +17,9 @@ use {
     super::*,
     curios_abi::ForeignStore,
     curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind},
-    curios_core::Bound,
+    curios_core::{Bound, DefinitionKind, UniverseContext, UniverseRole},
     std::{
+        cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
@@ -147,6 +148,7 @@ pub struct PreparedPrelude {
     core: curios_core::Module,
     metavariable_floor: usize,
     binder_floor: usize,
+    universe_floor: usize,
 }
 
 impl PreparedPrelude {
@@ -160,6 +162,10 @@ impl PreparedPrelude {
 
     pub fn binder_floor(&self) -> usize {
         self.binder_floor
+    }
+
+    pub fn universe_floor(&self) -> usize {
+        self.universe_floor
     }
 }
 
@@ -546,6 +552,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
+                    kind: DefinitionKind::Authored,
                     name: context.prefixed(&let_item.label),
                     island: context.island(),
                     root: context.root(),
@@ -564,6 +571,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
+                    kind: DefinitionKind::Authored,
                     name,
                     island: context.island(),
                     root: context.root(),
@@ -578,6 +586,7 @@ fn process_items(
                         let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
+                            kind: DefinitionKind::Authored,
                             name: context.prefixed(&let_item.label),
                             island: context.island(),
                             root: context.root(),
@@ -606,7 +615,7 @@ fn process_items(
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
+                            .map(|(p, n, t)| Ok((*p, n.clone(), lower.input_type(t)?)))
                             .collect::<Result<Vec<_>, Error>>()?;
                         // The registry and the `InductType` normal form are
                         // positional; plicity matters only on the generated
@@ -631,7 +640,7 @@ fn process_items(
                             .enumerate()
                             .map(|(i, (n, t))| {
                                 let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                                Ok((n, lower.term(t)?))
+                                Ok((n, lower.input_type(t)?))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
 
@@ -659,7 +668,7 @@ fn process_items(
                                     .map(|(i, param)| {
                                         let n =
                                             param.label.clone().unwrap_or_else(|| format!("_{i}"));
-                                        Ok((n, lower.term(&param.type_)?))
+                                        Ok((n, lower.input_type(&param.type_)?))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -708,6 +717,7 @@ fn process_items(
                         induct_decls.insert(
                             name.clone(),
                             curios_core::InductDecl {
+                                universe_context: UniverseContext::empty(),
                                 params: curios_core::Telescope::build(
                                     param_tys_unmarked.clone(),
                                     (),
@@ -757,6 +767,7 @@ fn process_items(
                             )
                         };
                         Ok(FlatLet {
+                            kind: DefinitionKind::InductiveType,
                             name: context.prefixed(&u.label),
                             island: context.island(),
                             root: context.root(),
@@ -820,12 +831,14 @@ fn process_items(
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(_, n, t)| Ok((Plicity::Implicit, n.clone(), lower.term(t)?)))
+                            .map(|(_, n, t)| {
+                                Ok((Plicity::Implicit, n.clone(), lower.input_type(t)?))
+                            })
                             .chain(c.payload.iter().enumerate().map(|(i, param)| {
                                 Ok((
                                     param.plicity,
                                     payload_name(i, &param.label),
-                                    lower.term(&param.type_)?,
+                                    lower.input_type(&param.type_)?,
                                 ))
                             }))
                             .collect::<Result<Vec<_>, Error>>()?;
@@ -864,6 +877,9 @@ fn process_items(
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
+                            kind: DefinitionKind::InductiveConstructor {
+                                owner: context.prefixed(&u.label).join(),
+                            },
                             name: context.prefixed(&u.label).with(&c.label),
                             island: context.island(),
                             root: context.root(),
@@ -889,7 +905,7 @@ fn process_items(
                 let param_tys = s
                     .params
                     .iter()
-                    .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
+                    .map(|(p, n, t)| Ok((*p, n.clone(), lower.input_type(t)?)))
                     .collect::<Result<Vec<_>, Error>>()?;
                 let param_tys_unmarked = param_tys
                     .iter()
@@ -910,7 +926,7 @@ fn process_items(
                     .enumerate()
                     .map(|(i, param)| {
                         let n = param.label.clone().unwrap_or_else(|| format!("_{i}"));
-                        Ok((n, lower.term(&param.desugared_type())?))
+                        Ok((n, lower.input_type(&param.desugared_type())?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -924,6 +940,7 @@ fn process_items(
                 struct_decls.insert(
                     name.clone(),
                     curios_core::StructDecl {
+                        universe_context: UniverseContext::empty(),
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
@@ -951,6 +968,7 @@ fn process_items(
                 };
 
                 flat_items.push(FlatItem::Let(FlatLet {
+                    kind: DefinitionKind::StructType,
                     name: context.prefixed(&s.label),
                     island: context.island(),
                     root: context.root(),
@@ -973,7 +991,7 @@ fn process_items(
                     concept
                         .params
                         .iter()
-                        .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
+                        .map(|(p, n, t)| Ok((*p, n.clone(), lower.input_type(t)?)))
                         .collect::<Result<Vec<_>, Error>>()?
                 };
                 let param_tys_unmarked = param_tys
@@ -1015,7 +1033,7 @@ fn process_items(
                         .iter()
                         .zip(&field_labels)
                         .map(|(field, label)| {
-                            Ok((label.clone(), lower.term(&field.desugared_type())?))
+                            Ok((label.clone(), lower.input_type(&field.desugared_type())?))
                         })
                         .collect::<Result<Vec<_>, Error>>()?
                 };
@@ -1029,6 +1047,7 @@ fn process_items(
                 struct_decls.insert(
                     name.clone(),
                     curios_core::StructDecl {
+                        universe_context: UniverseContext::empty(),
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
@@ -1061,6 +1080,7 @@ fn process_items(
                 concepts.insert(
                     name.clone(),
                     curios_core::Concept {
+                        universe_context: UniverseContext::empty(),
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),
                         supers,
@@ -1079,6 +1099,7 @@ fn process_items(
                     )
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
+                    kind: DefinitionKind::ConceptType,
                     name: context.prefixed(&concept.label),
                     island: context.island(),
                     root: context.root(),
@@ -1121,6 +1142,9 @@ fn process_items(
 
                     let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
+                        kind: DefinitionKind::ConceptMethod {
+                            owner: context.prefixed(&concept.label).join(),
+                        },
                         name: context.prefixed(&concept.label).with(&field.label),
                         island: context.island(),
                         root: context.root(),
@@ -1170,6 +1194,7 @@ fn process_items(
 
                 let lower = Lowerer::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
+                    kind: DefinitionKind::Witness,
                     name: context.prefixed(&label),
                     island: context.island(),
                     root: context.root(),
@@ -1677,13 +1702,28 @@ pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
+) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
+    let universes = Entropy::<usize>::new();
+    let universe_role = Cell::new(UniverseRole::Flexible);
+    let universe_seeds = RefCell::new(Vec::new());
+    let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
 
-    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
+    let mut context = Context::new(
+        &table,
+        &public,
+        RootId::Entry,
+        &metavars,
+        &universes,
+        &universe_role,
+        &universe_seeds,
+        &universe_allocations,
+        &binders,
+        syntax,
+    );
 
     let mut flat_items = Vec::new();
     let mut induct_decls = BTreeMap::new();
@@ -1734,6 +1774,7 @@ pub fn into_core(
     Ok((
         curios_core::Module {
             items,
+            universe_seeds: universe_seeds.into_inner(),
             induct_decls,
             struct_decls,
             concepts,
@@ -1742,6 +1783,7 @@ pub fn into_core(
             body: tail,
         },
         metavars.count(),
+        universes.count(),
         foreigns,
     ))
 }
@@ -1755,8 +1797,23 @@ pub fn prepare_prelude(
     let (Resolved { mut table, modules }, roots) = Resolved::for_prelude(input)?;
     let public = interface::resolve_prelude(&roots, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
+    let universes = Entropy::<usize>::new();
+    let universe_role = Cell::new(UniverseRole::Flexible);
+    let universe_seeds = RefCell::new(Vec::new());
+    let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
-    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
+    let mut context = Context::new(
+        &table,
+        &public,
+        RootId::Entry,
+        &metavars,
+        &universes,
+        &universe_role,
+        &universe_seeds,
+        &universe_allocations,
+        &binders,
+        syntax,
+    );
     for (name, _) in &roots {
         context.insert_scope(name.clone(), Qualifier::empty().with(name))?;
     }
@@ -1793,6 +1850,7 @@ pub fn prepare_prelude(
         .collect();
     let core = curios_core::Module {
         items,
+        universe_seeds: universe_seeds.into_inner(),
         induct_decls,
         struct_decls,
         concepts,
@@ -1808,6 +1866,7 @@ pub fn prepare_prelude(
         core,
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
+        universe_floor: universes.count(),
     })
 }
 
@@ -1818,7 +1877,7 @@ pub fn into_core_with_prelude(
     loader: &RootSource,
     prepared: &PreparedPrelude,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
+) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     let mut resolved = Resolved {
         modules: HashMap::new(),
         table: prepared.table.clone().into_iter().collect(),
@@ -1834,9 +1893,25 @@ pub fn into_core_with_prelude(
 
     let metavars = Entropy::<usize>::new();
     metavars.seed(prepared.metavariable_floor);
+    let universes = Entropy::<usize>::new();
+    universes.seed(prepared.universe_floor);
+    let universe_role = Cell::new(UniverseRole::Flexible);
+    let universe_seeds = RefCell::new(prepared.core.universe_seeds.clone());
+    let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
     binders.seed(prepared.binder_floor);
-    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
+    let mut context = Context::new(
+        &table,
+        &public,
+        RootId::Entry,
+        &metavars,
+        &universes,
+        &universe_role,
+        &universe_seeds,
+        &universe_allocations,
+        &binders,
+        syntax,
+    );
     for (name, _) in &prepared.roots {
         context.insert_scope(name.clone(), Qualifier::empty().with(name))?;
     }
@@ -1878,6 +1953,7 @@ pub fn into_core_with_prelude(
     Ok((
         curios_core::Module {
             items,
+            universe_seeds: universe_seeds.into_inner(),
             induct_decls,
             struct_decls,
             concepts,
@@ -1886,6 +1962,7 @@ pub fn into_core_with_prelude(
             body,
         },
         metavars.count(),
+        universes.count(),
         foreigns,
     ))
 }

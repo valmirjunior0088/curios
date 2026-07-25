@@ -26,7 +26,7 @@ fn reduce_apply_beta_reduces() {
     let mut context = context();
 
     let term: Term = Term::apply(
-        Term::func([("x", Term::type_())], Term::free_var("x")),
+        Term::func([("x", Term::type_ground())], Term::free_var("x")),
         [nat(1)],
     );
 
@@ -163,9 +163,41 @@ fn reduce_let_then_var_unfolds_definition() {
 
     context.define("y", &nat(7));
 
-    let term: Term = Term::let_("x", Term::type_(), Term::free_var("y"), Term::free_var("x"));
+    let term: Term = Term::let_(
+        "x",
+        Term::type_ground(),
+        Term::free_var("y"),
+        Term::free_var("x"),
+    );
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
+}
+
+#[test]
+fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
+    let mut context = context();
+    let parameter = Level::param(UniverseParam(0));
+    let body = Term::type_at(parameter.clone());
+    context.assume("poly", &Term::type_at(parameter.succ().unwrap()));
+    context.define("poly", &body);
+    context.set_assumption_universe_context(
+        "poly",
+        UniverseContext {
+            parameter_count: 1,
+            outer_parameter_count: 0,
+            constraints: Vec::new(),
+        },
+    );
+
+    let raw = Term::free_var("poly");
+    assert_eq!(reduce(&mut context, raw.clone()), Ok(raw.clone()));
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::universe_inst(raw, vec![Level::constant(3)])
+        ),
+        Ok(Term::type_at(Level::constant(3)))
+    );
 }
 
 #[test]
@@ -512,7 +544,7 @@ fn eta_reduce_func_fires() {
     let mut context = context();
 
     let term: Term = Term::func(
-        [("y", Term::type_())],
+        [("y", Term::type_ground())],
         Term::apply(Term::free_var("f"), [Term::free_var("y")]),
     );
 
@@ -530,6 +562,41 @@ fn define_invalidates_cached_reduction() {
     // Defining x must clear the cache so the next reduce unfolds.
     context.define("x", &nat(3));
     assert_eq!(reduce(&mut context, x), Ok(nat(3)));
+}
+
+#[test]
+fn scrutinee_refinement_ignores_fresh_universe_instances() {
+    let mut context = context();
+    let function = Term::free_var("classify");
+    let registered = Term::apply(
+        Term::universe_inst(function.clone(), vec![Level::meta(UniverseMetaId(0))]),
+        [nat(0)],
+    );
+    let probe = Term::apply(
+        Term::universe_inst(function, vec![Level::meta(UniverseMetaId(1))]),
+        [nat(0)],
+    );
+    let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
+    context.refine_scrutinee(canonical, nat(1));
+
+    assert_eq!(reduce(&mut context, probe), Ok(nat(1)));
+}
+
+#[test]
+fn projection_refinement_ignores_fresh_universe_instances() {
+    let mut context = context();
+    let record = Term::free_var("record");
+    let registered = Term::apply(
+        Term::universe_inst(record.clone(), vec![Level::meta(UniverseMetaId(0))]),
+        [nat(0)],
+    );
+    let probe = Term::apply(
+        Term::universe_inst(record, vec![Level::meta(UniverseMetaId(1))]),
+        [nat(0)],
+    );
+    context.refine_projection(registered, 0, nat(1));
+
+    assert_eq!(reduce(&mut context, Term::proj(probe, 0)), Ok(nat(1)));
 }
 
 #[test]
@@ -585,7 +652,7 @@ fn reduce_unsolved_metavar_is_neutral() {
     // No store entry, or an unsolved one, both reduce to the metavariable itself.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
+    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
     assert_eq!(reduce(&mut context, m.clone()), Ok(m));
 }
 
@@ -594,14 +661,14 @@ fn reduce_solved_metavar_yields_solution() {
     let mut context = context();
     let m = Term::metavar(0);
 
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
+    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     // An unsolved metavariable reduces to itself, but that reduct names an
     // unsolved metavariable, so it is deliberately not memoized.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
     let solution = nat(1);
-    context.solve_metavar(MetavarId(0), solution.clone());
+    context.solve_metavar(MetaId(0), solution.clone());
 
     // Nothing stale was cached, so the reduct now follows the solution —
     // `solve_metavar` needs no cache clear.

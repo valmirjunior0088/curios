@@ -1,5 +1,5 @@
 use {
-    super::{Bound, MetavarId, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ForeignFunction, WireType},
     curios_base::{Flt, Grain, Int, PackedBin},
     std::{collections::BTreeSet, sync::Arc},
@@ -934,7 +934,7 @@ impl Prim {
         reach
     }
 
-    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || term.any_metavar(pred));
         found

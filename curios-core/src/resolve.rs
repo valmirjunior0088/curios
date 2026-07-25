@@ -22,9 +22,9 @@
 
 use {
     super::{
-        Context, Error, HeadKey, ImplicitOrigin, Metavar, MetavarId, Outcome, ParkedGoal,
-        ParkedWork, StructType, Subterm, Telescope, Term, Witness, WitnessKey, WitnessOrigin,
-        convert_outcome, reduce_with,
+        Context, Error, HeadKey, ImplicitOrigin, Level, MetaId, Metavar, Outcome, ParkedGoal,
+        ParkedWork, StructType, Subterm, Telescope, Term, UniverseContext, Witness, WitnessKey,
+        WitnessOrigin, convert_outcome, reduce_with,
     },
     curios_base::{Plicity, RootId},
     std::collections::{BTreeSet, HashSet},
@@ -69,13 +69,18 @@ fn flex_head(context: &Context, term: &Term) -> bool {
 
 /// The goal type as a concept application: its (reduced) `StructType` name and
 /// parameters, when that name is a registered concept.
-fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(String, Vec<Term>)> {
-    let Subterm::StructType(StructType { name, params }) = &**goal_whnf else {
+fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(String, Vec<Level>, Vec<Term>)> {
+    let Subterm::StructType(StructType {
+        name,
+        universes,
+        params,
+    }) = &**goal_whnf
+    else {
         return None;
     };
     context
         .concept(name)
-        .map(|_| (name.clone(), params.clone()))
+        .map(|_| (name.clone(), universes.clone(), params.clone()))
 }
 
 enum Probe {
@@ -90,9 +95,10 @@ enum Probe {
 /// match.
 fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
     let mark = context.solution_mark();
-    let outcome = convert_outcome(context, &Term::type_(), candidate, goal).map_err(|error| {
-        error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
-    })?;
+    let outcome =
+        convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {
+            error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
+        })?;
     context.rollback_solutions(mark);
 
     Ok(match outcome {
@@ -106,9 +112,10 @@ fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<P
 /// unification is what pins the goal's open parameters to the candidate's.
 fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
     let mark = context.solution_mark();
-    let outcome = convert_outcome(context, &Term::type_(), candidate, goal).map_err(|error| {
-        error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
-    })?;
+    let outcome =
+        convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {
+            error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
+        })?;
 
     Ok(match outcome {
         Outcome::Converts => Probe::Yes,
@@ -141,7 +148,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     // `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a
     // first-param-only gate would let `Into(Nat, ?B)` reach the table with an
     // incomplete key and wrongly defer.
-    if let Some((_, params)) = &concept_app {
+    if let Some((_, _, params)) = &concept_app {
         for param in params {
             let head = reduce_with(context, param)?;
             if flex_head(context, &head) {
@@ -180,12 +187,20 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
 
     // Steps 2–3 need a concept goal; anything else has no projections and no
     // table to consult.
-    let Some((concept_name, params)) = concept_app else {
+    let Some((concept_name, universes, params)) = concept_app else {
         return Ok(match saw_undecided {
             true => Resolution::Flex,
             false => Resolution::NoMatch,
         });
     };
+    let concept = context
+        .concept(&concept_name)
+        .cloned()
+        .expect("the goal was classified as a registered concept");
+    context
+        .universes_mut()
+        .instantiate_at(&concept.universe_context, &universes)
+        .map_err(Error::from)?;
 
     // Step 2: superclass projections of local binders, breadth-first by
     // depth. The graph is acyclic (checked at registration), so this is
@@ -273,7 +288,12 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
     // free var (assumption lookup) or a projection whose type we compute here.
     let node_type = node_type(context, node)?;
     let reduced = reduce_with(context, &node_type)?;
-    let Subterm::StructType(StructType { name, params }) = &*reduced else {
+    let Subterm::StructType(StructType {
+        name,
+        universes,
+        params,
+    }) = &*reduced
+    else {
         return Ok(Vec::new());
     };
     let Some(concept) = context.concept(name).cloned() else {
@@ -283,7 +303,12 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
         return Ok(Vec::new());
     };
 
-    let telescope = struct_decl.fields_at(params);
+    let fields = context.instantiate_universe_bound_at(
+        &struct_decl.universe_context,
+        &struct_decl.fields,
+        universes,
+    )?;
+    let telescope = fields.open_params(params);
     let mut out = Vec::with_capacity(concept.supers.len());
     for (index, _) in &concept.supers {
         let field_type = telescope
@@ -301,8 +326,8 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
 fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
     match &**node {
         Subterm::Var(var) => context
-            .assumption(var.unwrap())
-            .cloned()
+            .instantiate_assumption(var.unwrap())?
+            .map(|(type_, _)| type_)
             .ok_or_else(|| Error::unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
             let super::Field::Index(index) = proj.field else {
@@ -310,15 +335,25 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             };
             let head_type = node_type(context, &proj.head)?;
             let reduced = reduce_with(context, &head_type)?;
-            let Subterm::StructType(StructType { name, params }) = &*reduced else {
+            let Subterm::StructType(StructType {
+                name,
+                universes,
+                params,
+            }) = &*reduced
+            else {
                 return Err(Error::not_a_tuple(Term::unwrap_or_clone(reduced)));
             };
             let struct_decl = context
                 .struct_decl(name)
                 .cloned()
                 .ok_or_else(|| Error::unbound_variable(Term::free_var(name)))?;
-            Ok(struct_decl
-                .fields_at(params)
+            let fields = context.instantiate_universe_bound_at(
+                &struct_decl.universe_context,
+                &struct_decl.fields,
+                universes,
+            )?;
+            Ok(fields
+                .open_params(params)
                 .nth(index, |j| Term::proj(proj.head.clone(), j))
                 .expect("projection index within telescope"))
         }
@@ -338,13 +373,19 @@ fn instantiate(
     origin: &Term,
 ) -> Result<Resolution, Error> {
     let mark = context.solution_mark();
-    let head = Term::free_var(&witness.name);
+    let (signature, universes) =
+        context.instantiate_universe_bound(&witness.universe_context, &witness.signature)?;
+    let head = if universes.is_empty() {
+        Term::free_var(&witness.name)
+    } else {
+        Term::universe_inst(Term::free_var(&witness.name), universes)
+    };
     let span = origin.span();
 
-    let (args, premises, terminal) = match &*witness.signature {
+    let (args, premises, terminal) = match &*signature {
         Subterm::FuncType(ft) => {
             let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities.len());
-            let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
+            let mut premises: Vec<(MetaId, Term, WitnessOrigin)> = Vec::new();
             let mut tele = ft.telescope.clone();
             for plicity in &ft.plicities {
                 let Telescope::Cons(ty, rest) = tele else {
@@ -385,7 +426,7 @@ fn instantiate(
             };
             (args, premises, *terminal)
         }
-        _ => (Vec::new(), Vec::new(), witness.signature.clone()),
+        _ => (Vec::new(), Vec::new(), signature),
     };
 
     // Instantiated premise types must reflect solutions the terminal
@@ -419,7 +460,7 @@ fn instantiate(
 /// at `origin`'s span.
 pub(crate) fn attempt_witness_goal(
     context: &mut Context,
-    slot: MetavarId,
+    slot: MetaId,
     goal: &Term,
     provenance: WitnessOrigin,
     origin: &Term,
@@ -464,7 +505,7 @@ pub(crate) fn attempt_witness_goal(
 /// `retry_parked`'s wake path and the deferred-goal sweeps.
 pub(crate) fn retry_witness(
     context: &mut Context,
-    slot: MetavarId,
+    slot: MetaId,
     goal: Term,
     provenance: WitnessOrigin,
     origin: Term,
@@ -576,6 +617,7 @@ pub(crate) fn register_witness(
     context: &mut Context,
     name: &str,
     signature: &Term,
+    universe_context: UniverseContext,
     root: RootId,
 ) -> Result<(), Error> {
     let reduced = reduce_with(context, signature)?;
@@ -610,6 +652,7 @@ pub(crate) fn register_witness(
     let Subterm::StructType(StructType {
         name: concept_name,
         params,
+        ..
     }) = &*terminal
     else {
         return Err(Error::not_a_concept(name, terminal.clone()));
@@ -644,6 +687,7 @@ pub(crate) fn register_witness(
         let Subterm::StructType(StructType {
             name: premise_concept,
             params: premise_args,
+            ..
         }) = &*premise
         else {
             return Err(Error::non_regular_witness_premise(name, premise.clone()));
@@ -698,6 +742,7 @@ pub(crate) fn register_witness(
         key.clone(),
         Witness {
             name: name.to_string(),
+            universe_context,
             signature: signature.clone(),
             root,
         },

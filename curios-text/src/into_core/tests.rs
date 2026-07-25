@@ -3,7 +3,7 @@ use curios_base::RootId;
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const SYNTAX: crate::SyntaxRegistry = crate::SyntaxRegistry::new(
@@ -28,7 +28,7 @@ fn syntax() -> &'static crate::SyntaxRegistry {
 }
 
 fn run(src: &str) -> curios_core::Term {
-    let (module, _, _) = super::into_core(
+    let (module, _, _, _) = super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
         &crate::RootSource::none(),
         syntax(),
@@ -36,6 +36,78 @@ fn run(src: &str) -> curios_core::Term {
     .unwrap();
 
     module.into_nested_term()
+}
+
+fn written_type(id: usize) -> curios_core::Term {
+    curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(id)))
+}
+
+fn elaborate_source(src: &str) -> curios_core::Module {
+    let (module, metavar_floor, universe_floor, _) = super::into_core(
+        &src.parse::<crate::Entrypoint>().unwrap(),
+        &crate::RootSource::none(),
+        syntax(),
+    )
+    .unwrap();
+    let mut context = curios_core::Context::new(Duration::from_secs(1));
+    curios_core::elaborate_and_zonk_module(
+        &mut context,
+        &module,
+        metavar_floor,
+        universe_floor,
+        curios_core::Mode::Infer,
+    )
+    .unwrap()
+    .0
+}
+
+fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
+    let (lowered, metavar_floor, universe_floor, _) = super::into_core(
+        &src.parse::<crate::Entrypoint>().unwrap(),
+        &crate::RootSource::none(),
+        syntax(),
+    )
+    .unwrap();
+    assert!(lowered.items.len() >= 2);
+
+    let mut lowered_prefix = lowered.clone();
+    lowered_prefix.items.truncate(1);
+    lowered_prefix.induct_decls.clear();
+    lowered_prefix.struct_decls.clear();
+    lowered_prefix.concepts.clear();
+    lowered_prefix.witnesses.clear();
+    lowered_prefix.type_ = None;
+    lowered_prefix.body = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero));
+    let prelude = curios_core::elaborate_and_zonk_module(
+        &mut curios_core::Context::new(Duration::from_secs(1)),
+        &lowered_prefix,
+        metavar_floor,
+        universe_floor,
+        curios_core::Mode::Infer,
+    )
+    .unwrap()
+    .0;
+
+    let full = curios_core::elaborate_and_zonk_module(
+        &mut curios_core::Context::new(Duration::from_secs(1)),
+        &lowered,
+        metavar_floor,
+        universe_floor,
+        curios_core::Mode::Infer,
+    )
+    .unwrap()
+    .0;
+    let cached = curios_core::elaborate_and_zonk_with_prelude(
+        &mut curios_core::Context::new(Duration::from_secs(1)),
+        &prelude,
+        &lowered,
+        metavar_floor,
+        universe_floor,
+        curios_core::Mode::Infer,
+    )
+    .unwrap()
+    .0;
+    (full, cached)
 }
 
 fn run_err(src: &str) -> String {
@@ -95,7 +167,179 @@ fn write_module(base: &Path, path: &str, source: &str) {
 
 #[test]
 fn no_items_simple_tail() {
-    assert_eq!(run("Type"), curios_core::Term::type_());
+    assert_eq!(run("Type"), written_type(0));
+}
+
+#[test]
+fn written_types_get_distinct_levels_and_lexical_roles() {
+    let (module, _, universe_floor, _) = super::into_core(
+        &"let id(@A : Type, x : A) -> A = x; Type"
+            .parse::<crate::Entrypoint>()
+            .unwrap(),
+        &crate::RootSource::none(),
+        syntax(),
+    )
+    .unwrap();
+
+    assert_eq!(universe_floor, 2);
+    assert_eq!(
+        module
+            .universe_seeds
+            .iter()
+            .map(|seed| seed.role)
+            .collect::<Vec<_>>(),
+        vec![
+            curios_core::UniverseRole::Generalizable,
+            curios_core::UniverseRole::Flexible,
+        ],
+    );
+    assert!(
+        module
+            .universe_seeds
+            .iter()
+            .all(|seed| seed.origin.is_some())
+    );
+}
+
+#[test]
+fn cached_and_full_elaboration_have_identical_universe_transactions() {
+    let (full, cached) = elaboration_paths(
+        "let pre(@A : Type, x : A) -> A = x;\
+         let user(@B : Type, x : B) -> B = pre(x);\
+         user(Type)",
+    );
+
+    assert_eq!(cached, full);
+}
+
+#[test]
+fn a_polymorphic_definition_instantiates_at_prop_and_type() {
+    let module = elaborate_source("let id(@A : Type, x : A) -> A = x; (id(Prop), id(Type))");
+    let definition = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(definition) if definition.name == "/id" => Some(definition),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(definition.universe_context.parameter_count, 1);
+
+    let curios_core::Subterm::Tuple(tuple) = &*module.body else {
+        panic!("the entrypoint is a tuple");
+    };
+    let levels = tuple
+        .fields
+        .iter()
+        .map(|field| {
+            let curios_core::Subterm::Apply(apply) = &**field else {
+                panic!("each tuple field is an id application");
+            };
+            let curios_core::Subterm::UniverseInst(instance) = &*apply.head else {
+                panic!("each external id use is universe-instantiated");
+            };
+            instance.levels.clone()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        levels,
+        vec![
+            vec![curios_core::Level::constant(1)],
+            vec![curios_core::Level::constant(2)],
+        ]
+    );
+}
+
+#[test]
+fn inductive_constructor_ownership_is_explicit() {
+    let module = elaborate_source(
+        r#"
+        induct Result(A : Type, E : Type) : Type
+        | success(A)
+        | failure(E)
+        end
+        Type
+        "#,
+    );
+    let schemes = module
+        .items
+        .iter()
+        .flat_map(|item| match item {
+            curios_core::Item::Let(definition) => vec![definition.clone()],
+            curios_core::Item::Rec(rec) => rec.definitions(),
+        })
+        .map(|definition| {
+            (
+                definition.name,
+                definition.kind,
+                definition.universe_context.parameter_count,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        schemes,
+        vec![
+            (
+                "/Result".into(),
+                curios_core::DefinitionKind::InductiveType,
+                2,
+            ),
+            (
+                "/Result/success".into(),
+                curios_core::DefinitionKind::InductiveConstructor {
+                    owner: "/Result".into(),
+                },
+                2,
+            ),
+            (
+                "/Result/failure".into(),
+                curios_core::DefinitionKind::InductiveConstructor {
+                    owner: "/Result".into(),
+                },
+                2,
+            ),
+        ],
+    );
+}
+
+#[test]
+fn a_local_polymorphic_definition_instantiates_independently() {
+    let module = elaborate_source(
+        "let outer : {Type, Type} = let id : (@A : Type, A) -> A = (x) => x; (id(Prop), id(Type)); outer",
+    );
+    let definition = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(definition) if definition.name == "/outer" => Some(definition),
+            _ => None,
+        })
+        .unwrap();
+    let curios_core::Subterm::Let(let_) = &*definition.body else {
+        panic!("outer contains the local let");
+    };
+    assert_eq!(let_.bindings[0].universe_context().parameter_count, 1);
+}
+
+#[test]
+fn an_inferred_local_alias_remains_universe_polymorphic() {
+    let module = elaborate_source(
+        "let outer : {Type, Type} = let id : (@A : Type, A) -> A = (x) => x; let alias = id; (alias(Prop), alias(Type)); outer",
+    );
+    let definition = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(definition) if definition.name == "/outer" => Some(definition),
+            _ => None,
+        })
+        .unwrap();
+    let curios_core::Subterm::Let(let_) = &*definition.body else {
+        panic!("outer contains the local lets");
+    };
+    assert_eq!(let_.bindings.len(), 2);
+    assert_eq!(let_.bindings[1].universe_context().parameter_count, 1);
 }
 
 #[test]
@@ -107,8 +351,8 @@ fn single_let_binding() {
         "#),
         curios_core::Term::let_(
             "/x",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/x"))
         ),
     );
@@ -125,8 +369,8 @@ fn nested_module_binding_reference() {
         "#),
         curios_core::Term::let_(
             "/Foo/f",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/Foo/f"))
         ),
     );
@@ -143,8 +387,8 @@ fn module_named_after_type_resolves_by_qualified_path() {
         "#),
         curios_core::Term::let_(
             "/Nat/double",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/Nat/double"))
         ),
     );
@@ -164,8 +408,8 @@ fn use_shorthand_resolves_qualifier() {
         "#),
         curios_core::Term::let_(
             "/Foo/Bar/f",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
         ),
     );
@@ -287,8 +531,8 @@ fn pub_use_exposes_qualifier() {
         "#),
         curios_core::Term::let_(
             "/Foo/Bar/f",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
         ),
     );
@@ -331,8 +575,8 @@ fn use_of_pub_use_path_resolves_through_alias() {
         "#),
         curios_core::Term::let_(
             "/Foo/Bar/f",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
         ),
     );
@@ -357,8 +601,8 @@ fn chained_pub_use_re_exports_transitively() {
         "#),
         curios_core::Term::let_(
             "/A/X/f",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/A/X/f"))
         ),
     );
@@ -386,8 +630,8 @@ fn chained_re_export_resolves_out_of_order() {
         "#),
         curios_core::Term::let_(
             "/C/x",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/C/x"))
         ),
     );
@@ -457,8 +701,8 @@ fn deep_facade_traversal_through_re_exported_module() {
         "#),
         curios_core::Term::let_(
             "/B/M/x",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/B/M/x"))
         ),
     );
@@ -482,8 +726,8 @@ fn re_exports_from_own_private_child() {
         "#),
         curios_core::Term::let_(
             "/Facade/Impl/helper",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::var(curios_core::Var::free("/Facade/Impl/helper"))
         ),
     );
@@ -1320,6 +1564,28 @@ fn use_of_dual_existence_registers_both() {
 }
 
 #[test]
+fn module_member_is_not_classified_as_a_generated_nominal_member() {
+    let module = elaborate_source(
+        r#"
+        struct Foo(A : Type, B : Type) : pub Type { a : A, b : B }
+        pub mod Foo
+            pub let bar : Type = Type;
+        end
+        Type
+    "#,
+    );
+    let bar = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(definition) if definition.name == "/Foo/bar" => Some(definition),
+            _ => None,
+        })
+        .expect("module member definition");
+    assert_eq!(bar.kind, curios_core::DefinitionKind::Authored);
+}
+
+#[test]
 fn dual_use_lets_bare_name_resolve_to_binding() {
     run(r#"
         pub mod Foo
@@ -1459,12 +1725,12 @@ fn use_glob_imports_all_public_bindings() {
         "#),
         curios_core::Term::let_(
             "/Foo/x",
-            curios_core::Term::type_(),
-            curios_core::Term::type_(),
+            written_type(0),
+            written_type(1),
             curios_core::Term::let_(
                 "/Foo/y",
-                curios_core::Term::type_(),
-                curios_core::Term::type_(),
+                written_type(2),
+                written_type(3),
                 curios_core::Term::var(curios_core::Var::free("/Foo/x"))
             )
         ),
@@ -1722,7 +1988,7 @@ fn bang_in_a_type_is_rejected() {
 fn foreign_declaration_populates_the_store() {
     // No loader/prelude needed at all: a `foreign` signature is parsed
     // directly into `WireType`s, not resolved as ordinary names.
-    let (_, _, foreigns) = super::into_core(
+    let (_, _, _, foreigns) = super::into_core(
         &"foreign frobnicate : (Nat, Bin) -> Nat; 0"
             .parse::<crate::Entrypoint>()
             .unwrap(),
@@ -1747,7 +2013,7 @@ fn foreign_declaration_populates_the_store() {
 
 #[test]
 fn foreign_declaration_zero_arg_populates_the_store() {
-    let (_, _, foreigns) = super::into_core(
+    let (_, _, _, foreigns) = super::into_core(
         &"foreign clock : Nat; 0"
             .parse::<crate::Entrypoint>()
             .unwrap(),
@@ -1789,7 +2055,7 @@ fn foreign_declarations_across_modules_get_distinct_import_names() {
     // import name is the declaration's fully qualified name, so the shared
     // label never collides on the wire — each module's row registers under
     // its own name.
-    let (_, _, foreigns) = super::into_core(
+    let (_, _, _, foreigns) = super::into_core(
         &r#"
         mod A
             foreign frobnicate : Nat;

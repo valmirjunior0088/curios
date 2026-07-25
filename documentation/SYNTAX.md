@@ -150,6 +150,8 @@ The entire packed literal is whitespace-free. An unparenthesized spread operand 
 
 `Type` is the sort of computational types. `Prop` is the sort of proof-irrelevant propositions.
 
+Although the surface spelling is always the nullary term `Type`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A type accepted at one level is also accepted where a higher level is required.
+
 All inhabitants of the same proposition are definitionally irrelevant. Eliminating a proposition into informative data is restricted; proofs may always be eliminated to prove another proposition.
 
 ### Function types

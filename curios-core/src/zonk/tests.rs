@@ -12,11 +12,50 @@ fn nat_lit(n: usize) -> Term {
     Subterm::Prim(Prim::Nat(Nat::new(n))).into()
 }
 
+fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
+    Module {
+        items: Vec::new(),
+        universe_seeds,
+        induct_decls: Default::default(),
+        struct_decls: Default::default(),
+        concepts: Default::default(),
+        witnesses: Default::default(),
+        type_: None,
+        body,
+    }
+}
+
+#[test]
+fn lowered_module_validation_rejects_a_truncated_universe_seed_table() {
+    let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))), Vec::new());
+
+    assert!(matches!(
+        validate_lowered_universe_seeds(&module, 0),
+        Err(Error::UniverseInvariant(message)) if message.contains("?u0")
+    ));
+}
+
+#[test]
+fn lowered_module_validation_rejects_a_seed_floor_mismatch() {
+    let module = lowered_module(
+        Term::type_ground(),
+        vec![UniverseSeed {
+            role: UniverseRole::Flexible,
+            origin: None,
+        }],
+    );
+
+    assert!(matches!(
+        validate_lowered_universe_seeds(&module, 0),
+        Err(Error::UniverseInvariant(message)) if message.contains("seed table")
+    ));
+}
+
 #[test]
 fn zonk_leaves_a_meta_free_term_unchanged() {
     let context = context();
 
-    let term = Term::func([("x", Term::type_())], nat_lit(0));
+    let term = Term::func([("x", Term::type_ground())], nat_lit(0));
     let zonked = zonk(&context, &term).unwrap();
 
     assert_eq!(zonked, term);
@@ -26,8 +65,8 @@ fn zonk_leaves_a_meta_free_term_unchanged() {
 fn zonk_replaces_a_solved_metavariable_with_its_solution() {
     let mut context = context();
 
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
-    context.solve_metavar(MetavarId(0), nat());
+    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetaId(0), nat());
 
     let zonked = zonk(&context, &Term::metavar(0)).unwrap();
 
@@ -38,8 +77,8 @@ fn zonk_replaces_a_solved_metavariable_with_its_solution() {
 fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
     let mut context = context();
 
-    context.birth_metavar(MetavarId(0), Vec::new(), nat());
-    context.solve_metavar(MetavarId(0), nat_lit(7));
+    context.birth_metavar(MetaId(0), Vec::new(), nat());
+    context.solve_metavar(MetaId(0), nat_lit(7));
 
     // The catch-all default is a real term position, so a solved metavar sitting
     // in it is resolved like any other.
@@ -66,8 +105,8 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
 fn zonk_resolves_a_metavariable_nested_in_a_structure() {
     let mut context = context();
 
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
-    context.solve_metavar(MetavarId(0), nat());
+    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetaId(0), nat());
 
     // A tuple `{ ?0 }` zonks to `{ Nat }`.
     let term = Subterm::Tuple(Tuple {
@@ -93,10 +132,10 @@ fn zonk_chases_a_solution_that_mentions_another_metavariable() {
     let mut context = context();
 
     // ?0 := ?1, ?1 := Nat. Zonking ?0 must resolve through to `Nat`.
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
-    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_());
-    context.solve_metavar(MetavarId(1), nat());
-    context.solve_metavar(MetavarId(0), Term::metavar(1));
+    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetaId(1), nat());
+    context.solve_metavar(MetaId(0), Term::metavar(1));
 
     let zonked = zonk(&context, &Term::metavar(0)).unwrap();
 
@@ -104,10 +143,48 @@ fn zonk_chases_a_solution_that_mentions_another_metavariable() {
 }
 
 #[test]
+fn universe_dependencies_of_a_solved_meta_follow_only_its_materialized_solution() {
+    let mut context = context();
+    let result = UniverseMetaId(0);
+    let telescope = UniverseMetaId(1);
+    let solution = UniverseMetaId(2);
+
+    context.birth_metavar(
+        MetaId(0),
+        vec![("x".to_string(), Term::type_at(Level::meta(telescope)))],
+        Term::type_at(Level::meta(result)),
+    );
+    context.solve_metavar(MetaId(0), Term::type_at(Level::meta(solution)));
+
+    assert_eq!(
+        context.universe_metas_in(&Term::metavar(0)),
+        [solution].into()
+    );
+}
+
+#[test]
+fn universe_dependencies_of_an_unsolved_meta_keep_its_birth_context() {
+    let mut context = context();
+    let result = UniverseMetaId(0);
+    let telescope = UniverseMetaId(1);
+
+    context.birth_metavar(
+        MetaId(0),
+        vec![("x".to_string(), Term::type_at(Level::meta(telescope)))],
+        Term::type_at(Level::meta(result)),
+    );
+
+    assert_eq!(
+        context.universe_metas_in(&Term::metavar(0)),
+        [result, telescope].into()
+    );
+}
+
+#[test]
 fn zonk_rejects_an_unsolved_metavariable() {
     let mut context = context();
 
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
+    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     let result = zonk(&context, &Term::metavar(0));
 
@@ -120,8 +197,8 @@ fn zonk_reports_a_solved_goal() {
 
     // A written goal `?` errors even when solved — the report carries the
     // frozen scope, the goal's type, and the committed solution.
-    context.birth_metavar(MetavarId(0), vec![("x".to_string(), nat())], nat());
-    context.solve_metavar(MetavarId(0), nat_lit(7));
+    context.birth_metavar(MetaId(0), vec![("x".to_string(), nat())], nat());
+    context.solve_metavar(MetaId(0), nat_lit(7));
 
     let error = zonk(&context, &Term::goal(0)).unwrap_err();
 
@@ -137,7 +214,7 @@ fn zonk_reports_a_solved_goal() {
 fn zonk_reports_an_unsolved_goal_as_undetermined() {
     let mut context = context();
 
-    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.birth_metavar(MetaId(0), Vec::new(), nat());
 
     let error = zonk(&context, &Term::goal(0)).unwrap_err();
 

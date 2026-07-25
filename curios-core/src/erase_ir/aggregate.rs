@@ -257,6 +257,7 @@ impl Lowering {
             .struct_decl(&value.name)
             .cloned()
             .expect("erase_ir: a registered struct");
+        let struct_decl = context.instantiate_struct_decl_at(&struct_decl, &value.universes)?;
         let telescope = struct_decl.fields_at(&value.params);
         let atoms = match self.masked_fields(context, &row.mask, telescope, &value.fields)? {
             Ok(atoms) => atoms,
@@ -290,6 +291,7 @@ impl Lowering {
             .induct_decl(&variant.name)
             .cloned()
             .expect("erase_ir: a registered inductive");
+        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &variant.universes)?;
         let index = induct_decl
             .constructor_index(&variant.tag)
             .expect("erase_ir: constructor tag registered with its inductive");

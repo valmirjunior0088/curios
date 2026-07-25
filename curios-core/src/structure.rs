@@ -1,5 +1,5 @@
 use {
-    super::{Telescope, Term},
+    super::{Telescope, Term, UniverseContext},
     curios_base::{Qualifier, RootId},
 };
 
@@ -17,6 +17,7 @@ use {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct StructDecl {
+    pub universe_context: UniverseContext,
     /// The declaration's parameter telescope, e.g. `(A : Type, B : Type)` for
     /// `struct Pair(A : Type, B : Type)`. Ends in `()` like a `TupleType`'s
     /// telescope: there is no trailing body, only binders.

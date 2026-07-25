@@ -1,7 +1,7 @@
 use {
     super::{
-        Concept, InductDecl, Many, RecGroup, Scope, StructDecl, Term, build_shorten,
-        with_short_names,
+        Concept, InductDecl, Many, RecGroup, Scope, StructDecl, Term, UniverseContext,
+        UniverseSeed, build_shorten, with_short_names,
     },
     curios_base::{Qualifier, RootId},
     std::{
@@ -10,6 +10,27 @@ use {
         rc::Rc,
     },
 };
+
+/// How a lowered definition was introduced.
+///
+/// This is elaboration metadata, not a fact inferred from the flattened
+/// qualified name. In particular, a module and a nominal type may share a
+/// qualifier without turning ordinary module members into generated nominal
+/// members.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub enum DefinitionKind {
+    Authored,
+    InductiveType,
+    InductiveConstructor { owner: String },
+    StructType,
+    ConceptType,
+    ConceptMethod { owner: String },
+    Witness,
+}
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
 ///
@@ -24,6 +45,8 @@ use {
 )]
 pub struct Definition {
     pub name: String,
+    pub kind: DefinitionKind,
+    pub universe_context: UniverseContext,
     /// This definition's declaring module — `name`'s qualifier prefix,
     /// precomputed once by `into_core` (before `name` was flattened) rather
     /// than re-derived from it later. Stamped into `Context::island` per item
@@ -52,6 +75,7 @@ pub struct Definition {
 )]
 pub(crate) struct RecDefinition {
     pub name: String,
+    pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
 }
@@ -72,6 +96,21 @@ pub struct RecItem {
 
 impl RecItem {
     pub fn new(definitions: Vec<Definition>) -> Self {
+        Self::try_new(definitions).expect("a recursive group has one valid universe context")
+    }
+
+    pub fn try_new(definitions: Vec<Definition>) -> Result<Self, super::UniverseError> {
+        let universe_context = definitions
+            .first()
+            .map(|definition| definition.universe_context.clone())
+            .unwrap_or_default();
+        universe_context.validate()?;
+        if !definitions
+            .iter()
+            .all(|definition| definition.universe_context == universe_context)
+        {
+            return Err(super::UniverseError::MismatchedRecursiveContexts);
+        }
         let labels = definitions
             .iter()
             .map(|definition| definition.name.as_str())
@@ -87,20 +126,26 @@ impl RecItem {
                     )
                 })
                 .collect(),
-        );
+        )
+        .with_universe_context(universe_context);
         let definitions = definitions
             .into_iter()
             .map(|definition| RecDefinition {
                 name: definition.name,
+                kind: definition.kind,
                 island: definition.island,
                 root: definition.root,
             })
             .collect();
 
-        Self { definitions, group }
+        Ok(Self { definitions, group })
     }
 
-    pub(crate) fn definitions(&self) -> Vec<Definition> {
+    /// Open the recursive scopes against their exported names.
+    ///
+    /// The returned definitions are a read-only projection; the authoritative
+    /// types and bodies remain structurally shared in the group's scheme.
+    pub fn definitions(&self) -> Vec<Definition> {
         let names = self
             .definitions
             .iter()
@@ -110,9 +155,11 @@ impl RecItem {
 
         self.definitions
             .iter()
-            .zip(self.group.items())
+            .zip(self.group.iter())
             .map(|(definition, (type_, body))| Definition {
                 name: definition.name.clone(),
+                kind: definition.kind.clone(),
+                universe_context: self.group.universe_context().clone(),
                 island: definition.island.clone(),
                 root: definition.root,
                 type_: type_.open(&name_refs),
@@ -177,6 +224,9 @@ impl Item {
 )]
 pub struct Module {
     pub items: Vec<Item>,
+    /// Lowering-time metadata for every universe metavariable id in this
+    /// module. Finalized, zonked modules clear this vector.
+    pub universe_seeds: Vec<UniverseSeed>,
     /// Inductive declarations' registry entries, keyed by the type's qualified
     /// name. Carried on the module — not on a `Context` — because elaboration
     /// and erasure each run with their *own* `Context` (see `run::compile`);
@@ -285,17 +335,32 @@ impl fmt::Display for Module {
 mod tests {
     use super::*;
 
-    #[test]
-    fn top_level_rec_item_captures_its_exports_into_the_shared_group() {
-        let rec = RecItem::new(vec![Definition {
-            name: "loop".into(),
+    fn definition(name: &str, universe_context: UniverseContext) -> Definition {
+        Definition {
+            name: name.into(),
+            kind: DefinitionKind::Authored,
+            universe_context,
             island: Qualifier::empty(),
             root: RootId::Entry,
-            type_: Term::type_(),
-            body: Term::free_var("loop"),
-        }]);
+            type_: Term::type_ground(),
+            body: Term::free_var(name),
+        }
+    }
 
-        assert!(rec.group.items()[0].1.body().free_vars().is_empty());
+    #[test]
+    fn top_level_rec_item_captures_its_exports_into_the_shared_group() {
+        let rec = RecItem::new(vec![definition("loop", UniverseContext::empty())]);
+
+        assert!(
+            rec.group
+                .iter()
+                .next()
+                .unwrap()
+                .1
+                .body()
+                .free_vars()
+                .is_empty()
+        );
         assert!(matches!(
             &*rec.group.member_body(0),
             super::super::Subterm::RecMember(member)
@@ -304,5 +369,23 @@ mod tests {
 
         let opened = rec.definitions();
         assert_eq!(opened[0].body, Term::free_var("loop"));
+    }
+
+    #[test]
+    fn recursive_members_cannot_silently_discard_different_universe_contexts() {
+        let polymorphic = UniverseContext {
+            parameter_count: 1,
+            outer_parameter_count: 0,
+            constraints: Vec::new(),
+        };
+
+        assert_eq!(
+            RecItem::try_new(vec![
+                definition("left", UniverseContext::empty()),
+                definition("right", polymorphic),
+            ])
+            .unwrap_err(),
+            crate::UniverseError::MismatchedRecursiveContexts,
+        );
     }
 }

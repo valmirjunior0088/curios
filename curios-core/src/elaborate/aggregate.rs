@@ -12,7 +12,7 @@ pub(super) fn elaborate_tuple_type(
         match tele {
             Telescope::Done(_) => Ok(()),
             Telescope::Cons(ty, rest) => {
-                let field = check(context, &ty, Term::type_())?;
+                let field = crate::check_is_sort(context, &ty)?.0;
                 let name = context.fresh(rest.first_label());
                 let x = Term::free_var(&name);
                 // The *rebuilt* field type, as in `elaborate_func_type`.
@@ -58,10 +58,19 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     // additionally enforces representation privacy here (§7).
     let telescope = match &*head_type {
         Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
-        Subterm::StructType(StructType { name, params }) => {
+        Subterm::StructType(StructType {
+            name,
+            universes,
+            params,
+        }) => {
             let Some(struct_decl) = context.struct_decl(name).cloned() else {
                 return Err(Error::unbound_variable(Term::free_var(name)));
             };
+            let fields = context.instantiate_universe_bound_at(
+                &struct_decl.universe_context,
+                &struct_decl.fields,
+                universes,
+            )?;
 
             // The use-site module is the enclosing item's qualifier prefix
             // (`Context::island`, set per item by `elaborate_module`). A
@@ -81,7 +90,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
                 return Err(Error::private_field(name.clone(), field));
             }
 
-            struct_decl.fields_at(params)
+            fields.open_params(params)
         }
         other => return Err(Error::not_a_tuple(other.clone())),
     };
@@ -142,6 +151,7 @@ pub(super) fn elaborate_induct_type(
 ) -> Result<(Term, Term), Error> {
     let InductType {
         name,
+        universes: written_universes,
         params,
         indices,
     } = ut;
@@ -149,25 +159,40 @@ pub(super) fn elaborate_induct_type(
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Err(Error::unbound_variable(Term::free_var(name)));
     };
+    let (indices_telescope, result_sort, universes) = if written_universes.is_empty() {
+        let (indices_telescope, universes) = context
+            .instantiate_universe_bound(&induct_decl.universe_context, &induct_decl.indices)?;
+        let result_sort = instantiate_universe_levels_scoped(&induct_decl.result_sort, &universes)
+            .map_err(Error::from)?;
+        (indices_telescope, result_sort, universes)
+    } else {
+        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;
+        (
+            induct_decl.indices,
+            induct_decl.result_sort,
+            written_universes.clone(),
+        )
+    };
 
     let args: Vec<Term> = params.iter().chain(indices.iter()).cloned().collect();
 
-    if args.len() != induct_decl.indices.len() {
+    if args.len() != indices_telescope.len() {
         return Err(Error::wrong_number_of_arguments(
-            induct_decl.indices.len(),
+            indices_telescope.len(),
             args.len(),
         ));
     }
 
-    let (elaborated, ()) = check_args_against(context, induct_decl.indices, &args)?;
+    let (elaborated, ()) = check_args_against(context, indices_telescope, &args)?;
 
     Ok((
-        Term::induct_type(
+        Term::induct_type_at(
             name,
+            universes,
             elaborated[..params.len()].iter().cloned(),
             elaborated[params.len()..].iter().cloned(),
         ),
-        induct_decl.result_sort,
+        result_sort,
     ))
 }
 
@@ -182,6 +207,7 @@ pub(super) fn elaborate_variant(
 ) -> Result<(Term, Term), Error> {
     let Variant {
         name,
+        universes: written_universes,
         params,
         tag,
         payload,
@@ -199,12 +225,27 @@ pub(super) fn elaborate_variant(
         return Err(Error::private_representation(name.clone()));
     }
 
-    let Some(signature) = induct_decl
-        .constructors
-        .get(tag)
-        .map(|c| c.telescope.clone())
-    else {
-        return Err(Error::match_case_missing(term.clone(), tag.clone()));
+    let (signature, universes) = if written_universes.is_empty() {
+        let Some(signature) = induct_decl
+            .constructors
+            .get(tag)
+            .map(|c| c.telescope.clone())
+        else {
+            return Err(Error::match_case_missing(term.clone(), tag.clone()));
+        };
+        let (signature, universes) =
+            context.instantiate_universe_bound(&induct_decl.universe_context, &signature)?;
+        (signature, universes)
+    } else {
+        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;
+        let Some(signature) = induct_decl
+            .constructors
+            .get(tag)
+            .map(|constructor| constructor.telescope.clone())
+        else {
+            return Err(Error::match_case_missing(term.clone(), tag.clone()));
+        };
+        (signature, written_universes.clone())
     };
 
     let args: Vec<Term> = params.iter().chain(payload.iter()).cloned().collect();
@@ -218,8 +259,15 @@ pub(super) fn elaborate_variant(
 
     let (elaborated, output) = check_args_against(context, signature, &args)?;
 
-    let rebuilt = Term::variant(
+    let output = crate::stamp_declaration_instance(
+        &output,
+        &BTreeSet::from([name.clone()]),
+        crate::SelfReference::Free,
+        &universes,
+    );
+    let rebuilt = Term::variant_at(
         name,
+        universes,
         elaborated[..params.len()].iter().cloned(),
         tag.clone(),
         elaborated[params.len()..].iter().cloned(),

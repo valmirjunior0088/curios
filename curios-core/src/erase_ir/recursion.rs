@@ -43,7 +43,6 @@ impl Lowering {
         let name_refs = name_terms.iter().collect::<Vec<_>>();
 
         let members = group
-            .items()
             .iter()
             .map(|(type_, body)| (type_.open(&name_refs), body.open(&name_refs)))
             .collect::<Vec<_>>();
@@ -52,6 +51,7 @@ impl Lowering {
         context.with_frame(|context| {
             for (name, (type_, _)) in names.iter().zip(&members) {
                 context.assume(name, type_);
+                context.set_assumption_universe_context(name, group.universe_context().clone());
             }
             for (index, name) in names.iter().enumerate() {
                 context.define(name, &Term::rec_member(group.clone(), index));
@@ -90,6 +90,10 @@ impl Lowering {
         let definitions = rec.definitions();
         for definition in &definitions {
             context.assume(&definition.name, &definition.type_);
+            context.set_assumption_universe_context(
+                &definition.name,
+                rec.group.universe_context().clone(),
+            );
         }
         for (index, definition) in definitions.iter().enumerate() {
             context.define(

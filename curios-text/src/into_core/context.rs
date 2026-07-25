@@ -1,13 +1,21 @@
 use {
     super::PublicInterface,
     crate::{Error, Name, SyntaxRegistry},
-    curios_base::{Entropy, Qualifier, RootId},
-    std::collections::{HashMap, HashSet},
+    curios_base::{Entropy, Qualifier, RootId, Span},
+    curios_core::{
+        DefinitionKind, Level, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseMetaId, UniverseRole, UniverseSeed,
+    },
+    std::{
+        cell::{Cell, RefCell},
+        collections::{HashMap, HashSet},
+    },
 };
 
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: Qualifier,
+    pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
     pub type_: curios_core::Term,
@@ -20,6 +28,8 @@ impl FlatLet {
             root: self.root,
             island: self.island,
             name: self.name.join(),
+            kind: self.kind,
+            universe_context: UniverseContext::empty(),
             type_: self.type_,
             body: self.body,
         }
@@ -243,6 +253,10 @@ pub(super) struct Context<'a> {
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
     // `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
+    universes: &'a Entropy,
+    universe_role: &'a Cell<UniverseRole>,
+    universe_seeds: &'a RefCell<Vec<UniverseSeed>>,
+    universe_allocations: &'a RefCell<HashMap<Span, UniverseMetaId>>,
     // Sibling counter for fresh continuation-binder names minted while desugaring
     // `!` regions. Threaded (not a process-global atomic) for determinism:
     // `curios_core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
@@ -252,11 +266,16 @@ pub(super) struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
         root: RootId,
         metavars: &'a Entropy,
+        universes: &'a Entropy,
+        universe_role: &'a Cell<UniverseRole>,
+        universe_seeds: &'a RefCell<Vec<UniverseSeed>>,
+        universe_allocations: &'a RefCell<HashMap<Span, UniverseMetaId>>,
         binders: &'a Entropy,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
@@ -268,6 +287,10 @@ impl<'a> Context<'a> {
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
             metavars,
+            universes,
+            universe_role,
+            universe_seeds,
+            universe_allocations,
             binders,
             syntax,
         }
@@ -282,6 +305,10 @@ impl<'a> Context<'a> {
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
             metavars: self.metavars,
+            universes: self.universes,
+            universe_role: self.universe_role,
+            universe_seeds: self.universe_seeds,
+            universe_allocations: self.universe_allocations,
             binders: self.binders,
             syntax: self.syntax,
         }
@@ -309,6 +336,54 @@ impl<'a> Context<'a> {
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
     pub(super) fn fresh_metavar(&self) -> usize {
         self.metavars.fresh()
+    }
+
+    pub(super) fn fresh_universe(&self, span: Option<&Span>) -> Level {
+        if let Some(span) = span
+            && let Some(id) = self.universe_allocations.borrow().get(span)
+        {
+            assert_eq!(
+                self.universe_seeds.borrow()[id.0].role,
+                self.universe_role(),
+                "one written Type was lowered under conflicting universe roles"
+            );
+            return Level::meta(*id);
+        }
+
+        let id = self.universes.fresh();
+        let mut seeds = self.universe_seeds.borrow_mut();
+        assert_eq!(id, seeds.len(), "universe seeds parallel their dense ids");
+        seeds.push(UniverseSeed {
+            role: self.universe_role(),
+            origin: span.cloned().map(|span| UniverseConstraintOrigin {
+                span: Some(span),
+                kind: UniverseConstraintKind::WrittenType,
+                declaration: (!self.prefix.segments().is_empty()).then(|| self.prefix.join()),
+                binder: None,
+            }),
+        });
+        let id = UniverseMetaId(id);
+        if let Some(span) = span {
+            self.universe_allocations
+                .borrow_mut()
+                .insert(span.clone(), id);
+        }
+        Level::meta(id)
+    }
+
+    pub(super) fn universe_role(&self) -> UniverseRole {
+        self.universe_role.get()
+    }
+
+    pub(super) fn with_universe_role<T>(
+        &self,
+        role: UniverseRole,
+        f: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let old = self.universe_role.replace(role);
+        let result = f();
+        self.universe_role.set(old);
+        result
     }
 
     /// Mint a fresh continuation-binder name for `!` desugaring. The `#`

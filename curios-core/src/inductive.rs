@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Telescope, Term},
+    super::{Atom, Telescope, Term, UniverseContext},
     curios_base::{Plicity, Qualifier, RootId},
     std::collections::BTreeMap,
 };
@@ -44,6 +44,7 @@ pub struct InductParam {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct InductDecl {
+    pub universe_context: UniverseContext,
     /// The declaration's parameter telescope, e.g. `(A : Type, E : Type)` for
     /// `induct Result(A : Type, E : Type)`. Ends in `()` like a `TupleType`'s
     /// telescope: there is no trailing body, only binders.

@@ -90,15 +90,16 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let (lowered, metavars, user_foreigns) = curios_prelude::with_prelude(|prelude| {
-        curios_text::into_core_with_prelude(
-            entrypoint,
-            &loader,
-            prelude.prepared(),
-            &curios_prelude::SYNTAX,
-        )
-    })
-    .map_err(|error| error.format())?;
+    let (lowered, metavars, universe_floor, user_foreigns) =
+        curios_prelude::with_prelude(|prelude| {
+            curios_text::into_core_with_prelude(
+                entrypoint,
+                &loader,
+                prelude.prepared(),
+                &curios_prelude::SYNTAX,
+            )
+        })
+        .map_err(|error| error.format())?;
 
     observe(Stage::Core(&lowered));
 
@@ -115,6 +116,7 @@ where
             prelude.core(),
             &lowered,
             metavars,
+            universe_floor,
             core_mode,
         )
     })

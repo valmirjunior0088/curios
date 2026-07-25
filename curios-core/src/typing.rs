@@ -2,8 +2,9 @@
 mod tests;
 
 use super::{
-    Apply, Context, Error, Field, Func, Many, MetavarId, Mode, Outcome, Prim, PrimHead, Proj,
-    Scope, Subterm, Telescope, Term, elaborate,
+    Apply, Context, Error, Field, Func, Level, Many, MetaId, Mode, Outcome, Prim, PrimHead, Proj,
+    Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+    UniverseRole, elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -57,6 +58,26 @@ pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error
         .map_err(|error| error.into_error(|| Error::reduce_preempted(type_.clone())))
 }
 
+/// Elaborate `term` as a type/proposition without inventing an arbitrary
+/// expected universe upper bound.
+pub(crate) fn check_is_sort(
+    context: &mut Context,
+    term: &Term,
+) -> Result<(Term, super::Sort), Error> {
+    let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {
+        let classifier = context.fresh_classifier_type("written type hole");
+        elaborate(context, term, Mode::Check(classifier))?
+    } else {
+        elaborate(context, term, Mode::Infer)?
+    };
+
+    match &*reduce_with(context, &inferred)? {
+        Subterm::Prop => Ok((rebuilt, super::Sort::Prop)),
+        Subterm::Type(level) => Ok((rebuilt, super::Sort::Type(level.clone()))),
+        other => Err(Error::type_mismatch(other.clone(), Term::type_ground())),
+    }
+}
+
 /// Best-effort display form for a mismatch report: substitute the solutions
 /// that have landed, so the message names the actual disagreement rather than
 /// the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize)
@@ -87,18 +108,34 @@ pub(crate) fn expect(
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
-    // Cumulativity: `Prop ⊑ Type`. A proposition is a type, so a term whose type
-    // is `Prop` is accepted where a `Type` is expected — the sole universe
-    // subsumption (the reverse does not hold). The direct case at the checking
-    // boundary; everything else goes through ordinary conversion below.
-    if matches!(&*reduce_with(context, expected)?, Subterm::Type)
-        && matches!(&*reduce_with(context, inferred)?, Subterm::Prop)
-    {
-        return context.retry_parked();
+    let inferred_sort = reduce_with(context, inferred)?;
+    let expected_sort = reduce_with(context, expected)?;
+    if let Subterm::Type(upper) = &*expected_sort {
+        let lower = match &*inferred_sort {
+            Subterm::Prop => Some(Level::zero()),
+            Subterm::Type(lower) => Some(lower.clone()),
+            _ => None,
+        };
+        if let Some(lower) = lower {
+            context
+                .universes_mut()
+                .add_leq(
+                    lower,
+                    upper.clone(),
+                    UniverseConstraintOrigin {
+                        span: term.span(),
+                        kind: UniverseConstraintKind::Cumulativity,
+                        declaration: None,
+                        binder: None,
+                    },
+                )
+                .map_err(Error::from)?;
+            return context.retry_parked();
+        }
     }
 
-    let outcome =
-        super::convert_outcome(context, &Term::type_(), inferred, expected).map_err(|error| {
+    let outcome = super::convert_outcome(context, &Term::type_ground(), inferred, expected)
+        .map_err(|error| {
             error.into_error(|| Error::convert_preempted(inferred.clone(), expected.clone()))
         })?;
 
@@ -147,6 +184,18 @@ impl Context {
                 retry_one(self, parked)?;
             }
         }
+    }
+
+    /// Retry every currently parked problem once without requiring the store
+    /// to become empty. Declaration finalization uses this to settle work that
+    /// is already decidable before closing universe metas, while witness goals
+    /// that genuinely depend on a later declaration remain parked.
+    pub(crate) fn sweep_parked(&mut self) -> Result<(), Error> {
+        let parked = self.take_parked();
+        for goal in parked {
+            retry_one(self, goal)?;
+        }
+        self.retry_parked()
     }
 
     /// Drain the parked store: retry everything to a fixpoint, then report
@@ -284,7 +333,7 @@ fn retry_checking(
     context: &mut Context,
     term: Term,
     expected: Term,
-    placeholder: MetavarId,
+    placeholder: MetaId,
     origin: Term,
     frame: super::FrozenFrame,
 ) -> Result<(), Error> {
@@ -427,6 +476,7 @@ pub(crate) enum MotiveShape<'a> {
     /// takes `I(p̄, ī)` at those index binders.
     Induct {
         name: &'a str,
+        universes: &'a [Level],
         params: &'a [Term],
         indices: Telescope<()>,
     },
@@ -461,6 +511,7 @@ impl MotiveShape<'_> {
             MotiveShape::Prim(head_type) => (*head_type).clone(),
             MotiveShape::Induct {
                 name,
+                universes,
                 params,
                 indices,
             } => {
@@ -479,7 +530,7 @@ impl MotiveShape<'_> {
                     };
                     index_vars.push(var);
                 }
-                Term::induct_type(*name, params.to_vec(), index_vars)
+                Term::induct_type_at(*name, universes.to_vec(), params.to_vec(), index_vars)
             }
         };
 
@@ -498,6 +549,7 @@ impl MotiveShape<'_> {
             MotiveShape::Prim(head_type) => (*head_type).clone(),
             MotiveShape::Induct {
                 name,
+                universes,
                 params,
                 indices,
             } => {
@@ -510,12 +562,18 @@ impl MotiveShape<'_> {
                     binders.push((label, ty));
                     index_vars.push(var);
                 }
-                Term::induct_type(*name, params.to_vec(), index_vars)
+                Term::induct_type_at(*name, universes.to_vec(), params.to_vec(), index_vars)
             }
         };
 
         binders.push((context.fresh(None), scrutinee_type));
-        Term::func_type(binders, Term::type_())
+        let level = context.fresh_universe(
+            UniverseRole::Flexible,
+            Some(UniverseConstraintOrigin::new(
+                UniverseConstraintKind::Other("motive result".into()),
+            )),
+        );
+        Term::func_type(binders, Term::type_at(level))
     }
 }
 
@@ -578,7 +636,8 @@ fn check_closed_motive(
 
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = vars.iter().collect::<Vec<_>>();
-        let body = elaborate(context, &motive.open(&refs), Mode::Check(Term::type_()))?.0;
+        let classifier = context.fresh_classifier_type("eliminator motive result");
+        let body = check(context, &motive.open(&refs), classifier)?;
 
         let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         Ok(Scope::close(Many(labels.len()), &label_strs, body))

@@ -6,8 +6,19 @@
 //! plugs it into this machinery by implementing `Bound`.
 
 use {
-    super::{Context, Error, MetavarId, Subterm, Term, zonk_term},
-    std::{collections::BTreeSet, fmt, hash::Hash, ops::Deref},
+    super::{
+        Context, Error, Level, LevelHead, MetaId, Subterm, Term, UniverseError, UniverseMetaId,
+        UniverseParam, UniverseSolver, zonk_term,
+    },
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        convert::Infallible,
+        fmt,
+        hash::Hash,
+        ops::Deref,
+        rc::Rc,
+    },
 };
 
 // === Arity ===================================================================
@@ -173,6 +184,9 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// identity on it.
     fn reach(&self) -> usize;
 
+    /// Whether an elaboration metavariable occurs in this value.
+    fn has_metavar(&self) -> bool;
+
     /// `true` iff the term has no loose de Bruijn indices — i.e. it's not
     /// floating inside some outer scope.
     fn closed(&self) -> bool {
@@ -243,6 +257,207 @@ impl Bound for () {
     fn reach(&self) -> usize {
         0
     }
+
+    fn has_metavar(&self) -> bool {
+        false
+    }
+}
+
+pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
+    value: &B,
+    rewrite: impl FnMut(&Level) -> Result<Level, E> + 'static,
+) -> Result<B, E> {
+    let mut rewrite = rewrite;
+    rewrite_universe_levels_scoped(value, move |_, level| rewrite(level))
+}
+
+/// Structural implementation used only by the validated Core-to-Ersd
+/// projection. Nominal vectors, instances, and contexts are removed by their
+/// owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant
+/// payload is rebuilt with Core's private canonical ground representative.
+pub(crate) fn project_erased_universes<B: Bound>(value: &B) -> B {
+    value.traverse(&mut Visit::erasing_universes(|_, _| None))
+}
+
+pub(crate) fn rewrite_universe_levels_scoped<B: Bound, E: 'static>(
+    value: &B,
+    rewrite: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+) -> Result<B, E> {
+    let rewrite = Rc::new(RefCell::new(rewrite));
+    let error = Rc::new(RefCell::new(None));
+    let rewrite_for_visit = Rc::clone(&rewrite);
+    let error_for_visit = Rc::clone(&error);
+    let mut visit = Visit::rewriting_levels_scoped(
+        |_, _| None,
+        Box::new(move |depth, level| {
+            if error_for_visit.borrow().is_some() {
+                return level.clone();
+            }
+            match rewrite_for_visit.borrow_mut()(depth, level) {
+                Ok(level) => level,
+                Err(found) => {
+                    *error_for_visit.borrow_mut() = Some(found);
+                    level.clone()
+                }
+            }
+        }),
+    );
+    let rewritten = value.traverse(&mut visit);
+    match error.borrow_mut().take() {
+        Some(error) => Err(error),
+        None => Ok(rewritten),
+    }
+}
+
+fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, UniverseError> {
+    level.substitute(|head| match head {
+        LevelHead::Param(UniverseParam(index)) => index
+            .checked_add(amount)
+            .map(UniverseParam)
+            .map(Level::param),
+        LevelHead::Meta(_) => None,
+    })
+}
+
+/// Substitute a scheme's own universe parameters by `arguments`.
+///
+/// Universe parameters are innermost-first: beneath the `depth` universe
+/// binders this walk has crossed, the scheme's own parameters occupy
+/// `depth .. depth + arguments.len()`. An index above that range belongs to an
+/// *enclosing* scheme and is shifted down by the parameters this instantiation
+/// discharges, exactly as [`UniverseSolver::instantiate_at`] rewrites the outer
+/// references in a nested residual context.
+///
+/// Instance arity is the owning [`UniverseContext`]'s contract and is checked
+/// against its declared `parameter_count`. Rejecting an out-of-range index here
+/// instead would misread every legitimate outer-scheme reference as a missing
+/// argument.
+pub(crate) fn instantiate_universe_levels_scoped<B: Bound>(
+    value: &B,
+    arguments: &[Level],
+) -> Result<B, UniverseError> {
+    let arguments = arguments.to_vec();
+    rewrite_universe_levels_scoped(value, move |depth, level| {
+        let arguments = arguments
+            .iter()
+            .map(|argument| shift_universe_params(argument, depth))
+            .collect::<Result<Vec<_>, _>>()?;
+        level.substitute(|head| match head {
+            LevelHead::Param(UniverseParam(index)) if index < depth => None,
+            LevelHead::Param(UniverseParam(index)) => Some(
+                arguments
+                    .get(index - depth)
+                    .cloned()
+                    .unwrap_or_else(|| Level::param(UniverseParam(index - arguments.len()))),
+            ),
+            LevelHead::Meta(_) => None,
+        })
+    })
+}
+
+pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
+    value: &B,
+    solver: &UniverseSolver,
+) -> Result<B, UniverseError> {
+    fn zonk_solution(
+        solver: &UniverseSolver,
+        level: &Level,
+        visiting: &mut BTreeSet<UniverseMetaId>,
+    ) -> Result<Level, UniverseError> {
+        let mut replacements = BTreeMap::new();
+        for meta in level.metas() {
+            if let Some(solution) = solver.solution(meta)
+                && visiting.insert(meta)
+            {
+                let zonked = zonk_solution(solver, solution, visiting)?;
+                visiting.remove(&meta);
+                replacements.insert(meta, zonked);
+            }
+        }
+        level.substitute(|head| match head {
+            LevelHead::Param(_) => None,
+            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
+        })
+    }
+
+    let solver = solver.clone();
+    rewrite_universe_levels_scoped(value, move |depth, level| {
+        let mut replacements = BTreeMap::new();
+        for meta in level.metas() {
+            if let Some(solution) = solver.solution(meta) {
+                let zonked = zonk_solution(&solver, solution, &mut BTreeSet::from([meta]))?;
+                replacements.insert(meta, shift_universe_params(&zonked, depth)?);
+            }
+        }
+        level.substitute(|head| match head {
+            LevelHead::Param(_) => None,
+            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
+        })
+    })
+}
+
+pub(crate) fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
+    let metas = Rc::new(RefCell::new(BTreeSet::new()));
+    let found = Rc::clone(&metas);
+    let _: Result<_, Infallible> = rewrite_universe_levels(value, move |level| {
+        found.borrow_mut().extend(level.metas());
+        Ok(level.clone())
+    });
+    Rc::try_unwrap(metas)
+        .expect("the universe collector releases its traversal closure")
+        .into_inner()
+}
+
+/// How a declaration's own name reaches the value being stamped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SelfReference {
+    /// Still a free variable. Nothing else will supply the instance, so the
+    /// occurrence must carry one explicitly: a later use site instantiates the
+    /// stored scheme by substituting the declaration's universe parameters,
+    /// and a bare variable has none to substitute.
+    Free,
+    /// Already captured by an enclosing [`RecGroup`]'s binder, which
+    /// instantiates its own members through
+    /// [`RecGroup::instantiate_universes`]. An explicit instance here would be
+    /// applied a second time when the group is opened, against a group whose
+    /// parameters that first instantiation already consumed.
+    Bound,
+}
+
+/// Rewrite every occurrence of a declaration group's own members to denote the
+/// universe instance `levels`.
+///
+/// A declaration's signature, body, and registry telescopes are elaborated
+/// before its universe parameters exist: within its own group it is
+/// monomorphic, so its self-references carry no instance at all. Finalization
+/// mints the parameters, and every internal occurrence must then denote *that*
+/// instance rather than a freshly instantiated one — the concrete form of the
+/// rule that recursion is monomorphic inside a group.
+///
+/// Nominal normal forms always carry the instance in their own universe
+/// vector. Variable occurrences carry it only when they are still
+/// [`SelfReference::Free`].
+///
+/// The per-node rule is [`Term::stamp_declaration_node`]; this driver only
+/// carries it through the binders and telescopes an arbitrary [`Bound`] holds.
+/// An empty instance is the identity, so a monomorphic declaration pays a
+/// single comparison rather than a traversal.
+pub(crate) fn stamp_declaration_instance<B: Bound>(
+    value: &B,
+    names: &BTreeSet<String>,
+    self_reference: SelfReference,
+    levels: &[Level],
+) -> B {
+    if names.is_empty() {
+        return value.clone();
+    }
+    let names = names.clone();
+    let levels = levels.to_vec();
+    let mut visit = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term| term.stamp_declaration_node(&names, self_reference, &levels)),
+    );
+    value.traverse(&mut visit)
 }
 
 // === Scope ===================================================================
@@ -630,7 +845,7 @@ impl Telescope<Term> {
     /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) —
     /// the parameter types and the trailing body/return type — satisfies
     /// `pred`, short-circuiting on the first hit.
-    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             Telescope::Done(body) => body.any_metavar(pred),
@@ -679,7 +894,7 @@ impl Telescope<()> {
     /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field
     /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
     /// the first hit.
-    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
@@ -785,6 +1000,13 @@ impl<B: Bound> Bound for Telescope<B> {
             Telescope::Done(body) => body.reach(),
         }
     }
+
+    fn has_metavar(&self) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => ty.has_metavar() || Bound::has_metavar(rest.body()),
+            Telescope::Done(body) => body.has_metavar(),
+        }
+    }
 }
 
 // === Visit ===================================================================
@@ -792,10 +1014,12 @@ impl<B: Bound> Bound for Telescope<B> {
 /// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the
 /// whole node at the current depth.
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
+type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
 
 /// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. `Visit::rewriting` is the crate-visible constructor; `Visit::new` and `Visit::pruning` are module-internal to this file.
 pub struct Visit<F> {
     depth: usize,
+    universe_depth: usize,
     prune: bool,
     visit: F,
     // An optional *term-level* pre-hook, consulted at every recursion point
@@ -803,6 +1027,9 @@ pub struct Visit<F> {
     // is not descended into). Incompatible with pruning, which may skip the
     // very nodes the hook would match.
     rewrite: Option<Rewrite>,
+    level_rewrite: Option<LevelRewrite>,
+    erase_universes: bool,
+    universes_only: bool,
 }
 
 impl<F> Visit<F>
@@ -812,9 +1039,13 @@ where
     pub(crate) fn new(visit: F) -> Self {
         Self {
             depth: 0,
+            universe_depth: 0,
             prune: false,
             visit,
             rewrite: None,
+            level_rewrite: None,
+            erase_universes: false,
+            universes_only: false,
         }
     }
 
@@ -826,21 +1057,68 @@ where
     fn pruning(visit: F) -> Self {
         Self {
             depth: 0,
+            universe_depth: 0,
             prune: true,
             visit,
             rewrite: None,
+            level_rewrite: None,
+            erase_universes: false,
+            universes_only: false,
         }
     }
 
     /// Like `new`, additionally carrying a term-level rewrite hook fired at
-    /// every recursion point. Note the root term reaches `traverse` directly,
-    /// not through `visit_subterm` — callers must check it themselves.
+    /// every [`Term::traverse`] entry, including terms that are the direct
+    /// body of a scope or telescope terminal.
     pub(crate) fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
             depth: 0,
+            universe_depth: 0,
             prune: false,
             visit,
             rewrite: Some(rewrite),
+            level_rewrite: None,
+            erase_universes: false,
+            universes_only: false,
+        }
+    }
+
+    pub(crate) fn rewriting_universes(visit: F, rewrite: Rewrite) -> Self {
+        Self {
+            depth: 0,
+            universe_depth: 0,
+            prune: false,
+            visit,
+            rewrite: Some(rewrite),
+            level_rewrite: None,
+            erase_universes: false,
+            universes_only: true,
+        }
+    }
+
+    pub(crate) fn rewriting_levels_scoped(visit: F, rewrite: LevelRewrite) -> Self {
+        Self {
+            depth: 0,
+            universe_depth: 0,
+            prune: false,
+            visit,
+            rewrite: None,
+            level_rewrite: Some(rewrite),
+            erase_universes: false,
+            universes_only: true,
+        }
+    }
+
+    fn erasing_universes(visit: F) -> Self {
+        Self {
+            depth: 0,
+            universe_depth: 0,
+            prune: false,
+            visit,
+            rewrite: None,
+            level_rewrite: None,
+            erase_universes: true,
+            universes_only: true,
         }
     }
 
@@ -865,18 +1143,51 @@ where
         self.depth -= amount;
     }
 
+    pub(crate) fn enter_universe_scope(&mut self, amount: usize) {
+        self.universe_depth += amount;
+    }
+
+    pub(crate) fn leave_universe_scope(&mut self, amount: usize) {
+        self.universe_depth -= amount;
+    }
+
     /// Invoke the underlying visit callback on a variable at the current depth.
     pub(crate) fn call(&mut self, var: &Var) -> Option<Subterm> {
         (self.visit)(self.depth, var)
     }
 
-    pub(crate) fn visit_subterm(&mut self, term: &Term) -> Term {
-        if let Some(rewrite) = &mut self.rewrite
-            && let Some(replacement) = rewrite(self.depth, term)
-        {
-            return replacement;
+    pub(crate) fn visit_level(&mut self, level: &Level) -> Level {
+        if self.erase_universes {
+            // Every other level-bearing container is removed structurally in
+            // `Subterm::traverse`; this is the unavoidable payload of Core's
+            // still-level-indexed `Type` variant, not an erasure sentinel.
+            return Level::zero();
         }
+        match &mut self.level_rewrite {
+            Some(rewrite) => rewrite(self.universe_depth, level),
+            None => level.clone(),
+        }
+    }
 
+    pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
+        self.rewrite
+            .as_mut()
+            .and_then(|rewrite| rewrite(self.depth, term))
+    }
+
+    pub(crate) fn erases_universes(&self) -> bool {
+        self.erase_universes
+    }
+
+    pub(crate) fn universes_only(&self) -> bool {
+        self.universes_only
+    }
+
+    pub(crate) fn rewrites_terms(&self) -> bool {
+        self.rewrite.is_some()
+    }
+
+    pub(crate) fn visit_subterm(&mut self, term: &Term) -> Term {
         term.traverse(self)
     }
 

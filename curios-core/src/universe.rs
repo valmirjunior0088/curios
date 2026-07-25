@@ -1,0 +1,2059 @@
+//! Algebraic universe levels, declaration-local schemes, and the transactional
+//! constraint solver used by elaboration.
+//!
+//! Surface Curios has no level syntax. `curios-text` assigns a fresh
+//! [`UniverseMetaId`] and diagnostic [`UniverseSeed`] to every written `Type`;
+//! Core normalizes levels to finite maxima of a constant and checked-offset
+//! parameter/meta atoms. `Prop` remains a separate impredicative sort, while
+//! `Type u : Type (u + 1)` and checking `Type u` against `Type v` records
+//! `u ≤ v`.
+//!
+//! Reusable declarations bind surviving input levels in a
+//! [`UniverseContext`]. Flexible classifier levels take their principal least
+//! solution when one exists; genuinely non-principal choices remain residual
+//! constrained parameters. Every external occurrence instantiates the stored
+//! context freshly. Local schemes may temporarily refer to ambient metas and
+//! are capture-safely rewritten beneath the enclosing declaration's parameters;
+//! recursive members instead share one context and one internal instance.
+//!
+//! Constraint provenance is diagnostic-only: semantic equality and hashing
+//! compare normalized inequalities but ignore their spans and explanations.
+//! Consistency reduces ordinary inequalities to one difference graph and
+//! branches only for genuine maxima on the right. Solver marks cover both
+//! assignments and constraints so failed speculative elaboration rolls them
+//! back together. Zonked Core validates that contexts are closed and nominal
+//! instance arities agree, then erasure removes every level, context, and
+//! instance before Ersd.
+
+mod constraints;
+use constraints::{ConstraintStore, StoreMark};
+
+#[cfg(test)]
+mod tests;
+
+use {
+    curios_base::{Mint, Span},
+    std::{
+        collections::{BTreeMap, BTreeSet, VecDeque},
+        fmt,
+        hash::{Hash, Hasher},
+    },
+};
+
+/// A lowering- or elaboration-minted universe metavariable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
+pub struct UniverseMetaId(pub usize);
+
+impl From<usize> for UniverseMetaId {
+    fn from(raw: usize) -> Self {
+        Self(raw)
+    }
+}
+
+impl Mint for UniverseMetaId {
+    fn mint(entropy: usize) -> Self {
+        Self(entropy)
+    }
+}
+
+impl fmt::Display for UniverseMetaId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "?u{}", self.0)
+    }
+}
+
+/// A declaration-local, de Bruijn-indexed universe parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
+pub struct UniverseParam(pub usize);
+
+/// The head of one non-constant level atom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
+pub enum LevelHead {
+    Param(UniverseParam),
+    Meta(UniverseMetaId),
+}
+
+/// A canonical algebraic universe level.
+///
+/// The value denotes `max(constant, head₁ + offset₁, …)`. A `BTreeMap`
+/// provides deterministic atom ordering; construction coalesces duplicate
+/// heads at their greatest offset, making equality, hashing, and archival
+/// independent of the expression's original association and ordering.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct Level {
+    constant: u32,
+    atoms: BTreeMap<LevelHead, u32>,
+}
+
+impl Default for Level {
+    fn default() -> Self {
+        Self::zero()
+    }
+}
+
+impl Level {
+    fn normalized(mut self) -> Self {
+        // Every parameter/meta ranges over naturals. Therefore `head + k`
+        // already dominates any constant `n ≤ k`.
+        if self.atoms.values().any(|offset| *offset >= self.constant) {
+            self.constant = 0;
+        }
+        self
+    }
+
+    pub fn zero() -> Self {
+        Self {
+            constant: 0,
+            atoms: BTreeMap::new(),
+        }
+    }
+
+    pub fn constant(value: u32) -> Self {
+        Self {
+            constant: value,
+            atoms: BTreeMap::new(),
+        }
+    }
+
+    pub fn param(param: UniverseParam) -> Self {
+        Self::atom(LevelHead::Param(param), 0)
+    }
+
+    pub fn meta(meta: UniverseMetaId) -> Self {
+        Self::atom(LevelHead::Meta(meta), 0)
+    }
+
+    pub fn atom(head: LevelHead, offset: u32) -> Self {
+        Self {
+            constant: 0,
+            atoms: BTreeMap::from([(head, offset)]),
+        }
+    }
+
+    pub fn constant_part(&self) -> u32 {
+        self.constant
+    }
+
+    pub fn atoms(&self) -> impl Iterator<Item = (LevelHead, u32)> + '_ {
+        self.atoms.iter().map(|(&head, &offset)| (head, offset))
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.constant == 0 && self.atoms.is_empty()
+    }
+
+    /// Whether the level algebra alone proves `self ≤ upper`, without using
+    /// any surrounding constraints.
+    fn structurally_leq(&self, upper: &Self) -> bool {
+        let constant_is_bounded = self.constant <= upper.constant
+            || upper.atoms.values().any(|offset| *offset >= self.constant);
+        constant_is_bounded
+            && self.atoms.iter().all(|(head, offset)| {
+                upper
+                    .atoms
+                    .get(head)
+                    .is_some_and(|upper_offset| offset <= upper_offset)
+            })
+    }
+
+    pub fn is_closed(&self, parameter_count: usize) -> bool {
+        self.atoms.keys().all(|head| match head {
+            LevelHead::Param(param) => param.0 < parameter_count,
+            LevelHead::Meta(_) => false,
+        })
+    }
+
+    pub fn metas(&self) -> impl Iterator<Item = UniverseMetaId> + '_ {
+        self.atoms.keys().filter_map(|head| match head {
+            LevelHead::Meta(meta) => Some(*meta),
+            LevelHead::Param(_) => None,
+        })
+    }
+
+    pub fn params(&self) -> impl Iterator<Item = UniverseParam> + '_ {
+        self.atoms.keys().filter_map(|head| match head {
+            LevelHead::Param(param) => Some(*param),
+            LevelHead::Meta(_) => None,
+        })
+    }
+
+    /// Add a successor offset, distributing it over the canonical maximum.
+    pub fn checked_add(&self, offset: u32) -> Result<Self, UniverseError> {
+        let constant = self
+            .constant
+            .checked_add(offset)
+            .ok_or(UniverseError::OffsetOverflow)?;
+        let atoms = self
+            .atoms
+            .iter()
+            .map(|(&head, &old)| {
+                old.checked_add(offset)
+                    .map(|new| (head, new))
+                    .ok_or(UniverseError::OffsetOverflow)
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self { constant, atoms }.normalized())
+    }
+
+    pub fn succ(&self) -> Result<Self, UniverseError> {
+        self.checked_add(1)
+    }
+
+    /// Cancel a common successor offset from a lower bound. Algebraic levels
+    /// have no predecessor former, so an atom below the cancelled offset has
+    /// no principal expression in the level language.
+    fn cancel_offset(&self, offset: u32) -> Option<Self> {
+        let mut atoms = BTreeMap::new();
+        for (&head, &old) in &self.atoms {
+            atoms.insert(head, old.checked_sub(offset)?);
+        }
+        Some(
+            Self {
+                constant: self.constant.saturating_sub(offset),
+                atoms,
+            }
+            .normalized(),
+        )
+    }
+
+    /// Construct the canonical least upper bound.
+    pub fn max(levels: impl IntoIterator<Item = Level>) -> Self {
+        let mut result = Self::zero();
+        for level in levels {
+            result.constant = result.constant.max(level.constant);
+            for (head, offset) in level.atoms {
+                result
+                    .atoms
+                    .entry(head)
+                    .and_modify(|old| *old = (*old).max(offset))
+                    .or_insert(offset);
+            }
+        }
+        result.normalized()
+    }
+
+    /// Substitute heads simultaneously and normalize the resulting maximum.
+    pub fn substitute(
+        &self,
+        mut replacement: impl FnMut(LevelHead) -> Option<Level>,
+    ) -> Result<Self, UniverseError> {
+        let mut parts = vec![Self::constant(self.constant)];
+        for (&head, &offset) in &self.atoms {
+            let base = replacement(head).unwrap_or_else(|| Self::atom(head, 0));
+            parts.push(base.checked_add(offset)?);
+        }
+        Ok(Self::max(parts))
+    }
+
+    pub fn instantiate(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
+        if self.params().any(|param| param.0 >= arguments.len()) {
+            return Err(UniverseError::EscapingLevel);
+        }
+        self.substitute(|head| match head {
+            LevelHead::Param(param) => arguments.get(param.0).cloned(),
+            LevelHead::Meta(_) => None,
+        })
+    }
+}
+
+impl fmt::Display for Level {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.atoms.is_empty() {
+            return write!(formatter, "{}", self.constant);
+        }
+
+        let mut parts = Vec::new();
+        if self.constant != 0 {
+            parts.push(self.constant.to_string());
+        }
+        for (head, offset) in &self.atoms {
+            let name = match head {
+                LevelHead::Param(param) => {
+                    let letter = char::from(b'u' + u8::try_from(param.0 % 26).unwrap());
+                    if param.0 < 26 {
+                        letter.to_string()
+                    } else {
+                        format!("{letter}{}", param.0 / 26)
+                    }
+                }
+                LevelHead::Meta(meta) => meta.to_string(),
+            };
+            parts.push(if *offset == 0 {
+                name
+            } else {
+                format!("{name}+{offset}")
+            });
+        }
+        if parts.len() == 1 {
+            formatter.write_str(&parts[0])
+        } else {
+            write!(formatter, "max({})", parts.join(","))
+        }
+    }
+}
+
+/// Whether an unsolved level is an input eligible for generalization or an
+/// inferred output/classifier that should be minimized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub enum UniverseRole {
+    Generalizable,
+    Flexible,
+}
+
+/// Lowering-time metadata for one densely numbered universe metavariable.
+///
+/// The role controls finalization, while the origin survives the Text/Core
+/// boundary so a later constraint failure can still point at the written
+/// `Type` that introduced the level.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UniverseSeed {
+    pub role: UniverseRole,
+    pub origin: Option<UniverseConstraintOrigin>,
+}
+
+/// The semantic reason a universe inequality was introduced.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub enum UniverseConstraintKind {
+    WrittenType,
+    Cumulativity,
+    TypeSuccessor,
+    FunctionFormation,
+    TupleFormation,
+    FieldSizing,
+    ConstructorSizing,
+    Conversion,
+    SchemeInstantiation,
+    Other(String),
+}
+
+/// User-facing provenance for one universe constraint.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UniverseConstraintOrigin {
+    pub span: Option<Span>,
+    pub kind: UniverseConstraintKind,
+    pub declaration: Option<String>,
+    pub binder: Option<String>,
+}
+
+impl UniverseConstraintOrigin {
+    pub fn new(kind: UniverseConstraintKind) -> Self {
+        Self {
+            span: None,
+            kind,
+            declaration: None,
+            binder: None,
+        }
+    }
+}
+
+/// One normalized inequality `lower ≤ upper`.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UniverseConstraint {
+    pub lower: Level,
+    pub upper: Level,
+    pub origin: UniverseConstraintOrigin,
+}
+
+// Provenance explains an inequality but is not part of its semantic identity.
+// In particular, `Span` equality follows source-allocation identity, which
+// must not make replayed or archive-restored schemes compare differently.
+impl PartialEq for UniverseConstraint {
+    fn eq(&self, other: &Self) -> bool {
+        self.lower == other.lower && self.upper == other.upper
+    }
+}
+
+impl Eq for UniverseConstraint {}
+
+impl Hash for UniverseConstraint {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.lower.hash(state);
+        self.upper.hash(state);
+    }
+}
+
+impl UniverseConstraint {
+    fn is_tautology(&self) -> bool {
+        self.lower.structurally_leq(&self.upper)
+    }
+}
+
+/// A closed, declaration-local residual universe context.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UniverseContext {
+    pub parameter_count: usize,
+    /// Number of enclosing universe parameters referenced by this nested
+    /// scheme after its own innermost parameters.
+    pub outer_parameter_count: usize,
+    pub constraints: Vec<UniverseConstraint>,
+}
+
+impl UniverseContext {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn validate(&self) -> Result<(), UniverseError> {
+        self.validate_shape(false)
+    }
+
+    /// This context's own parameters as an argument vector: the one instance
+    /// that instantiates it to itself.
+    ///
+    /// A declaration denotes this instance at every occurrence inside its own
+    /// signature, body, and registry entries, because a group is monomorphic
+    /// in its own universes. External uses instead take a fresh instance from
+    /// [`UniverseSolver::instantiate`].
+    pub fn identity_instance(&self) -> Vec<Level> {
+        (0..self.parameter_count)
+            .map(UniverseParam)
+            .map(Level::param)
+            .collect()
+    }
+
+    /// Validate a scheme still nested in an elaborating declaration. Such a
+    /// scheme may retain ambient metas that the enclosing finalization will
+    /// rewrite to outer parameters.
+    fn validate_open(&self) -> Result<(), UniverseError> {
+        self.validate_shape(true)
+    }
+
+    fn validate_shape(&self, allow_metas: bool) -> Result<(), UniverseError> {
+        self.validate_in(self.outer_parameter_count, allow_metas)
+    }
+
+    /// Validate a scheme nested beneath `outer_parameter_count` enclosing
+    /// universe binders. This context's own parameters are innermost; outer
+    /// references begin at `self.parameter_count`.
+    fn validate_in(
+        &self,
+        outer_parameter_count: usize,
+        allow_metas: bool,
+    ) -> Result<(), UniverseError> {
+        let visible = self
+            .parameter_count
+            .checked_add(outer_parameter_count)
+            .ok_or(UniverseError::OffsetOverflow)?;
+        for constraint in &self.constraints {
+            let valid = |level: &Level| {
+                level.params().all(|param| param.0 < visible)
+                    && (allow_metas || level.metas().next().is_none())
+            };
+            if !valid(&constraint.lower) || !valid(&constraint.upper) {
+                return Err(UniverseError::EscapingLevel);
+            }
+        }
+        let mut solver = UniverseSolver::new(0);
+        for constraint in &self.constraints {
+            solver.add_constraint(constraint.clone())?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
+        Self::from_constraints(
+            self.parameter_count,
+            self.constraints
+                .iter()
+                .map(|constraint| UniverseConstraint {
+                    lower: map(&constraint.lower),
+                    upper: map(&constraint.upper),
+                    origin: constraint.origin.clone(),
+                })
+                .collect(),
+        )
+    }
+
+    fn from_constraints(parameter_count: usize, constraints: Vec<UniverseConstraint>) -> Self {
+        let outer_parameter_count = constraints
+            .iter()
+            .flat_map(|constraint| constraint.lower.params().chain(constraint.upper.params()))
+            .map(|param| param.0.saturating_add(1).saturating_sub(parameter_count))
+            .max()
+            .unwrap_or(0);
+        Self {
+            parameter_count,
+            outer_parameter_count,
+            constraints,
+        }
+    }
+}
+
+/// One value under a shared universe context.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UniverseScheme<T> {
+    pub context: UniverseContext,
+    pub value: T,
+}
+
+impl<T> UniverseScheme<T> {
+    pub fn monomorphic(value: T) -> Self {
+        Self {
+            context: UniverseContext::empty(),
+            value,
+        }
+    }
+}
+
+/// A stable point to which all universe assignments and constraints can be
+/// rolled back after a speculative elaboration branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UniverseMark {
+    constraints: StoreMark,
+    solution_log_len: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct UniverseStateToken {
+    next_meta: usize,
+    constraints: StoreMark,
+    solution_log_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UniverseError {
+    OffsetOverflow,
+    EscapingLevel,
+    InstanceArity {
+        expected: usize,
+        got: usize,
+    },
+    UnknownMeta(UniverseMetaId),
+    MismatchedRecursiveContexts,
+    /// The disjunctive consistency search exceeded its node budget.
+    ///
+    /// Deciding a set of inequalities whose right-hand sides are genuine
+    /// maxima means choosing, for each left atom, which branch dominates it —
+    /// a search exponential in the number of such clauses. The budget makes
+    /// that blowup a reported diagnostic rather than an unbounded spin, and
+    /// names the shape that caused it.
+    SearchExhausted {
+        constraints: usize,
+        branches: usize,
+        widths: Vec<usize>,
+    },
+    Inconsistency {
+        lower: Level,
+        upper: Level,
+        path: Vec<UniverseConstraintOrigin>,
+    },
+}
+
+impl fmt::Display for UniverseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UniverseError::OffsetOverflow => formatter.write_str("universe level offset overflow"),
+            UniverseError::EscapingLevel => {
+                formatter.write_str("a universe metavariable or parameter escaped its scope")
+            }
+            UniverseError::InstanceArity { expected, got } => {
+                write!(
+                    formatter,
+                    "universe instance has {got} arguments but its scheme expects {expected}"
+                )
+            }
+            UniverseError::UnknownMeta(meta) => write!(formatter, "unknown universe meta {meta}"),
+            UniverseError::MismatchedRecursiveContexts => formatter
+                .write_str("members of one recursive group carry different universe contexts"),
+            UniverseError::SearchExhausted {
+                constraints,
+                branches,
+                widths,
+            } => write!(
+                formatter,
+                "universe consistency search exceeded its budget: \
+                 {constraints} constraints, {branches} disjunctive clauses, widths {widths:?}"
+            ),
+            UniverseError::Inconsistency { lower, upper, path } => {
+                write!(
+                    formatter,
+                    "this Type would need to be strictly below itself ({lower} ≤ {upper})"
+                )?;
+                for origin in path {
+                    write!(formatter, "\n  required by {:?}", origin.kind)?;
+                    if let Some(declaration) = &origin.declaration {
+                        write!(formatter, " in {declaration}")?;
+                    }
+                    if let Some(binder) = &origin.binder {
+                        write!(formatter, " at binder {binder}")?;
+                    }
+                    if let Some(span) = &origin.span {
+                        write!(formatter, "\n{}", span.render_snippet())?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for UniverseError {}
+
+#[derive(Debug, Clone)]
+struct UniverseMeta {
+    role: UniverseRole,
+    origin: Option<UniverseConstraintOrigin>,
+    solution: Option<Level>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum DifferenceNode {
+    Zero,
+    Head(LevelHead),
+}
+
+/// The difference constraint `to - from ≤ weight`.
+#[derive(Debug, Clone)]
+struct DifferenceEdge {
+    from: DifferenceNode,
+    to: DifferenceNode,
+    weight: i64,
+    origin: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct DifferenceGraph {
+    nodes: Vec<DifferenceNode>,
+    positions: BTreeMap<DifferenceNode, usize>,
+    edges: Vec<DifferenceEdge>,
+    outgoing: Vec<Vec<usize>>,
+    distance: Vec<i128>,
+    predecessor: Vec<Option<usize>>,
+}
+
+impl DifferenceGraph {
+    fn new() -> Self {
+        Self {
+            nodes: vec![DifferenceNode::Zero],
+            positions: BTreeMap::from([(DifferenceNode::Zero, 0)]),
+            edges: Vec::new(),
+            outgoing: vec![Vec::new()],
+            distance: vec![0],
+            predecessor: vec![None],
+        }
+    }
+
+    fn ensure_node(&mut self, node: DifferenceNode) {
+        if self.positions.contains_key(&node) {
+            return;
+        }
+        let index = self.nodes.len();
+        self.nodes.push(node);
+        self.positions.insert(node, index);
+        self.outgoing.push(Vec::new());
+        self.distance.push(0);
+        self.predecessor.push(None);
+        if node != DifferenceNode::Zero {
+            self.push_edge(DifferenceEdge {
+                from: node,
+                to: DifferenceNode::Zero,
+                weight: 0,
+                origin: None,
+            });
+        }
+    }
+
+    fn push_edge(&mut self, edge: DifferenceEdge) {
+        let from = self.positions[&edge.from];
+        let index = self.edges.len();
+        self.edges.push(edge);
+        self.outgoing[from].push(index);
+    }
+
+    fn extend(
+        &mut self,
+        nodes: impl IntoIterator<Item = DifferenceNode>,
+        edges: impl IntoIterator<Item = DifferenceEdge>,
+    ) -> Result<(), Vec<usize>> {
+        for node in nodes {
+            self.ensure_node(node);
+        }
+        let first_new_edge = self.edges.len();
+        for edge in edges {
+            self.ensure_node(edge.from);
+            self.ensure_node(edge.to);
+            self.push_edge(edge);
+        }
+        self.relax_from(first_new_edge)
+    }
+
+    fn relax_from(&mut self, first_new_edge: usize) -> Result<(), Vec<usize>> {
+        let mut queue = VecDeque::new();
+        let mut queued = vec![false; self.nodes.len()];
+        for edge_index in first_new_edge..self.edges.len() {
+            if let Some(to) = self.relax_edge(edge_index)? {
+                queued[to] = true;
+                queue.push_back(to);
+            }
+        }
+        while let Some(from) = queue.pop_front() {
+            queued[from] = false;
+            let outgoing = self.outgoing[from].clone();
+            for edge_index in outgoing {
+                if let Some(to) = self.relax_edge(edge_index)?
+                    && !queued[to]
+                {
+                    queued[to] = true;
+                    queue.push_back(to);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn relax_edge(&mut self, edge_index: usize) -> Result<Option<usize>, Vec<usize>> {
+        let edge = &self.edges[edge_index];
+        let from = self.positions[&edge.from];
+        let to = self.positions[&edge.to];
+        let candidate = self.distance[from] + i128::from(edge.weight);
+        if self.distance[to] <= candidate {
+            return Ok(None);
+        }
+
+        // Predecessors form a forest while the graph is feasible. Making an
+        // ancestor depend on its descendant closes a cycle; the strict
+        // distance improvement proves that cycle has negative total weight.
+        let mut cursor = from;
+        let mut path = vec![edge_index];
+        loop {
+            if cursor == to {
+                let mut origins = path
+                    .into_iter()
+                    .filter_map(|index| self.edges[index].origin)
+                    .collect::<Vec<_>>();
+                origins.reverse();
+                origins.dedup();
+                return Err(origins);
+            }
+            let Some(predecessor) = self.predecessor[cursor] else {
+                break;
+            };
+            path.push(predecessor);
+            cursor = self.positions[&self.edges[predecessor].from];
+        }
+
+        self.distance[to] = candidate;
+        self.predecessor[to] = Some(edge_index);
+        Ok(Some(to))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ConsistencyCache {
+    constraint_len: usize,
+    graph: DifferenceGraph,
+}
+
+fn atomic_difference_edge(
+    lower: (Option<LevelHead>, u32),
+    upper: (Option<LevelHead>, u32),
+    origin: usize,
+) -> Result<Option<DifferenceEdge>, ()> {
+    match (lower, upper) {
+        ((None, lower), (None, upper)) => {
+            if lower <= upper {
+                Ok(None)
+            } else {
+                Err(())
+            }
+        }
+        ((Some(lower), lower_offset), (None, upper)) => {
+            if lower_offset > upper {
+                Err(())
+            } else {
+                Ok(Some(DifferenceEdge {
+                    from: DifferenceNode::Zero,
+                    to: DifferenceNode::Head(lower),
+                    weight: i64::from(upper) - i64::from(lower_offset),
+                    origin: Some(origin),
+                }))
+            }
+        }
+        ((None, lower), (Some(upper), upper_offset)) => {
+            Ok((lower > upper_offset).then_some(DifferenceEdge {
+                from: DifferenceNode::Head(upper),
+                to: DifferenceNode::Zero,
+                weight: i64::from(upper_offset) - i64::from(lower),
+                origin: Some(origin),
+            }))
+        }
+        ((Some(lower), lower_offset), (Some(upper), upper_offset)) => {
+            if lower == upper {
+                if lower_offset <= upper_offset {
+                    Ok(None)
+                } else {
+                    Err(())
+                }
+            } else {
+                Ok(Some(DifferenceEdge {
+                    from: DifferenceNode::Head(upper),
+                    to: DifferenceNode::Head(lower),
+                    weight: i64::from(upper_offset) - i64::from(lower_offset),
+                    origin: Some(origin),
+                }))
+            }
+        }
+    }
+}
+
+/// Encode a constraint whose right-hand maxima have one forced viable choice.
+/// `Ok(None)` means that the exact disjunctive solver is required.
+fn forced_difference_edges(
+    constraint: &UniverseConstraint,
+    index: usize,
+) -> Result<Option<(BTreeSet<DifferenceNode>, Vec<DifferenceEdge>)>, Vec<usize>> {
+    let nodes = BTreeSet::from_iter(
+        constraint
+            .lower
+            .atoms()
+            .chain(constraint.upper.atoms())
+            .map(|(head, _)| DifferenceNode::Head(head))
+            .chain([DifferenceNode::Zero]),
+    );
+    let mut lower_parts = constraint
+        .lower
+        .atoms()
+        .map(|(head, offset)| (Some(head), offset))
+        .collect::<Vec<_>>();
+    if constraint.lower.constant != 0 {
+        lower_parts.push((None, constraint.lower.constant));
+    }
+    let mut upper_parts = constraint
+        .upper
+        .atoms()
+        .map(|(head, offset)| (Some(head), offset))
+        .collect::<Vec<_>>();
+    if upper_parts.is_empty() || constraint.upper.constant != 0 {
+        upper_parts.push((None, constraint.upper.constant));
+    }
+
+    let mut edges = Vec::new();
+    for lower in lower_parts {
+        let mut choices = upper_parts
+            .iter()
+            .copied()
+            .filter_map(|upper| atomic_difference_edge(lower, upper, index).ok())
+            .collect::<Vec<_>>();
+        choices.sort_by_key(|edge| {
+            edge.as_ref()
+                .map_or((DifferenceNode::Zero, DifferenceNode::Zero, 0), |edge| {
+                    (edge.from, edge.to, edge.weight)
+                })
+        });
+        choices.dedup_by(|left, right| match (left, right) {
+            (None, None) => true,
+            (Some(left), Some(right)) => {
+                left.from == right.from && left.to == right.to && left.weight == right.weight
+            }
+            _ => false,
+        });
+        match choices.as_slice() {
+            [] => return Err(vec![index]),
+            [None] => {}
+            [Some(edge)] => edges.push(edge.clone()),
+            _ => return Ok(None),
+        }
+    }
+    Ok(Some((nodes, edges)))
+}
+
+/// The mutable algebraic-universe inference state.
+#[derive(Debug, Clone)]
+pub struct UniverseSolver {
+    metas: Vec<UniverseMeta>,
+    constraints: ConstraintStore,
+    solution_log: Vec<UniverseMetaId>,
+    next_meta: usize,
+    consistency: Option<ConsistencyCache>,
+}
+
+impl UniverseSolver {
+    /// The metas reachable from `metas` through constraints and solutions —
+    /// the declaration's universe closure.
+    ///
+    /// Reachability is a graph search over the occurrence index, so each
+    /// constraint is visited once per newly reached level rather than once per
+    /// pass over the whole store.
+    fn connected_metas(
+        &self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> BTreeSet<UniverseMetaId> {
+        let mut relevant = BTreeSet::new();
+        let mut pending = metas.into_iter().collect::<Vec<_>>();
+        while let Some(meta) = pending.pop() {
+            if !relevant.insert(meta) {
+                continue;
+            }
+            if let Some(solution) = self.solution(meta) {
+                pending.extend(solution.metas());
+            }
+            for position in self.constraints.mentioning(LevelHead::Meta(meta)) {
+                let constraint = self
+                    .constraints
+                    .get(position)
+                    .expect("the occurrence index names a live constraint");
+                pending.extend(constraint.lower.metas().chain(constraint.upper.metas()));
+            }
+        }
+        relevant
+    }
+
+    fn discard_constraints(&mut self, metas: &BTreeSet<UniverseMetaId>) {
+        self.constraints.retain(|constraint| {
+            constraint
+                .lower
+                .metas()
+                .chain(constraint.upper.metas())
+                .all(|meta| !metas.contains(&meta))
+        });
+        self.consistency = None;
+    }
+
+    pub fn new(meta_floor: usize) -> Self {
+        Self {
+            metas: (0..meta_floor)
+                .map(|_| UniverseMeta {
+                    role: UniverseRole::Generalizable,
+                    origin: None,
+                    solution: None,
+                })
+                .collect(),
+            constraints: ConstraintStore::default(),
+            solution_log: Vec::new(),
+            next_meta: meta_floor,
+            consistency: None,
+        }
+    }
+
+    pub fn seed(&mut self, seeds: &[UniverseSeed]) {
+        assert!(
+            self.metas.is_empty(),
+            "universes may only seed a fresh elaboration context"
+        );
+        self.metas = seeds
+            .iter()
+            .map(|seed| UniverseMeta {
+                role: seed.role,
+                origin: seed.origin.clone(),
+                solution: None,
+            })
+            .collect();
+        self.next_meta = seeds.len();
+        self.consistency = None;
+    }
+
+    pub fn fresh(
+        &mut self,
+        role: UniverseRole,
+        origin: Option<UniverseConstraintOrigin>,
+    ) -> UniverseMetaId {
+        let id = UniverseMetaId(self.next_meta);
+        self.next_meta += 1;
+        self.metas.push(UniverseMeta {
+            role,
+            origin,
+            solution: None,
+        });
+        id
+    }
+
+    pub fn role(&self, meta: UniverseMetaId) -> Option<UniverseRole> {
+        self.metas.get(meta.0).map(|entry| entry.role)
+    }
+
+    pub fn origin(&self, meta: UniverseMetaId) -> Option<&UniverseConstraintOrigin> {
+        self.metas
+            .get(meta.0)
+            .and_then(|entry| entry.origin.as_ref())
+    }
+
+    pub fn mark(&self) -> UniverseMark {
+        UniverseMark {
+            constraints: self.constraints.mark(),
+            solution_log_len: self.solution_log.len(),
+        }
+    }
+
+    pub(crate) fn state_token(&self) -> UniverseStateToken {
+        UniverseStateToken {
+            next_meta: self.next_meta,
+            constraints: self.constraints.mark(),
+            solution_log_len: self.solution_log.len(),
+        }
+    }
+
+    /// Restore both stores to `mark`. Solutions are unwound first: the
+    /// constraint journal's pre-images were taken *before* the assignments
+    /// that rewrote them, so the two unwind in the same direction.
+    pub fn rollback(&mut self, mark: UniverseMark) {
+        while self.solution_log.len() > mark.solution_log_len {
+            let meta = self.solution_log.pop().unwrap();
+            self.metas[meta.0].solution = None;
+        }
+        self.constraints.rollback(mark.constraints);
+        self.consistency = None;
+    }
+
+    pub fn constraints(&self) -> &[UniverseConstraint] {
+        self.constraints.as_slice()
+    }
+
+    /// Release inference constraints after their enclosing declaration has
+    /// finalized. Any relation that remains externally meaningful has already
+    /// been projected into that declaration's [`UniverseContext`]; later uses
+    /// reinsert the stored residual context at fresh instances.
+    pub(crate) fn clear_constraints(&mut self) {
+        self.constraints.clear();
+        self.consistency = None;
+    }
+
+    pub fn solution(&self, meta: UniverseMetaId) -> Option<&Level> {
+        self.metas
+            .get(meta.0)
+            .and_then(|entry| entry.solution.as_ref())
+    }
+
+    pub fn zonk(&self, level: &Level) -> Result<Level, UniverseError> {
+        fn go(
+            solver: &UniverseSolver,
+            level: &Level,
+            visiting: &mut BTreeSet<UniverseMetaId>,
+        ) -> Result<Level, UniverseError> {
+            level.substitute(|head| match head {
+                LevelHead::Param(_) => None,
+                LevelHead::Meta(meta) => {
+                    let solution = solver.solution(meta)?.clone();
+                    if !visiting.insert(meta) {
+                        return None;
+                    }
+                    let zonked = go(solver, &solution, visiting).ok();
+                    visiting.remove(&meta);
+                    zonked
+                }
+            })
+        }
+        go(self, level, &mut BTreeSet::new())
+    }
+
+    pub fn add_leq(
+        &mut self,
+        lower: Level,
+        upper: Level,
+        origin: UniverseConstraintOrigin,
+    ) -> Result<(), UniverseError> {
+        self.add_constraint(UniverseConstraint {
+            lower,
+            upper,
+            origin,
+        })
+    }
+
+    pub fn add_eq(
+        &mut self,
+        left: Level,
+        right: Level,
+        origin: UniverseConstraintOrigin,
+    ) -> Result<(), UniverseError> {
+        let mark = self.mark();
+        if let Err(error) = self.add_leq(left.clone(), right.clone(), origin.clone()) {
+            self.rollback(mark);
+            return Err(error);
+        }
+        if let Err(error) = self.add_leq(right, left, origin) {
+            self.rollback(mark);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub fn add_constraint(
+        &mut self,
+        mut constraint: UniverseConstraint,
+    ) -> Result<(), UniverseError> {
+        constraint.lower = self.zonk(&constraint.lower)?;
+        constraint.upper = self.zonk(&constraint.upper)?;
+        if constraint.is_tautology() {
+            return Ok(());
+        }
+        if constraint.lower.atoms.is_empty() && constraint.upper.atoms.is_empty() {
+            return if constraint.lower.constant <= constraint.upper.constant {
+                Ok(())
+            } else {
+                Err(UniverseError::Inconsistency {
+                    lower: constraint.lower,
+                    upper: constraint.upper,
+                    path: vec![constraint.origin],
+                })
+            };
+        }
+        self.constraints.push(constraint);
+        if let Err(error) = self.check_consistent() {
+            self.constraints.pop();
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Minimize flexible metas from their current lower bounds. Repeating to a
+    /// fixpoint handles classifier chains; unconstrained flexible metas become
+    /// zero. Generalizable metas are left for declaration finalization.
+    pub fn solve_flexible(&mut self) -> Result<(), UniverseError> {
+        let metas = (0..self.metas.len())
+            .map(UniverseMetaId)
+            .collect::<BTreeSet<_>>();
+        self.solve_flexible_in(&metas)
+    }
+
+    /// Whether `meta` is unsolved and eligible for minimization.
+    fn is_open_flexible(&self, meta: UniverseMetaId) -> bool {
+        self.metas
+            .get(meta.0)
+            .is_some_and(|entry| entry.role == UniverseRole::Flexible && entry.solution.is_none())
+    }
+
+    /// The least level satisfying every `lower ≤ meta + k` bound, or `None`
+    /// when some bound still mentions an unsolved flexible level and the
+    /// answer would not yet be final.
+    ///
+    /// Cancelling `k` yields the principal solution only when every lower atom
+    /// carries at least that offset. Otherwise the solution would need a
+    /// predecessor expression, which the level algebra deliberately does not
+    /// contain, and finalization retains the relation as constrained
+    /// polymorphism instead.
+    fn principal_lower_bound(
+        &self,
+        meta: UniverseMetaId,
+    ) -> Result<Option<Level>, UniverseError> {
+        let head = LevelHead::Meta(meta);
+        let mut lowers = Vec::new();
+        for position in self.constraints.mentioning(head).collect::<Vec<_>>() {
+            let constraint = self
+                .constraints
+                .get(position)
+                .expect("the occurrence index names a live constraint");
+            if constraint.upper.atoms.len() != 1 || constraint.upper.constant != 0 {
+                continue;
+            }
+            let Some(&upper_offset) = constraint.upper.atoms.get(&head) else {
+                continue;
+            };
+            let lower = constraint
+                .lower
+                .substitute(|lower_head| (lower_head == head).then(Level::zero))?;
+            let Some(lower) = lower.cancel_offset(upper_offset) else {
+                continue;
+            };
+            if lower.metas().any(|other| self.is_open_flexible(other)) {
+                return Ok(None);
+            }
+            if !lower.is_zero() {
+                lowers.push(lower);
+            }
+        }
+        Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
+    }
+
+    /// Whether any constraint genuinely bounds `meta` from above. A level with
+    /// no such bound has the unconditional least solution zero.
+    fn is_upper_bounded(&self, meta: UniverseMetaId) -> bool {
+        self.constraints
+            .mentioning(LevelHead::Meta(meta))
+            .filter_map(|position| self.constraints.get(position))
+            .any(|constraint| {
+                !constraint.lower.structurally_leq(&constraint.upper)
+                    && constraint.upper.metas().any(|candidate| candidate == meta)
+            })
+    }
+
+    /// The levels whose own bounds mention `meta`, and which may therefore
+    /// become solvable once `meta` is. Collected before the assignment, since
+    /// committing it substitutes `meta` out of exactly these constraints.
+    fn dependents_of(&self, meta: UniverseMetaId) -> BTreeSet<UniverseMetaId> {
+        self.constraints
+            .mentioning(LevelHead::Meta(meta))
+            .filter_map(|position| self.constraints.get(position))
+            .flat_map(|constraint| constraint.upper.metas())
+            .filter(|other| *other != meta)
+            .collect()
+    }
+
+    /// Minimize the flexible levels in `metas` to their least solutions.
+    ///
+    /// Solving is worklist-driven: a level is revisited only when one of the
+    /// levels its bounds mention has just been solved. Rescanning every
+    /// constraint for every level after every assignment is what made this
+    /// quadratic in the size of a declaration's universe closure.
+    fn solve_flexible_in(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
+        self.merge_forced_equalities(metas)?;
+
+        let mut queue = metas.iter().copied().collect::<VecDeque<_>>();
+        let mut queued = metas.clone();
+        loop {
+            while let Some(meta) = queue.pop_front() {
+                queued.remove(&meta);
+                if !self.is_open_flexible(meta) {
+                    continue;
+                }
+                let Some(level) = self.principal_lower_bound(meta)? else {
+                    continue;
+                };
+                let dependents = self.dependents_of(meta);
+                self.assign(meta, level)?;
+                for other in dependents {
+                    if metas.contains(&other) && queued.insert(other) {
+                        queue.push_back(other);
+                    }
+                }
+            }
+
+            // A flexible level that occurs only in lower positions is zero.
+            // Default the lowest such id, then resume propagation: for
+            // `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. A level on a
+            // non-principal right-hand side is left unsolved so declaration
+            // finalization can promote it into the residual scheme rather than
+            // arbitrarily restricting its inputs.
+            let Some(meta) = metas
+                .iter()
+                .copied()
+                .find(|meta| self.is_open_flexible(*meta) && !self.is_upper_bounded(*meta))
+            else {
+                break;
+            };
+            let dependents = self.dependents_of(meta);
+            self.assign(meta, Level::zero())?;
+            for other in dependents {
+                if metas.contains(&other) && queued.insert(other) {
+                    queue.push_back(other);
+                }
+            }
+        }
+        self.check_consistent()
+    }
+
+    /// Collapse exact bidirectional atom inequalities before allocating
+    /// generalized parameters. This handles the equality classes generated by
+    /// conversion without pretending that arbitrary max equalities are
+    /// syntactically unifiable.
+    /// Each round collects *every* forced equality rather than the first.
+    /// Merging can expose new ones — `a ≤ c` and `c ≤ b` become mutual once
+    /// `a` and `b` coincide — so rounds still repeat to a fixpoint, but a
+    /// round costs one pass over the store instead of one pass per merge.
+    fn merge_forced_equalities(
+        &mut self,
+        metas: &BTreeSet<UniverseMetaId>,
+    ) -> Result<(), UniverseError> {
+        loop {
+            let mut assignments = Vec::new();
+            {
+                let inequalities = self
+                    .constraints
+                    .iter()
+                    .filter(|constraint| {
+                        constraint.lower.constant == 0
+                            && constraint.upper.constant == 0
+                            && constraint.lower.atoms.len() == 1
+                            && constraint.upper.atoms.len() == 1
+                    })
+                    .map(|constraint| (&constraint.lower, &constraint.upper))
+                    .collect::<BTreeSet<_>>();
+
+                let mut replaced = BTreeSet::new();
+                for (lower, upper) in &inequalities {
+                    if !inequalities.contains(&(*upper, *lower)) {
+                        continue;
+                    }
+                    let (&lower_head, &lower_offset) = lower.atoms.iter().next().unwrap();
+                    let (&upper_head, &upper_offset) = upper.atoms.iter().next().unwrap();
+                    if lower_offset != upper_offset || lower_head == upper_head {
+                        continue;
+                    }
+                    let assignment = match (lower_head, upper_head) {
+                        (LevelHead::Meta(meta), LevelHead::Param(param))
+                        | (LevelHead::Param(param), LevelHead::Meta(meta))
+                            if metas.contains(&meta) =>
+                        {
+                            Some((meta, Level::param(param)))
+                        }
+                        (LevelHead::Meta(left), LevelHead::Meta(right))
+                            if metas.contains(&left) && metas.contains(&right) =>
+                        {
+                            let (replace, retain) = if left > right {
+                                (left, right)
+                            } else {
+                                (right, left)
+                            };
+                            Some((replace, Level::meta(retain)))
+                        }
+                        _ => None,
+                    };
+                    if let Some((meta, level)) = assignment
+                        && replaced.insert(meta)
+                    {
+                        assignments.push((meta, level));
+                    }
+                }
+            }
+            if assignments.is_empty() {
+                return Ok(());
+            }
+            for (meta, level) in assignments {
+                self.assign(meta, level)?;
+            }
+        }
+    }
+
+    /// Commit a solution, then normalize the constraints that mention it.
+    ///
+    /// Substituting here rather than re-zonking at every read is what keeps
+    /// the store's normalization invariant: the work is proportional to the
+    /// solved level's degree, and every later reader sees a settled
+    /// inequality. A second assignment to one meta is ignored, so a solution
+    /// is committed at most once and the journal stays a faithful inverse.
+    fn assign(&mut self, meta: UniverseMetaId, level: Level) -> Result<(), UniverseError> {
+        let entry = self
+            .metas
+            .get_mut(meta.0)
+            .ok_or(UniverseError::UnknownMeta(meta))?;
+        if entry.solution.is_some() {
+            return Ok(());
+        }
+        entry.solution = Some(level);
+        self.solution_log.push(meta);
+        self.consistency = None;
+
+        let head = LevelHead::Meta(meta);
+        let solution = self.zonk(&Level::meta(meta))?;
+        self.constraints.substitute(head, |level| {
+            level.substitute(|found| (found == head).then(|| solution.clone()))
+        })?;
+        Ok(())
+    }
+
+    /// Instantiate a closed context, returning its fresh argument vector after
+    /// inserting the substituted residual constraints transactionally.
+    pub fn instantiate(
+        &mut self,
+        context: &UniverseContext,
+        role: UniverseRole,
+    ) -> Result<Vec<Level>, UniverseError> {
+        let levels = (0..context.parameter_count)
+            .map(|_| Level::meta(self.fresh(role, None)))
+            .collect::<Vec<_>>();
+        self.instantiate_at(context, &levels)?;
+        Ok(levels)
+    }
+
+    /// Insert a closed context's residual constraints at an already chosen
+    /// occurrence instance. Used when re-elaborating an explicit
+    /// `UniverseInst`: its stored arguments are authoritative and must not be
+    /// replaced by a second fresh instantiation.
+    ///
+    /// A stored context is validated where it is built ([`Self::generalize`])
+    /// and where it is restored (`validate_universes`), not here: every
+    /// occurrence of every polymorphic binding instantiates, and re-deciding a
+    /// context's consistency per occurrence repeats a whole constraint solve
+    /// for an invariant that cannot have changed.
+    pub fn instantiate_at(
+        &mut self,
+        context: &UniverseContext,
+        levels: &[Level],
+    ) -> Result<(), UniverseError> {
+        if levels.len() != context.parameter_count {
+            return Err(UniverseError::InstanceArity {
+                expected: context.parameter_count,
+                got: levels.len(),
+            });
+        }
+        let mark = self.mark();
+        for constraint in &context.constraints {
+            let substitute = |level: &Level| {
+                level.substitute(|head| match head {
+                    LevelHead::Param(param) if param.0 < context.parameter_count => {
+                        Some(levels[param.0].clone())
+                    }
+                    LevelHead::Param(param) => Some(Level::param(UniverseParam(
+                        param.0 - context.parameter_count,
+                    ))),
+                    LevelHead::Meta(_) => None,
+                })
+            };
+            let instantiated = UniverseConstraint {
+                lower: substitute(&constraint.lower)?,
+                upper: substitute(&constraint.upper)?,
+                origin: UniverseConstraintOrigin {
+                    kind: UniverseConstraintKind::SchemeInstantiation,
+                    ..constraint.origin.clone()
+                },
+            };
+            if let Err(error) = self.add_constraint(instantiated) {
+                self.rollback(mark);
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Generalize the requested unsolved metas in deterministic id order,
+    /// rewriting all constraints that mention only those metas into a closed
+    /// declaration context.
+    pub fn generalize(
+        &self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> Result<(UniverseContext, BTreeMap<UniverseMetaId, Level>), UniverseError> {
+        self.generalize_with_ambient(metas, BTreeSet::new())
+    }
+
+    fn generalize_with_ambient(
+        &self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+        ambient: BTreeSet<UniverseMetaId>,
+    ) -> Result<(UniverseContext, BTreeMap<UniverseMetaId, Level>), UniverseError> {
+        let metas = metas
+            .into_iter()
+            .filter(|meta| self.solution(*meta).is_none())
+            .collect::<BTreeSet<_>>();
+        let replacement = metas
+            .iter()
+            .enumerate()
+            .map(|(index, meta)| (*meta, Level::param(UniverseParam(index))))
+            .collect::<BTreeMap<_, _>>();
+        let local_parameter_count = replacement.len();
+        let rewrite = |level: &Level| {
+            if level
+                .params()
+                .any(|param| param.0.checked_add(local_parameter_count).is_none())
+            {
+                return Err(UniverseError::OffsetOverflow);
+            }
+            level.substitute(|head| match head {
+                LevelHead::Meta(meta) => replacement.get(&meta).cloned(),
+                LevelHead::Param(param) => {
+                    Some(Level::param(UniverseParam(param.0 + local_parameter_count)))
+                }
+            })
+        };
+        let mut constraints = Vec::new();
+        for constraint in self.constraints.iter() {
+            let mentioned = constraint
+                .lower
+                .metas()
+                .chain(constraint.upper.metas())
+                .collect::<BTreeSet<_>>();
+            if mentioned.is_disjoint(&metas) {
+                continue;
+            }
+            if mentioned
+                .iter()
+                .all(|meta| metas.contains(meta) || ambient.contains(meta))
+            {
+                constraints.push(UniverseConstraint {
+                    lower: rewrite(&constraint.lower)?,
+                    upper: rewrite(&constraint.upper)?,
+                    origin: constraint.origin.clone(),
+                });
+            } else {
+                return Err(UniverseError::EscapingLevel);
+            }
+        }
+        constraints
+            .sort_by(|left, right| (&left.lower, &left.upper).cmp(&(&right.lower, &right.upper)));
+        constraints.dedup_by(|left, right| left.lower == right.lower && left.upper == right.upper);
+        constraints.retain(|constraint| !constraint.is_tautology());
+        let context = UniverseContext::from_constraints(replacement.len(), constraints);
+        if ambient.is_empty() {
+            context.validate()?;
+        } else {
+            context.validate_open()?;
+        }
+        Ok((context, replacement))
+    }
+
+    /// Solve `metas` as if each were an inferred output, restoring their
+    /// declared roles afterwards. Solving ranges over `scope` so a minimized
+    /// level can still be determined by its relations to levels outside the
+    /// requested set.
+    ///
+    /// Minimization is a property of the *position* a level occupies rather
+    /// than of the level itself: one written `Type` is an input where a use
+    /// site can choose it and an ordinary classifier where it cannot.
+    fn minimize(
+        &mut self,
+        metas: &BTreeSet<UniverseMetaId>,
+        scope: &BTreeSet<UniverseMetaId>,
+    ) -> Result<(), UniverseError> {
+        let roles = metas
+            .iter()
+            .map(|meta| {
+                let entry = self
+                    .metas
+                    .get_mut(meta.0)
+                    .ok_or(UniverseError::UnknownMeta(*meta))?;
+                let role = entry.role;
+                entry.role = UniverseRole::Flexible;
+                Ok((*meta, role))
+            })
+            .collect::<Result<Vec<_>, UniverseError>>()?;
+        let solved = self.solve_flexible_in(scope);
+        for (meta, role) in roles {
+            self.metas[meta.0].role = role;
+        }
+        solved
+    }
+
+    /// Minimize inference-only levels and bind every surviving input meta as a
+    /// deterministic declaration parameter.
+    ///
+    /// `interface` is the declaration's externally visible universe surface —
+    /// its type and the registry signatures a use site instantiates. `internal`
+    /// levels occur only in the body, so no occurrence could ever choose them;
+    /// they are minimized instead of becoming parameters a caller cannot
+    /// supply. An internal level with no principal solution is still
+    /// generalized, because the residual context must stay closed.
+    pub fn finalize(
+        &mut self,
+        interface: impl IntoIterator<Item = UniverseMetaId>,
+        internal: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> Result<UniverseContext, UniverseError> {
+        let interface = interface.into_iter().collect::<BTreeSet<_>>();
+        let internal = internal
+            .into_iter()
+            .filter(|meta| !interface.contains(meta))
+            .collect::<BTreeSet<_>>();
+        let relevant = self.connected_metas(interface.iter().chain(&internal).copied());
+        self.minimize(&internal, &relevant)?;
+        let metas = relevant
+            .iter()
+            .copied()
+            .filter(|meta| self.solution(*meta).is_none())
+            .collect::<BTreeSet<_>>();
+        let (context, replacement) = self.generalize(metas)?;
+        for (meta, level) in replacement {
+            self.assign(meta, level)?;
+        }
+        self.check_consistent()?;
+        self.discard_constraints(&relevant);
+        Ok(context)
+    }
+
+    /// Generalize declaration-local metas while retaining relations to
+    /// enclosing metas in the nested residual context. The enclosing
+    /// declaration's later scoped zonk rewrites those ambient metas to outer
+    /// parameters inside both this context and its value.
+    pub fn finalize_excluding(
+        &mut self,
+        interface: impl IntoIterator<Item = UniverseMetaId>,
+        internal: impl IntoIterator<Item = UniverseMetaId>,
+        protected: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> Result<UniverseContext, UniverseError> {
+        let mut protected = protected.into_iter().collect::<BTreeSet<_>>();
+        loop {
+            let mut dependencies = BTreeSet::new();
+            for meta in &protected {
+                if let Some(solution) = self.solution(*meta) {
+                    dependencies.extend(self.zonk(solution)?.metas());
+                }
+            }
+            let old_len = protected.len();
+            protected.extend(dependencies);
+            if protected.len() == old_len {
+                break;
+            }
+        }
+        let interface = interface.into_iter().collect::<BTreeSet<_>>();
+        let internal = internal
+            .into_iter()
+            .filter(|meta| !interface.contains(meta))
+            .collect::<BTreeSet<_>>();
+        let relevant = self.connected_metas(interface.iter().chain(&internal).copied());
+        let local = relevant
+            .difference(&protected)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let minimized = internal.intersection(&local).copied().collect();
+        self.minimize(&minimized, &local)?;
+        let local = local
+            .into_iter()
+            .filter(|meta| self.solution(*meta).is_none())
+            .collect::<BTreeSet<_>>();
+        let ambient = relevant
+            .difference(&local)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let (context, replacement) =
+            self.generalize_with_ambient(local.iter().copied(), ambient)?;
+        for (meta, level) in replacement {
+            self.assign(meta, level)?;
+        }
+        self.check_consistent()?;
+        self.discard_constraints(&local);
+        Ok(context)
+    }
+
+    /// Close a non-reusable result (the module entrypoint) at its least
+    /// universe solution instead of introducing a scheme.
+    pub fn default(
+        &mut self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> Result<(), UniverseError> {
+        let relevant = self.connected_metas(metas);
+        self.minimize(&relevant, &relevant)?;
+        self.check_consistent()?;
+        self.discard_constraints(&relevant);
+        Ok(())
+    }
+
+    /// Explain an inconsistency from the constraint indices that closed the
+    /// cycle, widening the path with the origins of the levels it names.
+    fn inconsistency_from_path(&self, path: Vec<usize>) -> UniverseError {
+        let constraints = self.constraints.as_slice();
+        let witness = path.first().copied().unwrap_or(0);
+        let mut origins = path
+            .iter()
+            .map(|index| constraints[*index].origin.clone())
+            .collect::<Vec<_>>();
+        for index in path.iter().copied().chain([witness]) {
+            for meta in constraints[index]
+                .lower
+                .metas()
+                .chain(constraints[index].upper.metas())
+            {
+                if let Some(origin) = self.origin(meta)
+                    && !origins.contains(origin)
+                {
+                    origins.push(origin.clone());
+                }
+            }
+        }
+        UniverseError::Inconsistency {
+            lower: constraints[witness].lower.clone(),
+            upper: constraints[witness].upper.clone(),
+            path: origins,
+        }
+    }
+
+    fn check_consistent(&mut self) -> Result<(), UniverseError> {
+        if let Some(mut cache) = self.consistency.take() {
+            if cache.constraint_len == self.constraints.len() {
+                self.consistency = Some(cache);
+                return Ok(());
+            }
+            if cache.constraint_len + 1 == self.constraints.len() {
+                let index = cache.constraint_len;
+                match forced_difference_edges(self.constraints.get(index).expect("the cache trails the store by one"), index) {
+                    Ok(Some((nodes, edges))) => match cache.graph.extend(nodes, edges) {
+                        Ok(()) => {
+                            cache.constraint_len += 1;
+                            self.consistency = Some(cache);
+                            return Ok(());
+                        }
+                        Err(path) => return Err(self.inconsistency_from_path(path)),
+                    },
+                    Err(path) => return Err(self.inconsistency_from_path(path)),
+                    Ok(None) => {}
+                }
+            }
+        }
+
+        let constraints = self.constraints.as_slice();
+        let mut nodes = BTreeSet::new();
+        let mut edges = Vec::new();
+        let mut forced = true;
+        for (index, constraint) in constraints.iter().enumerate() {
+            match forced_difference_edges(constraint, index) {
+                Ok(Some((new_nodes, new_edges))) => {
+                    nodes.extend(new_nodes);
+                    edges.extend(new_edges);
+                }
+                Ok(None) => {
+                    forced = false;
+                    break;
+                }
+                Err(path) => {
+                    return Err(self.inconsistency_from_path(path));
+                }
+            }
+        }
+        if forced {
+            let mut graph = DifferenceGraph::new();
+            if let Err(path) = graph.extend(nodes, edges) {
+                return Err(self.inconsistency_from_path(path));
+            }
+            self.consistency = Some(ConsistencyCache {
+                constraint_len: constraints.len(),
+                graph,
+            });
+            return Ok(());
+        }
+
+        self.check_consistent_full()
+    }
+
+    /// Decide consistency from scratch, branching on genuine right-hand
+    /// maxima. Reads the store directly: every stored constraint is already
+    /// normalized, so there is no separate zonked copy to drift from.
+    fn check_consistent_full(&self) -> Result<(), UniverseError> {
+        let constraints = self.constraints.as_slice();
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        enum Node {
+            Zero,
+            Head(LevelHead),
+        }
+
+        /// The difference constraint `to - from ≤ weight`.
+        #[derive(Debug, Clone)]
+        struct Edge {
+            from: Node,
+            to: Node,
+            weight: i64,
+            origin: Option<usize>,
+        }
+
+        fn atomic_edge(
+            lower: (Option<LevelHead>, u32),
+            upper: (Option<LevelHead>, u32),
+            origin: usize,
+        ) -> Result<Option<Edge>, ()> {
+            match (lower, upper) {
+                ((None, lower), (None, upper)) => {
+                    if lower <= upper {
+                        Ok(None)
+                    } else {
+                        Err(())
+                    }
+                }
+                ((Some(lower), lower_offset), (None, upper)) => {
+                    if lower_offset > upper {
+                        Err(())
+                    } else {
+                        Ok(Some(Edge {
+                            from: Node::Zero,
+                            to: Node::Head(lower),
+                            weight: i64::from(upper) - i64::from(lower_offset),
+                            origin: Some(origin),
+                        }))
+                    }
+                }
+                ((None, lower), (Some(upper), upper_offset)) => Ok((lower > upper_offset)
+                    .then_some(Edge {
+                        from: Node::Head(upper),
+                        to: Node::Zero,
+                        weight: i64::from(upper_offset) - i64::from(lower),
+                        origin: Some(origin),
+                    })),
+                ((Some(lower), lower_offset), (Some(upper), upper_offset)) => {
+                    if lower == upper {
+                        if lower_offset <= upper_offset {
+                            Ok(None)
+                        } else {
+                            Err(())
+                        }
+                    } else {
+                        Ok(Some(Edge {
+                            from: Node::Head(upper),
+                            to: Node::Head(lower),
+                            weight: i64::from(upper_offset) - i64::from(lower_offset),
+                            origin: Some(origin),
+                        }))
+                    }
+                }
+            }
+        }
+
+        /// One difference constraint over *indexed* nodes.
+        ///
+        /// The search resolves node identity once, up front. Keeping `Node`
+        /// keys here instead made every relaxation step a `BTreeMap` lookup,
+        /// inside the innermost loop of an exponential search.
+        #[derive(Debug, Clone, Copy)]
+        struct Arc {
+            from: usize,
+            to: usize,
+            weight: i64,
+            origin: Option<usize>,
+        }
+
+        fn difference_consistent(node_count: usize, arcs: &[Arc]) -> Result<(), Vec<usize>> {
+            // Every node has an implicit zero-weight edge from a super-source,
+            // so all distances start at zero. A change on the |V|th complete
+            // Bellman-Ford pass is exactly a reachable negative cycle.
+            let mut distance = vec![0_i128; node_count];
+            let mut predecessor = vec![None::<usize>; node_count];
+            let mut cycle = None;
+            for _ in 0..node_count {
+                cycle = None;
+                for (index, arc) in arcs.iter().enumerate() {
+                    let candidate = distance[arc.from] + i128::from(arc.weight);
+                    if distance[arc.to] > candidate {
+                        distance[arc.to] = candidate;
+                        predecessor[arc.to] = Some(index);
+                        cycle = Some(arc.to);
+                    }
+                }
+                if cycle.is_none() {
+                    return Ok(());
+                }
+            }
+            let Some(mut cursor) = cycle else {
+                return Ok(());
+            };
+            for _ in 0..node_count {
+                cursor = arcs[predecessor[cursor].expect("negative cycle predecessor")].from;
+            }
+            let start = cursor;
+            let mut path = Vec::new();
+            loop {
+                let arc = arcs[predecessor[cursor].expect("negative cycle edge")];
+                if let Some(origin) = arc.origin {
+                    path.push(origin);
+                }
+                cursor = arc.from;
+                if cursor == start || path.len() > arcs.len() {
+                    break;
+                }
+            }
+            path.reverse();
+            path.dedup();
+            Err(path)
+        }
+
+        /// `budget` bounds the nodes this search may visit. Exhausting it is
+        /// reported as `Err(None)`, distinct from a refuted branch, so the
+        /// caller can name the clause shape instead of spinning.
+        fn choose(
+            clauses: &[(usize, Vec<Option<Arc>>)],
+            clause: usize,
+            node_count: usize,
+            arcs: &mut Vec<Arc>,
+            budget: &mut u64,
+        ) -> Result<(), Option<Vec<usize>>> {
+            let Some(remaining) = budget.checked_sub(1) else {
+                return Err(None);
+            };
+            *budget = remaining;
+            if clause == clauses.len() {
+                return difference_consistent(node_count, arcs).map_err(Some);
+            }
+
+            let mut best_failure = None;
+            for choice in &clauses[clause].1 {
+                if let Some(arc) = choice {
+                    arcs.push(*arc);
+                }
+                let result = match difference_consistent(node_count, arcs) {
+                    Ok(()) => choose(clauses, clause + 1, node_count, arcs, budget),
+                    Err(path) => Err(Some(path)),
+                };
+                if choice.is_some() {
+                    arcs.pop();
+                }
+                match result {
+                    Ok(()) => return Ok(()),
+                    Err(None) => return Err(None),
+                    Err(Some(path))
+                        if best_failure
+                            .as_ref()
+                            .is_none_or(|best: &Vec<usize>| path.len() > best.len()) =>
+                    {
+                        best_failure = Some(path);
+                    }
+                    Err(Some(_)) => {}
+                }
+            }
+            Err(Some(
+                best_failure.unwrap_or_else(|| vec![clauses[clause].0]),
+            ))
+        }
+
+        // A maximum on the left is conjunctive. A maximum on the right is a
+        // finite disjunction: under any satisfying valuation, each left atom
+        // is dominated by at least one right atom. Enumerating those symbolic
+        // choices and checking their difference graphs decides consistency
+        // without searching numeric universe assignments.
+        let mut nodes = BTreeSet::from([Node::Zero]);
+        for constraint in constraints {
+            nodes.extend(
+                constraint
+                    .lower
+                    .atoms()
+                    .chain(constraint.upper.atoms())
+                    .map(|(head, _)| Node::Head(head)),
+            );
+        }
+        let positions = nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| (*node, index))
+            .collect::<BTreeMap<_, _>>();
+        let node_count = nodes.len();
+        let arc = |edge: Edge| Arc {
+            from: positions[&edge.from],
+            to: positions[&edge.to],
+            weight: edge.weight,
+            origin: edge.origin,
+        };
+
+        let mut clauses = Vec::<(usize, Vec<Option<Arc>>)>::new();
+        for (index, constraint) in constraints.iter().enumerate() {
+            let mut lower_parts = constraint
+                .lower
+                .atoms()
+                .map(|(head, offset)| (Some(head), offset))
+                .collect::<Vec<_>>();
+            if constraint.lower.constant != 0 {
+                lower_parts.push((None, constraint.lower.constant));
+            }
+            let mut upper_parts = constraint
+                .upper
+                .atoms()
+                .map(|(head, offset)| (Some(head), offset))
+                .collect::<Vec<_>>();
+            // Canonical normalization leaves a zero constant beside atoms
+            // only when every atom dominates it for every natural valuation.
+            // Keeping that redundant branch would multiply the consistency
+            // search by two for nearly every ordinary max constraint.
+            if upper_parts.is_empty() || constraint.upper.constant != 0 {
+                upper_parts.push((None, constraint.upper.constant));
+            }
+
+            for lower in lower_parts {
+                let mut choices = upper_parts
+                    .iter()
+                    .copied()
+                    .filter_map(|upper| atomic_edge(lower, upper, index).ok())
+                    .map(|edge| edge.map(&arc))
+                    .collect::<Vec<_>>();
+                choices.sort_by_key(|choice| {
+                    choice.map_or((0, 0, 0), |arc| (arc.from, arc.to, arc.weight))
+                });
+                choices.dedup_by(|left, right| match (left, right) {
+                    (None, None) => true,
+                    (Some(left), Some(right)) => {
+                        left.from == right.from && left.to == right.to && left.weight == right.weight
+                    }
+                    _ => false,
+                });
+                clauses.push((index, choices));
+            }
+        }
+
+        // Universe heads range over naturals: `0 - head ≤ 0`.
+        let mut arcs = (0..node_count)
+            .filter(|index| *index != positions[&Node::Zero])
+            .map(|index| Arc {
+                from: index,
+                to: positions[&Node::Zero],
+                weight: 0,
+                origin: None,
+            })
+            .collect::<Vec<_>>();
+
+        // Ordinary difference constraints have exactly one symbolic RHS
+        // choice. Put all of those arcs into one graph and run Bellman-Ford
+        // once; recursing through them one-by-one would repeat the same graph
+        // scan quadratically. Only genuine right-hand maxima remain as
+        // disjunctive clauses.
+        let mut branches = Vec::new();
+        for (index, choices) in clauses {
+            match choices.as_slice() {
+                [choice] => {
+                    if let Some(arc) = choice {
+                        arcs.push(*arc);
+                    }
+                }
+                _ => branches.push((index, choices)),
+            }
+        }
+
+        // Narrowest clause first. A clause whose alternatives are all refuted
+        // by the committed arcs fails at the shallowest possible depth, so
+        // ordering by width prunes the tree before it is built rather than
+        // after. The decision is unchanged — only the order in which the same
+        // finite set of assignments is explored.
+        branches.sort_by_key(|(_, choices)| choices.len());
+
+        // Bounding the search is what makes this decision procedure total.
+        //
+        // Accepting is always justified: a satisfying branch assignment is a
+        // model of the original constraints, so any `Ok` here is sound however
+        // few branches were explored. Only *refuting* needs the whole tree, so
+        // exhausting the budget means "not decided", and the caller reports it
+        // rather than continuing an exponential walk. The bound is small
+        // because a legitimate clause set is discharged in a handful of nodes;
+        // reaching thousands means combinatorial blowup, which no larger
+        // budget would rescue.
+        const SEARCH_BUDGET: u64 = 20_000;
+        let mut budget = SEARCH_BUDGET;
+        let consistency = difference_consistent(node_count, &arcs)
+            .map_err(Some)
+            .and_then(|_| choose(&branches, 0, node_count, &mut arcs, &mut budget));
+
+        consistency.map_err(|path| match path {
+            Some(path) => self.inconsistency_from_path(path),
+            None => UniverseError::SearchExhausted {
+                constraints: constraints.len(),
+                branches: branches.len(),
+                widths: branches
+                    .iter()
+                    .map(|(_, choices)| choices.len())
+                    .take(16)
+                    .collect(),
+            },
+        })
+    }
+}

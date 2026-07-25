@@ -5,6 +5,7 @@ use {
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity},
+    curios_core::UniverseRole,
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
 };
@@ -92,14 +93,22 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let span = term.span().cloned();
         let elaborated = match span.as_ref() {
             Some(s) => self
-                .subterm(term.as_subterm())
+                .subterm(term.as_subterm(), Some(s))
                 .map_err(|error| error.at(s.clone()))?,
-            None => self.subterm(term.as_subterm())?,
+            None => self.subterm(term.as_subterm(), None)?,
         };
         Ok(match span {
             Some(s) => curios_core::Term::spanned(s, elaborated),
             None => elaborated,
         })
+    }
+
+    /// Lower a type in an input position. The role is lexical, so every
+    /// written `Type` inside a nested higher-kinded domain remains eligible
+    /// for declaration generalization.
+    pub(super) fn input_type(&self, term: &Term) -> Result<curios_core::Term, Error> {
+        self.context
+            .with_universe_role(UniverseRole::Generalizable, || self.term(term))
     }
 
     /// Resolve a surface name to its qualified (joined) core name — the same
@@ -235,9 +244,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    pub(super) fn subterm(&self, term: &Subterm) -> Result<curios_core::Term, Error> {
+    pub(super) fn subterm(
+        &self,
+        term: &Subterm,
+        span: Option<&curios_base::Span>,
+    ) -> Result<curios_core::Term, Error> {
         Ok(match term {
-            Subterm::Type => curios_core::Term::type_(),
+            Subterm::Type => curios_core::Term::type_at(self.context.fresh_universe(span)),
             Subterm::Prop => curios_core::Term::prop(),
             Subterm::Hole => curios_core::Term::metavar(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk
@@ -267,7 +280,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let mut seen = Vec::new();
                 let mut params = Vec::with_capacity(ft.params.len());
                 for param in &ft.params {
-                    let domain = self.scoped(seen.clone(), || self.term(&param.type_))?;
+                    let domain = self.scoped(seen.clone(), || self.input_type(&param.type_))?;
                     let name = param.label.clone().unwrap_or_default();
                     seen.push(name.clone());
                     params.push((param.plicity, name, domain));
@@ -739,7 +752,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             } = param;
             let domain = match annotation {
                 Some(annotation) => {
-                    let annotation = self.scoped(seen.clone(), || self.term(annotation))?;
+                    let annotation = self.scoped(seen.clone(), || self.input_type(annotation))?;
                     self.wrap_pattern_chains(&chains, annotation)
                 }
                 None => curios_core::Term::metavar(self.context.fresh_metavar()),

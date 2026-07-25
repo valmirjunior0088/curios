@@ -18,6 +18,8 @@ fn nat_lit(n: usize) -> Term {
 fn definition(name: &str, type_: Term, body: Term) -> Item {
     Item::Let(Definition {
         name: name.into(),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         root: RootId::Entry,
         type_,
@@ -28,6 +30,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
 fn module(items: Vec<Item>, body: Term) -> Module {
     Module {
         items,
+        universe_seeds: vec![],
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -193,18 +196,62 @@ fn erasure_is_deterministic() {
 }
 
 #[test]
+fn universe_erasure_is_a_validated_structural_projection() {
+    let parameter = Level::param(UniverseParam(0));
+    let definition = Definition {
+        name: "poly".into(),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            outer_parameter_count: 0,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::empty(),
+        root: RootId::Entry,
+        type_: Term::type_at(parameter.succ().unwrap()),
+        body: Term::induct_type_at(
+            "Family",
+            [parameter],
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        ),
+    };
+    let source = module(
+        vec![Item::Let(definition)],
+        Term::universe_inst(Term::free_var("poly"), vec![Level::constant(2)]),
+    );
+
+    let projected = super::lower::UniverseErased::<Module>::project(&source)
+        .unwrap()
+        .into_inner();
+    let Item::Let(definition) = &projected.items[0] else {
+        panic!("expected definition")
+    };
+    assert_eq!(definition.universe_context, UniverseContext::empty());
+    assert_eq!(definition.type_, Term::type_ground());
+    let Subterm::InductType(induct) = &*definition.body else {
+        panic!("expected nominal type")
+    };
+    assert!(induct.universes.is_empty());
+    assert_eq!(projected.body, Term::free_var("poly"));
+
+    let invalid = module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0))));
+    assert!(super::lower::UniverseErased::<Module>::project(&invalid).is_err());
+}
+
+#[test]
 fn a_function_erases_with_dropped_type_params_and_no_captures() {
     // (A : Type, x : A) => x — the type parameter is dropped; the runtime
     // function takes one parameter and stores no captures.
     let func_type = Term::func_type(
-        [("A", Term::type_()), ("x", Term::free_var("A"))],
+        [("A", Term::type_ground()), ("x", Term::free_var("A"))],
         Term::free_var("A"),
     );
     let items = vec![definition(
         "id",
         func_type,
         Term::func(
-            [("A", Term::type_()), ("x", Term::type_())],
+            [("A", Term::type_ground()), ("x", Term::type_ground())],
             Term::free_var("x"),
         ),
     )];
@@ -241,9 +288,9 @@ fn a_capturing_closure_stores_no_capture_list() {
         "make",
         outer_type,
         Term::func(
-            [("y", Term::type_())],
+            [("y", Term::type_ground())],
             Term::func(
-                [("x", Term::type_())],
+                [("x", Term::type_ground())],
                 Term::prim(Prim::nat_add(Term::free_var("x"), Term::free_var("y"))),
             ),
         ),
@@ -285,6 +332,7 @@ fn opt_type() -> Term {
 // tag 1 (registry-sorted). Registered on the module so erasure seeds it.
 fn opt_induct() -> InductDecl {
     InductDecl {
+        universe_context: UniverseContext::empty(),
         params: Telescope::done(()),
         indices: Telescope::done(()),
         constructors: BTreeMap::from([
@@ -303,7 +351,7 @@ fn opt_induct() -> InductDecl {
                 },
             ),
         ]),
-        result_sort: Term::type_(),
+        result_sort: Term::type_ground(),
         module: Qualifier::empty(),
         root: RootId::Entry,
         rep_public: true,
@@ -319,6 +367,7 @@ fn a_variant_constructs_with_its_registered_schema() {
         &mut context(),
         &Module {
             items: Vec::new(),
+            universe_seeds: vec![],
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -542,6 +591,7 @@ fn a_variant_match_binds_payload_without_projections() {
         &mut context(),
         &Module {
             items: Vec::new(),
+            universe_seeds: vec![],
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -584,7 +634,7 @@ fn an_effectful_scrutinee_is_erased_once() {
             [("x", Term::prim(Prim::NatType))],
             Term::prim(Prim::NatType),
         ),
-        Term::func([("x", Term::type_())], Term::free_var("x")),
+        Term::func([("x", Term::type_ground())], Term::free_var("x")),
     )];
     let body = Term::nat_match(
         io_read,
@@ -616,7 +666,7 @@ fn a_recursive_function_group_erases_to_functions() {
             "f",
             func_type.clone(),
             Term::func(
-                [("x", Term::type_())],
+                [("x", Term::type_ground())],
                 Term::apply(Term::free_var("f"), [Term::free_var("x")]),
             ),
         )],
@@ -653,7 +703,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
             (
                 "produce",
                 produce_type.clone(),
-                Term::func([("u", Term::type_())], nat_lit(5)),
+                Term::func([("u", Term::type_ground())], nat_lit(5)),
             ),
             ("consume", produce_type.clone(), Term::free_var("produce")),
         ],
@@ -709,11 +759,13 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
     );
     let items = vec![Item::Rec(RecItem::new(vec![Definition {
         name: "go".into(),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         root: RootId::Entry,
         type_: func_type.clone(),
         body: Term::func(
-            [("x", Term::type_())],
+            [("x", Term::type_ground())],
             Term::apply(Term::free_var("go"), [Term::free_var("x")]),
         ),
     }]))];

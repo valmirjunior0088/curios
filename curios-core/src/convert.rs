@@ -6,10 +6,10 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductType, Match, Metavar,
-        Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
-        Tuple, TupleType, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
-        unfold_rec_apply,
+        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductType, Level, Match,
+        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        Variant, Visit, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
     },
     crate::Instant,
     curios_base::Plicity,
@@ -25,6 +25,17 @@ enum Solved {
     Postponed,
     /// Unsolvable: occurs-check, scope-check, or re-validation failure.
     Failed,
+}
+
+fn instantiate_bound_at<B: Bound>(
+    context: &mut Context,
+    universe_context: &UniverseContext,
+    value: &B,
+    universes: &[Level],
+) -> Result<B, ReduceError> {
+    context
+        .instantiate_universe_bound_at(universe_context, value, universes)
+        .map_err(ReduceError::Universe)
 }
 
 pub(crate) fn convert(
@@ -74,7 +85,10 @@ pub(crate) enum Outcome {
 /// there is no duplicated typing judgment to drift from `infer`.
 fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, ReduceError> {
     match &**term {
-        Subterm::Var(var) => Ok(context.assumption(var.unwrap()).cloned()),
+        Subterm::Var(var) => context
+            .instantiate_assumption_universes(var.unwrap())
+            .map(|instance| instance.map(|(type_, _)| type_))
+            .map_err(ReduceError::Universe),
         Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(context, head)? else {
                 return Ok(None);
@@ -112,7 +126,7 @@ fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, Red
 /// Recover the parameter types of an application from the head's function type, opening
 /// each successive entry with the actual arguments (dependency). `None` when the head's
 /// type is unavailable or not a `FuncType` of matching arity — callers fall back to
-/// comparing arguments at `Term::type_()`.
+/// comparing arguments at `Term::type_ground()`.
 fn apply_param_types(
     context: &mut Context,
     head: &Term,
@@ -140,9 +154,9 @@ fn apply_param_types(
 
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type`
 /// otherwise.
-#[derive(Clone, Copy)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Sort {
-    Type,
+    Type(Level),
     Prop,
 }
 
@@ -157,45 +171,79 @@ impl Sort {
         let reduced = reduce_forced(context, type_.clone())?;
 
         Ok(match &*reduced {
-            Subterm::InductType(InductType { name, .. }) => {
-                match context.induct_decl(name).map(|i| i.result_sort.clone()) {
-                    Some(sort) => Sort::from_universe(context, &sort)?,
-                    None => Sort::Type,
+            Subterm::InductType(InductType {
+                name, universes, ..
+            }) => match context.induct_decl(name).cloned() {
+                Some(induct_decl) => {
+                    let induct_decl = context
+                        .instantiate_induct_decl_at(&induct_decl, universes)
+                        .map_err(ReduceError::Universe)?;
+                    Sort::from_universe(context, &induct_decl.result_sort)?
                 }
-            }
-            Subterm::StructType(StructType { name, .. }) => {
-                match context.struct_decl(name).map(|s| s.result_sort.clone()) {
-                    Some(sort) => Sort::from_universe(context, &sort)?,
-                    None => Sort::Type,
+                None => Sort::Type(Level::zero()),
+            },
+            Subterm::StructType(StructType {
+                name, universes, ..
+            }) => match context.struct_decl(name).cloned() {
+                Some(struct_decl) => {
+                    let struct_decl = context
+                        .instantiate_struct_decl_at(&struct_decl, universes)
+                        .map_err(ReduceError::Universe)?;
+                    Sort::from_universe(context, &struct_decl.result_sort)?
                 }
-            }
+                None => Sort::Type(Level::zero()),
+            },
             // A *non-empty* record of propositions is a proposition. The empty
             // tuple `{}` is unit, not a prop: it is the result type of effects
             // (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is
             // kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
                 let mut tele = telescope.clone();
+                let mut levels = Vec::new();
                 loop {
                     match tele {
                         Telescope::Cons(ty, rest) => {
-                            if !matches!(Sort::of(context, &ty)?, Sort::Prop) {
-                                break Sort::Type;
+                            if let Sort::Type(level) = Sort::of(context, &ty)? {
+                                levels.push(level);
                             }
                             let v = Term::free_var(context.fresh(rest.first_label()));
                             tele = rest.open(&[&v]);
                         }
-                        Telescope::Done(_) => break Sort::Prop,
+                        Telescope::Done(_) => {
+                            break if levels.is_empty() {
+                                Sort::Prop
+                            } else {
+                                Sort::Type(Level::max(levels))
+                            };
+                        }
                     }
                 }
             }
+            Subterm::TupleType(_) => Sort::Type(Level::zero()),
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                let telescope = telescope.clone();
-                let vars: Vec<Term> = (0..telescope.len())
-                    .map(|_| Term::free_var(context.fresh(None)))
-                    .collect();
-                let refs: Vec<&Term> = vars.iter().collect();
-                Sort::of(context, &telescope.open(&refs))?
+                let mut telescope = telescope.clone();
+                let mut domains = Vec::new();
+                loop {
+                    match telescope {
+                        Telescope::Cons(domain, rest) => {
+                            if let Sort::Type(level) = Sort::of(context, &domain)? {
+                                domains.push(level);
+                            }
+                            let var = Term::free_var(context.fresh(rest.first_label()));
+                            telescope = rest.open(&[&var]);
+                        }
+                        Telescope::Done(output) => {
+                            break match Sort::of(context, &output)? {
+                                Sort::Prop => Sort::Prop,
+                                Sort::Type(output) => {
+                                    domains.push(output);
+                                    Sort::Type(Level::max(domains))
+                                }
+                            };
+                        }
+                    }
+                }
             }
             // A type-valued match (`Lt = match _ : Prop | ..`): its sort is the
             // motive — a constant `Prop` when the result is a proposition.
@@ -212,10 +260,12 @@ impl Sort {
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
                 match synth_neutral(context, &reduced)? {
                     Some(sort) => Sort::from_universe(context, &sort)?,
-                    None => Sort::Type,
+                    None => Sort::Type(Level::zero()),
                 }
             }
-            _ => Sort::Type,
+            Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
+            Subterm::UniverseInst(instance) => Sort::of(context, &instance.head)?,
+            _ => Sort::Type(Level::zero()),
         })
     }
 
@@ -223,7 +273,7 @@ impl Sort {
     /// [`Sort::from_universe`]; used as the type-of-a-type a type-former reports.
     pub(crate) fn term(self) -> Term {
         match self {
-            Sort::Type => Term::type_(),
+            Sort::Type(level) => Term::type_at(level),
             Sort::Prop => Term::prop(),
         }
     }
@@ -235,7 +285,8 @@ impl Sort {
     fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
         Ok(match &*reduce(context, universe.clone())? {
             Subterm::Prop => Sort::Prop,
-            _ => Sort::Type,
+            Subterm::Type(level) => Sort::Type(level.clone()),
+            _ => Sort::Type(Level::zero()),
         })
     }
 }
@@ -272,6 +323,27 @@ pub(crate) struct Convert {
 }
 
 impl Convert {
+    fn compare_levels(
+        context: &mut Context,
+        left: &[Level],
+        right: &[Level],
+    ) -> Result<bool, ReduceError> {
+        if left.len() != right.len() {
+            return Ok(false);
+        }
+        for (left, right) in left.iter().zip(right) {
+            context
+                .universes_mut()
+                .add_eq(
+                    left.clone(),
+                    right.clone(),
+                    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                )
+                .map_err(ReduceError::Universe)?;
+        }
+        Ok(true)
+    }
+
     fn new(type_: Term, this: Term, that: Term) -> Self {
         Self {
             history: HashSet::new(),
@@ -362,7 +434,7 @@ impl Convert {
         let b = Term::free_var(self.opening(context, None));
         let c = Term::free_var(self.opening(context, None));
         self.enqueue(
-            Term::type_(),
+            Term::type_ground(),
             this.open(&[&a, &b, &c]),
             that.open(&[&a, &b, &c]),
         );
@@ -399,14 +471,14 @@ impl Convert {
         ) -> Result<bool, ReduceError> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
+                    cmp.enqueue(Term::type_ground(), ty_a.clone(), ty_b.clone());
                     let v = Term::free_var(cmp.opening(context, rest_a.first_label()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
                 }
                 (Telescope::Done(out_a), Telescope::Done(out_b)) => {
-                    cmp.enqueue(Term::type_(), (**out_a).clone(), (**out_b).clone());
+                    cmp.enqueue(Term::type_ground(), (**out_a).clone(), (**out_b).clone());
                     Ok(true)
                 }
                 _ => Ok(false),
@@ -432,7 +504,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 telescope.open(&ys.iter().collect::<Vec<_>>())
             }
-            _ => Term::type_(),
+            _ => Term::type_ground(),
         };
         Ok((ys, output_type))
     }
@@ -474,17 +546,17 @@ impl Convert {
 
         // Recover the real argument types from the head's function type so η fires at the
         // correct type (e.g. a unit-typed argument is compared at `()`, where proof
-        // irrelevance makes distinct neutrals equal). Falls back to `Term::type_()` when
+        // irrelevance makes distinct neutrals equal). Falls back to `Term::type_ground()` when
         // the head's type is unavailable.
         let param_types = apply_param_types(context, &this.head, &this.params)?;
 
-        self.enqueue(Term::type_(), this.head, that.head);
+        self.enqueue(Term::type_ground(), this.head, that.head);
 
         for (i, (a, b)) in this.params.into_iter().zip(that.params).enumerate() {
             let type_ = param_types
                 .as_ref()
                 .and_then(|types| types.get(i).cloned())
-                .unwrap_or_else(Term::type_);
+                .unwrap_or_else(Term::type_ground);
             self.enqueue(type_, a, b);
         }
 
@@ -513,7 +585,7 @@ impl Convert {
             let param_type = param_types
                 .as_ref()
                 .and_then(|types| types.get(index).cloned())
-                .unwrap_or_else(Term::type_);
+                .unwrap_or_else(Term::type_ground);
             match convert_outcome(context, &param_type, a, b)? {
                 Outcome::Converts => {}
                 Outcome::Blocked(_) => blocked = true,
@@ -562,7 +634,7 @@ impl Convert {
                     {
                         return Ok(false);
                     }
-                    cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
+                    cmp.enqueue(Term::type_ground(), ty_a.clone(), ty_b.clone());
                     let v = Term::free_var(cmp.opening(context, rest_a.first_label()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
@@ -603,7 +675,7 @@ impl Convert {
         if this.field != that.field {
             return Ok(false);
         }
-        self.enqueue(Term::type_(), this.head, that.head);
+        self.enqueue(Term::type_ground(), this.head, that.head);
         Ok(true)
     }
 
@@ -619,6 +691,9 @@ impl Convert {
         {
             return Ok(false);
         }
+        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+            return Ok(false);
+        }
 
         // Recover the full param+index telescope from the registry so each
         // argument compares at its declared type rather than a flat `Type`. When
@@ -631,7 +706,16 @@ impl Convert {
             .chain(this.indices.iter())
             .cloned()
             .collect();
-        let arg_types = match context.induct_decl(&this.name).map(|i| i.indices.clone()) {
+        let arg_types = match context.induct_decl(&this.name).cloned() {
+            Some(induct_decl) => Some(instantiate_bound_at(
+                context,
+                &induct_decl.universe_context,
+                &induct_decl.indices,
+                &this.universes,
+            )?),
+            None => None,
+        };
+        let arg_types = match arg_types {
             Some(telescope) if telescope.len() == this_args.len() => {
                 let mut types = Vec::with_capacity(this_args.len());
                 telescope.walk(&this_args, |_, _, ty| {
@@ -652,7 +736,7 @@ impl Convert {
             let type_ = arg_types
                 .as_ref()
                 .and_then(|types| types.get(i).cloned())
-                .unwrap_or_else(Term::type_);
+                .unwrap_or_else(Term::type_ground);
             self.enqueue(type_, a, b);
         }
 
@@ -676,7 +760,7 @@ impl Convert {
                     telescope = Some(rest.open(&[&a]));
                     ty
                 }
-                _ => Term::type_(),
+                _ => Term::type_ground(),
             };
             self.enqueue(type_, a, b);
         }
@@ -695,18 +779,36 @@ impl Convert {
         {
             return Ok(false);
         }
+        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+            return Ok(false);
+        }
 
         // Recover the payload types from the constructor's registry telescope
         // (instantiated at this side's parameters) so each payload field
         // compares at its own type — η and proof irrelevance fire per field,
         // instead of a structural compare at `Type`. Same recovery `erase`
         // uses; falls back to `Type` if the inductive is somehow absent.
-        let telescope = context
-            .induct_decl(&this.name)
-            .and_then(|induct_decl| induct_decl.instantiate(&this.tag, &this.params));
+        let telescope = match context.induct_decl(&this.name).cloned() {
+            Some(induct_decl) => {
+                let constructor = induct_decl.constructors.get(&this.tag);
+                match constructor {
+                    Some(constructor) => Some(
+                        instantiate_bound_at(
+                            context,
+                            &induct_decl.universe_context,
+                            &constructor.telescope,
+                            &this.universes,
+                        )?
+                        .open_params(&this.params),
+                    ),
+                    None => None,
+                }
+            }
+            None => None,
+        };
 
         for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Term::type_(), a, b);
+            self.enqueue(Term::type_ground(), a, b);
         }
 
         self.enqueue_fields(this.payload, that.payload, telescope);
@@ -716,15 +818,19 @@ impl Convert {
 
     fn compare_struct_type(
         &mut self,
+        context: &mut Context,
         this: StructType,
         that: StructType,
     ) -> Result<bool, ReduceError> {
         if this.name != that.name || this.params.len() != that.params.len() {
             return Ok(false);
         }
+        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+            return Ok(false);
+        }
 
         for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Term::type_(), a, b);
+            self.enqueue(Term::type_ground(), a, b);
         }
 
         Ok(true)
@@ -742,17 +848,29 @@ impl Convert {
         {
             return Ok(false);
         }
+        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+            return Ok(false);
+        }
 
         // Recover the field types from the registry (instantiated at this side's
         // parameters) so each field compares at its own type — η and proof
         // irrelevance fire per field, as `compare_tuple` does with the tuple
         // type's telescope. Falls back to `Type` if the struct is somehow absent.
-        let telescope = context
-            .struct_decl(&this.name)
-            .map(|struct_decl| struct_decl.fields_at(&this.params));
+        let telescope = match context.struct_decl(&this.name).cloned() {
+            Some(struct_decl) => Some(
+                instantiate_bound_at(
+                    context,
+                    &struct_decl.universe_context,
+                    &struct_decl.fields,
+                    &this.universes,
+                )?
+                .open_params(&this.params),
+            ),
+            None => None,
+        };
 
         for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Term::type_(), a, b);
+            self.enqueue(Term::type_ground(), a, b);
         }
 
         self.enqueue_fields(this.fields, that.fields, telescope);
@@ -766,7 +884,7 @@ impl Convert {
         this: Match,
         that: Match,
     ) -> Result<bool, ReduceError> {
-        self.enqueue(Term::type_(), this.head, that.head);
+        self.enqueue(Term::type_ground(), this.head, that.head);
 
         // The motive's arity is 1 except for an annotated inductive-match motive
         // (pattern binders then the scrutinee); different arities are
@@ -780,7 +898,7 @@ impl Convert {
             .collect::<Vec<_>>();
         let label_refs = labels.iter().collect::<Vec<_>>();
         self.enqueue(
-            Term::type_(),
+            Term::type_ground(),
             this.motive.open(&label_refs),
             that.motive.open(&label_refs),
         );
@@ -796,8 +914,8 @@ impl Convert {
                     true_case: that_true,
                 },
             ) => {
-                self.enqueue(Term::type_(), this_false, that_false);
-                self.enqueue(Term::type_(), this_true, that_true);
+                self.enqueue(Term::type_ground(), this_false, that_false);
+                self.enqueue(Term::type_ground(), this_true, that_true);
                 Ok(true)
             }
 
@@ -819,10 +937,10 @@ impl Convert {
                     if kl != kr {
                         return Ok(false);
                     }
-                    self.enqueue(Term::type_(), vl, vr);
+                    self.enqueue(Term::type_ground(), vl, vr);
                 }
 
-                self.enqueue(Term::type_(), this_default, that_default);
+                self.enqueue(Term::type_ground(), this_default, that_default);
                 Ok(true)
             }
 
@@ -859,7 +977,7 @@ impl Convert {
                     let binder_refs = binders.iter().collect::<Vec<_>>();
 
                     self.enqueue(
-                        Term::type_(),
+                        Term::type_ground(),
                         this_scope.open(&binder_refs),
                         that_scope.open(&binder_refs),
                     );
@@ -867,7 +985,7 @@ impl Convert {
 
                 match (this_default, that_default) {
                     (None, None) => {}
-                    (Some(this), Some(that)) => self.enqueue(Term::type_(), this, that),
+                    (Some(this), Some(that)) => self.enqueue(Term::type_ground(), this, that),
                     _ => return Ok(false),
                 }
 
@@ -892,14 +1010,14 @@ impl Convert {
                         cons_case: that_cons,
                     },
                 ) => {
-                    self.enqueue(Term::type_(), this_empty, that_empty);
+                    self.enqueue(Term::type_ground(), this_empty, that_empty);
 
                     // The unary cons arm binds (predecessor, ih); open both under
                     // shared fresh binders and compare the bodies.
                     let a = Term::free_var(self.opening(context, None));
                     let b = Term::free_var(self.opening(context, None));
                     self.enqueue(
-                        Term::type_(),
+                        Term::type_ground(),
                         this_cons.open(&[&a, &b]),
                         that_cons.open(&[&a, &b]),
                     );
@@ -918,7 +1036,7 @@ impl Convert {
                         ..
                     },
                 ) => {
-                    self.enqueue(Term::type_(), this_empty, that_empty);
+                    self.enqueue(Term::type_ground(), this_empty, that_empty);
                     self.compare_cons_three(context, this_cons, that_cons);
 
                     Ok(true)
@@ -935,8 +1053,8 @@ impl Convert {
                         cons_case: that_cons,
                     },
                 ) => {
-                    self.enqueue(Term::type_(), this_elem, that_elem);
-                    self.enqueue(Term::type_(), this_empty, that_empty);
+                    self.enqueue(Term::type_ground(), this_elem, that_elem);
+                    self.enqueue(Term::type_ground(), this_empty, that_empty);
                     self.compare_cons_three(context, this_cons, that_cons);
 
                     Ok(true)
@@ -968,22 +1086,22 @@ impl Convert {
         let labels = labels.iter().collect::<Vec<_>>();
 
         for ((this_type, this_body), (that_type, that_body)) in
-            this.group.items().iter().zip(that.group.items())
+            this.group.iter().zip(that.group.iter())
         {
             self.enqueue(
-                Term::type_(),
+                Term::type_ground(),
                 this_type.open(&labels),
                 that_type.open(&labels),
             );
             self.enqueue(
-                Term::type_(),
+                Term::type_ground(),
                 this_body.open(&labels),
                 that_body.open(&labels),
             );
         }
 
         self.enqueue(
-            Term::type_(),
+            Term::type_ground(),
             this.tail.open(&labels),
             that.tail.open(&labels),
         );
@@ -1041,9 +1159,22 @@ impl Convert {
         // does — a `Struct` value carries no telescope of its own, unlike a
         // `Tuple`'s inline `TupleType`.
         let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::StructType(StructType { name, params }) if name == struct_.name => context
-                .struct_decl(&name)
-                .map(|struct_decl| struct_decl.fields_at(&params)),
+            Subterm::StructType(StructType {
+                name,
+                universes,
+                params,
+            }) if name == struct_.name => match context.struct_decl(&name).cloned() {
+                Some(struct_decl) => Some(
+                    instantiate_bound_at(
+                        context,
+                        &struct_decl.universe_context,
+                        &struct_decl.fields,
+                        &universes,
+                    )?
+                    .open_params(&params),
+                ),
+                None => None,
+            },
             _ => None,
         };
 
@@ -1080,7 +1211,7 @@ impl Convert {
             Subterm::TupleType(TupleType { telescope, .. }) => {
                 for i in 0..telescope.len() {
                     self.enqueue(
-                        Term::type_(),
+                        Term::type_ground(),
                         Term::proj(this.clone(), i),
                         Term::proj(that.clone(), i),
                     );
@@ -1102,7 +1233,7 @@ impl Convert {
                 };
                 for i in 0..n {
                     self.enqueue(
-                        Term::type_(),
+                        Term::type_ground(),
                         Term::proj(this.clone(), i),
                         Term::proj(that.clone(), i),
                     );
@@ -1319,7 +1450,7 @@ impl Convert {
                 .collect::<Vec<_>>();
             let refs = entries.iter().collect::<Vec<_>>();
             let resolved = inverted.capture(&labels).release(&refs);
-            if resolved != *t && !convert(context, &Term::type_(), &resolved, t)? {
+            if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
                 return Ok(Solved::Postponed);
             }
         }
@@ -1415,6 +1546,7 @@ impl Convert {
         let (rigid_args, mk_body): (Vec<Term>, MkBody) = match &*rigid {
             Subterm::InductType(induct_decl) => {
                 let name = induct_decl.name.clone();
+                let universes = induct_decl.universes.clone();
                 let n_params = induct_decl.params.len();
                 let args = induct_decl
                     .params
@@ -1426,16 +1558,24 @@ impl Convert {
                     args,
                     Box::new(move |vars| {
                         let (params, indices) = vars.split_at(n_params);
-                        Term::induct_type(&name, params.iter().cloned(), indices.iter().cloned())
+                        Term::induct_type_at(
+                            &name,
+                            universes.clone(),
+                            params.iter().cloned(),
+                            indices.iter().cloned(),
+                        )
                     }),
                 )
             }
             // Struct types carry no indices.
             Subterm::StructType(struct_decl) => {
                 let name = struct_decl.name.clone();
+                let universes = struct_decl.universes.clone();
                 (
                     struct_decl.params.clone(),
-                    Box::new(move |vars| Term::struct_type(&name, vars.iter().cloned())),
+                    Box::new(move |vars| {
+                        Term::struct_type_at(&name, universes.clone(), vars.iter().cloned())
+                    }),
                 )
             }
             // The unary primitive type formers: their argument rides inside
@@ -1614,6 +1754,22 @@ impl Convert {
                 continue;
             }
 
+            // Universe instantiations are computationally irrelevant: Curios
+            // has no universe reflection, and erasure removes every instance,
+            // nominal level vector, and `Type` payload. For values (goals not
+            // checked at `Type` itself), identical erased spellings are
+            // definitionally equal without unfolding their shared head. This
+            // also prevents independently fresh instances of a partial
+            // definition from being evaluated merely to rediscover the same
+            // value. Type expressions still take the structural path below,
+            // where their level vectors generate equality constraints.
+            if (this.has_universe_data() || that.has_universe_data())
+                && super::project_erased_universes(&this) == super::project_erased_universes(&that)
+                && !matches!(&*reduce(context, type_.clone())?, Subterm::Type(_))
+            {
+                continue;
+            }
+
             // The unreduced spellings, kept for the flex–rigid case: the
             // reductions below apply counterfactual match-arm refinements,
             // and a candidate *solution* must be derived without them (see
@@ -1649,7 +1805,7 @@ impl Convert {
                     {
                         let mut entrywise = true;
                         for (a, b) in this_m.spine.iter().zip(that_m.spine.iter()) {
-                            if !convert(context, &Term::type_(), a, b)? {
+                            if !convert(context, &Term::type_ground(), a, b)? {
                                 entrywise = false;
                                 break;
                             }
@@ -1721,6 +1877,25 @@ impl Convert {
 
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Prim(this), Subterm::Prim(that)) => convert_prim(self, this, that)?,
+                (Subterm::Type(this), Subterm::Type(that)) => {
+                    context
+                        .universes_mut()
+                        .add_eq(
+                            this,
+                            that,
+                            UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                        )
+                        .map_err(ReduceError::Universe)?;
+                    true
+                }
+                (Subterm::UniverseInst(this), Subterm::UniverseInst(that)) => {
+                    if !Self::compare_levels(context, &this.levels, &that.levels)? {
+                        false
+                    } else {
+                        self.enqueue(type_, this.head, that.head);
+                        true
+                    }
+                }
                 // Same-kind matches compare structurally; cross-kind pairs fall
                 // through to `eta_expand_neutral` (e.g. proof irrelevance at unit).
                 (Subterm::Match(this), Subterm::Match(that))
@@ -1816,7 +1991,7 @@ impl Convert {
                     self.compare_variant(context, this, that)?
                 }
                 (Subterm::StructType(this), Subterm::StructType(that)) => {
-                    self.compare_struct_type(this, that)?
+                    self.compare_struct_type(context, this, that)?
                 }
                 (Subterm::Struct(this), Subterm::Struct(that)) => {
                     self.compare_struct(context, this, that)?
@@ -1945,9 +2120,7 @@ impl Convert {
 /// entropy-fresh, so a free-named subject cannot be captured by an inner
 /// scope) — with its birth binder's name. Top-down: an outer match wins and
 /// is not descended into. Subjects are pairwise distinct by construction, so
-/// the match is unambiguous. (A subject that is exactly a scope's whole body
-/// is missed — scope bodies bypass `visit_subterm` — which the round-trip
-/// verification in `Convert::solve` catches conservatively.)
+/// the match is unambiguous.
 fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
     if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
         return Term::free_var(name);

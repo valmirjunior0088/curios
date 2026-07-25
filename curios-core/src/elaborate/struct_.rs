@@ -1,4 +1,43 @@
-use super::*;
+use {
+    super::*,
+    crate::{Level, UniverseContext, instantiate_universe_levels_scoped},
+};
+
+fn instantiate_struct_decl(
+    context: &mut Context,
+    struct_decl: StructDecl,
+    universes: Option<&[Level]>,
+) -> Result<(StructDecl, Vec<Level>), Error> {
+    let (fields, universes) = match universes {
+        Some(universes) => (
+            context.instantiate_universe_bound_at(
+                &struct_decl.universe_context,
+                &struct_decl.fields,
+                universes,
+            )?,
+            universes.to_vec(),
+        ),
+        None => context
+            .instantiate_universe_bound(&struct_decl.universe_context, &struct_decl.fields)?,
+    };
+    let arguments = universes.clone();
+    let params =
+        instantiate_universe_levels_scoped(&struct_decl.params, &arguments).map_err(Error::from)?;
+    let result_sort = instantiate_universe_levels_scoped(&struct_decl.result_sort, &arguments)
+        .map_err(Error::from)?;
+    Ok((
+        StructDecl {
+            universe_context: UniverseContext::empty(),
+            params,
+            fields,
+            result_sort,
+            module: struct_decl.module,
+            root: struct_decl.root,
+            rep_public: struct_decl.rep_public,
+        },
+        universes,
+    ))
+}
 
 /// Type a struct type against its registry entry: the parameters are checked
 /// pointwise (dependently) through the parameter telescope, and the whole node
@@ -14,7 +53,11 @@ pub(super) fn elaborate_struct_type(
     st: &StructType,
     term: &Term,
 ) -> Result<(Term, Term), Error> {
-    let StructType { name, params } = st;
+    let StructType {
+        name,
+        universes,
+        params,
+    } = st;
 
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Err(match context.assumption(name) {
@@ -22,6 +65,9 @@ pub(super) fn elaborate_struct_type(
             None => Error::unbound_variable(Term::free_var(name)),
         });
     };
+    let explicit_universes = (!universes.is_empty()).then_some(universes.as_slice());
+    let (struct_decl, universes) =
+        instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
     if params.is_empty() && !struct_decl.params.is_empty() {
         let mut resolved = Vec::with_capacity(struct_decl.params.len());
@@ -40,7 +86,7 @@ pub(super) fn elaborate_struct_type(
             resolved.push(arg);
         }
         return Ok((
-            Term::struct_type(name, resolved),
+            Term::struct_type_at(name, universes, resolved),
             struct_decl.result_sort.clone(),
         ));
     }
@@ -55,7 +101,10 @@ pub(super) fn elaborate_struct_type(
 
     let (elaborated, ()) = check_args_against(context, struct_decl.params, params)?;
 
-    Ok((Term::struct_type(name, elaborated), struct_decl.result_sort))
+    Ok((
+        Term::struct_type_at(name, universes, elaborated),
+        struct_decl.result_sort,
+    ))
 }
 
 /// Where one field position's value comes from: a written term to check, or —
@@ -125,6 +174,7 @@ pub(super) fn elaborate_struct(
 ) -> Result<(Term, Term), Error> {
     let Struct {
         name,
+        universes: written_universes,
         params,
         fields,
         entries,
@@ -136,6 +186,10 @@ pub(super) fn elaborate_struct(
             None => Error::unbound_variable(Term::free_var(name)),
         });
     };
+    let explicit_universes =
+        (!written_universes.is_empty()).then_some(written_universes.as_slice());
+    let (struct_decl, universes) =
+        instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
     // Construction privacy (§7): a private-representation struct may be built
     // only within its declaring module's subtree. Checked here (alongside
@@ -169,14 +223,14 @@ pub(super) fn elaborate_struct(
     {
         0 => {}
         1 if matches!(entries[0], StructEntry::Spread) => {
-            return elaborate_struct_spread(context, &struct_decl, s, term, mode);
+            return elaborate_struct_spread(context, &struct_decl, &universes, s, term, mode);
         }
         1 => return Err(Error::spread_not_first(name.clone())),
         _ => return Err(Error::multiple_spreads(name.clone())),
     }
 
     let resolved = resolve_struct_params(context, name, &struct_decl, params, term)?;
-    seed_struct_expectation(context, name, &resolved, term, mode)?;
+    seed_struct_expectation(context, name, &universes, &resolved, term, mode)?;
 
     // Instantiate the field telescope at the resolved parameters.
     let field_telescope = struct_decl.fields_at(&resolved);
@@ -290,8 +344,8 @@ pub(super) fn elaborate_struct(
     check_dependent_fields(context, field_telescope, &sources, term, &mut elaborated)?;
 
     Ok((
-        Term::struct_(name, resolved.clone(), elaborated),
-        Term::struct_type(name, resolved),
+        Term::struct_at(name, universes.clone(), resolved.clone(), elaborated),
+        Term::struct_type_at(name, universes, resolved),
     ))
 }
 
@@ -339,6 +393,7 @@ pub(super) fn resolve_struct_params(
 pub(super) fn seed_struct_expectation(
     context: &mut Context,
     name: &str,
+    universes: &[Level],
     resolved: &[Term],
     term: &Term,
     mode: &Mode,
@@ -350,7 +405,7 @@ pub(super) fn seed_struct_expectation(
         }) = Term::unwrap_or_clone(reduce_with(context, expected)?)
         && expected_name == name
     {
-        let seeded = Term::struct_type(name, resolved.to_vec());
+        let seeded = Term::struct_type_at(name, universes.to_vec(), resolved.to_vec());
         expect(context, term, &seeded, expected)?;
     }
     Ok(())
@@ -373,6 +428,7 @@ pub(super) fn seed_struct_expectation(
 pub(super) fn elaborate_struct_spread(
     context: &mut Context,
     struct_decl: &StructDecl,
+    universes: &[Level],
     s: &Struct,
     term: &Term,
     mode: &Mode,
@@ -382,6 +438,7 @@ pub(super) fn elaborate_struct_spread(
         params,
         fields,
         entries,
+        ..
     } = s;
 
     // The base must be a value of this very struct: positional projections
@@ -407,7 +464,7 @@ pub(super) fn elaborate_struct_spread(
         context.define_assuming(&label, &base_type, &base);
 
         let resolved = resolve_struct_params(context, name, struct_decl, params, term)?;
-        seed_struct_expectation(context, name, &resolved, term, mode)?;
+        seed_struct_expectation(context, name, universes, &resolved, term, mode)?;
 
         let field_telescope = struct_decl.fields_at(&resolved);
 
@@ -523,9 +580,15 @@ pub(super) fn elaborate_struct_spread(
 
         // Reduce inside the frame, where the binder is defined: occurrences of
         // it in the result type unfold to the base before escaping the `let`.
-        let result_type = reduce_with(context, &Term::struct_type(name.clone(), resolved.clone()))?;
+        let result_type = reduce_with(
+            context,
+            &Term::struct_type_at(name.clone(), universes.to_vec(), resolved.clone()),
+        )?;
 
-        Ok::<_, Error>((Term::struct_(name, resolved, elaborated), result_type))
+        Ok::<_, Error>((
+            Term::struct_at(name, universes.to_vec(), resolved, elaborated),
+            result_type,
+        ))
     })?;
 
     Ok((Term::let_(label, base_type, base, rebuilt), result_type))

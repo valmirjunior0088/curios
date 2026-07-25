@@ -87,11 +87,11 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let io_type: Term = Subterm::Prim(Prim::HandleType).into();
 
     Ok(match prim {
-        Prim::BoolType => (prim.clone(), Term::type_()),
+        Prim::BoolType => (prim.clone(), Term::type_ground()),
         Prim::Bool(_) => (prim.clone(), bool_type),
-        Prim::NatType => (prim.clone(), Term::type_()),
+        Prim::NatType => (prim.clone(), Term::type_ground()),
         Prim::Nat(_) => (prim.clone(), nat_type),
-        Prim::ByteType => (prim.clone(), Term::type_()),
+        Prim::ByteType => (prim.clone(), Term::type_ground()),
         Prim::Byte(_) => (prim.clone(), byte_type.clone()),
         Prim::ByteToNat(i) => unary(context, i, &byte_type, nat_type.clone(), Prim::ByteToNat)?,
         Prim::NatToByte(i) => unary(context, i, &nat_type, byte_type.clone(), Prim::NatToByte)?,
@@ -129,7 +129,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::BoolXor(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolXor)?,
         Prim::BoolEql(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolEql)?,
         Prim::BoolNeq(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolNeq)?,
-        Prim::IntType => (prim.clone(), Term::type_()),
+        Prim::IntType => (prim.clone(), Term::type_ground()),
         Prim::Int(_) => (prim.clone(), int_type),
         Prim::IntEql(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntEql)?,
         Prim::IntNeq(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntNeq)?,
@@ -152,7 +152,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::IntClz(i) => unary(context, i, &int_type, int_type.clone(), Prim::IntClz)?,
         Prim::IntCtz(i) => unary(context, i, &int_type, int_type.clone(), Prim::IntCtz)?,
         Prim::IntPopcnt(i) => unary(context, i, &int_type, int_type.clone(), Prim::IntPopcnt)?,
-        Prim::FltType => (prim.clone(), Term::type_()),
+        Prim::FltType => (prim.clone(), Term::type_ground()),
         Prim::Flt(_) => (prim.clone(), flt_type),
         Prim::FltAdd(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltAdd)?,
         Prim::FltSub(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltSub)?,
@@ -198,7 +198,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::IntToFlt(i) => unary(context, i, &int_type, flt_type.clone(), Prim::IntToFlt)?,
         Prim::FltToNat(i) => unary(context, i, &flt_type, nat_type.clone(), Prim::FltToNat)?,
         Prim::FltToInt(i) => unary(context, i, &flt_type, int_type.clone(), Prim::FltToInt)?,
-        Prim::BinType(Grain::X) => (prim.clone(), Term::type_()),
+        Prim::BinType(Grain::X) => (prim.clone(), Term::type_ground()),
         Prim::Bin(Grain::X, _) => (prim.clone(), bin_type),
         Prim::BinLen(Grain::X, bin) => {
             let bin = infer_bin(context, bin)?;
@@ -235,7 +235,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::BinConcat(Grain::X, elaborated), bin_type)
         }
-        Prim::BinType(Grain::B) => (prim.clone(), Term::type_()),
+        Prim::BinType(Grain::B) => (prim.clone(), Term::type_ground()),
         Prim::Bin(Grain::B, _) => (prim.clone(), bin_b_type.clone()),
         Prim::BinLen(Grain::B, bin) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type.clone()))?.0;
@@ -270,8 +270,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::BinConcat(Grain::B, elaborated), bin_b_type)
         }
         Prim::LstType(elem) => {
-            let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
-            (Prim::LstType(elem), Term::type_())
+            let (elem, sort) = crate::check_is_sort(context, elem)?;
+            (Prim::LstType(elem), sort.term())
         }
         // Inferring: the element type is unknown, so mint a fresh metavar — the
         // implicit `@T` a `nil`/`cons` constructor would insert — which the elements
@@ -279,8 +279,9 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         // as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which
         // borrows the concrete element type from `expected` before reaching here.
         Prim::Lst(elems) => {
+            let classifier = context.fresh_classifier_type("list element classifier");
             let elem_type = context.fresh_metavar(
-                Term::type_(),
+                classifier,
                 None,
                 ImplicitOrigin {
                     func: "Lst".to_string(),
@@ -291,13 +292,13 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::Lst(elaborated), lst_type(elem_type))
         }
         Prim::LstLen(type_, list) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
             (Prim::LstLen(type_, list), nat_type)
         }
         Prim::LstGet(type_, list, index) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type))?.0;
@@ -305,7 +306,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::LstGet(type_, list, index), output)
         }
         Prim::LstSlice(type_, list, start, end) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
@@ -313,14 +314,14 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::LstSlice(type_, list, start, end), list_type)
         }
         Prim::LstAppend(type_, list, elem) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let elem = elaborate(context, elem, Mode::Check(type_.clone()))?.0;
             (Prim::LstAppend(type_, list, elem), list_type)
         }
         Prim::LstConcat(type_, operands) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let list_type = lst_type(type_.clone());
             let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
@@ -329,8 +330,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::LstConcat(type_, elaborated), list_type)
         }
         Prim::LstMap(a, b, lst, f) => {
-            let a = elaborate(context, a, Mode::Check(Term::type_()))?.0;
-            let b = elaborate(context, b, Mode::Check(Term::type_()))?.0;
+            let a = crate::check_is_sort(context, a)?.0;
+            let b = crate::check_is_sort(context, b)?.0;
             let lst_a = lst_type(a.clone());
             let lst = elaborate(context, lst, Mode::Check(lst_a))?.0;
             let f_type = Term::func_type([("x", a.clone())], b.clone());
@@ -338,13 +339,13 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let lst_b = lst_type(b.clone());
             (Prim::LstMap(a, b, lst, f), lst_b)
         }
-        Prim::HandleType => (prim.clone(), Term::type_()),
+        Prim::HandleType => (prim.clone(), Term::type_ground()),
         Prim::Handle(_) => (prim.clone(), io_type),
         // `(@A : Type) -> Nat -> A`: exit never returns, so the result type is
         // whatever the caller demands (`/std/proc/exit` instantiates it at
         // `False`). The type argument keeps the kernel from naming `/std/False`.
         Prim::Exit(type_, code) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
             (Prim::Exit(type_.clone(), code), type_)
         }
@@ -380,24 +381,24 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::Foreign(Arc::clone(function), elaborated), result)
         }
         Prim::CellType(elem) => {
-            let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
-            (Prim::CellType(elem), Term::type_())
+            let (elem, sort) = crate::check_is_sort(context, elem)?;
+            (Prim::CellType(elem), sort.term())
         }
         Prim::Cell(type_, init) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let init = elaborate(context, init, Mode::Check(type_.clone()))?.0;
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             (Prim::Cell(type_, init), cell_type)
         }
         Prim::CellSet(type_, cell, value) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
             let value = elaborate(context, value, Mode::Check(type_.clone()))?.0;
             (Prim::CellSet(type_, cell, value), Term::tuple_type_unit())
         }
         Prim::CellGet(type_, cell) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let type_ = crate::check_is_sort(context, type_)?.0;
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
             let output = type_.clone();
@@ -439,7 +440,7 @@ pub(crate) fn elaborate_prim(
     if let (Prim::LstConcat(type_slot, operands), Mode::Check(expected)) = (prim, &mode)
         && let Subterm::Prim(Prim::LstType(_)) = &*reduce_with(context, expected)?
     {
-        let type_slot = elaborate(context, type_slot, Mode::Check(Term::type_()))?.0;
+        let type_slot = crate::check_is_sort(context, type_slot)?.0;
         expect(context, term, &lst_type(type_slot.clone()), expected)?;
 
         let mut elaborated = Vec::with_capacity(operands.len());

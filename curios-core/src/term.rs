@@ -2,7 +2,11 @@
 mod tests;
 
 use {
-    super::{Atom, Bound, Many, Nat, Prim, Scope, Telescope, Three, Two, Var, Visit, print_term},
+    super::{
+        Atom, Bound, Level, Many, Nat, Prim, Scope, SelfReference, Telescope, Three, Two,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
+        instantiate_universe_levels_scoped, print_term,
+    },
     curios_base::{Flt, Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
     num_bigint::BigUint,
     std::{
@@ -60,6 +64,10 @@ struct Node {
     has_local_free: OnceCell<bool>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     has_metavar: OnceCell<bool>,
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    has_universe_meta: OnceCell<bool>,
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    has_universe_data: OnceCell<bool>,
     subterm: Subterm,
 }
 
@@ -71,6 +79,8 @@ impl Node {
             free_vars: OnceCell::new(),
             has_local_free: OnceCell::new(),
             has_metavar: OnceCell::new(),
+            has_universe_meta: OnceCell::new(),
+            has_universe_data: OnceCell::new(),
             subterm,
         }
     }
@@ -112,10 +122,10 @@ impl Term {
         }
     }
 
-    /// Fill the four cheap scalar cells (`hash`, `reach`, `has_local_free`,
-    /// `has_metavar`) together in one post-order pass. They combine from the
-    /// children's cells in O(children), and are almost always all wanted on the
-    /// same node, so one shared walk beats four. `reach` is the fill marker.
+    /// Fill the cheap scalar cells together in one post-order pass. They
+    /// combine from the children's cells in O(children), and are almost always
+    /// wanted together, so one shared walk beats independent traversals.
+    /// `reach` is the fill marker.
     fn warm_scalars(&self) {
         self.fill_post_order(
             |node| node.reach.get().is_some(),
@@ -124,6 +134,10 @@ impl Term {
                 node.has_local_free
                     .get_or_init(|| node.subterm.has_local_free());
                 node.has_metavar.get_or_init(|| node.subterm.has_metavar());
+                node.has_universe_meta
+                    .get_or_init(|| node.subterm.has_universe_meta());
+                node.has_universe_data
+                    .get_or_init(|| node.subterm.has_universe_data());
                 node.hash.get_or_init(|| {
                     let mut hasher = DefaultHasher::new();
                     node.subterm.hash(&mut hasher);
@@ -174,6 +188,191 @@ impl Term {
             .expect("warm_scalars fills has_metavar")
     }
 
+    /// Whether this term contains an unresolved universe metavariable in a
+    /// `Type` level, universe instantiation, or nominal universe vector.
+    pub(crate) fn has_universe_meta(&self) -> bool {
+        if self.inner.has_universe_meta.get().is_none() {
+            self.warm_scalars();
+        }
+        *self
+            .inner
+            .has_universe_meta
+            .get()
+            .expect("warm_scalars fills has_universe_meta")
+    }
+
+    /// Whether universe erasure or validation must inspect this subtree.
+    ///
+    /// Cached and filled on the explicit post-order stack like the other
+    /// scalar derivations, so universe-only passes can structurally share a
+    /// deep universe-free data spine without consuming one native frame per
+    /// node.
+    pub(crate) fn has_universe_data(&self) -> bool {
+        if self.inner.has_universe_data.get().is_none() {
+            self.warm_scalars();
+        }
+        *self
+            .inner
+            .has_universe_data
+            .get()
+            .expect("warm_scalars fills has_universe_data")
+    }
+
+    pub(crate) fn universe_metas(&self) -> BTreeSet<UniverseMetaId> {
+        super::universe_metas(self)
+    }
+
+    /// Whether any universe metavariable in this subtree satisfies `pred`.
+    ///
+    /// The walk is iterative and pointer-deduplicated, matching the scalar
+    /// cache fill: cache eligibility calls this on data-shaped terms and must
+    /// not put their depth back onto the native stack.
+    pub(crate) fn any_universe_meta(&self, mut pred: impl FnMut(UniverseMetaId) -> bool) -> bool {
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        let mut pending = vec![self.clone()];
+        while let Some(term) = pending.pop() {
+            if !seen.insert(Rc::as_ptr(&term.inner)) {
+                continue;
+            }
+            if !term.has_universe_meta() {
+                continue;
+            }
+            if term.inner.subterm.any_direct_universe_meta(&mut pred) {
+                return true;
+            }
+            term.inner.subterm.any_child_term(&mut |child| {
+                pending.push(child.clone());
+                false
+            });
+        }
+        false
+    }
+
+    /// Extend the two dependency sets in one explicit walk without rebuilding
+    /// the term or warming its unrelated scalar caches. Declaration universe
+    /// closure uses both sets together: direct level metas join the closure,
+    /// while term metas lead to their result, telescope, and solved body in
+    /// the context store.
+    pub(crate) fn collect_universe_dependencies(
+        &self,
+        universes: &mut BTreeSet<UniverseMetaId>,
+        term_metas: &mut BTreeSet<MetaId>,
+    ) {
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        let mut pending = vec![self.clone()];
+        while let Some(term) = pending.pop() {
+            if !seen.insert(Rc::as_ptr(&term.inner)) {
+                continue;
+            }
+            term.inner.subterm.any_direct_universe_meta(&mut |meta| {
+                universes.insert(meta);
+                false
+            });
+            if let Subterm::Metavar(Metavar { id, spine, .. }) = &term.inner.subterm {
+                term_metas.insert(*id);
+                pending.extend(
+                    spine
+                        .iter()
+                        .filter(|entry| !matches!(&***entry, Subterm::Var(_)))
+                        .cloned(),
+                );
+                continue;
+            }
+            term.inner.subterm.any_child_term(&mut |child| {
+                pending.push(child.clone());
+                false
+            });
+        }
+    }
+
+    /// Rewrite this node, if it is an occurrence of one of `names`, to denote
+    /// the declaration instance `levels`. Returns `None` for every other node,
+    /// leaving it to ordinary traversal.
+    ///
+    /// Two occurrence shapes carry an instance. A nominal normal form holds it
+    /// in its own universe vector; a not-yet-reduced reference to a type former
+    /// is an ordinary variable, which holds it as a wrapping [`UniverseInst`] —
+    /// the same node an external use site receives from scheme instantiation.
+    /// A variable already under a `UniverseInst` has been instantiated and is
+    /// returned untouched rather than wrapped twice.
+    ///
+    /// Nominal children are stamped explicitly because a rewrite hook replaces
+    /// its node wholesale: an occurrence nested in a parameter or index must
+    /// receive the same instance as the occurrence containing it.
+    pub(crate) fn stamp_declaration_node(
+        &self,
+        names: &BTreeSet<String>,
+        self_reference: SelfReference,
+        levels: &[Level],
+    ) -> Option<Self> {
+        fn stamp(
+            terms: &[Term],
+            names: &BTreeSet<String>,
+            self_reference: SelfReference,
+            levels: &[Level],
+        ) -> Vec<Term> {
+            terms
+                .iter()
+                .map(|term| super::stamp_declaration_instance(term, names, self_reference, levels))
+                .collect()
+        }
+
+        let subterm = match &**self {
+            Subterm::InductType(induct) if names.contains(&induct.name) => {
+                Subterm::InductType(InductType {
+                    name: induct.name.clone(),
+                    universes: levels.to_vec(),
+                    params: stamp(&induct.params, names, self_reference, levels),
+                    indices: stamp(&induct.indices, names, self_reference, levels),
+                })
+            }
+            Subterm::Variant(variant) if names.contains(&variant.name) => {
+                Subterm::Variant(Variant {
+                    name: variant.name.clone(),
+                    universes: levels.to_vec(),
+                    params: stamp(&variant.params, names, self_reference, levels),
+                    tag: variant.tag.clone(),
+                    payload: stamp(&variant.payload, names, self_reference, levels),
+                })
+            }
+            Subterm::StructType(struct_type) if names.contains(&struct_type.name) => {
+                Subterm::StructType(StructType {
+                    name: struct_type.name.clone(),
+                    universes: levels.to_vec(),
+                    params: stamp(&struct_type.params, names, self_reference, levels),
+                })
+            }
+            Subterm::Struct(struct_) if names.contains(&struct_.name) => Subterm::Struct(Struct {
+                name: struct_.name.clone(),
+                universes: levels.to_vec(),
+                params: stamp(&struct_.params, names, self_reference, levels),
+                fields: stamp(&struct_.fields, names, self_reference, levels),
+                entries: struct_.entries.clone(),
+            }),
+            Subterm::UniverseInst(instance)
+                if instance
+                    .head
+                    .head_label()
+                    .is_some_and(|label| names.contains(label)) =>
+            {
+                return Some(self.clone());
+            }
+            Subterm::Var(var)
+                if self_reference == SelfReference::Free
+                    && var.as_free().is_some_and(|label| names.contains(label)) =>
+            {
+                return Some(Term::universe_inst(self.clone(), levels.to_vec()));
+            }
+            _ => return None,
+        };
+
+        let stamped = Term::from(subterm);
+        Some(match self.span() {
+            Some(span) => stamped.with_span(span),
+            None => stamped,
+        })
+    }
+
     pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
         match Rc::try_unwrap(this.inner) {
             Ok(node) => node.subterm,
@@ -190,6 +389,7 @@ impl Term {
     pub(crate) fn head_label(&self) -> Option<&str> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_label(),
+            Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_label(),
             Subterm::Var(var) => var.as_free(),
             // A decidable comparison's normal form is a primitive node, not an
             // application, so it carries no named head. Scrutinee refinement
@@ -275,7 +475,7 @@ impl Term {
     pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<String> {
         fn ends_in_literal_sort(term: &Term) -> bool {
             match &**term {
-                Subterm::Type | Subterm::Prop => true,
+                Subterm::Type(_) | Subterm::Prop => true,
                 Subterm::FuncType(FuncType { telescope, .. }) => {
                     ends_in_literal_sort(telescope.terminal())
                 }
@@ -319,9 +519,15 @@ impl Term {
         self
     }
 
-    /// The universe of types, `Type` (the trailing underscore dodges the Rust keyword).
-    pub fn type_() -> Self {
-        Self::from(Subterm::Type)
+    /// Ground `Type 0`, used only where the calculus requires that exact
+    /// universe (primitive carriers and the type of `Prop`).
+    pub fn type_ground() -> Self {
+        Self::type_at(Level::zero())
+    }
+
+    /// `Type` at a known internal level.
+    pub fn type_at(level: Level) -> Self {
+        Self::from(Subterm::Type(level))
     }
 
     /// The universe of strict propositions, `Prop`.
@@ -343,6 +549,15 @@ impl Term {
         Self::var(Var::free(label))
     }
 
+    /// Instantiate a generalized binding at occurrence-specific levels.
+    pub fn universe_inst(head: Term, levels: Vec<Level>) -> Self {
+        if levels.is_empty() {
+            head
+        } else {
+            Self::from(Subterm::UniverseInst(UniverseInst { head, levels }))
+        }
+    }
+
     /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.
     pub fn infix(op: NumOp, left: Term, right: Term) -> Self {
         Self::from(Subterm::Infix(Infix { op, left, right }))
@@ -358,7 +573,7 @@ impl Term {
     }
 
     /// A bare metavariable, as `into_core` mints one for a desugared hole (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin, so its solution is spliced silently at zonk.
-    pub fn metavar(id: impl Into<MetavarId>) -> Self {
+    pub fn metavar(id: impl Into<MetaId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
             spine: Rc::new(Vec::new()),
@@ -367,7 +582,7 @@ impl Term {
     }
 
     /// A written goal `?`, as `into_core` mints one: a bare metavariable (empty spine, like [`Term::metavar`]) whose [`MetavarOrigin::Goal`] origin makes zonk *report* what elaboration determined for it — scope, type, and solution — instead of splicing silently.
-    pub fn goal(id: impl Into<MetavarId>) -> Self {
+    pub fn goal(id: impl Into<MetaId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
             spine: Rc::new(Vec::new()),
@@ -380,7 +595,7 @@ impl Term {
     /// its frozen telescope, or an elaborator insertion minted with its
     /// provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
     pub(crate) fn metavar_birthed(
-        id: impl Into<MetavarId>,
+        id: impl Into<MetaId>,
         origin: Option<MetavarOrigin>,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
@@ -589,8 +804,26 @@ impl Term {
         J: IntoIterator<Item = Q>,
         Q: Into<Term>,
     {
+        Self::induct_type_at(name, Vec::<Level>::new(), params, indices)
+    }
+
+    pub(crate) fn induct_type_at<N, U, I, P, J, Q>(
+        name: N,
+        universes: U,
+        params: I,
+        indices: J,
+    ) -> Self
+    where
+        N: Into<String>,
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
         Self::from(Subterm::InductType(InductType {
             name: name.into(),
+            universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
             indices: indices.into_iter().map(|i| i.into()).collect(),
         }))
@@ -606,8 +839,28 @@ impl Term {
         J: IntoIterator<Item = Q>,
         Q: Into<Term>,
     {
+        Self::variant_at(name, Vec::<Level>::new(), params, tag, payload)
+    }
+
+    pub(crate) fn variant_at<N, U, I, P, A, J, Q>(
+        name: N,
+        universes: U,
+        params: I,
+        tag: A,
+        payload: J,
+    ) -> Self
+    where
+        N: Into<String>,
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        A: Into<Atom>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
         Self::from(Subterm::Variant(Variant {
             name: name.into(),
+            universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
             tag: tag.into(),
             payload: payload.into_iter().map(|p| p.into()).collect(),
@@ -621,8 +874,19 @@ impl Term {
         I: IntoIterator<Item = P>,
         P: Into<Term>,
     {
+        Self::struct_type_at(name, Vec::<Level>::new(), params)
+    }
+
+    pub(crate) fn struct_type_at<N, U, I, P>(name: N, universes: U, params: I) -> Self
+    where
+        N: Into<String>,
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+    {
         Self::from(Subterm::StructType(StructType {
             name: name.into(),
+            universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
         }))
     }
@@ -637,8 +901,21 @@ impl Term {
         J: IntoIterator<Item = Q>,
         Q: Into<Term>,
     {
+        Self::struct_at(name, Vec::<Level>::new(), params, fields)
+    }
+
+    pub(crate) fn struct_at<N, U, I, P, J, Q>(name: N, universes: U, params: I, fields: J) -> Self
+    where
+        N: Into<String>,
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
         Self::from(Subterm::Struct(Struct {
             name: name.into(),
+            universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
             fields: fields.into_iter().map(|f| f.into()).collect(),
             entries: vec![],
@@ -667,6 +944,7 @@ impl Term {
 
         Self::from(Subterm::Struct(Struct {
             name: name.into(),
+            universes: vec![],
             params: params.into_iter().map(|p| p.into()).collect(),
             fields,
             entries,
@@ -1195,6 +1473,22 @@ impl Term {
         B: Into<Term>,
         U: Into<Term>,
     {
+        Self::let_scheme(label, type_, body, UniverseContext::empty(), tail)
+    }
+
+    pub(crate) fn let_scheme<L, T, B, U>(
+        label: L,
+        type_: T,
+        body: B,
+        universe_context: UniverseContext,
+        tail: U,
+    ) -> Self
+    where
+        L: Into<String>,
+        T: Into<Term>,
+        B: Into<Term>,
+        U: Into<Term>,
+    {
         let label = label.into();
         let type_ = type_.into();
         let body = body.into();
@@ -1203,10 +1497,12 @@ impl Term {
         match Term::unwrap_or_clone(tail) {
             Subterm::Let(Let { bindings, tail }) => {
                 let mut merged = Vec::with_capacity(bindings.len() + 1);
-                merged.push((type_, body));
+                merged.push(LetBinding::new(universe_context, type_, body));
 
-                for (binding_type, binding_value) in &bindings {
-                    merged.push((
+                for binding in bindings {
+                    let (context, binding_type, binding_value) = binding.into_parts();
+                    merged.push(LetBinding::new(
+                        context,
                         binding_type.capture(&[label.as_str()]),
                         binding_value.capture(&[label.as_str()]),
                     ));
@@ -1218,7 +1514,7 @@ impl Term {
                 }))
             }
             other => Self::from(Subterm::Let(Let {
-                bindings: vec![(type_, body)],
+                bindings: vec![LetBinding::new(universe_context, type_, body)],
                 tail: Scope::close(Many(1), &[label.as_str()], Term::from(other)),
             })),
         }
@@ -1226,6 +1522,21 @@ impl Term {
 
     /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
     pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
+    where
+        I: IntoIterator<Item = (L, T, U)>,
+        L: Into<String>,
+        T: Into<Term>,
+        U: Into<Term>,
+        V: Into<Term>,
+    {
+        Self::rec_scheme(items, UniverseContext::empty(), tail)
+    }
+
+    pub(crate) fn rec_scheme<I, L, T, U, V>(
+        items: I,
+        universe_context: UniverseContext,
+        tail: V,
+    ) -> Self
     where
         I: IntoIterator<Item = (L, T, U)>,
         L: Into<String>,
@@ -1258,7 +1569,8 @@ impl Term {
                     )
                 })
                 .collect(),
-        );
+        )
+        .with_universe_context(universe_context);
 
         Self::from(Subterm::Rec(Rec {
             group,
@@ -1328,16 +1640,22 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
+        if let Some(replacement) = visit.rewrite_term(self) {
+            return replacement;
+        }
+        if visit.universes_only() && !self.has_universe_data() {
+            return self.clone();
+        }
         if visit.prune() && self.reach() <= visit.depth() {
             return self.clone();
         }
-
-        // Preserve the span across traversal; the rebuilt node is a fresh
-        // structure, so its cache starts empty.
-        Self {
-            span: self.span.clone(),
-            inner: Rc::new(Node::new((**self).traverse(visit))),
+        if (visit.universes_only() || visit.rewrites_terms())
+            && matches!(&**self, Subterm::Apply(_) | Subterm::Variant(_))
+        {
+            return self.traverse_rewrite_spine(visit);
         }
+
+        self.traverse_children(visit)
     }
 
     fn reach(&self) -> usize {
@@ -1345,6 +1663,10 @@ impl Bound for Term {
             self.warm_scalars();
         }
         *self.inner.reach.get().expect("warm_scalars fills reach")
+    }
+
+    fn has_metavar(&self) -> bool {
+        Term::has_metavar(self)
     }
 
     /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s
@@ -1356,6 +1678,132 @@ impl Bound for Term {
     /// not specific to recursive ones; see `Convert::history_key`.
     fn free_vars(&self) -> BTreeSet<String> {
         self.get_or_init_free_vars().as_ref().clone()
+    }
+}
+
+impl Term {
+    fn traverse_children<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        // Preserve the span across traversal; the rebuilt node is a fresh
+        // structure, so its cache starts empty.
+        Self {
+            span: self.span.clone(),
+            inner: Rc::new(Node::new((**self).traverse(visit))),
+        }
+    }
+
+    /// Rewrite a potentially deep constructor/application spine without
+    /// putting one native frame per link on the stack. Term hooks and
+    /// universe-level rewrites are structurally local at these nodes: neither
+    /// former changes binder depth, and every nested scope still delegates to
+    /// ordinary traversal.
+    fn traverse_rewrite_spine<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        enum Work {
+            Enter(Term, bool),
+            Exit(Term, usize),
+        }
+
+        let mut work = Vec::from([Work::Enter(self.clone(), true)]);
+        let mut rewritten = Vec::new();
+
+        while let Some(next) = work.pop() {
+            match next {
+                Work::Enter(term, prechecked) => {
+                    if !prechecked {
+                        if let Some(replacement) = visit.rewrite_term(&term) {
+                            rewritten.push(replacement);
+                            continue;
+                        }
+                        if visit.universes_only() && !term.has_universe_data() {
+                            rewritten.push(term);
+                            continue;
+                        }
+                    }
+
+                    let children = match &*term {
+                        Subterm::Apply(Apply { head, params, .. }) => {
+                            let mut children = Vec::with_capacity(params.len() + 1);
+                            children.push(head.clone());
+                            children.extend(params.iter().cloned());
+                            children
+                        }
+                        Subterm::Variant(Variant {
+                            params, payload, ..
+                        }) => params.iter().chain(payload).cloned().collect(),
+                        _ => {
+                            rewritten.push(term.traverse_children(visit));
+                            continue;
+                        }
+                    };
+
+                    let child_count = children.len();
+                    work.push(Work::Exit(term, child_count));
+                    work.extend(
+                        children
+                            .into_iter()
+                            .rev()
+                            .map(|child| Work::Enter(child, false)),
+                    );
+                }
+                Work::Exit(term, child_count) => {
+                    let child_start = rewritten
+                        .len()
+                        .checked_sub(child_count)
+                        .expect("each universe traversal frame owns its child results");
+                    let mut children = rewritten.drain(child_start..);
+                    let subterm = match &*term {
+                        Subterm::Apply(Apply { plicities, .. }) => {
+                            let head = children
+                                .next()
+                                .expect("an application traversal preserves its head");
+                            Subterm::Apply(Apply {
+                                head,
+                                params: children.collect(),
+                                plicities: plicities.clone(),
+                            })
+                        }
+                        Subterm::Variant(Variant {
+                            name,
+                            universes,
+                            params,
+                            tag,
+                            ..
+                        }) => {
+                            let universes = if visit.erases_universes() {
+                                Vec::new()
+                            } else {
+                                universes
+                                    .iter()
+                                    .map(|level| visit.visit_level(level))
+                                    .collect()
+                            };
+                            let params = children.by_ref().take(params.len()).collect();
+                            Subterm::Variant(Variant {
+                                name: name.clone(),
+                                universes,
+                                params,
+                                tag: tag.clone(),
+                                payload: children.collect(),
+                            })
+                        }
+                        _ => unreachable!("only spine nodes create universe traversal frames"),
+                    };
+                    rewritten.push(Self {
+                        span: term.span.clone(),
+                        inner: Rc::new(Node::new(subterm)),
+                    });
+                }
+            }
+        }
+
+        rewritten
+            .pop()
+            .expect("a universe spine traversal returns its root")
     }
 }
 
@@ -1403,7 +1851,7 @@ impl Term {
     /// spine) short-circuits without walking, so the enumeration only ever
     /// recurses through metavariable-bearing structure, whose depth is bounded
     /// by the written program.
-    pub(crate) fn metavars(&self) -> BTreeSet<MetavarId> {
+    pub(crate) fn metavars(&self) -> BTreeSet<MetaId> {
         let mut ids = BTreeSet::new();
         if self.has_metavar() {
             self.inner.subterm.collect_metavars(&mut ids);
@@ -1415,7 +1863,7 @@ impl Term {
     /// gated on [`has_metavar`](Self::has_metavar) like [`metavars`](Self::metavars),
     /// and — since `Subterm::any_metavar`'s recursion re-enters through each
     /// child `Term` — every ground subtree it reaches short-circuits too.
-    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         self.has_metavar() && self.inner.subterm.any_metavar(pred)
     }
 }
@@ -1593,6 +2041,7 @@ pub struct Proj {
 )]
 pub struct InductType {
     pub name: String,
+    pub universes: Vec<Level>,
     pub params: Vec<Term>,
     pub indices: Vec<Term>,
 }
@@ -1612,6 +2061,7 @@ pub struct InductType {
 )]
 pub struct Variant {
     pub name: String,
+    pub universes: Vec<Level>,
     pub params: Vec<Term>,
     pub tag: Atom,
     pub payload: Vec<Term>,
@@ -1628,6 +2078,7 @@ pub struct Variant {
 )]
 pub struct StructType {
     pub name: String,
+    pub universes: Vec<Level>,
     pub params: Vec<Term>,
 }
 
@@ -1666,6 +2117,7 @@ pub enum StructEntry {
 )]
 pub struct Struct {
     pub name: String,
+    pub universes: Vec<Level>,
     pub params: Vec<Term>,
     pub fields: Vec<Term>,
     pub entries: Vec<StructEntry>,
@@ -1822,8 +2274,53 @@ pub enum Carrier {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Let {
-    pub bindings: Vec<(Term, Term)>,
+    pub bindings: Vec<LetBinding>,
     pub tail: Scope<Many>,
+}
+
+/// One non-recursive local binding under its inferred universe scheme.
+///
+/// The wrapper keeps the scheme context, declared type, and value
+/// structurally inseparable while exposing names meaningful to binding
+/// consumers instead of the generic scheme's tuple positions.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct LetBinding {
+    scheme: UniverseScheme<(Term, Term)>,
+}
+
+impl LetBinding {
+    pub(crate) fn new(context: UniverseContext, type_: Term, value: Term) -> Self {
+        Self {
+            scheme: UniverseScheme {
+                context,
+                value: (type_, value),
+            },
+        }
+    }
+
+    pub fn universe_context(&self) -> &UniverseContext {
+        &self.scheme.context
+    }
+
+    pub fn type_(&self) -> &Term {
+        &self.scheme.value.0
+    }
+
+    pub fn value(&self) -> &Term {
+        &self.scheme.value.1
+    }
+
+    pub(crate) fn into_parts(self) -> (UniverseContext, Term, Term) {
+        (
+            self.scheme.context,
+            self.scheme.value.0,
+            self.scheme.value.1,
+        )
+    }
 }
 
 /// The shared knot of a mutually-recursive group. Every member type and body
@@ -1835,22 +2332,40 @@ pub struct Let {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct RecGroup {
-    items: Rc<Vec<(Scope<Many>, Scope<Many>)>>,
+    scheme: UniverseScheme<Rc<Vec<(Scope<Many>, Scope<Many>)>>>,
 }
 
 impl RecGroup {
     pub(crate) fn new(items: Vec<(Scope<Many>, Scope<Many>)>) -> Self {
         Self {
-            items: Rc::new(items),
+            scheme: UniverseScheme::monomorphic(Rc::new(items)),
         }
     }
 
-    pub(crate) fn items(&self) -> &[(Scope<Many>, Scope<Many>)] {
-        &self.items
+    pub(crate) fn iter(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &(Scope<Many>, Scope<Many>)> + Clone {
+        self.scheme.value.iter()
+    }
+
+    fn item(&self, index: usize) -> &(Scope<Many>, Scope<Many>) {
+        self.scheme
+            .value
+            .get(index)
+            .expect("recursive member index in bounds")
+    }
+
+    pub fn universe_context(&self) -> &UniverseContext {
+        &self.scheme.context
+    }
+
+    pub(crate) fn with_universe_context(mut self, universe_context: UniverseContext) -> Self {
+        self.scheme.context = universe_context;
+        self
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.items.len()
+        self.iter().len()
     }
 
     pub(crate) fn members(&self) -> Vec<Term> {
@@ -1862,30 +2377,67 @@ impl RecGroup {
     pub(crate) fn member_type(&self, index: usize) -> Term {
         let members = self.members();
         let refs = members.iter().collect::<Vec<_>>();
-        self.items[index].0.open(&refs)
+        self.item(index).0.open(&refs)
     }
 
     pub(crate) fn member_body(&self, index: usize) -> Term {
         let members = self.members();
         let refs = members.iter().collect::<Vec<_>>();
-        self.items[index].1.open(&refs)
+        self.item(index).1.open(&refs)
+    }
+
+    pub(crate) fn instantiate_universes(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
+        if arguments.len() != self.scheme.context.parameter_count {
+            return Err(UniverseError::InstanceArity {
+                expected: self.scheme.context.parameter_count,
+                got: arguments.len(),
+            });
+        }
+        Ok(Self {
+            scheme: UniverseScheme {
+                value: self
+                    .iter()
+                    .map(|(type_, body)| {
+                        Ok((
+                            type_.map_body(|body| {
+                                instantiate_universe_levels_scoped(body, arguments)
+                            })?,
+                            body.map_body(|body| {
+                                instantiate_universe_levels_scoped(body, arguments)
+                            })?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, UniverseError>>()?
+                    .into(),
+                context: UniverseContext::empty(),
+            },
+        })
     }
 
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        Self::new(
-            self.items
-                .iter()
+        let universe_arity = self.scheme.context.parameter_count;
+        visit.enter_universe_scope(universe_arity);
+        let mut result = Self::new(
+            self.iter()
                 .map(|(type_, body)| (visit.visit_scope(type_), visit.visit_scope(body)))
                 .collect(),
-        )
+        );
+        result.scheme.context = if visit.erases_universes() {
+            UniverseContext::empty()
+        } else {
+            self.scheme
+                .context
+                .map_levels(|level| visit.visit_level(level))
+        };
+        visit.leave_universe_scope(universe_arity);
+        result
     }
 
     fn reach(&self) -> usize {
-        self.items
-            .iter()
+        self.iter()
             .map(|(type_, body)| type_.reach().max(body.reach()))
             .max()
             .unwrap_or(0)
@@ -1977,21 +2529,21 @@ pub enum MetavarOrigin {
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
 )]
-pub struct MetavarId(pub usize);
+pub struct MetaId(pub usize);
 
-impl From<usize> for MetavarId {
+impl From<usize> for MetaId {
     fn from(raw: usize) -> Self {
         Self(raw)
     }
 }
 
-impl Mint for MetavarId {
+impl Mint for MetaId {
     fn mint(entropy: usize) -> Self {
         Self(entropy)
     }
 }
 
-impl fmt::Display for MetavarId {
+impl fmt::Display for MetaId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -2029,9 +2581,21 @@ impl fmt::Display for MetavarId {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Metavar {
-    pub id: MetavarId,
+    pub id: MetaId,
     pub spine: Rc<Vec<Term>>,
     pub origin: Option<MetavarOrigin>,
+}
+
+/// An internal, occurrence-specific instantiation of a universe-polymorphic
+/// binding. The ordinary term binder structure remains entirely in `head`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UniverseInst {
+    pub head: Term,
+    pub levels: Vec<Level>,
 }
 
 /// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final two variants (`Infix`, `NumLit`) are elaboration-transient: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
@@ -2041,7 +2605,7 @@ pub struct Metavar {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum Subterm {
-    Type,
+    Type(Level),
     Prop,
     Prim(Prim),
     FuncType(FuncType),
@@ -2058,6 +2622,7 @@ pub enum Subterm {
     Let(Let),
     Rec(Rec),
     RecMember(RecMember),
+    UniverseInst(UniverseInst),
     Var(Var),
     Metavar(Metavar),
     /// An unresolved infix operator application; consumed by `elaborate_infix`.
@@ -2067,6 +2632,39 @@ pub enum Subterm {
 }
 
 impl Subterm {
+    fn any_direct_universe_meta(&self, pred: &mut impl FnMut(UniverseMetaId) -> bool) -> bool {
+        let mut level_matches = |level: &Level| level.metas().any(&mut *pred);
+        let context_matches =
+            |context: &UniverseContext, level_matches: &mut dyn FnMut(&Level) -> bool| {
+                context.constraints.iter().any(|constraint| {
+                    level_matches(&constraint.lower) || level_matches(&constraint.upper)
+                })
+            };
+        match self {
+            Subterm::Type(level) => level_matches(level),
+            Subterm::UniverseInst(UniverseInst { levels, .. })
+            | Subterm::InductType(InductType {
+                universes: levels, ..
+            })
+            | Subterm::Variant(Variant {
+                universes: levels, ..
+            })
+            | Subterm::StructType(StructType {
+                universes: levels, ..
+            })
+            | Subterm::Struct(Struct {
+                universes: levels, ..
+            }) => levels.iter().any(level_matches),
+            Subterm::Let(Let { bindings, .. }) => bindings
+                .iter()
+                .any(|binding| context_matches(binding.universe_context(), &mut level_matches)),
+            Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
+                context_matches(group.universe_context(), &mut level_matches)
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) fn as_nat(&self) -> Option<Nat> {
         match self {
             Subterm::Prim(Prim::Nat(nat)) => Some(nat.clone()),
@@ -2115,7 +2713,10 @@ impl Subterm {
 
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
         match self {
-            Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
+            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => {}
+            Subterm::UniverseInst(UniverseInst { head, .. }) => {
+                head.collect_construction_names(names);
+            }
             Subterm::NumLit(_) => {}
             Subterm::Infix(Infix { left, right, .. }) => {
                 left.collect_construction_names(names);
@@ -2150,6 +2751,7 @@ impl Subterm {
                 name,
                 params,
                 indices,
+                ..
             }) => {
                 names.insert(name.clone());
                 params
@@ -2173,7 +2775,7 @@ impl Subterm {
                     .iter()
                     .for_each(|p| p.collect_construction_names(names));
             }
-            Subterm::StructType(StructType { name, params }) => {
+            Subterm::StructType(StructType { name, params, .. }) => {
                 names.insert(name.clone());
                 params
                     .iter()
@@ -2250,22 +2852,22 @@ impl Subterm {
                     },
                 }
             }
-            Subterm::Let(Let { bindings, tail }) => {
-                for (type_, value) in bindings {
-                    type_.collect_construction_names(names);
-                    value.collect_construction_names(names);
+            Subterm::Let(Let { bindings, tail, .. }) => {
+                for binding in bindings {
+                    binding.type_().collect_construction_names(names);
+                    binding.value().collect_construction_names(names);
                 }
                 tail.body().collect_construction_names(names);
             }
             Subterm::Rec(Rec { group, tail }) => {
-                for (type_, value) in group.items() {
+                for (type_, value) in group.iter() {
                     type_.body().collect_construction_names(names);
                     value.body().collect_construction_names(names);
                 }
                 tail.body().collect_construction_names(names);
             }
             Subterm::RecMember(RecMember { group, .. }) => {
-                for (type_, value) in group.items() {
+                for (type_, value) in group.iter() {
                     type_.body().collect_construction_names(names);
                     value.body().collect_construction_names(names);
                 }
@@ -2278,12 +2880,13 @@ impl Subterm {
     /// (which is this with a collector that never stops): the reducer's memo
     /// gate uses it to reject caching a WHNF that still names an unsolved
     /// metavariable, without allocating the full id set.
-    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
             }
-            Subterm::Type | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::UniverseInst(UniverseInst { head, .. }) => head.any_metavar(pred),
             Subterm::NumLit(_) => false,
             Subterm::Infix(Infix { left, right, .. }) => {
                 left.any_metavar(pred) || right.any_metavar(pred)
@@ -2357,22 +2960,19 @@ impl Subterm {
                         },
                     }
             }
-            Subterm::Let(Let { bindings, tail }) => {
-                bindings
-                    .iter()
-                    .any(|(type_, value)| type_.any_metavar(pred) || value.any_metavar(pred))
-                    || tail.body().any_metavar(pred)
+            Subterm::Let(Let { bindings, tail, .. }) => {
+                bindings.iter().any(|binding| {
+                    binding.type_().any_metavar(pred) || binding.value().any_metavar(pred)
+                }) || tail.body().any_metavar(pred)
             }
             Subterm::Rec(Rec { group, tail }) => {
-                group.items().iter().any(|(type_, value)| {
+                group.iter().any(|(type_, value)| {
                     type_.body().any_metavar(pred) || value.body().any_metavar(pred)
                 }) || tail.body().any_metavar(pred)
             }
-            Subterm::RecMember(RecMember { group, .. }) => {
-                group.items().iter().any(|(type_, value)| {
-                    type_.body().any_metavar(pred) || value.body().any_metavar(pred)
-                })
-            }
+            Subterm::RecMember(RecMember { group, .. }) => group.iter().any(|(type_, value)| {
+                type_.body().any_metavar(pred) || value.body().any_metavar(pred)
+            }),
         }
     }
 
@@ -2386,7 +2986,8 @@ impl Subterm {
     fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
-            Subterm::Type | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::UniverseInst(UniverseInst { head, .. }) => pred(head),
             Subterm::NumLit(_) => false,
             Subterm::Infix(Infix { left, right, .. }) => pred(left) || pred(right),
             Subterm::Prim(prim) => prim.any_term(pred),
@@ -2445,21 +3046,19 @@ impl Subterm {
                         },
                     }
             }
-            Subterm::Let(Let { bindings, tail }) => {
+            Subterm::Let(Let { bindings, tail, .. }) => {
                 bindings
                     .iter()
-                    .any(|(type_, value)| pred(type_) || pred(value))
+                    .any(|binding| pred(binding.type_()) || pred(binding.value()))
                     || pred(tail.body())
             }
             Subterm::Rec(Rec { group, tail }) => {
                 group
-                    .items()
                     .iter()
                     .any(|(type_, value)| pred(type_.body()) || pred(value.body()))
                     || pred(tail.body())
             }
             Subterm::RecMember(RecMember { group, .. }) => group
-                .items()
                 .iter()
                 .any(|(type_, value)| pred(type_.body()) || pred(value.body())),
         }
@@ -2482,6 +3081,48 @@ impl Subterm {
         match self {
             Subterm::Metavar(_) => true,
             _ => self.any_child_term(&mut |t| t.has_metavar()),
+        }
+    }
+
+    pub(crate) fn has_universe_meta(&self) -> bool {
+        let level_has_meta = |level: &Level| level.metas().next().is_some();
+        match self {
+            Subterm::Type(level) => level_has_meta(level),
+            Subterm::UniverseInst(UniverseInst { head, levels }) => {
+                head.has_universe_meta() || levels.iter().any(level_has_meta)
+            }
+            Subterm::InductType(InductType { universes, .. })
+            | Subterm::Variant(Variant { universes, .. })
+            | Subterm::StructType(StructType { universes, .. })
+            | Subterm::Struct(Struct { universes, .. }) => {
+                universes.iter().any(level_has_meta)
+                    || self.any_child_term(&mut |term| term.has_universe_meta())
+            }
+            _ => self.any_child_term(&mut |term| term.has_universe_meta()),
+        }
+    }
+
+    pub(crate) fn has_universe_data(&self) -> bool {
+        match self {
+            Subterm::Type(level) => level != &Level::zero(),
+            Subterm::UniverseInst(_) => true,
+            Subterm::InductType(InductType { universes, .. })
+            | Subterm::Variant(Variant { universes, .. })
+            | Subterm::StructType(StructType { universes, .. })
+            | Subterm::Struct(Struct { universes, .. }) => {
+                !universes.is_empty() || self.any_child_term(&mut |term| term.has_universe_data())
+            }
+            Subterm::Let(Let { bindings, .. }) => {
+                bindings
+                    .iter()
+                    .any(|binding| binding.universe_context() != &UniverseContext::empty())
+                    || self.any_child_term(&mut |term| term.has_universe_data())
+            }
+            Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
+                group.universe_context() != &UniverseContext::empty()
+                    || self.any_child_term(&mut |term| term.has_universe_data())
+            }
+            _ => self.any_child_term(&mut |term| term.has_universe_data()),
         }
     }
 
@@ -2509,7 +3150,7 @@ impl Subterm {
     /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
     /// cannot piggyback on `free_vars` — this walk (an `any_metavar` whose
     /// collector never short-circuits) enumerates them directly.
-    fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+    fn collect_metavars(&self, ids: &mut BTreeSet<MetaId>) {
         self.any_metavar(&mut |id| {
             ids.insert(id);
             false
@@ -2529,7 +3170,7 @@ impl Bound for Subterm {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         match self {
-            Subterm::Type => Subterm::Type,
+            Subterm::Type(level) => Subterm::Type(visit.visit_level(level)),
             Subterm::Prop => Subterm::Prop,
             Subterm::Prim(prim) => Subterm::Prim(prim.traverse(visit)),
             Subterm::FuncType(FuncType {
@@ -2574,35 +3215,74 @@ impl Bound for Subterm {
             }),
             Subterm::InductType(InductType {
                 name,
+                universes,
                 params,
                 indices,
             }) => Subterm::InductType(InductType {
                 name: name.clone(),
+                universes: if visit.erases_universes() {
+                    Vec::new()
+                } else {
+                    universes
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect()
+                },
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 indices: indices.iter().map(|i| visit.visit_subterm(i)).collect(),
             }),
             Subterm::Variant(Variant {
                 name,
+                universes,
                 params,
                 tag,
                 payload,
             }) => Subterm::Variant(Variant {
                 name: name.clone(),
+                universes: if visit.erases_universes() {
+                    Vec::new()
+                } else {
+                    universes
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect()
+                },
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 tag: tag.clone(),
                 payload: payload.iter().map(|p| visit.visit_subterm(p)).collect(),
             }),
-            Subterm::StructType(StructType { name, params }) => Subterm::StructType(StructType {
+            Subterm::StructType(StructType {
+                name,
+                universes,
+                params,
+            }) => Subterm::StructType(StructType {
                 name: name.clone(),
+                universes: if visit.erases_universes() {
+                    Vec::new()
+                } else {
+                    universes
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect()
+                },
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
             }),
             Subterm::Struct(Struct {
                 name,
+                universes,
                 params,
                 fields,
                 entries,
             }) => Subterm::Struct(Struct {
                 name: name.clone(),
+                universes: if visit.erases_universes() {
+                    Vec::new()
+                } else {
+                    universes
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect()
+                },
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),
                 entries: entries.clone(),
@@ -2680,9 +3360,23 @@ impl Bound for Subterm {
                 let bindings = bindings
                     .iter()
                     .enumerate()
-                    .map(|(i, (type_, value))| {
+                    .map(|(i, binding)| {
                         visit.enter_scope(i);
-                        let out = (visit.visit_subterm(type_), visit.visit_subterm(value));
+                        let universe_arity = binding.universe_context().parameter_count;
+                        visit.enter_universe_scope(universe_arity);
+                        let context = if visit.erases_universes() {
+                            UniverseContext::empty()
+                        } else {
+                            binding
+                                .universe_context()
+                                .map_levels(|level| visit.visit_level(level))
+                        };
+                        let out = LetBinding::new(
+                            context,
+                            visit.visit_subterm(binding.type_()),
+                            visit.visit_subterm(binding.value()),
+                        );
+                        visit.leave_universe_scope(universe_arity);
                         visit.leave_scope(i);
                         out
                     })
@@ -2701,6 +3395,18 @@ impl Bound for Subterm {
                 group: group.traverse(visit),
                 index: *index,
             }),
+            Subterm::UniverseInst(UniverseInst { head, .. }) if visit.erases_universes() => {
+                (*visit.visit_subterm(head)).clone()
+            }
+            Subterm::UniverseInst(UniverseInst { head, levels }) => {
+                Subterm::UniverseInst(UniverseInst {
+                    head: visit.visit_subterm(head),
+                    levels: levels
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect(),
+                })
+            }
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
             // The spine is ordinary term content: visiting it is what keeps
             // the delayed substitution aligned through `close`/`open`. Spines
@@ -2743,11 +3449,12 @@ impl Bound for Subterm {
 
     fn reach(&self) -> usize {
         match self {
-            Subterm::Type => 0,
+            Subterm::Type(_) => 0,
             Subterm::Prop => 0,
             Subterm::NumLit(_) => 0,
             Subterm::Infix(Infix { left, right, .. }) => left.reach().max(right.reach()),
             Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
+            Subterm::UniverseInst(UniverseInst { head, .. }) => head.reach(),
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,
@@ -2806,13 +3513,13 @@ impl Bound for Subterm {
             // boundary is `reach - i`; `Scope::reach` handles the tail's own
             // arity. A flat forward max — no inner-to-outer unwind — because
             // the block is flat, not a nest of arity-subtracting scopes.
-            Subterm::Let(Let { bindings, tail }) => {
+            Subterm::Let(Let { bindings, tail, .. }) => {
                 let mut reach = tail.reach();
 
-                for (i, (type_, value)) in bindings.iter().enumerate() {
+                for (i, binding) in bindings.iter().enumerate() {
                     reach = reach
-                        .max(type_.reach().saturating_sub(i))
-                        .max(value.reach().saturating_sub(i));
+                        .max(binding.type_().reach().saturating_sub(i))
+                        .max(binding.value().reach().saturating_sub(i));
                 }
 
                 reach
@@ -2820,6 +3527,10 @@ impl Bound for Subterm {
             Subterm::Rec(Rec { group, tail }) => group.reach().max(tail.reach()),
             Subterm::RecMember(RecMember { group, .. }) => group.reach(),
         }
+    }
+
+    fn has_metavar(&self) -> bool {
+        Subterm::has_metavar(self)
     }
 }
 

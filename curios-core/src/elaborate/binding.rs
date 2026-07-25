@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    crate::{UniverseContext, instantiate_universe_levels_scoped},
+};
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node,
 /// so this loops over them — elaborating each binding's type/body, minting its
@@ -15,14 +18,22 @@ pub(super) fn elaborate_let(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
+        let enclosing_universes = context.ambient_universe_metas();
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
-        let mut triples = Vec::<(String, Term, Term)>::with_capacity(let_.bindings.len());
+        let mut triples =
+            Vec::<(String, UniverseContext, Term, Term)>::with_capacity(let_.bindings.len());
 
-        for (index, (type_, body)) in let_.bindings.iter().enumerate() {
+        for (index, binding) in let_.bindings.iter().enumerate() {
             let (type_, body) = {
                 let refs = label_terms.iter().collect::<Vec<_>>();
-                (type_.release(&refs), body.release(&refs))
+                (
+                    binding.type_().release(&refs),
+                    binding.value().release(&refs),
+                )
             };
+            let universe_context = binding.universe_context();
+            let (type_, levels) = context.instantiate_universe_bound(universe_context, &type_)?;
+            let body = instantiate_universe_levels_scoped(&body, &levels)?;
 
             // A bare metavar annotation is the lowering of a typeless local
             // `let x = e` (equivalently `let x : _ = e`): infer the body's type
@@ -30,31 +41,45 @@ pub(super) fn elaborate_let(
             // lambda/tuple/atom body — which `check` against an unsolved hole
             // would reject — be bound without an annotation. Otherwise check the
             // body against the (possibly partial) annotation, as before.
-            let (type_elaborated, body_elaborated, assumed) = match &*type_ {
+            let (type_elaborated, body_elaborated) = match &*type_ {
                 Subterm::Metavar(_) => {
                     let (body_elaborated, inferred) = elaborate(context, &body, Mode::Infer)?;
-                    (inferred.clone(), body_elaborated, inferred)
+                    (inferred, body_elaborated)
                 }
                 // The body is checked against — and the binder assumed at — the
                 // *rebuilt* annotation: insertion saturates applications during
                 // elaboration, and a lowered (under-applied) type reaching the
                 // reducer would open a telescope at the wrong arity.
                 _ => {
-                    let type_elaborated = check(context, &type_, Term::type_())?;
+                    let type_elaborated = crate::check_is_sort(context, &type_)?.0;
                     let body_elaborated = check(context, &body, type_elaborated.clone())?;
-                    (type_elaborated.clone(), body_elaborated, type_elaborated)
+                    (type_elaborated, body_elaborated)
                 }
             };
+            let (universe_context, types, bodies) = context.finalize_local_universes(
+                &[&type_elaborated],
+                &[&body_elaborated],
+                &enclosing_universes,
+            )?;
+            let [type_elaborated]: [Term; 1] =
+                types.try_into().expect("one finalized local-let signature");
+            let [body_elaborated]: [Term; 1] =
+                bodies.try_into().expect("one finalized local-let value");
 
             let label = context.fresh(let_.tail.label_iter().nth(index).flatten());
 
             // Define the binding with the *rebuilt* body so the tail's
             // type-level evaluation does not reduce through the lowered
             // (under-applied) original.
-            context.define_assuming(&label, &assumed, &body_elaborated);
+            context.define_assuming_scheme(
+                &label,
+                &type_elaborated,
+                &body_elaborated,
+                universe_context.clone(),
+            );
 
             label_terms.push(Term::free_var(&label));
-            triples.push((label, type_elaborated, body_elaborated));
+            triples.push((label, universe_context, type_elaborated, body_elaborated));
         }
 
         // Propagate `mode` into the tail: a `Check(expected)` turnaround happens
@@ -64,12 +89,12 @@ pub(super) fn elaborate_let(
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        let rebuilt = triples
-            .into_iter()
-            .rev()
-            .fold(tail_elaborated, |tail, (label, type_, body)| {
-                Term::let_(label, type_, body, tail)
-            });
+        let rebuilt = triples.into_iter().rev().fold(
+            tail_elaborated,
+            |tail, (label, universe_context, type_, body)| {
+                Term::let_scheme(label, type_, body, universe_context, tail)
+            },
+        );
 
         Ok((rebuilt, tail_type))
     })
@@ -84,6 +109,9 @@ pub(super) fn elaborate_rec(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
+        let enclosing_universes = context.ambient_universe_metas();
+        let (_, levels) = context.instantiate_universe_bound(rec.group.universe_context(), &())?;
+        let group = rec.group.instantiate_universes(&levels)?;
         let labels = rec
             .tail
             .label_iter()
@@ -97,9 +125,7 @@ pub(super) fn elaborate_rec(
             .collect::<Vec<_>>();
         let label_refs = label_terms.iter().collect::<Vec<_>>();
 
-        let items = rec
-            .group
-            .items()
+        let items = group
             .iter()
             .map(|(type_, body)| (type_.open(&label_refs), body.open(&label_refs)))
             .collect::<Vec<_>>();
@@ -110,7 +136,7 @@ pub(super) fn elaborate_rec(
 
         let mut types_elaborated = Vec::with_capacity(items.len());
         for (type_, _) in &items {
-            types_elaborated.push(check(context, type_, Term::type_())?);
+            types_elaborated.push(crate::check_is_sort(context, type_)?.0);
         }
 
         // Upgrade the assumptions to the *rebuilt* signatures before any body is
@@ -141,19 +167,49 @@ pub(super) fn elaborate_rec(
         }
         context.retry_parked()?;
 
+        let (universe_context, types_elaborated, bodies_elaborated) = context
+            .finalize_local_universes(
+                &types_elaborated.iter().collect::<Vec<_>>(),
+                &bodies_elaborated.iter().collect::<Vec<_>>(),
+                &enclosing_universes,
+            )
+            .map_err(|error| match error {
+                Error::UniverseInvariant(message) => Error::UniverseInvariant(format!(
+                    "finalizing local recursive universe context failed: {message}"
+                )),
+                other => other,
+            })?;
+
         let triples = labels
             .iter()
             .cloned()
-            .zip(types_elaborated)
-            .zip(bodies_elaborated)
+            .zip(types_elaborated.iter().cloned())
+            .zip(bodies_elaborated.iter().cloned())
             .map(|((label, type_), body)| (label, type_, body))
             .collect::<Vec<_>>();
+
+        let group = match Term::unwrap_or_clone(Term::rec_scheme(
+            triples.clone(),
+            universe_context.clone(),
+            Term::tuple(Vec::<Term>::new()),
+        )) {
+            Subterm::Rec(rec) => rec.group,
+            _ => unreachable!("rec_scheme constructs a recursive block"),
+        };
+        for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
+            context.reassume(label, type_);
+            context.define(label, &Term::rec_member(group.clone(), index));
+            context.set_assumption_universe_context(label, universe_context.clone());
+        }
 
         let tail = rec.tail.open(&label_refs);
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        Ok((Term::rec(triples, tail_elaborated), tail_type))
+        Ok((
+            Term::rec_scheme(triples, universe_context, tail_elaborated),
+            tail_type,
+        ))
     })
 }
 
@@ -341,7 +397,8 @@ pub(super) fn elaborate_infix(
     let bool_type: Term = Subterm::Prim(Prim::BoolType).into();
 
     // `?T`: the operand type shared by both sides.
-    let (operand_id, operand_type) = context.fresh_placeholder(Term::type_(), term.span());
+    let classifier = context.fresh_classifier_type("infix operand classifier");
+    let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.span());
 
     // An arithmetic operator returns its operand type, so an expected result
     // type pins `?T` straight away; a comparison returns `Bool`, which says
@@ -410,7 +467,8 @@ pub(super) fn elaborate_infix(
     // argument: it resolves, parks on a flex operand type, or defers to a
     // later witness registration, and a definite miss reports
     // `no witness of Add(Point)` — the single operator error vocabulary.
-    let goal = Term::struct_type(concept_name, vec![operand_type.clone()]);
+    let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
+    let goal = Term::struct_type_at(concept_name, universes, vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: infix.op.symbol().to_string(),
         binder: field_name.to_string(),
@@ -476,7 +534,8 @@ pub(super) fn elaborate_func_check(
     term: &Term,
     expected: Term,
 ) -> Result<(Term, Term), Error> {
-    let ft = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
+    let reduced_expected = reduce_with(context, &expected)?;
+    let ft = match Term::unwrap_or_clone(reduced_expected) {
         Subterm::FuncType(ft) => ft,
         Subterm::Metavar(_) if !context.parking_suppressed() => {
             return park_checking(context, term, &expected);
@@ -541,7 +600,7 @@ pub(super) fn elaborate_func_check(
                         // against the expected domain (`expect` reduces both
                         // sides; an omitted annotation is a hole `check` births
                         // and `expect` solves to the expected domain).
-                        let w_domain = check(context, &w_domain, Term::type_())?;
+                        let w_domain = crate::check_is_sort(context, &w_domain)?.0;
                         expect(context, term, &w_domain, &e_domain)?;
                         let name = context.fresh(w_rest.first_label());
                         let x = Term::free_var(&name);
@@ -601,7 +660,7 @@ pub(super) fn elaborate_func_infer(
         match body {
             Telescope::Done(body) => elaborate(context, &body, Mode::Infer),
             Telescope::Cons(domain, body_rest) => {
-                let domain = check(context, &domain, Term::type_())?;
+                let domain = crate::check_is_sort(context, &domain)?.0;
 
                 if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(_)) {
                     return Err(Error::CannotInfer);

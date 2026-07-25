@@ -3,13 +3,18 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, InductDecl,
-        InductParam, InductType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module, Nat,
-        Prim, Proj, Rec, RecItem, Struct, StructDecl, StructType, Subterm, Term, Tuple, TupleType,
-        Variant,
+        Apply, Bound, Carrier, Cases, Context, Definition, DefinitionKind, Error, Func, FuncType,
+        InductDecl, InductParam, InductType, Item, Let, Level, Match, MetaId, Metavar,
+        MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl, StructType,
+        Subterm, Term, Tuple, TupleType, UniverseContext, UniverseInst, Variant, Visit,
     },
     curios_base::Grain,
-    std::sync::Arc,
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+        sync::Arc,
+    },
 };
 
 /// Substitute every solved metavariable in `term` by its (recursively zonked)
@@ -27,6 +32,90 @@ use {
 /// bare copy of a birthed hole survives to be spliced.
 pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
     zonk_term(context, term)
+}
+
+/// Materialize the solutions already committed for term metavariables without
+/// rejecting holes that remain legitimately deferred. Universe levels are
+/// preserved verbatim: declaration finalization rewrites them only after this
+/// pass has exposed the levels hidden in solved term-meta solutions.
+pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
+    if !value.has_metavar() {
+        return value.clone();
+    }
+
+    type Solution = (Vec<String>, Term);
+
+    fn materialize<B: Bound>(value: &B, solutions: Rc<BTreeMap<MetaId, Solution>>) -> B {
+        let rewrite_solutions = Rc::clone(&solutions);
+        let mut visit = Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term| {
+                let Subterm::Metavar(Metavar { id, spine, origin }) = &**term else {
+                    return None;
+                };
+                if matches!(origin, Some(MetavarOrigin::Goal)) {
+                    return None;
+                }
+                let (labels, solution) = rewrite_solutions.get(id)?;
+                assert_eq!(
+                    spine.len(),
+                    labels.len(),
+                    "a solved metavariable's occurrence carries its full spine"
+                );
+                let resolved = materialize(solution, Rc::clone(&rewrite_solutions));
+                let spine = spine
+                    .iter()
+                    .map(|term| materialize(term, Rc::clone(&rewrite_solutions)))
+                    .collect::<Vec<_>>();
+                let labels = labels.iter().map(String::as_str).collect::<Vec<_>>();
+                let spine = spine.iter().collect::<Vec<_>>();
+                let zonked = resolved.capture(&labels).release(&spine);
+                Some(match term.span() {
+                    Some(span) => zonked.with_span(span),
+                    None => zonked,
+                })
+            }),
+        );
+        value.traverse(&mut visit)
+    }
+
+    let found = Rc::new(RefCell::new(BTreeSet::new()));
+    let collected = Rc::clone(&found);
+    let mut visit = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term| {
+            collected.borrow_mut().extend(term.metavars());
+            None
+        }),
+    );
+    let _: B = value.traverse(&mut visit);
+    let mut solutions = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    let mut pending = found.borrow().iter().copied().collect::<Vec<_>>();
+    while let Some(id) = pending.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        let Some(entry) = context.metavar_entry(id) else {
+            continue;
+        };
+        let Some(solution) = &entry.solution else {
+            continue;
+        };
+        pending.extend(solution.metavars());
+        solutions.insert(
+            id,
+            (
+                entry
+                    .telescope
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect(),
+                solution.clone(),
+            ),
+        );
+    }
+    materialize(value, Rc::new(solutions))
 }
 
 /// Zonk a whole [`Module`]: substitute metavariable solutions throughout every
@@ -57,6 +146,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             Ok((
                 name.clone(),
                 InductDecl {
+                    universe_context: induct_decl.universe_context.clone(),
                     params: induct_decl.params.zonk(context)?,
                     indices: induct_decl.indices.zonk(context)?,
                     constructors: induct_decl
@@ -72,7 +162,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                             ))
                         })
                         .collect::<Result<_, Error>>()?,
-                    result_sort: induct_decl.result_sort.clone(),
+                    result_sort: zonk_term(context, &induct_decl.result_sort)?,
                     module: induct_decl.module.clone(),
                     root: induct_decl.root,
                     rep_public: induct_decl.rep_public,
@@ -89,9 +179,10 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             Ok((
                 name.clone(),
                 StructDecl {
+                    universe_context: struct_decl.universe_context.clone(),
                     params: struct_decl.params.zonk(context)?,
                     fields: struct_decl.fields.zonk(context)?,
-                    result_sort: struct_decl.result_sort.clone(),
+                    result_sort: zonk_term(context, &struct_decl.result_sort)?,
                     module: struct_decl.module.clone(),
                     root: struct_decl.root,
                     rep_public: struct_decl.rep_public,
@@ -100,38 +191,530 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         })
         .collect::<Result<_, Error>>()?;
 
-    Ok(Module {
+    let module = Module {
         items,
+        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls,
         // Concept metadata and witness markers carry no terms of their own
         // (each concept's telescopes live in `struct_decls`, zonked above).
-        concepts: module.concepts.clone(),
+        concepts: module
+            .concepts
+            .iter()
+            .map(|(name, concept)| {
+                Ok((
+                    name.clone(),
+                    super::Concept {
+                        universe_context: concept.universe_context.clone(),
+                        params: concept.params.zonk(context)?,
+                        fields: concept.fields.clone(),
+                        supers: concept.supers.clone(),
+                        root: concept.root,
+                    },
+                ))
+            })
+            .collect::<Result<_, Error>>()?,
         witnesses: module.witnesses.clone(),
         type_,
         body,
+    };
+    validate_universes(&module)?;
+    Ok(module)
+}
+
+pub(crate) fn validate_bound_universes<B: Bound>(
+    value: &B,
+    parameter_count: usize,
+    owner: &str,
+) -> Result<(), Error> {
+    let nested_error = Rc::new(RefCell::new(None));
+    let error = Rc::clone(&nested_error);
+    let mut visit = Visit::rewriting_universes(
+        |_, _| None,
+        Box::new(move |_, term| {
+            let contexts: Vec<&UniverseContext> = match &**term {
+                Subterm::Let(let_) => let_
+                    .bindings
+                    .iter()
+                    .map(super::LetBinding::universe_context)
+                    .collect(),
+                Subterm::Rec(rec) => vec![rec.group.universe_context()],
+                Subterm::RecMember(member) => vec![member.group.universe_context()],
+                _ => Vec::new(),
+            };
+            for context in contexts {
+                if error.borrow().is_none()
+                    && let Err(found) = context.validate()
+                {
+                    *error.borrow_mut() = Some(found);
+                }
+            }
+            None
+        }),
+    );
+    let _: B = value.traverse(&mut visit);
+    if let Some(error) = nested_error.borrow_mut().take() {
+        return Err(Error::UniverseInvariant(format!(
+            "{owner}: nested universe context is invalid: {error}"
+        )));
+    }
+
+    let owner = owner.to_string();
+    let _: B = super::rewrite_universe_levels_scoped(value, move |depth, level| {
+        let visible_parameter_count = depth
+            .checked_add(parameter_count)
+            .ok_or_else(|| format!("{owner}: universe binder depth overflow"))?;
+        if level.is_closed(visible_parameter_count) {
+            Ok(level.clone())
+        } else {
+            Err(format!(
+                "{owner}: level {level} escapes its universe parameter context"
+            ))
+        }
     })
+    .map_err(Error::UniverseInvariant)?;
+    Ok(())
+}
+
+fn validate_instance_arities<B: Bound>(
+    value: &B,
+    definitions: &BTreeMap<String, usize>,
+    inducts: &BTreeMap<String, usize>,
+    structs: &BTreeMap<String, usize>,
+    owner: &str,
+) -> Result<(), Error> {
+    let definitions = definitions.clone();
+    let inducts = inducts.clone();
+    let structs = structs.clone();
+    let owner = owner.to_string();
+    let error = Rc::new(RefCell::new(None));
+    let found = Rc::clone(&error);
+    let mut visit = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term| {
+            if found.borrow().is_some() {
+                return None;
+            }
+            let mismatch = |kind: &str, name: &str, expected: usize, got: usize| {
+                (expected != got).then(|| {
+                    format!(
+                        "{owner}: {kind} {name} has {got} universe arguments but its context expects {expected}"
+                    )
+                })
+            };
+            let invalid = match &**term {
+                Subterm::UniverseInst(instance) => match &*instance.head {
+                    Subterm::Var(var) => var.as_free().and_then(|name| {
+                        definitions.get(name).and_then(|expected| {
+                            mismatch(
+                                "definition instance",
+                                name,
+                                *expected,
+                                instance.levels.len(),
+                            )
+                        })
+                    }),
+                    Subterm::RecMember(member) => mismatch(
+                        "recursive instance",
+                        "<local rec>",
+                        member.group.universe_context().parameter_count,
+                        instance.levels.len(),
+                    ),
+                    _ => Some(format!(
+                        "{owner}: a universe instance wraps neither a variable nor a recursive member"
+                    )),
+                },
+                Subterm::InductType(induct) => inducts.get(&induct.name).and_then(|expected| {
+                    mismatch(
+                        "inductive occurrence",
+                        &induct.name,
+                        *expected,
+                        induct.universes.len(),
+                    )
+                }),
+                Subterm::Variant(variant) => inducts.get(&variant.name).and_then(|expected| {
+                    mismatch(
+                        "constructor occurrence",
+                        &variant.name,
+                        *expected,
+                        variant.universes.len(),
+                    )
+                }),
+                Subterm::StructType(struct_) => structs.get(&struct_.name).and_then(|expected| {
+                    mismatch(
+                        "structure occurrence",
+                        &struct_.name,
+                        *expected,
+                        struct_.universes.len(),
+                    )
+                }),
+                Subterm::Struct(struct_) => structs.get(&struct_.name).and_then(|expected| {
+                    mismatch(
+                        "structure value",
+                        &struct_.name,
+                        *expected,
+                        struct_.universes.len(),
+                    )
+                }),
+                _ => None,
+            };
+            if let Some(invalid) = invalid {
+                *found.borrow_mut() = Some(invalid);
+            }
+            None
+        }),
+    );
+    let _: B = value.traverse(&mut visit);
+    match error.borrow_mut().take() {
+        Some(error) => Err(Error::UniverseInvariant(error)),
+        None => Ok(()),
+    }
+}
+
+fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
+    let mut definition_schemes = BTreeMap::new();
+    for item in &module.items {
+        match item {
+            Item::Let(definition) => {
+                definition_schemes.insert(
+                    definition.name.clone(),
+                    (definition.kind.clone(), definition.universe_context.clone()),
+                );
+            }
+            Item::Rec(rec) => {
+                for definition in rec.definitions() {
+                    definition_schemes.insert(
+                        definition.name.clone(),
+                        (definition.kind, definition.universe_context),
+                    );
+                }
+            }
+        }
+    }
+    let definitions = definition_schemes
+        .iter()
+        .map(|(name, (_, context))| (name.clone(), context.parameter_count))
+        .collect::<BTreeMap<_, _>>();
+    let inducts = module
+        .induct_decls
+        .iter()
+        .map(|(name, declaration)| (name.clone(), declaration.universe_context.parameter_count))
+        .collect::<BTreeMap<_, _>>();
+    let structs = module
+        .struct_decls
+        .iter()
+        .map(|(name, declaration)| (name.clone(), declaration.universe_context.parameter_count))
+        .collect::<BTreeMap<_, _>>();
+    macro_rules! validate {
+        ($value:expr, $owner:expr $(,)?) => {
+            validate_instance_arities($value, &definitions, &inducts, &structs, $owner)
+        };
+    }
+
+    for item in &module.items {
+        for definition in match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        } {
+            validate!(
+                &definition.type_,
+                &format!("definition {} type", definition.name),
+            )?;
+            validate!(
+                &definition.body,
+                &format!("definition {} body", definition.name),
+            )?;
+        }
+    }
+    for (name, declaration) in &module.induct_decls {
+        validate!(&declaration.params, &format!("inductive {name} parameters"))?;
+        validate!(&declaration.indices, &format!("inductive {name} indices"))?;
+        validate!(
+            &declaration.result_sort,
+            &format!("inductive {name} result sort"),
+        )?;
+        for (constructor, signature) in &declaration.constructors {
+            validate!(
+                &signature.telescope,
+                &format!("inductive {name} constructor {constructor}"),
+            )?;
+        }
+
+        if let Some((kind, actual)) = definition_schemes.get(name)
+            && (kind != &DefinitionKind::InductiveType || actual != &declaration.universe_context)
+        {
+            return Err(Error::UniverseInvariant(format!(
+                "inductive {name} and its type-former definition have different universe contexts"
+            )));
+        }
+        for constructor in declaration.constructors.keys() {
+            let definition_name = format!("{name}/{}", constructor.as_str());
+            if let Some((kind, _)) = definition_schemes.get(&definition_name)
+                && kind
+                    != &(DefinitionKind::InductiveConstructor {
+                        owner: name.clone(),
+                    })
+            {
+                return Err(Error::UniverseInvariant(format!(
+                    "inductive {name} and constructor {definition_name} have inconsistent ownership"
+                )));
+            }
+        }
+    }
+    for (name, declaration) in &module.struct_decls {
+        validate!(&declaration.params, &format!("structure {name} parameters"))?;
+        validate!(&declaration.fields, &format!("structure {name} fields"))?;
+        validate!(
+            &declaration.result_sort,
+            &format!("structure {name} result sort"),
+        )?;
+        if let Some((kind, actual)) = definition_schemes.get(name)
+            && (!matches!(
+                kind,
+                DefinitionKind::StructType | DefinitionKind::ConceptType
+            ) || actual != &declaration.universe_context)
+        {
+            return Err(Error::UniverseInvariant(format!(
+                "structure {name} and its type-former definition have different universe contexts"
+            )));
+        }
+    }
+    for (name, concept) in &module.concepts {
+        validate!(&concept.params, &format!("concept {name} parameters"))?;
+        let Some(struct_decl) = module.struct_decls.get(name) else {
+            return Err(Error::UniverseInvariant(format!(
+                "concept {name} has no structure registry entry"
+            )));
+        };
+        if concept.universe_context != struct_decl.universe_context {
+            return Err(Error::UniverseInvariant(format!(
+                "concept {name} and its structure registry have different universe contexts"
+            )));
+        }
+    }
+    for (name, (kind, _)) in &definition_schemes {
+        match kind {
+            DefinitionKind::InductiveConstructor { owner } => {
+                if !module.induct_decls.contains_key(owner) {
+                    return Err(Error::UniverseInvariant(format!(
+                        "constructor definition {name} names missing owner {owner}"
+                    )));
+                }
+            }
+            DefinitionKind::ConceptMethod { owner } => {
+                if !module.concepts.contains_key(owner) {
+                    return Err(Error::UniverseInvariant(format!(
+                        "concept method {name} names missing owner {owner}"
+                    )));
+                }
+            }
+            DefinitionKind::Authored
+            | DefinitionKind::InductiveType
+            | DefinitionKind::StructType
+            | DefinitionKind::ConceptType
+            | DefinitionKind::Witness => {}
+        }
+    }
+    validate!(&module.body, "module body")?;
+    if let Some(type_) = &module.type_ {
+        validate!(type_, "module body annotation")?;
+    }
+    Ok(())
+}
+
+pub fn validate_universes(module: &Module) -> Result<(), Error> {
+    for item in &module.items {
+        for definition in match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        } {
+            definition.universe_context.validate().map_err(|error| {
+                Error::UniverseInvariant(format!(
+                    "definition {} has an invalid universe context: {error}",
+                    definition.name
+                ))
+            })?;
+            let parameter_count = definition.universe_context.parameter_count;
+            validate_bound_universes(
+                &definition.type_,
+                parameter_count,
+                &format!("definition {} type", definition.name),
+            )?;
+            validate_bound_universes(
+                &definition.body,
+                parameter_count,
+                &format!("definition {} body", definition.name),
+            )?;
+        }
+    }
+    for (name, induct_decl) in &module.induct_decls {
+        induct_decl.universe_context.validate().map_err(|error| {
+            Error::UniverseInvariant(format!(
+                "inductive {name} has an invalid universe context: {error}"
+            ))
+        })?;
+        let parameter_count = induct_decl.universe_context.parameter_count;
+        validate_bound_universes(
+            &induct_decl.params,
+            parameter_count,
+            &format!("inductive {name} parameters"),
+        )?;
+        validate_bound_universes(
+            &induct_decl.indices,
+            parameter_count,
+            &format!("inductive {name} indices"),
+        )?;
+        validate_bound_universes(
+            &induct_decl.result_sort,
+            parameter_count,
+            &format!("inductive {name} result sort"),
+        )?;
+        for (constructor_name, constructor) in &induct_decl.constructors {
+            validate_bound_universes(
+                &constructor.telescope,
+                parameter_count,
+                &format!("inductive {name} constructor {constructor_name}"),
+            )?;
+        }
+    }
+    for (name, struct_decl) in &module.struct_decls {
+        struct_decl.universe_context.validate().map_err(|error| {
+            Error::UniverseInvariant(format!(
+                "structure {name} has an invalid universe context: {error}"
+            ))
+        })?;
+        let parameter_count = struct_decl.universe_context.parameter_count;
+        validate_bound_universes(
+            &struct_decl.params,
+            parameter_count,
+            &format!("structure {name} parameters"),
+        )?;
+        validate_bound_universes(
+            &struct_decl.fields,
+            parameter_count,
+            &format!("structure {name} fields"),
+        )?;
+        validate_bound_universes(
+            &struct_decl.result_sort,
+            parameter_count,
+            &format!("structure {name} result sort"),
+        )?;
+        if let Some(concept) = module.concepts.get(name)
+            && concept.universe_context != struct_decl.universe_context
+        {
+            return Err(Error::UniverseInvariant(format!(
+                "concept and structure universe contexts differ for {name}"
+            )));
+        }
+    }
+    for (name, concept) in &module.concepts {
+        concept.universe_context.validate().map_err(|error| {
+            Error::UniverseInvariant(format!(
+                "concept {name} has an invalid universe context: {error}"
+            ))
+        })?;
+        validate_bound_universes(
+            &concept.params,
+            concept.universe_context.parameter_count,
+            &format!("concept {name} parameters"),
+        )?;
+    }
+    validate_bound_universes(&module.body, 0, "module body")?;
+    if let Some(type_) = &module.type_ {
+        validate_bound_universes(type_, 0, "module body annotation")?;
+    }
+    if !module.universe_seeds.is_empty() {
+        return Err(Error::UniverseInvariant(
+            "finalized module retained lowering-time universe seeds".into(),
+        ));
+    }
+    validate_module_instance_arities(module)?;
+    Ok(())
+}
+
+/// Validate the lowering-time universe allocator contract before replaying a
+/// prepared Text module. Every meta reachable from lowered Core must have a
+/// corresponding seed below the recorded allocator floor.
+pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<(), Error> {
+    if module.universe_seeds.len() != floor {
+        return Err(Error::UniverseInvariant(format!(
+            "lowered universe seed table has {} entries but its allocator floor is {floor}",
+            module.universe_seeds.len()
+        )));
+    }
+
+    let mut metas = BTreeSet::new();
+    macro_rules! collect {
+        ($value:expr) => {
+            metas.extend(super::universe_metas($value))
+        };
+    }
+
+    for item in &module.items {
+        for definition in match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        } {
+            collect!(&definition.type_);
+            collect!(&definition.body);
+            for constraint in &definition.universe_context.constraints {
+                metas.extend(constraint.lower.metas());
+                metas.extend(constraint.upper.metas());
+            }
+        }
+    }
+    for declaration in module.induct_decls.values() {
+        collect!(&declaration.params);
+        collect!(&declaration.indices);
+        collect!(&declaration.result_sort);
+        for constructor in declaration.constructors.values() {
+            collect!(&constructor.telescope);
+        }
+    }
+    for declaration in module.struct_decls.values() {
+        collect!(&declaration.params);
+        collect!(&declaration.fields);
+        collect!(&declaration.result_sort);
+    }
+    for concept in module.concepts.values() {
+        collect!(&concept.params);
+    }
+    collect!(&module.body);
+    if let Some(type_) = &module.type_ {
+        collect!(type_);
+    }
+
+    if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= floor) {
+        return Err(Error::UniverseInvariant(format!(
+            "lowered universe meta {meta} has no seed below allocator floor {floor}"
+        )));
+    }
+    Ok(())
 }
 
 fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
     match item {
         Item::Let(def) => Ok(Item::Let(zonk_definition(context, def)?)),
-        Item::Rec(rec) => Ok(Item::Rec(RecItem::new(
+        Item::Rec(rec) => Ok(Item::Rec(RecItem::try_new(
             rec.definitions()
                 .iter()
                 .map(|def| zonk_definition(context, def))
                 .collect::<Result<Vec<_>, Error>>()?,
-        ))),
+        )?)),
     }
 }
 
 fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Error> {
+    let type_ = zonk_term(context, &def.type_)?;
+    let body = zonk_term(context, &def.body)?;
     Ok(Definition {
         name: def.name.clone(),
+        kind: def.kind.clone(),
+        universe_context: def.universe_context.clone(),
         island: def.island.clone(),
         root: def.root,
-        type_: zonk_term(context, &def.type_)?,
-        body: zonk_term(context, &def.body)?,
+        type_,
+        body,
     })
 }
 
@@ -139,7 +722,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 /// its birth, the goal's type, and the solution elaboration committed (if
 /// any) — each zonked for *display*, keeping the raw spelling where unsolved
 /// holes survive (the same tolerance the no-witness report uses).
-fn goal_report(context: &Context, id: MetavarId) -> Error {
+fn goal_report(context: &Context, id: MetaId) -> Error {
     let display = |term: &Term| zonk_term(context, term).unwrap_or_else(|_| term.clone());
     match context.metavar_entry(id) {
         Some(entry) => Error::goal(
@@ -186,7 +769,7 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                     let goal = context
                         .metavar_entry(*id)
                         .map(|entry| entry.result.clone())
-                        .unwrap_or_else(Term::type_);
+                        .unwrap_or_else(Term::type_ground);
                     let goal = zonk_term(context, &goal).unwrap_or(goal);
                     Error::no_witness(goal, origin.func.clone(), origin.binder.clone())
                 }
@@ -233,9 +816,11 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
         });
     }
 
-    // Fast path: a subtree with no metavariables is already meta-free. Clone it
-    // (cheap — `Term` is `Rc`-backed) and keep its span untouched.
-    if term.metavars().is_empty() {
+    // Fast path: a subtree with neither term nor universe metavariables is
+    // already fully zonked. A solved term metavariable's solution can be
+    // term-meta-free while still carrying levels that declaration
+    // finalization solved, so universe metas must keep descending.
+    if term.metavars().is_empty() && !term.has_universe_meta() {
         return Ok(term.clone());
     }
 
@@ -251,11 +836,28 @@ fn zonk_terms(context: &Context, terms: &[Term]) -> Result<Vec<Term>, Error> {
     terms.iter().map(|t| zonk_term(context, t)).collect()
 }
 
+fn zonk_levels(context: &Context, levels: &[Level]) -> Result<Vec<Level>, Error> {
+    levels
+        .iter()
+        .map(|level| context.universes().zonk(level).map_err(Error::from))
+        .collect()
+}
+
 fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
     Ok(match &**term {
-        Subterm::Type => Subterm::Type,
+        Subterm::Type(level) => {
+            Subterm::Type(context.universes().zonk(level).map_err(Error::from)?)
+        }
         Subterm::Prop => Subterm::Prop,
         Subterm::Var(var) => Subterm::Var(var.clone()),
+        Subterm::UniverseInst(instance) => Subterm::UniverseInst(UniverseInst {
+            head: zonk_term(context, &instance.head)?,
+            levels: instance
+                .levels
+                .iter()
+                .map(|level| context.universes().zonk(level).map_err(Error::from))
+                .collect::<Result<_, _>>()?,
+        }),
 
         // `Infix`/`NumLit` are elaboration-transient: `elaborate` replaces every
         // occurrence with a concrete `Prim` before zonk ever runs.
@@ -306,38 +908,49 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 
         Subterm::InductType(InductType {
             name,
+            universes,
             params,
             indices,
         }) => Subterm::InductType(InductType {
             name: name.clone(),
+            universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
             indices: zonk_terms(context, indices)?,
         }),
 
         Subterm::Variant(Variant {
             name,
+            universes,
             params,
             tag,
             payload,
         }) => Subterm::Variant(Variant {
             name: name.clone(),
+            universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
             tag: tag.clone(),
             payload: zonk_terms(context, payload)?,
         }),
 
-        Subterm::StructType(StructType { name, params }) => Subterm::StructType(StructType {
+        Subterm::StructType(StructType {
+            name,
+            universes,
+            params,
+        }) => Subterm::StructType(StructType {
             name: name.clone(),
+            universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
         }),
 
         Subterm::Struct(Struct {
             name,
+            universes,
             params,
             fields,
             entries,
         }) => Subterm::Struct(Struct {
             name: name.clone(),
+            universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
             fields: zonk_terms(context, fields)?,
             entries: entries.clone(),
@@ -415,7 +1028,13 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         Subterm::Let(Let { bindings, tail }) => Subterm::Let(Let {
             bindings: bindings
                 .iter()
-                .map(|(type_, value)| Ok((zonk_term(context, type_)?, zonk_term(context, value)?)))
+                .map(|binding| {
+                    Ok(super::LetBinding::new(
+                        binding.universe_context().clone(),
+                        zonk_term(context, binding.type_())?,
+                        zonk_term(context, binding.value())?,
+                    ))
+                })
                 .collect::<Result<_, Error>>()?,
             tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
@@ -423,7 +1042,6 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
             group: super::RecGroup::new(
                 group
-                    .items()
                     .iter()
                     .map(|(type_, body)| {
                         Ok((
@@ -432,7 +1050,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         ))
                     })
                     .collect::<Result<_, Error>>()?,
-            ),
+            )
+            .with_universe_context(group.universe_context().clone()),
             tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
 
@@ -440,7 +1059,6 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             group: super::RecGroup::new(
                 member
                     .group
-                    .items()
                     .iter()
                     .map(|(type_, body)| {
                         Ok((
@@ -449,7 +1067,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         ))
                     })
                     .collect::<Result<_, Error>>()?,
-            ),
+            )
+            .with_universe_context(member.group.universe_context().clone()),
             index: member.index,
         }),
 

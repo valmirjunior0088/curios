@@ -10,17 +10,19 @@ Non-goals: Curios is not a foundational proof assistant and makes no logical-sou
 
 ## The language
 
-### One universe, general recursion
+### Implicit cumulative universes, general recursion
 
-**Decision.** `Type : Type` is a kernel rule, `rec` provides unrestricted general recursion uniformly across the type and value layers, and there is no termination or positivity checking. A safe subset carrying those checks is planned for later — not soon.
+**Decision.** Surface `Type` remains nullary, but Core assigns every occurrence an inferred level in an infinite cumulative hierarchy: `Type u : Type (u + 1)`. Reusable declarations generalize their inferred universe inputs and instantiate them freshly at external uses; recursive calls remain monomorphic within their shared group instance. `rec` still provides unrestricted general recursion uniformly across the type and value layers, and there is no termination or positivity checking. A safe subset carrying those checks is planned for later — not soon.
 
-**Rationale.** For the time being, Curios is a programming language first. The logical-soundness bullet is bitten once and explicitly rather than layering conservative checkers over a system whose universe is already inconsistent: `rec` is the honest marker of where general recursion enters, and type-level computation is bounded operationally by the reduction deadline, not logically by a termination proof. Until the safe subset exists, proofs are best-effort certificates, not foundational guarantees.
+**Rationale.** Implicit levels remove the inconsistency specific to `Type : Type` without burdening programs with universe syntax or changing runtime code. Curios remains a programming language first: `rec` is the honest marker of unrestricted general recursion, type-level computation is bounded operationally by the reduction deadline rather than by a termination proof, and inductive declarations still lack a strict-positivity check. Until the safe subset exists, proofs are best-effort certificates, not foundational guarantees.
 
-**Rejected.** Gating the whole language on termination and positivity checking. When soundness arrives, it arrives as an opt-in checked subset, not as a second language of accepted-versus-rejected recursion imposed on all code.
+**Rejected.** Retaining `Type : Type`; exposing universe variables or level expressions in surface syntax; specializing runtime code by universe instance; and gating the whole language on termination and positivity checking. When soundness arrives, it arrives as an opt-in checked subset, not as a second language of accepted-versus-rejected recursion imposed on all code.
+
+**Generated declarations.** Lowering records whether a definition is authored or generated and records a generated definition's owner explicitly; flattened path spelling is never used to infer ownership. Registry entries and their actual type-former definitions share one finalized context. Generated constructor and concept-method wrappers independently generalize their own schemes because they may use only a subset of, or additional independently instantiated dependencies beyond, the owner's scheme; their explicit owner metadata validates provenance without conflating the wrapper's binders with the nominal registry's binders.
 
 ### Strict Prop under Type
 
-**Decision.** There are exactly two universes: `Type`, and a strict `Prop` with definitional proof irrelevance. `Prop : Type` holds, `Prop ⊑ Type` is the sole subsumption, and large elimination out of `Prop` is guarded.
+**Decision.** Alongside the cumulative `Type` hierarchy, Curios has a strict `Prop` with definitional proof irrelevance. `Prop : Type 0` holds, proposition types are admitted at `Type` through the existing subsumption and cumulativity, and large elimination out of `Prop` is guarded.
 
 **Rationale.** Proof irrelevance is what makes proofs erasable by construction: any two proofs of a proposition are definitionally equal, so no program can depend on which proof it received, and erasure drops them wholesale. The large-elimination guard is what keeps that erasure sound.
 

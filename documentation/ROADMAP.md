@@ -14,6 +14,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Eta-reduction for Π-types and Σ-types
 - [x] Named tuple fields
 - [x] `Prop` universe with definitional proof irrelevance
+- [x] Implicit cumulative `Type` hierarchy (nullary surface `Type`, algebraic inferred levels, declaration-local universe polymorphism, fresh external instantiation, monomorphic recursive groups, cumulative checking, finalized nominal registry instances, archive replay, and complete erasure before Ersd)
 - [x] Implicit arguments (`@`-marked binders)
   - [x] Plicity as a coherent contract (part of function-type identity — plicity-sensitive conversion — with every written function binder and constructor-pattern argument checked against its slot, and omitted implicit/witness *lambda* binders inserted automatically from the expected type, mirroring application-side insertion)
 - [x] Instance arguments (ad-hoc polymorphism: `concept` declarations, anonymous `satisfy` (witness) declarations, the `use` binder plicity, deterministic witness resolution with local-scope, superclass-projection, and global-table steps; `use`-marked concept fields resolve by omission and fill explicitly with `use <term>` entries)

@@ -15,7 +15,7 @@
 mod tests;
 
 use {
-    super::{Subterm, Telescope, Term},
+    super::{Subterm, Telescope, Term, UniverseContext},
     curios_base::{Grain, RootId},
     std::fmt,
 };
@@ -27,6 +27,7 @@ use {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Concept {
+    pub universe_context: UniverseContext,
     /// The declaration's parameter telescope, e.g. `(A : Type)` for
     /// `concept Show(A : Type)`. Ends in `()` like a `StructDecl`'s.
     pub params: Telescope<()>,
@@ -52,6 +53,7 @@ pub struct Concept {
 )]
 pub(crate) struct Witness {
     pub name: String,
+    pub universe_context: UniverseContext,
     pub signature: Term,
     /// The compilation root that declares this witness — consulted by the
     /// orphan-rule ownership check alongside `Concept::root` and the key's

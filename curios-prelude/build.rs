@@ -53,11 +53,12 @@ fn main() {
     validate_syntax_targets(prepared.core());
 
     let lowered = prepared.core().clone();
-    let mut context = curios_core::Context::new(Duration::from_secs(300));
+    let mut context = curios_core::Context::new(Duration::from_secs(3000));
     let (core, body_type) = curios_core::elaborate_and_zonk_module(
         &mut context,
         &lowered,
         prepared.metavariable_floor(),
+        prepared.universe_floor(),
         curios_core::Mode::Infer,
     )
     .unwrap_or_else(|error| {
@@ -68,7 +69,7 @@ fn main() {
     });
 
     let ersd = curios_core::erase_prelude_to_ir_prefix(
-        &mut curios_core::Context::new(Duration::from_secs(300)),
+        &mut curios_core::Context::new(Duration::from_secs(3000)),
         &core,
     )
     .unwrap_or_else(|error| {

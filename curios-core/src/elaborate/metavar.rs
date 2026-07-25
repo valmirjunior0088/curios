@@ -113,7 +113,8 @@ pub(super) fn elaborate_metavar(
             // shows the stand-in — `?N` — if nothing ever pins it). Birth
             // mirrors the checking arm, with the stand-in as `result`.
             None if matches!(metavar.origin, Some(MetavarOrigin::Goal)) => {
-                let result = context.fresh_unmarked_metavar(Term::type_(), term.span());
+                let classifier = context.fresh_classifier_type("inferred goal classifier");
+                let result = context.fresh_unmarked_metavar(classifier, term.span());
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, result.clone());
 
@@ -140,7 +141,7 @@ pub(super) fn check_args_against<B: Bound>(
     args: &[Term],
 ) -> Result<(Vec<Term>, B), Error> {
     let mut elaborated = Vec::with_capacity(args.len());
-    let terminal = signature.walk(args, |_, arg, ty| {
+    let terminal = signature.walk(args, |_, arg, ty| -> Result<(), Error> {
         elaborated.push(check(context, arg, ty.clone())?);
         Ok(())
     })?;
@@ -207,7 +208,7 @@ pub(super) fn insert_implicits_on_check(
     // substitution so a later binder mentioning an earlier one is instantiated.
     let mut head_args: Vec<(Plicity, Term)> = Vec::new();
     let mut binders: Vec<(String, Term)> = Vec::new();
-    let output = context.with_frame(|context| {
+    let output = context.with_frame(|context| -> Result<Term, Error> {
         let mut tele = ift.telescope.clone();
         let mut plicities = ift.plicities.iter();
         loop {

@@ -43,7 +43,12 @@ impl Lowering {
                             curios_ersd::Atom::Value(value)
                         }
                     };
-                    context.define_assuming(&definition.name, &definition.type_, &definition.body);
+                    context.define_assuming_scheme(
+                        &definition.name,
+                        &definition.type_,
+                        &definition.body,
+                        definition.universe_context.clone(),
+                    );
                     self.environment.bind(&definition.name, atom);
                 }
                 Item::Rec(rec) => {

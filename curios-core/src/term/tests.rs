@@ -50,7 +50,7 @@ fn close_open_preserves_nested_bind() {
     let term = Scope::close(
         One,
         &["x"],
-        Term::func([("y", Term::type_())], Term::free_var("x")),
+        Term::func([("y", Term::type_ground())], Term::free_var("x")),
     )
     .open(&[&Term::free_var("z")]);
 
@@ -69,11 +69,11 @@ fn close_open_preserves_nested_bind() {
 #[test]
 fn collect_ignores_index_names() {
     let term = Term::func(
-        [("x", Term::type_())],
+        [("x", Term::type_ground())],
         Term::tuple([
             Term::free_var("x"),
             Term::rec(
-                vec![("y", Term::type_(), Term::free_var("z"))],
+                vec![("y", Term::type_ground(), Term::free_var("z"))],
                 Term::tuple([Term::free_var("y"), Term::free_var("w")]),
             ),
         ]),
@@ -97,20 +97,20 @@ fn metavar_is_a_closed_global_head() {
 fn metavars_collects_ids_across_structure() {
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([("x", Term::type_())], Term::metavar(1)),
+        Term::func([("x", Term::type_ground())], Term::metavar(1)),
         [
             Term::metavar(2),
             Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
         ],
     );
-    assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetavarId)));
+    assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetaId)));
 }
 
 #[test]
 fn any_metavar_short_circuits_and_agrees_with_collection() {
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([("x", Term::type_())], Term::metavar(1)),
+        Term::func([("x", Term::type_ground())], Term::metavar(1)),
         [
             Term::metavar(2),
             Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
@@ -119,8 +119,8 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
 
     // A predicate over the ids agrees with the collecting walk: a present id is
     // found, an absent one is not.
-    assert!(term.any_metavar(&mut |id| id == MetavarId(3)));
-    assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
+    assert!(term.any_metavar(&mut |id| id == MetaId(3)));
+    assert!(!term.any_metavar(&mut |id| id == MetaId(99)));
     assert_eq!(term.any_metavar(&mut |_| true), !term.metavars().is_empty());
 
     // Bails on the first metavariable: the head's `?1` is reached first, so an
@@ -133,7 +133,7 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     assert_eq!(visits, 1);
 
     // A metavariable-free term never fires the predicate.
-    let plain = Term::func([("x", Term::type_())], Term::free_var("x"));
+    let plain = Term::func([("x", Term::type_ground())], Term::free_var("x"));
     let mut fired = false;
     assert!(!plain.any_metavar(&mut |_| {
         fired = true;
@@ -157,7 +157,7 @@ fn has_local_free_flags_minted_names_not_binder_hints() {
 
     // A binder whose label hint carries `#` stays clean: the hint is not an
     // occurrence, and the captured variable is bound, not free.
-    let binder = Term::func([("x#9", Term::type_())], Term::free_var("x#9"));
+    let binder = Term::func([("x#9", Term::type_ground())], Term::free_var("x#9"));
     assert!(!binder.has_local_free());
 }
 
@@ -166,12 +166,12 @@ fn has_metavar_flags_any_metavariable_node() {
     assert!(Term::metavar(1).has_metavar());
     assert!(
         Term::apply(
-            Term::func([("x", Term::type_())], Term::free_var("x")),
+            Term::func([("x", Term::type_ground())], Term::free_var("x")),
             [Term::metavar(2)],
         )
         .has_metavar()
     );
-    assert!(!Term::func([("x", Term::type_())], Term::free_var("x")).has_metavar());
+    assert!(!Term::func([("x", Term::type_ground())], Term::free_var("x")).has_metavar());
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn metavar_is_inert_under_traversal() {
 #[test]
 fn variant_collects_metavars_and_prints_as_function_call() {
     let ctor = Term::variant("Result", [Term::metavar(1)], "success", [Term::metavar(2)]);
-    assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetavarId)));
+    assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetaId)));
     assert_eq!(format!("{ctor}"), "Result/success(?2)");
 
     let type_ = Term::induct_type(
@@ -194,7 +194,7 @@ fn variant_collects_metavars_and_prints_as_function_call() {
         [Term::prim(Prim::NatType), Term::metavar(3)],
         Vec::<Term>::new(),
     );
-    assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetavarId)));
+    assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetaId)));
     assert_eq!(format!("{type_}"), "Result(Nat, ?3)");
 }
 
@@ -202,7 +202,7 @@ fn variant_collects_metavars_and_prints_as_function_call() {
 fn implicit_marks_print_and_default_to_explicit() {
     let ft = Term::func_type_marked(
         [
-            (Plicity::Implicit, "T", Term::type_()),
+            (Plicity::Implicit, "T", Term::type_ground()),
             (Plicity::Explicit, "x", Term::free_var("T")),
         ],
         Term::free_var("T"),
@@ -210,7 +210,7 @@ fn implicit_marks_print_and_default_to_explicit() {
     assert_eq!(format!("{ft}"), "(@T : Type, x : T) -> T");
 
     // The unmarked builders default every slot to `Explicit`.
-    let plain = Term::func_type([("T", Term::type_())], Term::type_());
+    let plain = Term::func_type([("T", Term::type_ground())], Term::type_ground());
     match &*plain {
         Subterm::FuncType(FuncType { plicities, .. }) => {
             assert_eq!(plicities, &[Plicity::Explicit]);
@@ -234,7 +234,7 @@ fn inductive_match_case_binders_are_captured() {
     let term = Term::induct_match(
         Term::free_var("r"),
         None,
-        Term::type_(),
+        Term::type_ground(),
         [("success", vec!["value"], Term::free_var("value"))],
     );
 
@@ -250,7 +250,7 @@ fn inductive_match_default_prints_a_catch_all_arm() {
     let term = Term::induct_match_default(
         Term::free_var("r"),
         None,
-        Term::type_(),
+        Term::type_ground(),
         [("none", Vec::<&str>::new(), Term::free_var("a"))],
         Term::free_var("b"),
     );
@@ -282,13 +282,13 @@ fn inductive_variants_reach_spans_components() {
 
 #[test]
 fn reach_basic_values() {
-    assert_eq!(Term::type_().reach(), 0);
+    assert_eq!(Term::type_ground().reach(), 0);
     assert_eq!(Term::free_var("x").reach(), 0);
     assert_eq!(Term::var(Var::bound(0)).reach(), 1);
     assert_eq!(Term::var(Var::bound(3)).reach(), 4);
     // closed identity function λx.x
     assert_eq!(
-        Term::func([("x", Term::type_())], Term::free_var("x")).reach(),
+        Term::func([("x", Term::type_ground())], Term::free_var("x")).reach(),
         0
     );
 }
@@ -300,7 +300,7 @@ fn reach_telescope_absorbs_arity() {
     // preserved exactly (unlike `Telescope::cons`, which captures by label).
     let f1 = Term::from(Subterm::Func(Func {
         telescope: Telescope::Cons(
-            Term::type_(),
+            Term::type_ground(),
             Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
         ),
         plicities: vec![Plicity::Explicit],
@@ -309,11 +309,11 @@ fn reach_telescope_absorbs_arity() {
 
     let f2 = Term::from(Subterm::Func(Func {
         telescope: Telescope::Cons(
-            Term::type_(),
+            Term::type_ground(),
             Scope::constant(
                 One,
                 Telescope::Cons(
-                    Term::type_(),
+                    Term::type_ground(),
                     Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
                 ),
             ),
@@ -326,14 +326,14 @@ fn reach_telescope_absorbs_arity() {
 #[test]
 fn open_shares_closed_body_without_rebuild() {
     // body does not mention the bound variable -> open returns the stored Rc unchanged
-    let scope = Scope::close(One, &["x"], Term::type_());
+    let scope = Scope::close(One, &["x"], Term::type_ground());
     let opened = scope.open(&[&Term::free_var("y")]);
     assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
 }
 
 #[test]
 fn open_shares_closed_subterm_inside_substituted_body() {
-    let closed = Term::func([("a", Term::type_())], Term::free_var("a")); // λa.a, closed
+    let closed = Term::func([("a", Term::type_ground())], Term::free_var("a")); // λa.a, closed
     let scope = Scope::close(One, &["x"], Term::tuple([Term::free_var("x"), closed]));
 
     let stored_field = match &**scope.body() {
@@ -357,8 +357,8 @@ fn open_shares_closed_subterm_inside_substituted_body() {
 fn binder_name_hints_are_identity_irrelevant() {
     use std::hash::BuildHasher;
 
-    let this = Term::func([("x", Term::type_())], Term::free_var("x"));
-    let that = Term::func([("y", Term::type_())], Term::free_var("y"));
+    let this = Term::func([("x", Term::type_ground())], Term::free_var("x"));
+    let that = Term::func([("y", Term::type_ground())], Term::free_var("y"));
 
     assert_eq!(this, that);
 
@@ -371,12 +371,79 @@ fn tuple_type_field_labels_are_identity() {
     // Field labels are the target of `.label` resolution, so unlike binder
     // hints they split identity: an α-equal twin with different labels must
     // not be substituted for this type by any Eq-keyed cache.
-    let this = Term::tuple_type([("cp", Term::type_()), ("v", Term::free_var("cp"))]);
-    let that = Term::tuple_type([("r", Term::type_()), ("v", Term::free_var("r"))]);
+    let this = Term::tuple_type([("cp", Term::type_ground()), ("v", Term::free_var("cp"))]);
+    let that = Term::tuple_type([("r", Term::type_ground()), ("v", Term::free_var("r"))]);
 
     assert_ne!(this, that);
     assert_eq!(
         this,
-        Term::tuple_type([("cp", Term::type_()), ("v", Term::free_var("cp"))])
+        Term::tuple_type([("cp", Term::type_ground()), ("v", Term::free_var("cp"))])
+    );
+}
+
+#[test]
+fn universe_rewrites_respect_nested_local_schemes() {
+    let inner = Level::param(UniverseParam(0));
+
+    let mut solver = UniverseSolver::new(0);
+    let outer_meta = solver.fresh(UniverseRole::Generalizable, None);
+    let inner_context = UniverseContext {
+        parameter_count: 1,
+        outer_parameter_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: inner.clone(),
+            upper: Level::meta(outer_meta),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Other("nested".into())),
+        }],
+    };
+    let outer_context = solver.finalize([outer_meta], []).unwrap();
+    assert_eq!(outer_context.parameter_count, 1);
+
+    let term = Term::let_scheme(
+        "local",
+        Term::type_at(inner.clone()),
+        Term::tuple([
+            Term::type_at(inner.clone()),
+            Term::type_at(Level::meta(outer_meta)),
+        ]),
+        inner_context,
+        Term::free_var("local"),
+    );
+    let zonked = zonk_universe_levels_scoped(&term, &solver).unwrap();
+    let Subterm::Let(Let { bindings, .. }) = &*zonked else {
+        panic!("expected local definition")
+    };
+    assert_eq!(bindings[0].universe_context().outer_parameter_count, 1);
+    assert_eq!(
+        bindings[0].universe_context().constraints[0].upper,
+        Level::param(UniverseParam(1))
+    );
+    assert_eq!(bindings[0].type_(), &Term::type_at(inner.clone()));
+    assert_eq!(
+        bindings[0].value(),
+        &Term::tuple([
+            Term::type_at(inner.clone()),
+            Term::type_at(Level::param(UniverseParam(1))),
+        ])
+    );
+
+    let instantiated = instantiate_universe_levels_scoped(
+        &zonked,
+        &[Level::param(UniverseParam(0)).succ().unwrap()],
+    )
+    .unwrap();
+    let Subterm::Let(Let { bindings, .. }) = &*instantiated else {
+        panic!("expected local definition")
+    };
+    assert_eq!(
+        bindings[0].universe_context().constraints[0].upper,
+        Level::param(UniverseParam(1)).succ().unwrap()
+    );
+    assert_eq!(
+        bindings[0].value(),
+        &Term::tuple([
+            Term::type_at(inner),
+            Term::type_at(Level::param(UniverseParam(1)).succ().unwrap()),
+        ])
     );
 }

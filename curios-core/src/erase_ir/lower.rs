@@ -12,7 +12,12 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, Let, Module, Subterm, Term, emitted, prim,
+        Binding, Bound, Context, Environment, Error, InductDecl, Item, Let, Module, Subterm, Term,
+        emitted, prim,
+    },
+    crate::{
+        Concept, Definition, InductParam, RecItem, StructDecl, project_erased_universes,
+        validate_bound_universes, validate_universes,
     },
     std::collections::BTreeSet,
 };
@@ -36,6 +41,128 @@ pub(super) struct Lowering {
     pub(super) dangled: BTreeSet<String>,
 }
 
+pub(super) struct UniverseErased<T>(T);
+
+impl<T> UniverseErased<T> {
+    pub(super) fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl UniverseErased<Term> {
+    fn project(term: &Term) -> Result<Self, Error> {
+        validate_bound_universes(term, 0, "erasure expected type")?;
+        Ok(Self(project_erased_universes(term)))
+    }
+}
+
+impl UniverseErased<Module> {
+    pub(super) fn project(module: &Module) -> Result<Self, Error> {
+        validate_universes(module)?;
+        Ok(Self(project_module(module)))
+    }
+}
+
+fn project_definition(definition: &Definition) -> Definition {
+    Definition {
+        name: definition.name.clone(),
+        kind: definition.kind.clone(),
+        universe_context: Default::default(),
+        island: definition.island.clone(),
+        root: definition.root,
+        type_: project_erased_universes(&definition.type_),
+        body: project_erased_universes(&definition.body),
+    }
+}
+
+/// Build the representation sealed by [`UniverseErased<Module>`]. Universe
+/// arguments have no runtime identity; projecting them once also prevents
+/// reduction from repeatedly specializing polymorphic Core bodies while
+/// lowering them.
+fn project_module(module: &Module) -> Module {
+    Module {
+        items: module
+            .items
+            .iter()
+            .map(|item| match item {
+                Item::Let(definition) => Item::Let(project_definition(definition)),
+                Item::Rec(rec) => Item::Rec(RecItem::new(
+                    rec.definitions().iter().map(project_definition).collect(),
+                )),
+            })
+            .collect(),
+        universe_seeds: Vec::new(),
+        induct_decls: module
+            .induct_decls
+            .iter()
+            .map(|(name, declaration)| {
+                (
+                    name.clone(),
+                    InductDecl {
+                        universe_context: Default::default(),
+                        params: project_erased_universes(&declaration.params),
+                        indices: project_erased_universes(&declaration.indices),
+                        constructors: declaration
+                            .constructors
+                            .iter()
+                            .map(|(tag, constructor)| {
+                                (
+                                    tag.clone(),
+                                    InductParam {
+                                        telescope: project_erased_universes(&constructor.telescope),
+                                        plicities: constructor.plicities.clone(),
+                                    },
+                                )
+                            })
+                            .collect(),
+                        result_sort: project_erased_universes(&declaration.result_sort),
+                        module: declaration.module.clone(),
+                        root: declaration.root,
+                        rep_public: declaration.rep_public,
+                    },
+                )
+            })
+            .collect(),
+        struct_decls: module
+            .struct_decls
+            .iter()
+            .map(|(name, declaration)| {
+                (
+                    name.clone(),
+                    StructDecl {
+                        universe_context: Default::default(),
+                        params: project_erased_universes(&declaration.params),
+                        fields: project_erased_universes(&declaration.fields),
+                        result_sort: project_erased_universes(&declaration.result_sort),
+                        module: declaration.module.clone(),
+                        root: declaration.root,
+                        rep_public: declaration.rep_public,
+                    },
+                )
+            })
+            .collect(),
+        concepts: module
+            .concepts
+            .iter()
+            .map(|(name, concept)| {
+                (
+                    name.clone(),
+                    Concept {
+                        universe_context: Default::default(),
+                        params: project_erased_universes(&concept.params),
+                        fields: concept.fields.clone(),
+                        supers: concept.supers.clone(),
+                        root: concept.root,
+                    },
+                )
+            })
+            .collect(),
+        witnesses: module.witnesses.clone(),
+        type_: module.type_.as_ref().map(project_erased_universes),
+        body: project_erased_universes(&module.body),
+    }
+}
+
 /// Erase a whole meta-free [`Module`] into a verified arena
 /// [`Module`]. Top-level items are erased in dominance order as the
 /// module's item chain; the entrypoint body becomes the entry block, checked
@@ -46,6 +173,8 @@ pub fn erase_module_to_ir(
     module: &Module,
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
+    let module = UniverseErased::<Module>::project(module)?.into_inner();
+    let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Erasure is re-derivation of elaborated terms, never surface elaboration,
     // so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
@@ -59,10 +188,10 @@ pub fn erase_module_to_ir(
         }
 
         let mut lowering = Lowering::default();
-        lowering.erase_items(context, module, 0)?;
+        lowering.erase_items(context, &module, 0)?;
 
         lowering.builder.open_block();
-        let outcome = lowering.walk(context, &module.body, expected, None)?;
+        let outcome = lowering.walk(context, &module.body, &expected, None)?;
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
 
@@ -130,12 +259,15 @@ impl Lowering {
             Subterm::Prim(primitive) => prim::erase_prim(self, context, primitive, expected, hint),
             // Type formers carry nothing to lower; their value is the unit of
             // a retained-but-erased slot.
-            Subterm::Type
+            Subterm::Type(_)
             | Subterm::Prop
             | Subterm::FuncType(_)
             | Subterm::TupleType(_)
             | Subterm::InductType(_)
             | Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
+            Subterm::UniverseInst(_) => {
+                unreachable!("UniverseInst survived the UniverseErased<Module> projection")
+            }
             Subterm::Var(var) => {
                 let name = var.unwrap();
                 match self.environment.lookup(name) {
@@ -179,10 +311,10 @@ impl Lowering {
         context.with_frame(|context| {
             let mut label_terms = Vec::<Term>::with_capacity(binding.bindings.len());
 
-            for (index, (type_, value)) in binding.bindings.iter().enumerate() {
+            for (index, local) in binding.bindings.iter().enumerate() {
                 let (type_, value) = {
                     let refs = label_terms.iter().collect::<Vec<_>>();
-                    (type_.release(&refs), value.release(&refs))
+                    (local.type_().release(&refs), local.value().release(&refs))
                 };
 
                 // The arena identity uniquifies by index, so the hint stays
@@ -201,7 +333,12 @@ impl Lowering {
                 // `erase_apply` and `erase_proj`).
                 let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
-                context.define_assuming(&name, &type_, &value);
+                context.define_assuming_scheme(
+                    &name,
+                    &type_,
+                    &value,
+                    local.universe_context().clone(),
+                );
                 self.environment.bind(&name, atom);
                 label_terms.push(Term::free_var(&name));
             }
@@ -249,6 +386,7 @@ pub fn erase_prelude_to_ir_prefix(
     context: &mut Context,
     prelude: &Module,
 ) -> Result<ErasedPrelude, Error> {
+    let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
     context.with_suppressed_privacy(|context| {
         for (name, induct_decl) in &prelude.induct_decls {
@@ -258,7 +396,7 @@ pub fn erase_prelude_to_ir_prefix(
             context.register_struct(name, struct_decl.clone())?;
         }
         let mut lowering = Lowering::default();
-        lowering.erase_items(context, prelude, 0)?;
+        lowering.erase_items(context, &prelude, 0)?;
         Ok(ErasedPrelude {
             module: lowering.builder.into_module(),
             environment: lowering.environment,
@@ -280,6 +418,9 @@ pub fn erase_module_with_prelude_to_ir(
     expected: &Term,
     prefix: ErasedPrelude,
 ) -> Result<curios_ersd::Module, Error> {
+    let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
+    let module = UniverseErased::<Module>::project(module)?.into_inner();
+    let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
     context.with_suppressed_privacy(|context| {
         for (name, induct_decl) in &module.induct_decls {
@@ -295,12 +436,21 @@ pub fn erase_module_with_prelude_to_ir(
         for item in &prelude.items {
             match item {
                 super::Item::Let(definition) => {
-                    context.define_assuming(&definition.name, &definition.type_, &definition.body);
+                    context.define_assuming_scheme(
+                        &definition.name,
+                        &definition.type_,
+                        &definition.body,
+                        definition.universe_context.clone(),
+                    );
                 }
                 super::Item::Rec(rec) => {
                     let definitions = rec.definitions();
                     for definition in &definitions {
                         context.assume(&definition.name, &definition.type_);
+                        context.set_assumption_universe_context(
+                            &definition.name,
+                            rec.group.universe_context().clone(),
+                        );
                     }
                     for (index, definition) in definitions.iter().enumerate() {
                         context.define(
@@ -317,10 +467,10 @@ pub fn erase_module_with_prelude_to_ir(
             environment: prefix.environment,
             dangled: Default::default(),
         };
-        lowering.erase_items(context, module, prelude.items.len())?;
+        lowering.erase_items(context, &module, prelude.items.len())?;
 
         lowering.builder.open_block();
-        let outcome = lowering.walk(context, &module.body, expected, None)?;
+        let outcome = lowering.walk(context, &module.body, &expected, None)?;
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
 

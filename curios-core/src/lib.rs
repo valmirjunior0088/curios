@@ -2,6 +2,8 @@
 //!
 //! The stage runs module-at-a-time: [`elaborate_module`] walks a lowered [`Module`] item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; `zonk`/[`zonk_module`] then substitute solved metavariables and report unsolved holes; `erase_ir` ([`erase_module_with_prelude_to_ir`]) strips types, proofs, and other runtime-irrelevant structure for `curios-ersd`.
 //!
+//! `Type` is internally indexed by canonical algebraic [`Level`]s even though the surface term is nullary. Written levels and elaborator classifiers occupy distinct [`UniverseMetaId`]s with explicit roles; inequalities are solved transactionally with term metavariables, and declaration finalization minimizes flexible outputs before generalizing the remaining inputs into a closed [`UniverseContext`]. Top-level and local definitions instantiate those contexts freshly, while every member of a recursive group shares one monomorphic instance internally. [`validate_universes`] is the closure and instance-arity gate on zonked Core. The Core-to-Ersd boundary then projects through a validated universe-erased module, removing instances, contexts, and nominal vectors before any runtime representation is built.
+//!
 //! Everything else is that pipeline's machinery: `term`/`scope` define the term language and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]); `reduce` is deadline-bounded type-level evaluation (`normalize` for full normal forms); `convert` decides definitional equality, solving metavariables and distinguishing hard mismatches from goals merely blocked on unsolved metas (`Outcome`) so `typing` can park and retry them; `resolve` implements witness (concept) resolution with global coherence checks; `invert` proves omitted match arms impossible; `print`/`names` render terms for [`Error`] messages.
 //!
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_core::Term`, not paths into the modules.
@@ -14,6 +16,9 @@ pub use scope::*;
 
 mod nat;
 pub use nat::*;
+
+mod universe;
+pub use universe::*;
 
 mod prim;
 pub use prim::*;

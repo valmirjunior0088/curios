@@ -11,9 +11,9 @@ pub(super) fn elaborate_func_type(
         domains: &mut Vec<(String, Term)>,
     ) -> Result<Term, Error> {
         match tele {
-            Telescope::Done(output) => check(context, &output, Term::type_()),
+            Telescope::Done(output) => crate::check_is_sort(context, &output).map(|(term, _)| term),
             Telescope::Cons(ty, rest) => {
-                let domain = check(context, &ty, Term::type_())?;
+                let domain = crate::check_is_sort(context, &ty)?.0;
                 let name = context.fresh(rest.first_label());
                 let x = Term::free_var(&name);
                 // Assume the *rebuilt* domain: insertion saturates applications
@@ -43,7 +43,8 @@ pub(super) fn elaborate_func_type(
         output,
     );
 
-    Ok((rebuilt, Term::type_()))
+    let sort = sort_term(context, &rebuilt)?;
+    Ok((rebuilt, sort))
 }
 
 /// Fill an omitted non-explicit slot: an implicit binder gets a fresh
@@ -433,7 +434,7 @@ pub(super) fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
     ty: &Term,
-    result_metavars: &BTreeSet<MetavarId>,
+    result_metavars: &BTreeSet<MetaId>,
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
@@ -481,7 +482,7 @@ pub(super) fn blocked_on_metavar(
 /// a solution can still embed unsolved metavars, so `expected_ground` needs this
 /// transitive view to be sure the turnaround will actually pin a result metavar rather
 /// than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
-pub(super) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
+pub(super) fn transitively_ground(context: &Context, id: MetaId) -> bool {
     match context.metavar_solution(id) {
         None => false,
         Some(solution) => solution
@@ -558,7 +559,7 @@ pub(super) struct ElabFrame {
     /// `Some(stamp)` when this node was a cacheable probe miss: record the
     /// finalized (un-restamped) result under `stamp` at pop. `None` when the
     /// node is uncacheable (a non-ground expected type).
-    record: Option<usize>,
+    record: Option<ElaborationStamp>,
 }
 
 /// Outcome of advancing a fast-path walk one step
@@ -591,7 +592,7 @@ impl ElabFrame {
         apply: &Apply,
         term: &Term,
         mode: Mode,
-        record: Option<usize>,
+        record: Option<ElaborationStamp>,
     ) -> Result<Walk, Error> {
         let (head, head_type) = elaborate(context, &apply.head, Mode::Infer)?;
         let head_type = reduce_with(context, &head_type)?;

@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Arity, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductType, Infix, Let,
-        Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType, Subterm,
+        Level, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
@@ -14,6 +14,21 @@ use {
         rc::Rc,
     },
 };
+
+fn universe_suffix(levels: &[Level]) -> String {
+    if levels.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ".{{{}}}",
+            levels
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+}
 
 // === Source-style names (diagnostics) ========================================
 //
@@ -174,22 +189,22 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             each(out, params);
             each(out, fields);
         }
-        Subterm::Let(Let { bindings, tail }) => {
-            for (type_, value) in bindings {
-                collect_labels(type_, out);
-                collect_labels(value, out);
+        Subterm::Let(Let { bindings, tail, .. }) => {
+            for binding in bindings {
+                collect_labels(binding.type_(), out);
+                collect_labels(binding.value(), out);
             }
             scope(out, tail);
         }
         Subterm::Rec(Rec { group, tail }) => {
-            for (type_, value) in group.items() {
+            for (type_, value) in group.iter() {
                 scope(out, type_);
                 scope(out, value);
             }
             scope(out, tail);
         }
         Subterm::RecMember(RecMember { group, .. }) => {
-            for (type_, value) in group.items() {
+            for (type_, value) in group.iter() {
                 scope(out, type_);
                 scope(out, value);
             }
@@ -246,12 +261,16 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             }
         }
         Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
+        Subterm::UniverseInst(instance) => collect_labels(&instance.head, out),
         Subterm::Infix(Infix { left, right, .. }) => {
             collect_labels(left, out);
             collect_labels(right, out);
         }
-        Subterm::Var(_) | Subterm::Type | Subterm::Prop | Subterm::Prim(_) | Subterm::NumLit(_) => {
-        }
+        Subterm::Var(_)
+        | Subterm::Type(_)
+        | Subterm::Prop
+        | Subterm::Prim(_)
+        | Subterm::NumLit(_) => {}
     }
 }
 
@@ -742,8 +761,26 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
 
 pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match Term::unwrap_or_clone(term) {
-        Subterm::Type => pure("Type"),
+        Subterm::Type(level) => {
+            if level.is_zero() {
+                pure("Type")
+            } else {
+                pure(format!("Type.{{{level}}}"))
+            }
+        }
         Subterm::Prop => pure("Prop"),
+        Subterm::UniverseInst(instance) => flat([
+            print_term(instance.head, depth),
+            pure(format!(
+                ".{{{}}}",
+                instance
+                    .levels
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )),
+        ]),
         Subterm::Prim(prim) => print_prim(prim, depth),
         Subterm::FuncType(FuncType {
             telescope,
@@ -900,14 +937,16 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         // type-constructor function is applied at use sites.
         Subterm::InductType(InductType {
             name,
+            universes,
             params,
             indices,
         }) => {
+            let name = format!("{}{}", display_label(&name), universe_suffix(&universes));
             if params.is_empty() && indices.is_empty() {
-                pure(display_label(&name))
+                pure(name)
             } else {
                 flat([
-                    pure(display_label(&name)),
+                    pure(name),
                     pure("("),
                     sep_flat(
                         params
@@ -924,13 +963,18 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         // Prints as the constructor-function call, instantiated type params
         // hidden — `Result/success(42)`.
         Subterm::Variant(Variant {
-            name, tag, payload, ..
+            name,
+            universes,
+            tag,
+            payload,
+            ..
         }) => {
+            let name = format!("{}{}", display_label(&name), universe_suffix(&universes));
             if payload.is_empty() {
-                pure(format!("{}/{tag}", display_label(&name)))
+                pure(format!("{name}/{tag}"))
             } else {
                 flat([
-                    pure(format!("{}/{tag}", display_label(&name))),
+                    pure(format!("{name}/{tag}")),
                     pure("("),
                     sep_flat(
                         payload
@@ -944,12 +988,17 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             }
         }
         // Like `InductType` but with no indices: `Pair(Nat, Bin)`.
-        Subterm::StructType(StructType { name, params }) => {
+        Subterm::StructType(StructType {
+            name,
+            universes,
+            params,
+        }) => {
+            let name = format!("{}{}", display_label(&name), universe_suffix(&universes));
             if params.is_empty() {
-                pure(display_label(&name))
+                pure(name)
             } else {
                 flat([
-                    pure(display_label(&name)),
+                    pure(name),
                     pure("("),
                     sep_flat(
                         params
@@ -964,8 +1013,17 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }
         // Prints as the brace literal, instantiated type params hidden —
         // `Pair { 0, "" }`.
-        Subterm::Struct(Struct { name, fields, .. }) => flat([
-            pure(format!("{} {{ ", display_label(&name))),
+        Subterm::Struct(Struct {
+            name,
+            universes,
+            fields,
+            ..
+        }) => flat([
+            pure(format!(
+                "{}{} {{ ",
+                display_label(&name),
+                universe_suffix(&universes)
+            )),
             sep_flat(
                 fields
                     .into_iter()
@@ -1180,7 +1238,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([prefix, arms])
         }
-        Subterm::Let(Let { bindings, tail }) => {
+        Subterm::Let(Let { bindings, tail, .. }) => {
             let labels = scope_labels(tail.label_iter(), depth);
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
@@ -1188,9 +1246,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let lines = bindings
                 .iter()
                 .enumerate()
-                .map(|(index, (type_, value))| {
-                    let type_ = type_.release(&label_terms[..index]);
-                    let value = value.release(&label_terms[..index]);
+                .map(|(index, binding)| {
+                    let type_ = binding.type_().release(&label_terms[..index]);
+                    let value = binding.value().release(&label_terms[..index]);
 
                     flat([
                         pure("let "),
@@ -1216,7 +1274,6 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let inner_depth = depth + labels.len();
 
             let bindings = group
-                .items()
                 .iter()
                 .cloned()
                 .enumerate()
