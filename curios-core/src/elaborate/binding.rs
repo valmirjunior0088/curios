@@ -102,7 +102,12 @@ pub(super) fn elaborate_rec(
 
         let items = group
             .iter()
-            .map(|(type_, body)| (type_.open(&label_refs), body.open(&label_refs)))
+            .map(|member| {
+                (
+                    member.type_.open(&label_refs),
+                    member.body.open(&label_refs),
+                )
+            })
             .collect::<Vec<_>>();
 
         for (label, (type_, _)) in labels.iter().zip(items.iter()) {

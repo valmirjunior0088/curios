@@ -1184,9 +1184,9 @@ impl Convert {
 
         let labels = labels.iter().collect::<Vec<_>>();
 
-        for ((this_type, this_body), (that_type, that_body)) in
-            this.group.iter().zip(that.group.iter())
-        {
+        for (this_member, that_member) in this.group.iter().zip(that.group.iter()) {
+            let (this_type, this_body) = (&this_member.type_, &this_member.body);
+            let (that_type, that_body) = (&that_member.type_, &that_member.body);
             self.enqueue(
                 Term::type_ground(),
                 this_type.open(&labels),

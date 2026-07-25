@@ -1058,11 +1058,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             group: super::RecGroup::new(
                 group
                     .iter()
-                    .map(|(type_, body)| {
-                        Ok((
-                            type_.map_body(|t| zonk_term(context, t))?,
-                            body.map_body(|b| zonk_term(context, b))?,
-                        ))
+                    .map(|member| {
+                        Ok(super::RecMemberScopes {
+                            type_: member.type_.map_body(|t| zonk_term(context, t))?,
+                            body: member.body.map_body(|b| zonk_term(context, b))?,
+                        })
                     })
                     .collect::<Result<_, Error>>()?,
             )
@@ -1075,11 +1075,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 member
                     .group
                     .iter()
-                    .map(|(type_, body)| {
-                        Ok((
-                            type_.map_body(|t| zonk_term(context, t))?,
-                            body.map_body(|b| zonk_term(context, b))?,
-                        ))
+                    .map(|scopes| {
+                        Ok(super::RecMemberScopes {
+                            type_: scopes.type_.map_body(|t| zonk_term(context, t))?,
+                            body: scopes.body.map_body(|b| zonk_term(context, b))?,
+                        })
                     })
                     .collect::<Result<_, Error>>()?,
             )

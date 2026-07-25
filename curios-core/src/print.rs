@@ -197,16 +197,16 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             scope(out, tail);
         }
         Subterm::Rec(Rec { group, tail }) => {
-            for (type_, value) in group.iter() {
-                scope(out, type_);
-                scope(out, value);
+            for member in group.iter() {
+                scope(out, &member.type_);
+                scope(out, &member.body);
             }
             scope(out, tail);
         }
         Subterm::RecMember(RecMember { group, .. }) => {
-            for (type_, value) in group.iter() {
-                scope(out, type_);
-                scope(out, value);
+            for member in group.iter() {
+                scope(out, &member.type_);
+                scope(out, &member.body);
             }
         }
         Subterm::Match(Match {
@@ -1277,9 +1277,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 .iter()
                 .cloned()
                 .enumerate()
-                .map(|(index, (type_, body))| {
-                    let type_ = type_.open(&label_terms);
-                    let body = body.open(&label_terms);
+                .map(|(index, member)| {
+                    let type_ = member.type_.open(&label_terms);
+                    let body = member.body.open(&label_terms);
 
                     flat([
                         pure(display_label(&labels[index])),

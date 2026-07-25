@@ -825,12 +825,16 @@ fn atomic_difference_edge(
     }
 }
 
+/// The difference-graph fragment one constraint contributes: the nodes it
+/// names and the edges relating them.
+type DifferenceFragment = (BTreeSet<DifferenceNode>, Vec<DifferenceEdge>);
+
 /// Encode a constraint whose right-hand maxima have one forced viable choice.
 /// `Ok(None)` means that the exact disjunctive solver is required.
 fn forced_difference_edges(
     constraint: &UniverseConstraint,
     index: usize,
-) -> Result<Option<(BTreeSet<DifferenceNode>, Vec<DifferenceEdge>)>, Vec<usize>> {
+) -> Result<Option<DifferenceFragment>, Vec<usize>> {
     let nodes = BTreeSet::from_iter(
         constraint
             .lower

@@ -1,7 +1,7 @@
 use {
     super::{
-        Concept, InductDecl, Many, RecGroup, Scope, StructDecl, Term, UniverseContext,
-        UniverseSeed, build_shorten, with_short_names,
+        Concept, InductDecl, Many, RecGroup, RecMemberScopes, Scope, StructDecl, Term,
+        UniverseContext, UniverseSeed, build_shorten, with_short_names,
     },
     curios_base::{Qualifier, RootId},
     std::{
@@ -119,11 +119,9 @@ impl RecItem {
         let group = RecGroup::new(
             definitions
                 .iter()
-                .map(|definition| {
-                    (
-                        Scope::close(arity, &labels, definition.type_.clone()),
-                        Scope::close(arity, &labels, definition.body.clone()),
-                    )
+                .map(|definition| RecMemberScopes {
+                    type_: Scope::close(arity, &labels, definition.type_.clone()),
+                    body: Scope::close(arity, &labels, definition.body.clone()),
                 })
                 .collect(),
         )
@@ -156,14 +154,14 @@ impl RecItem {
         self.definitions
             .iter()
             .zip(self.group.iter())
-            .map(|(definition, (type_, body))| Definition {
+            .map(|(definition, member)| Definition {
                 name: definition.name.clone(),
                 kind: definition.kind.clone(),
                 universe_context: self.group.universe_context().clone(),
                 island: definition.island.clone(),
                 root: definition.root,
-                type_: type_.open(&name_refs),
-                body: body.open(&name_refs),
+                type_: member.type_.open(&name_refs),
+                body: member.body.open(&name_refs),
             })
             .collect()
     }
@@ -356,7 +354,7 @@ mod tests {
                 .iter()
                 .next()
                 .unwrap()
-                .1
+                .body
                 .body()
                 .free_vars()
                 .is_empty()

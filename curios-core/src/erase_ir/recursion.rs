@@ -44,7 +44,7 @@ impl Lowering {
 
         let members = group
             .iter()
-            .map(|(type_, body)| (type_.open(&name_refs), body.open(&name_refs)))
+            .map(|member| (member.type_.open(&name_refs), member.body.open(&name_refs)))
             .collect::<Vec<_>>();
         let tail = tail.open(&name_refs);
 

@@ -1530,11 +1530,9 @@ impl Term {
         let group = RecGroup::new(
             items
                 .into_iter()
-                .map(|(_, type_, value)| {
-                    (
-                        Scope::close(Many(labels.len()), &labels, type_),
-                        Scope::close(Many(labels.len()), &labels, value),
-                    )
+                .map(|(_, type_, value)| RecMemberScopes {
+                    type_: Scope::close(Many(labels.len()), &labels, type_),
+                    body: Scope::close(Many(labels.len()), &labels, value),
                 })
                 .collect(),
         );
@@ -2281,6 +2279,18 @@ impl LetBinding {
     }
 }
 
+/// One member of a recursive group as the knot stores it. Both scopes are
+/// closed over the whole group, so any member may reference any other.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct RecMemberScopes {
+    pub(crate) type_: Scope<Many>,
+    pub(crate) body: Scope<Many>,
+}
+
 /// The shared knot of a mutually-recursive group. Every member type and body
 /// is scoped over the full group. `Rc` sharing is an implementation detail;
 /// equality and hashing remain structural through the scoped items.
@@ -2290,23 +2300,21 @@ impl LetBinding {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct RecGroup {
-    scheme: UniverseScheme<Rc<Vec<(Scope<Many>, Scope<Many>)>>>,
+    scheme: UniverseScheme<Rc<Vec<RecMemberScopes>>>,
 }
 
 impl RecGroup {
-    pub(crate) fn new(items: Vec<(Scope<Many>, Scope<Many>)>) -> Self {
+    pub(crate) fn new(items: Vec<RecMemberScopes>) -> Self {
         Self {
             scheme: UniverseScheme::monomorphic(Rc::new(items)),
         }
     }
 
-    pub(crate) fn iter(
-        &self,
-    ) -> impl ExactSizeIterator<Item = &(Scope<Many>, Scope<Many>)> + Clone {
+    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
         self.scheme.value.iter()
     }
 
-    fn item(&self, index: usize) -> &(Scope<Many>, Scope<Many>) {
+    fn item(&self, index: usize) -> &RecMemberScopes {
         self.scheme
             .value
             .get(index)
@@ -2335,13 +2343,13 @@ impl RecGroup {
     pub(crate) fn member_type(&self, index: usize) -> Term {
         let members = self.members();
         let refs = members.iter().collect::<Vec<_>>();
-        self.item(index).0.open(&refs)
+        self.item(index).type_.open(&refs)
     }
 
     pub(crate) fn member_body(&self, index: usize) -> Term {
         let members = self.members();
         let refs = members.iter().collect::<Vec<_>>();
-        self.item(index).1.open(&refs)
+        self.item(index).body.open(&refs)
     }
 
     pub(crate) fn instantiate_universes(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
@@ -2355,15 +2363,15 @@ impl RecGroup {
             scheme: UniverseScheme {
                 value: self
                     .iter()
-                    .map(|(type_, body)| {
-                        Ok((
-                            type_.map_body(|body| {
+                    .map(|member| {
+                        Ok(RecMemberScopes {
+                            type_: member.type_.map_body(|body| {
                                 instantiate_universe_levels_scoped(body, arguments)
                             })?,
-                            body.map_body(|body| {
+                            body: member.body.map_body(|body| {
                                 instantiate_universe_levels_scoped(body, arguments)
                             })?,
-                        ))
+                        })
                     })
                     .collect::<Result<Vec<_>, UniverseError>>()?
                     .into(),
@@ -2380,7 +2388,10 @@ impl RecGroup {
         visit.enter_universe_scope(universe_arity);
         let mut result = Self::new(
             self.iter()
-                .map(|(type_, body)| (visit.visit_scope(type_), visit.visit_scope(body)))
+                .map(|member| RecMemberScopes {
+                    type_: visit.visit_scope(&member.type_),
+                    body: visit.visit_scope(&member.body),
+                })
                 .collect(),
         );
         result.scheme.context = if visit.erases_universes() {
@@ -2396,7 +2407,7 @@ impl RecGroup {
 
     fn reach(&self) -> usize {
         self.iter()
-            .map(|(type_, body)| type_.reach().max(body.reach()))
+            .map(|member| member.type_.reach().max(member.body.reach()))
             .max()
             .unwrap_or(0)
     }
@@ -2815,16 +2826,16 @@ impl Subterm {
                 tail.body().collect_construction_names(names);
             }
             Subterm::Rec(Rec { group, tail }) => {
-                for (type_, value) in group.iter() {
-                    type_.body().collect_construction_names(names);
-                    value.body().collect_construction_names(names);
+                for member in group.iter() {
+                    member.type_.body().collect_construction_names(names);
+                    member.body.body().collect_construction_names(names);
                 }
                 tail.body().collect_construction_names(names);
             }
             Subterm::RecMember(RecMember { group, .. }) => {
-                for (type_, value) in group.iter() {
-                    type_.body().collect_construction_names(names);
-                    value.body().collect_construction_names(names);
+                for member in group.iter() {
+                    member.type_.body().collect_construction_names(names);
+                    member.body.body().collect_construction_names(names);
                 }
             }
         }
@@ -2921,12 +2932,12 @@ impl Subterm {
                 }) || tail.body().any_metavar(pred)
             }
             Subterm::Rec(Rec { group, tail }) => {
-                group.iter().any(|(type_, value)| {
-                    type_.body().any_metavar(pred) || value.body().any_metavar(pred)
+                group.iter().any(|member| {
+                    member.type_.body().any_metavar(pred) || member.body.body().any_metavar(pred)
                 }) || tail.body().any_metavar(pred)
             }
-            Subterm::RecMember(RecMember { group, .. }) => group.iter().any(|(type_, value)| {
-                type_.body().any_metavar(pred) || value.body().any_metavar(pred)
+            Subterm::RecMember(RecMember { group, .. }) => group.iter().any(|member| {
+                member.type_.body().any_metavar(pred) || member.body.body().any_metavar(pred)
             }),
         }
     }
@@ -3010,12 +3021,12 @@ impl Subterm {
             Subterm::Rec(Rec { group, tail }) => {
                 group
                     .iter()
-                    .any(|(type_, value)| pred(type_.body()) || pred(value.body()))
+                    .any(|member| pred(member.type_.body()) || pred(member.body.body()))
                     || pred(tail.body())
             }
             Subterm::RecMember(RecMember { group, .. }) => group
                 .iter()
-                .any(|(type_, value)| pred(type_.body()) || pred(value.body())),
+                .any(|member| pred(member.type_.body()) || pred(member.body.body())),
         }
     }
 
