@@ -143,53 +143,6 @@ pub let maj3(a : Bool, b : Bool, c : Bool) -> Bool =
     | false => match b | true => c | false => false end
     end;
 
-let xor3_comm(a : Bool, b : Bool, c : Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
-    match a
-    | true => match b | true => refl_at(xor3(true, true, c)) | false => refl_at(xor3(true, false, c)) end
-    | false => match b | true => refl_at(xor3(false, true, c)) | false => refl_at(xor3(false, false, c)) end
-    end;
-
-let maj3_comm(a : Bool, b : Bool, c : Bool) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
-    match a
-    | true => match b | true => refl_at(maj3(true, true, c)) | false => refl_at(maj3(true, false, c)) end
-    | false => match b | true => refl_at(maj3(false, true, c)) | false => refl_at(maj3(false, false, c)) end
-    end;
-
-let xor3_inj_mid(a : Bool, @b1 : Bool, @b2 : Bool, c : Bool, p : Eq(xor3(a, b1, c), xor3(a, b2, c)))
-    -> Eq(b1, b2) =
-    match a
-    | true =>
-        match c
-        | true =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
-            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
-            end
-        | false =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
-            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
-            end
-        end
-    | false =>
-        match c
-        | true =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
-            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
-            end
-        | false =>
-            match b1
-            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
-            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
-            end
-        end
-    end;
-
-let cong_maj3_mid(a : Bool, @b1 : Bool, @b2 : Bool, p : Eq(b1, b2), c : Bool)
-    -> Eq(maj3(a, b1, c), maj3(a, b2, c)) =
-    Eq/cong((w) => maj3(a, w, c), p);
-
 pub let eq(a : BigNat, b : BigNat, p : Eq(a.rep, b.rep)) -> Eq(a, b) =
     Eq/subst((r : Bits) => (c : Canonical(r)) -> Eq(a, BigNat { rep = r, canonical = c }),
              p,

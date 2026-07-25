@@ -2,7 +2,7 @@ use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul,
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/Bits/{cons};
-use /std/BigNat/{BigNat, cong_cons2, cong_is_trimmed, cong_maj3_mid, cong_of_bits, cong_rep, cons_inj_head, cons_inj_tail, eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, maj3_comm, nonempty, of_bits, refl_at, tail_is_trimmed, trim_of_trimmed, xor3, xor3_comm, xor3_inj_mid, mod succ};
+use /std/BigNat/{BigNat, cong_cons2, cong_is_trimmed, cong_of_bits, cong_rep, cons_inj_head, cons_inj_tail, eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_bits, refl_at, tail_is_trimmed, trim_of_trimmed, xor3, mod succ};
 
 pub rec raw(x : Bits, y : Bits, carry : Bool) -> Bits =
     match x
@@ -20,6 +20,56 @@ pub rec raw(x : Bits, y : Bits, carry : Bool) -> Bits =
 
 pub let add(a : BigNat, b : BigNat) -> BigNat =
     of_bits(raw(a.rep, b.rep, false));
+
+-- Facts about the full-adder bit functions above. They exist only to justify
+-- this ladder's commutativity and cancellation, so they live with the adder
+-- rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
+let xor3_comm(a : Bool, b : Bool, c : Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
+    match a
+    | true => match b | true => refl_at(xor3(true, true, c)) | false => refl_at(xor3(true, false, c)) end
+    | false => match b | true => refl_at(xor3(false, true, c)) | false => refl_at(xor3(false, false, c)) end
+    end;
+
+let maj3_comm(a : Bool, b : Bool, c : Bool) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
+    match a
+    | true => match b | true => refl_at(maj3(true, true, c)) | false => refl_at(maj3(true, false, c)) end
+    | false => match b | true => refl_at(maj3(false, true, c)) | false => refl_at(maj3(false, false, c)) end
+    end;
+
+let xor3_inj_mid(a : Bool, @b1 : Bool, @b2 : Bool, c : Bool, p : Eq(xor3(a, b1, c), xor3(a, b2, c)))
+    -> Eq(b1, b2) =
+    match a
+    | true =>
+        match c
+        | true =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
+            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
+            end
+        | false =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
+            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
+            end
+        end
+    | false =>
+        match c
+        | true =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
+            | false => match b2 | true => False/absurd(false_neq_true(Eq/sym(p))) | false => refl_at(false) end
+            end
+        | false =>
+            match b1
+            | true => match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(Eq/sym(p))) end
+            | false => match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
+            end
+        end
+    end;
+
+let cong_maj3_mid(a : Bool, @b1 : Bool, @b2 : Bool, p : Eq(b1, b2), c : Bool)
+    -> Eq(maj3(a, b1, c), maj3(a, b2, c)) =
+    Eq/cong((w) => maj3(a, w, c), p);
 
 let cong_raw_c(x : Bits, y : Bits, @c1 : Bool, @c2 : Bool, p : Eq(c1, c2))
     -> Eq(raw(x, y, c1), raw(x, y, c2)) =
