@@ -152,6 +152,23 @@ fn apply_param_types(
     Ok(Some(types))
 }
 
+/// Report a site that could not determine a universe level and fell back to
+/// `Type 0`. Diagnostic only: it changes nothing, and exists to answer whether
+/// the concept-wrapper universe failures originate in these fallbacks rather
+/// than in how a wrapper is generalized.
+#[cfg(feature = "profile")]
+fn probe_level_fallback(site: &'static str, type_: &Term) {
+    tracing::debug!(
+        target: "curios_core::sort",
+        site,
+        type_ = %type_,
+        "level defaulted to 0",
+    );
+}
+
+#[cfg(not(feature = "profile"))]
+fn probe_level_fallback(_site: &'static str, _type_: &Term) {}
+
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type`
 /// otherwise.
 #[derive(Clone, PartialEq, Eq)]
@@ -180,7 +197,10 @@ impl Sort {
                         .map_err(ReduceError::Universe)?;
                     Sort::from_universe(context, &induct_decl.result_sort)?
                 }
-                None => Sort::Type(Level::zero()),
+                None => {
+                    probe_level_fallback("induct decl missing", &reduced);
+                    Sort::Type(Level::zero())
+                }
             },
             Subterm::StructType(StructType {
                 name, universes, ..
@@ -191,7 +211,10 @@ impl Sort {
                         .map_err(ReduceError::Universe)?;
                     Sort::from_universe(context, &struct_decl.result_sort)?
                 }
-                None => Sort::Type(Level::zero()),
+                None => {
+                    probe_level_fallback("struct decl missing", &reduced);
+                    Sort::Type(Level::zero())
+                }
             },
             // A *non-empty* record of propositions is a proposition. The empty
             // tuple `{}` is unit, not a prop: it is the result type of effects
@@ -219,7 +242,10 @@ impl Sort {
                     }
                 }
             }
-            Subterm::TupleType(_) => Sort::Type(Level::zero()),
+            Subterm::TupleType(_) => {
+                probe_level_fallback("empty tuple type", &reduced);
+                Sort::Type(Level::zero())
+            }
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut telescope = telescope.clone();
@@ -260,12 +286,24 @@ impl Sort {
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
                 match synth_neutral(context, &reduced)? {
                     Some(sort) => Sort::from_universe(context, &sort)?,
-                    None => Sort::Type(Level::zero()),
+                    None => {
+                        probe_level_fallback("neutral type unsynthesizable", &reduced);
+                        Sort::Type(Level::zero())
+                    }
                 }
             }
             Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
             Subterm::UniverseInst(instance) => Sort::of(context, &instance.head)?,
-            _ => Sort::Type(Level::zero()),
+            // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so
+            // it is not a fallback and is not worth reporting. A `Metavar` is
+            // the opposite: an unsolved type pinned to level 0 is precisely the
+            // collapse under investigation.
+            _ => {
+                if !matches!(&*reduced, Subterm::Prop) {
+                    probe_level_fallback("unclassified shape", &reduced);
+                }
+                Sort::Type(Level::zero())
+            }
         })
     }
 
@@ -283,10 +321,14 @@ impl Sort {
     /// which classifies an arbitrary *type*: `from_universe(Prop) = Prop`,
     /// whereas `of(Prop) = Type` (the universe `Prop` is itself `Type`-sorted).
     fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
-        Ok(match &*reduce(context, universe.clone())? {
+        let reduced = reduce(context, universe.clone())?;
+        Ok(match &*reduced {
             Subterm::Prop => Sort::Prop,
             Subterm::Type(level) => Sort::Type(level.clone()),
-            _ => Sort::Type(Level::zero()),
+            _ => {
+                probe_level_fallback("universe term is not a sort", &reduced);
+                Sort::Type(Level::zero())
+            }
         })
     }
 }
