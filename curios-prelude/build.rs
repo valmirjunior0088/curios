@@ -24,6 +24,8 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/archive.rs");
     println!("cargo:rerun-if-changed=src/syntax.rs");
+    println!("cargo:rerun-if-env-changed=CURIOS_PRELUDE_LOG");
+    install_tracing();
 
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let sources = source_files(&manifest);
@@ -104,6 +106,48 @@ fn main() {
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("prelude.rkyv");
     fs::write(out, first).expect("failed to write fixed prelude archive");
 }
+
+/// Install a `tracing` subscriber over the prelude elaboration when
+/// `CURIOS_PRELUDE_LOG` names a filter, and do nothing otherwise.
+///
+/// Elaborating the fixed prelude is the compiler's largest single run, and it
+/// happens here rather than under any binary a profiler or debugger can attach
+/// to. Without a subscriber the spans and events the compiler crates already
+/// emit go nowhere, which leaves recompiling with `eprintln!` as the only way to
+/// ask a question — minutes per question, and the answer is gone when the probe
+/// is removed. A filter read from the environment instead selects targets and
+/// levels at *run* time, so successive questions cost a run rather than a build.
+///
+/// `FmtSpan::CLOSE` reports each span's duration as it closes, which is what
+/// makes this double as the per-declaration breakdown of the prelude build.
+/// `cargo:rerun-if-env-changed` above keeps a changed filter from being served
+/// out of Cargo's cache as a no-op.
+#[cfg(feature = "profile")]
+fn install_tracing() {
+    use tracing_subscriber::{EnvFilter, fmt, fmt::format::FmtSpan, prelude::*};
+
+    let Some(filter) = env::var_os("CURIOS_PRELUDE_LOG") else {
+        return;
+    };
+
+    tracing_subscriber::registry()
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_span_events(FmtSpan::CLOSE)
+                // `without_time` would also suppress the busy/idle figures a
+                // close event carries, which are the whole point of enabling it.
+                .with_timer(fmt::time::uptime())
+                .with_ansi(false),
+        )
+        .with(EnvFilter::new(filter.to_string_lossy()))
+        .init();
+}
+
+/// Without the `profile` feature the compiler crates emit no spans or events at
+/// all, so there is nothing for a subscriber to observe.
+#[cfg(not(feature = "profile"))]
+fn install_tracing() {}
 
 fn source_files(manifest: &Path) -> Vec<PathBuf> {
     let mut files = vec![manifest.join("syn.crs"), manifest.join("std.crs")];

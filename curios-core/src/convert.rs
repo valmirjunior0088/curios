@@ -1263,7 +1263,8 @@ impl Convert {
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
         if metavars.contains(&id) {
-            eprintln!("[fail:occurs] ?{}", id.0);
+            #[cfg(feature = "profile")]
+            tracing::debug!(target: "curios_core::solve", meta = id.0, "failed: occurs check");
             return Ok(Solved::Failed);
         }
 
@@ -1274,25 +1275,32 @@ impl Convert {
             .iter()
             .any(|other| context.metavar_solution(*other).is_none())
         {
-            let blocking = metavars
-                .iter()
-                .filter(|other| context.metavar_solution(**other).is_none())
-                .map(|other| {
-                    let result = context
-                        .metavar_entry(*other)
-                        .map(|entry| format!("{}", entry.result))
-                        .unwrap_or_else(|| "<no birth record>".into());
-                    format!("?{} : {result}", other.0)
-                })
-                .collect::<Vec<_>>();
-            eprintln!("[block] ?{} blocked by {}", id.0, blocking.join(", "));
+            #[cfg(feature = "profile")]
+            tracing::debug!(
+                target: "curios_core::solve",
+                meta = id.0,
+                blockers = %metavars
+                    .iter()
+                    .filter(|other| context.metavar_solution(**other).is_none())
+                    .map(|other| {
+                        let result = context
+                            .metavar_entry(*other)
+                            .map(|entry| format!("{}", entry.result))
+                            .unwrap_or_else(|| "<no birth record>".into());
+                        format!("?{} : {result}", other.0)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                "postponed: embedded metavariable",
+            );
             return Ok(Solved::Postponed);
         }
 
         let Some(entry) = context.metavar_entry(id) else {
             // No birth record (e.g. a synthesis-position hole that never reached
             // a checking site): nothing to validate against, cannot solve.
-            eprintln!("[fail:no-birth] ?{}", id.0);
+            #[cfg(feature = "profile")]
+            tracing::debug!(target: "curios_core::solve", meta = id.0, "failed: no birth record");
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope.clone();
@@ -1424,9 +1432,13 @@ impl Convert {
                 || entries
                     .iter()
                     .any(|entry| entry.free_vars().contains(&name));
-            eprintln!(
-                "[fail:scope] ?{} name={name} mentioned={mentioned}",
-                id.0
+            #[cfg(feature = "profile")]
+            tracing::debug!(
+                target: "curios_core::solve",
+                meta = id.0,
+                %name,
+                mentioned,
+                "scope check rejected a free name",
             );
             return Ok(match mentioned {
                 true => Solved::Postponed,
@@ -1469,7 +1481,12 @@ impl Convert {
             let refs = entries.iter().collect::<Vec<_>>();
             let resolved = inverted.capture(&labels).release(&refs);
             if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
-                eprintln!("[fail:roundtrip] ?{}", id.0);
+                #[cfg(feature = "profile")]
+                tracing::debug!(
+                    target: "curios_core::solve",
+                    meta = id.0,
+                    "postponed: inversion round-trip disagreed",
+                );
                 return Ok(Solved::Postponed);
             }
         }
@@ -1497,15 +1514,30 @@ impl Convert {
                 // the frozen type is not validly typed here — reject the
                 // solution. (Under the oracle's suppressed parking an undecided
                 // check surfaces as an error too, and likewise rejects.)
-                Err(error) => {
-                    eprintln!("[revalidate-error] ?{}: {error}", id.0);
+                Err(_error) => {
+                    // The oracle's verdict is a boolean, so this error is
+                    // otherwise discarded — and it is exactly what explains a
+                    // rejected candidate that looks correct at the use site.
+                    #[cfg(feature = "profile")]
+                    tracing::debug!(
+                        target: "curios_core::solve",
+                        meta = id.0,
+                        error = %_error,
+                        "re-validation rejected the candidate",
+                    );
                     Ok(false)
                 }
             })
         })?;
 
         if !revalidated {
-            eprintln!("[fail:revalidate] ?{} against {result}", id.0);
+            #[cfg(feature = "profile")]
+            tracing::debug!(
+                target: "curios_core::solve",
+                meta = id.0,
+                against = %result,
+                "failed: re-validation",
+            );
             context.rollback_solutions(mark);
             return Ok(Solved::Failed);
         }

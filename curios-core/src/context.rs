@@ -874,13 +874,27 @@ impl Context {
         let Some(type_) = self.assumption(label).cloned() else {
             return Ok(None);
         };
-        let universe_context = self
+        let found = self
             .assumption_universes
             .iter()
             .rev()
             .find_map(|contexts| contexts.get(label))
-            .cloned()
-            .unwrap_or_default();
+            .cloned();
+        #[cfg(feature = "profile")]
+        if found
+            .as_ref()
+            .is_none_or(|context| context.parameter_count != levels.len())
+        {
+            tracing::debug!(
+                target: "curios_core::universe",
+                %label,
+                registered = found.is_some(),
+                expected = found.as_ref().map_or(0, |context| context.parameter_count),
+                got = levels.len(),
+                "assumption instance arity mismatch",
+            );
+        }
+        let universe_context = found.unwrap_or_default();
         self.universes_mut()
             .instantiate_at(&universe_context, levels)
             .map_err(Error::from)?;
@@ -912,6 +926,15 @@ impl Context {
         value: &B,
         levels: &[Level],
     ) -> Result<B, UniverseError> {
+        #[cfg(feature = "profile")]
+        if levels.len() != universe_context.parameter_count {
+            tracing::debug!(
+                target: "curios_core::universe",
+                expected = universe_context.parameter_count,
+                got = levels.len(),
+                "bound instance arity mismatch",
+            );
+        }
         self.universes_mut()
             .instantiate_at(universe_context, levels)?;
         super::instantiate_universe_levels_scoped(value, levels)
@@ -926,6 +949,16 @@ impl Context {
             super::instantiate_universe_levels_scoped(value, levels)
         }
 
+        #[cfg(feature = "profile")]
+        if levels.len() != induct_decl.universe_context.parameter_count {
+            tracing::debug!(
+                target: "curios_core::universe",
+                module = ?induct_decl.module,
+                expected = induct_decl.universe_context.parameter_count,
+                got = levels.len(),
+                "induct instance arity mismatch",
+            );
+        }
         self.universes_mut()
             .instantiate_at(&induct_decl.universe_context, levels)?;
         let mut instantiated = induct_decl.clone();
@@ -948,6 +981,16 @@ impl Context {
             super::instantiate_universe_levels_scoped(value, levels)
         }
 
+        #[cfg(feature = "profile")]
+        if levels.len() != struct_decl.universe_context.parameter_count {
+            tracing::debug!(
+                target: "curios_core::universe",
+                module = ?struct_decl.module,
+                expected = struct_decl.universe_context.parameter_count,
+                got = levels.len(),
+                "struct instance arity mismatch",
+            );
+        }
         self.universes_mut()
             .instantiate_at(&struct_decl.universe_context, levels)?;
         let mut instantiated = struct_decl.clone();
@@ -1365,6 +1408,14 @@ impl Context {
         assert!(
             self.struct_decls.contains_key(&name),
             "update_struct: '{name}' is not already registered"
+        );
+        #[cfg(feature = "profile")]
+        tracing::debug!(
+            target: "curios_core::universe",
+            %name,
+            params = struct_decl.universe_context.parameter_count,
+            was = self.struct_decls[&name].universe_context.parameter_count,
+            "struct scheme rewritten",
         );
         self.struct_decls.insert(name, struct_decl);
     }
@@ -1793,7 +1844,8 @@ impl Context {
             .split_off(mark.term_solution_log_len.min(self.solved_log.len()));
 
         for id in &unwound {
-            eprintln!("[unsolve] ?{}", id.0);
+            #[cfg(feature = "profile")]
+            tracing::debug!(target: "curios_core::solve", meta = id.0, "solution unwound");
             if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
                 entry.solution = None;
             }

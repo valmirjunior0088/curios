@@ -707,6 +707,16 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     context.set_island(item_module);
 
     let item_names = item.declared_names().join(", ");
+    // One span per top-level item is the natural unit for the fixed prelude:
+    // its close event attributes elapsed time to a declaration by name, which
+    // is the breakdown a whole-module timing cannot give.
+    #[cfg(feature = "profile")]
+    let _declaration = tracing::info_span!(
+        target: "curios_core::declaration",
+        "declaration",
+        name = %item_names,
+    )
+    .entered();
     let elaborated = match item {
         Item::Let(definition) => elaborate_module_let(context, definition).map(Item::Let),
         Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
