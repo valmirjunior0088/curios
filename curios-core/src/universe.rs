@@ -1644,6 +1644,80 @@ impl UniverseSolver {
         Ok(())
     }
 
+    /// Commit `instance` to the levels `determined` already fixes, position by
+    /// position.
+    ///
+    /// A witness inhabits its goal and no other, so the levels its scheme
+    /// introduces at a use site carry no freedom — the goal fixes them.
+    /// Conversion alone does not say so: cumulativity makes a concept
+    /// application's universe arguments a bound rather than an equation, and a
+    /// bounded-but-unsolved level is left for declaration finalization.
+    ///
+    /// These must therefore be *solutions*, not constraints. A goal that
+    /// deferred resolves after its consuming declaration finalized, so no
+    /// finalization remains to turn a bound into a value, and the enclosing
+    /// item's `clear_constraints` would discard a constraint unsolved.
+    ///
+    /// Positions whose instance level is already solved, or whose determining
+    /// level is itself still open, are left alone: this pins what is knowable
+    /// and never invents a solution.
+    ///
+    /// The goal fixes only the levels its own application mentions. A witness
+    /// scheme may carry more — `satisfy Monad(Async)` generalizes levels its
+    /// *body* needs, which no goal could determine — so `minted` names the
+    /// whole instance, and whatever the goal leaves open is minimized from its
+    /// lower bounds. That is precisely how [`Self::finalize`] treats a level
+    /// reachable only through a body, applied here because the declaration
+    /// that would have done it has already closed.
+    pub fn close_instance(
+        &mut self,
+        minted: &[Level],
+        instance: &[Level],
+        determined: &[Level],
+    ) -> Result<(), UniverseError> {
+        self.pin_instance(instance, determined)?;
+
+        let open = minted
+            .iter()
+            .flat_map(Level::metas)
+            .filter(|meta| self.solution(*meta).is_none())
+            .collect::<BTreeSet<_>>();
+        if !open.is_empty() {
+            let scope = self.connected_metas(open.iter().copied());
+            self.minimize(&open, &scope)?;
+        }
+        self.check_consistent()
+    }
+
+    fn pin_instance(
+        &mut self,
+        instance: &[Level],
+        determined: &[Level],
+    ) -> Result<(), UniverseError> {
+        if instance.len() != determined.len() {
+            return Err(UniverseError::InstanceArity {
+                expected: determined.len(),
+                got: instance.len(),
+            });
+        }
+        for (level, target) in instance.iter().zip(determined) {
+            let level = self.zonk(level)?;
+            let target = self.zonk(target)?;
+            if target.metas().next().is_some() || level.constant_part() != 0 {
+                continue;
+            }
+            let meta = {
+                let mut atoms = level.atoms();
+                match (atoms.next(), atoms.next()) {
+                    (Some((LevelHead::Meta(meta), 0)), None) => meta,
+                    _ => continue,
+                }
+            };
+            self.assign(meta, target)?;
+        }
+        Ok(())
+    }
+
     fn relevant_open_metas<'a>(
         &'a self,
         relevant: &'a BTreeSet<UniverseMetaId>,

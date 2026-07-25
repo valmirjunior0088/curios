@@ -375,6 +375,7 @@ fn instantiate(
     let mark = context.solution_mark();
     let (signature, universes) =
         context.instantiate_universe_bound(&witness.universe_context, &witness.signature)?;
+    let minted = universes.clone();
     let head = if universes.is_empty() {
         Term::free_var(&witness.name)
     } else {
@@ -443,6 +444,38 @@ fn instantiate(
         }
     }
 
+    // The witness inhabits *this* goal and no other, so the levels its scheme
+    // introduced here are determined by the goal's — they are not free.
+    // Conversion alone does not say so: cumulativity makes a concept
+    // application's universe arguments a bound rather than an equation, and
+    // `solve_flexible_in` deliberately leaves a bounded-but-unsolved level for
+    // declaration finalization to generalize. That is sound only while the
+    // consuming declaration is still open. A goal that *defers* — the normal
+    // case for a `/syn` declaration whose witness lives in `/std`, since the
+    // two roots import mutually — resolves long after its consumer finalized,
+    // and the level it mints then has nothing left to close it.
+    // Pin the instantiation to what the goal already fixes. This must run
+    // *before* the premises: a premise goal is stated in terms of these levels,
+    // so pinning first is what makes the same argument hold recursively for
+    // every witness the premises pull in.
+    if !minted.is_empty() {
+        let terminal = reduce_with(context, &terminal)?;
+        // A terminal that is not a concept application pins nothing, but its
+        // levels still have to be closed, so the minimizing pass runs either
+        // way.
+        let (instance, determined) = match (
+            as_concept_app(context, &terminal),
+            as_concept_app(context, goal),
+        ) {
+            (Some((_, from_witness, _)), Some((_, from_goal, _)))
+                if from_witness.len() == from_goal.len() =>
+            {
+                (from_witness, from_goal)
+            }
+            _ => (Vec::new(), Vec::new()),
+        };
+        context.close_universe_instance(&minted, &instance, &determined)?;
+    }
     for (id, type_, provenance) in premises {
         attempt_witness_goal(context, id, &type_, provenance, origin)?;
     }
@@ -577,6 +610,27 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
             unreachable!("only witness goals defer");
         };
         retry_witness(context, slot, goal, provenance, origin, frame)?;
+
+        // The deferred store is retried only *between* items, so the
+        // declaration that raised this goal has already finalized: its universe
+        // scheme is fixed, and no later pass will generalize or minimize a
+        // level introduced now. `instantiate` pins the witness's instance
+        // against the goal for exactly that reason. Check it held. Without
+        // this, a level that slips through is reported by `zonk` at the end of
+        // the module as an anonymous `?uN` escaping, naming neither the goal
+        // that introduced it nor the witness it came from.
+        if let Some(solution) = context.metavar_solution(slot).cloned()
+            && solution.any_universe_meta(|meta| {
+                context
+                    .universes()
+                    .zonk(&Level::meta(meta))
+                    .is_ok_and(|level| !level.metas().collect::<Vec<_>>().is_empty())
+            })
+        {
+            return Err(Error::UniverseInvariant(format!(
+                "a deferred witness left an unsolved universe level in {solution}"
+            )));
+        }
     }
 
     context.retry_parked()

@@ -50,8 +50,7 @@ fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
         }),
     );
     let _: Term = value.traverse(&mut visit);
-    let levels = found.borrow_mut().take();
-    levels
+    found.borrow_mut().take()
 }
 
 /// Walk a (params-first) telescope, checking each binder's type against `Type`

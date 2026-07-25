@@ -2048,6 +2048,20 @@ impl Context {
         Ok(())
     }
 
+    pub(crate) fn close_universe_instance(
+        &mut self,
+        minted: &[Level],
+        instance: &[Level],
+        determined: &[Level],
+    ) -> Result<(), Error> {
+        self.universes_mut()
+            .close_instance(minted, instance, determined)
+            .map_err(Error::from)?;
+        self.reduction_cache.clear();
+        self.elaboration_cache.clear();
+        Ok(())
+    }
+
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
         super::zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
     }
