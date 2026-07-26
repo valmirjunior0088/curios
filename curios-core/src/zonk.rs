@@ -836,7 +836,12 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     // already fully zonked. A solved term metavariable's solution can be
     // term-meta-free while still carrying levels that declaration
     // finalization solved, so universe metas must keep descending.
-    if term.metavars().is_empty() && !term.has_universe_meta() {
+    //
+    // Both halves read cached per-node bits. Testing the metavariable *set*
+    // for emptiness instead answers the same question — the set is empty
+    // exactly when the bit is false — but re-walks the whole subtree at every
+    // level on the way down, which is quadratic on a deep spine.
+    if !term.has_metavar() && !term.has_universe_meta() {
         return Ok(term.clone());
     }
 
