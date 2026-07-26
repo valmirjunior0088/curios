@@ -1,6 +1,6 @@
 use {
     super::{
-        Concept, InductDecl, Many, RecGroup, RecMemberScopes, Scope, StructDecl, Term,
+        Atom, Concept, InductDecl, Many, RecGroup, RecMemberScopes, Scope, StructDecl, Term,
         UniverseContext, UniverseSeed, build_shorten, with_short_names,
     },
     curios_base::{Qualifier, RootId},
@@ -17,6 +17,11 @@ use {
 /// qualified name. In particular, a module and a nominal type may share a
 /// qualifier without turning ordinary module members into generated nominal
 /// members.
+///
+/// A generated member names its origin in full: `InductiveConstructor` carries
+/// both the inductive it belongs to *and* which constructor it is, so the
+/// registry correspondence is read off the pair rather than re-synthesized by
+/// joining an owner and a tag into a name and looking that name up.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
     feature = "archive",
@@ -25,10 +30,10 @@ use {
 pub enum DefinitionKind {
     Authored,
     InductiveType,
-    InductiveConstructor { owner: String },
+    InductiveConstructor { owner: Qualifier, tag: Atom },
     StructType,
     ConceptType,
-    ConceptMethod { owner: String },
+    ConceptMethod { owner: Qualifier },
     Witness,
 }
 

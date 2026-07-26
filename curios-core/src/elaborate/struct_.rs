@@ -461,7 +461,7 @@ pub(super) fn elaborate_struct_spread(
     let label = context.fresh(Some("base"));
 
     let (rebuilt, result_type) = context.with_frame(|context| {
-        context.define_assuming(&label, &base_type, &base);
+        context.define_assuming(&label, &base_type, &base, None);
 
         let resolved = resolve_struct_params(context, name, struct_decl, params, term)?;
         seed_struct_expectation(context, name, universes, &resolved, term, mode)?;

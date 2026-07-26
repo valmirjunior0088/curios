@@ -110,6 +110,11 @@ impl InductDecl {
         self.constructors.keys()
     }
 
+    /// Whether `tag` is one of this inductive's declared cases.
+    pub(crate) fn declares(&self, tag: &Atom) -> bool {
+        self.constructors.contains_key(tag)
+    }
+
     /// `tag`'s position in [`Self::constructor_order`] — the runtime tag
     /// `erase_variant` gives a value constructed with it.
     pub(crate) fn constructor_index(&self, tag: &Atom) -> Option<usize> {

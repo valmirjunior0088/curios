@@ -16,7 +16,7 @@ mod tests;
 
 use {
     super::{Subterm, Telescope, Term, UniverseContext},
-    curios_base::{Grain, RootId},
+    curios_base::{Grain, Qualifier, RootId},
     std::fmt,
 };
 
@@ -53,6 +53,12 @@ pub struct Concept {
 )]
 pub(crate) struct Witness {
     pub name: String,
+    /// The module this witness was declared in, carried from its definition's
+    /// `island`. Witnesses are anonymous, so this — not `name` — is the
+    /// coordinate a coherence diagnostic reports; recovering it by splitting
+    /// the compiler-minted `name` would re-derive what the declaration
+    /// already knew.
+    pub module: Qualifier,
     pub universe_context: UniverseContext,
     pub signature: Term,
     /// The compilation root that declares this witness — consulted by the

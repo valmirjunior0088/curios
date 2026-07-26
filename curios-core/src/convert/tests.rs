@@ -29,6 +29,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
                 nat(0),
             )),
         ),
+        None,
     );
     let applied = |universe| {
         Term::apply(
@@ -255,7 +256,7 @@ fn recursive_matcher(head: &str, none_value: usize) -> Term {
 #[test]
 fn convert_folded_recursive_call_against_its_unfolding() {
     let mut context = context();
-    context.define("f", &recursive_matcher("f", 0));
+    context.define("f", &recursive_matcher("f", 0), None);
 
     let folded = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
 
@@ -289,7 +290,7 @@ fn convert_folded_recursive_call_against_its_unfolding() {
 #[test]
 fn convert_same_recursive_head_compares_spines() {
     let mut context = context();
-    context.define("f", &recursive_matcher("f", 0));
+    context.define("f", &recursive_matcher("f", 0), None);
 
     // Convertible (but not syntactically equal) spines: true.
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
@@ -346,8 +347,8 @@ fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively
     // entropy, so the canonicalized history recognizes the cycle and assumes
     // it. No finite disagreement exists: the functions are bisimilar. Before
     // goal canonicalization this pair spun to `Err(Preempted)`.
-    context.define("f", &recursive_matcher("f", 0));
-    context.define("g", &recursive_matcher("g", 0));
+    context.define("f", &recursive_matcher("f", 0), None);
+    context.define("g", &recursive_matcher("g", 0), None);
 
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
     let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
@@ -359,8 +360,8 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
     let mut context = context();
     // The `none` arms disagree: the first unfolding round surfaces the
     // finite disagreement on a sibling goal, well before any deadline.
-    context.define("f", &recursive_matcher("f", 0));
-    context.define("g", &recursive_matcher("g", 1));
+    context.define("f", &recursive_matcher("f", 0), None);
+    context.define("g", &recursive_matcher("g", 1), None);
 
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
     let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
@@ -398,8 +399,8 @@ fn convert_growing_recursive_unfolding_spends_the_deadline() {
             ),
         )
     };
-    context.define("f", &growing("f"));
-    context.define("g", &growing("g"));
+    context.define("f", &growing("f"), None);
+    context.define("g", &growing("g"), None);
 
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
     let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
@@ -423,8 +424,8 @@ fn convert_recursive_values_are_bisimilar() {
             [nat(1), Term::free_var(name)],
         )
     };
-    context.define("xs", &stream("xs"));
-    context.define("ys", &stream("ys"));
+    context.define("xs", &stream("xs"), None);
+    context.define("ys", &stream("ys"), None);
 
     assert_eq!(
         conv(&mut context, &Term::free_var("xs"), &Term::free_var("ys")),
@@ -435,7 +436,7 @@ fn convert_recursive_values_are_bisimilar() {
 #[test]
 fn convert_folded_recursive_call_against_neutral_head_is_false() {
     let mut context = context();
-    context.define("f", &recursive_matcher("f", 0));
+    context.define("f", &recursive_matcher("f", 0), None);
 
     // The recursive side unfolds to its stuck match, the neutral side
     // cannot unfold at all: a structural mismatch, decided well within the
@@ -754,8 +755,8 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     let mut context = context();
 
     // p = (1, 2), q = (1, 3) — both 2-tuples agreeing on field 0, differing on field 1.
-    context.define("p", &Term::tuple([nat(1), nat(2)]));
-    context.define("q", &Term::tuple([nat(1), nat(3)]));
+    context.define("p", &Term::tuple([nat(1), nat(2)]), None);
+    context.define("q", &Term::tuple([nat(1), nat(3)]), None);
 
     // A 1-field tuple type {x : Nat}.
     let type_: Term = Term::tuple_type([("x", Term::prim(Prim::NatType))]);
@@ -777,7 +778,7 @@ fn convert_partial_projection_tuple_at_narrow_type() {
 fn convert_times_out_on_pathological_inputs() {
     let mut context = context();
 
-    context.define("loop", &Term::free_var("loop"));
+    context.define("loop", &Term::free_var("loop"), None);
 
     let this = Term::tuple_type([
         (

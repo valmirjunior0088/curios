@@ -402,8 +402,9 @@ fn finalize_definition(
     // own parameters in its own order. `finalize_at_instance` binds the concept
     // application's arguments to the inherited parameters positionally instead.
     if let DefinitionKind::ConceptMethod { owner } = kind {
+        let owner = owner.join();
         let universe_context = context
-            .concept(owner)
+            .concept(&owner)
             .ok_or_else(|| {
                 Error::UniverseInvariant(format!(
                     "{name}: method wrapper names an unregistered concept '{owner}'"
@@ -411,7 +412,7 @@ fn finalize_definition(
             })?
             .universe_context
             .clone();
-        let instance = declaration_instance(&type_, owner).ok_or_else(|| {
+        let instance = declaration_instance(&type_, &owner).ok_or_else(|| {
             Error::UniverseInvariant(format!(
                 "{name}: method wrapper does not apply its concept '{owner}'"
             ))
@@ -439,9 +440,10 @@ fn finalize_definition(
     //
     // Like `ConceptMethod`, the owner is a field `into_core` records where the
     // constructor is generated, not something recovered from `name`.
-    if let DefinitionKind::InductiveConstructor { owner } = kind {
+    if let DefinitionKind::InductiveConstructor { owner, .. } = kind {
+        let owner = owner.join();
         let universe_context = context
-            .induct_decl(owner)
+            .induct_decl(&owner)
             .ok_or_else(|| {
                 Error::UniverseInvariant(format!(
                     "{name}: constructor names an unregistered inductive '{owner}'"
@@ -455,7 +457,7 @@ fn finalize_definition(
         // an explicit instance after this finalization runs. So a missing
         // instance is not a malformed constructor — it denotes the identity
         // instance, which is what the stamp would write.
-        let instance = declaration_instance(&type_, owner)
+        let instance = declaration_instance(&type_, &owner)
             .unwrap_or_else(|| universe_context.identity_instance());
         let mut metas = context.universe_metas_in(&type_);
         metas.extend(context.universe_metas_in(&body));
@@ -606,6 +608,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
             &def.name,
             &type_,
             def.universe_context.clone(),
+            &def.island,
             def.root,
         )
         .map_err(|error| error.at_opt(def.type_.span()))?;
@@ -619,7 +622,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // and the untyped reducer (type-level evaluation in later items' types)
     // would meet a lowered form's under-applied calls and open a telescope at
     // the wrong arity. Pre-insertion the two were interchangeable; no longer.
-    context.define_assuming(&def.name, &type_, &body);
+    context.define_assuming(&def.name, &type_, &body, Some(&def.kind));
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry
     // telescopes now that the former is defined (no-op for an ordinary let).
@@ -628,7 +631,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     let (universe_context, type_, body) =
         finalize_definition(context, &def.name, &def.kind, type_, body)?;
     context.reassume(&def.name, &type_);
-    context.define(&def.name, &body);
+    context.define(&def.name, &body, Some(&def.kind));
     context.set_assumption_universe_context(&def.name, universe_context.clone());
     if context.is_witness_declaration(&def.name) {
         context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
@@ -681,7 +684,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .zip(&types)
         .map(|(def, type_)| {
             let (id, slot) = context.fresh_rec_slot(type_.clone());
-            context.define(&def.name, &slot);
+            context.define(&def.name, &slot, Some(&def.kind));
             id
         })
         .collect::<Vec<_>>();
@@ -880,6 +883,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         context.define(
             &definition.name,
             &Term::rec_member(rec.group.clone(), index),
+            Some(&definition.kind),
         );
         context.set_assumption_universe_context(&definition.name, universe_context.clone());
     }
@@ -1147,6 +1151,7 @@ pub fn elaborate_and_zonk_with_prelude(
                     &def.name,
                     &def.type_,
                     &def.body,
+                    Some(&def.kind),
                     def.universe_context.clone(),
                 );
                 if prelude.witnesses.contains(&def.name) {
@@ -1155,6 +1160,7 @@ pub fn elaborate_and_zonk_with_prelude(
                         &def.name,
                         &def.type_,
                         def.universe_context.clone(),
+                        &def.island,
                         def.root,
                     )?;
                 }
@@ -1169,6 +1175,7 @@ pub fn elaborate_and_zonk_with_prelude(
                     context.define(
                         &definition.name,
                         &Term::rec_member(rec.group.clone(), index),
+                        Some(&definition.kind),
                     );
                 }
             }

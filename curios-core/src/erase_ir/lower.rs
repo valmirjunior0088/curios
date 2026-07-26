@@ -333,7 +333,7 @@ impl Lowering {
                 // `erase_apply` and `erase_proj`).
                 let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
-                context.define_assuming(&name, &type_, &value);
+                context.define_assuming(&name, &type_, &value, None);
                 self.environment.bind(&name, atom);
                 label_terms.push(Term::free_var(&name));
             }
@@ -435,6 +435,7 @@ pub fn erase_module_with_prelude_to_ir(
                         &definition.name,
                         &definition.type_,
                         &definition.body,
+                        Some(&definition.kind),
                         definition.universe_context.clone(),
                     );
                 }
@@ -451,6 +452,7 @@ pub fn erase_module_with_prelude_to_ir(
                         context.define(
                             &definition.name,
                             &Term::rec_member(rec.group.clone(), index),
+                            Some(&definition.kind),
                         );
                     }
                 }

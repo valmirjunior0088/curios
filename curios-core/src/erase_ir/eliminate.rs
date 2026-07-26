@@ -219,7 +219,7 @@ impl Lowering {
             return Ok(Ok((head.clone(), atom)));
         }
         let name = context.fresh(Some("scrutinee"));
-        context.define_assuming(&name, head_type, head);
+        context.define_assuming(&name, head_type, head, None);
         self.environment.bind(&name, atom);
         Ok(Ok((Term::free_var(&name), atom)))
     }

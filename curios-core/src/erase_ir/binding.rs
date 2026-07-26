@@ -47,6 +47,7 @@ impl Lowering {
                         &definition.name,
                         &definition.type_,
                         &definition.body,
+                        Some(&definition.kind),
                         definition.universe_context.clone(),
                     );
                     self.environment.bind(&definition.name, atom);

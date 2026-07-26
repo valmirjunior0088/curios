@@ -26,7 +26,7 @@ use {
         ParkedWork, StructType, Subterm, Telescope, Term, UniverseContext, Witness, WitnessKey,
         WitnessOrigin, convert_outcome, reduce_with,
     },
-    curios_base::{Plicity, RootId},
+    curios_base::{Plicity, Qualifier, RootId},
     std::collections::{BTreeSet, HashSet},
 };
 
@@ -672,6 +672,7 @@ pub(crate) fn register_witness(
     name: &str,
     signature: &Term,
     universe_context: UniverseContext,
+    module: &Qualifier,
     root: RootId,
 ) -> Result<(), Error> {
     let reduced = reduce_with(context, signature)?;
@@ -787,15 +788,16 @@ pub(crate) fn register_witness(
         return Err(Error::orphan_witness(
             concept_name.clone(),
             key,
-            name.to_string(),
+            module.clone(),
         ));
     }
 
-    if let Some(first_name) = context.insert_witness(
+    if let Some(first_module) = context.insert_witness(
         concept_name.clone(),
         key.clone(),
         Witness {
             name: name.to_string(),
+            module: module.clone(),
             universe_context,
             signature: signature.clone(),
             root,
@@ -804,8 +806,8 @@ pub(crate) fn register_witness(
         return Err(Error::duplicate_witness(
             concept_name.clone(),
             key,
-            first_name,
-            name.to_string(),
+            first_module,
+            module.clone(),
         ));
     }
 

@@ -54,7 +54,7 @@ impl Lowering {
                 context.set_assumption_universe_context(name, group.universe_context().clone());
             }
             for (index, name) in names.iter().enumerate() {
-                context.define(name, &Term::rec_member(group.clone(), index));
+                context.define(name, &Term::rec_member(group.clone(), index), None);
             }
             self.emit_group(context, &names, &hints, &members)?;
             self.walk(context, &tail, expected, hint)
@@ -99,6 +99,7 @@ impl Lowering {
             context.define(
                 &definition.name,
                 &Term::rec_member(rec.group.clone(), index),
+                Some(&definition.kind),
             );
         }
 

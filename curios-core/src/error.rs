@@ -1,6 +1,6 @@
 use {
     super::{Atom, Level, Module, Term, UniverseConstraintOrigin, UniverseError},
-    curios_base::{Int, Plicity, Span},
+    curios_base::{Int, Plicity, Qualifier, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
@@ -363,8 +363,12 @@ pub enum Error {
     DuplicateWitness {
         concept: String,
         key: super::WitnessKey,
-        first: String,
-        second: String,
+        /// The two declaring modules. Witnesses are anonymous, so the module
+        /// is the coordinate that locates them for a reader — carried from
+        /// each declaration's `island` rather than recovered by splitting the
+        /// compiler-minted name.
+        first: Qualifier,
+        second: Qualifier,
     },
     /// A witness registered by a root that owns neither the concept nor any
     /// key head's declaring root — the orphan rule: a coherence-relevant
@@ -374,7 +378,8 @@ pub enum Error {
     OrphanWitness {
         concept: String,
         key: super::WitnessKey,
-        witness: String,
+        /// The declaring module — see [`Error::DuplicateWitness`].
+        witness: Qualifier,
     },
     /// Two distinct superclass projections of local `use` binders match a goal
     /// at the same minimal depth — no principled tiebreak exists.
@@ -768,8 +773,8 @@ impl Error {
     pub(crate) fn duplicate_witness(
         concept: String,
         key: super::WitnessKey,
-        first: String,
-        second: String,
+        first: Qualifier,
+        second: Qualifier,
     ) -> Self {
         Self::DuplicateWitness {
             concept,
@@ -779,7 +784,11 @@ impl Error {
         }
     }
 
-    pub(crate) fn orphan_witness(concept: String, key: super::WitnessKey, witness: String) -> Self {
+    pub(crate) fn orphan_witness(
+        concept: String,
+        key: super::WitnessKey,
+        witness: Qualifier,
+    ) -> Self {
         Self::OrphanWitness {
             concept,
             key,
@@ -1020,6 +1029,15 @@ impl From<UniverseError> for Error {
             }
             other => Self::UniverseInvariant(other.to_string()),
         }
+    }
+}
+
+/// How a diagnostic names a declaring module. The root qualifier is the entry
+/// module — a legitimate value, not a missing one.
+fn declaring_module(module: &Qualifier) -> String {
+    match module.segments().is_empty() {
+        true => "the entry module".to_string(),
+        false => format!("module '{}'", module.join()),
     }
 }
 
@@ -1357,17 +1375,11 @@ impl fmt::Display for Error {
                     1 => "head",
                     _ => "key",
                 };
-                // Witnesses are anonymous; their compiler names encode the
-                // declaring module, which is the useful coordinate.
-                let module = |name: &str| match name.rsplit_once('/') {
-                    Some(("", _)) | None => "the entry module".to_string(),
-                    Some((module, _)) => format!("module '{module}'"),
-                };
                 write!(
                     f,
                     "duplicate witness of '{concept}' for {noun} '{key}'\n  one is declared in {}, another in {}\n  every concept-{noun} pair has at most one witness, program-wide",
-                    module(first),
-                    module(second)
+                    declaring_module(first),
+                    declaring_module(second)
                 )
             }
             Error::OrphanWitness {
@@ -1379,16 +1391,10 @@ impl fmt::Display for Error {
                     1 => "head",
                     _ => "key",
                 };
-                // Witnesses are anonymous; their compiler names encode the
-                // declaring module, which is the useful coordinate.
-                let module = |name: &str| match name.rsplit_once('/') {
-                    Some(("", _)) | None => "the entry module".to_string(),
-                    Some((module, _)) => format!("module '{module}'"),
-                };
                 write!(
                     f,
                     "orphan witness of '{concept}' for {noun} '{key}', declared in {}\n  a witness may only be declared where the concept or a type in its {noun} is already declared",
-                    module(witness)
+                    declaring_module(witness)
                 )
             }
             Error::AmbiguousWitness {

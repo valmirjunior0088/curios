@@ -19,9 +19,12 @@
 //! rather than a materialized witness (proof irrelevance — the slot stays,
 //! only its contents collapse).
 
-use super::{
-    Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Telescope, Term, emitted,
-    erasure_mask, infer, is_erasable, reduce_with,
+use {
+    super::{
+        Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Telescope, Term,
+        emitted, erasure_mask, infer, is_erasable, reduce_with,
+    },
+    crate::DefinitionKind,
 };
 
 impl Lowering {
@@ -216,9 +219,15 @@ impl Lowering {
     }
 }
 
-/// Whether `head` names a constructor of a `Prop`-sorted inductive. Constructor
-/// functions are generated per case into their family's namespace, so the
-/// family is the name's qualifier prefix and the case is its last segment.
+/// Whether `head` names a constructor of a `Prop`-sorted inductive.
+///
+/// The owning family comes from the definition's own
+/// [`DefinitionKind::InductiveConstructor`], recorded by `into_core` where the
+/// constructor function was generated. Splitting the name into a qualifier
+/// prefix and a last segment would instead ask whether some *other*
+/// declaration happens to be registered under this name's prefix — a question
+/// whose answer is only accidentally the same one, and which decides whether a
+/// call is dropped entirely.
 fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Error> {
     let Subterm::Var(var) = &**head else {
         return Ok(false);
@@ -226,18 +235,16 @@ fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Erro
     let Some(name) = var.as_free() else {
         return Ok(false);
     };
-    let Some((family, tag)) = name.rsplit_once('/') else {
+    let Some(DefinitionKind::InductiveConstructor { owner, .. }) = context.definition_kind(name)
+    else {
         return Ok(false);
     };
-    let Some(declaration) = context.induct_decl(family).cloned() else {
+    let Some(declaration) = context.induct_decl(&owner.join()).cloned() else {
         return Ok(false);
     };
 
-    Ok(declaration
-        .constructor_order()
-        .any(|case| case.as_str() == tag)
-        && matches!(
-            &*reduce_with(context, &declaration.result_sort)?,
-            Subterm::Prop
-        ))
+    Ok(matches!(
+        &*reduce_with(context, &declaration.result_sort)?,
+        Subterm::Prop
+    ))
 }

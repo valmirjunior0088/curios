@@ -53,7 +53,7 @@ pub(super) fn elaborate_let(
             // Define the binding with the *rebuilt* body so the tail's
             // type-level evaluation does not reduce through the lowered
             // (under-applied) original.
-            context.define_assuming(&label, &type_elaborated, &body_elaborated);
+            context.define_assuming(&label, &type_elaborated, &body_elaborated, None);
 
             label_terms.push(Term::free_var(&label));
             triples.push((label, type_elaborated, body_elaborated));
@@ -134,7 +134,7 @@ pub(super) fn elaborate_rec(
             .zip(&types_elaborated)
             .map(|(label, type_)| {
                 let (id, slot) = context.fresh_rec_slot(type_.clone());
-                context.define(label, &slot);
+                context.define(label, &slot, None);
                 id
             })
             .collect::<Vec<_>>();
@@ -164,7 +164,7 @@ pub(super) fn elaborate_rec(
         };
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
-            context.define(label, &Term::rec_member(group.clone(), index));
+            context.define(label, &Term::rec_member(group.clone(), index), None);
         }
 
         let tail = rec.tail.open(&label_refs);

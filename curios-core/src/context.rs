@@ -1,9 +1,10 @@
 use {
     super::{
-        Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, InductDecl, Level, MetaId, Metavar,
-        MetavarOrigin, StructDecl, Subterm, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed,
-        UniverseSolver, UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
+        Bound, Concept, DefinitionKind, Error, Goal, HeadKey, ImplicitOrigin, InductDecl, Level,
+        MetaId, Metavar, MetavarOrigin, StructDecl, Subterm, Term, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMark, UniverseMetaId,
+        UniverseRole, UniverseSeed, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
+        WitnessOrigin,
     },
     crate::Instant,
     curios_base::{Entropy, Qualifier, RootId, Span},
@@ -95,12 +96,21 @@ pub(crate) struct MetaStore {
     entries: Vec<Option<MetaEntry>>,
 }
 
-/// One definition: just the definiens. Every `DefEntry` — whether a plain
-/// `let`/`rec` member or mid-window rec-group registration — is treated
-/// uniformly; there is no `recursive` marker distinguishing them.
+/// One definition: the definiens, plus the [`DefinitionKind`] of the module
+/// item that introduced it. Every `DefEntry` — whether a plain `let`/`rec`
+/// member or mid-window rec-group registration — is treated uniformly; there is
+/// no `recursive` marker distinguishing them.
+///
+/// `kind` is `None` for a genuine *local* binding — a `let` binder, an opened
+/// match scrutinee, a lambda parameter — which no module item declared. It is
+/// carried rather than re-derived: the kind is elaboration metadata `into_core`
+/// attached where the item was generated, and splitting the definition's name
+/// apart to recover it would misread an ordinary definition that merely happens
+/// to sit under a generated namespace (see [`DefinitionKind`]'s own docs).
 #[derive(Debug, Clone)]
 pub(crate) struct DefEntry {
     term: Term,
+    kind: Option<DefinitionKind>,
 }
 
 /// The local frame a parked problem froze at park time: assumptions (in
@@ -1041,20 +1051,33 @@ impl Context {
         self.definitions.last_mut().unwrap().insert(label, entry);
     }
 
-    pub(crate) fn define<A>(&mut self, label: A, term: &Term)
+    /// Define `label`. `kind` is the declaring module item's
+    /// [`DefinitionKind`], or `None` for a local binding no item declared.
+    pub(crate) fn define<A>(&mut self, label: A, term: &Term, kind: Option<&DefinitionKind>)
     where
         A: Into<String>,
     {
-        self.define_entry(label.into(), DefEntry { term: term.clone() });
+        self.define_entry(
+            label.into(),
+            DefEntry {
+                term: term.clone(),
+                kind: kind.cloned(),
+            },
+        );
     }
 
-    pub(crate) fn define_assuming<A>(&mut self, label: A, type_: &Term, term: &Term)
-    where
+    pub(crate) fn define_assuming<A>(
+        &mut self,
+        label: A,
+        type_: &Term,
+        term: &Term,
+        kind: Option<&DefinitionKind>,
+    ) where
         A: Into<String>,
     {
         let label = label.into();
         self.assume(label.as_str(), type_);
-        self.define(label, term);
+        self.define(label, term, kind);
     }
 
     pub(crate) fn define_assuming_scheme<A>(
@@ -1062,13 +1085,29 @@ impl Context {
         label: A,
         type_: &Term,
         term: &Term,
+        kind: Option<&DefinitionKind>,
         universe_context: UniverseContext,
     ) where
         A: Into<String>,
     {
         let label = label.into();
-        self.define_assuming(label.as_str(), type_, term);
+        self.define_assuming(label.as_str(), type_, term, kind);
         self.set_assumption_universe_context(&label, universe_context);
+    }
+
+    /// The [`DefinitionKind`] of the module item that defined `label`, or
+    /// `None` for a local binding or an undefined name.
+    ///
+    /// The structural replacement for splitting a definition's qualified name
+    /// into a family and a case and looking the family up in a registry: the
+    /// kind was known where the definition was generated, so it is read back
+    /// rather than re-derived from the name's spelling.
+    pub(crate) fn definition_kind(&self, label: &str) -> Option<&DefinitionKind> {
+        self.definitions
+            .iter()
+            .rev()
+            .find_map(|definitions| definitions.get(label))
+            .and_then(|entry| entry.kind.as_ref())
     }
 
     // === Refinements ========================================================
@@ -1460,16 +1499,18 @@ impl Context {
         self.witness_table.get(&(concept.to_string(), key.clone()))
     }
 
-    /// Insert a witness under its key, returning the previous occupant's name
-    /// on a collision (the caller reports `DuplicateWitness`).
+    /// Insert a witness under its key, returning the previous occupant's
+    /// declaring module on a collision (the caller reports
+    /// `DuplicateWitness`, which reports modules rather than the anonymous
+    /// witnesses' compiler-minted names).
     pub(crate) fn insert_witness(
         &mut self,
         concept: String,
         key: WitnessKey,
         witness: Witness,
-    ) -> Option<String> {
+    ) -> Option<Qualifier> {
         match self.witness_table.get(&(concept.clone(), key.clone())) {
-            Some(existing) => Some(existing.name.clone()),
+            Some(existing) => Some(existing.module.clone()),
             None => {
                 self.mutation_stamp.fresh();
                 self.witness_table.insert((concept, key), witness);

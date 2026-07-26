@@ -886,7 +886,8 @@ fn process_items(
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             kind: DefinitionKind::InductiveConstructor {
-                                owner: context.prefixed(&u.label).join(),
+                                owner: context.prefixed(&u.label),
+                                tag: curios_core::Atom::from(c.label.as_str()),
                             },
                             name: context.prefixed(&u.label).with(&c.label),
                             island: context.island(),
@@ -1151,7 +1152,7 @@ fn process_items(
                     let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
                         kind: DefinitionKind::ConceptMethod {
-                            owner: context.prefixed(&concept.label).join(),
+                            owner: context.prefixed(&concept.label),
                         },
                         name: context.prefixed(&concept.label).with(&field.label),
                         island: context.island(),

@@ -161,7 +161,7 @@ fn reduce_nat_fold_zero_is_not_true() {
 fn reduce_let_then_var_unfolds_definition() {
     let mut context = context();
 
-    context.define("y", &nat(7));
+    context.define("y", &nat(7), None);
 
     let term: Term = Term::let_(
         "x",
@@ -179,7 +179,7 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
     let parameter = Level::param(UniverseParam(0));
     let body = Term::type_at(parameter.clone());
     context.assume("poly", &Term::type_at(parameter.succ().unwrap()));
-    context.define("poly", &body);
+    context.define("poly", &body, None);
     context.set_assumption_universe_context(
         "poly",
         UniverseContext {
@@ -312,7 +312,7 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
 fn reduce_var_cycle_times_out() {
     let mut context = context();
 
-    context.define("loop", &Term::free_var("loop"));
+    context.define("loop", &Term::free_var("loop"), None);
 
     assert_eq!(
         reduce(&mut context, Term::free_var("loop")),
@@ -559,7 +559,7 @@ fn define_invalidates_cached_reduction() {
     assert_eq!(reduce(&mut context, x.clone()), Ok(x.clone()));
 
     // Defining x must clear the cache so the next reduce unfolds.
-    context.define("x", &nat(3));
+    context.define("x", &nat(3), None);
     assert_eq!(reduce(&mut context, x), Ok(nat(3)));
 }
 
@@ -618,12 +618,12 @@ fn redefine_invalidates_reduction_cached_under_the_old_value() {
 
     // First definition: x reduces to 4 and the reduct — which no longer
     // mentions `x` — is cached.
-    context.define("x", &nat(4));
+    context.define("x", &nat(4), None);
     assert_eq!(reduce(&mut context, x.clone()), Ok(nat(4)));
 
     // Rebinding the same label must evict that entry even though a selective
     // retain keyed on mentions of `x` cannot see it.
-    context.define("x", &nat(5));
+    context.define("x", &nat(5), None);
     assert_eq!(reduce(&mut context, x), Ok(nat(5)));
 }
 
@@ -634,7 +634,7 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
 
     // Inside a frame, define x and reduce — the cache will hold x → "inner".
     context.with_frame(|context| {
-        context.define("x", &nat(4));
+        context.define("x", &nat(4), None);
         assert_eq!(reduce(context, x.clone()), Ok(nat(4)));
     });
 

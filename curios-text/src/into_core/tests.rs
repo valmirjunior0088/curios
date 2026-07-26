@@ -288,14 +288,16 @@ fn inductive_constructor_ownership_is_explicit() {
             (
                 "/Result/success".into(),
                 curios_core::DefinitionKind::InductiveConstructor {
-                    owner: "/Result".into(),
+                    owner: curios_base::Qualifier::from(["Result"]),
+                    tag: curios_core::Atom::from("success"),
                 },
                 2,
             ),
             (
                 "/Result/failure".into(),
                 curios_core::DefinitionKind::InductiveConstructor {
-                    owner: "/Result".into(),
+                    owner: curios_base::Qualifier::from(["Result"]),
+                    tag: curios_core::Atom::from("failure"),
                 },
                 2,
             ),

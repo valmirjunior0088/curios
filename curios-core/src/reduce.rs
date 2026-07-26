@@ -452,7 +452,7 @@ fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
     let label_refs = label_terms.iter().collect::<Vec<_>>();
 
     for (i, (label, binding)) in labels.iter().zip(&let_.bindings).enumerate() {
-        context.define(label, &binding.value().release(&label_refs[..i]));
+        context.define(label, &binding.value().release(&label_refs[..i]), None);
     }
 
     Reduce::Continue(let_.tail.open(&label_refs))

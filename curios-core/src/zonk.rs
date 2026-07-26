@@ -468,19 +468,6 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
                 "inductive {name} and its type-former definition have different universe contexts"
             )));
         }
-        for constructor in declaration.constructors.keys() {
-            let definition_name = format!("{name}/{}", constructor.as_str());
-            if let Some((kind, _)) = definition_schemes.get(&definition_name)
-                && kind
-                    != &(DefinitionKind::InductiveConstructor {
-                        owner: name.clone(),
-                    })
-            {
-                return Err(Error::UniverseInvariant(format!(
-                    "inductive {name} and constructor {definition_name} have inconsistent ownership"
-                )));
-            }
-        }
     }
     for (name, declaration) in &module.struct_decls {
         validate!(&declaration.params, &format!("structure {name} parameters"))?;
@@ -513,17 +500,29 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             )));
         }
     }
+    // Both directions of the generated-member correspondence, read off the
+    // definition's own recorded origin. A constructor names the inductive it
+    // belongs to *and* which case it is, so this checks the registry entry
+    // exists and actually declares that case — without joining an owner and a
+    // tag back into a name to look up.
     for (name, (kind, _)) in &definition_schemes {
         match kind {
-            DefinitionKind::InductiveConstructor { owner } => {
-                if !module.induct_decls.contains_key(owner) {
+            DefinitionKind::InductiveConstructor { owner, tag } => {
+                let owner = owner.join();
+                let Some(declaration) = module.induct_decls.get(&owner) else {
                     return Err(Error::UniverseInvariant(format!(
                         "constructor definition {name} names missing owner {owner}"
+                    )));
+                };
+                if !declaration.declares(tag) {
+                    return Err(Error::UniverseInvariant(format!(
+                        "constructor definition {name} names owner {owner}, which declares no case '{tag}'"
                     )));
                 }
             }
             DefinitionKind::ConceptMethod { owner } => {
-                if !module.concepts.contains_key(owner) {
+                let owner = owner.join();
+                if !module.concepts.contains_key(&owner) {
                     return Err(Error::UniverseInvariant(format!(
                         "concept method {name} names missing owner {owner}"
                     )));
