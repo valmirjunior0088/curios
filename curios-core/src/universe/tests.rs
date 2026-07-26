@@ -312,6 +312,35 @@ fn mutually_bounded_flexible_levels_close_at_their_floor() {
     assert_eq!(solver.solution(right), Some(&Level::zero()));
 }
 
+/// The same cycle, but forced above zero by a direct bound. `left` solves to 2
+/// from that bound, leaving `2 ≤ max(1, right)`. Its upper side is not a bare
+/// atom, so cancelling the offset alone does not answer it — but `max`'s own
+/// constant of 1 cannot supply 2, so `right ≥ 2` is determined rather than
+/// guessed. Before that was recognized the floor attempt tried `right := 0`,
+/// found `2 ≤ max(1, 0)` inconsistent, rolled back, and left `right` unsolved
+/// — surfacing as "level escapes its universe parameter context".
+#[test]
+fn a_mutually_bounded_cycle_closes_at_a_non_zero_floor() {
+    let mut solver = UniverseSolver::new(0);
+    let left = solver.fresh(UniverseRole::Flexible, None);
+    let right = solver.fresh(UniverseRole::Flexible, None);
+    let guarded = |meta| Level::max([Level::constant(1), Level::meta(meta)]);
+    solver
+        .add_leq(Level::constant(2), Level::meta(left), origin("direct"))
+        .unwrap();
+    solver
+        .add_leq(guarded(left), guarded(right), origin("dispatch"))
+        .unwrap();
+    solver
+        .add_leq(guarded(right), guarded(left), origin("dispatch"))
+        .unwrap();
+
+    solver.solve_flexible().unwrap();
+
+    assert_eq!(solver.solution(left), Some(&Level::constant(2)));
+    assert_eq!(solver.solution(right), Some(&Level::constant(2)));
+}
+
 #[test]
 fn constraint_identity_ignores_diagnostic_provenance() {
     let semantic = || UniverseConstraint {

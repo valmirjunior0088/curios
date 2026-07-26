@@ -1144,6 +1144,28 @@ impl UniverseSolver {
             .is_some_and(|entry| entry.role == UniverseRole::Flexible && entry.solution.is_none())
     }
 
+    /// The bound `lower ≤ max(c, atom + k)` places on `atom`, or `None` when it
+    /// places none.
+    ///
+    /// With `c = 0` the atom must cover `lower` outright, and cancelling `k`
+    /// answers directly. With `c > 0` the upper side already covers everything
+    /// up to `c` on its own, so only the part of `lower` exceeding `c`
+    /// constrains the atom — and whether `c` covers `lower` is decidable only
+    /// when `lower` is a known constant. A larger constant *is* determined:
+    /// `c` cannot supply it, so the atom must, even though the upper side is
+    /// not a bare atom.
+    fn atom_lower_bound(upper_constant: u32, upper_offset: u32, lower: Level) -> Option<Level> {
+        if upper_constant != 0 {
+            if lower.atoms().next().is_some() {
+                return None;
+            }
+            if lower.constant_part() <= upper_constant {
+                return None;
+            }
+        }
+        lower.cancel_offset(upper_offset)
+    }
+
     /// The least level satisfying every `lower ≤ meta + k` bound, or `None`
     /// when some bound still mentions an unsolved flexible level and the
     /// answer would not yet be final.
@@ -1161,7 +1183,7 @@ impl UniverseSolver {
                 .constraints
                 .get(position)
                 .expect("the occurrence index names a live constraint");
-            if constraint.upper.atoms.len() != 1 || constraint.upper.constant != 0 {
+            if constraint.upper.atoms.len() != 1 {
                 continue;
             }
             let Some(&upper_offset) = constraint.upper.atoms.get(&head) else {
@@ -1170,7 +1192,9 @@ impl UniverseSolver {
             let lower = constraint
                 .lower
                 .substitute(|lower_head| (lower_head == head).then(Level::zero))?;
-            let Some(lower) = lower.cancel_offset(upper_offset) else {
+            let Some(lower) =
+                Self::atom_lower_bound(constraint.upper.constant, upper_offset, lower)
+            else {
                 continue;
             };
             if lower.metas().any(|other| self.is_open_flexible(other)) {
@@ -1202,7 +1226,7 @@ impl UniverseSolver {
                 .constraints
                 .get(position)
                 .expect("the occurrence index names a live constraint");
-            if constraint.upper.atoms.len() != 1 || constraint.upper.constant != 0 {
+            if constraint.upper.atoms.len() != 1 {
                 continue;
             }
             let Some(&upper_offset) = constraint.upper.atoms.get(&head) else {
@@ -1217,7 +1241,9 @@ impl UniverseSolver {
                     _ => None,
                 }
             })?;
-            let Some(lower) = lower.cancel_offset(upper_offset) else {
+            let Some(lower) =
+                Self::atom_lower_bound(constraint.upper.constant, upper_offset, lower)
+            else {
                 continue;
             };
             if !lower.is_zero() {
