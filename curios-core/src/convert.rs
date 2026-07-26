@@ -285,10 +285,44 @@ impl Sort {
                 opened.truncate(mark);
                 sort
             }
-            Subterm::TupleType(_) => {
-                probe_level_fallback("empty tuple type", &reduced);
-                Sort::Type(Level::zero())
-            }
+            // The empty tuple `{}` is unit — it quantifies over nothing, so
+            // level 0 is the answer rather than a default, and like `Prop`
+            // below it is not worth reporting as a fallback.
+            Subterm::TupleType(_) => Sort::Type(Level::zero()),
+            // A primitive type former states its own level.
+            //
+            // A closed primitive is small: it quantifies over nothing, so it
+            // sits at level 0. A parameterized one carries its parameter's
+            // level — `Lst : Type u -> Type u` — and pinning those at 0 would
+            // claim the type is smaller than it is, which is the unsound
+            // direction: it is what would let a large type be stored in a
+            // small universe.
+            Subterm::Prim(prim) => match prim {
+                Prim::BoolType
+                | Prim::NatType
+                | Prim::ByteType
+                | Prim::IntType
+                | Prim::FltType
+                | Prim::BinType(_)
+                | Prim::HandleType => Sort::Type(Level::zero()),
+                Prim::LstType(element) | Prim::CellType(element) => {
+                    let element = element.clone();
+                    match Sort::of_in(context, opened, &element)? {
+                        Sort::Type(level) => Sort::Type(level),
+                        // A list or cell of proofs is not itself a proposition
+                        // — it has length, or identity, so its inhabitants are
+                        // distinguishable and proof irrelevance does not apply.
+                        // It lands at `Type` instead, and `Prop : Type 0`.
+                        Sort::Prop => Sort::Type(Level::zero()),
+                    }
+                }
+                // A primitive *value* in type position is not a shape this can
+                // classify, and unlike the formers above it is not expected.
+                _ => {
+                    probe_level_fallback("non-type primitive", &reduced);
+                    Sort::Type(Level::zero())
+                }
+            },
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 // Each opened binder must carry its domain type, not merely be
