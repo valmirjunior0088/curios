@@ -715,7 +715,11 @@ fn process_items(
                                     },
                                 ))
                             })
-                            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+                            // Collected in written order: a constructor's
+                            // position here is the runtime tag `erase` gives it
+                            // (`InductDecl::constructors`), so the sequence is
+                            // the declaration's, not a collation of its labels.
+                            .collect::<Result<Vec<_>, Error>>()?;
 
                         // The declared result sort (`Type`/`Prop`) — closed, so
                         // it lowers in the base context. It is both the registry
@@ -1426,8 +1430,8 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<String> {
         .chain(
             induct_decl
                 .constructors
-                .values()
-                .flat_map(|param| param.telescope.free_vars()),
+                .iter()
+                .flat_map(|(_, param)| param.telescope.free_vars()),
         )
         .collect()
 }
@@ -1673,8 +1677,8 @@ fn audit_public_exposures(
                         &item,
                         induct_decl
                             .constructors
-                            .values()
-                            .flat_map(|case| case.telescope.free_vars()),
+                            .iter()
+                            .flat_map(|(_, case)| case.telescope.free_vars()),
                     )?;
                 }
             } else if let Some(struct_decl) = struct_decls.get(&nominal) {

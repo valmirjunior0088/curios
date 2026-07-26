@@ -334,7 +334,7 @@ fn opt_induct() -> InductDecl {
         universe_context: UniverseContext::empty(),
         params: Telescope::done(()),
         indices: Telescope::done(()),
-        constructors: BTreeMap::from([
+        constructors: Vec::from([
             (
                 Atom::from("none"),
                 InductParam {

@@ -1,7 +1,6 @@
 use {
     super::{Atom, Telescope, Term, UniverseContext},
     curios_base::{Plicity, Qualifier, RootId},
-    std::collections::BTreeMap,
 };
 
 /// One constructor's registry signature: its full telescope.
@@ -56,9 +55,17 @@ pub struct InductDecl {
     /// unindexed inductive. Like `constructors`, instantiate at known parameters
     /// by peeling the leading `params.len()` binders.
     pub indices: Telescope<()>,
-    /// Per-constructor signatures, keyed by tag — each the constructor's
-    /// signature telescope (see [`InductParam`]).
-    pub constructors: BTreeMap<Atom, InductParam>,
+    /// Per-constructor signatures **in declaration order** — each the
+    /// constructor's signature telescope (see [`InductParam`]).
+    ///
+    /// A sequence rather than a map, because the order is load-bearing: a
+    /// constructor's position here *is* its runtime tag
+    /// ([`Self::constructor_index`]). A `BTreeMap<Atom, _>` made that position
+    /// the collation order over constructor spellings, so renaming a case
+    /// silently renumbered the emitted tags of every case it sorted past.
+    /// Declaration order is predictable from the source, stable under a rename,
+    /// and changes only under an edit that visibly reorders the declaration.
+    pub constructors: Vec<(Atom, InductParam)>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the
     /// type-constructor's kind. A fully-applied `InductType { name, .. }`
     /// has this sort, which `sort_of` reads to decide propositional irrelevance.
@@ -80,13 +87,27 @@ impl InductDecl {
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
     /// `(_0 : Nat) -> InductType { Result, [Nat, Bin] }`.
     pub(crate) fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
-        Some(
-            self.constructors
-                .get(tag)?
-                .telescope
-                .clone()
-                .open_params(params),
-        )
+        Some(self.constructor(tag)?.telescope.clone().open_params(params))
+    }
+
+    /// `tag`'s signature entry, or `None` if it is not a case of this
+    /// inductive. Constructor counts are small, so the scan is cheaper than the
+    /// tree the collation-ordered map needed.
+    pub(crate) fn constructor(&self, tag: &Atom) -> Option<&InductParam> {
+        self.constructors
+            .iter()
+            .find(|(candidate, _)| candidate == tag)
+            .map(|(_, param)| param)
+    }
+
+    /// Every constructor signature, in declaration order.
+    pub(crate) fn signatures(&self) -> impl Iterator<Item = &InductParam> {
+        self.constructors.iter().map(|(_, param)| param)
+    }
+
+    /// Every constructor signature mutably, in declaration order.
+    pub(crate) fn signatures_mut(&mut self) -> impl Iterator<Item = &mut InductParam> {
+        self.constructors.iter_mut().map(|(_, param)| param)
     }
 
     /// The canonical plicities of `tag`'s *payload* binders — the constructor
@@ -95,24 +116,23 @@ impl InductDecl {
     /// if `tag` is not a constructor of this inductive.
     pub(crate) fn payload_plicities(&self, tag: &Atom) -> Option<&[Plicity]> {
         let param_count = self.params.len();
-        self.constructors
-            .get(tag)
+        self.constructor(tag)
             .map(|param| &param.plicities[param_count..])
     }
 
-    /// Constructor tags in runtime dispatch order: position `i` here is the
-    /// tag `erase` assigns as runtime index `i` (`erase_variant`) and the
-    /// arm order it builds a `Match` in (`erase_induct_match`). Both sites
-    /// must derive that correspondence from this one method, not from their
-    /// own `constructors.keys()` walk, so the two can never disagree about
-    /// what "index `i`" means.
+    /// Constructor tags in runtime dispatch order — which is declaration
+    /// order: position `i` here is the tag `erase` assigns as runtime index
+    /// `i` (`erase_variant`) and the arm order it builds a `Match` in
+    /// (`erase_induct_match`). Both sites must derive that correspondence from
+    /// this one method, not from their own walk over `constructors`, so the
+    /// two can never disagree about what "index `i`" means.
     pub(crate) fn constructor_order(&self) -> impl Iterator<Item = &Atom> {
-        self.constructors.keys()
+        self.constructors.iter().map(|(tag, _)| tag)
     }
 
     /// Whether `tag` is one of this inductive's declared cases.
     pub(crate) fn declares(&self, tag: &Atom) -> bool {
-        self.constructors.contains_key(tag)
+        self.constructor(tag).is_some()
     }
 
     /// `tag`'s position in [`Self::constructor_order`] — the runtime tag

@@ -460,7 +460,7 @@ pub(crate) fn elaborate_match(
 struct InductMatchInput<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
-    cases: &'a BTreeMap<Atom, InductArm>,
+    cases: &'a [(Atom, InductArm)],
     default: Option<&'a Term>,
     term: &'a Term,
 }
@@ -726,7 +726,7 @@ fn elaborate_induct_match(
             && match cases.len() {
                 0 => true,
                 1 => {
-                    let tag = cases.keys().next().expect("one covered constructor");
+                    let (tag, _) = cases.first().expect("one covered constructor");
                     singleton_eliminable(context, &induct_decl, tag, &params)?
                 }
                 _ => false,
@@ -740,8 +740,9 @@ fn elaborate_induct_match(
     // constructor below — a missing arm is legal iff inversion proves it
     // impossible (Rung C).
     if let Some(tag) = cases
-        .keys()
-        .find(|tag| !induct_decl.constructors.contains_key(*tag))
+        .iter()
+        .map(|(tag, _)| tag)
+        .find(|tag| !induct_decl.declares(tag))
     {
         return Err(Error::unknown_match_constructor(
             name.clone(),
@@ -749,9 +750,12 @@ fn elaborate_induct_match(
         ));
     }
 
-    let mut cases_elaborated = BTreeMap::new();
-    for tag in induct_decl.constructors.keys() {
-        let Some(scope) = cases.get(tag) else {
+    // Built by walking the *declaration* order, not the written order, so the
+    // elaborated arm sequence is canonical: two matches differing only in how
+    // their arms were written produce the same term.
+    let mut cases_elaborated = Vec::new();
+    for tag in induct_decl.constructor_order() {
+        let Some((_, scope)) = cases.iter().find(|(candidate, _)| candidate == tag) else {
             // A catch-all default covers every un-enumerated constructor, so a
             // missing arm needs neither the unindexed-completeness check nor
             // Rung-C inversion — the default is checked once, below.
@@ -900,13 +904,13 @@ fn elaborate_induct_match(
         let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         // Rebuild the arm with the constructor's canonical payload plicities, so
         // a re-elaborated arm re-checks identically (idempotence).
-        cases_elaborated.insert(
+        cases_elaborated.push((
             tag.clone(),
             InductArm {
                 body: Scope::close(Many(arity), &label_strs, body_elaborated),
                 plicities: payload_plicities.to_vec(),
             },
-        );
+        ));
     }
 
     // The catch-all binds nothing and refines no index, so it is checked at the

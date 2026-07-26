@@ -226,11 +226,7 @@ pub(super) fn elaborate_variant(
     }
 
     let (signature, universes) = if written_universes.is_empty() {
-        let Some(signature) = induct_decl
-            .constructors
-            .get(tag)
-            .map(|c| c.telescope.clone())
-        else {
+        let Some(signature) = induct_decl.constructor(tag).map(|c| c.telescope.clone()) else {
             return Err(Error::match_case_missing(term.clone(), tag.clone()));
         };
         let (signature, universes) =
@@ -239,8 +235,7 @@ pub(super) fn elaborate_variant(
     } else {
         let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;
         let Some(signature) = induct_decl
-            .constructors
-            .get(tag)
+            .constructor(tag)
             .map(|constructor| constructor.telescope.clone())
         else {
             return Err(Error::match_case_missing(term.clone(), tag.clone()));

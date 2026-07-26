@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_base::{Grain, Int, PackedBin, Plicity, Qualifier, RootId},
-    std::{collections::BTreeMap, time::Duration},
+    std::time::Duration,
 };
 
 fn context() -> Context {
@@ -876,7 +876,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
                 indices: Telescope::done(()),
-                constructors: BTreeMap::from([(
+                constructors: Vec::from([(
                     Atom::from("wrap"),
                     InductParam {
                         telescope: Telescope::build(
@@ -1533,7 +1533,7 @@ fn register_lst(context: &mut Context) {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::build([("A", Term::type_ground())], ()),
                 indices: Telescope::build([("A", Term::type_ground())], ()),
-                constructors: BTreeMap::new(),
+                constructors: Vec::new(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 root: RootId::Entry,
@@ -1555,7 +1555,7 @@ fn register_vec(context: &mut Context) {
                     [("T", Term::type_ground()), ("n", Term::prim(Prim::NatType))],
                     (),
                 ),
-                constructors: BTreeMap::new(),
+                constructors: Vec::new(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 root: RootId::Entry,

@@ -8,11 +8,7 @@ use {
         retry_deferred_witnesses, sort_term, zonk, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
-    std::{
-        cell::RefCell,
-        collections::{BTreeMap, BTreeSet},
-        rc::Rc,
-    },
+    std::{cell::RefCell, collections::BTreeSet, rc::Rc},
 };
 
 /// The universe arguments `value` applies to `name`'s declaration, at the first
@@ -201,7 +197,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
         return Ok(());
     };
 
-    let mut constructors = BTreeMap::new();
+    let mut constructors = Vec::new();
     for (tag, param) in &induct_decl.constructors {
         let signature = &param.telescope;
         let labels = signature
@@ -217,7 +213,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
         })?;
 
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
-        constructors.insert(
+        constructors.push((
             tag.clone(),
             InductParam {
                 telescope: Telescope::build(entries, terminal).relabel(&label_refs),
@@ -225,7 +221,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
                 // re-checks the types but never changes the calling convention.
                 plicities: param.plicities.clone(),
             },
-        );
+        ));
     }
 
     context.update_induct(
@@ -705,7 +701,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
     for def in &defs {
         if let Some(induct_decl) = context.induct_decl(&def.name).cloned() {
-            for constructor in induct_decl.constructors.values() {
+            for constructor in induct_decl.signatures() {
                 add_declaration_sizing(
                     context,
                     &def.name,
@@ -770,7 +766,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             interface.extend(crate::universe_metas(&induct_decl.params));
             interface.extend(crate::universe_metas(&induct_decl.indices));
             interface.extend(induct_decl.result_sort.universe_metas());
-            for constructor in induct_decl.constructors.values() {
+            for constructor in induct_decl.signatures() {
                 interface.extend(crate::universe_metas(&constructor.telescope));
             }
         }

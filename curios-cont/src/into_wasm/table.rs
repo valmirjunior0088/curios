@@ -7,7 +7,7 @@ use {
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         sync::Arc,
     },
 };
@@ -225,7 +225,7 @@ fn max_value_tpl_arity(value: &EmissionValue) -> usize {
 /// Collect every closure that is reserved as a recursive shell anywhere in `region` (and its
 /// nested blocks). These are the only closures whose `envr` fields are back-patched, so they
 /// are the only ones whose wasm struct fields must stay mutable.
-fn collect_cyclic_clsrs(region: &EmissionBody, out: &mut BTreeSet<EmissionClosureName>) {
+fn collect_cyclic_clsrs(region: &EmissionBody, out: &mut HashSet<EmissionClosureName>) {
     for (_, clsr) in &region.shells {
         out.insert(clsr.clone());
     }
@@ -307,13 +307,13 @@ pub(crate) struct Table<'a> {
     // back-patched (`struct.set`), so those fields must stay mutable. Every other aggregate
     // field is immutable. `cyclic_clsr_arities` carries the same fact at arity granularity,
     // for the shared `envr/N` special field (which must agree across all its subtypes).
-    cyclic_clsrs: BTreeSet<EmissionClosureName>,
+    cyclic_clsrs: HashSet<EmissionClosureName>,
     cyclic_clsr_arities: BTreeSet<usize>,
 }
 
 impl<'a> Table<'a> {
     pub(crate) fn new(module: &'a EmissionModule) -> Self {
-        let mut cyclic_clsrs = BTreeSet::new();
+        let mut cyclic_clsrs = HashSet::new();
         for (_, clsr) in module.clsrs() {
             collect_cyclic_clsrs(&clsr.region, &mut cyclic_clsrs);
         }

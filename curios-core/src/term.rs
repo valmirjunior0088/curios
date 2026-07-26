@@ -1084,7 +1084,7 @@ impl Term {
 
     /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
     /// one plicity mark per payload binder (the [`InductArm`] invariant).
-    pub(crate) fn induct_cases_marked<I, A, L, B>(cases: I) -> BTreeMap<Atom, InductArm>
+    pub(crate) fn induct_cases_marked<I, A, L, B>(cases: I) -> Vec<(Atom, InductArm)>
     where
         I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
         A: Into<Atom>,
@@ -2213,7 +2213,15 @@ pub enum Cases {
     /// target indices and the default at the scrutinee's actual ones, so a
     /// catch-all is legal on an indexed family too.
     Induct {
-        cases: BTreeMap<Atom, InductArm>,
+        /// The enumerated arms, in the owning inductive's *declaration order*
+        /// — the same order `InductDecl::constructor_order` reports, which is
+        /// what makes this a canonical form: two matches whose arms are
+        /// written in different source order elaborate to the same sequence,
+        /// so arm order never enters term identity. Elaboration establishes
+        /// that by building the arms from `constructor_order` rather than from
+        /// the written order (`elaborate_induct_match`). A subsequence is
+        /// legal — an arm may be absent under a `default` or a Rung-C prune.
+        cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
     },
     /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/
@@ -2812,8 +2820,8 @@ impl Subterm {
                     }
                     Cases::Induct { cases, default } => {
                         cases
-                            .values()
-                            .for_each(|s| s.body.body().collect_construction_names(names));
+                            .iter()
+                            .for_each(|(_, s)| s.body.body().collect_construction_names(names));
                         default
                             .iter()
                             .for_each(|d| d.collect_construction_names(names));
@@ -2929,7 +2937,7 @@ impl Subterm {
                             cases.values().any(|b| b.any_metavar(pred)) || default.any_metavar(pred)
                         }
                         Cases::Induct { cases, default } => {
-                            cases.values().any(|s| s.body.body().any_metavar(pred))
+                            cases.iter().any(|(_, s)| s.body.body().any_metavar(pred))
                                 || default.as_ref().is_some_and(|d| d.any_metavar(pred))
                         }
                         Cases::FreeMonoid { carrier } => match carrier {
@@ -3019,7 +3027,7 @@ impl Subterm {
                             cases.values().any(&mut *pred) || pred(default)
                         }
                         Cases::Induct { cases, default } => {
-                            cases.values().any(|s| pred(s.body.body()))
+                            cases.iter().any(|(_, s)| pred(s.body.body()))
                                 || default.as_ref().is_some_and(&mut *pred)
                         }
                         Cases::FreeMonoid { carrier } => match carrier {
@@ -3470,8 +3478,8 @@ impl Bound for Subterm {
                 } => false_case.reach().max(true_case.reach()),
                 Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
                 Cases::Induct { cases, default } => cases
-                    .values()
-                    .map(|s| s.reach())
+                    .iter()
+                    .map(|(_, s)| s.reach())
                     .max()
                     .unwrap_or(0)
                     .max(default.as_ref().map_or(0, |d| d.reach())),

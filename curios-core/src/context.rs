@@ -910,7 +910,7 @@ impl Context {
         instantiated.params = rewrite(&instantiated.params, levels)?;
         instantiated.indices = rewrite(&instantiated.indices, levels)?;
         instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
-        for constructor in instantiated.constructors.values_mut() {
+        for constructor in instantiated.signatures_mut() {
             constructor.telescope = rewrite(&constructor.telescope, levels)?;
         }
         instantiated.universe_context = UniverseContext::empty();

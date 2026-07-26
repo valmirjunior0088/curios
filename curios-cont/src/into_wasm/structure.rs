@@ -17,7 +17,7 @@ use {
     crate::{
         EmissionBlockName, EmissionBody, EmissionCallTarget, EmissionHostTarget, EmissionTail,
     },
-    std::collections::BTreeMap,
+    std::collections::{HashMap, HashSet},
 };
 
 /// The control-flow graph of one region over its sibling blocks plus a virtual
@@ -41,7 +41,9 @@ impl RegionCfg {
             .iter()
             .enumerate()
             .map(|(i, (name, _))| (name, i))
-            .collect::<BTreeMap<_, _>>();
+            // Keyed on a block name purely to look its position up; nothing
+            // iterates it, so no name ordering reaches the emitted module.
+            .collect::<HashMap<_, _>>();
 
         let mut succ = vec![Vec::new(); blocks + 1];
 
@@ -62,7 +64,7 @@ impl RegionCfg {
         // index and sorting keeps each successor list sorted and
         // duplicate-free (the set already deduplicates).
         for (source, (_, block)) in region.blocks.iter().enumerate() {
-            let mut names = std::collections::BTreeSet::new();
+            let mut names = HashSet::new();
             collect_region_targets(&block.region, &mut names);
             let mut targets = names
                 .into_iter()
@@ -139,10 +141,7 @@ fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
 /// branches into — the sibling-level edge oracle, collected in one traversal:
 /// a branch from deep inside a block to a sibling is an edge between those
 /// two blocks.
-fn collect_region_targets<'a>(
-    region: &'a EmissionBody,
-    out: &mut std::collections::BTreeSet<&'a EmissionBlockName>,
-) {
+fn collect_region_targets<'a>(region: &'a EmissionBody, out: &mut HashSet<&'a EmissionBlockName>) {
     out.extend(tail_targets(&region.tail));
     for (_, block) in &region.blocks {
         collect_region_targets(&block.region, out);

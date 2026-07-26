@@ -687,7 +687,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
         collect!(&declaration.params);
         collect!(&declaration.indices);
         collect!(&declaration.result_sort);
-        for constructor in declaration.constructors.values() {
+        for constructor in declaration.signatures() {
             collect!(&constructor.telescope);
         }
     }

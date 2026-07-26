@@ -923,7 +923,7 @@ impl Convert {
         // uses; falls back to `Type` if the inductive is somehow absent.
         let telescope = match context.induct_decl(&this.name).cloned() {
             Some(induct_decl) => {
-                let constructor = induct_decl.constructors.get(&this.tag);
+                let constructor = induct_decl.constructor(&this.tag);
                 match constructor {
                     Some(constructor) => Some(
                         instantiate_bound_at(

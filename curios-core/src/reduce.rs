@@ -350,7 +350,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
         // flow on to `zonk`.
         Cases::Induct { cases, default } => {
             if let Subterm::Variant(ctor) = &*forced {
-                if let Some(scope) = cases.get(&ctor.tag) {
+                if let Some((_, scope)) = cases.iter().find(|(tag, _)| tag == &ctor.tag) {
                     let projections = (0..scope.arity())
                         .map(|i| Term::proj(head.clone(), i + 1))
                         .collect::<Vec<_>>();

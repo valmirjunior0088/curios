@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_base::{Plicity, Qualifier, RootId},
-    std::{collections::BTreeMap, time::Duration},
+    std::time::Duration,
 };
 
 fn context() -> Context {
@@ -30,7 +30,7 @@ fn register_opt(context: &mut Context) {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
                 indices: Telescope::done(()),
-                constructors: BTreeMap::from([
+                constructors: Vec::from([
                     (
                         Atom::from("none"),
                         InductParam {
@@ -351,7 +351,7 @@ fn register_flag(context: &mut Context) {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
                 indices: Telescope::build([("b", nat())], ()),
-                constructors: BTreeMap::from([
+                constructors: Vec::from([
                     (
                         Atom::from("off"),
                         InductParam {
@@ -389,7 +389,7 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
         head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
         motive: Scope::close(Many(2), &["b", "m"], nat()),
         cases: Cases::Induct {
-            cases: BTreeMap::from([(
+            cases: Vec::from([(
                 Atom::from("on"),
                 InductArm {
                     body: Scope::close(Many(0), &[], nat_lit(0)),
@@ -417,7 +417,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
         motive: Term::match_motive_written(Term::func([("m", flag_type(nat_lit(1)))], nat())),
         cases: Cases::Induct {
-            cases: BTreeMap::from([(
+            cases: Vec::from([(
                 Atom::from("on"),
                 InductArm {
                     body: Scope::close(Many(0), &[], nat_lit(0)),

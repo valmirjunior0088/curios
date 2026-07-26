@@ -549,7 +549,7 @@ impl Lowering {
         context: &mut Context,
         head: &Term,
         motive: &Scope<Many>,
-        cases: &super::BTreeMap<Atom, InductArm>,
+        cases: &[(Atom, InductArm)],
         default: Option<&Term>,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -601,7 +601,11 @@ impl Lowering {
         for (index, tag) in induct_decl.constructor_order().enumerate() {
             let constructor = row.constructors[index].id;
             let mask = row.constructors[index].mask.clone();
-            match cases.get(tag) {
+            match cases
+                .iter()
+                .find(|(candidate, _)| candidate == tag)
+                .map(|(_, arm)| arm)
+            {
                 Some(arm) => {
                     let telescope = induct_decl
                         .instantiate(tag, m.params)
@@ -728,7 +732,7 @@ impl Lowering {
         context: &mut Context,
         m: &InductMatch<'_>,
         induct_decl: &InductDecl,
-        cases: &super::BTreeMap<Atom, InductArm>,
+        cases: &[(Atom, InductArm)],
         default: Option<&Term>,
     ) -> Result<Outcome, Error> {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the
