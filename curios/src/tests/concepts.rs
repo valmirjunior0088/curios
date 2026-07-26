@@ -185,7 +185,47 @@ fn duplicate_witness_is_an_error() {
         /std/print(Show/show(n))
         "#;
 
-    assert!(error(source).to_lowercase().contains("witness"));
+    // Both the concept and the declaring module are pinned, not just the word
+    // "witness". Witnesses are anonymous, so the module is the only coordinate
+    // the report can give a reader — and it comes from each definition's
+    // `island`, not from splitting the compiler-minted `witness@N` name.
+    // Matched on the message body: the `while elaborating …` prefix names the
+    // minted `witness@N`, which Phase C of the name-identity work replaces.
+    assert!(error(source).ends_with(
+        "duplicate witness of '/Show' for head 'Nat'\n  \
+         one is declared in the entry module, another in the entry module\n  \
+         every concept-head pair has at most one witness, program-wide"
+    ));
+}
+
+// The declaring module of a nested-module witness renders as that module,
+// which the entry-module cases above cannot distinguish from a bug that always
+// reports the root.
+#[test]
+fn duplicate_witness_reports_its_declaring_module() {
+    let source = r#"
+        mod M
+            pub concept C(A : Type) : pub Type {
+                f(A) -> A
+            }
+            pub induct T : pub Type
+            | t()
+            end
+            satisfy C(T) {
+                f(x) = x
+            }
+            satisfy C(T) {
+                f(x) = x
+            }
+        end
+        ()
+        "#;
+
+    assert!(error(source).ends_with(
+        "duplicate witness of '/M/C' for head '/M/T'\n  \
+         one is declared in module '/M', another in module '/M'\n  \
+         every concept-head pair has at most one witness, program-wide"
+    ));
 }
 
 // The orphan rule: a witness may be declared only where the concept it
@@ -203,7 +243,10 @@ fn orphan_witness_is_rejected() {
         n
         "#;
 
-    assert!(error(source).to_lowercase().contains("orphan"));
+    assert!(error(source).ends_with(
+        "orphan witness of '/std/Ord/Ord' for head 'Bool', declared in the entry module\n  \
+         a witness may only be declared where the concept or a type in its head is already declared"
+    ));
 }
 
 // The sanctioned counterpart: a user's own type is legal to `satisfy` a
