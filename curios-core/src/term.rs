@@ -1605,22 +1605,17 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        if let Some(replacement) = visit.rewrite_term(self) {
-            return replacement;
-        }
-        if visit.universes_only() && !self.has_universe_data() {
-            return self.clone();
-        }
-        if visit.prune() && self.reach() <= visit.depth() {
-            return self.clone();
-        }
-        if (visit.universes_only() || visit.rewrites_terms())
-            && matches!(&**self, Subterm::Apply(_) | Subterm::Variant(_))
-        {
-            return self.traverse_rewrite_spine(visit);
+        if visit.memoizes() {
+            let key = Rc::as_ptr(&self.inner) as usize;
+            if let Some(hit) = visit.memo_get(key) {
+                return hit;
+            }
+            let rebuilt = self.traverse_unmemoized(visit);
+            visit.memo_put(key, rebuilt.clone());
+            return rebuilt;
         }
 
-        self.traverse_children(visit)
+        self.traverse_unmemoized(visit)
     }
 
     fn reach(&self) -> usize {
@@ -1647,6 +1642,28 @@ impl Bound for Term {
 }
 
 impl Term {
+    fn traverse_unmemoized<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        if let Some(replacement) = visit.rewrite_term(self) {
+            return replacement;
+        }
+        if visit.universes_only() && !self.has_universe_data() {
+            return self.clone();
+        }
+        if visit.prune() && self.reach() <= visit.depth() {
+            return self.clone();
+        }
+        if (visit.universes_only() || visit.rewrites_terms())
+            && matches!(&**self, Subterm::Apply(_) | Subterm::Variant(_))
+        {
+            return self.traverse_rewrite_spine(visit);
+        }
+
+        self.traverse_children(visit)
+    }
+
     fn traverse_children<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
@@ -1680,6 +1697,12 @@ impl Term {
             match next {
                 Work::Enter(term, prechecked) => {
                     if !prechecked {
+                        if visit.memoizes()
+                            && let Some(hit) = visit.memo_get(Rc::as_ptr(&term.inner) as usize)
+                        {
+                            rewritten.push(hit);
+                            continue;
+                        }
                         if let Some(replacement) = visit.rewrite_term(&term) {
                             rewritten.push(replacement);
                             continue;
@@ -1701,7 +1724,10 @@ impl Term {
                             params, payload, ..
                         }) => params.iter().chain(payload).cloned().collect(),
                         _ => {
-                            rewritten.push(term.traverse_children(visit));
+                            let key = Rc::as_ptr(&term.inner) as usize;
+                            let rebuilt = term.traverse_children(visit);
+                            visit.memo_put(key, rebuilt.clone());
+                            rewritten.push(rebuilt);
                             continue;
                         }
                     };
@@ -1758,10 +1784,12 @@ impl Term {
                         }
                         _ => unreachable!("only spine nodes create universe traversal frames"),
                     };
-                    rewritten.push(Self {
+                    let rebuilt = Self {
                         span: term.span.clone(),
                         inner: Rc::new(Node::new(subterm)),
-                    });
+                    };
+                    visit.memo_put(Rc::as_ptr(&term.inner) as usize, rebuilt.clone());
+                    rewritten.push(rebuilt);
                 }
             }
         }

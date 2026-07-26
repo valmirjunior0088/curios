@@ -453,7 +453,7 @@ pub(crate) fn stamp_declaration_instance<B: Bound>(
     }
     let names = names.clone();
     let levels = levels.to_vec();
-    let mut visit = Visit::rewriting(
+    let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| term.stamp_declaration_node(&names, self_reference, &levels)),
     );
@@ -1030,6 +1030,12 @@ pub struct Visit<F> {
     level_rewrite: Option<LevelRewrite>,
     erase_universes: bool,
     universes_only: bool,
+    /// Pointer-keyed memo for a depth-independent rewriting visit: each input
+    /// node is rebuilt once and every later occurrence of it reuses that
+    /// result. Keys are addresses of *input* nodes, which the caller's value
+    /// keeps alive for the whole traversal, so an address cannot be recycled
+    /// under the memo.
+    shared_memo: Option<std::collections::HashMap<usize, Term>>,
 }
 
 impl<F> Visit<F>
@@ -1046,6 +1052,7 @@ where
             level_rewrite: None,
             erase_universes: false,
             universes_only: false,
+            shared_memo: None,
         }
     }
 
@@ -1064,6 +1071,7 @@ where
             level_rewrite: None,
             erase_universes: false,
             universes_only: false,
+            shared_memo: None,
         }
     }
 
@@ -1080,6 +1088,37 @@ where
             level_rewrite: None,
             erase_universes: false,
             universes_only: false,
+            shared_memo: None,
+        }
+    }
+
+    /// Like [`rewriting`](Self::rewriting), but memoized on node identity, so a
+    /// structurally shared input stays shared in the output instead of being
+    /// expanded into a tree.
+    ///
+    /// A rebuilt node is a fresh allocation, so an unmemoized rewrite of a DAG
+    /// materializes its expansion: a lowered string literal shares one
+    /// scan-state chain across every `more` link, and rebuilding it unshared
+    /// costs O(n^2) nodes for an n-byte literal — which then makes every later
+    /// pass over the term quadratic too.
+    ///
+    /// Only sound when the hook and the variable callback are pure and depend
+    /// on the node alone — not on binder depth, and not on how many times they
+    /// have run. A memoized visit skips both, so a depth-sensitive rewrite
+    /// would silently reuse a result computed at the wrong depth, and a
+    /// stateful hook would see each shared node once rather than once per
+    /// occurrence.
+    pub(crate) fn rewriting_shared(visit: F, rewrite: Rewrite) -> Self {
+        Self {
+            depth: 0,
+            universe_depth: 0,
+            prune: false,
+            visit,
+            rewrite: Some(rewrite),
+            level_rewrite: None,
+            erase_universes: false,
+            universes_only: false,
+            shared_memo: Some(std::collections::HashMap::new()),
         }
     }
 
@@ -1093,6 +1132,7 @@ where
             level_rewrite: None,
             erase_universes: false,
             universes_only: true,
+            shared_memo: None,
         }
     }
 
@@ -1106,6 +1146,7 @@ where
             level_rewrite: Some(rewrite),
             erase_universes: false,
             universes_only: true,
+            shared_memo: None,
         }
     }
 
@@ -1119,6 +1160,7 @@ where
             level_rewrite: None,
             erase_universes: true,
             universes_only: true,
+            shared_memo: None,
         }
     }
 
@@ -1181,6 +1223,20 @@ where
 
     pub(crate) fn universes_only(&self) -> bool {
         self.universes_only
+    }
+
+    pub(crate) fn memoizes(&self) -> bool {
+        self.shared_memo.is_some()
+    }
+
+    pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
+        self.shared_memo.as_ref()?.get(&key).cloned()
+    }
+
+    pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
+        if let Some(memo) = self.shared_memo.as_mut() {
+            memo.insert(key, term);
+        }
     }
 
     pub(crate) fn rewrites_terms(&self) -> bool {

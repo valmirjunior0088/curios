@@ -305,7 +305,12 @@ fn validate_instance_arities<B: Bound>(
     let owner = owner.to_string();
     let error = Rc::new(RefCell::new(None));
     let found = Rc::clone(&error);
-    let mut visit = Visit::rewriting(
+    // Inspection only — the hook always returns `None` and the rebuilt value is
+    // discarded. Memoized on node identity so a structurally shared term is
+    // checked once per distinct node rather than once per occurrence: an
+    // unmemoized rewrite here rebuilt, and immediately dropped, one node per
+    // occurrence, which on a lowered string literal is O(n^2) of pure garbage.
+    let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| {
             if found.borrow().is_some() {

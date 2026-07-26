@@ -380,3 +380,72 @@ fn tuple_type_field_labels_are_identity() {
         Term::tuple_type([("cp", Term::type_ground()), ("v", Term::free_var("cp"))])
     );
 }
+
+/// The number of distinct `Node`s reachable from `term`, counting a shared node
+/// once. Inlined here because only these tests ask the question.
+fn distinct_nodes(term: &Term) -> usize {
+    let mut seen = std::collections::HashSet::new();
+    let mut stack = Vec::from([term.clone()]);
+    while let Some(node) = stack.pop() {
+        if !seen.insert(Rc::as_ptr(&node.inner)) {
+            continue;
+        }
+        node.as_ref().any_child_term(&mut |child| {
+            stack.push(child.clone());
+            false
+        });
+    }
+    seen.len()
+}
+
+#[test]
+fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
+    let shared = Term::apply(Term::free_var("f"), [Term::free_var("x")]);
+    let term = Term::tuple([shared.clone(), shared]);
+
+    let rewritten: Term = term.traverse(&mut Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(|_, _| None),
+    ));
+
+    let Subterm::Tuple(tuple) = rewritten.as_ref() else {
+        panic!("the rewrite changed the term's shape");
+    };
+    assert!(
+        Rc::ptr_eq(&tuple.fields[0].inner, &tuple.fields[1].inner),
+        "a memoized rewrite split one shared subterm into two nodes"
+    );
+}
+
+/// A rewrite that rebuilds a shared node once per *occurrence* rather than once
+/// per node turns a DAG into its expansion. This is the shape that made it
+/// matter: a string literal lowers to a chain threading a scan state, where
+/// every link mentions the previous state, so the term is linear in distinct
+/// nodes but triangular expanded. Losing the memo here cost O(n^2) nodes for an
+/// n-byte literal, and every later pass over the term inherited it.
+#[test]
+fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
+    let depth = 200;
+    let mut state = Term::free_var("lead");
+    let mut chain = Term::free_var("stop");
+    for _ in 0..depth {
+        chain = Term::tuple([state.clone(), chain]);
+        state = Term::apply(Term::free_var("step"), [state]);
+    }
+
+    assert!(
+        distinct_nodes(&chain) < 4 * depth,
+        "the fixture itself is not shared, so the test proves nothing"
+    );
+
+    let rewritten: Term = chain.traverse(&mut Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(|_, _| None),
+    ));
+
+    assert_eq!(
+        distinct_nodes(&rewritten),
+        distinct_nodes(&chain),
+        "a memoized rewrite expanded the shared chain"
+    );
+}
