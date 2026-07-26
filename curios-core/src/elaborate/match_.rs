@@ -71,7 +71,7 @@ fn resolve_prim_motive(
 
     if let (Mode::Check(expected), Subterm::Var(var)) = (mode, &**head)
         && is_elided_motive(motive)
-        && let Some(label) = var.as_free()
+        && let Some(label) = var.as_label()
     {
         let synthesized = Scope::close(Many(1), &[label], expected.clone());
         return check_motive(context, &shape, &synthesized);
@@ -968,7 +968,7 @@ fn is_elided_motive(motive: &Scope<Many>) -> bool {
 /// inversion already pins it).
 fn abstraction_label(context: &mut Context, value: &Term, used: &mut BTreeSet<String>) -> String {
     if let Subterm::Var(var) = &**value
-        && let Some(label) = var.as_free()
+        && let Some(label) = var.as_label()
         && used.insert(label.to_string())
     {
         return label.to_string();

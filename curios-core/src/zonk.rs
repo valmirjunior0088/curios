@@ -325,7 +325,7 @@ fn validate_instance_arities<B: Bound>(
             };
             let invalid = match &**term {
                 Subterm::UniverseInst(instance) => match &*instance.head {
-                    Subterm::Var(var) => var.as_free().and_then(|name| {
+                    Subterm::Var(var) => var.as_label().and_then(|name| {
                         definitions.get(name).and_then(|expected| {
                             mismatch(
                                 "definition instance",

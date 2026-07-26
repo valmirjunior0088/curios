@@ -2273,9 +2273,12 @@ fn glob_does_not_import_subtree_private_bindings() {
     "#);
 
     let term = format!("{term:?}");
-    assert!(term.contains("Free(\"helper\")"), "unexpected term: {term}");
     assert!(
-        !term.contains("Free(\"/Owner/helper\")"),
+        term.contains("Opaque(\"helper\")"),
+        "unexpected term: {term}"
+    );
+    assert!(
+        !term.contains("Opaque(\"/Owner/helper\")"),
         "unexpected term: {term}"
     );
 }

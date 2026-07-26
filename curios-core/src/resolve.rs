@@ -752,7 +752,7 @@ pub(crate) fn register_witness(
         }
         let regular = premise_args.iter().all(|arg| match &**arg {
             Subterm::Var(var) => var
-                .as_free()
+                .as_label()
                 .is_some_and(|free| binder_names.contains(free)),
             _ => false,
         });

@@ -1479,7 +1479,7 @@ impl Convert {
             let names = entries
                 .iter()
                 .map(|term| match &**term {
-                    Subterm::Var(var) => var.as_free(),
+                    Subterm::Var(var) => var.as_label(),
                     _ => None,
                 })
                 .collect::<Vec<_>>();

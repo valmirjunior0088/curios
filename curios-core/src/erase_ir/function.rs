@@ -232,7 +232,7 @@ fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Erro
     let Subterm::Var(var) = &**head else {
         return Ok(false);
     };
-    let Some(name) = var.as_free() else {
+    let Some(name) = var.as_label() else {
         return Ok(false);
     };
     let Some(DefinitionKind::InductiveConstructor { owner, .. }) = context.definition_kind(name)

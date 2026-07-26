@@ -28,12 +28,15 @@ id!(Mint, "local"; archive);
 /// both into one field would make [`Qualifier`] mean "module plus the item's own
 /// name" for one case and "the declaring module alone" for the other — one field
 /// with two readings, which is the defect this vocabulary exists to remove.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-#[cfg_attr(feature = "archive", rkyv(derive(PartialEq, Eq, Hash)))]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
 pub enum Global {
     /// A name a programmer wrote, at its resolved module path.
     Authored(Qualifier),
@@ -49,15 +52,54 @@ pub enum Global {
 /// The distinction is a discriminant rather than a spelling convention. Asking
 /// "is this a local?" is a `matches!` — exact, and impossible to get wrong the
 /// way a marker character in a string could be.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-#[cfg_attr(feature = "archive", rkyv(derive(PartialEq, Eq, Hash)))]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
 pub enum Free {
     Global(Global),
     Local(Mint),
+    /// **Migration scaffold. Deleted before this work lands.**
+    ///
+    /// A binder label the elaborator still mints as text (`Context::fresh`'s
+    /// `x#7`). Held verbatim so the spelling round-trips exactly, which is what
+    /// lets typed and untyped sites coexist while the migration runs: every
+    /// construction of a given name-kind goes through one path, so a migrated
+    /// site and an unmigrated one never build different values for the same
+    /// name. Retired when `Context::fresh` becomes `Context::mint` and the
+    /// display hint moves onto the binder.
+    Opaque(String),
+}
+
+impl Free {
+    /// **Migration scaffold. Deleted before this work lands.**
+    ///
+    /// Wraps a legacy spelling without interpreting it. Decoding is deliberately
+    /// deferred to the commit that retypes a given construction site: a `Free`
+    /// that owns its spelling can hand out a borrowed `&str`, and the kernel's
+    /// hot paths — variable reduction, capture, free-variable collection — read
+    /// names often enough that materializing one per read blows the reduction
+    /// deadline outright.
+    pub(crate) fn from_legacy(label: String) -> Self {
+        Free::Opaque(label)
+    }
+
+    /// **Migration scaffold. Deleted before this work lands.**
+    ///
+    /// The legacy spelling of a name that has not been retyped yet. `None` once
+    /// a site builds a real identity, which is what forces its consumers to be
+    /// migrated in the same commit rather than silently reading a rendering.
+    pub(crate) fn as_legacy(&self) -> Option<&str> {
+        match self {
+            Free::Opaque(label) => Some(label),
+            Free::Global(_) | Free::Local(_) => None,
+        }
+    }
 }
 
 impl fmt::Display for Global {
@@ -77,6 +119,7 @@ impl fmt::Display for Free {
         match self {
             Free::Global(global) => write!(formatter, "{global}"),
             Free::Local(mint) => write!(formatter, "{mint}"),
+            Free::Opaque(label) => formatter.write_str(label),
         }
     }
 }

@@ -7,8 +7,8 @@
 
 use {
     super::{
-        Context, Error, Level, LevelHead, MetaId, Subterm, Term, UniverseError, UniverseMetaId,
-        UniverseParam, UniverseSolver, zonk_term,
+        Context, Error, Free, Level, LevelHead, MetaId, Subterm, Term, UniverseError,
+        UniverseMetaId, UniverseParam, UniverseSolver, zonk_term,
     },
     std::{
         cell::RefCell,
@@ -119,7 +119,7 @@ impl Arity for Many {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 enum VarType {
-    Free(String),
+    Free(Free),
     Bound(usize),
 }
 
@@ -135,20 +135,33 @@ pub struct Var {
 
 impl Var {
     /// A free variable named `label` — the only form constructible outside the crate; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
+    ///
+    /// **Migration scaffold.** The label is decoded once, by
+    /// [`Free::parse_legacy`], so callers that have not yet been retyped keep
+    /// building the same identity a retyped caller would. Retired with the last
+    /// of those callers.
     pub fn free<A>(label: A) -> Self
     where
         A: Into<String>,
     {
         Self {
-            type_: VarType::Free(label.into()),
+            type_: VarType::Free(Free::from_legacy(label.into())),
         }
     }
 
-    pub(crate) fn as_free(&self) -> Option<&str> {
+    /// This occurrence's identity, if it is free.
+    pub(crate) fn as_free(&self) -> Option<&Free> {
         match &self.type_ {
-            VarType::Free(label) => Some(label),
+            VarType::Free(free) => Some(free),
             VarType::Bound(_) => None,
         }
+    }
+
+    /// **Migration scaffold.** A free occurrence's legacy spelling, borrowed,
+    /// for the consumers that still compare names as text. Deleted alongside
+    /// [`Free::as_legacy`].
+    pub(crate) fn as_label(&self) -> Option<&str> {
+        self.as_free().and_then(Free::as_legacy)
     }
 
     pub(crate) fn bound(index: usize) -> Self {
@@ -164,8 +177,9 @@ impl Var {
         }
     }
 
+    /// **Migration scaffold.** See [`Var::as_label`].
     pub(crate) fn unwrap(&self) -> &str {
-        self.as_free().unwrap()
+        self.as_label().unwrap()
     }
 }
 
@@ -205,7 +219,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// The closing half of the locally-nameless discipline: turn free occurrences of `labels` into bound indices (position in `labels`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     fn capture(&self, labels: &[&str]) -> Self {
         self.traverse(&mut Visit::new(|depth, var| {
-            var.as_free()
+            var.as_label()
                 .and_then(|label| {
                     labels
                         .iter()
@@ -238,7 +252,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     fn free_vars(&self) -> BTreeSet<String> {
         let mut vars = BTreeSet::new();
         self.traverse(&mut Visit::new(|_, var| {
-            if let Some(label) = var.as_free() {
+            if let Some(label) = var.as_label() {
                 vars.insert(label.to_string());
             }
             None

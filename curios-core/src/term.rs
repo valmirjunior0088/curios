@@ -359,7 +359,7 @@ impl Term {
             }
             Subterm::Var(var)
                 if self_reference == SelfReference::Free
-                    && var.as_free().is_some_and(|label| names.contains(label)) =>
+                    && var.as_label().is_some_and(|label| names.contains(label)) =>
             {
                 return Some(Term::universe_inst(self.clone(), levels.to_vec()));
             }
@@ -390,7 +390,7 @@ impl Term {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_label(),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_label(),
-            Subterm::Var(var) => var.as_free(),
+            Subterm::Var(var) => var.as_label(),
             // A decidable comparison's normal form is a primitive node, not an
             // application, so it carries no named head. Scrutinee refinement
             // keys on this label and the reducer's probe gates on it, so an
@@ -438,7 +438,7 @@ impl Term {
     /// representation provenance; computed bodies are not classified as aliases.
     pub fn transparent_alias_target(&self) -> Option<String> {
         match &self.inner.subterm {
-            Subterm::Var(var) => var.as_free().map(str::to_string),
+            Subterm::Var(var) => var.as_label().map(str::to_string),
             Subterm::Func(Func { telescope, .. }) => {
                 let fresh = (0..telescope.len())
                     .map(|index| format!("#alias{index}"))
@@ -455,9 +455,9 @@ impl Term {
                 };
                 (params.len() == fresh.len()
                     && params.iter().zip(&fresh).all(|(param, label)| {
-                        matches!(&**param, Subterm::Var(var) if var.as_free() == Some(label))
+                        matches!(&**param, Subterm::Var(var) if var.as_label() == Some(label))
                     }))
-                .then(|| target.as_free().map(str::to_string))
+                .then(|| target.as_label().map(str::to_string))
                 .flatten()
             }
             _ => None,
@@ -486,7 +486,7 @@ impl Term {
         fn application_head(term: &Term) -> Option<&str> {
             match &**term {
                 Subterm::Apply(Apply { head, .. }) => application_head(head),
-                Subterm::Var(var) => var.as_free(),
+                Subterm::Var(var) => var.as_label(),
                 _ => None,
             }
         }
@@ -3077,7 +3077,7 @@ impl Subterm {
     /// do not set this bit.
     pub(crate) fn has_local_free(&self) -> bool {
         match self {
-            Subterm::Var(var) => var.as_free().is_some_and(|label| label.contains('#')),
+            Subterm::Var(var) => var.as_label().is_some_and(|label| label.contains('#')),
             _ => self.any_child_term(&mut |t| t.has_local_free()),
         }
     }
@@ -3136,7 +3136,7 @@ impl Subterm {
     /// free name occurs free in exactly the nodes whose subtrees contain it.
     fn free_vars_from_children(&self) -> BTreeSet<String> {
         if let Subterm::Var(var) = self
-            && let Some(label) = var.as_free()
+            && let Some(label) = var.as_label()
         {
             return BTreeSet::from([label.to_string()]);
         }
