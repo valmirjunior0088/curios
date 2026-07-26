@@ -220,7 +220,7 @@ pub enum WitnessEntry {
 /// are anonymous — they are only ever reached through resolution (or an
 /// explicit `use <term>` carrying an ordinary value), so there is no name and
 /// no `pub`. The declaration desugars to a compiler-named top-level definition
-/// `let witness#N(tele) -> C(args) = C(args) { … }` (§4.3) registered in the
+/// `let witness@N(tele) -> C(args) = C(args) { … }` (§4.3) registered in the
 /// program-wide witness table; diagnostics identify it by concept, key, and
 /// declaring module. Surface syntax writes a nonempty telescope as
 /// `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use`

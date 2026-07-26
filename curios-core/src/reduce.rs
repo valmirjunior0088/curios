@@ -607,7 +607,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
 ///
 /// `reduce` alone stops at the head: an inductive type's indices are not
 /// sub-reduced, so a concept-method projection standing in an index position —
-/// `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness#0).0(0, 1))` once
+/// `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness@0).0(0, 1))` once
 /// resolution has picked the primitive witness — survives verbatim into a
 /// type-mismatch message. Normalizing the index collapses it to the value it
 /// denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying

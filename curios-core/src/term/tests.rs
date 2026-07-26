@@ -151,6 +151,13 @@ fn has_local_free_flags_minted_names_not_binder_hints() {
     assert!(Term::free_var("x#3").has_local_free());
     assert!(!Term::free_var("/std/Nat").has_local_free());
 
+    // A compiler-named *global* carries a disambiguating ordinal too, but under
+    // its own `@` sigil (`into_core`'s anonymous witnesses) — it is not context
+    // dependent and must not set the bit. `#` and `@` name disjoint kinds; when
+    // witnesses spelled themselves `witness#N` this misfired on every term
+    // mentioning one, silently disabling three elaboration caches.
+    assert!(!Term::free_var("/std/Nat/witness@0").has_local_free());
+
     // The bit is structural: a minted name anywhere in the tree sets it.
     let inner = Term::apply(Term::free_var("/syn/Str/step"), [Term::free_var("c#1")]);
     assert!(inner.has_local_free());

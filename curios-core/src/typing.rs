@@ -82,7 +82,7 @@ pub(crate) fn check_is_sort(
 /// that have landed, so the message names the actual disagreement rather than
 /// the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize)
 /// the result so a stuck concept-method projection standing in an index
-/// position collapses to the value it denotes (`Vec(Nat, (sys/witness#0).0(0, 1))`
+/// position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))`
 /// → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery.
 /// An unsolved metavariable makes `zonk` fail, in which case the raw spelling
 /// is kept; a normalization that preempts falls back to the merely-zonked form.

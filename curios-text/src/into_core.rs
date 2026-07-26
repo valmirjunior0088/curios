@@ -480,10 +480,18 @@ fn process_items(
         }
     }
 
-    // Anonymous witnesses get deterministic compiler names — `witness#N` by
+    // Anonymous witnesses get deterministic compiler names — `witness@N` by
     // per-module declaration ordinal, under the module prefix. Determinism
-    // matters (the cached-prelude replay compares by name); the `#` sigil is
-    // illegal in source identifiers, so no user name can collide.
+    // matters (the cached-prelude replay compares by name); the `@` sigil is
+    // illegal in source identifiers, so no user name can collide. (It is the
+    // implicit-plicity mark in surface syntax, but that is a token in the
+    // grammar, never a character inside an identifier — the two never meet.)
+    //
+    // The sigil is `@`, not `#`, deliberately: `#` is reserved for the
+    // elaborator's minted *locals* (`Context::fresh`), and `Term::has_local_free`
+    // reads a label's `#` as proof that the term is context-dependent. A
+    // `#`-bearing global would make that bit misfire, needlessly invalidating
+    // three elaboration caches. Keep the two namespaces disjoint.
     let mut witness_ordinal = 0usize;
 
     for top_item in top_items {
@@ -1154,10 +1162,10 @@ fn process_items(
                 }
             }
             // A witness desugars to an ordinary compiler-named definition
-            //   let witness#N(tele) -> C(args) = C(args) { f = e, … };
+            //   let witness@N(tele) -> C(args) = C(args) { f = e, … };
             // and marks it for registration in the program-wide witness table.
             TopItem::Witness(witness) => {
-                let label = format!("witness#{witness_ordinal}");
+                let label = format!("witness@{witness_ordinal}");
                 witness_ordinal += 1;
 
                 let concept_app = witness_concept_application(&witness.concept, &witness.args);

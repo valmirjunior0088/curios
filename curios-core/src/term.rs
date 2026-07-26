@@ -3061,6 +3061,12 @@ impl Subterm {
     /// Whether any free variable in this subterm carries an elaborator-minted
     /// (`#`-bearing) label — the uncached spelling of
     /// [`Term::has_local_free`], which supplies the per-node memoization.
+    ///
+    /// `#` is minted by `Context::fresh` alone and cannot occur in a written
+    /// identifier, so it marks exactly the context-dependent locals. Compiler
+    /// names for *globals* must therefore avoid it: anonymous witnesses are
+    /// spelled `witness@N` (`curios-text/src/into_core.rs`) precisely so they
+    /// do not set this bit.
     pub(crate) fn has_local_free(&self) -> bool {
         match self {
             Subterm::Var(var) => var.as_free().is_some_and(|label| label.contains('#')),
