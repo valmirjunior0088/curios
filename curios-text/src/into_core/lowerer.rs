@@ -163,7 +163,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // exactly what a `Bytes` literal does.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::Term::struct_(
-            self.context.syntax().string().string(),
+            self.context.syntax().string().string().symbol(),
             Vec::<curios_core::Term>::new(),
             [
                 curios_core::Term::prim(curios_core::Prim::Bin(
@@ -187,7 +187,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             self.context.syntax().character().scalar_above()
         };
         let scalar = curios_core::Term::apply_marked(
-            curios_core::Term::var(curios_core::Var::free(syn_name(constructor))),
+            curios_core::Term::var(curios_core::Var::free(Free::global(
+                constructor.qualifier(),
+            ))),
             [
                 (Plicity::Implicit, code.clone()),
                 (
@@ -198,7 +200,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         );
 
         curios_core::Term::struct_(
-            self.context.syntax().character().character(),
+            self.context.syntax().character().character().symbol(),
             Vec::<curios_core::Term>::new(),
             [code, scalar],
         )
@@ -208,11 +210,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // parser would resolve it (privacy is a surface-resolution concern; these are
     // already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
     pub(super) fn syn_call(
-        name: &str,
+        name: crate::SyntaxName,
         args: impl IntoIterator<Item = curios_core::Term>,
     ) -> curios_core::Term {
         curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(syn_name(name))),
+            curios_core::Term::var(curios_core::Var::free(Free::global(name.qualifier()))),
             args.into_iter().collect::<Vec<_>>(),
         )
     }
@@ -1400,14 +1402,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 /// but is ignored by [`Lowerer::scoped`].
 /// Whether a written binder name can be referred to. `_` and the empty label
 /// occupy a binder position but name nothing.
-/// A `/syn` or `/sys` name the lowerer emits directly: already resolved, so it
-/// is a global at exactly the path it spells.
-fn syn_name(path: &str) -> Free {
-    Free::global(curios_base::Qualifier::from(
-        path.trim_start_matches('/').split('/'),
-    ))
-}
-
 fn bindable(name: &str) -> bool {
     !(name.is_empty() || name == "_")
 }

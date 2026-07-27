@@ -254,15 +254,16 @@ mod archived_mint {
 /// A binder identity interned by written name: the same name always yields the
 /// same binder, and two different names never collide.
 ///
-/// **Fixtures only.** Hand-built core terms — the unit-test suites here and in
-/// `curios-text` — have no minting counter to draw from, and their whole
-/// vocabulary is the spelling. Nothing in the compiler may call this: a
-/// production binder comes from `Context::fresh` or `into_core`'s counter, and
-/// deriving one from a spelling is exactly the coupling this vocabulary exists
-/// to remove. Indices are handed out from the top of the space downwards, so a
+/// **Test fixtures only, and it does not exist outside them.** Hand-built core
+/// terms have no minting counter to draw from, and their whole vocabulary is
+/// the spelling. Deriving an identity from a spelling is exactly the coupling
+/// this vocabulary exists to remove, so this is `cfg(test)`-gated rather than
+/// merely discouraged: no shipped build contains it, and no other crate can
+/// reach it. A production binder comes from `Context::fresh` or `into_core`'s
+/// counter. Indices are handed out from the top of the space downwards, so a
 /// fixture binder cannot alias a minted one.
-#[doc(hidden)]
-pub fn fixture_binder(name: &str) -> Free {
+#[cfg(test)]
+pub(crate) fn fixture_binder(name: &str) -> Free {
     use std::{
         collections::HashMap,
         sync::{LazyLock, Mutex},

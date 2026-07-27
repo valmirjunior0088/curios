@@ -6,21 +6,28 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+const fn syn_name(segments: &'static [&'static str]) -> crate::SyntaxName {
+    crate::SyntaxName::new(segments)
+}
+
 const SYNTAX: crate::SyntaxRegistry = crate::SyntaxRegistry::new(
-    crate::MonadSyntax::new("/syn/Monad/bind"),
+    crate::MonadSyntax::new(syn_name(&["syn", "Monad", "bind"])),
     crate::CharacterSyntax::new(
-        "/syn/Char/Char",
-        "/syn/Char/Scalar/below",
-        "/syn/Char/Scalar/above",
+        syn_name(&["syn", "Char", "Char"]),
+        syn_name(&["syn", "Char", "Scalar", "below"]),
+        syn_name(&["syn", "Char", "Scalar", "above"]),
     ),
     crate::StringSyntax::new(
-        "/syn/Str/Str",
-        "/syn/Str/Scan/lead",
-        "/syn/Str/Utf8/stop",
-        "/syn/Str/Utf8/more",
-        "/syn/Str/step",
+        syn_name(&["syn", "Str", "Str"]),
+        syn_name(&["syn", "Str", "Scan", "lead"]),
+        syn_name(&["syn", "Str", "Utf8", "stop"]),
+        syn_name(&["syn", "Str", "Utf8", "more"]),
+        syn_name(&["syn", "Str", "step"]),
     ),
-    crate::ProofSyntax::new("/syn/True/True/qed", "/syn/False/absurd"),
+    crate::ProofSyntax::new(
+        syn_name(&["syn", "True", "True", "qed"]),
+        syn_name(&["syn", "False", "absurd"]),
+    ),
 );
 
 fn syntax() -> &'static crate::SyntaxRegistry {

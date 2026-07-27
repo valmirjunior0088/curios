@@ -221,15 +221,17 @@ fn validate_syntax_targets(module: &curios_core::Module) {
         .items
         .iter()
         .flat_map(curios_core::Item::declared_names)
-        .map(curios_core::Global::symbol)
+        .cloned()
         .collect::<BTreeSet<_>>();
     for target in SYNTAX.targets() {
+        let symbol = target.symbol();
         assert!(
-            names.contains(target),
-            "registered syntax target '{target}' is absent from the lowered prelude; nearby names: {:?}",
+            names.contains(&curios_core::Global::Authored(target.qualifier())),
+            "registered syntax target '{symbol}' is absent from the lowered prelude; nearby names: {:?}",
             names
                 .iter()
-                .filter(|name| name.contains(target.rsplit('/').next().unwrap_or(target)))
+                .map(curios_core::Global::symbol)
+                .filter(|name| name.contains(target.last()))
                 .collect::<Vec<_>>()
         );
     }

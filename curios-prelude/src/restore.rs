@@ -254,10 +254,14 @@ mod tests {
                 .items
                 .iter()
                 .flat_map(curios_core::Item::declared_names)
-                .map(curios_core::Global::symbol)
+                .cloned()
                 .collect::<BTreeSet<_>>();
             for target in SYNTAX.targets() {
-                assert!(names.contains(target), "missing syntax target {target}");
+                assert!(
+                    names.contains(&curios_core::Global::Authored(target.qualifier())),
+                    "missing syntax target {}",
+                    target.symbol()
+                );
             }
         });
     }
