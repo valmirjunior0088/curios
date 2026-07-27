@@ -139,6 +139,13 @@ impl Qualifier {
         }
     }
 
+    /// Whether this *is* the module root — no segments. A predicate rather than
+    /// an `is_empty` on the segment list, so a caller asking a structural
+    /// question never has to reach for the text to ask it.
+    pub fn is_root(&self) -> bool {
+        self.segments.is_empty()
+    }
+
     /// Whether this is exactly one segment — a root-level name, whose `head` and `last` coincide.
     pub fn is_single(&self) -> bool {
         self.segments_slice().len() == 1

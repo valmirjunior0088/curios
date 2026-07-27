@@ -154,7 +154,7 @@ impl Audiences {
     pub(super) fn module(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
         match self.modules.get(qualifier) {
             Some(audience) => audience.clone(),
-            None if qualifier.segments().is_empty() => vec![Qualifier::empty()],
+            None if qualifier.is_root() => vec![Qualifier::empty()],
             None => self.module(&qualifier.without_last()),
         }
     }

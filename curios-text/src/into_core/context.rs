@@ -363,7 +363,7 @@ impl<'a> Context<'a> {
             origin: span.cloned().map(|span| UniverseConstraintOrigin {
                 span: Some(span),
                 kind: UniverseConstraintKind::WrittenType,
-                declaration: (!self.prefix.segments().is_empty()).then(|| self.prefix.join()),
+                declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
                 binder: None,
             }),
         });

@@ -1046,7 +1046,7 @@ impl From<UniverseError> for Error {
 /// How a diagnostic names a declaring module. The root qualifier is the entry
 /// module — a legitimate value, not a missing one.
 fn declaring_module(module: &Qualifier) -> String {
-    match module.segments().is_empty() {
+    match module.is_root() {
         true => "the entry module".to_string(),
         false => format!("module '{}'", module.join()),
     }

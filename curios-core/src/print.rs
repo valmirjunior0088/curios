@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Infix,
-        Let, Level, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType,
+        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Free, Func, FuncType, Global, InductType,
+        Infix, Let, Level, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType,
         Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
-        Flt, Grain, Plicity,
+        Flt, Grain, Plicity, Qualifier,
         printer::{Printer, flat, indent, pure, sep_flat},
     },
     std::{
@@ -59,7 +59,7 @@ thread_local! {
     static PRETTY: RefCell<Option<Rc<HashMap<Free, String>>>> = const { RefCell::new(None) };
     /// Global qualified names → their shortest in-scope spelling (axis (b));
     /// installed by both error rendering and `Module` display.
-    static SHORTEN: RefCell<Option<Rc<HashMap<String, String>>>> = const { RefCell::new(None) };
+    static SHORTEN: RefCell<Option<Rc<HashMap<Global, String>>>> = const { RefCell::new(None) };
 }
 
 /// Install a pretty-name rename map for the duration of `f`, restoring the
@@ -73,7 +73,7 @@ pub(crate) fn with_pretty_names<R>(rename: Rc<HashMap<Free, String>>, f: impl Fn
 
 /// Install a global-shortening map for the duration of `f`.
 pub(crate) fn with_short_names<R>(
-    shorten: Rc<HashMap<String, String>>,
+    shorten: Rc<HashMap<Global, String>>,
     f: impl FnOnce() -> R,
 ) -> R {
     let prev = SHORTEN.with(|s| s.borrow_mut().replace(shorten));
@@ -82,12 +82,14 @@ pub(crate) fn with_short_names<R>(
     result
 }
 
-/// The display spelling of a global's still-flattened name — the registry keys
-/// and nominal heads, which shorten (axis (b)) but never rename.
-fn display_symbol(symbol: &str) -> String {
+/// The display spelling of a global — shortened against the module's other
+/// symbols (axis (b)) when that is unambiguous, and rendered in full otherwise.
+/// Globals never take axis (a)'s rename: their spelling is a path a programmer
+/// wrote, not a minted hint.
+fn display_symbol(name: &Global) -> String {
     SHORTEN
-        .with(|s| s.borrow().as_ref().and_then(|m| m.get(symbol).cloned()))
-        .unwrap_or_else(|| symbol.to_string())
+        .with(|s| s.borrow().as_ref().and_then(|m| m.get(name).cloned()))
+        .unwrap_or_else(|| name.to_string())
 }
 
 /// The display spelling of a name. A global with a shorter in-scope spelling
@@ -95,7 +97,7 @@ fn display_symbol(symbol: &str) -> String {
 /// falling back to its minting hint. A name in neither map renders verbatim.
 fn display_label(name: &Free) -> String {
     if let Some(global) = name.as_global() {
-        return display_symbol(&global.symbol());
+        return display_symbol(global);
     }
     PRETTY
         .with(|p| p.borrow().as_ref().and_then(|map| map.get(name).cloned()))
@@ -306,14 +308,19 @@ pub(crate) fn build_rename(names: &BTreeSet<Free>) -> HashMap<Free, String> {
 /// shares — the name it has in scope, since Curios has no `use … as` aliasing,
 /// so an in-scope name is always a suffix. Only entries that actually shorten
 /// are recorded; an ambiguous (or single-segment) name keeps its full path.
-pub(crate) fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
+pub(crate) fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
     // One global can be listed twice (an inductive is both an `induct_decls` registry
     // key and an `items` type-constructor definition); count distinct names, or
     // such a name would look ambiguous with itself and never shorten.
-    let symbols = symbols.iter().map(String::as_str).collect::<BTreeSet<_>>();
+    let symbols = symbols.iter().collect::<BTreeSet<_>>();
 
-    let suffixes = |sym: &str| -> Vec<String> {
-        let segments = sym.split('/').collect::<Vec<_>>();
+    // Suffixes are taken over the *segments* a name is made of, never over its
+    // rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the
+    // structure says so.
+    let suffixes = |name: &Global| -> Vec<String> {
+        let Some(segments) = name.qualifier().map(Qualifier::segments) else {
+            return Vec::new();
+        };
         (1..=segments.len())
             .map(|k| segments[segments.len() - k..].join("/"))
             .collect()
@@ -321,20 +328,21 @@ pub(crate) fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
 
     // How many distinct globals carry each segment-suffix.
     let mut count: HashMap<String, usize> = HashMap::new();
-    for sym in &symbols {
-        for suffix in suffixes(sym) {
+    for name in &symbols {
+        for suffix in suffixes(name) {
             *count.entry(suffix).or_insert(0) += 1;
         }
     }
 
     let mut map = HashMap::new();
-    for sym in &symbols {
-        if let Some(shortest) = suffixes(sym)
+    for name in &symbols {
+        let rendered = name.to_string();
+        if let Some(shortest) = suffixes(name)
             .into_iter()
             .find(|suffix| count.get(suffix) == Some(&1))
-            && shortest.len() < sym.len()
+            && shortest.len() < rendered.len()
         {
-            map.insert(sym.to_string(), shortest);
+            map.insert((*name).clone(), shortest);
         }
     }
     map
@@ -936,11 +944,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             params,
             indices,
         }) => {
-            let name = format!(
-                "{}{}",
-                display_symbol(&name.symbol()),
-                universe_suffix(&universes)
-            );
+            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
             if params.is_empty() && indices.is_empty() {
                 pure(name)
             } else {
@@ -968,11 +972,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             payload,
             ..
         }) => {
-            let name = format!(
-                "{}{}",
-                display_symbol(&name.symbol()),
-                universe_suffix(&universes)
-            );
+            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
             if payload.is_empty() {
                 pure(format!("{name}/{tag}"))
             } else {
@@ -996,11 +996,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             universes,
             params,
         }) => {
-            let name = format!(
-                "{}{}",
-                display_symbol(&name.symbol()),
-                universe_suffix(&universes)
-            );
+            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
             if params.is_empty() {
                 pure(name)
             } else {
@@ -1028,7 +1024,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }) => flat([
             pure(format!(
                 "{}{} {{ ",
-                display_symbol(&name.symbol()),
+                display_symbol(&name),
                 universe_suffix(&universes)
             )),
             sep_flat(

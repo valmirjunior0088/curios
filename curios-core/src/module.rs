@@ -287,20 +287,20 @@ impl Module {
 
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each
     /// inductive type, each struct type. The universe a global is shortened *against*.
-    pub(crate) fn module_symbols(&self) -> Vec<String> {
+    pub(crate) fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
         for item in &self.items {
             match item {
-                Item::Let(def) => symbols.push(def.name.symbol()),
+                Item::Let(def) => symbols.push(def.name.clone()),
                 Item::Rec(rec) => symbols.extend(
                     rec.definitions
                         .iter()
-                        .map(|definition| definition.name.symbol()),
+                        .map(|definition| definition.name.clone()),
                 ),
             }
         }
-        symbols.extend(self.induct_decls.keys().map(Global::symbol));
-        symbols.extend(self.struct_decls.keys().map(Global::symbol));
+        symbols.extend(self.induct_decls.keys().cloned());
+        symbols.extend(self.struct_decls.keys().cloned());
         symbols
     }
 }

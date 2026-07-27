@@ -104,10 +104,7 @@ impl PreludeModules {
     }
 
     pub fn insert_module(&mut self, path: Qualifier, module: Module) {
-        assert!(
-            !path.segments().is_empty(),
-            "a prelude module path cannot be empty"
-        );
+        assert!(!path.is_root(), "a prelude module path cannot be the root");
         assert!(
             self.modules.insert(path.clone(), module).is_none(),
             "prelude module '{}' is already registered",

@@ -258,18 +258,34 @@ Phase C retypes the sites. Phase D is what makes the property hold for the next 
 - `Var::as_free()` returns `Option<&Free>`, and **`Free` exposes no spelling accessor at all.** Rendering goes through the printer, which wants structure anyway: `build_shorten` (`print.rs:322`) takes `Qualifier::segments()` and stops splitting.
 - **`Qualifier`'s textual accessors move behind the rendering boundary.** The bullet above closes `Var`; without this one the level beneath it stays open, and the objective is met only in letter. `Global::Authored` has to expose its `Qualifier` — the diagnostics and the visibility checks both need it — and `Qualifier` hands out `last`, `head`, `segments`, and `iter`, each yielding `&str`. So a site that matches out the qualifier and then prefix-tests `q.last()` compiles after Phase D as currently written, adds no method to any name type, and would pass review as ordinary code. Keep the *structural* half public — `with`, `without_last`, `without_first`, and `is_within`, which is the module system's visibility primitive — and make the *textual* half reachable only where text is the deliverable. `build_shorten` is exactly that boundary, which is why the bullet above routes through it.
 - Two things are deliberately out of this step's scope, and saying so keeps it from being over-applied. `curios-text`'s surface `Name` holds a `Qualifier` and walks its segments to resolve a written `A/B/c` (`into_core/context.rs:474-499`, `interface.rs:776`); that is the front end parsing user input, not the compiler re-deriving a fact it discarded. And tuple-type field labels stay `String`, because they are authored data that `.label` resolution projects by — `TupleType` reasserts them in its own node identity (`scope.rs:465`). A survey of the remaining Core-side text callers found only the witness diagnostics' module renderer and one `segments().is_empty()` in `into_core/interface.rs:157` that wants to be a `Qualifier::is_root()` predicate.
-- Audit `Ord` on the remaining name types. `Atom` is handled in Phase B. The name-keyed `BTreeMap`s in `Context` — `induct_decls`, `struct_decls`, `concepts`, `witness_declarations` — are queried by key rather than iterated for output, with one exception: `zonk`'s validation loops (`zonk.rs:450,485,571,601`) iterate them, so alphabetical order decides which error is reported first. Decide whether that becomes declaration order or stays arbitrary-but-deterministic.
-- Audit `as_str` callers on `name!` types so that none performs substructure work. Equality against a spelling is uniqueness and is fine; splitting, prefix-testing, and ordering are not.
+- **`Ord` audit — done, nothing to change.** `name!` derives no ordering at all (Phase B). `id!` derives it over the raw index, which is what a dense arena id is for. `Free`/`Global` derive it structurally because `free_vars` is a `BTreeSet` and the registries are `BTreeMap`s; `Mint` orders by index alone, by hand, with `ArchivedMint` matching. No name type orders by spelling.
+
+  The iteration-order question is **settled as arbitrary-but-deterministic**: the registries are `BTreeMap<Global, _>`, so `zonk`'s validation loops now iterate segment-wise rather than over joined text. Both are arbitrary; both are stable across runs, which is what a reproducible diagnostic needs. Declaration order would be friendlier but needs an index carried on every entry, which is a change to the data model for a cosmetic gain — worth revisiting only if error ordering ever becomes load-bearing.
+- **`as_str` audit — done, nothing to change.** Every `as_str` on a `name!` type feeds the WebAssembly text writer and printer, where text *is* the deliverable. The remaining hits are equality against a keyword table and `Atom::from(..)` construction, both on surface `String`s rather than name types. Equality against a spelling is uniqueness and is fine; no site splits, prefix-tests, or orders by one.
 
 Verify by deletion: remove the accessors, then confirm nothing needed them. A site that resists is a fact that still has no home, and it belongs in the table above.
 
+Applied, with one hit: `Mint::index` had no caller and is gone — nothing ever needed to *read* a binder's identity, only to compare it. `Mint::hint` and `Free::as_local` are `pub(crate)`, so the variant stays public (downstream code holds and compares binders) while its interior does not. `Qualifier::is_root` replaced four `segments().is_empty()` tests, so a structural question no longer reaches for the segment list to ask itself.
+
 The phase is done when the objective's own test passes against the *reachable* API rather than against `Var` alone: starting from a `Free`, no path to a `&str` exists except through the printer. Until the second bullet lands, that path is two ordinary method calls long, which is why retyping the sites is necessary and not sufficient.
 
-Phase C left two accessors on that path, and D's first bullet is about both, not just `Var`:
+### Where the door stands
 
-- `Free::hint` yields `Option<&str>`. It is display metadata by construction, but it is a `&str` reachable from a `Free`, so the audit must decide whether it belongs behind the printer too.
-- `Global::symbol` yields a `String`. Its registry-bridge role is gone; what remains is rendering, and `build_shorten` is where most of it lands. Routing `module_symbols()` and `build_shorten` through `Qualifier::segments()` — this phase's own first bullet — is what finally confines it.
-- Nothing else. There is no spelling-to-identity path left in the crate, test-only or otherwise.
+`build_shorten` and `module_symbols` now carry `Global`s and compute suffixes over `Qualifier::segments()`, so the printer's shortening table is keyed by identity and the last `split('/')` in `curios-core` is gone. `Free::hint` and `Mint::hint` are `pub(crate)`; `Mint::index` is deleted.
+
+What remains reachable from a `Free` outside `curios-core` is `Global::symbol` and `Global::qualifier`. Every consumer of both was enumerated:
+
+| consumer | what it does |
+| --- | --- |
+| `build.rs`, `restore.rs` | build a `Global` to compare, and render one into an assertion message |
+| `into_core.rs`'s visibility audit | `audiences.binding(qualifier)` — structural |
+| `lowerer.rs` | build a `Global` from a registry entry — structural |
+| `SyntaxName::symbol` | the declared rendering boundary |
+| `print.rs` | `Qualifier::segments()` for suffix computation — the printer |
+
+**No consumer derives behavior from a spelling.** That is the objective, verified by enumeration rather than assertion.
+
+The second bullet's remedy — moving `Qualifier`'s textual half behind a wrapper so a future `q.last()` prefix-test cannot pass review as ordinary code — was **assessed and not applied.** The hazard is real but its present surface is two sites, both diagnostics in `curios-core/src/error.rs`. The ~40 other textual callers are `curios-text`'s surface layer, which this phase excludes by name, and a `curios-base` wrapper would churn all of them to guard an area that has two. Revisit if a Core-side textual caller ever appears; the enumeration above is the tripwire.
 
 ## Evidence
 
