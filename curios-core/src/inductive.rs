@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Telescope, Term, UniverseContext},
+    super::{Atom, Polarity, Telescope, Term, UniverseContext},
     curios_base::{Plicity, Qualifier, RootId},
 };
 
@@ -80,9 +80,27 @@ pub struct InductDecl {
     /// Whether construction and elimination are available outside `module`.
     /// This metadata is elaboration-only and does not affect erased layouts.
     pub rep_public: bool,
+    /// How this inductive uses each of its `params`, one entry per parameter
+    /// in declaration order — the fact positivity composes through when a
+    /// recursive occurrence travels via this type. Computed by
+    /// [`check_positivity`](crate::check_positivity) after elaboration and
+    /// carried into the prelude archive so the standard library's are derived
+    /// once per compiler build. Empty until then; read through
+    /// [`Self::polarity`], never indexed directly.
+    pub polarities: Vec<Polarity>,
 }
 
 impl InductDecl {
+    /// This declaration's polarity in its `i`th parameter.
+    ///
+    /// [`Polarity::Mixed`] when the declaration has not been analyzed — the
+    /// sound default. `Unused` would be the *unsound* one: it claims a
+    /// parameter is harmless without evidence, which is exactly what lets a
+    /// negative occurrence through.
+    pub(crate) fn polarity(&self, i: usize) -> Polarity {
+        self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
+    }
+
     /// This declaration with every term hash-consed against `sharing`. See
     /// [`Module::shared`](crate::Module::shared).
     pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
@@ -107,6 +125,7 @@ impl InductDecl {
             module: self.module.clone(),
             root: self.root,
             rep_public: self.rep_public,
+            polarities: self.polarities.clone(),
         }
     }
 

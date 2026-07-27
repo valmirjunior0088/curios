@@ -2997,7 +2997,13 @@ impl Subterm {
     /// subterms are never re-walked. Scope bodies are visited closed: binder
     /// occurrences are bound indices there, so binder labels stay invisible to
     /// any free-variable predicate.
-    fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+    ///
+    /// Also the descent `positivity` uses for the forms it cannot see through,
+    /// with a `pred` that always returns `false` so the walk is exhaustive
+    /// rather than short-circuiting. That reuse is deliberate: it is what keeps
+    /// the positivity check from silently missing a recursive occurrence when a
+    /// new term former is added.
+    pub(crate) fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,

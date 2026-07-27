@@ -17,6 +17,7 @@ mod network;
 mod numeric;
 mod operators;
 mod plicity;
+mod positivity;
 mod runtime;
 mod scheduler;
 mod strings;

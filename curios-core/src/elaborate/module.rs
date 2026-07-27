@@ -4,8 +4,9 @@ use {
         Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl, InductParam, Item,
         Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
-        check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
-        retry_deferred_witnesses, sort_term, zonk, zonk_module, zonk_solved_term_metas,
+        check_concept_registry, check_positivity, finish_deferred_witnesses, is_prop, reduce_with,
+        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
+        zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     std::{cell::RefCell, collections::BTreeSet, rc::Rc},
@@ -181,6 +182,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
             module: induct_decl.module,
             root: induct_decl.root,
             rep_public: induct_decl.rep_public,
+            polarities: induct_decl.polarities,
         },
     );
 
@@ -239,6 +241,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             module: induct_decl.module,
             root: induct_decl.root,
             rep_public: induct_decl.rep_public,
+            polarities: induct_decl.polarities,
         },
     );
 
@@ -321,6 +324,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             module: struct_decl.module,
             root: struct_decl.root,
             rep_public: struct_decl.rep_public,
+            polarities: struct_decl.polarities,
         },
     );
 
@@ -491,6 +495,7 @@ fn finalize_definition(
                 module: struct_decl.module,
                 root: struct_decl.root,
                 rep_public: struct_decl.rep_public,
+                polarities: struct_decl.polarities,
             },
         );
     }
@@ -571,6 +576,7 @@ fn finalize_definition(
                 module: struct_decl.module,
                 root: struct_decl.root,
                 rep_public: struct_decl.rep_public,
+                polarities: struct_decl.polarities,
             },
         );
     }
@@ -770,6 +776,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 module: induct_decl.module,
                 root: induct_decl.root,
                 rep_public: induct_decl.rep_public,
+                polarities: induct_decl.polarities,
             },
         );
     }
@@ -874,6 +881,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 module: induct_decl.module,
                 root: induct_decl.root,
                 rep_public: induct_decl.rep_public,
+                polarities: induct_decl.polarities,
             },
         );
     }
@@ -1080,8 +1088,13 @@ pub fn elaborate_and_zonk_module(
         module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
     }
     let body_type = entry_terms.next().expect("entry body type was finalized");
-    let module = zonk_module(context, &module)?;
+    let mut module = zonk_module(context, &module)?;
     let body_type = zonk(context, &body_type)?;
+    // Positivity gates the zonked registries, beside `validate_universes`
+    // (which `zonk_module` runs) rather than inside elaboration: the
+    // telescopes it reads are final here, and meta-free, so an unsolved hole
+    // reports as an unsolved hole instead of as an unseeable occurrence.
+    check_positivity(context, &mut module)?;
     Ok((module, body_type))
 }
 
@@ -1299,8 +1312,14 @@ pub fn elaborate_and_zonk_with_prelude(
         user_module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
     }
     let body_type = entry_terms.next().expect("entry body type was finalized");
-    let user_module = zonk_module(context, &user_module)?;
+    let mut user_module = zonk_module(context, &user_module)?;
     let body_type = zonk(context, &body_type)?;
+    // Before the splice, so the module handed to positivity is exactly the
+    // user suffix. The replayed prelude is not re-analyzed: its declarations
+    // carry the vectors the archive was built with, and since prelude items
+    // cannot mention user code they are sinks of the occurrence relation, so
+    // no cycle crosses the boundary.
+    check_positivity(context, &mut user_module)?;
 
     let mut items = prelude.items.clone();
     items.extend(user_module.items);

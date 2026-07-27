@@ -434,6 +434,7 @@ fn opt_induct() -> InductDecl {
         module: Qualifier::empty(),
         root: RootId::Entry,
         rep_public: true,
+        polarities: Vec::new(),
     }
 }
 

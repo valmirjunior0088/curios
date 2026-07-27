@@ -34,6 +34,7 @@ fn instantiate_struct_decl(
             module: struct_decl.module,
             root: struct_decl.root,
             rep_public: struct_decl.rep_public,
+            polarities: struct_decl.polarities,
         },
         universes,
     ))

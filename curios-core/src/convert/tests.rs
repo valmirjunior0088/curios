@@ -966,6 +966,7 @@ fn convert_struct_unit_field_is_irrelevant() {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();
@@ -1022,6 +1023,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();
@@ -1717,6 +1719,7 @@ fn register_lst(context: &mut Context) {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();
@@ -1744,6 +1747,7 @@ fn register_vec(context: &mut Context) {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();
@@ -1869,6 +1873,7 @@ fn imitation_solves_against_struct_type() {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();

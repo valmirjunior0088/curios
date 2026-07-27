@@ -780,6 +780,9 @@ fn process_items(
                                 module: context.island(),
                                 root: context.root(),
                                 rep_public: u.rep_pub,
+                                // Positivity has not run yet: `curios-core` computes each declaration's
+                                // parameter polarities after elaboration and writes them back here.
+                                polarities: Vec::new(),
                             },
                         );
 
@@ -1023,6 +1026,9 @@ fn process_items(
                         module,
                         root,
                         rep_public: s.rep_pub,
+                        // Positivity has not run yet: `curios-core` computes each declaration's
+                        // parameter polarities after elaboration and writes them back here.
+                        polarities: Vec::new(),
                     },
                 );
 
@@ -1131,6 +1137,9 @@ fn process_items(
                         module,
                         root,
                         rep_public: concept.rep_pub,
+                        // Positivity has not run yet: `curios-core` computes each declaration's
+                        // parameter polarities after elaboration and writes them back here.
+                        polarities: Vec::new(),
                     },
                 );
 

@@ -47,6 +47,9 @@ pub use structure::*;
 mod concept;
 pub use concept::*;
 
+mod positivity;
+pub use positivity::*;
+
 mod print;
 use print::*;
 

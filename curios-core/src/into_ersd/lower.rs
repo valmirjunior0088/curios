@@ -196,6 +196,9 @@ fn project_module(module: &Module) -> Module {
                         module: declaration.module.clone(),
                         root: declaration.root,
                         rep_public: declaration.rep_public,
+                        // Polarity is elaboration-only metadata, projected out here
+                        // alongside the universe context.
+                        polarities: Vec::new(),
                     },
                 )
             })
@@ -214,6 +217,9 @@ fn project_module(module: &Module) -> Module {
                         module: declaration.module.clone(),
                         root: declaration.root,
                         rep_public: declaration.rep_public,
+                        // Polarity is elaboration-only metadata, projected out here
+                        // alongside the universe context.
+                        polarities: Vec::new(),
                     },
                 )
             })

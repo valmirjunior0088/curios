@@ -59,6 +59,7 @@ fn register_opt(context: &mut Context) {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();
@@ -401,6 +402,7 @@ fn register_flag(context: &mut Context) {
                 module: Qualifier::empty(),
                 root: RootId::Entry,
                 rep_public: true,
+                polarities: Vec::new(),
             },
         )
         .unwrap();

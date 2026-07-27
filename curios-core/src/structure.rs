@@ -1,5 +1,5 @@
 use {
-    super::{Telescope, Term, UniverseContext},
+    super::{Polarity, Telescope, Term, UniverseContext},
     curios_base::{Qualifier, RootId},
 };
 
@@ -44,9 +44,19 @@ pub struct StructDecl {
     /// The inner `pub`: whether the representation — construction and
     /// projection — is exported.
     pub rep_public: bool,
+    /// How this struct uses each of its `params`, one entry per parameter in
+    /// declaration order. See [`InductDecl::polarities`](super::InductDecl).
+    pub polarities: Vec<Polarity>,
 }
 
 impl StructDecl {
+    /// This declaration's polarity in its `i`th parameter, defaulting to
+    /// [`Polarity::Mixed`] before the declaration is analyzed. See
+    /// [`InductDecl::polarity`](super::InductDecl).
+    pub(crate) fn polarity(&self, i: usize) -> Polarity {
+        self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
+    }
+
     /// This declaration with every term hash-consed against `sharing`. See
     /// [`Module::shared`](crate::Module::shared).
     pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
@@ -58,6 +68,7 @@ impl StructDecl {
             module: self.module.clone(),
             root: self.root,
             rep_public: self.rep_public,
+            polarities: self.polarities.clone(),
         }
     }
 

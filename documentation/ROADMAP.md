@@ -31,6 +31,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Variant arity checking
   - [x] Exhaustiveness/coverage checking (index inversion)
   - [x] Large-elimination guard (restricts `Prop` → `Type` elimination)
+  - [x] Strict positivity modulo polarity (per-parameter polarity vectors on `induct`/`struct`, computed by a whole-declaration-set fixpoint over zonked Core, accepted on the diagonal of the transitively closed occurrence relation, and carried into the prelude archive)
 - [x] Unification solver
   - [x] Pattern unification for higher-order metavariable spines
   - [x] Re-validate solutions in checking mode

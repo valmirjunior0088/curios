@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Level, Module, Term, UniverseConstraintOrigin, UniverseError},
+    super::{Atom, Level, Module, Polarity, Term, UniverseConstraintOrigin, UniverseError},
     curios_base::{Int, Plicity, Qualifier, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
@@ -235,6 +235,22 @@ pub enum Error {
         name: String,
         field: String,
         field_type: Box<Term>,
+    },
+    /// An `induct` or `struct` declaration is not strictly positive: it reaches
+    /// itself through a position that is not a plain payload. Such a
+    /// declaration is not the initial algebra of a polynomial functor, so the
+    /// eliminator it would hand back is not sound — the classic witness being
+    /// `induct Bad | c(f : (Bad) -> False) end`, which inhabits `False`.
+    ///
+    /// `site` is the constructor payload or struct field the offending path
+    /// starts from and `site_type` its type. The path itself may be longer than
+    /// one step: `polarity` is where it ends up, not where the named site
+    /// stands on its own.
+    NotStrictlyPositive {
+        name: String,
+        site: String,
+        site_type: Box<Term>,
+        polarity: Polarity,
     },
     /// A struct literal's (or struct type's) head names a binding that is not a
     /// struct; `found` is that binding's type.
@@ -622,6 +638,20 @@ impl Error {
         }
     }
 
+    pub(crate) fn not_strictly_positive<N: Into<String>, S: Into<String>, T: Into<Term>>(
+        name: N,
+        site: S,
+        site_type: T,
+        polarity: Polarity,
+    ) -> Self {
+        Self::NotStrictlyPositive {
+            name: name.into(),
+            site: site.into(),
+            site_type: Box::new(site_type.into()),
+            polarity,
+        }
+    }
+
     pub(crate) fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
         Self::NotAStructType {
             found: Box::new(found.into()),
@@ -998,6 +1028,7 @@ impl Error {
             }
             Self::NotAStructType { found } => out.push(found),
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
+            Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
@@ -1217,6 +1248,17 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "struct '{name}' is declared at sort 'Prop' but field '{field} : {field_type}' is informative\n  a 'Prop' struct's fields must all be propositions (or forced by indices)"
+                )
+            }
+            Error::NotStrictlyPositive {
+                name,
+                site,
+                site_type,
+                polarity,
+            } => {
+                write!(
+                    f,
+                    "'{name}' is not strictly positive: through '{site} : {site_type}' it occurs in itself {polarity}\n  a recursive occurrence must be a plain payload, never left of an arrow"
                 )
             }
             Error::NotAStructType { found } => {
