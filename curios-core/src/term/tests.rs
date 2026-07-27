@@ -7,7 +7,7 @@ use {
 #[cfg(feature = "archive")]
 #[test]
 fn archive_resets_caches_and_preserves_rc_sharing() {
-    let shared = Term::free_var("shared");
+    let shared = Term::free_var(&crate::fixture_binder("shared"));
     let term = Term::tuple([shared.clone(), shared]);
     term.get_or_init_hash();
     term.reach();
@@ -36,52 +36,69 @@ fn archive_resets_caches_and_preserves_rc_sharing() {
 
 #[test]
 fn close_open_substitutes_label_name() {
-    let term = Scope::close(One, &["x"], Term::free_var("x")).open(&[&Term::free_var("y")]);
+    let term = Scope::close(
+        One,
+        &[&crate::fixture_binder("x")],
+        Term::free_var(&crate::fixture_binder("x")),
+    )
+    .open(&[&Term::free_var(&crate::fixture_binder("y"))]);
 
     let Subterm::Var(var) = &*term else {
         panic!("unexpected `{term:?}`")
     };
 
-    assert_eq!(var, &Var::free("y"));
+    assert_eq!(var, &Var::free(crate::fixture_binder("y")));
 }
 
 #[test]
 fn close_open_preserves_nested_bind() {
     let term = Scope::close(
         One,
-        &["x"],
-        Term::func([("y", Term::type_ground())], Term::free_var("x")),
+        &[&crate::fixture_binder("x")],
+        Term::func(
+            [(crate::fixture_binder("y"), Term::type_ground())],
+            Term::free_var(&crate::fixture_binder("x")),
+        ),
     )
-    .open(&[&Term::free_var("z")]);
+    .open(&[&Term::free_var(&crate::fixture_binder("z"))]);
 
     let Subterm::Func(body) = &*term else {
         panic!("unexpected `{term:?}`")
     };
 
-    let opened = body.telescope.open(&[&Term::free_var("w")]);
+    let opened = body
+        .telescope
+        .open(&[&Term::free_var(&crate::fixture_binder("w"))]);
     let Subterm::Var(var) = &*opened else {
         panic!("unexpected term")
     };
 
-    assert_eq!(var, &Var::free("z"));
+    assert_eq!(var, &Var::free(crate::fixture_binder("z")));
 }
 
 #[test]
 fn collect_ignores_index_names() {
     let term = Term::func(
-        [("x", Term::type_ground())],
+        [(crate::fixture_binder("x"), Term::type_ground())],
         Term::tuple([
-            Term::free_var("x"),
+            Term::free_var(&crate::fixture_binder("x")),
             Term::rec(
-                vec![("y", Term::type_ground(), Term::free_var("z"))],
-                Term::tuple([Term::free_var("y"), Term::free_var("w")]),
+                vec![(
+                    crate::fixture_binder("y"),
+                    Term::type_ground(),
+                    Term::free_var(&crate::fixture_binder("z")),
+                )],
+                Term::tuple([
+                    Term::free_var(&crate::fixture_binder("y")),
+                    Term::free_var(&crate::fixture_binder("w")),
+                ]),
             ),
         ]),
     );
 
     assert_eq!(
         term.free_vars(),
-        BTreeSet::from([String::from("w"), String::from("z")])
+        BTreeSet::from([crate::fixture_binder("w"), crate::fixture_binder("z")])
     );
 }
 
@@ -97,7 +114,10 @@ fn metavar_is_a_closed_global_head() {
 fn metavars_collects_ids_across_structure() {
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([("x", Term::type_ground())], Term::metavar(1)),
+        Term::func(
+            [(crate::fixture_binder("x"), Term::type_ground())],
+            Term::metavar(1),
+        ),
         [
             Term::metavar(2),
             Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
@@ -110,7 +130,10 @@ fn metavars_collects_ids_across_structure() {
 fn any_metavar_short_circuits_and_agrees_with_collection() {
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([("x", Term::type_ground())], Term::metavar(1)),
+        Term::func(
+            [(crate::fixture_binder("x"), Term::type_ground())],
+            Term::metavar(1),
+        ),
         [
             Term::metavar(2),
             Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
@@ -133,7 +156,10 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     assert_eq!(visits, 1);
 
     // A metavariable-free term never fires the predicate.
-    let plain = Term::func([("x", Term::type_ground())], Term::free_var("x"));
+    let plain = Term::func(
+        [(crate::fixture_binder("x"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("x")),
+    );
     let mut fired = false;
     assert!(!plain.any_metavar(&mut |_| {
         fired = true;
@@ -143,28 +169,37 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
 }
 
 #[test]
-fn has_local_free_flags_minted_names_not_binder_hints() {
-    // `#` is the elaborator's minting marker (`Context::fresh`) and cannot
-    // occur in a written identifier, so a free var carrying it is the mark of
-    // a context-dependent local — and the only kind that can invalidate an
-    // elaboration-cache entry across frames.
-    assert!(Term::free_var("x#3").has_local_free());
-    assert!(!Term::free_var("/std/Nat").has_local_free());
+fn has_local_free_flags_locals_not_globals() {
+    fn global(path: [&str; 2]) -> Term {
+        Term::free_var(&Free::global(curios_base::Qualifier::from(path)))
+    }
 
-    // A compiler-named *global* carries a disambiguating ordinal too, but under
-    // its own `@` sigil (`into_core`'s anonymous witnesses) — it is not context
-    // dependent and must not set the bit. `#` and `@` name disjoint kinds; when
-    // witnesses spelled themselves `witness#N` this misfired on every term
-    // mentioning one, silently disabling three elaboration caches.
-    assert!(!Term::free_var("/std/Nat/witness@0").has_local_free());
+    // A local is a discriminant, not a spelling: what makes a free variable
+    // context-dependent — the only kind that can invalidate an elaboration-cache
+    // entry across frames — is that a scope opened it.
+    assert!(Term::free_var(&Free::local(3, Some("x"))).has_local_free());
+    assert!(!global(["std", "Nat"]).has_local_free());
+
+    // A compiler-generated *global* is not context dependent and must not set
+    // the bit. This used to be a search for a marker character, so a witness
+    // that spelled itself `witness#N` misfired on every term mentioning one,
+    // silently disabling three elaboration caches. No spelling can do that now.
+    assert!(!Term::free_var(&Free::Global(Global::Witness(WitnessId(0)))).has_local_free());
+    assert!(!global(["std", "Nat"]).has_local_free());
 
     // The bit is structural: a minted name anywhere in the tree sets it.
-    let inner = Term::apply(Term::free_var("/syn/Str/step"), [Term::free_var("c#1")]);
+    let inner = Term::apply(
+        Term::free_var(&crate::fixture_binder("/syn/Str/step")),
+        [Term::free_var(&crate::fixture_binder("c#1"))],
+    );
     assert!(inner.has_local_free());
 
     // A binder whose label hint carries `#` stays clean: the hint is not an
     // occurrence, and the captured variable is bound, not free.
-    let binder = Term::func([("x#9", Term::type_ground())], Term::free_var("x#9"));
+    let binder = Term::func(
+        [(crate::fixture_binder("x#9"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("x#9")),
+    );
     assert!(!binder.has_local_free());
 }
 
@@ -173,12 +208,21 @@ fn has_metavar_flags_any_metavariable_node() {
     assert!(Term::metavar(1).has_metavar());
     assert!(
         Term::apply(
-            Term::func([("x", Term::type_ground())], Term::free_var("x")),
+            Term::func(
+                [(crate::fixture_binder("x"), Term::type_ground())],
+                Term::free_var(&crate::fixture_binder("x"))
+            ),
             [Term::metavar(2)],
         )
         .has_metavar()
     );
-    assert!(!Term::func([("x", Term::type_ground())], Term::free_var("x")).has_metavar());
+    assert!(
+        !Term::func(
+            [(crate::fixture_binder("x"), Term::type_ground())],
+            Term::free_var(&crate::fixture_binder("x"))
+        )
+        .has_metavar()
+    );
 }
 
 #[test]
@@ -186,8 +230,11 @@ fn metavar_is_inert_under_traversal() {
     // shifting/capture must not disturb a metavariable node
     let m = Term::metavar(4);
     assert_eq!(m.shift(3), m);
-    let scope = Scope::close(One, &["x"], Term::metavar(4));
-    assert_eq!(scope.open(&[&Term::free_var("y")]), Term::metavar(4));
+    let scope = Scope::close(One, &[&crate::fixture_binder("x")], Term::metavar(4));
+    assert_eq!(
+        scope.open(&[&Term::free_var(&crate::fixture_binder("y"))]),
+        Term::metavar(4)
+    );
 }
 
 #[test]
@@ -209,15 +256,26 @@ fn variant_collects_metavars_and_prints_as_function_call() {
 fn implicit_marks_print_and_default_to_explicit() {
     let ft = Term::func_type_marked(
         [
-            (Plicity::Implicit, "T", Term::type_ground()),
-            (Plicity::Explicit, "x", Term::free_var("T")),
+            (
+                Plicity::Implicit,
+                crate::fixture_binder("T"),
+                Term::type_ground(),
+            ),
+            (
+                Plicity::Explicit,
+                crate::fixture_binder("x"),
+                Term::free_var(&crate::fixture_binder("T")),
+            ),
         ],
-        Term::free_var("T"),
+        Term::free_var(&crate::fixture_binder("T")),
     );
     assert_eq!(format!("{ft}"), "(@T : Type, x : T) -> T");
 
     // The unmarked builders default every slot to `Explicit`.
-    let plain = Term::func_type([("T", Term::type_ground())], Term::type_ground());
+    let plain = Term::func_type(
+        [(crate::fixture_binder("T"), Term::type_ground())],
+        Term::type_ground(),
+    );
     match &*plain {
         Subterm::FuncType(FuncType { plicities, .. }) => {
             assert_eq!(plicities, &[Plicity::Explicit]);
@@ -226,10 +284,16 @@ fn implicit_marks_print_and_default_to_explicit() {
     }
 
     let call = Term::apply_marked(
-        Term::free_var("foo"),
+        Term::free_var(&crate::fixture_binder("foo")),
         [
-            (Plicity::Implicit, Term::free_var("Nat")),
-            (Plicity::Explicit, Term::free_var("x")),
+            (
+                Plicity::Implicit,
+                Term::free_var(&crate::fixture_binder("Nat")),
+            ),
+            (
+                Plicity::Explicit,
+                Term::free_var(&crate::fixture_binder("x")),
+            ),
         ],
     );
     assert_eq!(format!("{call}"), "foo(@Nat, x)");
@@ -239,15 +303,19 @@ fn implicit_marks_print_and_default_to_explicit() {
 fn inductive_match_case_binders_are_captured() {
     // match r : #m => Type; | success(value) => value;
     let term = Term::induct_match(
-        Term::free_var("r"),
+        Term::free_var(&crate::fixture_binder("r")),
         None,
         Term::type_ground(),
-        [("success", vec!["value"], Term::free_var("value"))],
+        [(
+            "success",
+            vec![crate::fixture_binder("value")],
+            Term::free_var(&crate::fixture_binder("value")),
+        )],
     );
 
     let free = term.free_vars();
-    assert!(free.contains("r"));
-    assert!(!free.contains("value"));
+    assert!(free.contains(&crate::fixture_binder("r")));
+    assert!(!free.contains(&crate::fixture_binder("value")));
 }
 
 #[test]
@@ -255,11 +323,15 @@ fn inductive_match_default_prints_a_catch_all_arm() {
     // The catch-all renders as a trailing `| _ =>` arm, after the enumerated
     // constructors — mirroring `Cases::Switch`'s default.
     let term = Term::induct_match_default(
-        Term::free_var("r"),
+        Term::free_var(&crate::fixture_binder("r")),
         None,
         Term::type_ground(),
-        [("none", Vec::<&str>::new(), Term::free_var("a"))],
-        Term::free_var("b"),
+        [(
+            "none",
+            Vec::<crate::Free>::new(),
+            Term::free_var(&crate::fixture_binder("a")),
+        )],
+        Term::free_var(&crate::fixture_binder("b")),
     );
 
     let printed = term.to_string();
@@ -290,12 +362,16 @@ fn inductive_variants_reach_spans_components() {
 #[test]
 fn reach_basic_values() {
     assert_eq!(Term::type_ground().reach(), 0);
-    assert_eq!(Term::free_var("x").reach(), 0);
+    assert_eq!(Term::free_var(&crate::fixture_binder("x")).reach(), 0);
     assert_eq!(Term::var(Var::bound(0)).reach(), 1);
     assert_eq!(Term::var(Var::bound(3)).reach(), 4);
     // closed identity function λx.x
     assert_eq!(
-        Term::func([("x", Term::type_ground())], Term::free_var("x")).reach(),
+        Term::func(
+            [(crate::fixture_binder("x"), Term::type_ground())],
+            Term::free_var(&crate::fixture_binder("x"))
+        )
+        .reach(),
         0
     );
 }
@@ -333,22 +409,29 @@ fn reach_telescope_absorbs_arity() {
 #[test]
 fn open_shares_closed_body_without_rebuild() {
     // body does not mention the bound variable -> open returns the stored Rc unchanged
-    let scope = Scope::close(One, &["x"], Term::type_ground());
-    let opened = scope.open(&[&Term::free_var("y")]);
+    let scope = Scope::close(One, &[&crate::fixture_binder("x")], Term::type_ground());
+    let opened = scope.open(&[&Term::free_var(&crate::fixture_binder("y"))]);
     assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
 }
 
 #[test]
 fn open_shares_closed_subterm_inside_substituted_body() {
-    let closed = Term::func([("a", Term::type_ground())], Term::free_var("a")); // λa.a, closed
-    let scope = Scope::close(One, &["x"], Term::tuple([Term::free_var("x"), closed]));
+    let closed = Term::func(
+        [(crate::fixture_binder("a"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("a")),
+    ); // λa.a, closed
+    let scope = Scope::close(
+        One,
+        &[&crate::fixture_binder("x")],
+        Term::tuple([Term::free_var(&crate::fixture_binder("x")), closed]),
+    );
 
     let stored_field = match &**scope.body() {
         Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
         _ => panic!("expected tuple body"),
     };
 
-    let opened = scope.open(&[&Term::free_var("y")]);
+    let opened = scope.open(&[&Term::free_var(&crate::fixture_binder("y"))]);
 
     let opened_field = match &*opened {
         Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
@@ -364,8 +447,14 @@ fn open_shares_closed_subterm_inside_substituted_body() {
 fn binder_name_hints_are_identity_irrelevant() {
     use std::hash::BuildHasher;
 
-    let this = Term::func([("x", Term::type_ground())], Term::free_var("x"));
-    let that = Term::func([("y", Term::type_ground())], Term::free_var("y"));
+    let this = Term::func(
+        [(crate::fixture_binder("x"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("x")),
+    );
+    let that = Term::func(
+        [(crate::fixture_binder("y"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("y")),
+    );
 
     assert_eq!(this, that);
 
@@ -378,13 +467,31 @@ fn tuple_type_field_labels_are_identity() {
     // Field labels are the target of `.label` resolution, so unlike binder
     // hints they split identity: an α-equal twin with different labels must
     // not be substituted for this type by any Eq-keyed cache.
-    let this = Term::tuple_type([("cp", Term::type_ground()), ("v", Term::free_var("cp"))]);
-    let that = Term::tuple_type([("r", Term::type_ground()), ("v", Term::free_var("r"))]);
+    let this = Term::tuple_type([
+        (crate::fixture_binder("cp"), Term::type_ground()),
+        (
+            crate::fixture_binder("v"),
+            Term::free_var(&crate::fixture_binder("cp")),
+        ),
+    ]);
+    let that = Term::tuple_type([
+        (crate::fixture_binder("r"), Term::type_ground()),
+        (
+            crate::fixture_binder("v"),
+            Term::free_var(&crate::fixture_binder("r")),
+        ),
+    ]);
 
     assert_ne!(this, that);
     assert_eq!(
         this,
-        Term::tuple_type([("cp", Term::type_ground()), ("v", Term::free_var("cp"))])
+        Term::tuple_type([
+            (crate::fixture_binder("cp"), Term::type_ground()),
+            (
+                crate::fixture_binder("v"),
+                Term::free_var(&crate::fixture_binder("cp"))
+            )
+        ])
     );
 }
 
@@ -407,7 +514,10 @@ fn distinct_nodes(term: &Term) -> usize {
 
 #[test]
 fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
-    let shared = Term::apply(Term::free_var("f"), [Term::free_var("x")]);
+    let shared = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("x"))],
+    );
     let term = Term::tuple([shared.clone(), shared]);
 
     let rewritten: Term = term.traverse(&mut Visit::rewriting_shared(
@@ -433,11 +543,11 @@ fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
 #[test]
 fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
     let depth = 200;
-    let mut state = Term::free_var("lead");
-    let mut chain = Term::free_var("stop");
+    let mut state = Term::free_var(&crate::fixture_binder("lead"));
+    let mut chain = Term::free_var(&crate::fixture_binder("stop"));
     for _ in 0..depth {
         chain = Term::tuple([state.clone(), chain]);
-        state = Term::apply(Term::free_var("step"), [state]);
+        state = Term::apply(Term::free_var(&crate::fixture_binder("step")), [state]);
     }
 
     assert!(

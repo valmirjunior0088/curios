@@ -30,9 +30,9 @@ fn signature_entries<B: super::Bound>(
     loop {
         match telescope {
             Telescope::Cons(type_, rest) => {
-                let label = rest.first_label().map(str::to_string);
+                let label = rest.first_hint().map(str::to_string);
                 let erasable = is_erasable(context, &type_)?;
-                let variable = Term::free_var(context.fresh(label.as_deref()));
+                let variable = Term::free_var(&context.fresh(label.as_deref()));
                 entries.push((label, erasable));
                 telescope = rest.open(&[&variable]);
             }
@@ -48,7 +48,7 @@ fn open_opaque(context: &mut Context, mut telescope: Telescope<()>) -> Vec<Term>
     loop {
         match telescope {
             Telescope::Cons(type_, rest) => {
-                let name = context.fresh(rest.first_label());
+                let name = context.fresh(rest.first_hint());
                 context.assume(&name, &type_);
                 let variable = Term::free_var(&name);
                 telescope = rest.open(&[&variable]);

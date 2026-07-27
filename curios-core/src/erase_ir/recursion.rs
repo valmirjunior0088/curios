@@ -11,7 +11,10 @@
 //! the recursion classes the language does not admit (a computed member
 //! evaluating itself or a later member), so no diagnostic is re-derived here.
 
-use super::{Context, Error, Lowering, Outcome, Rec, RecMember, Scope, Subterm, Term};
+use {
+    super::{Context, Error, Lowering, Outcome, Rec, RecMember, Scope, Subterm, Term},
+    crate::Free,
+};
 
 /// One classified member of a recursive group, pre-bound for mutual
 /// visibility before any body is erased.
@@ -32,7 +35,7 @@ impl Lowering {
         let Rec { group, tail } = rec;
 
         let hints = tail
-            .label_iter()
+            .hint_iter()
             .map(|label| label.map(str::to_string))
             .collect::<Vec<_>>();
         let names = hints
@@ -89,15 +92,13 @@ impl Lowering {
     ) -> Result<(), Error> {
         let definitions = rec.definitions();
         for definition in &definitions {
-            context.assume(&definition.name, &definition.type_);
-            context.set_assumption_universe_context(
-                &definition.name,
-                rec.group.universe_context().clone(),
-            );
+            let name = Free::from(&definition.name);
+            context.assume(&name, &definition.type_);
+            context.set_assumption_universe_context(&name, rec.group.universe_context().clone());
         }
         for (index, definition) in definitions.iter().enumerate() {
             context.define(
-                &definition.name,
+                &Free::from(&definition.name),
                 &Term::rec_member(rec.group.clone(), index),
                 Some(&definition.kind),
             );
@@ -105,11 +106,11 @@ impl Lowering {
 
         let names = definitions
             .iter()
-            .map(|definition| definition.name.clone())
+            .map(|definition| Free::from(&definition.name))
             .collect::<Vec<_>>();
-        let hints = names
+        let hints = definitions
             .iter()
-            .map(|name| Some(name.clone()))
+            .map(|definition| Some(definition.name.symbol()))
             .collect::<Vec<_>>();
         let members = definitions
             .iter()
@@ -125,7 +126,7 @@ impl Lowering {
     fn emit_group(
         &mut self,
         context: &mut Context,
-        names: &[String],
+        names: &[Free],
         hints: &[Option<String>],
         members: &[(Term, Term)],
     ) -> Result<(), Error> {

@@ -8,11 +8,17 @@ When this work lands, fold the permanent rule and the resulting type contracts i
 
 ## Status
 
-Investigated 2026-07-26. Phases 0, A, and B are implemented; `SCHEMA` is at 11. Phase C is specified and now unblocked — the universe hierarchy has landed and its specification is retired. Phase D is specified but follows C: its first two bullets need `Free`, while its two audits can run at any time (the `name!` half of the `Ord` audit landed with Phase B).
+Investigated 2026-07-26. Phases 0, A, B, and C are implemented; `SCHEMA` is at 12. Phase D is specified and now unblocked; its two audits can also run independently (the `name!` half of the `Ord` audit landed with Phase B).
+
+Phase C landed with one deviation from what this document specified, recorded under "Hint and identity" below: the hint sits on `Mint` rather than beside it on the binder. Read that section before extending the vocabulary — the reason the original decision was made still stands, and the reason it was overruled is a property of `Scope`, not a convenience.
 
 Phase C was never the only phase that changes the archive schema, which is what the sequencing was originally argued from — Phase A bumped it and Phase B bumped it again. The bump is a one-line constant and was never the real constraint; the reason to sequence after the universe work was that it was still churning the same Core types, `InductDecl`/`Definition`/`Module`. It no longer is.
 
-Two things must be settled before Phase C is written, both because they fix the archive's shape: the staged migration (below), and the mint floors (under Phase C's consequences).
+Three decoders survive C, each for a stated reason and none of them a fact-recovery:
+
+- `curios-text/src/names.rs:55` renders a surface `Name`; that is the front end printing user input.
+- `Lowerer::syn_name` (`into_core/lowerer.rs`) builds a global from a `SyntaxRegistry` path constant. The registry stores `&'static str`; giving it `Qualifier`s retires the last construction-side parse.
+- `Global::symbol` is the declared boundary against the still-`String`-keyed nominal registries (`induct_decls`, `struct_decls`, `concepts`, `witness_table`, `Module::witnesses`). Retyping those keys is the remaining slice of C's key ledger and the one Phase D's `Ord` audit wants.
 
 ## Objective
 
@@ -38,16 +44,18 @@ Every violation catalogued below exists because a name is a `String`, and `Strin
 
 ## The five facts encoded in a name
 
-| # | Fact | Structural home | Present state |
-| --- | --- | --- | --- |
-| 1 | namespace path | `Qualifier` — exists, correct | flattened at `into_core/context.rs:30`; 5 decoders |
-| 2 | global vs. local | a sum-type discriminant | does not exist; 4 decoders |
-| 3 | minted vs. authored | the same discriminant | does not exist; 3 decoders |
-| 4 | a minted local's authored hint | the binder | does not exist; 2 decoders |
-| 5 | owner/family relation | `DefinitionKind.owner` — **exists, correct** | 3 encoders, 1 decoder |
-| 6 | a constructor's runtime tag | an explicit index | *is* `Atom`'s lexicographic `Ord` |
+The state column is as investigated. The last column records where each fact ended up after Phase C.
 
-Facts 1 and 5 already have correct homes and are re-derived anyway. Facts 2 and 3 are encoded by punctuation. Fact 4 exists only because facts 3 and 4 share storage. Fact 6 is not encoded in the characters at all — it is encoded in the collation order over them, which is why a spelling-only audit misses it.
+| # | Fact | Structural home | State as investigated | After Phase C |
+| --- | --- | --- | --- | --- |
+| 1 | namespace path | `Qualifier` — exists, correct | flattened at `into_core/context.rs:30`; 5 decoders | `Global::Authored(Qualifier)`; flattened only at the registry bridge |
+| 2 | global vs. local | a sum-type discriminant | does not exist; 4 decoders | `Free`'s discriminant; no decoders |
+| 3 | minted vs. authored | the same discriminant | does not exist; 3 decoders | same discriminant; no decoders |
+| 4 | a minted local's authored hint | the binder | does not exist; 2 decoders | `Mint::hint`, identity-irrelevant; no decoders |
+| 5 | owner/family relation | `DefinitionKind.owner` — **exists, correct** | 3 encoders, 1 decoder | carried; decoder retired in Phase A |
+| 6 | a constructor's runtime tag | an explicit index | *is* `Atom`'s lexicographic `Ord` | declaration order; `Ord` removed in Phase B |
+
+Facts 1 and 5 already had correct homes and were re-derived anyway. Facts 2 and 3 were encoded by punctuation. Fact 4 existed only because facts 3 and 4 shared storage. Fact 6 was not encoded in the characters at all — it was encoded in the collation order over them, which is why a spelling-only audit misses it.
 
 ### Why this is more than untidiness
 
@@ -205,32 +213,45 @@ It also retires Phase 0's marker completely rather than relocating it. There is 
 
 ### Hint and identity are separated, not relocated
 
-A binder's label today serves as both its display hint and its variable identity. `Context::fresh` uniquifies it to `x#7`, which *destroys the hint*, so the hint is recovered by parsing the marker back off. Fact 4 exists only because facts 3 and 4 share one field.
+A binder's label served as both its display hint and its variable identity. `Context::fresh` uniquified it to `x#7`, which *destroyed the hint*, so the hint was recovered by parsing the marker back off. Fact 4 existed only because facts 3 and 4 shared one field.
 
-Putting a `hint` field inside the name is therefore rejected. It preserves the merge and forces a hand-written `Eq`/`Hash` that deliberately disagrees with the derive — which in this tree is a live hazard rather than a style point, because archived names derive their own comparisons (`curios-base/src/qualifier.rs:19`), so the live and archived orderings would disagree in a way nothing would surface.
+**What was specified.** `Context::fresh(hint) -> String` becomes `Context::mint() -> Mint`, carrying no hint at all; `Scope::close` abstracts by identity and records the hint separately, beside the identity. Putting a `hint` field *inside* the name was rejected on the grounds that it preserves the merge and forces a hand-written `Eq`/`Hash` disagreeing with the derive — a live hazard in this tree, because archived names derive their own comparisons (`curios-base/src/qualifier.rs:19`), so the live and archived orderings would disagree in a way nothing would surface.
 
-Instead:
+**What landed, and why.** The hint is a field of `Mint`, excluded from `Eq`/`Ord`/`Hash` by hand — the shape this section rejected. The rejection assumed the hint could live beside the identity at the binding site, and in `Scope` it cannot: `Scope::names` is the *only* place a binder is recorded, it is deliberately identity-irrelevant, and the sites that need a hint (`convert.rs`'s `imitate_flex_apply`, `elaborate/match_.rs`'s arm rebuilds, `erase_ir`'s value naming) read it from a scope they are *re-minting under*, not from the scope that stored it. Splitting the two would have made `close` take two parallel arrays and every re-mint thread both. One array of `Free` carries the pair, and every consumer already holds it.
 
-- `Context::fresh(hint) -> String` becomes `Context::mint() -> Mint`. A caller that passed a hint for display passes it to the binder it is building.
-- `Scope::close` abstracts by identity and records the binder's hint separately; telescopes already carry per-binder labels (`Telescope::first_label`). `capture` (`curios-core/src/scope.rs:206`) compares identities.
+The hazard the rejection named is real and is discharged explicitly, not assumed away: `ArchivedMint` gets the same hand-written `PartialEq`/`Ord`/`Hash` as `Mint`, keyed on the index alone (`curios-core/src/names.rs`). The two orderings agree by construction rather than by coincidence, and they agree on every set that can occur — a map keyed by `Free` holds at most one entry per index, because two mints with one index *are* one value. **If a third comparison surface appears on `Mint`, it must be written by hand too; a derive there is the bug this note exists to prevent.**
 
-This deletes sites rather than rewriting them. Every reader of fact 4 is already walking binder structure when it asks: `elaborate/apply.rs:92` receives the telescope's own label and becomes `label`; `strip_fresh` (`print.rs:92`) and `build_rename` (`print.rs:286`) **disappear**, since `build_rename` exists only to decide which names are prettifiable by testing for a non-empty hint before `#`.
+The merge is not preserved: identity is the index, and the hint has no effect on any decision. `names/tests.rs` pins both halves — a hint cannot split one identity, and distinct identities stay distinct under one shared hint.
 
-The sites that build a free variable from an unminted label mint instead: `imitate_flex_apply` (`convert.rs:1812,1823`) mints from the `context` it already holds and keeps `first_label()` as the rebuilt binder's hint, which also removes the `"_"` collision above; `print.rs:368` needs no identity for display and keys off the `depth` it already tracks. Admitting an unminted case was rejected — it would put spelling back into identity, which is the property being removed.
+The rest of the section held. Every reader of fact 4 was already walking binder structure when it asked: `elaborate/apply.rs`'s `binder_name` now takes the hint directly, and `strip_fresh` and `build_rename`'s spelling test **are gone** — `build_rename` existed only to decide which names were prettifiable by testing for a non-empty hint before `#`, and now partitions on `hint().is_some()`.
+
+The sites that built a free variable from an unminted label mint instead: `imitate_flex_apply` mints from the `context` it already holds and keeps `first_hint()` as the rebuilt binder's hint, which also removes the `"_"` collision above; the printer needs no identity for display and keys its stand-ins off the `depth` it already tracks. Admitting an unminted case was rejected — it would put spelling back into identity, which is the property being removed. `Free::fixture_binder` is the one interning-by-spelling constructor, `#[doc(hidden)]`, for hand-built test terms that have no counter to draw from; it allocates from the top of the index space downwards so a fixture binder cannot alias a minted one.
 
 ### Consequences
 
-- Every decoder of facts 2 and 3 becomes a `matches!`. `has_local_free` is `matches!(free, Free::Local(_))` — exact, so the misfires vanish by construction.
-- `Definition.name` becomes `Global`: a bare `Qualifier` cannot name a witness, which has no authored path.
-- Keys: `assumptions`, `assumption_universes`, and `definitions` take `Free` — they genuinely mix, per the ledger below; `refinements` takes `Mint`; `induct_decls`, `struct_decls`, and `concepts` take `Qualifier`; `witness_declarations` and `Module::witnesses` take `WitnessId`, and `Witness::name` becomes one, which also turns `update_witness_scheme`'s scan over the table into a lookup.
-- `module_symbols()` and the alias-source map, orphaned by Phase A, land here — both were waiting for `Definition.name` and Core `free_vars()` to carry structure.
-- `SCHEMA` bumps again (Phase A took it to 10, Phase B to 11).
+- Every decoder of facts 2 and 3 became a `matches!`. `has_local_free` is `var.as_free().is_some_and(Free::is_local)` — exact, so the misfires vanish by construction.
+- `Definition.name` and `RecDefinition.name` became `Global`: a bare `Qualifier` cannot name a witness, which has no authored path. `Witness.name` follows, which turns `update_witness_scheme`'s scan into a comparison on identities.
+- Keys landed: `assumptions`, `assumption_universes`, `definitions`, and `refinements` take `Free`; so do `local`, `witness_scope`, `MetaEntry::telescope`, the erasure `Environment`, and `Term::free_vars`. **The nominal registries did not**: `induct_decls`, `struct_decls`, `concepts`, `witness_declarations`, and `Module::witnesses` are still `String`-keyed, bridged by `Global::symbol`. That is the remaining slice, and it is what makes `InductType::name`/`Struct::name` still `String`.
+- `Global::Witness` is declared and tested but **not yet constructed**: a witness still reaches Core as an authored path whose last segment the lowerer manufactured (`witness@N`). Retiring that spelling is part of the same remaining slice, and until it lands the `while elaborating /witness@1:` diagnostic prefix stays.
+- `module_symbols()` and the alias-source map, orphaned by Phase A, landed here. `flat_aliases` now asks `Free::as_global` where it used to prefix-test for `/`, and the visibility audit takes `Global`s so `referent_audience` reads the `Qualifier` off the name instead of re-splitting it.
+- `SCHEMA` bumped to 12 (Phase A took it to 10, Phase B to 11).
 
-**Mint floors are an archive invariant, not an implementation detail.** `Mint` and `WitnessId` counters are compilation-scoped, and the ledger shows minted locals reaching `assumptions`/`definitions` — so they are *in* the archived Core. Replay must resume both counters strictly above the restored floors, exactly as `next_metavar` is seeded by `metavar_floor` (`context.rs:270-273`) and as the universe hierarchy seeds its own floors. Without it a freshly minted `Mint(7)` silently aliases an archived one: no error, no diagnostic, a wrong binder. This is the single worst failure mode in the effort, it has two precedents to copy, and it must be asserted rather than assumed.
+**Mint floors are an archive invariant, not an implementation detail.** The counters are compilation-scoped and minted locals reach `assumptions`/`definitions`, so they are *in* the archived Core. `Module::binder_floor` carries `into_core`'s high-water mark; `elaborate_module` seeds `Context::fresh` above it (`Context::set_local_floor`), and `PreparedPrelude::binder_floor` reseeds the text-side counter on replay — the same shape as `metavar_floor`. Without it a freshly minted `Mint(7)` silently aliases an archived one: no error, no diagnostic, a wrong binder.
 
-Risk is breadth, and the breadth is larger than a search for `Var::free` suggests: `Term::free_var` (`curios-core/src/term.rs:549`) is a thin wrapper over it and is the dominant spelling. Measured census below. The compiler catches nearly all of it; the one thing to watch is a table that keys both kinds in a way `Free` cannot express, which the ledger did not find but only covered the prelude.
+Breadth was the risk, as predicted, and larger than a search for `Var::free` suggested: `Term::free_var` is a thin wrapper over it and is the dominant spelling. Two things the census did not predict, both found by the compiler:
 
-`Scope::close`/`capture` moving from string comparison to identity comparison is the riskiest edit in this specification — it is the kernel's hot path — and is also the one place the change is expected to be *cheaper*, since a `Mint` comparison replaces a `String` comparison on every node of every term. Profile it with the built-in `tracing` mechanism after the phase exists; there is nothing to measure before then.
+- **Text lowering had no lexical binder table.** `Lowerer::scope` was a `BTreeSet<String>` and a bare reference resolved to *its own spelling*, relying on a fallback that emitted the unqualified name for `capture` to match. It is now a stack of `(spelling, Free)`, so shadowing is exact rather than incidental, and every construct that lowers a binder's type under earlier binders (Π/Σ telescopes, lambda parameters, inductive parameters and indices, constructor payloads, struct and concept fields) mints once and re-enters the same identities.
+- **`transparent_alias_target` minted probe binders to detect an eta-expansion.** It now reads the expansion under its binders — the parameters are exactly the innermost de Bruijn indices there — so no probe name has to be proven collision-free.
+
+`Scope::close`/`capture` moving from string comparison to identity comparison is the riskiest edit in this specification — it is the kernel's hot path — and was expected to be the one place the change is *cheaper*, since an identity comparison replaces a string comparison on every node of every term.
+
+**Measured, and it went the other way first.** Retyping alone made compilation 1.82× slower (`compile_entrypoint` on `programs/hello_curios.crs`, release, 1261 ms to 2299 ms), with `lower_from_ersd` flat as a control because it runs after erasure, where Core names no longer exist. The diagnostic was `restore_archive` at 1.67×: pure deserialization, no traversal and no comparison, so the cost was the *value*, not the algorithm. Every global name that had been one `String` was now `Qualifier`'s `Vec<String>` — one allocation per segment on every clone, on a type that every free variable carries and that the free-variable set memoized on every node is keyed by.
+
+The fix is `Qualifier` sharing its segments behind an `Rc`, with a pointer-identity fast path in `PartialEq`/`Ord` (`curios-base/src/qualifier.rs`). Clones become refcount bumps, and the fast path fires whenever two occurrences resolved through the same table entry, which is the common case. That brought compilation to 1105 ms — **12% below baseline overall and 23% below on erasure**, which is the prediction this paragraph originally made.
+
+Two things worth keeping when this section is folded into module documentation. The archived form deliberately excludes the sharing (`#[rkyv(with = Unshare)]`): an `Rc` in the archive would drag rkyv's `Sharing`/`Pooling` bounds into every container that holds a qualifier, and the archived shape is unchanged from before. And a memoized structural hash on top of the sharing was written, measured, and **removed** — it was indistinguishable from the uncached version (1103 ms against a 1096–1114 ms run-to-run band), while its `OnceCell` made `Qualifier` interior-mutable and tripped Clippy's `mutable_key_type` at 79 sites across two crates. The sharing was the whole win; the cache bought only lint exemptions.
+
+Measure this way and not another: on an otherwise idle machine, sequentially, baseline and change back to back, with a control span that the change cannot touch. A parallel `cargo test` on a loaded box produced 27 spurious "reduction preempted" failures in `curios-pipeline` on *both* sides — twice in this effort — and a debug-build test-suite wall time was quoted as a baseline it could not support.
 
 ## Phase D — close the door
 
@@ -245,6 +266,12 @@ Phase C retypes the sites. Phase D is what makes the property hold for the next 
 Verify by deletion: remove the accessors, then confirm nothing needed them. A site that resists is a fact that still has no home, and it belongs in the table above.
 
 The phase is done when the objective's own test passes against the *reachable* API rather than against `Var` alone: starting from a `Free`, no path to a `&str` exists except through the printer. Until the second bullet lands, that path is two ordinary method calls long, which is why retyping the sites is necessary and not sufficient.
+
+Phase C left three accessors on that path, and D's first bullet is about all three, not just `Var`:
+
+- `Free::hint` yields `Option<&str>`. It is display metadata by construction, but it is a `&str` reachable from a `Free`, so the audit must decide whether it belongs behind the printer too.
+- `Global::symbol` yields a `String` and is the declared bridge to the `String`-keyed registries. **It disappears when those keys are retyped, and not before** — which makes retyping them a prerequisite for D rather than an optional follow-on.
+- `Free::fixture_binder` is spelling-to-identity, the exact inverse. It is `#[doc(hidden)]` and fixture-only; D should decide whether that is enough or whether it moves behind a feature the dev-dependencies enable.
 
 ## Evidence
 

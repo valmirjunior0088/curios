@@ -368,7 +368,10 @@ pub(super) fn erase_prim(
         Prim::LstMap(domain, codomain, list, mapper) => {
             let list_atom =
                 emitted!(lowering.walk(context, list, &lst_type(domain.clone()), None)?);
-            let mapper_type = Term::func_type([("x", domain.clone())], codomain.clone());
+            let mapper_type = Term::func_type(
+                [(context.fresh(Some("x")), domain.clone())],
+                codomain.clone(),
+            );
             let mapper_atom = emitted!(lowering.walk(context, mapper, &mapper_type, None)?);
             Ok(lowering.bind(
                 hint,

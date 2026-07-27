@@ -253,6 +253,10 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
+    /// A nominal type whose declaration is absent from the registry.
+    UnknownDeclaration {
+        name: String,
+    },
     /// A written field label does not match the declared label at its position
     /// (fields are given in declaration order — no reordering).
     UnknownStructField {
@@ -646,6 +650,13 @@ impl Error {
             expected,
             got,
         }
+    }
+
+    /// A nominal type whose declaration is missing from the registry — a
+    /// well-typed term can only carry a declared nominal head, so this is an
+    /// invariant violation surfaced as a diagnostic rather than a panic.
+    pub(crate) fn unknown_declaration(name: String) -> Self {
+        Self::UnknownDeclaration { name }
     }
 
     pub(crate) fn unknown_struct_field<N: Into<String>>(
@@ -1230,6 +1241,9 @@ impl fmt::Display for Error {
                     f,
                     "struct '{name}' has {expected} field(s) but the literal supplies {got}"
                 )
+            }
+            Error::UnknownDeclaration { name } => {
+                write!(f, "no declaration for '{name}'")
             }
             Error::UnknownStructField {
                 name,

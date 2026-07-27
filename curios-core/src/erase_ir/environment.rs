@@ -9,7 +9,7 @@
 //! already defined — so a type constructed or matched at many sites shares
 //! one schema.
 
-use super::BTreeMap;
+use {super::BTreeMap, crate::Free};
 
 /// What a Core name erases to.
 #[derive(Debug, Clone, Copy)]
@@ -80,7 +80,7 @@ pub(super) struct FamilyRow {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub(super) struct Environment {
-    values: BTreeMap<String, Binding>,
+    values: BTreeMap<Free, Binding>,
     struct_decls: BTreeMap<String, ProductRow>,
     induct_decls: BTreeMap<String, FamilyRow>,
     /// Anonymous tuple schemas, interned by relevant-field width — an
@@ -90,15 +90,15 @@ pub(super) struct Environment {
 }
 
 impl Environment {
-    pub(super) fn bind(&mut self, name: impl Into<String>, atom: curios_ersd::Atom) {
-        self.values.insert(name.into(), Binding::Atom(atom));
+    pub(super) fn bind(&mut self, name: &Free, atom: curios_ersd::Atom) {
+        self.values.insert(name.clone(), Binding::Atom(atom));
     }
 
-    pub(super) fn bind_dropped(&mut self, name: impl Into<String>) {
-        self.values.insert(name.into(), Binding::Dropped);
+    pub(super) fn bind_dropped(&mut self, name: &Free) {
+        self.values.insert(name.clone(), Binding::Dropped);
     }
 
-    pub(super) fn lookup(&self, name: &str) -> Option<Binding> {
+    pub(super) fn lookup(&self, name: &Free) -> Option<Binding> {
         self.values.get(name).copied()
     }
 

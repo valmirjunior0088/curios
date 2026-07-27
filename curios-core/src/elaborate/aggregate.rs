@@ -7,13 +7,13 @@ pub(super) fn elaborate_tuple_type(
     fn walk(
         context: &mut Context,
         tele: Telescope<()>,
-        fields: &mut Vec<(String, Term)>,
+        fields: &mut Vec<(Free, Term)>,
     ) -> Result<(), Error> {
         match tele {
             Telescope::Done(_) => Ok(()),
             Telescope::Cons(ty, rest) => {
                 let field = crate::check_is_sort(context, &ty)?.0;
-                let name = context.fresh(rest.first_label());
+                let name = context.fresh(rest.first_hint());
                 let x = Term::free_var(&name);
                 // The *rebuilt* field type, as in `elaborate_func_type`.
                 context.assume(&name, &field);
@@ -64,7 +64,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             params,
         }) => {
             let Some(struct_decl) = context.struct_decl(name).cloned() else {
-                return Err(Error::unbound_variable(Term::free_var(name)));
+                return Err(Error::unknown_declaration(name.clone()));
             };
             let fields = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
@@ -157,7 +157,7 @@ pub(super) fn elaborate_induct_type(
     } = ut;
 
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Err(Error::unbound_variable(Term::free_var(name)));
+        return Err(Error::unknown_declaration(name.clone()));
     };
     let (indices_telescope, result_sort, universes) = if written_universes.is_empty() {
         let (indices_telescope, universes) = context
@@ -214,7 +214,7 @@ pub(super) fn elaborate_variant(
     } = uc;
 
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Err(Error::unbound_variable(Term::free_var(name)));
+        return Err(Error::unknown_declaration(name.clone()));
     };
 
     if !induct_decl.rep_public

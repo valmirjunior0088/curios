@@ -11,13 +11,24 @@ fn context() -> Context {
     Context::new(Duration::from_secs(1))
 }
 
+/// A top-level definition's identity, from the path a test writes — the same
+/// name [`definition`] declares it under. Fixture-only.
+fn global(path: &str) -> crate::Free {
+    crate::Free::global(Qualifier::from([path]))
+}
+
+/// A binder identity for a hand-built term, interned by spelling. Fixture-only.
+fn binder(name: &str) -> crate::Free {
+    crate::fixture_binder(name)
+}
+
 fn nat_lit(n: usize) -> Term {
     Term::prim(Prim::Nat(Nat::new(n)))
 }
 
 fn definition(name: &str, type_: Term, body: Term) -> Item {
     Item::Let(Definition {
-        name: name.into(),
+        name: Global::Authored(Qualifier::from([name])),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
@@ -35,6 +46,7 @@ fn module(items: Vec<Item>, body: Term) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        binder_floor: 0,
         type_: None,
         body,
     }
@@ -48,10 +60,10 @@ fn erase(module: &Module, expected: Term) -> curios_ersd::Module {
 fn a_scalar_expression_erases_in_evaluation_order() {
     // let x = 2; x + 3
     let body = Term::let_(
-        "x",
+        &binder("x"),
         Term::prim(Prim::NatType),
         nat_lit(2),
-        Term::prim(Prim::nat_add(Term::free_var("x"), nat_lit(3))),
+        Term::prim(Prim::nat_add(Term::free_var(&binder("x")), nat_lit(3))),
     );
     let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
     assert_eq!(
@@ -70,7 +82,7 @@ fn bool_and_byte_keep_their_shapes() {
     // Bool stays Bool-shaped and Byte stays Byte-shaped: no Nat carrier appears
     // anywhere in the erased output.
     let body = Term::let_(
-        "b",
+        &binder("b"),
         Term::prim(Prim::BoolType),
         Term::prim(Prim::BoolAnd(
             Term::prim(Prim::Bool(true)),
@@ -97,7 +109,10 @@ entry {
 #[test]
 fn a_nat_spine_over_a_variable_erases_to_one_addition() {
     let items = vec![definition("x", Term::prim(Prim::NatType), nat_lit(5))];
-    let body = Term::prim(Prim::Nat(Nat::Succ(3u32.into(), Term::free_var("x"))));
+    let body = Term::prim(Prim::Nat(Nat::Succ(
+        3u32.into(),
+        Term::free_var(&global("x")),
+    )));
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     assert_eq!(
         erased.to_string(),
@@ -118,20 +133,20 @@ fn items_erase_in_dominance_order() {
         definition(
             "a",
             Term::prim(Prim::NatType),
-            Term::prim(Prim::nat_add(Term::free_var("b"), nat_lit(1))),
+            Term::prim(Prim::nat_add(Term::free_var(&global("b")), nat_lit(1))),
         ),
         definition("b", Term::prim(Prim::NatType), nat_lit(2)),
     ];
     let erased = erase(
-        &module(items, Term::free_var("a")),
+        &module(items, Term::free_var(&global("a"))),
         Term::prim(Prim::NatType),
     );
     assert_eq!(
         erased.to_string(),
         "\
-~v0$a = NatAdd(2, 1)
+~v0$/a = NatAdd(2, 1)
 entry {
-  return ~v0$a
+  return ~v0$/a
 }
 "
     );
@@ -141,7 +156,7 @@ entry {
 fn an_exit_seals_the_block_and_drops_dead_code() {
     // let _ = /std/proc/exit(3); 7 — the trailing computation is dead.
     let body = Term::let_(
-        "dead",
+        &binder("dead"),
         Term::prim(Prim::NatType),
         Term::prim(Prim::Exit(Term::prim(Prim::NatType), nat_lit(3))),
         nat_lit(7),
@@ -160,12 +175,12 @@ entry {
 #[test]
 fn sequences_transcribe_without_carrier_choices() {
     let body = Term::let_(
-        "lst",
+        &binder("lst"),
         Term::prim(Prim::LstType(Term::prim(Prim::NatType))),
         Term::prim(Prim::Lst(vec![nat_lit(1), nat_lit(2)])),
         Term::prim(Prim::LstLen(
             Term::prim(Prim::NatType),
-            Term::free_var("lst"),
+            Term::free_var(&binder("lst")),
         )),
     );
     let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
@@ -185,10 +200,10 @@ entry {
 fn erasure_is_deterministic() {
     let build = || {
         let body = Term::let_(
-            "x",
+            &binder("x"),
             Term::prim(Prim::NatType),
             nat_lit(2),
-            Term::prim(Prim::nat_add(Term::free_var("x"), nat_lit(3))),
+            Term::prim(Prim::nat_add(Term::free_var(&binder("x")), nat_lit(3))),
         );
         erase(&module(Vec::new(), body), Term::prim(Prim::NatType)).to_string()
     };
@@ -199,7 +214,7 @@ fn erasure_is_deterministic() {
 fn universe_erasure_is_a_validated_structural_projection() {
     let parameter = Level::param(UniverseParam(0));
     let definition = Definition {
-        name: "poly".into(),
+        name: Global::Authored(Qualifier::from(["poly"])),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
@@ -217,7 +232,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
     };
     let source = module(
         vec![Item::Let(definition)],
-        Term::universe_inst(Term::free_var("poly"), vec![Level::constant(2)]),
+        Term::universe_inst(Term::free_var(&global("poly")), vec![Level::constant(2)]),
     );
 
     let projected = super::lower::UniverseErased::<Module>::project(&source)
@@ -232,7 +247,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         panic!("expected nominal type")
     };
     assert!(induct.universes.is_empty());
-    assert_eq!(projected.body, Term::free_var("poly"));
+    assert_eq!(projected.body, Term::free_var(&global("poly")));
 
     let invalid = module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0))));
     assert!(super::lower::UniverseErased::<Module>::project(&invalid).is_err());
@@ -243,31 +258,37 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
     // (A : Type, x : A) => x — the type parameter is dropped; the runtime
     // function takes one parameter and stores no captures.
     let func_type = Term::func_type(
-        [("A", Term::type_ground()), ("x", Term::free_var("A"))],
-        Term::free_var("A"),
+        [
+            (binder("A"), Term::type_ground()),
+            (binder("x"), Term::free_var(&binder("A"))),
+        ],
+        Term::free_var(&binder("A")),
     );
     let items = vec![definition(
         "id",
         func_type,
         Term::func(
-            [("A", Term::type_ground()), ("x", Term::type_ground())],
-            Term::free_var("x"),
+            [
+                (binder("A"), Term::type_ground()),
+                (binder("x"), Term::type_ground()),
+            ],
+            Term::free_var(&binder("x")),
         ),
     )];
     let body = Term::apply(
-        Term::free_var("id"),
+        Term::free_var(&global("id")),
         [Term::prim(Prim::NatType), nat_lit(4)],
     );
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     assert_eq!(
         erased.to_string(),
         "\
-functions ~f0$id
+functions ~f0$/id
 entry {
-  ~v1 = apply ~f0$id(4)
+  ~v1 = apply ~f0$/id(4)
   return ~v1
 }
-function ~f0$id(~v0$x) {
+function ~f0$/id(~v0$x) {
   return ~v0$x
 }
 "
@@ -279,32 +300,35 @@ fn a_capturing_closure_stores_no_capture_list() {
     // (y : Nat) => (x : Nat) => x + y — the inner closure references the
     // outer parameter freely; analysis derives it, nothing is stored.
     let inner_type = Term::func_type(
-        [("x", Term::prim(Prim::NatType))],
+        [(binder("x"), Term::prim(Prim::NatType))],
         Term::prim(Prim::NatType),
     );
-    let outer_type = Term::func_type([("y", Term::prim(Prim::NatType))], inner_type);
+    let outer_type = Term::func_type([(binder("y"), Term::prim(Prim::NatType))], inner_type);
     let items = vec![definition(
         "make",
         outer_type,
         Term::func(
-            [("y", Term::type_ground())],
+            [(binder("y"), Term::type_ground())],
             Term::func(
-                [("x", Term::type_ground())],
-                Term::prim(Prim::nat_add(Term::free_var("x"), Term::free_var("y"))),
+                [(binder("x"), Term::type_ground())],
+                Term::prim(Prim::nat_add(
+                    Term::free_var(&binder("x")),
+                    Term::free_var(&binder("y")),
+                )),
             ),
         ),
     )];
     let expected = Term::func_type(
-        [("y", Term::prim(Prim::NatType))],
+        [(binder("y"), Term::prim(Prim::NatType))],
         Term::func_type(
-            [("x", Term::prim(Prim::NatType))],
+            [(binder("x"), Term::prim(Prim::NatType))],
             Term::prim(Prim::NatType),
         ),
     );
-    let erased = erase(&module(items, Term::free_var("make")), expected);
+    let erased = erase(&module(items, Term::free_var(&global("make"))), expected);
 
     let printed = erased.to_string();
-    assert!(printed.contains("function ~f0$make(~v0$y)"), "{printed}");
+    assert!(printed.contains("function ~f0$/make(~v0$y)"), "{printed}");
     assert!(printed.contains("NatAdd("), "{printed}");
     // The inner closure's capture of `y` is derived, never stored: the outer
     // parameter is the inner function's one free value.
@@ -345,7 +369,10 @@ fn opt_induct() -> InductDecl {
             (
                 Atom::from("some"),
                 InductParam {
-                    telescope: Telescope::build([("x", Term::prim(Prim::NatType))], opt_type()),
+                    telescope: Telescope::build(
+                        [(binder("x"), Term::prim(Prim::NatType))],
+                        opt_type(),
+                    ),
                     plicities: vec![Plicity::Explicit],
                 },
             ),
@@ -371,6 +398,7 @@ fn a_variant_constructs_with_its_registered_schema() {
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
+            binder_floor: 0,
             type_: None,
             body,
         },
@@ -392,14 +420,14 @@ entry {
 #[test]
 fn a_multi_field_tuple_shares_the_width_schema() {
     let tuple_type = Term::tuple_type([
-        ("a", Term::prim(Prim::NatType)),
-        ("b", Term::prim(Prim::NatType)),
+        (binder("a"), Term::prim(Prim::NatType)),
+        (binder("b"), Term::prim(Prim::NatType)),
     ]);
     let body = Term::let_(
-        "pair",
+        &binder("pair"),
         tuple_type.clone(),
         Term::tuple([nat_lit(1), nat_lit(2)]),
-        Term::proj(Term::free_var("pair"), 1),
+        Term::proj(Term::free_var(&binder("pair")), 1),
     );
     let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
     assert_eq!(
@@ -419,12 +447,15 @@ entry {
 fn a_subset_tuple_collapses_to_its_relevant_field() {
     // { x : Nat, w : Prop-valued } erases to the bare Nat; its projection
     // vanishes.
-    let subset_type = Term::tuple_type([("x", Term::prim(Prim::NatType)), ("w", Term::prop())]);
+    let subset_type = Term::tuple_type([
+        (binder("x"), Term::prim(Prim::NatType)),
+        (binder("w"), Term::prop()),
+    ]);
     let body = Term::let_(
-        "sub",
+        &binder("sub"),
         subset_type.clone(),
         Term::tuple([nat_lit(9), Term::prop()]),
-        Term::proj(Term::free_var("sub"), 0),
+        Term::proj(Term::free_var(&binder("sub")), 0),
     );
     let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
     assert_eq!(
@@ -470,13 +501,13 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
     // match n | 0 => 0 | succ pred (ih dead) => pred — a case split, not a fold.
     let items = vec![definition("n", Term::prim(Prim::NatType), nat_lit(5))];
     let body = Term::nat_match(
-        Term::free_var("n"),
+        Term::free_var(&global("n")),
         None,
         Term::prim(Prim::NatType),
         nat_lit(0),
-        "pred",
-        "ih",
-        Term::free_var("pred"),
+        &binder("pred"),
+        &binder("ih"),
+        Term::free_var(&binder("pred")),
     );
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     assert_eq!(
@@ -503,13 +534,13 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
     // match n | 0 => 0 | succ pred ih => ih + 2 — genuine induction.
     let items = vec![definition("n", Term::prim(Prim::NatType), nat_lit(5))];
     let body = Term::nat_match(
-        Term::free_var("n"),
+        Term::free_var(&global("n")),
         None,
         Term::prim(Prim::NatType),
         nat_lit(0),
-        "pred",
-        "ih",
-        Term::prim(Prim::nat_add(Term::free_var("ih"), nat_lit(2))),
+        &binder("pred"),
+        &binder("ih"),
+        Term::prim(Prim::nat_add(Term::free_var(&binder("ih")), nat_lit(2))),
     );
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     assert_eq!(
@@ -541,23 +572,23 @@ fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
         Term::prim(Prim::Lst(vec![nat_lit(1)])),
     )];
     let body = Term::lst_match(
-        Term::free_var("xs"),
+        Term::free_var(&global("xs")),
         Term::prim(Prim::NatType),
         None,
         Term::prim(Prim::NatType),
         nat_lit(0),
-        "h",
-        "t",
-        "ih",
-        Term::prim(Prim::nat_add(Term::free_var("ih"), nat_lit(1))),
+        &binder("h"),
+        &binder("t"),
+        &binder("ih"),
+        Term::prim(Prim::nat_add(Term::free_var(&binder("ih")), nat_lit(1))),
     );
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     assert_eq!(
         erased.to_string(),
         "\
-~v0$xs = LstBuild(1)
+~v0$/xs = LstBuild(1)
 entry {
-  ~v5 = fold-seq[lst] ~v0$xs {
+  ~v5 = fold-seq[lst] ~v0$/xs {
     empty => {
       return 0
     }
@@ -582,8 +613,8 @@ fn a_variant_match_binds_payload_without_projections() {
         None,
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<String>::new(), nat_lit(0)),
-            ("some", vec!["x".to_string()], Term::free_var("x")),
+            ("none", Vec::<crate::Free>::new(), nat_lit(0)),
+            ("some", vec![binder("x")], Term::free_var(&binder("x"))),
         ],
     );
     let erased = erase_module_to_ir(
@@ -595,6 +626,7 @@ fn a_variant_match_binds_payload_without_projections() {
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
+            binder_floor: 0,
             type_: None,
             body,
         },
@@ -626,28 +658,31 @@ fn an_effectful_scrutinee_is_erased_once() {
     // The peel path re-derives Core terms from the head (`n - 1`); an
     // effectful compound head must still evaluate exactly once, through the
     // alias.
-    let io_read = Term::apply(Term::free_var("read"), [nat_lit(0)]);
+    let io_read = Term::apply(Term::free_var(&global("read")), [nat_lit(0)]);
     let items = vec![definition(
         "read",
         Term::func_type(
-            [("x", Term::prim(Prim::NatType))],
+            [(binder("x"), Term::prim(Prim::NatType))],
             Term::prim(Prim::NatType),
         ),
-        Term::func([("x", Term::type_ground())], Term::free_var("x")),
+        Term::func(
+            [(binder("x"), Term::type_ground())],
+            Term::free_var(&binder("x")),
+        ),
     )];
     let body = Term::nat_match(
         io_read,
         None,
         Term::prim(Prim::NatType),
         nat_lit(0),
-        "pred",
-        "ih",
-        Term::free_var("pred"),
+        &binder("pred"),
+        &binder("ih"),
+        Term::free_var(&binder("pred")),
     );
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     let printed = erased.to_string();
     assert_eq!(
-        printed.matches("apply ~f0$read").count(),
+        printed.matches("apply ~f0$/read").count(),
         1,
         "the compound scrutinee is applied exactly once:\n{printed}"
     );
@@ -657,19 +692,19 @@ fn an_effectful_scrutinee_is_erased_once() {
 fn a_recursive_function_group_erases_to_functions() {
     // rec f(x) = f(x); body f(3)
     let func_type = Term::func_type(
-        [("x", Term::prim(Prim::NatType))],
+        [(binder("x"), Term::prim(Prim::NatType))],
         Term::prim(Prim::NatType),
     );
     let body = Term::rec(
         vec![(
-            "f",
+            binder("f"),
             func_type.clone(),
             Term::func(
-                [("x", Term::type_ground())],
-                Term::apply(Term::free_var("f"), [Term::free_var("x")]),
+                [(binder("x"), Term::type_ground())],
+                Term::apply(Term::free_var(&binder("f")), [Term::free_var(&binder("x"))]),
             ),
         )],
-        Term::apply(Term::free_var("f"), [nat_lit(3)]),
+        Term::apply(Term::free_var(&binder("f")), [nat_lit(3)]),
     );
     let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
     assert_eq!(
@@ -694,19 +729,26 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     // computed member's initializer references the function, and the function
     // body references the computed member (dormant until applied).
     let produce_type = Term::func_type(
-        [("u", Term::tuple_type(Vec::<(&str, Term)>::new()))],
+        [(
+            binder("u"),
+            Term::tuple_type(Vec::<(crate::Free, Term)>::new()),
+        )],
         Term::prim(Prim::NatType),
     );
     let body = Term::rec(
         vec![
             (
-                "produce",
+                binder("produce"),
                 produce_type.clone(),
-                Term::func([("u", Term::type_ground())], nat_lit(5)),
+                Term::func([(binder("u"), Term::type_ground())], nat_lit(5)),
             ),
-            ("consume", produce_type.clone(), Term::free_var("produce")),
+            (
+                binder("consume"),
+                produce_type.clone(),
+                Term::free_var(&binder("produce")),
+            ),
         ],
-        Term::free_var("consume"),
+        Term::free_var(&binder("consume")),
     );
     let erased = erase(&module(Vec::new(), body), produce_type);
     assert_eq!(
@@ -737,10 +779,10 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
     let type_ = Term::prim(Prim::NatType);
     let body = Term::rec(
         vec![
-            ("a", type_.clone(), Term::free_var("b")),
-            ("b", type_.clone(), Term::free_var("a")),
+            (binder("a"), type_.clone(), Term::free_var(&binder("b"))),
+            (binder("b"), type_.clone(), Term::free_var(&binder("a"))),
         ],
-        Term::free_var("a"),
+        Term::free_var(&binder("a")),
     );
     let error = erase_module_to_ir(&mut context(), &module(Vec::new(), body), &type_)
         .expect_err("the value-level cycle is rejected");
@@ -753,33 +795,36 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
 #[test]
 fn top_level_recursive_items_erase_through_the_item_chain() {
     let func_type = Term::func_type(
-        [("x", Term::prim(Prim::NatType))],
+        [(binder("x"), Term::prim(Prim::NatType))],
         Term::prim(Prim::NatType),
     );
     let items = vec![Item::Rec(RecItem::new(vec![Definition {
-        name: "go".into(),
+        name: Global::Authored(Qualifier::from(["go"])),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         root: RootId::Entry,
         type_: func_type.clone(),
         body: Term::func(
-            [("x", Term::type_ground())],
-            Term::apply(Term::free_var("go"), [Term::free_var("x")]),
+            [(binder("x"), Term::type_ground())],
+            Term::apply(
+                Term::free_var(&global("go")),
+                [Term::free_var(&binder("x"))],
+            ),
         ),
     }]))];
-    let body = Term::apply(Term::free_var("go"), [nat_lit(1)]);
+    let body = Term::apply(Term::free_var(&global("go")), [nat_lit(1)]);
     let erased = erase(&module(items, body), Term::prim(Prim::NatType));
     assert_eq!(
         erased.to_string(),
         "\
-functions ~f0$go
+functions ~f0$/go
 entry {
-  ~v2 = apply ~f0$go(1)
+  ~v2 = apply ~f0$/go(1)
   return ~v2
 }
-function ~f0$go(~v0$x) {
-  ~v1 = apply ~f0$go(~v0$x)
+function ~f0$/go(~v0$x) {
+  ~v1 = apply ~f0$/go(~v0$x)
   return ~v1
 }
 "

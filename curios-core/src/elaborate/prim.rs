@@ -334,7 +334,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let b = crate::check_is_sort(context, b)?.0;
             let lst_a = lst_type(a.clone());
             let lst = elaborate(context, lst, Mode::Check(lst_a))?.0;
-            let f_type = Term::func_type([("x", a.clone())], b.clone());
+            let f_type = Term::func_type([(context.fresh(Some("x")), a.clone())], b.clone());
             let f = elaborate(context, f, Mode::Check(f_type))?.0;
             let lst_b = lst_type(b.clone());
             (Prim::LstMap(a, b, lst, f), lst_b)
@@ -374,7 +374,10 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 results => Term::tuple_type(
                     results
                         .iter()
-                        .map(|(label, wire_type)| (label.as_str(), wire_term(wire_type))),
+                        .map(|(label, wire_type)| {
+                            (context.fresh(Some(label)), wire_term(wire_type))
+                        })
+                        .collect::<Vec<_>>(),
                 ),
             };
 

@@ -3,10 +3,10 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Definition, DefinitionKind, Error, Func, FuncType,
-        InductDecl, InductParam, InductType, Item, Let, Level, Match, MetaId, Metavar,
-        MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl, StructType,
-        Subterm, Term, Tuple, TupleType, UniverseContext, UniverseInst, Variant, Visit,
+        Apply, Bound, Carrier, Cases, Context, Definition, DefinitionKind, Error, Free, Func,
+        FuncType, Global, InductDecl, InductParam, InductType, Item, Let, Level, Match, MetaId,
+        Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl,
+        StructType, Subterm, Term, Tuple, TupleType, UniverseContext, UniverseInst, Variant, Visit,
     },
     curios_base::Grain,
     std::{
@@ -43,7 +43,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         return value.clone();
     }
 
-    type Solution = (Vec<String>, Term);
+    type Solution = (Vec<Free>, Term);
 
     fn materialize<B: Bound>(value: &B, solutions: Rc<BTreeMap<MetaId, Solution>>) -> B {
         let rewrite_solutions = Rc::clone(&solutions);
@@ -67,7 +67,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                     .iter()
                     .map(|term| materialize(term, Rc::clone(&rewrite_solutions)))
                     .collect::<Vec<_>>();
-                let labels = labels.iter().map(String::as_str).collect::<Vec<_>>();
+                let labels = labels.iter().collect::<Vec<_>>();
                 let spine = spine.iter().collect::<Vec<_>>();
                 let zonked = resolved.capture(&labels).release(&spine);
                 Some(match term.span() {
@@ -215,6 +215,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             })
             .collect::<Result<_, Error>>()?,
         witnesses: module.witnesses.clone(),
+        binder_floor: module.binder_floor,
         type_,
         body,
     };
@@ -294,7 +295,7 @@ pub(crate) fn validate_bound_universes<B: Bound>(
 
 fn validate_instance_arities<B: Bound>(
     value: &B,
-    definitions: &BTreeMap<String, usize>,
+    definitions: &BTreeMap<Global, usize>,
     inducts: &BTreeMap<String, usize>,
     structs: &BTreeMap<String, usize>,
     owner: &str,
@@ -325,11 +326,11 @@ fn validate_instance_arities<B: Bound>(
             };
             let invalid = match &**term {
                 Subterm::UniverseInst(instance) => match &*instance.head {
-                    Subterm::Var(var) => var.as_label().and_then(|name| {
+                    Subterm::Var(var) => var.as_free().and_then(Free::as_global).and_then(|name| {
                         definitions.get(name).and_then(|expected| {
                             mismatch(
                                 "definition instance",
-                                name,
+                                &name.symbol(),
                                 *expected,
                                 instance.levels.len(),
                             )
@@ -416,6 +417,12 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
         .iter()
         .map(|(name, (_, context))| (name.clone(), context.parameter_count))
         .collect::<BTreeMap<_, _>>();
+    // The nominal registries are still keyed by the flattened spelling, so the
+    // cross-checks below need the same schemes under that key.
+    let nominal_schemes = definition_schemes
+        .iter()
+        .map(|(name, scheme)| (name.symbol(), scheme))
+        .collect::<BTreeMap<_, _>>();
     let inducts = module
         .induct_decls
         .iter()
@@ -461,7 +468,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             )?;
         }
 
-        if let Some((kind, actual)) = definition_schemes.get(name)
+        if let Some((kind, actual)) = nominal_schemes.get(name).copied()
             && (kind != &DefinitionKind::InductiveType || actual != &declaration.universe_context)
         {
             return Err(Error::UniverseInvariant(format!(
@@ -476,7 +483,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             &declaration.result_sort,
             &format!("structure {name} result sort"),
         )?;
-        if let Some((kind, actual)) = definition_schemes.get(name)
+        if let Some((kind, actual)) = nominal_schemes.get(name).copied()
             && (!matches!(
                 kind,
                 DefinitionKind::StructType | DefinitionKind::ConceptType
@@ -820,14 +827,14 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
             entry.telescope.len(),
             "a solved metavariable's occurrence carries its full spine"
         );
-        let labels = entry
+        let binders = entry
             .telescope
             .iter()
-            .map(|(name, _)| name.as_str())
+            .map(|(name, _)| name)
             .collect::<Vec<_>>();
         let spine = zonk_terms(context, spine)?;
         let refs = spine.iter().collect::<Vec<_>>();
-        let zonked = resolved.capture(&labels).release(&refs);
+        let zonked = resolved.capture(&binders).release(&refs);
 
         // Carry the hole's span only if the solution carries none of its own.
         return Ok(match term.span() {

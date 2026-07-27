@@ -8,7 +8,7 @@
 
 use {
     super::{
-        Context, Error, InductType, Peel, Subterm, Telescope, Term, convert_at, peel_prim,
+        Context, Error, Free, InductType, Peel, Subterm, Telescope, Term, convert_at, peel_prim,
         reduce_with,
     },
     std::collections::BTreeSet,
@@ -18,7 +18,7 @@ use {
 /// refused) cleanly, yielding the forced arm-binder solutions, or some
 /// position clashed definitely and the arm is unreachable.
 pub(crate) enum Invert {
-    Solved(Vec<(String, Term)>),
+    Solved(Vec<(Free, Term)>),
     Impossible,
 }
 
@@ -55,7 +55,7 @@ pub(crate) fn invert_indices(
     context: &mut Context,
     actuals: &[Term],
     targets: &[Term],
-    flex: &[String],
+    flex: &[Free],
 ) -> Result<Invert, Error> {
     let mut solutions = Vec::new();
 
@@ -89,32 +89,32 @@ pub(crate) fn invert_indices(
 /// conservatively. Never a `Clash`, so `Impossible`/prune semantics hold.
 fn consolidate(
     context: &mut Context,
-    solutions: Vec<(String, Term)>,
-) -> Result<Vec<(String, Term)>, Error> {
-    let mut kept: Vec<(String, Term)> = Vec::new();
+    solutions: Vec<(Free, Term)>,
+) -> Result<Vec<(Free, Term)>, Error> {
+    let mut kept: Vec<(Free, Term)> = Vec::new();
     let mut refused = BTreeSet::new();
 
-    for (label, value) in solutions {
-        if refused.contains(&label) {
+    for (binder, value) in solutions {
+        if refused.contains(&binder) {
             continue;
         }
 
-        let Some(index) = kept.iter().position(|(l, _)| *l == label) else {
-            kept.push((label, value));
+        let Some(index) = kept.iter().position(|(bound, _)| *bound == binder) else {
+            kept.push((binder, value));
             continue;
         };
 
         // A re-forcing: keep the prior solution iff the two are convertible at
         // the binder's declared type (cloned to release the context borrow).
         let prior = kept[index].1.clone();
-        let deletes = match context.assumption(&label).cloned() {
+        let deletes = match context.assumption(&binder).cloned() {
             Some(type_) => convert_at(context, &type_, &prior, &value)?,
             None => false,
         };
 
         if !deletes {
             kept.remove(index);
-            refused.insert(label);
+            refused.insert(binder);
         }
     }
 
@@ -125,9 +125,9 @@ fn unify_index(
     context: &mut Context,
     actual: &Term,
     target: &Term,
-    flex: &[String],
+    flex: &[Free],
     top: bool,
-    solutions: &mut Vec<(String, Term)>,
+    solutions: &mut Vec<(Free, Term)>,
 ) -> Result<Step, Error> {
     let actual = reduce_with(context, actual)?;
     let target = reduce_with(context, target)?;
@@ -138,9 +138,9 @@ fn unify_index(
     // rule in `consolidate` reconciles the two forcings by convertibility.
     if let Subterm::Var(var) = &*target
         && var.as_bound().is_none()
-        && flex.iter().any(|l| l == var.unwrap())
+        && flex.iter().any(|bound| bound == var.unwrap())
     {
-        let label = var.unwrap().to_string();
+        let binder = var.unwrap().clone();
 
         // At the top of a position a key-shaped actual is Rung B's: it was
         // refined *to* this binder, and solving the binder back to it would
@@ -158,12 +158,12 @@ fn unify_index(
         if actual
             .free_vars()
             .iter()
-            .any(|free| flex.iter().any(|l| l == free))
+            .any(|free| flex.iter().any(|bound| bound == free))
         {
             return Ok(Step::Refuse);
         }
 
-        solutions.push((label, actual.clone()));
+        solutions.push((binder, actual.clone()));
 
         return Ok(Step::Ok);
     }
@@ -222,8 +222,8 @@ fn unify_all(
     context: &mut Context,
     actuals: &[Term],
     targets: &[Term],
-    flex: &[String],
-    solutions: &mut Vec<(String, Term)>,
+    flex: &[Free],
+    solutions: &mut Vec<(Free, Term)>,
 ) -> Result<Step, Error> {
     for (actual, target) in actuals.iter().zip(targets) {
         match unify_index(context, actual, target, flex, false, solutions)? {

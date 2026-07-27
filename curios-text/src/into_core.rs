@@ -620,10 +620,26 @@ fn process_items(
                         let lower = Lowerer::new(context);
                         let name = context.prefixed(&u.label).join();
 
+                        // Parameters and indices are minted before any of their
+                        // types is lowered, and each type sees the binders
+                        // before it — a later index type naming an earlier
+                        // parameter must mean *that* binder.
+                        let head_binders =
+                            lower.mint(u.params.iter().map(|(_, n, _)| n.clone()).chain(
+                                u.indices.iter().enumerate().map(|(i, (n, _))| {
+                                    n.clone().unwrap_or_else(|| format!("_{i}"))
+                                }),
+                            ));
+                        let (param_binders, index_binders) = head_binders.split_at(u.params.len());
+
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(p, n, t)| Ok((*p, n.clone(), lower.input_type(t)?)))
+                            .enumerate()
+                            .map(|(i, (p, _, t))| {
+                                let ty = lower.bound(&head_binders[..i], || lower.input_type(t))?;
+                                Ok((*p, param_binders[i].1.clone(), ty))
+                            })
                             .collect::<Result<Vec<_>, Error>>()?;
                         // The registry and the `InductType` normal form are
                         // positional; plicity matters only on the generated
@@ -633,28 +649,33 @@ fn process_items(
                             .map(|(_, n, t)| (n.clone(), t.clone()))
                             .collect::<Vec<_>>();
 
-                        let param_vars = u
-                            .params
+                        let param_vars = param_binders
                             .iter()
-                            .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
+                            .map(|(_, id)| {
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
+                            })
                             .collect::<Vec<_>>();
 
-                        // The head's index telescope. Unnamed entries get a
-                        // positional placeholder — the name only matters for
-                        // dependency capture among the index types.
+                        // The head's index telescope. Unnamed entries got a
+                        // positional placeholder above — the name only matters
+                        // for dependency capture among the index types.
                         let index_tys = u
                             .indices
                             .iter()
                             .enumerate()
-                            .map(|(i, (n, t))| {
-                                let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                                Ok((n, lower.input_type(t)?))
+                            .map(|(i, (_, t))| {
+                                let seen = u.params.len() + i;
+                                let ty =
+                                    lower.bound(&head_binders[..seen], || lower.input_type(t))?;
+                                Ok((index_binders[i].1.clone(), ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
 
-                        let index_vars = index_tys
+                        let index_vars = index_binders
                             .iter()
-                            .map(|(n, _)| curios_core::Term::var(curios_core::Var::free(n)))
+                            .map(|(_, id)| {
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
+                            })
                             .collect::<Vec<_>>();
 
                         // Registry entry: the parameter telescope plus each
@@ -669,23 +690,30 @@ fn process_items(
                             .cases
                             .iter()
                             .map(|c| {
+                                let payload_binders =
+                                    lower.mint(c.payload.iter().enumerate().map(|(i, param)| {
+                                        param.label.clone().unwrap_or_else(|| format!("_{i}"))
+                                    }));
+                                let mut scope = param_binders.to_vec();
                                 let fields = c
                                     .payload
                                     .iter()
                                     .enumerate()
                                     .map(|(i, param)| {
-                                        let n =
-                                            param.label.clone().unwrap_or_else(|| format!("_{i}"));
-                                        Ok((n, lower.input_type(&param.type_)?))
+                                        let ty = lower
+                                            .bound(&scope, || lower.input_type(&param.type_))?;
+                                        scope.push(payload_binders[i].clone());
+                                        Ok((payload_binders[i].1.clone(), ty))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
 
-                                let target = c
-                                    .target
-                                    .iter()
-                                    .flatten()
-                                    .map(|t| lower.term(t))
-                                    .collect::<Result<Vec<_>, Error>>()?;
+                                let target = lower.bound(&scope, || {
+                                    c.target
+                                        .iter()
+                                        .flatten()
+                                        .map(|t| lower.term(t))
+                                        .collect::<Result<Vec<_>, Error>>()
+                                })?;
 
                                 let telescope = curios_core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
@@ -840,46 +868,57 @@ fn process_items(
                         // call-site `@` supplies one positionally — while the
                         // payload binders keep their declared marks (`@m`
                         // makes one implicit; the default is explicit).
-                        let param_tys = u
+                        let binders = lower.mint(
+                            u.params.iter().map(|(_, n, _)| n.clone()).chain(
+                                c.payload
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, param)| payload_name(i, &param.label)),
+                            ),
+                        );
+                        let plicities = u
                             .params
                             .iter()
-                            .map(|(_, n, t)| {
-                                Ok((Plicity::Implicit, n.clone(), lower.input_type(t)?))
+                            .map(|_| Plicity::Implicit)
+                            .chain(c.payload.iter().map(|param| param.plicity))
+                            .collect::<Vec<_>>();
+                        let written = u
+                            .params
+                            .iter()
+                            .map(|(_, _, t)| t)
+                            .chain(c.payload.iter().map(|param| &param.type_))
+                            .collect::<Vec<_>>();
+                        let param_tys = written
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| {
+                                let ty = lower.bound(&binders[..i], || lower.input_type(t))?;
+                                Ok((plicities[i], binders[i].1.clone(), ty))
                             })
-                            .chain(c.payload.iter().enumerate().map(|(i, param)| {
-                                Ok((
-                                    param.plicity,
-                                    payload_name(i, &param.label),
-                                    lower.input_type(&param.type_)?,
-                                ))
-                            }))
                             .collect::<Result<Vec<_>, Error>>()?;
+                        let payload_binders = &binders[u.params.len()..];
+                        let param_binders = &binders[..u.params.len()];
                         // Erasure is sort-driven: `erase_func` drops the same
                         // proof/type payload params that `erase_variant` drops
                         // from the tuple — the constructor function's arity and its
                         // injected variant's arity stay in lockstep.
                         let ctor_type = curios_core::Term::func_type_marked(
                             param_tys.clone(),
-                            lower.term(&output_type)?,
+                            lower.bound(&binders, || lower.term(&output_type))?,
                         );
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
-                        let args: Vec<curios_core::Term> = c
-                            .payload
+                        let args: Vec<curios_core::Term> = payload_binders
                             .iter()
-                            .enumerate()
-                            .map(|(i, param)| {
-                                curios_core::Term::var(curios_core::Var::free(payload_name(
-                                    i,
-                                    &param.label,
-                                )))
+                            .map(|(_, id)| {
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
                             })
                             .collect();
                         let inject = curios_core::Term::variant(
                             context.prefixed(&u.label).join(),
-                            u.params
-                                .iter()
-                                .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n))),
+                            param_binders.iter().map(|(_, id)| {
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
+                            }),
                             curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
@@ -915,31 +954,44 @@ fn process_items(
                 let module = context.prefixed(&s.label).without_last();
                 let root = context.root();
 
+                let param_binders = lower.mint(s.params.iter().map(|(_, n, _)| n.clone()));
                 let param_tys = s
                     .params
                     .iter()
-                    .map(|(p, n, t)| Ok((*p, n.clone(), lower.input_type(t)?)))
+                    .enumerate()
+                    .map(|(i, (p, _, t))| {
+                        let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
+                        Ok((*p, param_binders[i].1.clone(), ty))
+                    })
                     .collect::<Result<Vec<_>, Error>>()?;
                 let param_tys_unmarked = param_tys
                     .iter()
                     .map(|(_, n, t)| (n.clone(), t.clone()))
                     .collect::<Vec<_>>();
-                let param_vars = s
-                    .params
+                let param_vars = param_binders
                     .iter()
-                    .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
+                    .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                     .collect::<Vec<_>>();
 
                 // Field types, with declared or positional (`_i`) names so a
                 // later field type can depend on an earlier field. The
                 // signature sugar `f(params) -> T` is undone here.
+                let field_binders = lower.mint(
+                    s.fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, param)| param.label.clone().unwrap_or_else(|| format!("_{i}"))),
+                );
+                let mut field_scope = param_binders.clone();
                 let field_tys = s
                     .fields
                     .iter()
                     .enumerate()
                     .map(|(i, param)| {
-                        let n = param.label.clone().unwrap_or_else(|| format!("_{i}"));
-                        Ok((n, lower.input_type(&param.desugared_type())?))
+                        let ty = lower
+                            .bound(&field_scope, || lower.input_type(&param.desugared_type()))?;
+                        field_scope.push(field_binders[i].clone());
+                        Ok((field_binders[i].1.clone(), ty))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -999,22 +1051,24 @@ fn process_items(
                 let module = context.prefixed(&concept.label).without_last();
                 let root = context.root();
 
-                let param_tys = {
-                    let lower = Lowerer::new(context);
-                    concept
-                        .params
-                        .iter()
-                        .map(|(p, n, t)| Ok((*p, n.clone(), lower.input_type(t)?)))
-                        .collect::<Result<Vec<_>, Error>>()?
-                };
+                let lower = Lowerer::new(context);
+                let param_binders = lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
+                let param_tys = concept
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (p, _, t))| {
+                        let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
+                        Ok((*p, param_binders[i].1.clone(), ty))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
                 let param_tys_unmarked = param_tys
                     .iter()
                     .map(|(_, n, t)| (n.clone(), t.clone()))
                     .collect::<Vec<_>>();
-                let param_vars = concept
-                    .params
+                let param_vars = param_binders
                     .iter()
-                    .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
+                    .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                     .collect::<Vec<_>>();
 
                 // Superclass fields are anonymous in the surface syntax; mint a
@@ -1039,22 +1093,21 @@ fn process_items(
                 // label is the binder for later fields; a super field's minted
                 // label is inert). The signature sugar `f(params) -> T` is undone
                 // here.
-                let field_tys = {
-                    let lower = Lowerer::new(context);
-                    concept
-                        .fields
-                        .iter()
-                        .zip(&field_labels)
-                        .map(|(field, label)| {
-                            Ok((label.clone(), lower.input_type(&field.desugared_type())?))
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?
-                };
+                let field_binders = lower.mint(field_labels.iter().cloned());
+                let mut field_scope = param_binders.clone();
+                let field_tys = concept
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
+                        let ty = lower
+                            .bound(&field_scope, || lower.input_type(&field.desugared_type()))?;
+                        field_scope.push(field_binders[i].clone());
+                        Ok((field_binders[i].1.clone(), ty))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
 
-                let result_sort = {
-                    let lower = Lowerer::new(context);
-                    lower.term(&concept.result_sort)?
-                };
+                let result_sort = lower.term(&concept.result_sort)?;
 
                 // The record shape drives struct literals and projections.
                 struct_decls.insert(
@@ -1433,6 +1486,7 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<String> {
                 .iter()
                 .flat_map(|(_, param)| param.telescope.free_vars()),
         )
+        .filter_map(|name| name.as_global().map(curios_core::Global::symbol))
         .collect()
 }
 
@@ -1447,13 +1501,14 @@ fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<String> {
         .free_vars()
         .into_iter()
         .chain(struct_decl.fields.free_vars())
+        .filter_map(|name| name.as_global().map(curios_core::Global::symbol))
         .collect()
 }
 
 #[derive(Clone)]
 struct AliasEdge {
     target: String,
-    dependencies: Option<BTreeSet<String>>,
+    dependencies: Option<BTreeSet<curios_core::Global>>,
 }
 
 fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
@@ -1463,17 +1518,26 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
     });
 
     lets.filter_map(|let_| {
+        // An alias target is a top-level definition. A body that is a bare
+        // *local* is not an alias — a discriminant test now, where it used to be
+        // a leading-`/` test on the spelling.
         let direct = let_.body.direct_type_alias_target(&let_.type_);
-        let target = direct.clone().or_else(|| {
-            let target = let_.body.transparent_alias_target()?;
-            target.starts_with('/').then_some(target)
-        })?;
+        let target = direct
+            .or_else(|| let_.body.transparent_alias_target())
+            .and_then(curios_core::Free::as_global)?
+            .symbol();
 
         Some((
             let_.name.join(),
             AliasEdge {
                 target,
-                dependencies: direct.map(|_| let_.body.free_vars()),
+                dependencies: direct.map(|_| {
+                    let_.body
+                        .free_vars()
+                        .into_iter()
+                        .filter_map(|name| name.as_global().cloned())
+                        .collect()
+                }),
             },
         ))
     })
@@ -1550,18 +1614,31 @@ fn alias_sources(aliases: &HashMap<String, AliasEdge>) -> HashMap<String, HashSe
     sources
 }
 
+/// The top-level definitions among `names`. A binder is nobody's dependency:
+/// it is introduced and discharged inside the very signature being audited.
+fn globals(
+    names: impl IntoIterator<Item = curios_core::Free>,
+) -> impl Iterator<Item = curios_core::Global> {
+    names
+        .into_iter()
+        .filter_map(|name| name.as_global().cloned())
+}
+
 /// Everyone who can see `referent`, whether by its own name or through a
 /// transparent alias that stands for it.
 fn referent_audience(
     audiences: &Audiences,
     sources: &HashMap<String, HashSet<String>>,
-    referent: &str,
+    referent: &curios_core::Global,
 ) -> Vec<Qualifier> {
-    let mut audience = audiences.binding(&Qualifier::from(
-        referent.trim_start_matches('/').split('/'),
-    ));
+    let Some(qualifier) = referent.qualifier() else {
+        return Vec::new();
+    };
+    let mut audience = audiences.binding(qualifier);
 
-    for alias in sources.get(referent).into_iter().flatten() {
+    // The alias table is still keyed by the flattened spelling, so a hop is
+    // matched by rendering rather than by identity.
+    for alias in sources.get(&referent.symbol()).into_iter().flatten() {
         let Some(path) = alias.strip_prefix('/') else {
             continue;
         };
@@ -1580,18 +1657,14 @@ fn audit_dependencies(
     sources: &HashMap<String, HashSet<String>>,
     exposure: &[Qualifier],
     item: &str,
-    dependencies: impl IntoIterator<Item = String>,
+    dependencies: impl IntoIterator<Item = curios_core::Global>,
 ) -> Result<(), Error> {
     for referent in dependencies {
-        if !referent.starts_with('/') {
-            continue;
-        }
-
         let reach = referent_audience(audiences, sources, &referent);
         if !Audiences::covers(exposure, &reach) {
             return Err(Error::PrivateItemInPublicInterface {
                 item: item.to_string(),
-                referent,
+                referent: referent.symbol(),
             });
         }
     }
@@ -1641,7 +1714,7 @@ fn audit_public_exposures(
             &sources,
             &exposure,
             &let_.name.join(),
-            let_.type_.free_vars(),
+            globals(let_.type_.free_vars()),
         )?;
     }
 
@@ -1662,11 +1735,13 @@ fn audit_public_exposures(
             }
 
             if let Some(induct_decl) = induct_decls.get(&nominal) {
-                let nominal_dependencies = induct_decl
-                    .params
-                    .free_vars()
-                    .into_iter()
-                    .chain(induct_decl.indices.free_vars());
+                let nominal_dependencies = globals(
+                    induct_decl
+                        .params
+                        .free_vars()
+                        .into_iter()
+                        .chain(induct_decl.indices.free_vars()),
+                );
                 audit_dependencies(&audiences, &sources, &exposure, &item, nominal_dependencies)?;
 
                 if induct_decl.rep_public {
@@ -1675,10 +1750,12 @@ fn audit_public_exposures(
                         &sources,
                         &exposure,
                         &item,
-                        induct_decl
-                            .constructors
-                            .iter()
-                            .flat_map(|(_, case)| case.telescope.free_vars()),
+                        globals(
+                            induct_decl
+                                .constructors
+                                .iter()
+                                .flat_map(|(_, case)| case.telescope.free_vars()),
+                        ),
                     )?;
                 }
             } else if let Some(struct_decl) = struct_decls.get(&nominal) {
@@ -1687,7 +1764,7 @@ fn audit_public_exposures(
                     &sources,
                     &exposure,
                     &item,
-                    struct_decl.params.free_vars(),
+                    globals(struct_decl.params.free_vars()),
                 )?;
 
                 if struct_decl.rep_public {
@@ -1696,7 +1773,7 @@ fn audit_public_exposures(
                         &sources,
                         &exposure,
                         &item,
-                        struct_decl.fields.free_vars(),
+                        globals(struct_decl.fields.free_vars()),
                     )?;
                 }
             }
@@ -1792,6 +1869,7 @@ pub fn into_core(
             struct_decls,
             concepts,
             witnesses,
+            binder_floor: binders.count(),
             type_,
             body: tail,
         },
@@ -1868,6 +1946,7 @@ pub fn prepare_prelude(
         struct_decls,
         concepts,
         witnesses,
+        binder_floor: binders.count(),
         type_: None,
         body: curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
     };
@@ -1971,6 +2050,7 @@ pub fn into_core_with_prelude(
             struct_decls,
             concepts,
             witnesses,
+            binder_floor: binders.count(),
             type_,
             body,
         },

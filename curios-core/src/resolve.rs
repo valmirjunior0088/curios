@@ -22,9 +22,9 @@
 
 use {
     super::{
-        Context, Error, HeadKey, ImplicitOrigin, Level, MetaId, Metavar, Outcome, ParkedGoal,
-        ParkedWork, StructType, Subterm, Telescope, Term, UniverseContext, Witness, WitnessKey,
-        WitnessOrigin, convert_outcome, reduce_with,
+        Context, Error, Free, Global, HeadKey, ImplicitOrigin, Level, MetaId, Metavar, Outcome,
+        ParkedGoal, ParkedWork, StructType, Subterm, Telescope, Term, UniverseContext, Witness,
+        WitnessKey, WitnessOrigin, convert_outcome, reduce_with,
     },
     curios_base::{Plicity, Qualifier, RootId},
     std::collections::{BTreeSet, HashSet},
@@ -346,7 +346,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             let struct_decl = context
                 .struct_decl(name)
                 .cloned()
-                .ok_or_else(|| Error::unbound_variable(Term::free_var(name)))?;
+                .ok_or_else(|| Error::unknown_declaration(name.clone()))?;
             let fields = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
                 &struct_decl.fields,
@@ -376,10 +376,11 @@ fn instantiate(
     let (signature, universes) =
         context.instantiate_universe_bound(&witness.universe_context, &witness.signature)?;
     let minted = universes.clone();
+    let name = Free::from(&witness.name);
     let head = if universes.is_empty() {
-        Term::free_var(&witness.name)
+        Term::free_var(&name)
     } else {
-        Term::universe_inst(Term::free_var(&witness.name), universes)
+        Term::universe_inst(Term::free_var(&name), universes)
     };
     let span = origin.span();
 
@@ -392,19 +393,19 @@ fn instantiate(
                 let Telescope::Cons(ty, rest) = tele else {
                     unreachable!("plicities parallel the telescope");
                 };
-                let binder = rest.first_label().unwrap_or("_").to_string();
+                let binder = rest.first_hint().unwrap_or("_").to_string();
                 let arg = match plicity {
                     Plicity::Implicit => context.fresh_metavar(
                         ty.clone(),
                         span.clone(),
                         ImplicitOrigin {
-                            func: witness.name.clone(),
+                            func: witness.name.symbol(),
                             binder,
                         },
                     ),
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
-                            func: witness.name.clone(),
+                            func: witness.name.symbol(),
                             binder,
                         };
                         let (id, metavar) = context.fresh_witness_metavar(
@@ -669,7 +670,7 @@ pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Err
 /// name, never table membership.
 pub(crate) fn register_witness(
     context: &mut Context,
-    name: &str,
+    name: &Global,
     signature: &Term,
     universe_context: UniverseContext,
     module: &Qualifier,
@@ -680,7 +681,7 @@ pub(crate) fn register_witness(
     // Peel the telescope, opening each binder with its own label as a neutral
     // free variable (elaborated binder labels are entropy-fresh, so they
     // cannot collide).
-    let mut binders: Vec<(Plicity, String, Term)> = Vec::new();
+    let mut binders: Vec<(Plicity, Free, Term)> = Vec::new();
     let terminal = match &*reduced {
         Subterm::FuncType(ft) => {
             let mut tele = ft.telescope.clone();
@@ -689,11 +690,11 @@ pub(crate) fn register_witness(
                     unreachable!("plicities parallel the telescope");
                 };
                 if matches!(plicity, Plicity::Explicit) {
-                    return Err(Error::explicit_witness_param(name));
+                    return Err(Error::explicit_witness_param(name.symbol()));
                 }
-                let label = rest.first_label().unwrap_or("_").to_string();
-                tele = rest.open(&[&Term::free_var(&label)]);
-                binders.push((*plicity, label, ty.clone()));
+                let binder = context.fresh(rest.first_hint());
+                tele = rest.open(&[&Term::free_var(&binder)]);
+                binders.push((*plicity, binder, ty.clone()));
             }
             let Telescope::Done(terminal) = tele else {
                 unreachable!("plicities parallel the telescope");
@@ -710,21 +711,25 @@ pub(crate) fn register_witness(
         ..
     }) = &*terminal
     else {
-        return Err(Error::not_a_concept(name, terminal.clone()));
+        return Err(Error::not_a_concept(name.symbol(), terminal.clone()));
     };
     if context.concept(concept_name).is_none() {
-        return Err(Error::not_a_concept(name, terminal.clone()));
+        return Err(Error::not_a_concept(name.symbol(), terminal.clone()));
     }
 
     // Key on every parameter: each must reduce to a rigid, keyable head.
     if params.is_empty() {
-        return Err(Error::invalid_witness_head(name, 0, terminal.clone()));
+        return Err(Error::invalid_witness_head(
+            name.symbol(),
+            0,
+            terminal.clone(),
+        ));
     }
     let mut heads = Vec::with_capacity(params.len());
     for (position, param) in params.iter().enumerate() {
         let head = reduce_with(context, param)?;
         let Some(head) = HeadKey::of_whnf(&head) else {
-            return Err(Error::invalid_witness_head(name, position, head));
+            return Err(Error::invalid_witness_head(name.symbol(), position, head));
         };
         heads.push(head);
     }
@@ -733,7 +738,7 @@ pub(crate) fn register_witness(
     // Termination (Haskell-98-lite): every `use` premise applies a concept to
     // *variables bound by this witness's own telescope* — resolution through
     // it is then structurally decreasing, with no fuel or tabling.
-    let binder_names: BTreeSet<&str> = binders.iter().map(|(_, n, _)| n.as_str()).collect();
+    let binder_names: BTreeSet<&Free> = binders.iter().map(|(_, n, _)| n).collect();
     for (plicity, _, type_) in &binders {
         if !matches!(plicity, Plicity::Witness) {
             continue;
@@ -745,19 +750,28 @@ pub(crate) fn register_witness(
             ..
         }) = &*premise
         else {
-            return Err(Error::non_regular_witness_premise(name, premise.clone()));
+            return Err(Error::non_regular_witness_premise(
+                name.symbol(),
+                premise.clone(),
+            ));
         };
         if context.concept(premise_concept).is_none() {
-            return Err(Error::non_regular_witness_premise(name, premise.clone()));
+            return Err(Error::non_regular_witness_premise(
+                name.symbol(),
+                premise.clone(),
+            ));
         }
         let regular = premise_args.iter().all(|arg| match &**arg {
             Subterm::Var(var) => var
-                .as_label()
+                .as_free()
                 .is_some_and(|free| binder_names.contains(free)),
             _ => false,
         });
         if !regular {
-            return Err(Error::non_regular_witness_premise(name, premise.clone()));
+            return Err(Error::non_regular_witness_premise(
+                name.symbol(),
+                premise.clone(),
+            ));
         }
     }
 
@@ -796,7 +810,7 @@ pub(crate) fn register_witness(
         concept_name.clone(),
         key.clone(),
         Witness {
-            name: name.to_string(),
+            name: name.clone(),
             module: module.clone(),
             universe_context,
             signature: signature.clone(),

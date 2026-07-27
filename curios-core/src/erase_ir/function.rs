@@ -71,7 +71,7 @@ impl Lowering {
                 match (body_telescope, type_telescope) {
                     (Telescope::Done(body), Telescope::Done(output)) => break (*body, *output),
                     (Telescope::Cons(_domain, body_rest), Telescope::Cons(type_, type_rest)) => {
-                        let label = body_rest.first_label().map(str::to_string);
+                        let label = body_rest.first_hint().map(str::to_string);
                         let name = context.fresh(label.as_deref());
                         let variable = Term::free_var(&name);
                         // The flag is read before the binder is assumed: a
@@ -232,7 +232,7 @@ fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Erro
     let Subterm::Var(var) = &**head else {
         return Ok(false);
     };
-    let Some(name) = var.as_label() else {
+    let Some(name) = var.as_free() else {
         return Ok(false);
     };
     let Some(DefinitionKind::InductiveConstructor { owner, .. }) = context.definition_kind(name)

@@ -1,10 +1,10 @@
 use {
     super::{
-        Bound, Concept, DefinitionKind, Error, Goal, HeadKey, ImplicitOrigin, InductDecl, Level,
-        MetaId, Metavar, MetavarOrigin, StructDecl, Subterm, Term, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMark, UniverseMetaId,
-        UniverseRole, UniverseSeed, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
-        WitnessOrigin,
+        Bound, Concept, DefinitionKind, Error, Free, Goal, HeadKey, HeadTag, ImplicitOrigin,
+        InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Subterm, Term,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
+        UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
     curios_base::{Entropy, Qualifier, RootId, Span},
@@ -20,7 +20,7 @@ use {
 /// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta
 /// born under the same Γ shares one allocation (see
 /// [`Context::identity_snapshot`]).
-type SharedTelescope = Rc<Vec<(String, Term)>>;
+type SharedTelescope = Rc<Vec<(Free, Term)>>;
 
 /// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder
 /// — shared the same way.
@@ -122,15 +122,15 @@ pub(crate) struct DefEntry {
 /// committed solutions refinement-free.
 #[derive(Debug, Clone)]
 pub(crate) struct FrozenFrame {
-    assumptions: Vec<(String, Term)>,
-    definitions: Vec<(String, DefEntry)>,
-    refinements: Vec<(String, Term)>,
+    assumptions: Vec<(Free, Term)>,
+    definitions: Vec<(Free, DefEntry)>,
+    refinements: Vec<(Free, Term)>,
     refinement_projections: Vec<((Term, usize), Term)>,
     refinement_scrutinees: Vec<(Term, Term)>,
     /// The `use`-plicity binders in scope at park time (a subset of
     /// `assumptions`, in the same binding order). Witness resolution scans
     /// these; a retry must see the same instance scope its origin saw.
-    witness_binders: Vec<(String, Term)>,
+    witness_binders: Vec<(Free, Term)>,
 }
 
 /// The work a parked problem will retry (§8).
@@ -223,13 +223,13 @@ pub struct Context {
     // quadratic time and linear extra stack. See
     // `Context::get_or_init_elaborated` for the exact gates and clear sites.
     elaboration_cache: HashMap<ElaborationKey, (Term, Term)>,
-    assumptions: Vec<HashMap<String, Term>>,
-    assumption_universes: Vec<HashMap<String, UniverseContext>>,
-    definitions: Vec<HashMap<String, DefEntry>>,
+    assumptions: Vec<HashMap<Free, Term>>,
+    assumption_universes: Vec<HashMap<Free, UniverseContext>>,
+    definitions: Vec<HashMap<Free, DefEntry>>,
     // Counterfactual match-arm refinements (`refine_head`), kept parallel to
     // `definitions` but suppressible: re-validation of a metavariable
     // solution (§7.4) must keep stable definitions yet ignore these.
-    refinements: Vec<HashMap<String, Term>>,
+    refinements: Vec<HashMap<Free, Term>>,
     refinement_projections: Vec<HashMap<(Term, usize), Term>>,
     // Counterfactual refinements keyed by a *stuck application* scrutinee — a
     // non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head`
@@ -243,7 +243,7 @@ pub struct Context {
     // The local assumption context in binding order (a companion to
     // `assumptions`, which is keyed by name and loses order). `assume` appends;
     // frames are delimited by `local_marks`.
-    local: Vec<(String, Term)>,
+    local: Vec<(Free, Term)>,
     local_marks: Vec<usize>,
     // Parked conversion constraints (§8) — frame-independent, like `metas`.
     parked: Vec<ParkedGoal>,
@@ -302,7 +302,7 @@ pub struct Context {
     // The `use`-plicity binders currently in scope, in binding order (a
     // subset of `local`), with frame boundaries in `witness_marks` —
     // resolution's step-1/2 search space, scanned innermost-first.
-    witness_scope: Vec<(String, Term)>,
+    witness_scope: Vec<(Free, Term)>,
     witness_marks: Vec<usize>,
     // Witness goals whose key is rigid but has no table entry *yet*: a later
     // item may register the missing witness (the table is program-wide while
@@ -370,13 +370,26 @@ impl Context {
         }
     }
 
-    pub(crate) fn fresh(&mut self, hint: Option<&str>) -> String {
-        let counter = self.fresh_names.fresh();
+    /// Mint a binder nothing else can name, rendering as `hint`.
+    ///
+    /// The counter is seeded above every index `into_core` minted
+    /// ([`Context::set_local_floor`]), so a lowered binder and an elaborated one
+    /// can never be the same identity.
+    pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
+        let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
 
-        match hint {
-            Some(h) => format!("{h}#{counter}"),
-            None => format!("#{counter}"),
-        }
+        Free::local(index, hint)
+    }
+
+    /// Raise the binder counter above every index already minted elsewhere.
+    ///
+    /// `into_core` mints the binders of every lowered scope, and `core` mints
+    /// more while elaborating them; both draw from one identity space, so the
+    /// second source must start above the first. The archived prelude replays
+    /// terms whose binders were minted in an earlier compiler run, and this is
+    /// what keeps a fresh mint from aliasing one of them.
+    pub fn set_local_floor(&mut self, floor: usize) {
+        self.fresh_names.seed(floor);
     }
 
     pub(crate) fn deadline(&self) -> Instant {
@@ -655,39 +668,31 @@ impl Context {
 
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases),
     /// so a binder carries no runtime-multiplicity mark.
-    pub(crate) fn assume<A>(&mut self, label: A, type_: &Term)
-    where
-        A: Into<String>,
-    {
-        let label = label.into();
+    pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();
         self.mutation_stamp.fresh();
-        self.local.push((label.clone(), type_.clone()));
+        self.local.push((name.clone(), type_.clone()));
 
         self.assumptions
             .last_mut()
             .unwrap()
-            .insert(label.clone(), type_.clone());
+            .insert(name.clone(), type_.clone());
         self.assumption_universes
             .last_mut()
             .unwrap()
-            .insert(label, UniverseContext::empty());
+            .insert(name.clone(), UniverseContext::empty());
     }
 
     /// Assume `label : type_` as a `use`-plicity binder: an ordinary
     /// assumption that additionally joins the witness scope, where resolution
     /// finds it (innermost-first).
-    pub(crate) fn assume_witness<A>(&mut self, label: A, type_: &Term)
-    where
-        A: Into<String>,
-    {
-        let label = label.into();
-        self.assume(label.as_str(), type_);
-        self.witness_scope.push((label, type_.clone()));
+    pub(crate) fn assume_witness(&mut self, name: &Free, type_: &Term) {
+        self.assume(name, type_);
+        self.witness_scope.push((name.clone(), type_.clone()));
     }
 
     /// The `use`-plicity binders in scope, in binding order (innermost last).
-    pub(crate) fn witness_scope(&self) -> &[(String, Term)] {
+    pub(crate) fn witness_scope(&self) -> &[(Free, Term)] {
         &self.witness_scope
     }
 
@@ -700,7 +705,7 @@ impl Context {
     /// has no prior assumption — every caller is expected to have `assume`d
     /// it earlier in the same scope (a construction bug otherwise, not a
     /// user-facing case).
-    pub(crate) fn reassume(&mut self, label: &str, type_: &Term) {
+    pub(crate) fn reassume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();
         self.mutation_stamp.fresh();
         // A top-level `rec` group's names are qualified (`#`-free), so an
@@ -714,26 +719,41 @@ impl Context {
             .local
             .iter_mut()
             .rev()
-            .find(|(name, _)| name == label)
-            .unwrap_or_else(|| panic!("reassume: '{label}' has no local binding to replace"));
+            .find(|(bound, _)| bound == name)
+            .unwrap_or_else(|| panic!("reassume: '{name}' has no local binding to replace"));
         entry.1 = type_.clone();
 
         let assumptions = self
             .assumptions
             .iter_mut()
             .rev()
-            .find(|assumptions| assumptions.contains_key(label))
+            .find(|assumptions| assumptions.contains_key(name))
             .unwrap_or_else(|| {
-                panic!("reassume: '{label}' has no assumption-frame entry to replace")
+                panic!("reassume: '{name}' has no assumption-frame entry to replace")
             });
-        assumptions.insert(label.to_string(), type_.clone());
+        assumptions.insert(name.clone(), type_.clone());
     }
 
-    pub(crate) fn assumption(&self, label: &str) -> Option<&Term> {
+    /// The assumed type of the global that renders as `symbol`.
+    ///
+    /// A scan rather than a lookup: the nominal registries key on the flattened
+    /// spelling while Γ keys on identity, so this bridges the two by rendering.
+    /// Confined to diagnostic paths, where the scan is already past the point of
+    /// no return. Retired when the nominal heads carry a [`Global`].
+    pub(crate) fn assumption_of_symbol(&self, symbol: &str) -> Option<&Term> {
+        self.assumptions.iter().rev().find_map(|assumptions| {
+            assumptions
+                .iter()
+                .find(|(name, _)| name.as_global().is_some_and(|g| g.symbol() == symbol))
+                .map(|(_, type_)| type_)
+        })
+    }
+
+    pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
         self.assumptions
             .iter()
             .rev()
-            .find_map(|assumptions| assumptions.get(label))
+            .find_map(|assumptions| assumptions.get(name))
     }
 
     /// Collect universe metas reachable through a term and through any solved
@@ -773,16 +793,16 @@ impl Context {
 
     pub(crate) fn instantiate_assumption_universes(
         &mut self,
-        label: &str,
+        name: &Free,
     ) -> Result<Option<(Term, Vec<Level>)>, UniverseError> {
-        let Some(type_) = self.assumption(label).cloned() else {
+        let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
         };
         let universe_context = self
             .assumption_universes
             .iter()
             .rev()
-            .find_map(|contexts| contexts.get(label))
+            .find_map(|contexts| contexts.get(name))
             .cloned()
             .unwrap_or_default();
         if universe_context.parameter_count == 0 {
@@ -797,25 +817,25 @@ impl Context {
 
     pub(crate) fn instantiate_assumption(
         &mut self,
-        label: &str,
+        name: &Free,
     ) -> Result<Option<(Term, Vec<Level>)>, Error> {
-        self.instantiate_assumption_universes(label)
+        self.instantiate_assumption_universes(name)
             .map_err(Error::from)
     }
 
     pub(crate) fn instantiate_assumption_at(
         &mut self,
-        label: &str,
+        name: &Free,
         levels: &[Level],
     ) -> Result<Option<Term>, Error> {
-        let Some(type_) = self.assumption(label).cloned() else {
+        let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
         };
         let found = self
             .assumption_universes
             .iter()
             .rev()
-            .find_map(|contexts| contexts.get(label))
+            .find_map(|contexts| contexts.get(name))
             .cloned();
         #[cfg(feature = "profile")]
         if found
@@ -824,7 +844,7 @@ impl Context {
         {
             tracing::debug!(
                 target: "curios_core::universe",
-                %label,
+                %name,
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
                 got = levels.len(),
@@ -833,8 +853,8 @@ impl Context {
                     .assumption_universes
                     .iter()
                     .enumerate()
-                    .filter(|(_, contexts)| contexts.contains_key(label))
-                    .map(|(index, contexts)| (index, contexts[label].parameter_count))
+                    .filter(|(_, contexts)| contexts.contains_key(name))
+                    .map(|(index, contexts)| (index, contexts[name].parameter_count))
                     .collect::<Vec<_>>(),
                 "assumption instance arity mismatch",
             );
@@ -948,36 +968,36 @@ impl Context {
 
     pub(crate) fn set_assumption_universe_context(
         &mut self,
-        label: &str,
+        name: &Free,
         universe_context: UniverseContext,
     ) {
         let contexts = self
             .assumption_universes
             .iter_mut()
             .rev()
-            .find(|contexts| contexts.contains_key(label))
-            .unwrap_or_else(|| panic!("'{label}' has no assumption universe context to replace"));
+            .find(|contexts| contexts.contains_key(name))
+            .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
         #[cfg(feature = "profile")]
         tracing::debug!(
             target: "curios_core::universe",
-            %label,
+            %name,
             params = universe_context.parameter_count,
-            was = contexts[label].parameter_count,
+            was = contexts[name].parameter_count,
             "assumption scheme written",
         );
-        contexts.insert(label.to_string(), universe_context);
+        contexts.insert(name.clone(), universe_context);
         #[cfg(feature = "profile")]
         {
             let holders = self
                 .assumption_universes
                 .iter()
                 .enumerate()
-                .filter(|(_, contexts)| contexts.contains_key(label))
-                .map(|(index, contexts)| (index, contexts[label].parameter_count))
+                .filter(|(_, contexts)| contexts.contains_key(name))
+                .map(|(index, contexts)| (index, contexts[name].parameter_count))
                 .collect::<Vec<_>>();
             tracing::debug!(
                 target: "curios_core::universe",
-                %label,
+                %name,
                 frames = self.assumption_universes.len(),
                 ?holders,
                 "assumption scheme frames",
@@ -993,10 +1013,10 @@ impl Context {
     /// defined here will only ever be *re*defined (which clears both caches
     /// wholesale), never freshly defined, so an elaboration entry naming it is
     /// safe to keep across a later fresh `define`.
-    fn is_defined(&self, label: &str) -> bool {
+    fn is_defined(&self, name: &Free) -> bool {
         self.definitions
             .iter()
-            .any(|frame| frame.contains_key(label))
+            .any(|frame| frame.contains_key(name))
     }
 
     /// The local assumption context in binding order (outermost first). The
@@ -1005,11 +1025,11 @@ impl Context {
     /// must ride into the motive as Π-binders, or the synthesized motive is
     /// ill-typed. Binding order matters — a hypothesis's type can only mention
     /// earlier binders, so the telescope it yields is already well-ordered.
-    pub(crate) fn locals(&self) -> &[(String, Term)] {
+    pub(crate) fn locals(&self) -> &[(Free, Term)] {
         &self.local
     }
 
-    fn define_entry(&mut self, label: String, entry: DefEntry) {
+    fn define_entry(&mut self, name: Free, entry: DefEntry) {
         // A *fresh* definition can only unstick reductions that read this
         // name's absence, and a stuck read always leaves the name free in the
         // WHNF (the name analogue of the unsolved-metavariable argument in
@@ -1023,12 +1043,12 @@ impl Context {
         // The elaboration cache survives the same fresh definition with no
         // retain at all: its insert gate (`elaboration_cacheable`) already
         // refused every entry naming a not-yet-defined global, so the fresh
-        // label appears in no surviving entry. A `#`-minted `let` binder —
-        // which `reduce_let` leaks and the frame elaborators mint — is excluded
-        // from caching outright (`has_local_free`), and a `/`-qualified global
-        // is only ever referenced once defined; so not clearing lets a deep
-        // spine memoize once across those definitions instead of re-elaborating
-        // its shared subterms after each.
+        // name appears in no surviving entry. A minted `let` binder — which
+        // `reduce_let` leaks and the frame elaborators mint — is excluded from
+        // caching outright (`has_local_free`), and a global is only ever
+        // referenced once defined; so not clearing lets a deep spine memoize
+        // once across those definitions instead of re-elaborating its shared
+        // subterms after each.
         //
         // A *redefinition* voids both arguments — `reduce_let` and the frame
         // elaborators define under labels that can rebind or shadow, and the
@@ -1038,27 +1058,24 @@ impl Context {
         let redefinition = self
             .definitions
             .iter()
-            .any(|frame| frame.contains_key(&label));
+            .any(|frame| frame.contains_key(&name));
         if redefinition {
             self.mutation_stamp.fresh();
             self.reduction_cache.clear();
             self.elaboration_cache.clear();
         } else {
             self.reduction_cache
-                .retain(|_, reduct| !reduct.mentions_free(&label));
+                .retain(|_, reduct| !reduct.mentions_free(&name));
         }
 
-        self.definitions.last_mut().unwrap().insert(label, entry);
+        self.definitions.last_mut().unwrap().insert(name, entry);
     }
 
-    /// Define `label`. `kind` is the declaring module item's
+    /// Define `name`. `kind` is the declaring module item's
     /// [`DefinitionKind`], or `None` for a local binding no item declared.
-    pub(crate) fn define<A>(&mut self, label: A, term: &Term, kind: Option<&DefinitionKind>)
-    where
-        A: Into<String>,
-    {
+    pub(crate) fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
         self.define_entry(
-            label.into(),
+            name.clone(),
             DefEntry {
                 term: term.clone(),
                 kind: kind.cloned(),
@@ -1066,33 +1083,27 @@ impl Context {
         );
     }
 
-    pub(crate) fn define_assuming<A>(
+    pub(crate) fn define_assuming(
         &mut self,
-        label: A,
+        name: &Free,
         type_: &Term,
         term: &Term,
         kind: Option<&DefinitionKind>,
-    ) where
-        A: Into<String>,
-    {
-        let label = label.into();
-        self.assume(label.as_str(), type_);
-        self.define(label, term, kind);
+    ) {
+        self.assume(name, type_);
+        self.define(name, term, kind);
     }
 
-    pub(crate) fn define_assuming_scheme<A>(
+    pub(crate) fn define_assuming_scheme(
         &mut self,
-        label: A,
+        name: &Free,
         type_: &Term,
         term: &Term,
         kind: Option<&DefinitionKind>,
         universe_context: UniverseContext,
-    ) where
-        A: Into<String>,
-    {
-        let label = label.into();
-        self.define_assuming(label.as_str(), type_, term, kind);
-        self.set_assumption_universe_context(&label, universe_context);
+    ) {
+        self.define_assuming(name, type_, term, kind);
+        self.set_assumption_universe_context(name, universe_context);
     }
 
     /// The [`DefinitionKind`] of the module item that defined `label`, or
@@ -1102,11 +1113,11 @@ impl Context {
     /// into a family and a case and looking the family up in a registry: the
     /// kind was known where the definition was generated, so it is read back
     /// rather than re-derived from the name's spelling.
-    pub(crate) fn definition_kind(&self, label: &str) -> Option<&DefinitionKind> {
+    pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
         self.definitions
             .iter()
             .rev()
-            .find_map(|definitions| definitions.get(label))
+            .find_map(|definitions| definitions.get(name))
             .and_then(|entry| entry.kind.as_ref())
     }
 
@@ -1115,15 +1126,12 @@ impl Context {
     /// Register a counterfactual match-arm refinement of a variable. Unlike
     /// `define`, this lives in a suppressible store so re-validation can ignore
     /// it. Clears the reduction cache, as the variable now reduces differently.
-    pub(crate) fn refine<A>(&mut self, label: A, term: &Term)
-    where
-        A: Into<String>,
-    {
+    pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
         self.mutation_stamp.fresh();
         self.refinements
             .last_mut()
             .unwrap()
-            .insert(label.into(), term.clone());
+            .insert(name.clone(), term.clone());
 
         self.reduction_cache.clear();
         self.elaboration_cache.clear();
@@ -1143,12 +1151,12 @@ impl Context {
     }
 
     /// The reduct of a variable: its definition, or — unless refinements are
-    /// suppressed — its counterfactual refinement. Labels never appear in both
+    /// suppressed — its counterfactual refinement. A name never appears in both
     /// stores (definitions name `let`/`rec` binders; refinements name assumed
     /// scrutinee heads), so the order between them is immaterial.
-    fn raw_var_reduct(&self, label: &str) -> Option<&Term> {
+    fn raw_var_reduct(&self, name: &Free) -> Option<&Term> {
         if !self.suppress_refinements
-            && let Some(term) = self.refinements.iter().rev().find_map(|r| r.get(label))
+            && let Some(term) = self.refinements.iter().rev().find_map(|r| r.get(name))
         {
             return Some(term);
         }
@@ -1156,7 +1164,7 @@ impl Context {
         self.definitions
             .iter()
             .rev()
-            .find_map(|definitions| definitions.get(label))
+            .find_map(|definitions| definitions.get(name))
             .map(|entry| &entry.term)
     }
 
@@ -1168,20 +1176,20 @@ impl Context {
     /// raw variable unfold would leak those bound parameters into the ambient
     /// solver. The explicit-instance reducer uses [`Self::var_reduct_at`] after
     /// it has the occurrence's level arguments.
-    pub(crate) fn var_reduct(&self, label: &str) -> Option<&Term> {
+    pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
         let is_polymorphic = self
             .assumption_universes
             .iter()
             .rev()
-            .find_map(|contexts| contexts.get(label))
+            .find_map(|contexts| contexts.get(name))
             .is_some_and(|context| context.parameter_count != 0);
         (!is_polymorphic)
-            .then(|| self.raw_var_reduct(label))
+            .then(|| self.raw_var_reduct(name))
             .flatten()
     }
 
-    pub(crate) fn var_reduct_at(&self, label: &str) -> Option<&Term> {
-        self.raw_var_reduct(label)
+    pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
+        self.raw_var_reduct(name)
     }
 
     /// The reduct of a projection: its counterfactual match-arm refinement,
@@ -1222,13 +1230,13 @@ impl Context {
         !self.refinement_scrutinees.iter().all(|f| f.is_empty())
     }
 
-    /// Whether some registered scrutinee key shares `label` as its applied-head
-    /// symbol. The second gate, past [`Term::head_label`]: only a head that is
+    /// Whether some registered scrutinee key shares `head` as its applied-head
+    /// symbol. The second gate, past [`Term::head_key`]: only a head that is
     /// actually refined justifies canonicalizing the candidate's arguments.
-    pub(crate) fn scrutinee_head_refined(&self, label: &str) -> bool {
+    pub(crate) fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
         self.refinement_scrutinees
             .iter()
-            .any(|f| f.keys().any(|k| k.head_label() == Some(label)))
+            .any(|f| f.keys().any(|k| k.head_key() == Some(head)))
     }
 
     /// The reduct of a canonical stuck scrutinee: its refinement value, unless
@@ -1528,7 +1536,7 @@ impl Context {
         let witness = self
             .witness_table
             .values_mut()
-            .find(|witness| witness.name == name)
+            .find(|witness| witness.name.symbol() == name)
             .unwrap_or_else(|| panic!("witness '{name}' was not registered"));
         witness.universe_context = universe_context;
         witness.signature = signature;
@@ -1660,7 +1668,7 @@ impl Context {
     /// such names in a solution even though they are not in the metavariable's
     /// Γ/spine (which holds only local binders): a solution may freely mention
     /// a global constant without that constant being a context binder.
-    pub(crate) fn is_top_level(&self, name: &str) -> bool {
+    pub(crate) fn is_top_level(&self, name: &Free) -> bool {
         self.assumptions
             .first()
             .is_some_and(|frame| frame.contains_key(name))
@@ -1796,15 +1804,15 @@ impl Context {
             return Some(solution.clone());
         }
 
-        let labels = entry
+        let binders = entry
             .telescope
             .iter()
-            .map(|(name, _)| name.as_str())
+            .map(|(name, _)| name)
             .collect::<Vec<_>>();
 
         let spine = metavar.spine.iter().collect::<Vec<_>>();
 
-        Some(solution.capture(&labels).release(&spine))
+        Some(solution.capture(&binders).release(&spine))
     }
 
     /// Commit a metavariable's solution. Needs no reduction-cache clear: a WHNF

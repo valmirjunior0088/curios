@@ -27,7 +27,7 @@ impl FlatLet {
         curios_core::Definition {
             root: self.root,
             island: self.island,
-            name: self.name.join(),
+            name: curios_core::Global::Authored(self.name),
             kind: self.kind,
             universe_context: UniverseContext::empty(),
             type_: self.type_,
@@ -63,6 +63,10 @@ impl FlatItem {
         }
     }
 
+    /// Every global this item names, as the flattened spelling the reachability
+    /// prune keys on (see [`FlatItem::names`]). Locals are dropped: an item's
+    /// binders are its own business, and reachability is a question about
+    /// definitions.
     pub(super) fn free_vars(&self) -> HashSet<String> {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
@@ -80,6 +84,7 @@ impl FlatItem {
                     .free_vars()
                     .into_iter()
                     .chain(let_.body.free_vars())
+                    .filter_map(|name| name.as_global().map(curios_core::Global::symbol))
                     .chain(let_.type_.construction_names())
                     .chain(let_.body.construction_names())
             })
@@ -257,10 +262,10 @@ pub(super) struct Context<'a> {
     universe_role: &'a Cell<UniverseRole>,
     universe_seeds: &'a RefCell<Vec<UniverseSeed>>,
     universe_allocations: &'a RefCell<HashMap<Span, UniverseMetaId>>,
-    // Sibling counter for fresh continuation-binder names minted while desugaring
-    // `!` regions. Threaded (not a process-global atomic) for determinism:
-    // `curios_core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
-    // tests must be order-stable.
+    // Shared counter for every binder identity a lowered term closes over.
+    // Threaded (not a process-global atomic) for determinism: two runs over the
+    // same source must mint the same identities, or terms that should be equal
+    // would differ.
     binders: &'a Entropy,
     syntax: &'a SyntaxRegistry,
 }
@@ -386,11 +391,17 @@ impl<'a> Context<'a> {
         result
     }
 
-    /// Mint a fresh continuation-binder name for `!` desugaring. The `#`
-    /// sigil is illegal in source identifiers, so it cannot collide with user
-    /// names or qualified references.
-    pub(super) fn fresh_binder(&self) -> String {
-        format!("#{}", self.binders.fresh())
+    /// Mint a binder identity, rendering as `hint`.
+    ///
+    /// Every binder a lowered term closes over comes from here, including the
+    /// continuation binders `!` desugaring introduces. `curios-core` mints more
+    /// while elaborating and seeds its counter above [`Self::binder_floor`], so
+    /// the two sources share one identity space without colliding.
+    pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
+        curios_core::Free::local(
+            u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
+            hint,
+        )
     }
 
     pub(super) fn syntax(&self) -> SyntaxRegistry {

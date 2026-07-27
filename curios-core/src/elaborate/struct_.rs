@@ -60,9 +60,9 @@ pub(super) fn elaborate_struct_type(
     } = st;
 
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return Err(match context.assumption(name) {
+        return Err(match context.assumption_of_symbol(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unbound_variable(Term::free_var(name)),
+            None => Error::unknown_declaration(name.clone()),
         });
     };
     let explicit_universes = (!universes.is_empty()).then_some(universes.as_slice());
@@ -73,7 +73,7 @@ pub(super) fn elaborate_struct_type(
         let mut resolved = Vec::with_capacity(struct_decl.params.len());
         let mut tele = struct_decl.params.clone();
         while let Telescope::Cons(ty, rest) = tele {
-            let binder = binder_name(rest.first_label().unwrap_or("_"));
+            let binder = binder_name(rest.first_hint());
             let arg = context.fresh_metavar(
                 ty.clone(),
                 term.span(),
@@ -181,9 +181,9 @@ pub(super) fn elaborate_struct(
     } = s;
 
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return Err(match context.assumption(name) {
+        return Err(match context.assumption_of_symbol(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unbound_variable(Term::free_var(name)),
+            None => Error::unknown_declaration(name.clone()),
         });
     };
     let explicit_universes =
@@ -366,7 +366,7 @@ pub(super) fn resolve_struct_params(
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,
             None => {
-                let binder = binder_name(rest.first_label().unwrap_or("_"));
+                let binder = binder_name(rest.first_hint());
                 context.fresh_metavar(
                     ty.clone(),
                     term.span(),
@@ -591,5 +591,5 @@ pub(super) fn elaborate_struct_spread(
         ))
     })?;
 
-    Ok((Term::let_(label, base_type, base, rebuilt), result_type))
+    Ok((Term::let_(&label, base_type, base, rebuilt), result_type))
 }

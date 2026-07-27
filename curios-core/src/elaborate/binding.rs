@@ -16,7 +16,7 @@ pub(super) fn elaborate_let(
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
-        let mut triples = Vec::<(String, Term, Term)>::with_capacity(let_.bindings.len());
+        let mut triples = Vec::<(Free, Term, Term)>::with_capacity(let_.bindings.len());
 
         for (index, binding) in let_.bindings.iter().enumerate() {
             let (type_, body) = {
@@ -48,7 +48,7 @@ pub(super) fn elaborate_let(
                     (type_elaborated, body_elaborated)
                 }
             };
-            let label = context.fresh(let_.tail.label_iter().nth(index).flatten());
+            let label = context.fresh(let_.tail.hint_iter().nth(index).flatten());
 
             // Define the binding with the *rebuilt* body so the tail's
             // type-level evaluation does not reduce through the lowered
@@ -69,8 +69,8 @@ pub(super) fn elaborate_let(
         let rebuilt = triples
             .into_iter()
             .rev()
-            .fold(tail_elaborated, |tail, (label, type_, body)| {
-                Term::let_(label, type_, body, tail)
+            .fold(tail_elaborated, |tail, (binder, type_, body)| {
+                Term::let_(&binder, type_, body, tail)
             });
 
         Ok((rebuilt, tail_type))
@@ -89,15 +89,11 @@ pub(super) fn elaborate_rec(
         let group = &rec.group;
         let labels = rec
             .tail
-            .label_iter()
+            .hint_iter()
             .map(|l| context.fresh(l))
             .collect::<Vec<_>>();
 
-        let label_terms = labels
-            .iter()
-            .map(Var::free)
-            .map(Term::var)
-            .collect::<Vec<_>>();
+        let label_terms = labels.iter().map(Term::free_var).collect::<Vec<_>>();
         let label_refs = label_terms.iter().collect::<Vec<_>>();
 
         let items = group
@@ -508,14 +504,14 @@ pub(super) fn elaborate_func_check(
     // Assume an inserted or consumed binder into the ordinary scope, joining the
     // witness scope when the *expected* slot is a `use` binder so resolution in
     // later domains and the body finds it there.
-    fn assume_slot(context: &mut Context, name: &str, plicity: Plicity, type_: &Term) {
+    fn assume_slot(context: &mut Context, name: &Free, plicity: Plicity, type_: &Term) {
         match plicity {
             Plicity::Witness => context.assume_witness(name, type_),
             _ => context.assume(name, type_),
         }
     }
 
-    let mut domains: Vec<(Plicity, String, Term)> = Vec::new();
+    let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
     let body = context.with_frame(|context| {
         let mut written = telescope.clone();
         let mut expected_tele = ft.telescope;
@@ -564,7 +560,7 @@ pub(super) fn elaborate_func_check(
                         // and `expect` solves to the expected domain).
                         let w_domain = crate::check_is_sort(context, &w_domain)?.0;
                         expect(context, term, &w_domain, &e_domain)?;
-                        let name = context.fresh(w_rest.first_label());
+                        let name = context.fresh(w_rest.first_hint());
                         let x = Term::free_var(&name);
                         assume_slot(context, &name, e_plicity, &e_domain);
                         domains.push((e_plicity, name, e_domain));
@@ -617,7 +613,7 @@ pub(super) fn elaborate_func_infer(
         context: &mut Context,
         body: Telescope<Term>,
         plicities: &[Plicity],
-        domains: &mut Vec<(Plicity, String, Term)>,
+        domains: &mut Vec<(Plicity, Free, Term)>,
     ) -> Result<(Term, Term), Error> {
         match body {
             Telescope::Done(body) => elaborate(context, &body, Mode::Infer),
@@ -629,7 +625,7 @@ pub(super) fn elaborate_func_infer(
                 }
 
                 let plicity = plicities[domains.len()];
-                let name = context.fresh(body_rest.first_label());
+                let name = context.fresh(body_rest.first_hint());
                 let x = Term::free_var(&name);
                 match plicity {
                     Plicity::Witness => context.assume_witness(&name, &domain),

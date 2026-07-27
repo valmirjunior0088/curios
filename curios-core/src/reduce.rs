@@ -275,17 +275,17 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
     let y_refs = ys.iter().collect::<Vec<_>>();
 
     match Term::unwrap_or_clone(func.telescope.open(&y_refs)) {
-            Subterm::Apply(Apply { head, params, .. })
-                if params.len() == n
-                    && params.iter().enumerate().all(|(i, p)| {
-                        matches!(p.as_ref(), Subterm::Var(v) if v.unwrap() == freshs[i].as_str())
-                    })
-                    && freshs.iter().all(|f| !head.free_vars().contains(f)) =>
-            {
-                Ok(Reduce::Continue(head))
-            }
-            _ => Ok(Reduce::Break(Term::from(Subterm::Func(func)))),
+        Subterm::Apply(Apply { head, params, .. })
+            if params.len() == n
+                && params.iter().enumerate().all(
+                    |(i, p)| matches!(p.as_ref(), Subterm::Var(v) if v.unwrap() == &freshs[i]),
+                )
+                && freshs.iter().all(|f| !head.free_vars().contains(f)) =>
+        {
+            Ok(Reduce::Continue(head))
         }
+        _ => Ok(Reduce::Break(Term::from(Subterm::Func(func)))),
+    }
 }
 
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value.
@@ -440,15 +440,11 @@ fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
     // labels are entropy-fresh, so nothing collides.
     let labels = let_
         .tail
-        .label_iter()
+        .hint_iter()
         .map(|label| context.fresh(label))
         .collect::<Vec<_>>();
 
-    let label_terms = labels
-        .iter()
-        .map(Var::free)
-        .map(Term::var)
-        .collect::<Vec<_>>();
+    let label_terms = labels.iter().map(Term::free_var).collect::<Vec<_>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
 
     for (i, (label, binding)) in labels.iter().zip(&let_.bindings).enumerate() {
@@ -528,7 +524,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
             // — store non-empty, then a refined applied-head symbol — before
             // canonicalizing the candidate's arguments and looking the key up.
             if context.has_scrutinee_refinements()
-                && let Some(head) = term.head_label()
+                && let Some(head) = term.head_key()
                 && context.scrutinee_head_refined(head)
             {
                 let canonical = canonical_scrutinee(context, &term)?;
@@ -740,12 +736,9 @@ fn normalize_telescope(
         Telescope::Done(body) => Ok(Telescope::Done(Box::new(normalize(context, *body)?))),
         Telescope::Cons(ty, rest) => {
             let ty = normalize(context, ty)?;
-            let label = context.fresh(rest.first_label());
+            let label = context.fresh(rest.first_hint());
             let inner = normalize_telescope(context, rest.open(&[&Term::free_var(&label)]))?;
-            Ok(Telescope::Cons(
-                ty,
-                Scope::close(One, &[label.as_str()], inner),
-            ))
+            Ok(Telescope::Cons(ty, Scope::close(One, &[&label], inner)))
         }
     }
 }
@@ -761,12 +754,9 @@ fn normalize_tuple_telescope(
         Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
         Telescope::Cons(ty, rest) => {
             let ty = normalize(context, ty)?;
-            let label = context.fresh(rest.first_label());
+            let label = context.fresh(rest.first_hint());
             let inner = normalize_tuple_telescope(context, rest.open(&[&Term::free_var(&label)]))?;
-            Ok(Telescope::Cons(
-                ty,
-                Scope::close(One, &[label.as_str()], inner),
-            ))
+            Ok(Telescope::Cons(ty, Scope::close(One, &[&label], inner)))
         }
     }
 }

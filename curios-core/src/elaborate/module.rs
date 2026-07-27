@@ -1,7 +1,7 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Concept, Definition, DefinitionKind, FuncType, InductDecl, InductParam, Item, Level,
+        Concept, Definition, DefinitionKind, Free, FuncType, InductDecl, InductParam, Item, Level,
         Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
@@ -39,7 +39,11 @@ fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
                     Some(induct_type.universes.clone())
                 }
                 Subterm::UniverseInst(instance)
-                    if instance.head.head_label() == Some(name.as_str()) =>
+                    if instance
+                        .head
+                        .head_name()
+                        .and_then(Free::as_global)
+                        .is_some_and(|head| head.symbol() == name) =>
                 {
                     Some(instance.levels.clone())
                 }
@@ -65,14 +69,14 @@ fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
-) -> Result<(Vec<(String, Term)>, B), Error> {
+) -> Result<(Vec<(Free, Term)>, B), Error> {
     let mut entries = Vec::new();
     loop {
         match telescope {
             Telescope::Done(body) => break Ok((entries, *body)),
             Telescope::Cons(ty, rest) => {
                 let rebuilt = crate::check_is_sort(context, &ty)?.0;
-                let label = context.fresh(rest.first_label());
+                let label = context.fresh(rest.first_hint());
                 context.assume(&label, &rebuilt);
                 telescope = rest.open(&[&Term::free_var(&label)]);
                 entries.push((label, rebuilt));
@@ -115,15 +119,15 @@ fn add_declaration_sizing<B: Bound>(
                             span: domain.span(),
                             kind: kind.clone(),
                             declaration: Some(declaration.to_string()),
-                            binder: rest.first_label().map(str::to_string),
+                            binder: rest.first_hint().map(str::to_string),
                         },
                     )
                     .map_err(Error::from)?;
             }
 
-            let label = context.fresh(rest.first_label());
+            let label = context.fresh(rest.first_hint());
             context.assume(&label, &domain);
-            telescope = rest.open(&[&Term::free_var(label)]);
+            telescope = rest.open(&[&Term::free_var(&label)]);
             position += 1;
         }
         Ok(())
@@ -592,13 +596,17 @@ fn finalize_definition(
 /// the lowered one no longer interchangeable; see the comment below), and the
 /// rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
+    // `name` keys Γ and the definition store; `symbol` keys the nominal
+    // registries, which are still indexed by the flattened spelling.
+    let name = Free::from(&def.name);
+    let symbol = def.name.symbol();
     let type_ = crate::check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as
     // its signature is known — *before* its body elaborates, so a recursive
     // witness (a `Show(Tree)` whose fields show subtrees) can resolve through
     // its own entry.
-    if context.is_witness_declaration(&def.name) {
+    if context.is_witness_declaration(&symbol) {
         register_witness(
             context,
             &def.name,
@@ -618,19 +626,19 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // and the untyped reducer (type-level evaluation in later items' types)
     // would meet a lowered form's under-applied calls and open a telescope at
     // the wrong arity. Pre-insertion the two were interchangeable; no longer.
-    context.define_assuming(&def.name, &type_, &body, Some(&def.kind));
+    context.define_assuming(&name, &type_, &body, Some(&def.kind));
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry
     // telescopes now that the former is defined (no-op for an ordinary let).
-    elaborate_struct(context, &def.name)?;
+    elaborate_struct(context, &symbol)?;
 
     let (universe_context, type_, body) =
-        finalize_definition(context, &def.name, &def.kind, type_, body)?;
-    context.reassume(&def.name, &type_);
-    context.define(&def.name, &body, Some(&def.kind));
-    context.set_assumption_universe_context(&def.name, universe_context.clone());
-    if context.is_witness_declaration(&def.name) {
-        context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
+        finalize_definition(context, &symbol, &def.kind, type_, body)?;
+    context.reassume(&name, &type_);
+    context.define(&name, &body, Some(&def.kind));
+    context.set_assumption_universe_context(&name, universe_context.clone());
+    if context.is_witness_declaration(&symbol) {
+        context.update_witness_scheme(&symbol, universe_context.clone(), type_.clone());
     }
 
     Ok(Definition {
@@ -650,8 +658,15 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
 /// its folded structural member.
 fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
     let defs = rec.definitions();
-    for def in &defs {
-        context.assume(&def.name, &def.type_);
+    // See `elaborate_module_let`: identities key Γ, flattened spellings key the
+    // nominal registries.
+    let names = defs
+        .iter()
+        .map(|def| Free::from(&def.name))
+        .collect::<Vec<_>>();
+    let symbols = defs.iter().map(|def| def.name.symbol()).collect::<Vec<_>>();
+    for (def, name) in defs.iter().zip(&names) {
+        context.assume(name, &def.type_);
     }
 
     let mut types = Vec::with_capacity(defs.len());
@@ -663,24 +678,25 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // checked (see `elaborate_rec`): a lowered (under-applied) type must not
     // leak into later reduction. The lowered forms were only needed above,
     // while the signatures checked each other.
-    for (def, type_) in defs.iter().zip(&types) {
-        context.reassume(&def.name, type_);
+    for (name, type_) in names.iter().zip(&types) {
+        context.reassume(name, type_);
     }
 
     // An inductive's type bindings always lower as one `rec` group whose member
     // names are the registry keys. Rebuild the registry index telescopes here
     // — after the rebuilt signatures are assumed (index types may mention the
     // group), before any body's `InductType` node checks against them.
-    for def in &defs {
-        elaborate_induct_indices(context, &def.name)?;
+    for symbol in &symbols {
+        elaborate_induct_indices(context, symbol)?;
     }
 
     let slots = defs
         .iter()
+        .zip(&names)
         .zip(&types)
-        .map(|(def, type_)| {
+        .map(|((def, name), type_)| {
             let (id, slot) = context.fresh_rec_slot(type_.clone());
-            context.define(&def.name, &slot, Some(&def.kind));
+            context.define(name, &slot, Some(&def.kind));
             id
         })
         .collect::<Vec<_>>();
@@ -696,15 +712,15 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // Registry rebuild, phase two: constructor payload types may apply the
     // group's type constructors, so their signatures (and `InductType`
     // terminals) elaborate only now that the rebuilt bodies are defined.
-    for def in &defs {
-        elaborate_induct_constructors(context, &def.name)?;
+    for symbol in &symbols {
+        elaborate_induct_constructors(context, symbol)?;
     }
-    for def in &defs {
-        if let Some(induct_decl) = context.induct_decl(&def.name).cloned() {
+    for symbol in &symbols {
+        if let Some(induct_decl) = context.induct_decl(symbol).cloned() {
             for constructor in induct_decl.signatures() {
                 add_declaration_sizing(
                     context,
-                    &def.name,
+                    symbol,
                     &constructor.telescope,
                     induct_decl.params.len(),
                     &induct_decl.result_sort,
@@ -723,12 +739,12 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .map(|body| zonk_solved_term_metas(context, body))
         .collect::<Vec<_>>();
-    for def in &defs {
-        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
+    for symbol in &symbols {
+        let Some(induct_decl) = context.induct_decl(symbol).cloned() else {
             continue;
         };
         context.update_induct(
-            &def.name,
+            symbol,
             InductDecl {
                 universe_context: induct_decl.universe_context,
                 params: zonk_solved_term_metas(context, &induct_decl.params),
@@ -761,8 +777,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .flat_map(|type_| context.universe_metas_in(type_))
         .collect::<BTreeSet<_>>();
-    for def in &defs {
-        if let Some(induct_decl) = context.induct_decl(&def.name) {
+    for symbol in &symbols {
+        if let Some(induct_decl) = context.induct_decl(symbol) {
             interface.extend(crate::universe_metas(&induct_decl.params));
             interface.extend(crate::universe_metas(&induct_decl.indices));
             interface.extend(induct_decl.result_sort.universe_metas());
@@ -783,10 +799,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // occurrences were elaborated before the parameters existed and carry no
     // instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();
-    let owned = defs
-        .iter()
-        .map(|def| def.name.clone())
-        .collect::<BTreeSet<_>>();
+    let owned = symbols.iter().cloned().collect::<BTreeSet<_>>();
     fn stamp<B: Bound>(
         context: &Context,
         value: &B,
@@ -813,8 +826,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .map(|body| stamp(context, body, &owned, SelfReference::Bound, &instance))
         .collect::<Result<Vec<_>, _>>()?;
 
-    for def in &defs {
-        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
+    for symbol in &symbols {
+        let Some(induct_decl) = context.induct_decl(symbol).cloned() else {
             continue;
         };
         let constructors = induct_decl
@@ -844,7 +857,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         let indices = stamp(context, &induct_decl.indices, &owned, free, &instance)?;
         let result_sort = stamp(context, &induct_decl.result_sort, &owned, free, &instance)?;
         context.update_induct(
-            &def.name,
+            symbol,
             InductDecl {
                 universe_context: universe_context.clone(),
                 params,
@@ -875,13 +888,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     let rec = RecItem::try_new(definitions)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
-        context.reassume(&definition.name, &rec.group.member_type(index));
+        let name = Free::from(&definition.name);
+        context.reassume(&name, &rec.group.member_type(index));
         context.define(
-            &definition.name,
+            &name,
             &Term::rec_member(rec.group.clone(), index),
             Some(&definition.kind),
         );
-        context.set_assumption_universe_context(&definition.name, universe_context.clone());
+        context.set_assumption_universe_context(&name, universe_context.clone());
     }
 
     Ok(rec)
@@ -898,7 +912,12 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     };
     context.set_island(item_module);
 
-    let item_names = item.declared_names().join(", ");
+    let item_names = item
+        .declared_names()
+        .iter()
+        .map(|name| name.symbol())
+        .collect::<Vec<_>>()
+        .join(", ");
     // One span per top-level item is the natural unit for the fixed prelude:
     // its close event attributes elapsed time to a declaration by name, which
     // is the breakdown a whole-module timing cannot give.
@@ -971,6 +990,7 @@ pub fn elaborate_module(
     // floor the counter above `into_core`'s (which returns the count alongside
     // the lowered module) so the id spaces never collide.
     context.seed_metavars(metavar_floor);
+    context.set_local_floor(module.binder_floor);
     context.seed_universes(&module.universe_seeds, universe_floor);
 
     let mut items = Vec::with_capacity(module.items.len());
@@ -1023,6 +1043,7 @@ pub fn elaborate_module(
         struct_decls,
         concepts: context.concepts().clone(),
         witnesses: module.witnesses.clone(),
+        binder_floor: module.binder_floor,
         type_: module.type_.clone(),
         body,
     };
@@ -1143,14 +1164,15 @@ pub fn elaborate_and_zonk_with_prelude(
     for item in &prelude.items {
         match item {
             Item::Let(def) => {
+                let symbol = def.name.symbol();
                 context.define_assuming_scheme(
-                    &def.name,
+                    &Free::from(&def.name),
                     &def.type_,
                     &def.body,
                     Some(&def.kind),
                     def.universe_context.clone(),
                 );
-                if prelude.witnesses.contains(&def.name) {
+                if prelude.witnesses.contains(&symbol) {
                     register_witness(
                         context,
                         &def.name,
@@ -1163,13 +1185,14 @@ pub fn elaborate_and_zonk_with_prelude(
             }
             Item::Rec(rec) => {
                 for (index, definition) in rec.definitions.iter().enumerate() {
-                    context.assume(&definition.name, &rec.group.member_type(index));
+                    let name = Free::from(&definition.name);
+                    context.assume(&name, &rec.group.member_type(index));
                     context.set_assumption_universe_context(
-                        &definition.name,
+                        &name,
                         rec.group.universe_context().clone(),
                     );
                     context.define(
-                        &definition.name,
+                        &name,
                         &Term::rec_member(rec.group.clone(), index),
                         Some(&definition.kind),
                     );
@@ -1182,6 +1205,7 @@ pub fn elaborate_and_zonk_with_prelude(
     // include the prelude's range); the cached prelude is meta-free, so nothing
     // collides.
     context.seed_metavars(metavar_floor);
+    context.set_local_floor(module.binder_floor);
     context.seed_universes(&module.universe_seeds, universe_floor);
 
     // Elaborate only the user items — everything past the cached prelude prefix.
@@ -1248,6 +1272,7 @@ pub fn elaborate_and_zonk_with_prelude(
         struct_decls: user_struct_decls,
         concepts: user_concepts,
         witnesses: user_witnesses,
+        binder_floor: module.binder_floor,
         type_: module.type_.clone(),
         body,
     };
@@ -1286,6 +1311,7 @@ pub fn elaborate_and_zonk_with_prelude(
         struct_decls,
         concepts,
         witnesses,
+        binder_floor: prelude.binder_floor.max(user_module.binder_floor),
         type_: user_module.type_,
         body: user_module.body,
     };

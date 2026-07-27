@@ -22,7 +22,7 @@ pub(super) fn elaborate_tuple(
             for field in fields {
                 let (field, field_type) = elaborate(context, field, Mode::Infer)?;
                 elaborated.push(field);
-                field_types.push((String::new(), field_type));
+                field_types.push((context.fresh(None), field_type));
             }
             return Ok((Term::tuple(elaborated), Term::tuple_type(field_types)));
         }
@@ -207,7 +207,7 @@ pub(super) fn insert_implicits_on_check(
     // re-applies the head fully saturated; `open` threads the dependent
     // substitution so a later binder mentioning an earlier one is instantiated.
     let mut head_args: Vec<(Plicity, Term)> = Vec::new();
-    let mut binders: Vec<(String, Term)> = Vec::new();
+    let mut binders: Vec<(Free, Term)> = Vec::new();
     let output = context.with_frame(|context| -> Result<Term, Error> {
         let mut tele = ift.telescope.clone();
         let mut plicities = ift.plicities.iter();
@@ -220,7 +220,7 @@ pub(super) fn insert_implicits_on_check(
                             context,
                             plicity,
                             &domain,
-                            rest.first_label(),
+                            rest.first_hint(),
                             &func_label,
                             term,
                         )?;
@@ -228,7 +228,7 @@ pub(super) fn insert_implicits_on_check(
                         head_args.push((plicity, arg));
                     }
                     Some(Plicity::Explicit) => {
-                        let label = context.fresh(rest.first_label());
+                        let label = context.fresh(rest.first_hint());
                         context.assume(&label, &domain);
                         let var = Term::free_var(&label);
                         tele = rest.open(&[&var]);

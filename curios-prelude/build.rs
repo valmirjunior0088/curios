@@ -221,6 +221,7 @@ fn validate_syntax_targets(module: &curios_core::Module) {
         .items
         .iter()
         .flat_map(curios_core::Item::declared_names)
+        .map(curios_core::Global::symbol)
         .collect::<BTreeSet<_>>();
     for target in SYNTAX.targets() {
         assert!(

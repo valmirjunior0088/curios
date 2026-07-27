@@ -6,10 +6,11 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductType, Level, Match,
-        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        Variant, Visit, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
+        Apply, Bound, Carrier, Cases, Context, Field, Free, Func, FuncType, InductType, Level,
+        Match, Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
+        unfold_rec_apply,
     },
     crate::Instant,
     curios_base::Plicity,
@@ -88,7 +89,7 @@ pub(crate) enum Outcome {
 /// observationally read-only, which the conversion history relies on: labels
 /// minted here are never recorded in `Convert::minted`, so they must never
 /// reach a goal. They cannot, because `Sort::of` returns a `Sort`.
-type Opened = [(String, Term)];
+type Opened = [(Free, Term)];
 
 /// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating
 /// its subterms. Returns `None` when the head is out of scope or the spine is not a
@@ -102,13 +103,13 @@ fn synth_neutral(
 ) -> Result<Option<Term>, ReduceError> {
     match &**term {
         Subterm::Var(var) => {
-            let label = var.unwrap();
+            let name = var.unwrap();
             // Locally opened binders shadow the context, innermost first.
-            if let Some((_, type_)) = opened.iter().rev().find(|(name, _)| name == label) {
+            if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
                 return Ok(Some(type_.clone()));
             }
             context
-                .instantiate_assumption_universes(label)
+                .instantiate_assumption_universes(name)
                 .map(|instance| instance.map(|(type_, _)| type_))
                 .map_err(ReduceError::Universe)
         }
@@ -216,7 +217,7 @@ impl Sort {
     /// see [`Opened`] for why that distinction is load-bearing.
     fn of_in(
         context: &mut Context,
-        opened: &mut Vec<(String, Term)>,
+        opened: &mut Vec<(Free, Term)>,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
         let reduced = reduce_forced(context, type_.clone())?;
@@ -268,9 +269,9 @@ impl Sort {
                             if let Sort::Type(level) = Sort::of_in(context, opened, &ty)? {
                                 levels.push(level);
                             }
-                            let label = context.fresh(rest.first_label());
-                            let v = Term::free_var(label.clone());
-                            opened.push((label, ty));
+                            let binder = context.fresh(rest.first_hint());
+                            let v = Term::free_var(&binder);
+                            opened.push((binder, ty));
                             tele = rest.open(&[&v]);
                         }
                         Telescope::Done(_) => {
@@ -343,9 +344,9 @@ impl Sort {
                             if let Sort::Type(level) = Sort::of_in(context, opened, &domain)? {
                                 domains.push(level);
                             }
-                            let label = context.fresh(rest.first_label());
-                            let var = Term::free_var(label.clone());
-                            opened.push((label, domain));
+                            let binder = context.fresh(rest.first_hint());
+                            let var = Term::free_var(&binder);
+                            opened.push((binder, domain));
                             telescope = rest.open(&[&var]);
                         }
                         Telescope::Done(output) => {
@@ -367,7 +368,7 @@ impl Sort {
             Subterm::Match(m) => {
                 let motive = m.motive.clone();
                 let vars: Vec<Term> = (0..motive.arity())
-                    .map(|_| Term::free_var(context.fresh(None)))
+                    .map(|_| Term::free_var(&context.fresh(None)))
                     .collect();
                 let refs: Vec<&Term> = vars.iter().collect();
                 Sort::from_universe(context, &motive.open(&refs))?
@@ -451,7 +452,7 @@ pub(crate) struct Convert {
     // (label → mint sequence), and the placeholder pool `history_key` renames
     // them into. Fingerprints only — the goals actually processed keep their
     // globally-unique labels.
-    minted: HashMap<String, usize>,
+    minted: HashMap<Free, usize>,
     placeholders: Vec<Term>,
 }
 
@@ -496,10 +497,10 @@ impl Convert {
     /// recording it for `history_key`. The label itself is ordinary entropy
     /// freshness — recording changes nothing about the terms conversion
     /// builds.
-    fn opening(&mut self, context: &mut Context, hint: Option<&str>) -> String {
-        let label = context.fresh(hint);
-        self.minted.insert(label.clone(), self.minted.len());
-        label
+    fn opening(&mut self, context: &mut Context, hint: Option<&str>) -> Free {
+        let binder = context.fresh(hint);
+        self.minted.insert(binder.clone(), self.minted.len());
+        binder
     }
 
     /// The history fingerprint of a goal: every opening label this conversion
@@ -527,7 +528,7 @@ impl Convert {
 
         let mut present = free
             .iter()
-            .filter_map(|label| self.minted.get(label).map(|&seq| (seq, label.as_str())))
+            .filter_map(|name| self.minted.get(name).map(|&seq| (seq, name)))
             .collect::<Vec<_>>();
         if present.is_empty() {
             return goal.clone();
@@ -540,7 +541,7 @@ impl Convert {
         let labels = present.iter().map(|&(_, l)| l).collect::<Vec<_>>();
 
         while self.placeholders.len() < labels.len() {
-            self.placeholders.push(Term::free_var(context.fresh(None)));
+            self.placeholders.push(Term::free_var(&context.fresh(None)));
         }
         let refs = self.placeholders[..labels.len()].iter().collect::<Vec<_>>();
 
@@ -563,9 +564,9 @@ impl Convert {
         this: Scope<Three>,
         that: Scope<Three>,
     ) {
-        let a = Term::free_var(self.opening(context, None));
-        let b = Term::free_var(self.opening(context, None));
-        let c = Term::free_var(self.opening(context, None));
+        let a = Term::free_var(&self.opening(context, None));
+        let b = Term::free_var(&self.opening(context, None));
+        let c = Term::free_var(&self.opening(context, None));
         self.enqueue(
             Term::type_ground(),
             this.open(&[&a, &b, &c]),
@@ -605,7 +606,7 @@ impl Convert {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
                     cmp.enqueue(Term::type_ground(), ty_a.clone(), ty_b.clone());
-                    let v = Term::free_var(cmp.opening(context, rest_a.first_label()));
+                    let v = Term::free_var(&cmp.opening(context, rest_a.first_hint()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -631,7 +632,7 @@ impl Convert {
         type_: Term,
     ) -> Result<(Vec<Term>, Term), ReduceError> {
         let ys: Vec<Term> = (0..n)
-            .map(|_| Term::free_var(self.opening(context, None)))
+            .map(|_| Term::free_var(&self.opening(context, None)))
             .collect();
         let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -760,15 +761,15 @@ impl Convert {
                     // `{ a : Nat } ≢ { Nat } ≢ { b : Nat }` (the unlabeled ""
                     // is just another label). This is deliberately tuple-only —
                     // function-type parameter names stay alpha-convertible
-                    // (see `compare_func_type`, where `first_label` feeds
+                    // (see `compare_func_type`, where `first_hint` feeds
                     // freshness, never equality).
-                    if rest_a.first_label().unwrap_or_default()
-                        != rest_b.first_label().unwrap_or_default()
+                    if rest_a.first_hint().unwrap_or_default()
+                        != rest_b.first_hint().unwrap_or_default()
                     {
                         return Ok(false);
                     }
                     cmp.enqueue(Term::type_ground(), ty_a.clone(), ty_b.clone());
-                    let v = Term::free_var(cmp.opening(context, rest_a.first_label()));
+                    let v = Term::free_var(&cmp.opening(context, rest_a.first_hint()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -1027,7 +1028,7 @@ impl Convert {
         }
 
         let labels = (0..this.motive.arity())
-            .map(|_| Term::free_var(self.opening(context, None)))
+            .map(|_| Term::free_var(&self.opening(context, None)))
             .collect::<Vec<_>>();
         let label_refs = labels.iter().collect::<Vec<_>>();
         self.enqueue(
@@ -1105,7 +1106,7 @@ impl Convert {
                     }
 
                     let binders = (0..this_scope.arity())
-                        .map(|_| Term::free_var(self.opening(context, None)))
+                        .map(|_| Term::free_var(&self.opening(context, None)))
                         .collect::<Vec<_>>();
                     let binder_refs = binders.iter().collect::<Vec<_>>();
 
@@ -1147,8 +1148,8 @@ impl Convert {
 
                     // The unary cons arm binds (predecessor, ih); open both under
                     // shared fresh binders and compare the bodies.
-                    let a = Term::free_var(self.opening(context, None));
-                    let b = Term::free_var(self.opening(context, None));
+                    let a = Term::free_var(&self.opening(context, None));
+                    let b = Term::free_var(&self.opening(context, None));
                     self.enqueue(
                         Term::type_ground(),
                         this_cons.open(&[&a, &b]),
@@ -1213,7 +1214,7 @@ impl Convert {
         }
 
         let labels = (0..this.group.len())
-            .map(|_| Term::free_var(self.opening(context, None)))
+            .map(|_| Term::free_var(&self.opening(context, None)))
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
@@ -1330,7 +1331,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
-                    .map(|_| Term::free_var(self.opening(context, None)))
+                    .map(|_| Term::free_var(&self.opening(context, None)))
                     .collect();
                 let y_refs: Vec<&Term> = ys.iter().collect();
                 let output_type = telescope.open(&y_refs);
@@ -1479,7 +1480,7 @@ impl Convert {
             let names = entries
                 .iter()
                 .map(|term| match &**term {
-                    Subterm::Var(var) => var.as_label(),
+                    Subterm::Var(var) => var.as_free(),
                     _ => None,
                 })
                 .collect::<Vec<_>>();
@@ -1491,7 +1492,7 @@ impl Convert {
                     let name = (*name)?;
                     // A duplicated image name is ambiguous to invert.
                     let unique = names.iter().filter(|n| **n == Some(name)).count() == 1;
-                    unique.then(|| (name.to_string(), birth.as_str()))
+                    unique.then(|| (name.clone(), birth))
                 })
                 .collect()
         };
@@ -1582,19 +1583,16 @@ impl Convert {
         // Invert, storing the solution in birth-named form. The identity
         // renaming (every invertible entry still its own birth binder, and
         // nothing abstracted) skips the rewrite.
-        let inverted = if subjects.is_empty() && image.iter().all(|(img, birth)| img == birth) {
+        let inverted = if subjects.is_empty() && image.iter().all(|(img, birth)| img == *birth) {
             t.clone()
         } else {
-            let labels = image
-                .iter()
-                .map(|(name, _)| name.as_str())
-                .collect::<Vec<_>>();
+            let binders = image.iter().map(|(name, _)| name).collect::<Vec<_>>();
             let birth_vars = image
                 .iter()
-                .map(|(_, birth)| Term::free_var(*birth))
+                .map(|(_, birth)| Term::free_var(birth))
                 .collect::<Vec<_>>();
             let refs = birth_vars.iter().collect::<Vec<_>>();
-            abstracted.capture(&labels).release(&refs)
+            abstracted.capture(&binders).release(&refs)
         };
 
         // The equation must hold by construction: resolving the candidate
@@ -1607,12 +1605,9 @@ impl Convert {
         // conversion, which cannot solve anything here since both sides are
         // meta-free past the embedded guard.
         if !metavar.spine.is_empty() {
-            let labels = telescope
-                .iter()
-                .map(|(name, _)| name.as_str())
-                .collect::<Vec<_>>();
+            let binders = telescope.iter().map(|(name, _)| name).collect::<Vec<_>>();
             let refs = entries.iter().collect::<Vec<_>>();
-            let resolved = inverted.capture(&labels).release(&refs);
+            let resolved = inverted.capture(&binders).release(&refs);
             if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
                 #[cfg(feature = "profile")]
                 tracing::debug!(
@@ -1803,15 +1798,15 @@ impl Convert {
         // The candidate copies `?m`'s birth function type's plicities so the
         // imitation is convertible with that type (plicity is part of function
         // identity — see `compare_func`).
-        let mut domains: Vec<(Plicity, String, Term)> = Vec::with_capacity(arity);
+        let mut domains: Vec<(Plicity, Free, Term)> = Vec::with_capacity(arity);
         let mut telescope = func_type.telescope.clone();
         for plicity in func_type.plicities.iter().copied() {
             let Telescope::Cons(ty, rest) = telescope else {
                 unreachable!("plicities parallel the telescope");
             };
-            let label = rest.first_label().unwrap_or("_").to_string();
-            telescope = rest.open(&[&Term::free_var(&label)]);
-            domains.push((plicity, label, ty.clone()));
+            let binder = context.fresh(rest.first_hint());
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+            domains.push((plicity, binder, ty.clone()));
         }
 
         // The candidate body mirrors the rigid node's shape (for an inductive,
@@ -1820,7 +1815,7 @@ impl Convert {
         // wrong split).
         let binder_vars = domains
             .iter()
-            .map(|(_, label, _)| Term::free_var(label))
+            .map(|(_, binder, _)| Term::free_var(binder))
             .collect::<Vec<_>>();
         let body = mk_body(&binder_vars);
         let candidate = Term::func_marked(domains.clone(), body);
@@ -2309,7 +2304,7 @@ impl Convert {
 /// scope) — with its birth binder's name. Top-down: an outer match wins and
 /// is not descended into. Subjects are pairwise distinct by construction, so
 /// the match is unambiguous.
-fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
+fn abstract_occurrences(t: &Term, subjects: &[(Term, Free)]) -> Term {
     if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
         return Term::free_var(name);
     }
@@ -2321,7 +2316,7 @@ fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
             owned
                 .iter()
                 .find(|(s, _)| s == term)
-                .map(|(_, name)| Term::free_var(name.as_str()))
+                .map(|(_, name)| Term::free_var(name))
         }),
     ))
 }

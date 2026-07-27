@@ -2,8 +2,8 @@
 mod tests;
 
 use super::{
-    Apply, Context, Error, Field, Func, Level, Many, MetaId, Mode, Outcome, Prim, PrimHead, Proj,
-    Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+    Apply, Context, Error, Field, Free, Func, Level, Many, MetaId, Mode, Outcome, Prim, PrimHead,
+    Proj, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
     UniverseRole, elaborate,
 };
 
@@ -417,7 +417,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             // verbatim key leaves the arm unrefined, silently, while the
             // equivalent `Nat/lte(a, hi)` spelling refines. Register the probed
             // form alongside it so both spellings agree.
-            if canonical.head_label().is_none()
+            if canonical.head_key().is_none()
                 && let Some(spined) = spine_whnf(context, head)?
             {
                 // Propagated, not swallowed: `canonical_scrutinee` is best-effort
@@ -426,7 +426,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 let resolved = super::canonical_scrutinee(context, &spined)
                     .map_err(|error| error.into_error(|| Error::reduce_preempted(head.clone())))?;
 
-                if resolved.head_label().is_some() && resolved != canonical {
+                if resolved.head_key().is_some() && resolved != canonical {
                     context.refine_scrutinee(resolved, value.clone());
                 }
             }
@@ -511,8 +511,8 @@ impl MotiveShape<'_> {
     /// Assume this shape's binders in `context` under `labels`, each index type
     /// opened with the preceding index binders and the scrutinee typed at those
     /// binders. Returns the scrutinee's assumed type for the caller's use.
-    fn assume(&self, context: &mut Context, labels: &[String]) -> Term {
-        let (scrutinee_label, index_labels) = labels
+    fn assume(&self, context: &mut Context, binders: &[Free]) -> Term {
+        let (scrutinee_binder, index_binders) = binders
             .split_last()
             .expect("a motive binds at least the scrutinee");
 
@@ -525,12 +525,12 @@ impl MotiveShape<'_> {
                 indices,
             } => {
                 let mut telescope = indices.clone();
-                let mut index_vars = Vec::with_capacity(index_labels.len());
-                for label in index_labels {
-                    let var = Term::free_var(label);
+                let mut index_vars = Vec::with_capacity(index_binders.len());
+                for binder in index_binders {
+                    let var = Term::free_var(binder);
                     telescope = match telescope {
                         Telescope::Cons(ty, rest) => {
-                            context.assume(label, &ty);
+                            context.assume(binder, &ty);
                             rest.open(&[&var])
                         }
                         Telescope::Done(_) => {
@@ -543,7 +543,7 @@ impl MotiveShape<'_> {
             }
         };
 
-        context.assume(scrutinee_label, &scrutinee_type);
+        context.assume(scrutinee_binder, &scrutinee_type);
         scrutinee_type
     }
 
@@ -565,7 +565,7 @@ impl MotiveShape<'_> {
                 let mut telescope = indices.clone();
                 let mut index_vars = Vec::new();
                 while let Telescope::Cons(ty, rest) = telescope {
-                    let label = context.fresh(rest.first_label());
+                    let label = context.fresh(rest.first_hint());
                     let var = Term::free_var(&label);
                     telescope = rest.open(&[&var]);
                     binders.push((label, ty));
@@ -632,7 +632,7 @@ fn check_closed_motive(
     motive: &Scope<Many>,
 ) -> Result<Scope<Many>, Error> {
     let hints = motive
-        .label_iter()
+        .hint_iter()
         .map(|label| label.map(str::to_string))
         .collect::<Vec<_>>();
     let labels = hints
@@ -648,8 +648,8 @@ fn check_closed_motive(
         let classifier = context.fresh_classifier_type("eliminator motive result");
         let body = check(context, &motive.open(&refs), classifier)?;
 
-        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
-        Ok(Scope::close(Many(labels.len()), &label_strs, body))
+        let binders = labels.iter().collect::<Vec<_>>();
+        Ok(Scope::close(Many(labels.len()), &binders, body))
     })
 }
 
@@ -708,8 +708,8 @@ fn check_written_motive(
             _ => Term::apply(checked.clone(), vars.clone()),
         };
 
-        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
-        Ok(Scope::close(Many(arity), &label_strs, body))
+        let binders = labels.iter().collect::<Vec<_>>();
+        Ok(Scope::close(Many(arity), &binders, body))
     })
 }
 

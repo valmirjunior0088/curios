@@ -5,78 +5,86 @@ use {
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity},
-    curios_core::UniverseRole,
+    curios_core::{Free, UniverseRole},
     num_bigint::BigUint,
-    std::{cell::RefCell, collections::BTreeSet, sync::Arc},
+    std::{cell::RefCell, sync::Arc},
 };
 
-/// A lowered function's binders: `(plicity, core binder name, domain)` per slot,
+/// A lowered function's binders: `(plicity, core binder, domain)` per slot,
 /// paralleling the surface parameter list.
-type LoweredParams = Vec<(Plicity, String, curios_core::Term)>;
+type LoweredParams = Vec<(Plicity, Free, curios_core::Term)>;
+
+/// A source binder brought into lexical scope: what it was written as, and the
+/// identity every reference to it lowers to.
+///
+/// Minted once, where the binder is introduced, and reused everywhere that
+/// binder is in scope — a progressively-extended parameter list re-enters the
+/// same identities rather than re-minting them, or an earlier domain and the
+/// body would disagree about which binder a name meant.
+pub(super) type Bound = (String, Free);
 
 pub(super) struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
-    /// The user-written names bound by the enclosing local binders (function and
-    /// `let`/`rec` binders, match-arm patterns, motive labels). A bare reference
-    /// whose name is in this set resolves to the binder rather than a like-named
-    /// module binding — see [`Self::resolve_name`]. Internal gensym binders (the
-    /// `#`-sigil names from [`Context::fresh_binder`]) can never collide with a
-    /// source identifier, so they are deliberately never inserted here.
-    scope: RefCell<BTreeSet<String>>,
+    /// The enclosing local binders (function and `let`/`rec` binders, match-arm
+    /// patterns, motive labels), innermost last. A bare reference whose spelling
+    /// appears here resolves to the innermost such binder rather than a
+    /// like-named module binding — see [`Self::resolve_name`]. Compiler-minted
+    /// binders are never registered: nothing can write their name.
+    scope: RefCell<Vec<Bound>>,
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn new(context: &'a Context<'b>) -> Self {
         Self {
             context,
-            scope: RefCell::new(BTreeSet::new()),
+            scope: RefCell::new(Vec::new()),
         }
     }
 
-    /// Lowers under an extended local scope: each of `names` is treated as an
-    /// in-scope binder for the duration of `body`, then the previous scope is
-    /// restored. Only names this call *newly* introduces are removed on exit, so
-    /// an inner binder shadowing an outer one of the same name leaves the outer
-    /// binding intact. Empty (unlabelled) and `_` names bind nothing and are
-    /// skipped. The scope borrow is released before `body` runs, so nested
-    /// `scoped` calls and [`Self::resolve_name`] reads inside it are free.
-    pub(super) fn scoped<T>(
+    /// Mint one binder identity per written name, in order. Nothing is brought
+    /// into scope: the caller decides where each binder is visible, and the
+    /// identity it holds is the one every such region re-enters.
+    ///
+    /// An unwritten (`_` or empty) name still gets an identity — it occupies a
+    /// binder position — but no reference can reach it.
+    pub(super) fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Bound> {
+        names
+            .into_iter()
+            .map(|name| {
+                let id = self.context.fresh_binder(bindable(&name).then_some(&name));
+                (name, id)
+            })
+            .collect()
+    }
+
+    /// Lower `body` with already-minted `binders` in scope, then restore the
+    /// previous scope.
+    pub(super) fn bound<T>(
         &self,
-        names: impl IntoIterator<Item = String>,
+        binders: &[Bound],
         body: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let added = self.enter_scope(names);
+        let mark = self.enter_scope(binders);
         let result = body();
-        self.leave_scope(&added);
+        self.leave_scope(mark);
         result
     }
 
-    /// The two steps [`Self::scoped`] runs around one bounded closure call,
+    /// The two steps [`Self::bound`] runs around one bounded closure call,
     /// exposed separately for a walk that must hold several nested scopes open
     /// across a loop instead — see [`Self::lower_let_region`], which enters one
-    /// scope per binding of a `let` block and leaves them in reverse.
-    fn enter_scope(&self, names: impl IntoIterator<Item = String>) -> Vec<String> {
-        let mut added = Vec::new();
+    /// scope per binding of a `let` block and leaves them in reverse. The scope
+    /// is a stack, so a shadowing inner binder simply sits above the outer one
+    /// and [`Self::resolve_name`]'s innermost-first scan finds it.
+    fn enter_scope(&self, binders: &[Bound]) -> usize {
         let mut scope = self.scope.borrow_mut();
-
-        for name in names {
-            if name.is_empty() || name == "_" {
-                continue;
-            }
-            if scope.insert(name.clone()) {
-                added.push(name);
-            }
-        }
-
-        added
+        let mark = scope.len();
+        scope.extend(binders.iter().filter(|(name, _)| bindable(name)).cloned());
+        mark
     }
 
-    fn leave_scope(&self, added: &[String]) {
-        let mut scope = self.scope.borrow_mut();
-
-        for name in added {
-            scope.remove(name);
-        }
+    fn leave_scope(&self, mark: usize) {
+        self.scope.borrow_mut().truncate(mark);
     }
 
     /// Lowers a *value* body — a top-level `let`/`rec` body, a witness field,
@@ -113,24 +121,38 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Resolve a surface name to its qualified (joined) core name — the same
     /// rule the `Subterm::Name` term-reference arm uses.
-    pub(super) fn resolve_name(&self, name: &Name) -> Result<String, Error> {
-        Ok(if name.is_abs() || !name.is_single() {
-            self.context.resolve_term_name(name)?.join()
-        } else if self.scope.borrow().contains(name.head()) {
-            // A local binder shadows any like-named module binding: emit the
-            // spelled (unqualified) name, which core then resolves to the
-            // innermost enclosing binder. Without this an in-scope module binding
-            // of the same name would unlawfully capture the reference — and inside
-            // a qualified module the module's name (`std/Async/go`) and the local
-            // binder (`go`) are *different* strings, so core cannot recover from a
-            // wrong choice made here.
-            name.head().to_string()
-        } else {
-            match self.context.bindings().get(name.head()) {
-                Some(full) => full.join(),
-                None => name.head().to_string(),
-            }
-        })
+    pub(super) fn resolve_name(&self, name: &Name) -> Result<Free, Error> {
+        if name.is_abs() || !name.is_single() {
+            return Ok(Free::global(self.context.resolve_term_name(name)?));
+        }
+        // A local binder shadows any like-named module binding, and the
+        // innermost one wins. Resolving here — rather than emitting the
+        // spelling for a later stage to re-resolve — is what makes shadowing
+        // exact: two binders written `go` are two identities from the start.
+        if let Some((_, id)) = self
+            .scope
+            .borrow()
+            .iter()
+            .rev()
+            .find(|(bound, _)| bound == name.head())
+        {
+            return Ok(id.clone());
+        }
+        match self.context.bindings().get(name.head()) {
+            Some(full) => Ok(Free::global(full.clone())),
+            // Unresolved, and `curios-core` is what reports it — so this must
+            // lower to something no definition can ever be. A binder identity
+            // is unbound by construction (nothing closes over it) and carries
+            // the written name as its hint, so the diagnostic still names it.
+            //
+            // A root-level global would *not* do: `Qualifier::from([head])` is
+            // exactly what an entry-module `let helper` lowers to, so an
+            // unresolvable reference in a nested module would silently capture
+            // it. The old spelling-keyed lowering was safe only by accident —
+            // it emitted a bare `helper` while every definition carried a
+            // leading `/`.
+            None => Ok(self.context.fresh_binder(Some(name.head()))),
+        }
     }
 
     // The meta-emitter: a string literal becomes a proof-carrying `/syn/Str/Str`
@@ -165,7 +187,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             self.context.syntax().character().scalar_above()
         };
         let scalar = curios_core::Term::apply_marked(
-            curios_core::Term::var(curios_core::Var::free(constructor)),
+            curios_core::Term::var(curios_core::Var::free(syn_name(constructor))),
             [
                 (Plicity::Implicit, code.clone()),
                 (
@@ -190,7 +212,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         args: impl IntoIterator<Item = curios_core::Term>,
     ) -> curios_core::Term {
         curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(name)),
+            curios_core::Term::var(curios_core::Var::free(syn_name(name))),
             args.into_iter().collect::<Vec<_>>(),
         )
     }
@@ -277,20 +299,23 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // the output sees them all (a dependent Π-type), so they lower under a
             // progressively-extended scope.
             Subterm::FuncType(ft) => {
-                let mut seen = Vec::new();
+                let binders = self.mint(
+                    ft.params
+                        .iter()
+                        .map(|p| p.label.clone().unwrap_or_default()),
+                );
                 let mut params = Vec::with_capacity(ft.params.len());
-                for param in &ft.params {
-                    let domain = self.scoped(seen.clone(), || self.input_type(&param.type_))?;
-                    let name = param.label.clone().unwrap_or_default();
-                    seen.push(name.clone());
-                    params.push((param.plicity, name, domain));
+                for (index, param) in ft.params.iter().enumerate() {
+                    let domain = self.bound(&binders[..index], || self.input_type(&param.type_))?;
+                    params.push((param.plicity, binders[index].1.clone(), domain));
                 }
-                let output = self.scoped(seen, || self.term(&ft.output))?;
+                let output = self.bound(&binders, || self.term(&ft.output))?;
                 curios_core::Term::func_type_marked(params, output)
             }
             Subterm::Func(func) => {
-                let body = self.scoped(param_names(&func.params), || self.term(&func.body))?;
-                let (params, body) = self.lower_func_params(&func.params, body)?;
+                let binders = self.mint(param_names(&func.params));
+                let body = self.bound(&binders, || self.term(&func.body))?;
+                let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
                 curios_core::Term::func_marked(params, body)
             }
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
@@ -305,14 +330,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // labels, so they lower under a progressively-extended scope. The
             // signature sugar `f(params) -> T` is undone here.
             Subterm::TupleType(tt) => {
-                let mut seen = Vec::new();
+                let binders = self.mint(
+                    tt.fields
+                        .iter()
+                        .map(|f| f.label.clone().unwrap_or_default()),
+                );
                 let mut fields = Vec::with_capacity(tt.fields.len());
-                for param in &tt.fields {
+                for (index, param) in tt.fields.iter().enumerate() {
                     let type_ = param.desugared_type();
-                    let lowered = self.scoped(seen.clone(), || self.term(&type_))?;
-                    let name = param.label.clone().unwrap_or_default();
-                    seen.push(name.clone());
-                    fields.push((name, lowered));
+                    let lowered = self.bound(&binders[..index], || self.term(&type_))?;
+                    fields.push((binders[index].1.clone(), lowered));
                 }
                 curios_core::Term::tuple_type(fields)
             }
@@ -340,7 +367,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // privacy and spread shape are enforced in core
             // (`elaborate_struct`), alongside projection privacy.
             Subterm::StructLit(lit) => curios_core::Term::struct_entries(
-                self.resolve_name(&lit.head)?,
+                self.resolve_symbol(&lit.head)?,
                 lit.params
                     .iter()
                     .map(|p| self.term(p))
@@ -417,15 +444,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 for binding in &let_.bindings {
                     let type_ = self.term(&binding.signature.type_())?;
                     let value = self.term(&binding.signature.body())?;
-                    let added = self.enter_scope(pattern_names(&binding.binder));
-                    pending.push((added, &binding.binder, type_, value));
+                    let binders = self.mint(pattern_names(&binding.binder));
+                    let mark = self.enter_scope(&binders);
+                    pending.push((mark, binders, &binding.binder, type_, value));
                 }
 
                 let mut tail = self.term(&let_.tail)?;
 
-                for (added, binder, type_, value) in pending.into_iter().rev() {
-                    self.leave_scope(&added);
-                    tail = self.bind_pattern(binder, type_, value, tail);
+                for (mark, binders, binder, type_, value) in pending.into_iter().rev() {
+                    self.leave_scope(mark);
+                    tail = self.bind_pattern(binder, &binders, type_, value, tail);
                 }
 
                 tail
@@ -433,18 +461,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A `rec` is mutually recursive: every item label is in scope across
             // all item types, all item bodies, and the tail.
             Subterm::Rec(rec) => {
-                let labels = rec
-                    .items
-                    .iter()
-                    .map(|it| it.label.clone())
-                    .collect::<Vec<_>>();
-                self.scoped(labels, || {
+                let binders = self.mint(rec.items.iter().map(|it| it.label.clone()));
+                self.bound(&binders, || {
                     Ok(curios_core::Term::rec(
                         rec.items
                             .iter()
-                            .map(|it| {
+                            .zip(&binders)
+                            .map(|(it, (_, id))| {
                                 Ok((
-                                    it.label.clone(),
+                                    id.clone(),
                                     self.term(&it.signature.type_())?,
                                     self.term(&it.signature.body())?,
                                 ))
@@ -489,8 +514,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // A lambda re-roots the region.
             Subterm::Func(func) => {
-                let body = self.scoped(param_names(&func.params), || self.region(&func.body))?;
-                let (params, body) = self.lower_func_params(&func.params, body)?;
+                let binders = self.mint(param_names(&func.params));
+                let body = self.bound(&binders, || self.region(&func.body))?;
+                let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
                 Ok(curios_core::Term::func_marked(params, body))
             }
             // A `rec`'s item bodies are their own regions (hoisting an action
@@ -521,8 +547,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         tail: &Term,
     ) -> Result<curios_core::Term, Error> {
         struct PendingLet<'t> {
-            added: Vec<String>,
-            binds: Vec<(String, curios_core::Term)>,
+            mark: usize,
+            binders: Vec<Bound>,
+            binds: Vec<(Free, curios_core::Term)>,
             binder: &'t Pattern,
             type_: curios_core::Term,
             value: curios_core::Term,
@@ -534,10 +561,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let mut binds = Vec::new();
             let value = self.collect(&binding.signature.body(), &mut binds)?;
             let type_ = self.term(&binding.signature.type_())?;
-            let added = self.enter_scope(pattern_names(&binding.binder));
+            let binders = self.mint(pattern_names(&binding.binder));
+            let mark = self.enter_scope(&binders);
 
             pending.push(PendingLet {
-                added,
+                mark,
+                binders,
                 binds,
                 binder: &binding.binder,
                 type_,
@@ -548,9 +577,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut tail = self.region(tail)?;
 
         for pending_let in pending.into_iter().rev() {
-            self.leave_scope(&pending_let.added);
+            self.leave_scope(pending_let.mark);
             let let_term = self.bind_pattern(
                 pending_let.binder,
+                &pending_let.binders,
                 pending_let.type_,
                 pending_let.value,
                 tail,
@@ -565,18 +595,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// types, item bodies are fresh region roots, and the tail continues as its
     /// own region (a bang there hoists after the bindings, not above them).
     pub(super) fn build_rec(&self, rec: &Rec) -> Result<curios_core::Term, Error> {
-        let labels = rec
-            .items
-            .iter()
-            .map(|it| it.label.clone())
-            .collect::<Vec<_>>();
-        self.scoped(labels, || {
+        let binders = self.mint(rec.items.iter().map(|it| it.label.clone()));
+        self.bound(&binders, || {
             Ok(curios_core::Term::rec(
                 rec.items
                     .iter()
-                    .map(|it| {
+                    .zip(&binders)
+                    .map(|(it, (_, id))| {
                         Ok((
-                            it.label.clone(),
+                            id.clone(),
                             self.term(&it.signature.type_())?,
                             self.region(&it.signature.body())?,
                         ))
@@ -594,16 +621,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn collect(
         &self,
         term: &Term,
-        binds: &mut Vec<(String, curios_core::Term)>,
+        binds: &mut Vec<(Free, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
                 // The action is itself desugared first, so its inner bangs
                 // evaluate before this one (left-to-right).
                 let action = self.collect(action, binds)?;
-                let name = self.context.fresh_binder();
-                let var = curios_core::Term::var(curios_core::Var::free(name.clone()));
-                binds.push((name, action));
+                let binder = self.context.fresh_binder(None);
+                let var = curios_core::Term::var(curios_core::Var::free(binder.clone()));
+                binds.push((binder, action));
                 var
             }
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
@@ -634,7 +661,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A struct literal's entry values hoist their bangs into this
             // region, exactly like a tuple's fields.
             Subterm::StructLit(lit) => curios_core::Term::struct_entries(
-                self.resolve_name(&lit.head)?,
+                self.resolve_symbol(&lit.head)?,
                 lit.params
                     .iter()
                     .map(|p| self.collect(p, binds))
@@ -699,7 +726,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn build_let(
         &self,
         let_: &Let,
-        binds: &mut Vec<(String, curios_core::Term)>,
+        binds: &mut Vec<(Free, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         let (first, rest) = let_
             .bindings
@@ -707,11 +734,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .expect("a `let` block has at least one binding");
 
         let value = self.collect(&first.signature.body(), binds)?;
-        let tail = self.scoped(pattern_names(&first.binder), || {
-            self.lower_let_region(rest, &let_.tail)
-        })?;
+        let binders = self.mint(pattern_names(&first.binder));
+        let tail = self.bound(&binders, || self.lower_let_region(rest, &let_.tail))?;
         let type_ = self.term(&first.signature.type_())?;
-        Ok(self.bind_pattern(&first.binder, type_, value, tail))
+        Ok(self.bind_pattern(&first.binder, &binders, type_, value, tail))
     }
 
     /// Lowers a function's parameters into core binder `(name, domain)` pairs.
@@ -736,13 +762,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn lower_func_params(
         &self,
         params: &[FuncParam],
+        binders: &[Bound],
         body: curios_core::Term,
     ) -> Result<(LoweredParams, curios_core::Term), Error> {
         let mut lowered = Vec::with_capacity(params.len());
-        // The preceding parameters' leaf names, and the field-`let` chains that
-        // put the compound ones in scope — both grow as the walk advances.
-        let mut seen: Vec<String> = Vec::new();
-        let mut chains: Vec<(&[PatternField], String)> = Vec::new();
+        // The binders already minted for the leaves, consumed in the same
+        // pre-order `param_names` produced them, plus the field-`let` chains
+        // that put the compound patterns in scope — both advance with the walk.
+        let mut seen = 0;
+        let mut chains: Vec<(&[PatternField], Free, &[Bound])> = Vec::new();
 
         for param in params {
             let FuncParam {
@@ -752,7 +780,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             } = param;
             let domain = match annotation {
                 Some(annotation) => {
-                    let annotation = self.scoped(seen.clone(), || self.input_type(annotation))?;
+                    let annotation =
+                        self.bound(&binders[..seen], || self.input_type(annotation))?;
                     self.wrap_pattern_chains(&chains, annotation)
                 }
                 None => curios_core::Term::metavar(self.context.fresh_metavar()),
@@ -760,25 +789,27 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // The mark applies to the outer function slot the parameter
             // occupies, whatever the pattern shape: a compound pattern's fresh
             // core binder still claims a slot of the written plicity.
+            let leaves = &binders[seen..seen + pattern_names(pattern).len()];
             match pattern {
-                Pattern::Binder(Some(name)) => {
-                    lowered.push((*plicity, self.pattern_binder_name(name), domain))
-                }
+                Pattern::Binder(Some(_)) => lowered.push((*plicity, leaves[0].1.clone(), domain)),
                 Pattern::Binder(None) => {
-                    lowered.push((*plicity, self.context.fresh_binder(), domain))
+                    lowered.push((*plicity, self.context.fresh_binder(None), domain))
                 }
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-                    let synthetic = self.context.fresh_binder();
-                    chains.push((fields, synthetic.clone()));
+                    let synthetic = self.context.fresh_binder(None);
+                    chains.push((fields, synthetic.clone(), leaves));
                     lowered.push((*plicity, synthetic, domain));
                 }
             }
-            seen.extend(pattern_names(pattern));
+            seen += leaves.len();
         }
 
-        let body = chains.iter().rev().fold(body, |tail, (fields, synthetic)| {
-            self.lower_pattern_fields(fields, synthetic, tail)
-        });
+        let body = chains
+            .iter()
+            .rev()
+            .fold(body, |tail, (fields, synthetic, leaves)| {
+                self.lower_pattern_fields(fields, synthetic, leaves, tail)
+            });
 
         Ok((lowered, body))
     }
@@ -791,23 +822,42 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// it is the chain's original consumer and its shape is settled.)
     fn wrap_pattern_chains(
         &self,
-        chains: &[(&[PatternField], String)],
+        chains: &[(&[PatternField], Free, &[Bound])],
         annotation: curios_core::Term,
     ) -> curios_core::Term {
         chains
             .iter()
             .rev()
-            .fold(annotation, |tail, (fields, synthetic)| {
+            .fold(annotation, |tail, (fields, synthetic, leaves)| {
                 let free = tail.free_vars();
-                match fields
-                    .iter()
-                    .flat_map(|field| pattern_names(&field.value))
-                    .any(|name| free.contains(&name))
-                {
-                    true => self.lower_pattern_fields(fields, synthetic, tail),
+                // A leaf is mentioned iff one of the identities this chain binds
+                // occurs free — an exact test, where matching by spelling could
+                // only ever approximate one.
+                match leaves.iter().any(|(_, id)| free.contains(id)) {
+                    true => self.lower_pattern_fields(fields, synthetic, leaves, tail),
                     false => tail,
                 }
             })
+    }
+
+    /// One pattern-leaf binder: its written spelling and the identity it lowers
+    /// to. `_` gets an identity nothing can name, so repeated wildcards never
+    /// collide.
+    pub(super) fn pattern_binder(&self, name: &str) -> Bound {
+        (
+            name.to_string(),
+            self.context.fresh_binder(bindable(name).then_some(name)),
+        )
+    }
+
+    /// A nominal head's resolved name, flattened — the registries `curios-core`
+    /// keys on still use the spelling. Only a global can head a nominal literal.
+    pub(super) fn resolve_symbol(&self, name: &Name) -> Result<String, Error> {
+        Ok(self
+            .resolve_name(name)?
+            .as_global()
+            .map(curios_core::Global::symbol)
+            .unwrap_or_default())
     }
 
     /// Builds `let pat = value : type_; tail` for a pattern in any of the
@@ -823,24 +873,40 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// `pair : Point`). The extra trivial `let` this occasionally emits is
     /// exactly the shape `cont`'s copy-threading optimization already
     /// collapses, so it costs nothing at runtime.
+    /// `binders` are the identities minted for this pattern's written leaves,
+    /// in `pattern_names` order — the same ones the scope this `let` opened was
+    /// entered with, so the tail's references land on them.
     pub(super) fn bind_pattern(
         &self,
         pattern: &Pattern,
+        binders: &[Bound],
+        type_: curios_core::Term,
+        value: curios_core::Term,
+        tail: curios_core::Term,
+    ) -> curios_core::Term {
+        self.bind_pattern_from(pattern, &mut binders.iter(), type_, value, tail)
+    }
+
+    fn bind_pattern_from<'i>(
+        &self,
+        pattern: &Pattern,
+        binders: &mut impl Iterator<Item = &'i Bound>,
         type_: curios_core::Term,
         value: curios_core::Term,
         tail: curios_core::Term,
     ) -> curios_core::Term {
         match pattern {
-            Pattern::Binder(Some(name)) => {
-                curios_core::Term::let_(self.pattern_binder_name(name), type_, value, tail)
+            Pattern::Binder(Some(_)) => {
+                let (_, id) = binders.next().expect("one mint per written leaf");
+                curios_core::Term::let_(id, type_, value, tail)
             }
             Pattern::Binder(None) => {
-                curios_core::Term::let_(self.context.fresh_binder(), type_, value, tail)
+                curios_core::Term::let_(&self.context.fresh_binder(None), type_, value, tail)
             }
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-                let synthetic = self.context.fresh_binder();
-                let inner = self.lower_pattern_fields(fields, &synthetic, tail);
-                curios_core::Term::let_(synthetic, type_, value, inner)
+                let synthetic = self.context.fresh_binder(None);
+                let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail);
+                curios_core::Term::let_(&synthetic, type_, value, inner)
             }
         }
     }
@@ -852,42 +918,61 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// [`Self::bind_pattern`] for nested patterns. Each field's own type is a
     /// fresh metavar hole: there is never a per-field annotation to give,
     /// exactly like a hand-written `let x = p.0;`.
+    /// The chain over a compound pattern already in scope: its leaves' minted
+    /// identities are pulled from the surrounding walk, which produced them in
+    /// this very order.
     pub(super) fn lower_pattern_fields(
         &self,
         fields: &[PatternField],
-        scrutinee_name: &str,
+        scrutinee: &Free,
+        leaves: &[Bound],
         tail: curios_core::Term,
     ) -> curios_core::Term {
+        self.lower_pattern_fields_from(fields, scrutinee, &mut leaves.iter(), tail)
+    }
+
+    fn lower_pattern_fields_from<'i>(
+        &self,
+        fields: &[PatternField],
+        scrutinee_name: &Free,
+        binders: &mut impl Iterator<Item = &'i Bound>,
+        tail: curios_core::Term,
+    ) -> curios_core::Term {
+        // Right-to-left so the first field's `let` ends up outermost, but the
+        // binders were minted left-to-right, so they are consumed in a forward
+        // pass first.
+        let mut bound = Vec::with_capacity(fields.len());
+        for field in fields {
+            let taken = pattern_names(&field.value)
+                .iter()
+                .filter_map(|_| binders.next().cloned())
+                .collect::<Vec<_>>();
+            bound.push(taken);
+        }
+
         let mut tail = tail;
-        for (index, field) in fields.iter().enumerate().rev() {
-            let scrutinee = curios_core::Term::var(curios_core::Var::free(scrutinee_name));
+        for ((index, field), taken) in fields.iter().enumerate().zip(&bound).rev() {
+            let scrutinee = curios_core::Term::var(curios_core::Var::free(scrutinee_name.clone()));
             let proj = match &field.label {
                 Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
                 None => curios_core::Term::proj(scrutinee, index),
             };
             let hole = curios_core::Term::metavar(self.context.fresh_metavar());
-            tail = self.bind_pattern(&field.value, hole, proj, tail);
+            tail = self.bind_pattern(&field.value, taken, hole, proj, tail);
         }
         tail
     }
 
-    /// A pattern binder's core name: `_` mints a fresh internal name (so repeated
-    /// wildcards never collide), any other identifier is used verbatim.
-    pub(super) fn pattern_binder_name(&self, name: &str) -> String {
-        match name {
-            "_" => self.context.fresh_binder(),
-            name => name.to_string(),
-        }
-    }
-
-    /// A `Nat` succ or `Lst`/`Bin` cons arm's induction-hypothesis binder name: an omitted
-    /// `; ih` (`None` — there is no source name at all) mints a fresh internal
-    /// name directly; a written one gets the same wildcard-safe treatment as
-    /// [`Self::pattern_binder_name`].
-    pub(super) fn cons_ih_name(&self, ih_label: &Option<String>) -> String {
+    /// A `Nat` succ or `Lst`/`Bin` cons arm's induction-hypothesis binder: an
+    /// omitted `; ih` (`None` — there is no source name at all) mints an
+    /// unwritten binder; a written one is minted with its spelling as the hint.
+    pub(super) fn cons_ih_binder(&self, ih_label: &Option<String>) -> Bound {
         match ih_label {
-            Some(name) => self.pattern_binder_name(name),
-            None => self.context.fresh_binder(),
+            Some(name) => (
+                name.clone(),
+                self.context.fresh_binder(bindable(name).then_some(name)),
+            ),
+            None => (String::new(), self.context.fresh_binder(None)),
         }
     }
 
@@ -903,15 +988,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// regions can use different monads.
     pub(super) fn wrap(
         &self,
-        binds: Vec<(String, curios_core::Term)>,
+        binds: Vec<(Free, curios_core::Term)>,
         body: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
         binds
             .into_iter()
             .rev()
-            .try_fold(body, |acc, (name, action)| {
+            .try_fold(body, |acc, (binder, action)| {
                 let domain = curios_core::Term::metavar(self.context.fresh_metavar());
-                let cont = curios_core::Term::func([(name, domain)], acc);
+                let cont = curios_core::Term::func([(binder, domain)], acc);
                 // The already-resolved core name: the `Monad` concept at
                 // `/syn`'s top level, method wrapper `bind`.
                 Ok(Self::syn_call(
@@ -1313,6 +1398,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 /// in each parameter's pattern, flattened, all in scope across the body.
 /// These shadow like-named module bindings; the wildcard `_` rides along
 /// but is ignored by [`Lowerer::scoped`].
+/// Whether a written binder name can be referred to. `_` and the empty label
+/// occupy a binder position but name nothing.
+/// A `/syn` or `/sys` name the lowerer emits directly: already resolved, so it
+/// is a global at exactly the path it spells.
+fn syn_name(path: &str) -> Free {
+    Free::global(curios_base::Qualifier::from(
+        path.trim_start_matches('/').split('/'),
+    ))
+}
+
+fn bindable(name: &str) -> bool {
+    !(name.is_empty() || name == "_")
+}
+
 fn param_names(params: &[FuncParam]) -> Vec<String> {
     params
         .iter()

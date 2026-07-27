@@ -10,8 +10,25 @@
 #[cfg(test)]
 mod tests;
 
+use std::{
+    cmp::Ordering,
+    fmt,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
+
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// The segments are shared behind an `Rc`, so cloning a qualifier is a refcount
+/// bump rather than one allocation per segment. That matters because a
+/// qualifier is copied and compared far more often than it is built: every free
+/// variable in every Core term names one, and the free-variable set memoized on
+/// every node is keyed by them, so an owned clone put the cost on the kernel's
+/// hottest structure. Sharing also gives equality and ordering a
+/// pointer-identity fast path, which fires whenever two occurrences came from
+/// the same resolution — the common case, since references resolve through one
+/// table entry.
+#[derive(Clone)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
@@ -21,25 +38,93 @@ mod tests;
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
 )]
 pub struct Qualifier {
-    segments: Vec<String>,
+    /// Archived *unshared*: sharing is a runtime optimization, and putting the
+    /// `Rc` in the archive would drag rkyv's `Sharing`/`Pooling` bounds into
+    /// every container that holds a qualifier. The archived form stays what it
+    /// has always been — the segment sequence — so its derived comparisons
+    /// agree with the live ones by construction.
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Unshare))]
+    segments: Rc<Vec<String>>,
+}
+
+/// The default qualifier is the root, which is a legitimate value.
+impl Default for Qualifier {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl Qualifier {
+    fn of(segments: Vec<String>) -> Self {
+        Self {
+            segments: Rc::new(segments),
+        }
+    }
+
+    fn segments_slice(&self) -> &[String] {
+        &self.segments
+    }
+}
+
+/// Identity is the segment sequence. The pointer is only ever a way to reach
+/// that answer sooner, never a different answer: two qualifiers with equal
+/// segments are equal whether or not they share an allocation.
+impl PartialEq for Qualifier {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.segments, &other.segments) || self.segments == other.segments
+    }
+}
+
+impl Eq for Qualifier {}
+
+impl Ord for Qualifier {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match Rc::ptr_eq(&self.segments, &other.segments) {
+            true => Ordering::Equal,
+            false => self.segments.cmp(&other.segments),
+        }
+    }
+}
+
+impl PartialOrd for Qualifier {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Hashes the segments, not the pointer: sharing is an optimization, so two
+/// equal qualifiers must hash alike whether or not they share an allocation.
+impl Hash for Qualifier {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.segments.hash(state);
+    }
+}
+
+/// The sharing is noise; a qualifier prints as its segments.
+impl fmt::Debug for Qualifier {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("Qualifier")
+            .field(&self.segments)
+            .finish()
+    }
 }
 
 impl Qualifier {
     /// The root qualifier — no segments. The identity for `with`, and a legitimate value (e.g. `Context::island` for items of the entry module), not an error state.
     pub fn empty() -> Self {
-        Self { segments: vec![] }
+        Self::of(Vec::new())
     }
 
     /// This qualifier extended by one child `segment` — descending one module level.
     pub fn with(&self, segment: &str) -> Self {
-        Self {
-            segments: self
-                .segments
+        Self::of(
+            self.segments_slice()
                 .iter()
                 .cloned()
                 .chain([segment.to_string()])
                 .collect(),
-        }
+        )
     }
 
     /// The canonical flattened spelling — `/`-joined with a leading `/`, the empty string for the root — which is the exact string definition keys and hand-built references use, so it must match character-for-character.
@@ -48,60 +133,81 @@ impl Qualifier {
         // hand-built reference (e.g. the string-literal meta-emitter's `/syn/Str/…`)
         // matches a definition's key unambiguously. The empty (root) qualifier joins
         // to the empty string, not a bare `/`.
-        match self.segments.is_empty() {
+        match self.segments_slice().is_empty() {
             true => String::new(),
-            false => format!("/{}", self.segments.join("/")),
+            false => format!("/{}", self.segments_slice().join("/")),
         }
+    }
+
+    /// Whether this qualifier's canonical flattened spelling is exactly `path`
+    /// — [`Qualifier::join`] without building the string.
+    ///
+    /// A comparison against an already-flattened name, for the boundaries where
+    /// one side is a declaration name that has not been retyped yet. Nothing
+    /// here reads structure *out of* `path`; it only asks whether the two
+    /// render alike.
+    pub fn joins_to(&self, path: &str) -> bool {
+        let mut rest = path;
+        for segment in self.segments_slice() {
+            let Some(tail) = rest
+                .strip_prefix('/')
+                .and_then(|t| t.strip_prefix(segment.as_str()))
+            else {
+                return false;
+            };
+            rest = tail;
+        }
+        rest.is_empty()
     }
 
     /// Whether this is exactly one segment — a root-level name, whose `head` and `last` coincide.
     pub fn is_single(&self) -> bool {
-        self.segments.len() == 1
+        self.segments_slice().len() == 1
     }
 
     /// The leading (root) segment. Panics on the empty qualifier — use [`Qualifier::root_segment`] where the root qualifier is a legitimate value.
     pub fn head(&self) -> &str {
-        &self.segments[0]
+        &self.segments_slice()[0]
     }
 
     /// The final segment — a binding's own name, with [`Qualifier::without_last`] as its declaring module. Panics on the empty qualifier.
     pub fn last(&self) -> &str {
-        self.segments.last().unwrap()
+        self.segments_slice().last().unwrap()
     }
 
     /// The segments in order, as `&str`.
     pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.segments.iter().map(String::as_str)
+        self.segments_slice().iter().map(String::as_str)
     }
 
     /// The raw segment list.
     pub fn segments(&self) -> &[String] {
-        &self.segments
+        self.segments_slice()
     }
 
     /// The qualifier prefix — everything but the last segment — the
     /// declaring/use-site module a binding belongs to. `[a, b, c]` → `[a, b]`;
     /// a single-segment or already-empty qualifier drops to empty.
     pub fn without_last(&self) -> Qualifier {
-        Qualifier {
-            segments: self.segments[..self.segments.len().saturating_sub(1)].to_vec(),
-        }
+        let segments = self.segments_slice();
+        Self::of(segments[..segments.len().saturating_sub(1)].to_vec())
     }
 
     /// The qualifier suffix — everything but the leading (root) segment —
     /// a root's own qualifier for content nested under it. `[a, b, c]` →
     /// `[b, c]`; a single-segment or already-empty qualifier drops to empty.
     pub fn without_first(&self) -> Qualifier {
-        Qualifier {
-            segments: self.segments.iter().skip(1).cloned().collect(),
-        }
+        Self::of(self.segments_slice().iter().skip(1).cloned().collect())
     }
 
     /// The first segment, or `""` if empty. Distinct from `head`, which
     /// indexes unchecked — this is for values (like `Context::island`) that
     /// can legitimately be the empty (root) qualifier.
     pub fn root_segment(&self) -> &str {
-        self.segments.first().map(String::as_str).unwrap_or("")
+        self.segments_slice()
+            .first()
+            .map(String::as_str)
+            .unwrap_or("")
     }
 
     /// Whether this qualifier lies within `ancestor`'s subtree — equal to it,
@@ -113,12 +219,8 @@ impl Qualifier {
     /// without `pub` in module `M` is visible exactly to the qualifiers within
     /// `M`.
     pub fn is_within(&self, ancestor: &Qualifier) -> bool {
-        self.segments.len() >= ancestor.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(&ancestor.segments)
-                .all(|(here, there)| here == there)
+        let (here, there) = (self.segments_slice(), ancestor.segments_slice());
+        here.len() >= there.len() && here.iter().zip(there).all(|(here, there)| here == there)
     }
 }
 
@@ -128,8 +230,6 @@ where
     I: IntoIterator<Item = S>,
 {
     fn from(iter: I) -> Self {
-        Self {
-            segments: iter.into_iter().map(Into::into).collect(),
-        }
+        Self::of(iter.into_iter().map(Into::into).collect())
     }
 }

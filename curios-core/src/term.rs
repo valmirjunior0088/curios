@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        Atom, Bound, Level, Many, Nat, Prim, Scope, SelfReference, Telescope, Three, Two,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
+        Atom, Bound, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Telescope, Three,
+        Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
         instantiate_universe_levels_scoped, print_term,
     },
     curios_base::{Flt, Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
@@ -21,6 +21,22 @@ use {
 
 #[cfg(feature = "archive")]
 use curios_base::BigUintBytes;
+
+/// Whether `name` is one of `names` — a declaration group's own member names,
+/// which are still carried as flattened strings. A boundary, not a decode: it
+/// asks whether an authored path renders as one of the given names and reads no
+/// structure out of them. Retired when `Definition::name` becomes a [`Global`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HeadTag<'a> {
+    Name(&'a Free),
+    Prim(&'static str),
+}
+
+fn names_declaration(names: &BTreeSet<String>, name: &Free) -> bool {
+    name.as_global()
+        .and_then(Global::qualifier)
+        .is_some_and(|qualifier| names.iter().any(|declared| qualifier.joins_to(declared)))
+}
 
 /// A core-calculus term: an `Rc`-shared [`Node`] — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
@@ -59,7 +75,7 @@ struct Node {
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     reach: OnceCell<usize>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    free_vars: OnceCell<Rc<BTreeSet<String>>>,
+    free_vars: OnceCell<Rc<BTreeSet<Free>>>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     has_local_free: OnceCell<bool>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
@@ -352,14 +368,16 @@ impl Term {
             Subterm::UniverseInst(instance)
                 if instance
                     .head
-                    .head_label()
-                    .is_some_and(|label| names.contains(label)) =>
+                    .head_name()
+                    .is_some_and(|name| names_declaration(names, name)) =>
             {
                 return Some(self.clone());
             }
             Subterm::Var(var)
                 if self_reference == SelfReference::Free
-                    && var.as_label().is_some_and(|label| names.contains(label)) =>
+                    && var
+                        .as_free()
+                        .is_some_and(|name| names_declaration(names, name)) =>
             {
                 return Some(Term::universe_inst(self.clone(), levels.to_vec()));
             }
@@ -380,51 +398,65 @@ impl Term {
         }
     }
 
-    /// The free-variable label at the head of an application spine, descending
+    /// The free-variable identity at the head of an application spine, descending
     /// through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the
-    /// label of `classify` / `f`. A bare free variable reports itself; anything
+    /// name of `classify` / `f`. A bare free variable reports itself; anything
     /// else is `None`. Used to cheaply gate scrutinee-refinement
     /// canonicalization on the applied symbol before paying for argument
     /// reduction.
-    pub(crate) fn head_label(&self) -> Option<&str> {
+    pub(crate) fn head_name(&self) -> Option<&Free> {
         match &self.inner.subterm {
-            Subterm::Apply(Apply { head, .. }) => head.head_label(),
-            Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_label(),
-            Subterm::Var(var) => var.as_label(),
+            Subterm::Apply(Apply { head, .. }) => head.head_name(),
+            Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_name(),
+            Subterm::Var(var) => var.as_free(),
+            _ => None,
+        }
+    }
+
+    /// What a scrutinee-refinement key is gated on: the identity at an
+    /// application spine's head, or the primitive standing in for one where the
+    /// normal form is a `Prim` node rather than an application. Never a name a
+    /// program could write — the two sides of every comparison come from here,
+    /// so this only ever has to agree with itself.
+    pub(crate) fn head_key(&self) -> Option<HeadTag<'_>> {
+        match &self.inner.subterm {
+            Subterm::Apply(Apply { head, .. }) => head.head_key(),
+            Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_key(),
+            Subterm::Var(var) => var.as_free().map(HeadTag::Name),
             // A decidable comparison's normal form is a primitive node, not an
-            // application, so it carries no named head. Scrutinee refinement
-            // keys on this label and the reducer's probe gates on it, so an
-            // unlabelled key can be registered but never looked up — which is
-            // how an operator-spelled scrutinee loses its arm refinement while
-            // the equivalent `Nat/lte(a, b)` keeps it.
+            // application, so it has no named head. Scrutinee refinement keys on
+            // this tag and the reducer's probe gates on it, so an untagged key
+            // can be registered but never looked up — which is how an
+            // operator-spelled scrutinee loses its arm refinement while the
+            // equivalent `Nat/lte(a, b)` keeps it.
             Subterm::Prim(prim) => match prim {
-                Prim::BoolEql(..) => Some("prim:BoolEql"),
-                Prim::BoolNeq(..) => Some("prim:BoolNeq"),
-                Prim::NatEql(..) => Some("prim:NatEql"),
-                Prim::NatNeq(..) => Some("prim:NatNeq"),
-                Prim::NatLt(..) => Some("prim:NatLt"),
-                Prim::NatGt(..) => Some("prim:NatGt"),
-                Prim::NatLte(..) => Some("prim:NatLte"),
-                Prim::NatGte(..) => Some("prim:NatGte"),
-                Prim::ByteEql(..) => Some("prim:ByteEql"),
-                Prim::ByteLt(..) => Some("prim:ByteLt"),
-                Prim::ByteLte(..) => Some("prim:ByteLte"),
-                Prim::ByteGt(..) => Some("prim:ByteGt"),
-                Prim::ByteGte(..) => Some("prim:ByteGte"),
-                Prim::IntEql(..) => Some("prim:IntEql"),
-                Prim::IntNeq(..) => Some("prim:IntNeq"),
-                Prim::IntLt(..) => Some("prim:IntLt"),
-                Prim::IntGt(..) => Some("prim:IntGt"),
-                Prim::IntLte(..) => Some("prim:IntLte"),
-                Prim::IntGte(..) => Some("prim:IntGte"),
-                Prim::FltEql(..) => Some("prim:FltEql"),
-                Prim::FltNeq(..) => Some("prim:FltNeq"),
-                Prim::FltLt(..) => Some("prim:FltLt"),
-                Prim::FltGt(..) => Some("prim:FltGt"),
-                Prim::FltLte(..) => Some("prim:FltLte"),
-                Prim::FltGte(..) => Some("prim:FltGte"),
-                Prim::BinEql(..) => Some("prim:BinEql"),
-                Prim::HandleEql(..) => Some("prim:HandleEql"),
+                Prim::BoolEql(..) => Some(HeadTag::Prim("prim:BoolEql")),
+                Prim::BoolNeq(..) => Some(HeadTag::Prim("prim:BoolNeq")),
+                Prim::NatEql(..) => Some(HeadTag::Prim("prim:NatEql")),
+                Prim::NatNeq(..) => Some(HeadTag::Prim("prim:NatNeq")),
+                Prim::NatLt(..) => Some(HeadTag::Prim("prim:NatLt")),
+                Prim::NatGt(..) => Some(HeadTag::Prim("prim:NatGt")),
+                Prim::NatLte(..) => Some(HeadTag::Prim("prim:NatLte")),
+                Prim::NatGte(..) => Some(HeadTag::Prim("prim:NatGte")),
+                Prim::ByteEql(..) => Some(HeadTag::Prim("prim:ByteEql")),
+                Prim::ByteLt(..) => Some(HeadTag::Prim("prim:ByteLt")),
+                Prim::ByteLte(..) => Some(HeadTag::Prim("prim:ByteLte")),
+                Prim::ByteGt(..) => Some(HeadTag::Prim("prim:ByteGt")),
+                Prim::ByteGte(..) => Some(HeadTag::Prim("prim:ByteGte")),
+                Prim::IntEql(..) => Some(HeadTag::Prim("prim:IntEql")),
+                Prim::IntNeq(..) => Some(HeadTag::Prim("prim:IntNeq")),
+                Prim::IntLt(..) => Some(HeadTag::Prim("prim:IntLt")),
+                Prim::IntGt(..) => Some(HeadTag::Prim("prim:IntGt")),
+                Prim::IntLte(..) => Some(HeadTag::Prim("prim:IntLte")),
+                Prim::IntGte(..) => Some(HeadTag::Prim("prim:IntGte")),
+                Prim::FltEql(..) => Some(HeadTag::Prim("prim:FltEql")),
+                Prim::FltNeq(..) => Some(HeadTag::Prim("prim:FltNeq")),
+                Prim::FltLt(..) => Some(HeadTag::Prim("prim:FltLt")),
+                Prim::FltGt(..) => Some(HeadTag::Prim("prim:FltGt")),
+                Prim::FltLte(..) => Some(HeadTag::Prim("prim:FltLte")),
+                Prim::FltGte(..) => Some(HeadTag::Prim("prim:FltGte")),
+                Prim::BinEql(..) => Some(HeadTag::Prim("prim:BinEql")),
+                Prim::HandleEql(..) => Some(HeadTag::Prim("prim:HandleEql")),
                 _ => None,
             },
             _ => None,
@@ -436,28 +468,28 @@ impl Term {
     /// eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage
     /// interface audit uses this after name resolution to preserve
     /// representation provenance; computed bodies are not classified as aliases.
-    pub fn transparent_alias_target(&self) -> Option<String> {
+    pub fn transparent_alias_target(&self) -> Option<&Free> {
         match &self.inner.subterm {
-            Subterm::Var(var) => var.as_label().map(str::to_string),
+            Subterm::Var(var) => var.as_free(),
             Subterm::Func(Func { telescope, .. }) => {
-                let fresh = (0..telescope.len())
-                    .map(|index| format!("#alias{index}"))
-                    .collect::<Vec<_>>();
-                let args = fresh.iter().map(Term::free_var).collect::<Vec<_>>();
-                let refs = args.iter().collect::<Vec<_>>();
-                let Subterm::Apply(Apply { head, params, .. }) =
-                    Term::unwrap_or_clone(telescope.open(&refs))
-                else {
+                // Read the eta-expansion under its binders instead of opening
+                // it: the parameters are exactly the innermost de Bruijn
+                // indices there, counting outwards, so the shape is decided
+                // without minting probe binders that would have to be proven
+                // not to collide with the body's own.
+                let arity = telescope.len();
+                let Subterm::Apply(Apply { head, params, .. }) = &**telescope.terminal() else {
                     return None;
                 };
-                let Subterm::Var(target) = &*head else {
-                    return None;
-                };
-                (params.len() == fresh.len()
-                    && params.iter().zip(&fresh).all(|(param, label)| {
-                        matches!(&**param, Subterm::Var(var) if var.as_label() == Some(label))
-                    }))
-                .then(|| target.as_label().map(str::to_string))
+                let eta = params.len() == arity
+                    && params.iter().enumerate().all(|(index, param)| {
+                        matches!(&**param, Subterm::Var(var) if var.as_bound() == Some(arity - 1 - index))
+                    });
+
+                eta.then(|| match &**head {
+                    Subterm::Var(target) => target.as_free(),
+                    _ => None,
+                })
                 .flatten()
             }
             _ => None,
@@ -472,7 +504,7 @@ impl Term {
     /// again structurally and without reduction or substitution. Computed
     /// heads, local heads, and aliased universe annotations are deliberately
     /// excluded.
-    pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<String> {
+    pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free> {
         fn ends_in_literal_sort(term: &Term) -> bool {
             match &**term {
                 Subterm::Type(_) | Subterm::Prop => true,
@@ -483,15 +515,15 @@ impl Term {
             }
         }
 
-        fn application_head(term: &Term) -> Option<&str> {
+        fn application_head(term: &Term) -> Option<&Free> {
             match &**term {
                 Subterm::Apply(Apply { head, .. }) => application_head(head),
-                Subterm::Var(var) => var.as_label(),
+                Subterm::Var(var) => var.as_free(),
                 _ => None,
             }
         }
 
-        fn direct_head(term: &Term) -> Option<&str> {
+        fn direct_head(term: &Term) -> Option<&Free> {
             match &**term {
                 Subterm::Func(Func { telescope, .. }) => direct_head(telescope.terminal()),
                 _ => application_head(term),
@@ -501,8 +533,7 @@ impl Term {
         ends_in_literal_sort(declared_type)
             .then(|| direct_head(self))
             .flatten()
-            .filter(|target| target.starts_with('/'))
-            .map(str::to_string)
+            .filter(|target| !target.is_local())
     }
 
     pub(crate) fn span(&self) -> Option<Span> {
@@ -545,8 +576,8 @@ impl Term {
         Self::from(Subterm::Var(var))
     }
 
-    pub(crate) fn free_var<A: Into<String>>(label: A) -> Self {
-        Self::var(Var::free(label))
+    pub(crate) fn free_var(name: &Free) -> Self {
+        Self::var(Var::free(name.clone()))
     }
 
     /// Instantiate a generalized binding at occurrence-specific levels.
@@ -611,26 +642,24 @@ impl Term {
         inner.into().with_span(span)
     }
 
-    pub(crate) fn func_type<I, L, T, O>(params: I, output: O) -> Self
+    pub(crate) fn func_type<I, T, O>(params: I, output: O) -> Self
     where
-        I: IntoIterator<Item = (L, T)>,
-        L: Into<String>,
+        I: IntoIterator<Item = (Free, T)>,
         T: Into<Term>,
         O: Into<Term>,
     {
         Self::func_type_marked(
             params
                 .into_iter()
-                .map(|(label, type_)| (Plicity::Explicit, label, type_)),
+                .map(|(binder, type_)| (Plicity::Explicit, binder, type_)),
             output,
         )
     }
 
     /// Build a Π-type from `(plicity, label, type)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`FuncType`] invariant). The all-explicit shorthand is the crate-internal `func_type`.
-    pub fn func_type_marked<I, L, T, O>(params: I, output: O) -> Self
+    pub fn func_type_marked<I, T, O>(params: I, output: O) -> Self
     where
-        I: IntoIterator<Item = (Plicity, L, T)>,
-        L: Into<String>,
+        I: IntoIterator<Item = (Plicity, Free, T)>,
         T: Into<Term>,
         O: Into<Term>,
     {
@@ -655,17 +684,16 @@ impl Term {
     /// binder is stamped [`Plicity::Explicit`] — use [`Term::func_marked`] for a
     /// function containing hidden binders. There is deliberately no unmarked
     /// "trust me" constructor for a hidden-binder function.
-    pub fn func<I, L, T, B>(params: I, body: B) -> Self
+    pub fn func<I, T, B>(params: I, body: B) -> Self
     where
-        I: IntoIterator<Item = (L, T)>,
-        L: Into<String>,
+        I: IntoIterator<Item = (Free, T)>,
         T: Into<Term>,
         B: Into<Term>,
     {
         Self::func_marked(
             params
                 .into_iter()
-                .map(|(label, type_)| (Plicity::Explicit, label, type_)),
+                .map(|(binder, type_)| (Plicity::Explicit, binder, type_)),
             body,
         )
     }
@@ -673,10 +701,9 @@ impl Term {
     /// Build a function literal from `(plicity, label, annotation)` binders,
     /// keeping one plicity mark per telescope entry (asserted to line up — the
     /// [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
-    pub fn func_marked<I, L, T, B>(params: I, body: B) -> Self
+    pub fn func_marked<I, T, B>(params: I, body: B) -> Self
     where
-        I: IntoIterator<Item = (Plicity, L, T)>,
-        L: Into<String>,
+        I: IntoIterator<Item = (Plicity, Free, T)>,
         T: Into<Term>,
         B: Into<Term>,
     {
@@ -735,10 +762,9 @@ impl Term {
     }
 
     /// Build a dependent tuple (Σ) type from `(label, type)` fields: each field's type is closed over the labels before it — written order mirrors telescope order.
-    pub fn tuple_type<I, L, T>(fields: I) -> Self
+    pub fn tuple_type<I, T>(fields: I) -> Self
     where
-        I: IntoIterator<Item = (L, T)>,
-        L: Into<String>,
+        I: IntoIterator<Item = (Free, T)>,
         T: Into<Term>,
     {
         let telescope = Telescope::build(fields, ());
@@ -952,23 +978,22 @@ impl Term {
     }
 
     /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). [`Term::induct_match_marked`] carries per-binder plicity.
-    pub fn induct_match<H, M, I, A, L, B>(
+    pub fn induct_match<H, M, I, A, B>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         cases: I,
     ) -> Self
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<L>, B)>,
+        I: IntoIterator<Item = (A, Vec<Free>, B)>,
         A: Into<Atom>,
-        L: Into<String>,
         B: Into<Term>,
     {
         Self::induct_match_marked(
             head,
-            motive_label,
+            motive_binder,
             motive,
             cases
                 .into_iter()
@@ -977,23 +1002,22 @@ impl Term {
     }
 
     /// [`Term::induct_match`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub fn induct_match_marked<H, M, I, A, L, B>(
+    pub fn induct_match_marked<H, M, I, A, B>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         cases: I,
     ) -> Self
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
-        L: Into<String>,
         B: Into<Term>,
     {
         Self::induct_match_scoped_marked(
             head,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             cases,
             None,
         )
@@ -1002,7 +1026,7 @@ impl Term {
     /// [`Term::induct_match_marked`] over an already-built motive scope, with
     /// the optional `| _ =>` catch-all folded in — `into_core`'s single entry
     /// point for a nominal-inductive elimination.
-    pub fn induct_match_scoped_marked<H, I, A, L, B>(
+    pub fn induct_match_scoped_marked<H, I, A, B>(
         head: H,
         motive: Scope<Many>,
         cases: I,
@@ -1010,9 +1034,8 @@ impl Term {
     ) -> Self
     where
         H: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
-        L: Into<String>,
         B: Into<Term>,
     {
         Self::match_scoped(
@@ -1030,9 +1053,9 @@ impl Term {
     /// binding-free default standing in for every other constructor tag. The
     /// dispatching analogue of [`Term::induct_match`], mirroring how
     /// [`Term::switch`] relates to [`Term::nat_match`].
-    pub fn induct_match_default<H, M, I, A, L, B, D>(
+    pub fn induct_match_default<H, M, I, A, B, D>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         cases: I,
         default: D,
@@ -1040,15 +1063,14 @@ impl Term {
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<L>, B)>,
+        I: IntoIterator<Item = (A, Vec<Free>, B)>,
         A: Into<Atom>,
-        L: Into<String>,
         B: Into<Term>,
         D: Into<Term>,
     {
         Self::induct_match_default_marked(
             head,
-            motive_label,
+            motive_binder,
             motive,
             cases
                 .into_iter()
@@ -1058,9 +1080,9 @@ impl Term {
     }
 
     /// [`Term::induct_match_default`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub fn induct_match_default_marked<H, M, I, A, L, B, D>(
+    pub fn induct_match_default_marked<H, M, I, A, B, D>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         cases: I,
         default: D,
@@ -1068,15 +1090,14 @@ impl Term {
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
-        L: Into<String>,
         B: Into<Term>,
         D: Into<Term>,
     {
         Self::induct_match_scoped_marked(
             head,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             cases,
             Some(default.into()),
         )
@@ -1084,25 +1105,21 @@ impl Term {
 
     /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
     /// one plicity mark per payload binder (the [`InductArm`] invariant).
-    pub(crate) fn induct_cases_marked<I, A, L, B>(cases: I) -> Vec<(Atom, InductArm)>
+    pub(crate) fn induct_cases_marked<I, A, B>(cases: I) -> Vec<(Atom, InductArm)>
     where
-        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
-        L: Into<String>,
         B: Into<Term>,
     {
         cases
             .into_iter()
             .map(|(atom, binders, body)| {
-                let (plicities, labels): (Vec<Plicity>, Vec<String>) = binders
-                    .into_iter()
-                    .map(|(plicity, label)| (plicity, label.into()))
-                    .unzip();
-                let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+                let (plicities, names): (Vec<Plicity>, Vec<Free>) = binders.into_iter().unzip();
+                let payload = names.iter().collect::<Vec<_>>();
                 (
                     atom.into(),
                     InductArm {
-                        body: Scope::close(Many(label_refs.len()), &label_refs, body.into()),
+                        body: Scope::close(Many(payload.len()), &payload, body.into()),
                         plicities,
                     },
                 )
@@ -1115,9 +1132,9 @@ impl Term {
     /// every match constructor whose motive binds just the scrutinee — the
     /// canonical elaborated shape for a primitive carrier or an unindexed
     /// inductive.
-    fn motive_scope(motive_label: Option<&str>, motive: Term) -> Scope<Many> {
-        match motive_label {
-            Some(label) => Scope::close(Many(1), &[label], motive),
+    fn motive_scope(motive_binder: Option<&Free>, motive: Term) -> Scope<Many> {
+        match motive_binder {
+            Some(binder) => Scope::close(Many(1), &[binder], motive),
             None => Scope::constant(Many(1), motive),
         }
     }
@@ -1156,7 +1173,7 @@ impl Term {
     /// Build the dependent `Bool` eliminator ([`Cases::Bool`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
     pub fn bool_match<H, M, F, T>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         false_case: F,
         true_case: T,
@@ -1169,7 +1186,7 @@ impl Term {
     {
         Self::bool_match_scoped(
             head,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             false_case,
             true_case,
         )
@@ -1198,63 +1215,52 @@ impl Term {
     }
 
     /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`Lst`'s.
-    pub fn nat_match<H, M, ZC, PL, IL, SC>(
+    pub fn nat_match<H, M, ZC, SC>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         zero_case: ZC,
-        pred_label: PL,
-        ih_label: IL,
+        pred_binder: &Free,
+        ih_binder: &Free,
         succ_case: SC,
     ) -> Self
     where
         H: Into<Term>,
         M: Into<Term>,
         ZC: Into<Term>,
-        PL: Into<String>,
-        IL: Into<String>,
         SC: Into<Term>,
     {
         Self::nat_match_scoped(
             head,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             zero_case,
-            pred_label,
-            ih_label,
+            pred_binder,
+            ih_binder,
             succ_case,
         )
     }
 
     /// [`Term::nat_match`] over an already-built motive scope.
-    pub fn nat_match_scoped<H, ZC, PL, IL, SC>(
+    pub fn nat_match_scoped<H, ZC, SC>(
         head: H,
         motive: Scope<Many>,
         zero_case: ZC,
-        pred_label: PL,
-        ih_label: IL,
+        pred_binder: &Free,
+        ih_binder: &Free,
         succ_case: SC,
     ) -> Self
     where
         H: Into<Term>,
         ZC: Into<Term>,
-        PL: Into<String>,
-        IL: Into<String>,
         SC: Into<Term>,
     {
-        let pred_label = pred_label.into();
-        let ih_label = ih_label.into();
-
         Self::match_scoped(
             head.into(),
             motive,
             Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: zero_case.into(),
-                    cons_case: Scope::close(
-                        Two,
-                        &[pred_label.as_str(), ih_label.as_str()],
-                        succ_case.into(),
-                    ),
+                    cons_case: Scope::close(Two, &[pred_binder, ih_binder], succ_case.into()),
                 },
             },
         )
@@ -1262,15 +1268,15 @@ impl Term {
 
     /// Build the structural `Lst` eliminator ([`Carrier::Lst`]): the element type `elem`, an empty arm, and a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
-    pub fn lst_match<H, M, EL, EC, HL, TL, IL, CC>(
+    pub fn lst_match<H, M, EL, EC, CC>(
         head: H,
         elem: EL,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         empty_case: EC,
-        head_label: HL,
-        tail_label: TL,
-        ih_label: IL,
+        head_binder: &Free,
+        tail_binder: &Free,
+        ih_binder: &Free,
         cons_case: CC,
     ) -> Self
     where
@@ -1278,48 +1284,38 @@ impl Term {
         M: Into<Term>,
         EL: Into<Term>,
         EC: Into<Term>,
-        HL: Into<String>,
-        TL: Into<String>,
-        IL: Into<String>,
         CC: Into<Term>,
     {
         Self::lst_match_scoped(
             head,
             elem,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             empty_case,
-            head_label,
-            tail_label,
-            ih_label,
+            head_binder,
+            tail_binder,
+            ih_binder,
             cons_case,
         )
     }
 
     /// [`Term::lst_match`] over an already-built motive scope.
     #[allow(clippy::too_many_arguments)]
-    pub fn lst_match_scoped<H, EL, EC, HL, TL, IL, CC>(
+    pub fn lst_match_scoped<H, EL, EC, CC>(
         head: H,
         elem: EL,
         motive: Scope<Many>,
         empty_case: EC,
-        head_label: HL,
-        tail_label: TL,
-        ih_label: IL,
+        head_binder: &Free,
+        tail_binder: &Free,
+        ih_binder: &Free,
         cons_case: CC,
     ) -> Self
     where
         H: Into<Term>,
         EL: Into<Term>,
         EC: Into<Term>,
-        HL: Into<String>,
-        TL: Into<String>,
-        IL: Into<String>,
         CC: Into<Term>,
     {
-        let head_label = head_label.into();
-        let tail_label = tail_label.into();
-        let ih_label = ih_label.into();
-
         Self::match_scoped(
             head.into(),
             motive,
@@ -1329,7 +1325,7 @@ impl Term {
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(
                         Three,
-                        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
+                        &[head_binder, tail_binder, ih_binder],
                         cons_case.into(),
                     ),
                 },
@@ -1339,62 +1335,52 @@ impl Term {
 
     /// Build the structural `Bin` eliminator ([`Carrier::Bin`]): an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
-    pub fn bin_match<H, M, EC, HL, TL, IL, CC>(
+    pub fn bin_match<H, M, EC, CC>(
         grain: Grain,
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         empty_case: EC,
-        head_label: HL,
-        tail_label: TL,
-        ih_label: IL,
+        head_binder: &Free,
+        tail_binder: &Free,
+        ih_binder: &Free,
         cons_case: CC,
     ) -> Self
     where
         H: Into<Term>,
         M: Into<Term>,
         EC: Into<Term>,
-        HL: Into<String>,
-        TL: Into<String>,
-        IL: Into<String>,
         CC: Into<Term>,
     {
         Self::bin_match_scoped(
             grain,
             head,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             empty_case,
-            head_label,
-            tail_label,
-            ih_label,
+            head_binder,
+            tail_binder,
+            ih_binder,
             cons_case,
         )
     }
 
     /// [`Term::bin_match`] over an already-built motive scope.
     #[allow(clippy::too_many_arguments)]
-    pub fn bin_match_scoped<H, EC, HL, TL, IL, CC>(
+    pub fn bin_match_scoped<H, EC, CC>(
         grain: Grain,
         head: H,
         motive: Scope<Many>,
         empty_case: EC,
-        head_label: HL,
-        tail_label: TL,
-        ih_label: IL,
+        head_binder: &Free,
+        tail_binder: &Free,
+        ih_binder: &Free,
         cons_case: CC,
     ) -> Self
     where
         H: Into<Term>,
         EC: Into<Term>,
-        HL: Into<String>,
-        TL: Into<String>,
-        IL: Into<String>,
         CC: Into<Term>,
     {
-        let head_label = head_label.into();
-        let tail_label = tail_label.into();
-        let ih_label = ih_label.into();
-
         Self::match_scoped(
             head.into(),
             motive,
@@ -1404,7 +1390,7 @@ impl Term {
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(
                         Three,
-                        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
+                        &[head_binder, tail_binder, ih_binder],
                         cons_case.into(),
                     ),
                 },
@@ -1415,7 +1401,7 @@ impl Term {
     /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
     pub fn switch<H, M, I, B, D>(
         head: H,
-        motive_label: Option<&str>,
+        motive_binder: Option<&Free>,
         motive: M,
         cases: I,
         default: D,
@@ -1429,7 +1415,7 @@ impl Term {
     {
         Self::switch_scoped(
             head,
-            Self::motive_scope(motive_label, motive.into()),
+            Self::motive_scope(motive_binder, motive.into()),
             cases,
             default,
         )
@@ -1453,27 +1439,25 @@ impl Term {
         )
     }
 
-    /// Prepend a single non-recursive binding `label = body : type_` in front of
-    /// `tail`. `body` is deliberately *not* closed over `label` — a `let` is
+    /// Prepend a single non-recursive binding `binder = body : type_` in front
+    /// of `tail`. `body` is deliberately *not* closed over `binder` — a `let` is
     /// non-recursive; use [`Term::rec`] for self-reference.
     ///
     /// When `tail` is itself a [`Let`] block, the binding is *merged* into it so
-    /// a run of `let`s becomes one flat block, not a nest: `label` becomes the
+    /// a run of `let`s becomes one flat block, not a nest: `binder` becomes the
     /// block's new outermost binding, every existing binding and the tail step
     /// over one more binder (`capture`/reclose shift them by one), and free
-    /// occurrences of `label` in them bind to it. Building a block bottom-up —
+    /// occurrences of `binder` in them bind to it. Building a block bottom-up —
     /// as `into_core` and the elaborator's rebuild both do — therefore yields a
     /// single `Let`, and the flatness is what bounds every later walk over it.
     /// A `tail` that is not a `Let` (a `!`-bind's `Apply`, a `rec`, a base term)
     /// starts a fresh one-binding block, so effect boundaries segment naturally.
-    pub fn let_<L, T, B, U>(label: L, type_: T, body: B, tail: U) -> Self
+    pub fn let_<T, B, U>(binder: &Free, type_: T, body: B, tail: U) -> Self
     where
-        L: Into<String>,
         T: Into<Term>,
         B: Into<Term>,
         U: Into<Term>,
     {
-        let label = label.into();
         let type_ = type_.into();
         let body = body.into();
         let tail = tail.into();
@@ -1486,60 +1470,51 @@ impl Term {
                 for binding in bindings {
                     let (binding_type, binding_value) = binding.into_parts();
                     merged.push(LetBinding::new(
-                        binding_type.capture(&[label.as_str()]),
-                        binding_value.capture(&[label.as_str()]),
+                        binding_type.capture(&[binder]),
+                        binding_value.capture(&[binder]),
                     ));
                 }
 
                 Self::from(Subterm::Let(Let {
                     bindings: merged,
-                    tail: tail.prepend(label.as_str()),
+                    tail: tail.prepend(binder),
                 }))
             }
             other => Self::from(Subterm::Let(Let {
                 bindings: vec![LetBinding::new(type_, body)],
-                tail: Scope::close(Many(1), &[label.as_str()], Term::from(other)),
+                tail: Scope::close(Many(1), &[binder], Term::from(other)),
             })),
         }
     }
 
     /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
-    pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
+    pub fn rec<I, T, U, V>(items: I, tail: V) -> Self
     where
-        I: IntoIterator<Item = (L, T, U)>,
-        L: Into<String>,
+        I: IntoIterator<Item = (Free, T, U)>,
         T: Into<Term>,
         U: Into<Term>,
         V: Into<Term>,
     {
         let items = items
             .into_iter()
-            .map(|(label, type_, value)| (label.into(), type_.into(), value.into()))
+            .map(|(name, type_, value)| (name, type_.into(), value.into()))
             .collect::<Vec<_>>();
 
-        let labels = items
-            .iter()
-            .map(|(label, _, _)| label.clone())
-            .collect::<Vec<_>>();
-
-        let labels = labels
-            .iter()
-            .map(|label| label.as_str())
-            .collect::<Vec<_>>();
+        let members = items.iter().map(|(name, _, _)| name).collect::<Vec<_>>();
 
         let group = RecGroup::new(
             items
-                .into_iter()
+                .iter()
                 .map(|(_, type_, value)| RecMemberScopes {
-                    type_: Scope::close(Many(labels.len()), &labels, type_),
-                    body: Scope::close(Many(labels.len()), &labels, value),
+                    type_: Scope::close(Many(members.len()), &members, type_.clone()),
+                    body: Scope::close(Many(members.len()), &members, value.clone()),
                 })
                 .collect(),
         );
 
         Self::from(Subterm::Rec(Rec {
             group,
-            tail: Scope::close(Many(labels.len()), &labels, tail.into()),
+            tail: Scope::close(Many(members.len()), &members, tail.into()),
         }))
     }
 
@@ -1636,7 +1611,7 @@ impl Bound for Term {
     /// re-enqueued each round an unfolding cycle revisits them — pays this
     /// O(size) walk once rather than once per goal. Uniform in every term,
     /// not specific to recursive ones; see `Convert::history_key`.
-    fn free_vars(&self) -> BTreeSet<String> {
+    fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()
     }
 }
@@ -1802,11 +1777,11 @@ impl Term {
 
 impl Term {
     /// The memoized free-variable set, filled bottom-up on an explicit stack:
-    /// each node's set is its children's sets unioned with its own free label
+    /// each node's set is its children's sets unioned with its own identity
     /// (if it is a free `Var`), so filling reads the children's cached sets in
     /// O(children) rather than re-walking the subtree — a deep spine memoizes
     /// without native recursion. `free_vars` is the fill marker.
-    fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<String>> {
+    fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<Free>> {
         if self.inner.free_vars.get().is_none() {
             self.fill_post_order(
                 |node| node.free_vars.get().is_some(),
@@ -1822,20 +1797,20 @@ impl Term {
             .expect("fill_post_order fills free_vars")
     }
 
-    /// Whether `label` occurs free in this term, through the same memoized
+    /// Whether `name` occurs free in this term, through the same memoized
     /// set [`Bound::free_vars`] fills — but as a lookup instead of a set
     /// clone: `define`'s selective reduction-cache invalidation probes every
     /// cached WHNF, and cloning each entry's set there would swamp the walk
     /// it avoids.
-    pub(crate) fn mentions_free(&self, label: &str) -> bool {
-        self.get_or_init_free_vars().contains(label)
+    pub(crate) fn mentions_free(&self, name: &Free) -> bool {
+        self.get_or_init_free_vars().contains(name)
     }
 
-    /// The free-variable labels of this term. Inherent so a `term.free_vars()`
+    /// The free-variable identities of this term. Inherent so a `term.free_vars()`
     /// call routes through the memoized, iteratively-filled set (this and the
     /// [`Bound`] impl agree) rather than deref-ing to the uncached, recursive
     /// [`Subterm::free_vars`] when the `Bound` trait is out of scope.
-    pub fn free_vars(&self) -> BTreeSet<String> {
+    pub fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()
     }
 
@@ -2174,9 +2149,14 @@ impl InductArm {
         self.body.reach()
     }
 
-    /// The arm's payload binder labels (hints), in order.
-    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
-        self.body.label_iter()
+    /// The arm's payload binder hints, in order.
+    pub(crate) fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
+        self.body.hint_iter()
+    }
+
+    /// The arm's payload binders, in order.
+    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
+        self.body.binder_iter()
     }
 
     /// Rebuild the arm with its whole body scope replaced, preserving the
@@ -2695,8 +2675,8 @@ impl Subterm {
         }
     }
 
-    /// The free-variable labels occurring in this subterm — the inherent-method spelling of [`Bound::free_vars`], callable without importing the trait.
-    pub fn free_vars(&self) -> BTreeSet<String> {
+    /// The free-variable identities occurring in this subterm — the inherent-method spelling of [`Bound::free_vars`], callable without importing the trait.
+    pub fn free_vars(&self) -> BTreeSet<Free> {
         <Subterm as Bound>::free_vars(self)
     }
 
@@ -3066,18 +3046,16 @@ impl Subterm {
         }
     }
 
-    /// Whether any free variable in this subterm carries an elaborator-minted
-    /// (`#`-bearing) label — the uncached spelling of
+    /// Whether any free variable in this subterm is a binder rather than a
+    /// top-level definition — the uncached spelling of
     /// [`Term::has_local_free`], which supplies the per-node memoization.
     ///
-    /// `#` is minted by `Context::fresh` alone and cannot occur in a written
-    /// identifier, so it marks exactly the context-dependent locals. Compiler
-    /// names for *globals* must therefore avoid it: anonymous witnesses are
-    /// spelled `witness@N` (`curios-text/src/into_core.rs`) precisely so they
-    /// do not set this bit.
+    /// A local is a [`Free::Local`], so this is a discriminant test. It used to
+    /// be a search for a marker character in the spelling, which a compiler-made
+    /// *global* could set by accident — and once did.
     pub(crate) fn has_local_free(&self) -> bool {
         match self {
-            Subterm::Var(var) => var.as_label().is_some_and(|label| label.contains('#')),
+            Subterm::Var(var) => var.as_free().is_some_and(Free::is_local),
             _ => self.any_child_term(&mut |t| t.has_local_free()),
         }
     }
@@ -3128,17 +3106,17 @@ impl Subterm {
         }
     }
 
-    /// This subterm's free-variable set as its own free label (if it is a free
+    /// This subterm's free-variable set as its own identity (if it is a free
     /// `Var`) unioned with its children's already-memoized sets — the child-
     /// combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep
     /// spine bottom-up in O(children) per node instead of re-walking the
     /// subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a
     /// free name occurs free in exactly the nodes whose subtrees contain it.
-    fn free_vars_from_children(&self) -> BTreeSet<String> {
+    fn free_vars_from_children(&self) -> BTreeSet<Free> {
         if let Subterm::Var(var) = self
-            && let Some(label) = var.as_label()
+            && let Some(name) = var.as_free()
         {
-            return BTreeSet::from([label.to_string()]);
+            return BTreeSet::from([name.clone()]);
         }
         let mut vars = BTreeSet::new();
         self.any_child_term(&mut |child| {

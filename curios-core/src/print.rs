@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductType, Infix, Let,
-        Level, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
+        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Infix,
+        Let, Level, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
         Flt, Grain, Plicity,
@@ -56,7 +56,7 @@ fn universe_suffix(levels: &[Level]) -> String {
 thread_local! {
     /// Local binders → source-name renaming (axis (a)); installed by error
     /// rendering only.
-    static PRETTY: RefCell<Option<Rc<HashMap<String, String>>>> = const { RefCell::new(None) };
+    static PRETTY: RefCell<Option<Rc<HashMap<Free, String>>>> = const { RefCell::new(None) };
     /// Global qualified names → their shortest in-scope spelling (axis (b));
     /// installed by both error rendering and `Module` display.
     static SHORTEN: RefCell<Option<Rc<HashMap<String, String>>>> = const { RefCell::new(None) };
@@ -64,10 +64,7 @@ thread_local! {
 
 /// Install a pretty-name rename map for the duration of `f`, restoring the
 /// previous state afterwards so the faithful `Display` paths are unaffected.
-pub(crate) fn with_pretty_names<R>(
-    rename: Rc<HashMap<String, String>>,
-    f: impl FnOnce() -> R,
-) -> R {
+pub(crate) fn with_pretty_names<R>(rename: Rc<HashMap<Free, String>>, f: impl FnOnce() -> R) -> R {
     let prev = PRETTY.with(|p| p.borrow_mut().replace(rename));
     let result = f();
     PRETTY.with(|p| *p.borrow_mut() = prev);
@@ -85,34 +82,34 @@ pub(crate) fn with_short_names<R>(
     result
 }
 
-/// Strip a `fresh`-generated `hint#counter` name down to its source `hint`.
-/// User-written names carry no `#`; a counter-only `#7` (an unnamed binder) has
-/// an empty hint and is left as-is.
-fn strip_fresh(raw: &str) -> String {
-    match raw.split_once('#') {
-        Some((hint, _)) if !hint.is_empty() => hint.to_string(),
-        _ => raw.to_string(),
-    }
+/// The display spelling of a global's still-flattened name — the registry keys
+/// and nominal heads, which shorten (axis (b)) but never rename.
+fn display_symbol(symbol: &str) -> String {
+    SHORTEN
+        .with(|s| s.borrow().as_ref().and_then(|m| m.get(symbol).cloned()))
+        .unwrap_or_else(|| symbol.to_string())
 }
 
 /// The display spelling of a name. A global with a shorter in-scope spelling
-/// takes it (axis (b)); otherwise a local binder gets its pretty rename (axis
-/// (a), with a `strip_fresh` fallback). A name in neither map renders verbatim.
-fn display_label(raw: &str) -> String {
-    if let Some(short) = SHORTEN.with(|s| s.borrow().as_ref().and_then(|m| m.get(raw).cloned())) {
-        return short;
+/// takes it (axis (b)); a local binder gets its pretty rename (axis (a)),
+/// falling back to its minting hint. A name in neither map renders verbatim.
+fn display_label(name: &Free) -> String {
+    if let Some(global) = name.as_global() {
+        return display_symbol(&global.symbol());
     }
-    PRETTY.with(|p| match &*p.borrow() {
-        None => raw.to_string(),
-        Some(map) => map.get(raw).cloned().unwrap_or_else(|| strip_fresh(raw)),
-    })
+    PRETTY
+        .with(|p| p.borrow().as_ref().and_then(|map| map.get(name).cloned()))
+        .unwrap_or_else(|| match name.hint() {
+            Some(hint) => hint.to_string(),
+            None => name.to_string(),
+        })
 }
 
 /// Every name the printer will emit for `term`: free vars (Γ references) and the
 /// stored labels of every binder it reopens. Free vars come from the robust
 /// `Bound` traversal; binder labels — which that traversal never surfaces — from
 /// [`collect_labels`], which descends scope bodies (where nested binders live).
-pub(crate) fn display_names(term: &Term) -> BTreeSet<String> {
+pub(crate) fn display_names(term: &Term) -> BTreeSet<Free> {
     let mut names = term.free_vars();
     collect_labels(term, &mut names);
     names
@@ -121,25 +118,25 @@ pub(crate) fn display_names(term: &Term) -> BTreeSet<String> {
 /// Collect every binder label in `term`, recursing through scope and telescope
 /// bodies. (`Prim` interiors are skipped: they hold no binders the diagnostics
 /// need to name, and any free vars there are already in `free_vars`.)
-fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
-    fn push(out: &mut BTreeSet<String>, label: Option<&str>) {
-        if let Some(label) = label.filter(|l| !l.is_empty()) {
-            out.insert(label.to_string());
+fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
+    fn push(out: &mut BTreeSet<Free>, binder: Option<&Free>) {
+        if let Some(binder) = binder {
+            out.insert(binder.clone());
         }
     }
 
-    fn scope<A: Arity>(out: &mut BTreeSet<String>, scope: &Scope<A>) {
+    fn scope<A: Arity>(out: &mut BTreeSet<Free>, scope: &Scope<A>) {
         if let Some(names) = scope.names() {
             names.iter().for_each(|n| push(out, Some(n)));
         }
         collect_labels(scope.body(), out);
     }
 
-    fn telescope(out: &mut BTreeSet<String>, mut cur: &Telescope<Term>) {
+    fn telescope(out: &mut BTreeSet<Free>, mut cur: &Telescope<Term>) {
         loop {
             match cur {
                 Telescope::Cons(ty, rest) => {
-                    push(out, rest.first_label());
+                    push(out, rest.binder(0));
                     collect_labels(ty, out);
                     cur = rest.body();
                 }
@@ -150,15 +147,15 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
 
     // A tuple type's telescope has no result term (`Telescope<()>`); only its
     // field types and labels carry names.
-    fn tuple_telescope(out: &mut BTreeSet<String>, mut cur: &Telescope<()>) {
+    fn tuple_telescope(out: &mut BTreeSet<Free>, mut cur: &Telescope<()>) {
         while let Telescope::Cons(ty, rest) = cur {
-            push(out, rest.first_label());
+            push(out, rest.binder(0));
             collect_labels(ty, out);
             cur = rest.body();
         }
     }
 
-    let each = |out: &mut BTreeSet<String>, terms: &[Term]| {
+    let each = |out: &mut BTreeSet<Free>, terms: &[Term]| {
         terms.iter().for_each(|t| collect_labels(t, out))
     };
 
@@ -274,36 +271,33 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
     }
 }
 
-/// Assign every `hint#counter` name a clean display spelling: its source `hint`,
-/// or `hint2`, `hint3`, … when several distinct names — binders *or* free vars —
-/// would otherwise collide, or would shadow a name that renders literally
-/// (globals, already-clean labels). The result is unambiguous by construction,
-/// so no rendered name is ever silently shared between two binders.
-pub(crate) fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> {
+/// Give every hinted binder a clean display spelling: its hint, or `hint2`,
+/// `hint3`, … when several distinct identities — binders *or* free vars — would
+/// otherwise render alike, or would shadow a name that renders literally
+/// (globals, hintless binders). The result is unambiguous by construction, so no
+/// rendered name is ever silently shared between two binders.
+pub(crate) fn build_rename(names: &BTreeSet<Free>) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
-    let prettifiable = names
-        .iter()
-        .filter(|n| matches!(n.split_once('#'), Some((hint, _)) if !hint.is_empty()))
-        .collect::<Vec<_>>();
+    let (prettifiable, literal): (Vec<_>, Vec<_>) =
+        names.iter().partition(|name| name.hint().is_some());
 
     // Names that render as themselves reserve their spelling up front.
-    let mut used = names
-        .iter()
-        .filter(|n| !prettifiable.contains(n))
-        .cloned()
+    let mut used = literal
+        .into_iter()
+        .map(Free::to_string)
         .collect::<BTreeSet<_>>();
 
     let mut map = HashMap::new();
-    for raw in prettifiable {
-        let hint = strip_fresh(raw);
-        let mut candidate = hint.clone();
+    for name in prettifiable {
+        let hint = name.hint().expect("partitioned on a present hint");
+        let mut candidate = hint.to_string();
         let mut next = 2;
         while used.contains(&candidate) {
             candidate = format!("{hint}{next}");
             next += 1;
         }
         used.insert(candidate.clone());
-        map.insert(raw.clone(), candidate);
+        map.insert(name.clone(), candidate);
     }
     map
 }
@@ -346,59 +340,60 @@ pub(crate) fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
     map
 }
 
-fn label_at(depth: usize) -> String {
-    format!("#{depth}")
+/// A scope's stored binder, or a depth-positional stand-in when it has none — a
+/// `constant` scope never had binders written. The stand-in is minted at the de
+/// Bruijn level, so one printed term's placeholders stay distinct from each
+/// other.
+fn binder_or(binder: Option<&Free>, depth: usize) -> Free {
+    match binder {
+        Some(binder) => binder.clone(),
+        None => Free::local(u32::try_from(depth).unwrap_or(u32::MAX), None),
+    }
 }
 
-/// A binder's stored source label, or a depth-positional `#n` placeholder when
-/// it is unnamed.
-fn label_or(hint: Option<&str>, depth: usize) -> String {
-    hint.map(str::to_string).unwrap_or_else(|| label_at(depth))
-}
-
-/// Every binder label of a scope, unnamed ones filled with `#n` placeholders
-/// positioned from `depth`.
-fn scope_labels<'a>(labels: impl Iterator<Item = Option<&'a str>>, depth: usize) -> Vec<String> {
-    labels
+/// Every binder of a scope, unnamed ones filled with stand-ins positioned from
+/// `depth`.
+fn scope_labels<'a>(binders: impl Iterator<Item = Option<&'a Free>>, depth: usize) -> Vec<Free> {
+    binders
         .enumerate()
-        .map(|(index, label)| label_or(label, depth + index))
+        .map(|(index, binder)| binder_or(binder, depth + index))
         .collect()
 }
 
-fn label_terms(labels: &[String]) -> Vec<Term> {
-    labels.iter().map(Var::free).map(Term::var).collect()
+fn label_terms(binders: &[Free]) -> Vec<Term> {
+    binders.iter().map(Term::free_var).collect()
 }
 
-fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Term) {
-    fn walk(cur: Telescope<Term>, depth: usize, idx: usize, labels: &mut Vec<String>) -> Term {
+fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<Free>, Term) {
+    fn walk(cur: Telescope<Term>, depth: usize, idx: usize, binders: &mut Vec<Free>) -> Term {
         match cur {
             Telescope::Done(body) => *body,
             Telescope::Cons(_ty, rest) => {
-                let label = label_or(rest.first_label(), depth + idx);
-                let next = rest.open(&[&Term::free_var(&label)]);
-                labels.push(label);
-                walk(next, depth, idx + 1, labels)
+                let binder = binder_or(rest.binder(0), depth + idx);
+                let next = rest.open(&[&Term::free_var(&binder)]);
+                binders.push(binder);
+                walk(next, depth, idx + 1, binders)
             }
         }
     }
 
-    let mut labels = Vec::new();
-    let body = walk(telescope, depth, 0, &mut labels);
-    (labels, body)
+    let mut binders = Vec::new();
+    let body = walk(telescope, depth, 0, &mut binders);
+    (binders, body)
 }
 
-fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
-    let fst = label_or(scope.first_label(), depth);
-    let snd = label_or(scope.second_label(), depth + 1);
+fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((Free, Free), Term) {
+    let fst = binder_or(scope.binder(0), depth);
+    let snd = binder_or(scope.binder(1), depth + 1);
     let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
 
     ((fst, snd), body)
 }
 
-fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((String, String, String), Term) {
-    let fst = label_or(scope.first_label(), depth);
-    let snd = label_or(scope.second_label(), depth + 1);
-    let thd = label_or(scope.third_label(), depth + 2);
+fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((Free, Free, Free), Term) {
+    let fst = binder_or(scope.binder(0), depth);
+    let snd = binder_or(scope.binder(1), depth + 1);
+    let thd = binder_or(scope.binder(2), depth + 2);
     let body = scope.open(&[
         &Term::free_var(&fst),
         &Term::free_var(&snd),
@@ -797,8 +792,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 match cur {
                     Telescope::Done(body) => *body,
                     Telescope::Cons(ty, rest) => {
-                        let raw = rest.first_label();
-                        let label = label_or(raw, depth + idx);
+                        let raw = rest.binder(0);
+                        let label = binder_or(raw, depth + idx);
                         // Plicity marks the name (`@x` = implicit, `use x` = witness).
                         let mark = match plicities.get(idx) {
                             Some(Plicity::Implicit) => "@",
@@ -892,7 +887,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 match cur {
                     Telescope::Done(_) => {}
                     Telescope::Cons(ty, rest) => {
-                        let label = label_or(rest.first_label(), depth + idx);
+                        let label = binder_or(rest.binder(0), depth + idx);
                         items.push(indent(flat([
                             pure(display_label(&label)),
                             pure(" : "),
@@ -941,7 +936,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             params,
             indices,
         }) => {
-            let name = format!("{}{}", display_label(&name), universe_suffix(&universes));
+            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
             if params.is_empty() && indices.is_empty() {
                 pure(name)
             } else {
@@ -969,7 +964,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             payload,
             ..
         }) => {
-            let name = format!("{}{}", display_label(&name), universe_suffix(&universes));
+            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
             if payload.is_empty() {
                 pure(format!("{name}/{tag}"))
             } else {
@@ -993,7 +988,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             universes,
             params,
         }) => {
-            let name = format!("{}{}", display_label(&name), universe_suffix(&universes));
+            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
             if params.is_empty() {
                 pure(name)
             } else {
@@ -1021,7 +1016,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }) => flat([
             pure(format!(
                 "{}{} {{ ",
-                display_label(&name),
+                display_symbol(&name),
                 universe_suffix(&universes)
             )),
             sep_flat(
@@ -1040,13 +1035,13 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }) => {
             // Arity 1 everywhere except an annotated inductive-match motive,
             // whose pattern binders precede the scrutinee binder.
-            let motive_labels = scope_labels(motive.label_iter(), depth);
+            let motive_labels = scope_labels(motive.binder_iter(), depth);
             let motive_terms = label_terms(&motive_labels);
             let motive_refs = motive_terms.iter().collect::<Vec<_>>();
             let motive_arity = motive_labels.len();
             let motive_label = motive_labels
                 .iter()
-                .map(|l| display_label(l))
+                .map(display_label)
                 .collect::<Vec<_>>()
                 .join(", ");
             let motive = motive.open(&motive_refs);
@@ -1107,7 +1102,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         cases
                             .into_iter()
                             .map(|(atom, arm)| {
-                                let labels = scope_labels(arm.label_iter(), depth);
+                                let labels = scope_labels(arm.binder_iter(), depth);
                                 let label_terms = label_terms(&labels);
                                 let label_terms = label_terms.iter().collect::<Vec<_>>();
                                 let body = arm.open(&label_terms);
@@ -1239,7 +1234,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             flat([prefix, arms])
         }
         Subterm::Let(Let { bindings, tail, .. }) => {
-            let labels = scope_labels(tail.label_iter(), depth);
+            let labels = scope_labels(tail.binder_iter(), depth);
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
@@ -1268,7 +1263,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Subterm::Rec(Rec { group, tail }) => {
-            let labels = scope_labels(tail.label_iter(), depth);
+            let labels = scope_labels(tail.binder_iter(), depth);
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
             let inner_depth = depth + labels.len();

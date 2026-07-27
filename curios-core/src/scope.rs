@@ -123,7 +123,7 @@ enum VarType {
     Bound(usize),
 }
 
-/// A locally-nameless variable: free (a label naming a Γ assumption or global definition) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
+/// A locally-nameless variable: free (a [`Free`] identity naming a Γ assumption or global definition) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -134,34 +134,19 @@ pub struct Var {
 }
 
 impl Var {
-    /// A free variable named `label` — the only form constructible outside the crate; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
-    ///
-    /// **Migration scaffold.** The label is decoded once, by
-    /// [`Free::parse_legacy`], so callers that have not yet been retyped keep
-    /// building the same identity a retyped caller would. Retired with the last
-    /// of those callers.
-    pub fn free<A>(label: A) -> Self
-    where
-        A: Into<String>,
-    {
+    /// A free occurrence of `name` — the only form constructible outside the crate; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
+    pub fn free(name: Free) -> Self {
         Self {
-            type_: VarType::Free(Free::from_legacy(label.into())),
+            type_: VarType::Free(name),
         }
     }
 
     /// This occurrence's identity, if it is free.
-    pub(crate) fn as_free(&self) -> Option<&Free> {
+    pub fn as_free(&self) -> Option<&Free> {
         match &self.type_ {
             VarType::Free(free) => Some(free),
             VarType::Bound(_) => None,
         }
-    }
-
-    /// **Migration scaffold.** A free occurrence's legacy spelling, borrowed,
-    /// for the consumers that still compare names as text. Deleted alongside
-    /// [`Free::as_legacy`].
-    pub(crate) fn as_label(&self) -> Option<&str> {
-        self.as_free().and_then(Free::as_legacy)
     }
 
     pub(crate) fn bound(index: usize) -> Self {
@@ -177,9 +162,11 @@ impl Var {
         }
     }
 
-    /// **Migration scaffold.** See [`Var::as_label`].
-    pub(crate) fn unwrap(&self) -> &str {
-        self.as_label().unwrap()
+    /// This occurrence's identity, asserting it is free. Callers hold a term the
+    /// scope machinery has not closed over, where a bound index is an invariant
+    /// violation rather than a case to handle.
+    pub(crate) fn unwrap(&self) -> &Free {
+        self.as_free().expect("a free occurrence")
     }
 }
 
@@ -216,20 +203,20 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         }))
     }
 
-    /// The closing half of the locally-nameless discipline: turn free occurrences of `labels` into bound indices (position in `labels`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
-    fn capture(&self, labels: &[&str]) -> Self {
+    /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
+    fn capture(&self, binders: &[&Free]) -> Self {
         self.traverse(&mut Visit::new(|depth, var| {
-            var.as_label()
-                .and_then(|label| {
-                    labels
+            var.as_free()
+                .and_then(|name| {
+                    binders
                         .iter()
-                        .position(|&candidate| label == candidate)
+                        .position(|&candidate| name == candidate)
                         .map(|index| Subterm::Var(Var::bound(depth + index)))
                 })
                 .or_else(|| {
                     var.as_bound()
                         .filter(|&index| index >= depth)
-                        .map(|index| Subterm::Var(Var::bound(index + labels.len())))
+                        .map(|index| Subterm::Var(Var::bound(index + binders.len())))
                 })
         }))
     }
@@ -248,12 +235,12 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         }))
     }
 
-    /// The set of free-variable labels occurring anywhere in the term. A pure observation ridden on `traverse` (the callback rewrites nothing), so it must never be pruned — every node has to be seen.
-    fn free_vars(&self) -> BTreeSet<String> {
+    /// The set of free-variable identities occurring anywhere in the term. A pure observation ridden on `traverse` (the callback rewrites nothing), so it must never be pruned — every node has to be seen.
+    fn free_vars(&self) -> BTreeSet<Free> {
         let mut vars = BTreeSet::new();
         self.traverse(&mut Visit::new(|_, var| {
-            if let Some(label) = var.as_label() {
-                vars.insert(label.to_string());
+            if let Some(name) = var.as_free() {
+                vars.insert(name.clone());
             }
             None
         }));
@@ -476,30 +463,30 @@ pub(crate) fn stamp_declaration_instance<B: Bound>(
 
 // === Scope ===================================================================
 
-/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the source labels for reopening and printing (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `names` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder hints are equal — term equality is α-equivalence. The one place labels are semantic rather than hints — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of the labels) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
+/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the [`Free`] identities it was closed over, for printing and for the hints later rebuilds re-mint from (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `names` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder names are equal — term equality is α-equivalence. The one place binder *hints* are semantic rather than decoration — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of those identities) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
-    names: Option<Vec<String>>,
+    names: Option<Vec<Free>>,
     body: Box<B>,
 }
 
 impl<A: Arity, B: Bound> Scope<A, B> {
-    pub(crate) fn close<'a>(arity: A, labels: A::Params<'a, str>, body: B) -> Self {
+    pub(crate) fn close<'a>(arity: A, binders: A::Params<'a, Free>, body: B) -> Self {
         assert!(
-            arity.arity() == labels.as_ref().len(),
+            arity.arity() == binders.as_ref().len(),
             "scope arity mismatch in `close`: expected {}, got {}",
             arity.arity(),
-            labels.as_ref().len()
+            binders.as_ref().len()
         );
 
         Self {
             arity,
-            names: Some(labels.as_ref().iter().map(|s| s.to_string()).collect()),
-            body: body.capture(labels.as_ref()).into(),
+            names: Some(binders.as_ref().iter().map(|&name| name.clone()).collect()),
+            body: body.capture(binders.as_ref()).into(),
         }
     }
 
@@ -511,7 +498,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         &self.body
     }
 
-    pub(crate) fn names(&self) -> Option<&[String]> {
+    pub(crate) fn names(&self) -> Option<&[Free]> {
         self.names.as_deref()
     }
 
@@ -550,25 +537,39 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         })
     }
 
-    pub(crate) fn first_label(&self) -> Option<&str> {
-        self.names.as_deref()?.first().map(String::as_str)
+    /// The identity of the binder at position `index` (0 = first/outermost),
+    /// for a rebuild that must re-close over the very same binders.
+    pub(crate) fn binder(&self, index: usize) -> Option<&Free> {
+        self.names.as_deref()?.get(index)
     }
 
-    pub(crate) fn second_label(&self) -> Option<&str> {
-        self.names.as_deref()?.get(1).map(String::as_str)
+    /// What the binder at position `index` was called where it was written — a
+    /// rendering aid a rebuild carries onto the binder it re-mints, never a way
+    /// to recognize which binder this is.
+    pub(crate) fn hint(&self, index: usize) -> Option<&str> {
+        self.binder(index)?.hint()
     }
 
-    pub(crate) fn third_label(&self) -> Option<&str> {
-        self.names.as_deref()?.get(2).map(String::as_str)
+    pub(crate) fn first_hint(&self) -> Option<&str> {
+        self.hint(0)
     }
 
-    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
-        (0..self.arity()).map(move |i| {
-            self.names
-                .as_deref()
-                .and_then(|ns| ns.get(i))
-                .map(String::as_str)
-        })
+    pub(crate) fn second_hint(&self) -> Option<&str> {
+        self.hint(1)
+    }
+
+    pub(crate) fn third_hint(&self) -> Option<&str> {
+        self.hint(2)
+    }
+
+    pub(crate) fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
+        (0..self.arity()).map(move |index| self.hint(index))
+    }
+
+    /// The identity of each binder in order, `None` where the scope was built
+    /// without them (`constant`).
+    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
+        (0..self.arity()).map(move |index| self.binder(index))
     }
 
     /// Whether the binder at position `index` (0 = first/outermost label) is
@@ -589,18 +590,17 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 }
 
 impl<B: Bound> Scope<Many, B> {
-    /// Prepend one binder named `label` to the front of this scope: the new
-    /// binder becomes index 0 and every existing binder shifts up by one.
+    /// Prepend `binder` to the front of this scope: it becomes index 0 and every
+    /// existing binder shifts up by one.
     ///
-    /// Done by a direct `capture` on the body — free `label` occurrences bind to
-    /// the new index 0 while every existing bound index shifts by one — so it
-    /// stays correct when `label` shadows an inner binder. An open/close
-    /// round-trip through names cannot: opening turns the inner binder into a
-    /// free `label`, indistinguishable from a genuine outer reference, and the
-    /// reclose captures both to the same (wrong) index.
-    pub(crate) fn prepend(&self, label: &str) -> Self {
+    /// Done by a direct `capture` on the body — free occurrences of `binder`
+    /// bind to the new index 0 while every existing bound index shifts by one —
+    /// rather than an open/close round-trip through names, which would have to
+    /// reopen inner binders into free occurrences and could not tell them from
+    /// genuine outer references.
+    pub(crate) fn prepend(&self, binder: &Free) -> Self {
         let names = self.names.as_ref().map(|names| {
-            [label.to_string()]
+            [binder.clone()]
                 .into_iter()
                 .chain(names.iter().cloned())
                 .collect()
@@ -609,7 +609,7 @@ impl<B: Bound> Scope<Many, B> {
         Self {
             arity: Many(self.arity() + 1),
             names,
-            body: self.body.capture(&[label]).into(),
+            body: self.body.capture(&[binder]).into(),
         }
     }
 }
@@ -677,20 +677,17 @@ impl<B: Bound> Telescope<B> {
         Telescope::Done(body.into())
     }
 
-    pub(crate) fn cons<S, T>(label: S, ty: T, rest: Telescope<B>) -> Self
+    pub(crate) fn cons<T>(binder: &Free, ty: T, rest: Telescope<B>) -> Self
     where
-        S: Into<String>,
         T: Into<Term>,
     {
-        let label = label.into();
-        Telescope::Cons(ty.into(), Scope::close(One, &[label.as_str()], rest))
+        Telescope::Cons(ty.into(), Scope::close(One, &[binder], rest))
     }
 
-    /// Build a telescope from `(label, type)` entries in written order, right-folding so each entry's scope closes over everything after it — written order mirrors telescope order.
-    pub fn build<I, S, T>(entries: I, body: B) -> Self
+    /// Build a telescope from `(binder, type)` entries in written order, right-folding so each entry's scope closes over everything after it — written order mirrors telescope order.
+    pub fn build<I, T>(entries: I, body: B) -> Self
     where
-        I: IntoIterator<Item = (S, T)>,
-        S: Into<String>,
+        I: IntoIterator<Item = (Free, T)>,
         T: Into<Term>,
     {
         entries
@@ -698,8 +695,8 @@ impl<B: Bound> Telescope<B> {
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
-            .fold(Telescope::done(body), |rest, (l, t)| {
-                Telescope::cons(l, t, rest)
+            .fold(Telescope::done(body), |rest, (binder, ty)| {
+                Telescope::cons(&binder, ty, rest)
             })
     }
 
@@ -729,35 +726,39 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    /// The binder name at each position (`""` when unnamed), walking the spine
+    /// The binder hint at each position (`""` when unnamed), walking the spine
     /// without opening — names are structural, no substitution needed.
     pub(crate) fn labels(&self) -> Vec<&str> {
         let mut out = Vec::new();
         let mut cur = self;
         while let Telescope::Cons(_, rest) = cur {
-            out.push(rest.first_label().unwrap_or_default());
+            out.push(rest.first_hint().unwrap_or_default());
             cur = &rest.body;
         }
         out
     }
 
-    /// Replace the stored binder names along the spine. Pure metadata: the de
-    /// Bruijn structure is untouched, so this never changes what binds where —
-    /// it restores source labels after a rebuild that had to gensym its
-    /// binders (tuple-type labels are part of the type's identity and the
-    /// target of `.label` resolution, so they must survive elaboration
-    /// verbatim).
+    /// Replace the display hints along the spine, leaving each binder's identity
+    /// alone. Pure metadata: the de Bruijn structure is untouched and no
+    /// occurrence changes what it refers to — this restores source labels after
+    /// a rebuild that had to re-mint its binders (tuple-type labels are part of
+    /// the type's identity and the target of `.label` resolution, so they must
+    /// survive elaboration verbatim).
     pub(crate) fn relabel(self, labels: &[&str]) -> Self {
         match self {
             Telescope::Done(body) => Telescope::Done(body),
             Telescope::Cons(ty, rest) => {
                 let (label, rest_labels) = labels.split_first().expect("relabel arity");
+                let names = rest
+                    .names
+                    .as_ref()
+                    .map(|names| names.iter().map(|name| name.relabelled(label)).collect());
                 let Scope { arity, body, .. } = rest;
                 Telescope::Cons(
                     ty,
                     Scope {
                         arity,
-                        names: Some(vec![label.to_string()]),
+                        names,
                         body: Box::new((*body).relabel(rest_labels)),
                     },
                 )

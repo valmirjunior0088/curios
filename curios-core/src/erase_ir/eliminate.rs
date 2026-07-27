@@ -27,7 +27,7 @@ use {
         Match, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
         expect_prim_head, infer, is_erasable, reduce_with, refine_head,
     },
-    crate::Level,
+    crate::{Free, Level},
     curios_base::{Grain, PackedBin},
 };
 
@@ -387,8 +387,8 @@ impl Lowering {
 
         // Induction: bind the predecessor and the hypothesis, then erase the
         // successor arm at `motive(pred + 1)`.
-        let pred_hint = cons_case.first_label().map(str::to_string);
-        let hypothesis_hint = cons_case.second_label().map(str::to_string);
+        let pred_hint = cons_case.first_hint().map(str::to_string);
+        let hypothesis_hint = cons_case.second_hint().map(str::to_string);
         let pred_label = context.fresh(pred_hint.as_deref());
         let hypothesis_label = context.fresh(hypothesis_hint.as_deref());
         let predecessor = self.builder.value(pred_hint);
@@ -485,9 +485,9 @@ impl Lowering {
             ));
         }
 
-        let element_hint = cons_case.first_label().map(str::to_string);
-        let suffix_hint = cons_case.second_label().map(str::to_string);
-        let accumulator_hint = cons_case.third_label().map(str::to_string);
+        let element_hint = cons_case.first_hint().map(str::to_string);
+        let suffix_hint = cons_case.second_hint().map(str::to_string);
+        let accumulator_hint = cons_case.third_hint().map(str::to_string);
         let element_label = context.fresh(element_hint.as_deref());
         let suffix_label = context.fresh(suffix_hint.as_deref());
         let accumulator_label = context.fresh(accumulator_hint.as_deref());
@@ -673,7 +673,7 @@ impl Lowering {
         constructor: curios_ersd::ConstructorId,
     ) -> Result<curios_ersd::VariantArm, Error> {
         let hints = scope
-            .label_iter()
+            .hint_iter()
             .map(|label| label.map(str::to_string))
             .collect::<Vec<_>>();
         let labels = hints
@@ -748,7 +748,7 @@ impl Lowering {
             .instantiate(tag, m.params)
             .expect("erase_ir: constructor instantiates at its inductive's parameters");
         let labels = scope
-            .label_iter()
+            .hint_iter()
             .map(|label| context.fresh(label))
             .collect::<Vec<_>>();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
@@ -774,7 +774,7 @@ fn refine_arm(
     context: &mut Context,
     m: &InductMatch<'_>,
     tag: &Atom,
-    labels: &[String],
+    labels: &[Free],
     vars: &[Term],
     telescope: Telescope<Term>,
 ) -> Result<Term, Error> {

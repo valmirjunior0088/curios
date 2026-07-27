@@ -16,7 +16,7 @@ use {
         emitted, prim,
     },
     crate::{
-        Concept, Definition, InductParam, RecItem, StructDecl, project_erased_universes,
+        Concept, Definition, Free, InductParam, RecItem, StructDecl, project_erased_universes,
         validate_bound_universes, validate_universes,
     },
     std::collections::BTreeSet,
@@ -38,7 +38,7 @@ pub(super) struct Lowering {
     /// Dropped binder labels referenced from a retained position. Consumed by
     /// the function-body collapse: a proof-valued body that dangles a binder
     /// its own lambda dropped is replaced by the unit constant.
-    pub(super) dangled: BTreeSet<String>,
+    pub(super) dangled: BTreeSet<Free>,
 }
 
 pub(super) struct UniverseErased<T>(T);
@@ -158,6 +158,7 @@ fn project_module(module: &Module) -> Module {
             })
             .collect(),
         witnesses: module.witnesses.clone(),
+        binder_floor: module.binder_floor,
         type_: module.type_.as_ref().map(project_erased_universes),
         body: project_erased_universes(&module.body),
     }
@@ -273,7 +274,7 @@ impl Lowering {
                 match self.environment.lookup(name) {
                     Some(Binding::Atom(atom)) => Ok(Outcome::Emitted(atom)),
                     Some(Binding::Dropped) => {
-                        self.dangled.insert(name.to_string());
+                        self.dangled.insert(name.clone());
                         Ok(Outcome::Emitted(self.unit()))
                     }
                     None => unreachable!("erase_ir: unbound variable {name}"),
@@ -320,7 +321,7 @@ impl Lowering {
                 // The arena identity uniquifies by index, so the hint stays
                 // the clean source label; the `#`-uniquified fresh name is
                 // only the Core context key.
-                let label = binding.tail.label_iter().nth(index).flatten();
+                let label = binding.tail.hint_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
                 // A proof- or type-valued binding is walked, not collapsed: a
@@ -432,7 +433,7 @@ pub fn erase_module_with_prelude_to_ir(
             match item {
                 super::Item::Let(definition) => {
                     context.define_assuming_scheme(
-                        &definition.name,
+                        &Free::from(&definition.name),
                         &definition.type_,
                         &definition.body,
                         Some(&definition.kind),
@@ -442,15 +443,16 @@ pub fn erase_module_with_prelude_to_ir(
                 super::Item::Rec(rec) => {
                     let definitions = rec.definitions();
                     for definition in &definitions {
-                        context.assume(&definition.name, &definition.type_);
+                        let name = Free::from(&definition.name);
+                        context.assume(&name, &definition.type_);
                         context.set_assumption_universe_context(
-                            &definition.name,
+                            &name,
                             rec.group.universe_context().clone(),
                         );
                     }
                     for (index, definition) in definitions.iter().enumerate() {
                         context.define(
-                            &definition.name,
+                            &Free::from(&definition.name),
                             &Term::rec_member(rec.group.clone(), index),
                             Some(&definition.kind),
                         );

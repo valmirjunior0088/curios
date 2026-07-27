@@ -15,7 +15,7 @@ fn nat(n: usize) -> Term {
 #[test]
 fn nat_to_byte_reflects_byte_to_nat() {
     let mut context = context();
-    let byte = Term::free_var("byte");
+    let byte = Term::free_var(&crate::fixture_binder("byte"));
     let term = Term::prim(Prim::NatToByte(Term::prim(Prim::ByteToNat(byte.clone()))));
 
     assert_eq!(reduce(&mut context, term), Ok(byte));
@@ -26,7 +26,10 @@ fn reduce_apply_beta_reduces() {
     let mut context = context();
 
     let term: Term = Term::apply(
-        Term::func([("x", Term::type_ground())], Term::free_var("x")),
+        Term::func(
+            [(crate::fixture_binder("x"), Term::type_ground())],
+            Term::free_var(&crate::fixture_binder("x")),
+        ),
         [nat(1)],
     );
 
@@ -38,25 +41,34 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let mut context = context();
     let nat_type = Term::prim(Prim::NatType);
     let body = Term::func(
-        [("n", nat_type.clone())],
+        [(crate::fixture_binder("n"), nat_type.clone())],
         Term::nat_match(
-            Term::free_var("n"),
-            Some("m"),
+            Term::free_var(&crate::fixture_binder("n")),
+            Some(&crate::fixture_binder("m")),
             nat_type.clone(),
             nat(0),
-            "pred",
-            "ih",
-            Term::apply(Term::free_var("countdown"), [Term::free_var("pred")]),
+            &crate::fixture_binder("pred"),
+            &crate::fixture_binder("ih"),
+            Term::apply(
+                Term::free_var(&crate::fixture_binder("countdown")),
+                [Term::free_var(&crate::fixture_binder("pred"))],
+            ),
         ),
     );
 
     let neutral = Term::rec(
         [(
-            "countdown",
-            Term::func_type([("n", nat_type.clone())], nat_type.clone()),
+            crate::fixture_binder("countdown"),
+            Term::func_type(
+                [(crate::fixture_binder("n"), nat_type.clone())],
+                nat_type.clone(),
+            ),
             body.clone(),
         )],
-        Term::apply(Term::free_var("countdown"), [Term::free_var("x")]),
+        Term::apply(
+            Term::free_var(&crate::fixture_binder("countdown")),
+            [Term::free_var(&crate::fixture_binder("x"))],
+        ),
     );
     let Subterm::Rec(rec) = Term::unwrap_or_clone(neutral) else {
         unreachable!()
@@ -70,11 +82,14 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
 
     let concrete = Term::rec(
         [(
-            "countdown",
-            Term::func_type([("n", nat_type.clone())], nat_type),
+            crate::fixture_binder("countdown"),
+            Term::func_type([(crate::fixture_binder("n"), nat_type.clone())], nat_type),
             body,
         )],
-        Term::apply(Term::free_var("countdown"), [nat(2)]),
+        Term::apply(
+            Term::free_var(&crate::fixture_binder("countdown")),
+            [nat(2)],
+        ),
     );
     assert_eq!(reduce_forced(&mut context, concrete), Ok(nat(0)));
 }
@@ -88,11 +103,15 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
     // to the payload component.
     let term: Term = Term::induct_match(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
-        Some("m"),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<&str>::new(), nat(0)),
-            ("some", vec!["x"], Term::free_var("x")),
+            ("none", Vec::<crate::Free>::new(), nat(0)),
+            (
+                "some",
+                vec![crate::fixture_binder("x")],
+                Term::free_var(&crate::fixture_binder("x")),
+            ),
         ],
     );
 
@@ -108,9 +127,9 @@ fn reduce_inductive_match_absent_tag_takes_default() {
     // binding-free `| _ =>` default (no payload projected).
     let term: Term = Term::induct_match_default(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
-        Some("m"),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::NatType),
-        [("none", Vec::<&str>::new(), nat(0))],
+        [("none", Vec::<crate::Free>::new(), nat(0))],
         nat(99),
     );
 
@@ -125,11 +144,15 @@ fn reduce_inductive_match_present_tag_ignores_default() {
     // rather than the default — the default is only for absent tags.
     let term: Term = Term::induct_match_default(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
-        Some("m"),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<&str>::new(), nat(0)),
-            ("some", vec!["x"], Term::free_var("x")),
+            ("none", Vec::<crate::Free>::new(), nat(0)),
+            (
+                "some",
+                vec![crate::fixture_binder("x")],
+                Term::free_var(&crate::fixture_binder("x")),
+            ),
         ],
         nat(99),
     );
@@ -143,11 +166,11 @@ fn reduce_nat_fold_zero_is_not_true() {
 
     let term: Term = Term::nat_match(
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
-        Some("m"),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::BoolType),
         Term::prim(Prim::Bool(false)),
-        "pred",
-        "ih",
+        &crate::fixture_binder("pred"),
+        &crate::fixture_binder("ih"),
         Term::prim(Prim::Bool(true)),
     );
 
@@ -161,13 +184,13 @@ fn reduce_nat_fold_zero_is_not_true() {
 fn reduce_let_then_var_unfolds_definition() {
     let mut context = context();
 
-    context.define("y", &nat(7), None);
+    context.define(&crate::fixture_binder("y"), &nat(7), None);
 
     let term: Term = Term::let_(
-        "x",
+        &crate::fixture_binder("x"),
         Term::type_ground(),
-        Term::free_var("y"),
-        Term::free_var("x"),
+        Term::free_var(&crate::fixture_binder("y")),
+        Term::free_var(&crate::fixture_binder("x")),
     );
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
@@ -178,17 +201,20 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
     let mut context = context();
     let parameter = Level::param(UniverseParam(0));
     let body = Term::type_at(parameter.clone());
-    context.assume("poly", &Term::type_at(parameter.succ().unwrap()));
-    context.define("poly", &body, None);
+    context.assume(
+        &crate::fixture_binder("poly"),
+        &Term::type_at(parameter.succ().unwrap()),
+    );
+    context.define(&crate::fixture_binder("poly"), &body, None);
     context.set_assumption_universe_context(
-        "poly",
+        &crate::fixture_binder("poly"),
         UniverseContext {
             parameter_count: 1,
             constraints: Vec::new(),
         },
     );
 
-    let raw = Term::free_var("poly");
+    let raw = Term::free_var(&crate::fixture_binder("poly"));
     assert_eq!(reduce(&mut context, raw.clone()), Ok(raw.clone()));
     assert_eq!(
         reduce(
@@ -210,17 +236,23 @@ fn reduce_let_binds_each_value_to_its_own_slot() {
     let nat_type = Term::prim(Prim::NatType);
     let pick_second = Term::apply(
         Term::func(
-            [("p", nat_type.clone()), ("q", nat_type.clone())],
-            Term::free_var("q"),
+            [
+                (crate::fixture_binder("p"), nat_type.clone()),
+                (crate::fixture_binder("q"), nat_type.clone()),
+            ],
+            Term::free_var(&crate::fixture_binder("q")),
         ),
-        [Term::free_var("a"), Term::free_var("b")],
+        [
+            Term::free_var(&crate::fixture_binder("a")),
+            Term::free_var(&crate::fixture_binder("b")),
+        ],
     );
 
     let term = Term::let_(
-        "a",
+        &crate::fixture_binder("a"),
         nat_type.clone(),
         nat(3),
-        Term::let_("b", nat_type, nat(7), pick_second),
+        Term::let_(&crate::fixture_binder("b"), nat_type, nat(7), pick_second),
     );
 
     assert_eq!(reduce(&mut context, term), Ok(nat(7)));
@@ -235,10 +267,15 @@ fn reduce_let_shadowing_tail_picks_innermost() {
 
     let nat_type = Term::prim(Prim::NatType);
     let term = Term::let_(
-        "x",
+        &crate::fixture_binder("x"),
         nat_type.clone(),
         nat(3),
-        Term::let_("x", nat_type, nat(7), Term::free_var("x")),
+        Term::let_(
+            &crate::fixture_binder("x"),
+            nat_type,
+            nat(7),
+            Term::free_var(&crate::fixture_binder("x")),
+        ),
     );
 
     assert_eq!(reduce(&mut context, term), Ok(nat(7)));
@@ -254,10 +291,15 @@ fn reduce_let_shadowing_value_sees_the_outer_binding() {
 
     let nat_type = Term::prim(Prim::NatType);
     let term = Term::let_(
-        "x",
+        &crate::fixture_binder("x"),
         nat_type.clone(),
         nat(5),
-        Term::let_("x", nat_type, Term::free_var("x"), Term::free_var("x")),
+        Term::let_(
+            &crate::fixture_binder("x"),
+            nat_type,
+            Term::free_var(&crate::fixture_binder("x")),
+            Term::free_var(&crate::fixture_binder("x")),
+        ),
     );
 
     assert_eq!(reduce(&mut context, term), Ok(nat(5)));
@@ -272,7 +314,7 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     // every walk over it — `reduce` here, and `traverse` via `reach` — to a loop
     // instead of one native stack frame per binding.
     let depth = 1000;
-    let base = Term::free_var(format!("x{}", depth - 1));
+    let base = Term::free_var(&crate::fixture_binder(&format!("x{}", depth - 1)));
 
     // `let x0 = 0; let x1 = x0; …; let x{n-1} = x{n-2}; x{n-1}`.
     let t0 = Instant::now();
@@ -280,10 +322,15 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
         let value = if i == 0 {
             nat(0)
         } else {
-            Term::free_var(format!("x{}", i - 1))
+            Term::free_var(&crate::fixture_binder(&format!("x{}", i - 1)))
         };
 
-        Term::let_(format!("x{i}"), Term::prim(Prim::NatType), value, tail)
+        Term::let_(
+            &crate::fixture_binder(&format!("x{i}")),
+            Term::prim(Prim::NatType),
+            value,
+            tail,
+        )
     });
     eprintln!("build: {:?}", t0.elapsed());
 
@@ -312,10 +359,14 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
 fn reduce_var_cycle_times_out() {
     let mut context = context();
 
-    context.define("loop", &Term::free_var("loop"), None);
+    context.define(
+        &crate::fixture_binder("loop"),
+        &Term::free_var(&crate::fixture_binder("loop")),
+        None,
+    );
 
     assert_eq!(
-        reduce(&mut context, Term::free_var("loop")),
+        reduce(&mut context, Term::free_var(&crate::fixture_binder("loop"))),
         Err(ReduceError::Preempted)
     );
 }
@@ -515,9 +566,9 @@ fn reduce_proj_beta_reduces() {
 fn reduce_proj_refinement_lookup() {
     let mut context = context();
 
-    context.refine_projection(Term::free_var("r"), 0, nat(1));
+    context.refine_projection(Term::free_var(&crate::fixture_binder("r")), 0, nat(1));
 
-    let term: Term = Term::proj(Term::free_var("r"), 0);
+    let term: Term = Term::proj(Term::free_var(&crate::fixture_binder("r")), 0);
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(1)));
 }
@@ -531,8 +582,8 @@ fn reduce_does_not_eta_reduce_tuple() {
     // `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more
     // fields than the tuple does.
     let term: Term = Term::tuple([
-        Term::proj(Term::free_var("r"), 0),
-        Term::proj(Term::free_var("r"), 1),
+        Term::proj(Term::free_var(&crate::fixture_binder("r")), 0),
+        Term::proj(Term::free_var(&crate::fixture_binder("r")), 1),
     ]);
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(term));
@@ -543,30 +594,36 @@ fn eta_reduce_func_fires() {
     let mut context = context();
 
     let term: Term = Term::func(
-        [("y", Term::type_ground())],
-        Term::apply(Term::free_var("f"), [Term::free_var("y")]),
+        [(crate::fixture_binder("y"), Term::type_ground())],
+        Term::apply(
+            Term::free_var(&crate::fixture_binder("f")),
+            [Term::free_var(&crate::fixture_binder("y"))],
+        ),
     );
 
-    assert_eq!(reduce(&mut context, term.clone()), Ok(Term::free_var("f")));
+    assert_eq!(
+        reduce(&mut context, term.clone()),
+        Ok(Term::free_var(&crate::fixture_binder("f")))
+    );
 }
 
 #[test]
 fn define_invalidates_cached_reduction() {
     let mut context = context();
-    let x: Term = Term::free_var("x");
+    let x: Term = Term::free_var(&crate::fixture_binder("x"));
 
     // No definition yet: x reduces to itself and the result is cached.
     assert_eq!(reduce(&mut context, x.clone()), Ok(x.clone()));
 
     // Defining x must clear the cache so the next reduce unfolds.
-    context.define("x", &nat(3), None);
+    context.define(&crate::fixture_binder("x"), &nat(3), None);
     assert_eq!(reduce(&mut context, x), Ok(nat(3)));
 }
 
 #[test]
 fn scrutinee_refinement_ignores_fresh_universe_instances() {
     let mut context = context();
-    let function = Term::free_var("classify");
+    let function = Term::free_var(&crate::fixture_binder("classify"));
     let registered = Term::apply(
         Term::universe_inst(function.clone(), vec![Level::meta(UniverseMetaId(0))]),
         [nat(0)],
@@ -584,7 +641,7 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
 #[test]
 fn projection_refinement_ignores_fresh_universe_instances() {
     let mut context = context();
-    let record = Term::free_var("record");
+    let record = Term::free_var(&crate::fixture_binder("record"));
     let registered = Term::apply(
         Term::universe_inst(record.clone(), vec![Level::meta(UniverseMetaId(0))]),
         [nat(0)],
@@ -601,40 +658,40 @@ fn projection_refinement_ignores_fresh_universe_instances() {
 #[test]
 fn refine_projection_invalidates_cached_reduction() {
     let mut context = context();
-    let proj: Term = Term::proj(Term::free_var("r"), 0);
+    let proj: Term = Term::proj(Term::free_var(&crate::fixture_binder("r")), 0);
 
     // No projection refinement yet: proj reduces to itself and is cached.
     assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));
 
     // Refining the projection must clear the cache.
-    context.refine_projection(Term::free_var("r"), 0, nat(1));
+    context.refine_projection(Term::free_var(&crate::fixture_binder("r")), 0, nat(1));
     assert_eq!(reduce(&mut context, proj), Ok(nat(1)));
 }
 
 #[test]
 fn redefine_invalidates_reduction_cached_under_the_old_value() {
     let mut context = context();
-    let x: Term = Term::free_var("x");
+    let x: Term = Term::free_var(&crate::fixture_binder("x"));
 
     // First definition: x reduces to 4 and the reduct — which no longer
     // mentions `x` — is cached.
-    context.define("x", &nat(4), None);
+    context.define(&crate::fixture_binder("x"), &nat(4), None);
     assert_eq!(reduce(&mut context, x.clone()), Ok(nat(4)));
 
     // Rebinding the same label must evict that entry even though a selective
     // retain keyed on mentions of `x` cannot see it.
-    context.define("x", &nat(5), None);
+    context.define(&crate::fixture_binder("x"), &nat(5), None);
     assert_eq!(reduce(&mut context, x), Ok(nat(5)));
 }
 
 #[test]
 fn leave_frame_with_definitions_invalidates_cached_reduction() {
     let mut context = context();
-    let x: Term = Term::free_var("x");
+    let x: Term = Term::free_var(&crate::fixture_binder("x"));
 
     // Inside a frame, define x and reduce — the cache will hold x → "inner".
     context.with_frame(|context| {
-        context.define("x", &nat(4), None);
+        context.define(&crate::fixture_binder("x"), &nat(4), None);
         assert_eq!(reduce(context, x.clone()), Ok(nat(4)));
     });
 
@@ -677,10 +734,10 @@ fn reduce_solved_metavar_yields_solution() {
 #[test]
 fn refinement_is_suppressible() {
     let mut context = context();
-    let b = Term::free_var("b");
+    let b = Term::free_var(&crate::fixture_binder("b"));
     let truth = Term::prim(Prim::Bool(true));
 
-    context.refine("b", &truth);
+    context.refine(&crate::fixture_binder("b"), &truth);
 
     // With the refinement active, `b` reduces to its counterfactual value.
     assert_eq!(reduce(&mut context, b.clone()), Ok(truth));
@@ -721,7 +778,7 @@ fn reduce_nat_div_by_zero_reports() {
         reduce(
             &mut context,
             Term::prim(Prim::nat_div(
-                Term::free_var("x"),
+                Term::free_var(&crate::fixture_binder("x")),
                 Term::prim(Prim::Nat(Nat::new(0usize))),
             )),
         ),
@@ -734,7 +791,7 @@ fn reduce_nat_div_by_zero_reports() {
     // A symbolic divisor is not a zero divisor: the term just stays stuck.
     let stuck = Term::prim(Prim::nat_div(
         Subterm::Prim(Prim::Nat(Nat::new(1usize))),
-        Subterm::Var(Var::free("y")),
+        Subterm::Var(Var::free(crate::fixture_binder("y"))),
     ));
     assert_eq!(reduce(&mut context, stuck.clone()), Ok(stuck));
 }
@@ -862,7 +919,7 @@ mod prim {
     }
 
     fn x() -> Term {
-        Term::free_var("x")
+        Term::free_var(&crate::fixture_binder("x"))
     }
 
     fn reduced(context: &mut Context, term: Term) -> Subterm {
@@ -997,7 +1054,7 @@ mod prim {
     #[test]
     fn lst_get_peels_symbolic_cons() {
         let mut context = context();
-        let cons = lst_cons_seven(&Term::free_var("xs"));
+        let cons = lst_cons_seven(&Term::free_var(&crate::fixture_binder("xs")));
 
         // `get(cons(7, xs), 0) = 7`.
         assert_eq!(
@@ -1025,7 +1082,7 @@ mod prim {
     #[test]
     fn lst_slice_peels_symbolic_cons() {
         let mut context = context();
-        let cons = lst_cons_seven(&Term::free_var("xs"));
+        let cons = lst_cons_seven(&Term::free_var(&crate::fixture_binder("xs")));
 
         // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
         assert_eq!(
@@ -1061,7 +1118,7 @@ mod prim {
     #[test]
     fn lst_len_distributes_over_cons_and_append() {
         let mut context = context();
-        let xs = Term::free_var("xs");
+        let xs = Term::free_var(&crate::fixture_binder("xs"));
         // `1 + len(xs)`, the shape both symbolic cases reduce to.
         let succ_len = |context: &mut Context| {
             reduced(
@@ -1117,7 +1174,7 @@ mod prim {
     #[test]
     fn lst_slice_full_window_is_identity() {
         let mut context = context();
-        let xs = Term::free_var("xs");
+        let xs = Term::free_var(&crate::fixture_binder("xs"));
         let len = Term::prim(Prim::lst_len(Term::prim(Prim::NatType), xs.clone()));
         assert_eq!(
             reduced(
@@ -1140,7 +1197,7 @@ mod prim {
     fn bin_eql_decides_structurally() {
         let mut context = context();
         let bin = |bytes: Vec<u8>| Term::prim(Prim::Bin(Grain::X, PackedBin::from_bytes(bytes)));
-        let x = Term::free_var("x");
+        let x = Term::free_var(&crate::fixture_binder("x"));
 
         // Reflexivity over a symbolic value: `eql(x, x) = true`.
         assert_eq!(
@@ -1177,7 +1234,7 @@ mod prim {
         );
 
         // Distinct variables are undecidable: `eql(x, y)` stays neutral.
-        let y = Term::free_var("y");
+        let y = Term::free_var(&crate::fixture_binder("y"));
         assert!(matches!(
             reduced(&mut context, Term::prim(Prim::bin_eql(Grain::X, x, y))),
             Subterm::Prim(Prim::BinEql(Grain::X, ..)),
@@ -1193,7 +1250,7 @@ mod prim {
                 PackedBin::from_bits(values.iter().copied()),
             ))
         };
-        let tail = Term::free_var("tail");
+        let tail = Term::free_var(&crate::fixture_binder("tail"));
         let cons = Term::prim(Prim::bin_concat(Grain::B, [bits(&[true]), tail.clone()]));
 
         assert_eq!(
@@ -1250,7 +1307,7 @@ mod prim {
     #[test]
     fn lst_slice_reassociates_nested() {
         let mut context = context();
-        let xs = Term::free_var("xs");
+        let xs = Term::free_var(&crate::fixture_binder("xs"));
         let inner = Term::prim(Prim::lst_slice(
             Term::prim(Prim::NatType),
             xs.clone(),

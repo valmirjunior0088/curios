@@ -5,7 +5,10 @@
 //! scoping frame), so later items and the entrypoint reduce through them —
 //! top-level cross-references are already free names.
 
-use super::{BTreeMap, BTreeSet, Bound, Context, Error, Item, Lowering, Module, Outcome};
+use {
+    super::{BTreeMap, BTreeSet, Bound, Context, Error, Item, Lowering, Module, Outcome},
+    crate::Free,
+};
 
 impl Lowering {
     /// Erase every top-level item from `start` on, in dominance order among
@@ -25,7 +28,7 @@ impl Lowering {
                         context,
                         &definition.body,
                         &definition.type_,
-                        Some(&definition.name),
+                        Some(&definition.name.symbol()),
                     )?;
                     let atom = match outcome {
                         Outcome::Emitted(atom) => atom,
@@ -35,7 +38,7 @@ impl Lowering {
                         // divergence terminator — so the program traps at
                         // initialization, matching the entry-block convention.
                         Outcome::Diverged(terminator) => {
-                            let value = self.builder.value(Some(definition.name.clone()));
+                            let value = self.builder.value(Some(definition.name.symbol()));
                             self.builder.open_block();
                             let block = self.builder.seal_block(terminator);
                             let group = self.builder.rec_group(vec![], vec![(value, block)]);
@@ -43,14 +46,15 @@ impl Lowering {
                             curios_ersd::Atom::Value(value)
                         }
                     };
+                    let name = Free::from(&definition.name);
                     context.define_assuming_scheme(
-                        &definition.name,
+                        &name,
                         &definition.type_,
                         &definition.body,
                         Some(&definition.kind),
                         definition.universe_context.clone(),
                     );
-                    self.environment.bind(&definition.name, atom);
+                    self.environment.bind(&name, atom);
                 }
                 Item::Rec(rec) => {
                     self.erase_rec_item(context, rec)?;
@@ -87,9 +91,9 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
         .flat_map(|(index, item)| {
             item.declared_names()
                 .into_iter()
-                .map(move |name| (name, index))
+                .map(move |name| (Free::from(name), index))
         })
-        .collect::<BTreeMap<&str, usize>>();
+        .collect::<BTreeMap<Free, usize>>();
 
     // A reference to an item before `start` is already bound and carries no
     // edge; only references among the suffix items order the sort.
@@ -99,7 +103,7 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
         .map(|(index, item)| {
             item_reference_names(item, module)
                 .iter()
-                .filter_map(|name| owner.get(name.as_str()).copied())
+                .filter_map(|name| owner.get(name).copied())
                 .filter(|&dependency| dependency != index)
                 .collect::<BTreeSet<usize>>()
         })
@@ -122,7 +126,7 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
 /// bodies, plus — for an item declaring a registered inductive or struct — the
 /// free variables of that registry entry's telescopes, whose field and index
 /// types live nowhere in the type former's own normal-form body.
-fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<String> {
+fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<Free> {
     let mut names = BTreeSet::new();
     match item {
         Item::Let(definition) => {
@@ -137,14 +141,15 @@ fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<String> {
         }
     }
     for name in item.declared_names() {
-        if let Some(induct_decl) = module.induct_decls.get(name) {
+        let symbol = name.symbol();
+        if let Some(induct_decl) = module.induct_decls.get(&symbol) {
             names.extend(induct_decl.params.free_vars());
             names.extend(induct_decl.indices.free_vars());
             for parameter in induct_decl.signatures() {
                 names.extend(parameter.telescope.free_vars());
             }
         }
-        if let Some(struct_decl) = module.struct_decls.get(name) {
+        if let Some(struct_decl) = module.struct_decls.get(&symbol) {
             names.extend(struct_decl.params.free_vars());
             names.extend(struct_decl.fields.free_vars());
         }

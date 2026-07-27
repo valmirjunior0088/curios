@@ -42,7 +42,7 @@ fn register_opt(context: &mut Context) {
                         Atom::from("some"),
                         InductParam {
                             telescope: Telescope::build(
-                                [("x", Term::prim(Prim::NatType))],
+                                [(crate::fixture_binder("x"), Term::prim(Prim::NatType))],
                                 opt_type(),
                             ),
                             plicities: vec![Plicity::Explicit],
@@ -86,28 +86,28 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     let mut context = context();
     register_opt(&mut context);
     make_opt_opaque(&mut context);
-    context.assume("x", &opt_type());
+    context.assume(&crate::fixture_binder("x"), &opt_type());
 
     let empty = Term::induct_match(
-        Term::free_var("x"),
-        Some("x"),
+        Term::free_var(&crate::fixture_binder("x")),
+        Some(&crate::fixture_binder("x")),
         nat(),
-        Vec::<(Atom, Vec<&str>, Term)>::new(),
+        Vec::<(Atom, Vec<crate::Free>, Term)>::new(),
     );
     let named = Term::induct_match(
-        Term::free_var("x"),
-        Some("x"),
+        Term::free_var(&crate::fixture_binder("x")),
+        Some(&crate::fixture_binder("x")),
         nat(),
         [
-            ("none", Vec::<&str>::new(), nat_lit(0)),
-            ("some", vec!["n"], nat_lit(1)),
+            ("none", Vec::<crate::Free>::new(), nat_lit(0)),
+            ("some", vec![crate::fixture_binder("n")], nat_lit(1)),
         ],
     );
     let defaulted = Term::induct_match_default(
-        Term::free_var("x"),
-        Some("x"),
+        Term::free_var(&crate::fixture_binder("x")),
+        Some(&crate::fixture_binder("x")),
         nat(),
-        [("none", Vec::<&str>::new(), nat_lit(0))],
+        [("none", Vec::<crate::Free>::new(), nat_lit(0))],
         nat_lit(1),
     );
 
@@ -194,8 +194,8 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
     let mut context = context();
 
     // `\ _ -> 0` checked against `(_ : Nat) -> Nat`.
-    let func_type = Term::func_type([("x", nat())], nat());
-    let func = Term::func([("x", Term::metavar(0))], nat_lit(0));
+    let func_type = Term::func_type([(crate::fixture_binder("x"), nat())], nat());
+    let func = Term::func([(crate::fixture_binder("x"), Term::metavar(0))], nat_lit(0));
 
     let (term, type_) = elaborate(&mut context, &func, Mode::Check(func_type.clone())).unwrap();
 
@@ -212,7 +212,7 @@ fn naturally_checked_func_cannot_infer() {
 
     // A lambda whose domain is an unconstrained hole (the bare `(x) => …` sugar)
     // has nothing to synthesize a domain from, so inference still fails.
-    let func = Term::func([("x", Term::metavar(0))], nat_lit(0));
+    let func = Term::func([(crate::fixture_binder("x"), Term::metavar(0))], nat_lit(0));
     let result = elaborate(&mut context, &func, Mode::Infer);
 
     assert!(result.is_err());
@@ -223,7 +223,10 @@ fn annotated_func_infers_a_function_type() {
     let mut context = context();
 
     // `(x : Nat) => x` synthesizes `(Nat) -> Nat` on its own — no expected type.
-    let func = Term::func([("x", nat())], Term::free_var("x"));
+    let func = Term::func(
+        [(crate::fixture_binder("x"), nat())],
+        Term::free_var(&crate::fixture_binder("x")),
+    );
     let (term, type_) = elaborate(&mut context, &func, Mode::Infer).unwrap();
 
     // Meta-free, and convertible (alpha-insensitive) to the expected function
@@ -235,7 +238,7 @@ fn annotated_func_infers_a_function_type() {
             &mut context,
             &Term::type_ground(),
             &type_,
-            &Term::func_type([("x", nat())], nat())
+            &Term::func_type([(crate::fixture_binder("x"), nat())], nat())
         )
         .unwrap()
     );
@@ -253,7 +256,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     // against `Nat` births it, recording `Nat` as its type and the in-scope
     // locals as its frozen Γ.
     let (term, type_) = context.with_frame(|context| {
-        context.assume("x", &nat());
+        context.assume(&crate::fixture_binder("x"), &nat());
         let hole = Term::metavar(0);
         elaborate(context, &hole, Mode::Check(nat())).unwrap()
     });
@@ -263,13 +266,13 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     // every later `close`/`open`.
     assert_eq!(
         term,
-        Term::metavar_birthed(0, None, vec![Term::free_var("x")])
+        Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("x"))])
     );
     assert_eq!(type_, nat());
 
     let entry = context.metavar_entry(MetaId(0)).expect("hole was born");
     assert_eq!(entry.result, nat());
-    assert_eq!(*entry.telescope, vec![("x".to_string(), nat())]);
+    assert_eq!(*entry.telescope, vec![(crate::fixture_binder("x"), nat())]);
 }
 
 #[test]
@@ -310,9 +313,9 @@ fn inductive_match_default_relaxes_coverage() {
     // so this otherwise-incomplete match elaborates, at the motive's type.
     let term = Term::induct_match_default(
         Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
-        Some("m"),
+        Some(&crate::fixture_binder("m")),
         nat(),
-        [("none", Vec::<&str>::new(), nat_lit(0))],
+        [("none", Vec::<crate::Free>::new(), nat_lit(0))],
         nat_lit(99),
     );
 
@@ -329,9 +332,9 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
     // unindexed inductive, so coverage fails.
     let term = Term::induct_match(
         Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
-        Some("m"),
+        Some(&crate::fixture_binder("m")),
         nat(),
-        [("none", Vec::<&str>::new(), nat_lit(0))],
+        [("none", Vec::<crate::Free>::new(), nat_lit(0))],
     );
 
     assert!(elaborate(&mut context, &term, Mode::Infer).is_err());
@@ -350,7 +353,7 @@ fn register_flag(context: &mut Context) {
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
-                indices: Telescope::build([("b", nat())], ()),
+                indices: Telescope::build([(crate::fixture_binder("b"), nat())], ()),
                 constructors: Vec::from([
                     (
                         Atom::from("off"),
@@ -387,7 +390,11 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
     // its own case target index and the default at the scrutinee's actual one.
     let term: Term = Subterm::Match(Match {
         head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
-        motive: Scope::close(Many(2), &["b", "m"], nat()),
+        motive: Scope::close(
+            Many(2),
+            &[&crate::fixture_binder("b"), &crate::fixture_binder("m")],
+            nat(),
+        ),
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),
@@ -415,7 +422,10 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
     // reported as itself, not as a downstream domain mismatch.
     let term: Term = Subterm::Match(Match {
         head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
-        motive: Term::match_motive_written(Term::func([("m", flag_type(nat_lit(1)))], nat())),
+        motive: Term::match_motive_written(Term::func(
+            [(crate::fixture_binder("m"), flag_type(nat_lit(1)))],
+            nat(),
+        )),
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),

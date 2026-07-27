@@ -15,7 +15,7 @@
 mod tests;
 
 use {
-    super::{Subterm, Telescope, Term, UniverseContext},
+    super::{Global, Subterm, Telescope, Term, UniverseContext},
     curios_base::{Grain, Qualifier, RootId},
     std::fmt,
 };
@@ -52,7 +52,7 @@ pub struct Concept {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub(crate) struct Witness {
-    pub name: String,
+    pub name: Global,
     /// The module this witness was declared in, carried from its definition's
     /// `island`. Witnesses are anonymous, so this — not `name` — is the
     /// coordinate a coherence diagnostic reports; recovering it by splitting

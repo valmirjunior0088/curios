@@ -1,7 +1,7 @@
 use {
     super::{
-        Atom, Concept, InductDecl, Many, RecGroup, RecMemberScopes, Scope, StructDecl, Term,
-        UniverseContext, UniverseSeed, build_shorten, with_short_names,
+        Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope,
+        StructDecl, Term, UniverseContext, UniverseSeed, build_shorten, with_short_names,
     },
     curios_base::{Qualifier, RootId},
     std::{
@@ -49,7 +49,7 @@ pub enum DefinitionKind {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Definition {
-    pub name: String,
+    pub name: Global,
     pub kind: DefinitionKind,
     pub universe_context: UniverseContext,
     /// This definition's declaring module — `name`'s qualifier prefix,
@@ -79,7 +79,7 @@ pub struct Definition {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub(crate) struct RecDefinition {
-    pub name: String,
+    pub name: Global,
     pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
@@ -116,17 +116,18 @@ impl RecItem {
         {
             return Err(super::UniverseError::MismatchedRecursiveContexts);
         }
-        let labels = definitions
+        let names = definitions
             .iter()
-            .map(|definition| definition.name.as_str())
+            .map(|definition| Free::from(&definition.name))
             .collect::<Vec<_>>();
-        let arity = Many(labels.len());
+        let members = names.iter().collect::<Vec<_>>();
+        let arity = Many(members.len());
         let group = RecGroup::new(
             definitions
                 .iter()
                 .map(|definition| RecMemberScopes {
-                    type_: Scope::close(arity, &labels, definition.type_.clone()),
-                    body: Scope::close(arity, &labels, definition.body.clone()),
+                    type_: Scope::close(arity, &members, definition.type_.clone()),
+                    body: Scope::close(arity, &members, definition.body.clone()),
                 })
                 .collect(),
         )
@@ -152,7 +153,7 @@ impl RecItem {
         let names = self
             .definitions
             .iter()
-            .map(|definition| Term::free_var(&definition.name))
+            .map(|definition| Term::free_var(&Free::from(&definition.name)))
             .collect::<Vec<_>>();
         let name_refs = names.iter().collect::<Vec<_>>();
 
@@ -199,13 +200,13 @@ pub enum Item {
 
 impl Item {
     /// The names exported by this top-level item, in declaration order.
-    pub fn declared_names(&self) -> Vec<&str> {
+    pub fn declared_names(&self) -> Vec<&Global> {
         match self {
-            Item::Let(definition) => vec![definition.name.as_str()],
+            Item::Let(definition) => vec![&definition.name],
             Item::Rec(rec) => rec
                 .definitions
                 .iter()
-                .map(|definition| definition.name.as_str())
+                .map(|definition| &definition.name)
                 .collect(),
         }
     }
@@ -249,6 +250,14 @@ pub struct Module {
     /// carried as names (not keys) because the table key needs the
     /// *elaborated* head, which only exists once elaboration runs.
     pub witnesses: BTreeSet<String>,
+    /// One past the highest binder index `into_core` minted for this module.
+    ///
+    /// Binder identities are one space shared with `Context::fresh`, so
+    /// elaboration seeds its counter here (`Context::set_local_floor`). The
+    /// archived prelude carries its own high-water mark for the same reason: a
+    /// replayed term's binders were minted in an earlier compiler run, and a
+    /// fresh mint that aliased one of them would silently capture.
+    pub binder_floor: usize,
     pub type_: Option<Term>,
     pub body: Term,
 }
@@ -266,11 +275,11 @@ impl Module {
             .into_iter()
             .rev()
             .fold(self.body, |acc, item| match item {
-                Item::Let(def) => Term::let_(def.name, def.type_, def.body, acc),
+                Item::Let(def) => Term::let_(&Free::from(&def.name), def.type_, def.body, acc),
                 Item::Rec(rec) => Term::rec(
                     rec.definitions()
                         .into_iter()
-                        .map(|def| (def.name, def.type_, def.body)),
+                        .map(|def| (Free::from(&def.name), def.type_, def.body)),
                     acc,
                 ),
             })
@@ -282,11 +291,11 @@ impl Module {
         let mut symbols = Vec::new();
         for item in &self.items {
             match item {
-                Item::Let(def) => symbols.push(def.name.clone()),
+                Item::Let(def) => symbols.push(def.name.symbol()),
                 Item::Rec(rec) => symbols.extend(
                     rec.definitions
                         .iter()
-                        .map(|definition| definition.name.clone()),
+                        .map(|definition| definition.name.symbol()),
                 ),
             }
         }
@@ -339,14 +348,15 @@ mod tests {
     use super::*;
 
     fn definition(name: &str, universe_context: UniverseContext) -> Definition {
+        let global = Global::Authored(Qualifier::from([name]));
         Definition {
-            name: name.into(),
+            name: global.clone(),
             kind: DefinitionKind::Authored,
             universe_context,
             island: Qualifier::empty(),
             root: RootId::Entry,
             type_: Term::type_ground(),
-            body: Term::free_var(name),
+            body: Term::free_var(&Free::from(&global)),
         }
     }
 
@@ -371,7 +381,10 @@ mod tests {
         ));
 
         let opened = rec.definitions();
-        assert_eq!(opened[0].body, Term::free_var("loop"));
+        assert_eq!(
+            opened[0].body,
+            Term::free_var(&Free::global(Qualifier::from(["loop"])))
+        );
     }
 
     #[test]

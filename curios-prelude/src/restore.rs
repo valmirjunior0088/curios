@@ -165,14 +165,14 @@ mod tests {
                 match item {
                     curios_core::Item::Let(definition) => {
                         parameters.insert(
-                            definition.name.clone(),
+                            definition.name.symbol(),
                             definition.universe_context.parameter_count,
                         );
                     }
                     curios_core::Item::Rec(rec) => {
                         for definition in rec.definitions() {
                             parameters.insert(
-                                definition.name.clone(),
+                                definition.name.symbol(),
                                 definition.universe_context.parameter_count,
                             );
                         }
@@ -254,6 +254,7 @@ mod tests {
                 .items
                 .iter()
                 .flat_map(curios_core::Item::declared_names)
+                .map(curios_core::Global::symbol)
                 .collect::<BTreeSet<_>>();
             for target in SYNTAX.targets() {
                 assert!(names.contains(target), "missing syntax target {target}");

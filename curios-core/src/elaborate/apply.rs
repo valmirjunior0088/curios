@@ -8,13 +8,13 @@ pub(super) fn elaborate_func_type(
         context: &mut Context,
         tele: Telescope<Term>,
         plicities: &[Plicity],
-        domains: &mut Vec<(String, Term)>,
+        domains: &mut Vec<(Free, Term)>,
     ) -> Result<Term, Error> {
         match tele {
             Telescope::Done(output) => crate::check_is_sort(context, &output).map(|(term, _)| term),
             Telescope::Cons(ty, rest) => {
                 let domain = crate::check_is_sort(context, &ty)?.0;
-                let name = context.fresh(rest.first_label());
+                let name = context.fresh(rest.first_hint());
                 let x = Term::free_var(&name);
                 // Assume the *rebuilt* domain: insertion saturates applications
                 // during elaboration, and a lowered (under-applied) type leaking
@@ -60,7 +60,7 @@ pub(super) fn insert_auto_argument(
     func: &str,
     origin: &Term,
 ) -> Result<Term, Error> {
-    let binder = binder_name(label.unwrap_or("_"));
+    let binder = binder_name(label);
 
     match plicity {
         Plicity::Implicit => Ok(context.fresh_metavar(
@@ -85,15 +85,14 @@ pub(super) fn insert_auto_argument(
     }
 }
 
-/// A binder's user-facing name. The head's function type is the *rebuilt* one,
-/// whose binders were re-closed under `fresh`-minted labels (`T#1`); reports
-/// should name the binder as written, and `#` cannot occur in an identifier.
-pub(super) fn binder_name(label: &str) -> String {
-    match label.split_once('#') {
-        Some(("", _)) => "_".to_string(),
-        Some((name, _)) => name.to_string(),
-        None => label.to_string(),
-    }
+/// A binder's user-facing name: its minting hint, or `_` where it has none.
+///
+/// The head's function type is the *rebuilt* one, whose binders were re-closed
+/// under freshly minted identities; a report should still name the binder as
+/// written, and the hint is what the mint carried forward. This used to cut the
+/// written name back out of a minted spelling.
+pub(super) fn binder_name(hint: Option<&str>) -> String {
+    hint.unwrap_or("_").to_string()
 }
 
 pub(super) fn elaborate_apply(
@@ -171,7 +170,7 @@ pub(super) fn elaborate_apply(
                     context,
                     *plicity,
                     &ty,
-                    rest.first_label(),
+                    rest.first_hint(),
                     &func_label,
                     term,
                 )?,
@@ -238,7 +237,7 @@ pub(super) fn elaborate_apply(
                         context,
                         *plicity,
                         &ty,
-                        rest.first_label(),
+                        rest.first_hint(),
                         &func_label,
                         term,
                     )?,
@@ -249,7 +248,7 @@ pub(super) fn elaborate_apply(
                         context,
                         *plicity,
                         &ty,
-                        rest.first_label(),
+                        rest.first_hint(),
                         &func_label,
                         term,
                     )?,

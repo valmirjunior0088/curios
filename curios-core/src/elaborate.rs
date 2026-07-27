@@ -27,11 +27,11 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Context, ElabProbe, ElaborationStamp, Error, Field, Func, FuncType,
+        Apply, Bound, Context, ElabProbe, ElaborationStamp, Error, Field, Free, Func, FuncType,
         ImplicitOrigin, InductType, Infix, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit,
         ParkedWork, Prim, Proj, Rec, Struct, StructDecl, StructEntry, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Var, Variant, WitnessOrigin, attempt_witness_goal,
-        check, expect, instantiate_universe_levels_scoped, reduce_with, sort_term,
+        Telescope, Term, Tuple, TupleType, Variant, WitnessOrigin, attempt_witness_goal, check,
+        expect, instantiate_universe_levels_scoped, reduce_with, sort_term,
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
     num_bigint::BigInt,

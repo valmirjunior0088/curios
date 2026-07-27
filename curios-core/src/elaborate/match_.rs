@@ -1,9 +1,9 @@
 use {
     super::{Context, Error, InductType, Mode, check, elaborate, expect},
     crate::{
-        Atom, Carrier, Cases, InductArm, InductDecl, Invert, Many, Match, MotiveShape, Nat, Prim,
-        PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices, check_motive,
-        check_prim_head, invert_indices, is_prop, reduce_with, refine_head,
+        Atom, Carrier, Cases, Free, InductArm, InductDecl, Invert, Many, Match, MotiveShape, Nat,
+        Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices,
+        check_motive, check_prim_head, invert_indices, is_prop, reduce_with, refine_head,
     },
     curios_base::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
@@ -71,9 +71,9 @@ fn resolve_prim_motive(
 
     if let (Mode::Check(expected), Subterm::Var(var)) = (mode, &**head)
         && is_elided_motive(motive)
-        && let Some(label) = var.as_label()
+        && let Some(binder) = var.as_free()
     {
-        let synthesized = Scope::close(Many(1), &[label], expected.clone());
+        let synthesized = Scope::close(Many(1), &[binder], expected.clone());
         return check_motive(context, &shape, &synthesized);
     }
 
@@ -114,8 +114,8 @@ fn elaborate_nat_match(
         check(context, zero_case, motive.open(&[&zero_value]))
     })?;
 
-    let pred_label = context.fresh(succ_case.first_label());
-    let ih_label = context.fresh(succ_case.second_label());
+    let pred_label = context.fresh(succ_case.first_hint());
+    let ih_label = context.fresh(succ_case.second_hint());
 
     let succ_body = context.with_frame(|context| {
         context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
@@ -135,7 +135,7 @@ fn elaborate_nat_match(
         )
     })?;
 
-    let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+    let succ_elaborated = Scope::close(Two, &[&pred_label, &ih_label], succ_body);
 
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
@@ -188,9 +188,9 @@ fn elaborate_lst_match(
         check(context, empty_case, motive.open(&[&empty_value]))
     })?;
 
-    let head_label = context.fresh(cons_case.first_label());
-    let tail_label = context.fresh(cons_case.second_label());
-    let ih_label = context.fresh(cons_case.third_label());
+    let head_label = context.fresh(cons_case.first_hint());
+    let tail_label = context.fresh(cons_case.second_hint());
+    let ih_label = context.fresh(cons_case.third_hint());
 
     let cons_body = context.with_frame(|context| {
         context.assume(&head_label, &elem);
@@ -220,11 +220,7 @@ fn elaborate_lst_match(
         )
     })?;
 
-    let cons_elaborated = Scope::close(
-        Three,
-        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
-        cons_body,
-    );
+    let cons_elaborated = Scope::close(Three, &[&head_label, &tail_label, &ih_label], cons_body);
 
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
@@ -272,9 +268,9 @@ fn elaborate_bin_match(
         check(context, empty_case, motive.open(&[&empty_value]))
     })?;
 
-    let head_label = context.fresh(cons_case.first_label());
-    let tail_label = context.fresh(cons_case.second_label());
-    let ih_label = context.fresh(cons_case.third_label());
+    let head_label = context.fresh(cons_case.first_hint());
+    let tail_label = context.fresh(cons_case.second_hint());
+    let ih_label = context.fresh(cons_case.third_hint());
 
     let cons_body = context.with_frame(|context| {
         let atom_type: Term = Subterm::Prim(match grain {
@@ -314,11 +310,7 @@ fn elaborate_bin_match(
         )
     })?;
 
-    let cons_elaborated = Scope::close(
-        Three,
-        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
-        cons_body,
-    );
+    let cons_elaborated = Scope::close(Three, &[&head_label, &tail_label, &ih_label], cons_body);
 
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
@@ -543,12 +535,12 @@ fn singleton_eliminable(
 
     // Open the payload telescope under fresh binders, collecting each binder's
     // (name, type) and the terminal whose indices are the constructor's targets.
-    let mut binders: Vec<(String, Term)> = Vec::new();
+    let mut binders: Vec<(Free, Term)> = Vec::new();
     let mut telescope = payload;
     let terminal = loop {
         match telescope {
             Telescope::Cons(ty, rest) => {
-                let name = context.fresh(rest.first_label());
+                let name = context.fresh(rest.first_hint());
                 telescope = rest.open(&[&Term::free_var(&name)]);
                 binders.push((name, ty));
             }
@@ -625,7 +617,7 @@ fn elaborate_induct_match(
         .collect::<Result<Vec<_>, _>>()?;
 
     let Some(induct_decl) = context.induct_decl(&name).cloned() else {
-        return Err(Error::unbound_variable(Term::free_var(&name)));
+        return Err(Error::unknown_declaration(name.clone()));
     };
     let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
 
@@ -830,7 +822,7 @@ fn elaborate_induct_match(
         // Open the telescope with fresh names paralleling the arm's binder
         // labels; each binder is assumed at its declared (dependent) type.
         let hints = scope
-            .label_iter()
+            .hint_iter()
             .map(|l| l.map(str::to_string))
             .collect::<Vec<_>>();
         let labels = hints
@@ -901,7 +893,7 @@ fn elaborate_induct_match(
             check_generalized_arm(context, &scope.open(&var_refs), expected, &generalized)
         })?;
 
-        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        let label_strs = labels.iter().collect::<Vec<_>>();
         // Rebuild the arm with the constructor's canonical payload plicities, so
         // a re-elaborated arm re-checks identically (idempotence).
         cases_elaborated.push((
@@ -966,12 +958,12 @@ fn is_elided_motive(motive: &Scope<Many>) -> bool {
 /// each constructor when it reopens the motive; a forced constructor, a compound
 /// term, or a repeated variable takes a fresh label and binds vacuously (the
 /// inversion already pins it).
-fn abstraction_label(context: &mut Context, value: &Term, used: &mut BTreeSet<String>) -> String {
+fn abstraction_label(context: &mut Context, value: &Term, used: &mut BTreeSet<Free>) -> Free {
     if let Subterm::Var(var) = &**value
-        && let Some(label) = var.as_label()
-        && used.insert(label.to_string())
+        && let Some(name) = var.as_free()
+        && used.insert(name.clone())
     {
-        return label.to_string();
+        return name.clone();
     }
     context.fresh(None)
 }
@@ -979,7 +971,7 @@ fn abstraction_label(context: &mut Context, value: &Term, used: &mut BTreeSet<St
 /// The product of motive synthesis: the rebuilt motive scope and the hypotheses
 /// generalized into it (in binding order, for the caller to re-apply the
 /// eliminator to).
-type SynthesizedMotive = (Scope<Many>, Vec<(String, Term)>);
+type SynthesizedMotive = (Scope<Many>, Vec<(Free, Term)>);
 
 /// Derive, for an inductive match that elided its motive, the dependent motive
 /// the convoy pattern would otherwise be written by hand. The expected type is
@@ -1042,7 +1034,7 @@ fn synthesize_induct_motive(
     }
 
     let mut needed = expected.free_vars();
-    let mut generalized: Vec<(String, Term)> = Vec::new();
+    let mut generalized: Vec<(Free, Term)> = Vec::new();
     for (label, type_) in context.locals().iter().rev() {
         if used.contains(label) {
             continue;
@@ -1067,7 +1059,7 @@ fn synthesize_induct_motive(
         )
     };
 
-    let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let label_refs = labels.iter().collect::<Vec<_>>();
     let motive = Scope::close(Many(labels.len()), &label_refs, goal);
 
     Ok((check_motive(context, shape, &motive)?, generalized))
@@ -1086,7 +1078,7 @@ fn check_generalized_arm(
     context: &mut Context,
     body: &Term,
     expected: Term,
-    generalized: &[(String, Term)],
+    generalized: &[(Free, Term)],
 ) -> Result<Term, Error> {
     if generalized.is_empty() {
         return check(context, body, expected);
@@ -1109,9 +1101,9 @@ fn check_generalized_arm(
     let mut domains = Vec::with_capacity(generalized.len());
     let plicities = ft.plicities.clone();
     let codomain = ft.telescope.walk(&names, |i, name, type_| {
-        let name = name.head_label().expect("walked at a fresh free variable");
+        let name = name.head_name().expect("walked at a fresh free variable");
         context.assume(name, type_);
-        domains.push((plicities[i], name.to_string(), type_.clone()));
+        domains.push((plicities[i], name.clone(), type_.clone()));
         Ok::<(), Error>(())
     })?;
 

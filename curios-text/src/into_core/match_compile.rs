@@ -14,7 +14,7 @@ use {
 /// checks them against the constructor's canonical payload plicities.
 type InductCase = (
     curios_core::Atom,
-    Vec<(curios_base::Plicity, String)>,
+    Vec<(curios_base::Plicity, curios_core::Free)>,
     curios_core::Term,
 );
 
@@ -32,7 +32,7 @@ type InductCase = (
 /// recursion for it.
 struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
-    binds: Vec<(String, curios_core::Term)>,
+    binds: Vec<(super::lowerer::Bound, curios_core::Term)>,
     body: &'t Term,
 }
 
@@ -97,7 +97,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn match_region(
         &self,
         match_: &Match,
-        binds: &mut Vec<(String, curios_core::Term)>,
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         let head = self.collect(&match_.head, binds)?;
         self.compile_matrix_headed(head, &match_.motive, &match_.arms, Self::region)
@@ -111,7 +111,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn choose_region(
         &self,
         choose: &Choose,
-        binds: &mut Vec<(String, curios_core::Term)>,
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         self.ladder_region(&choose.arms, &choose.default, binds)
     }
@@ -127,7 +127,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         arms: &[ChooseArm],
         default: &Term,
-        binds: &mut Vec<(String, curios_core::Term)>,
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         let Some((arm, rest)) = arms.split_first() else {
             return self.collect(default, binds);
@@ -231,16 +231,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return MatchCompiler::with_default(self.lowerer, Some(default))
                 .compile_matrix(head, motive, arms, leaf);
         }
-        let k = self.context.fresh_binder();
+        let k = self.context.fresh_binder(None);
         let call = curios_core::Term::apply(
             curios_core::Term::var(curios_core::Var::free(k.clone())),
             Vec::<curios_core::Term>::new(),
         );
         let matrix = MatchCompiler::with_default(self.lowerer, Some(call))
             .compile_matrix(head, motive, arms, leaf)?;
-        let thunk = curios_core::Term::func(Vec::<(String, curios_core::Term)>::new(), default);
+        let thunk = curios_core::Term::func(
+            Vec::<(curios_core::Free, curios_core::Term)>::new(),
+            default,
+        );
         let hole = curios_core::Term::metavar(self.context.fresh_metavar());
-        Ok(curios_core::Term::let_(k, hole, thunk, matrix))
+        Ok(curios_core::Term::let_(&k, hole, thunk, matrix))
     }
 
     /// Lowers an optional match motive into the core motive slot. A written
@@ -373,7 +376,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     let MatchPattern::Binder(name) = row.patterns.remove(0) else {
                         unreachable!("every row classified as Binder")
                     };
-                    row.binds.push((name.clone(), scrutinee.clone()));
+                    row.binds
+                        .push((self.pattern_binder(name), scrutinee.clone()));
                     row
                 })
                 .collect();
@@ -535,12 +539,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 for (plicity, pattern) in args {
                     match pattern {
                         MatchPattern::Binder(name) => {
-                            let bound = self.pattern_binder_name(name);
-                            direct_names.push(bound.clone());
-                            binder_names.push((*plicity, bound));
+                            let bound = self.pattern_binder(name);
+                            binder_names.push((*plicity, bound.1.clone()));
+                            direct_names.push(bound);
                         }
                         other => {
-                            let synthetic = self.context.fresh_binder();
+                            let synthetic = self.context.fresh_binder(None);
                             sub_columns.push(curios_core::Term::var(curios_core::Var::free(
                                 synthetic.clone(),
                             )));
@@ -553,7 +557,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 row.patterns = sub_patterns;
                 sub_columns.extend(rest.clone());
 
-                let body = self.scoped(direct_names, || {
+                let body = self.bound(&direct_names, || {
                     self.compile(sub_columns, vec![row], None, leaf)
                 })?;
                 cases.push((curios_core::Atom::from(tag.as_str()), binder_names, body));
@@ -561,7 +565,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
 
             let synthetic = (0..arity)
-                .map(|_| self.context.fresh_binder())
+                .map(|_| self.context.fresh_binder(None))
                 .collect::<Vec<_>>();
             let sub_rows = group
                 .into_iter()
@@ -759,25 +763,25 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let (pred_label, ih_label, succ_case) = if succ_rows.len() == 1 {
             let (pred_name, ih_name, row) = succ_rows.pop().unwrap();
-            let pred_bound = self.pattern_binder_name(&pred_name);
-            let ih_bound = self.cons_ih_name(&ih_name);
-            let succ_case = self.scoped([pred_bound.clone(), ih_bound.clone()], || {
+            let pred_bound = self.pattern_binder(&pred_name);
+            let ih_bound = self.cons_ih_binder(&ih_name);
+            let succ_case = self.bound(&[pred_bound.clone(), ih_bound.clone()], || {
                 self.compile(rest, vec![row], None, leaf)
             })?;
-            (pred_bound, ih_bound, succ_case)
+            (pred_bound.1, ih_bound.1, succ_case)
         } else {
-            let pred_synth = self.context.fresh_binder();
-            let ih_synth = self.context.fresh_binder();
+            let pred_synth = self.context.fresh_binder(None);
+            let ih_synth = self.context.fresh_binder(None);
             let sub_rows = succ_rows
                 .into_iter()
                 .map(|(pred_name, ih_name, mut row)| {
                     row.binds.push((
-                        pred_name,
+                        self.pattern_binder(&pred_name),
                         curios_core::Term::var(curios_core::Var::free(pred_synth.clone())),
                     ));
                     if let Some(ih_name) = ih_name {
                         row.binds.push((
-                            ih_name,
+                            self.pattern_binder(&ih_name),
                             curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
                         ));
                     }
@@ -789,7 +793,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         };
 
         Ok(curios_core::Term::nat_match_scoped(
-            scrutinee, motive, zero_case, pred_label, ih_label, succ_case,
+            scrutinee,
+            motive,
+            zero_case,
+            &pred_label,
+            &ih_label,
+            succ_case,
         ))
     }
 
@@ -847,41 +856,41 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let (head_label, tail_label, ih_label, cons_case) = if cons_rows.is_empty() {
             // The default fills the cons arm; its binders go unused.
             (
-                self.context.fresh_binder(),
-                self.context.fresh_binder(),
-                self.context.fresh_binder(),
+                self.context.fresh_binder(None),
+                self.context.fresh_binder(None),
+                self.context.fresh_binder(None),
                 self.default
                     .clone()
                     .expect("default present when a group is missing"),
             )
         } else if cons_rows.len() == 1 {
             let (head_name, tail_name, ih_name, row) = cons_rows.pop().unwrap();
-            let head_bound = self.pattern_binder_name(&head_name);
-            let tail_bound = self.pattern_binder_name(&tail_name);
-            let ih_bound = self.cons_ih_name(&ih_name);
-            let cons_case = self.scoped(
-                [head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
+            let head_bound = self.pattern_binder(&head_name);
+            let tail_bound = self.pattern_binder(&tail_name);
+            let ih_bound = self.cons_ih_binder(&ih_name);
+            let cons_case = self.bound(
+                &[head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
                 || self.compile(rest, vec![row], None, leaf),
             )?;
-            (head_bound, tail_bound, ih_bound, cons_case)
+            (head_bound.1, tail_bound.1, ih_bound.1, cons_case)
         } else {
-            let head_synth = self.context.fresh_binder();
-            let tail_synth = self.context.fresh_binder();
-            let ih_synth = self.context.fresh_binder();
+            let head_synth = self.context.fresh_binder(None);
+            let tail_synth = self.context.fresh_binder(None);
+            let ih_synth = self.context.fresh_binder(None);
             let sub_rows = cons_rows
                 .into_iter()
                 .map(|(head_name, tail_name, ih_name, mut row)| {
                     row.binds.push((
-                        head_name,
+                        self.pattern_binder(&head_name),
                         curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
                     ));
                     row.binds.push((
-                        tail_name,
+                        self.pattern_binder(&tail_name),
                         curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
                     ));
                     if let Some(ih_name) = ih_name {
                         row.binds.push((
-                            ih_name,
+                            self.pattern_binder(&ih_name),
                             curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
                         ));
                     }
@@ -897,9 +906,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             curios_core::Term::metavar(self.context.fresh_metavar()),
             motive,
             empty_case,
-            head_label,
-            tail_label,
-            ih_label,
+            &head_label,
+            &tail_label,
+            &ih_label,
             cons_case,
         ))
     }
@@ -967,41 +976,41 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let (head_label, tail_label, ih_label, cons_case) = if byte_rows.is_empty() {
             // The default fills the byte arm; its binders go unused.
             (
-                self.context.fresh_binder(),
-                self.context.fresh_binder(),
-                self.context.fresh_binder(),
+                self.context.fresh_binder(None),
+                self.context.fresh_binder(None),
+                self.context.fresh_binder(None),
                 self.default
                     .clone()
                     .expect("default present when a group is missing"),
             )
         } else if byte_rows.len() == 1 {
             let (head_name, tail_name, ih_name, row) = byte_rows.pop().unwrap();
-            let head_bound = self.pattern_binder_name(&head_name);
-            let tail_bound = self.pattern_binder_name(&tail_name);
-            let ih_bound = self.cons_ih_name(&ih_name);
-            let cons_case = self.scoped(
-                [head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
+            let head_bound = self.pattern_binder(&head_name);
+            let tail_bound = self.pattern_binder(&tail_name);
+            let ih_bound = self.cons_ih_binder(&ih_name);
+            let cons_case = self.bound(
+                &[head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
                 || self.compile(rest, vec![row], None, leaf),
             )?;
-            (head_bound, tail_bound, ih_bound, cons_case)
+            (head_bound.1, tail_bound.1, ih_bound.1, cons_case)
         } else {
-            let head_synth = self.context.fresh_binder();
-            let tail_synth = self.context.fresh_binder();
-            let ih_synth = self.context.fresh_binder();
+            let head_synth = self.context.fresh_binder(None);
+            let tail_synth = self.context.fresh_binder(None);
+            let ih_synth = self.context.fresh_binder(None);
             let sub_rows = byte_rows
                 .into_iter()
                 .map(|(head_name, tail_name, ih_name, mut row)| {
                     row.binds.push((
-                        head_name,
+                        self.pattern_binder(&head_name),
                         curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
                     ));
                     row.binds.push((
-                        tail_name,
+                        self.pattern_binder(&tail_name),
                         curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
                     ));
                     if let Some(ih_name) = ih_name {
                         row.binds.push((
-                            ih_name,
+                            self.pattern_binder(&ih_name),
                             curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
                         ));
                     }
@@ -1017,9 +1026,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             scrutinee,
             motive,
             empty_case,
-            head_label,
-            tail_label,
-            ih_label,
+            &head_label,
+            &tail_label,
+            &ih_label,
             cons_case,
         ))
     }
@@ -1098,15 +1107,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         row: MatrixRow<'_>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        let names = row.binds.iter().map(|(name, _)| name.clone());
-        let body = self.scoped(names, || leaf(self, row.body))?;
+        let names = row
+            .binds
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+        let body = self.bound(&names, || leaf(self, row.body))?;
         Ok(row
             .binds
             .into_iter()
             .rev()
-            .fold(body, |tail, (name, value)| {
+            .fold(body, |tail, ((_, id), value)| {
                 let hole = curios_core::Term::metavar(self.context.fresh_metavar());
-                curios_core::Term::let_(self.pattern_binder_name(&name), hole, value, tail)
+                curios_core::Term::let_(&id, hole, value, tail)
             }))
     }
 }

@@ -35,7 +35,7 @@ pub(crate) fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, E
         // Recurse past the parameters (opened opaquely) into the codomain.
         Subterm::FuncType(FuncType { telescope, .. }) => {
             let vars: Vec<Term> = (0..telescope.len())
-                .map(|_| Term::free_var(context.fresh(None)))
+                .map(|_| Term::free_var(&context.fresh(None)))
                 .collect();
             let refs: Vec<&Term> = vars.iter().collect();
             is_erasable(context, &telescope.open(&refs))
@@ -59,7 +59,7 @@ pub(crate) fn erasure_mask<B: Bound>(
         match telescope {
             Telescope::Cons(ty, rest) => {
                 mask.push(is_erasable(context, &ty)?);
-                let x = Term::free_var(context.fresh(rest.first_label()));
+                let x = Term::free_var(&context.fresh(rest.first_hint()));
                 telescope = rest.open(&[&x]);
             }
             Telescope::Done(_) => break Ok(mask),

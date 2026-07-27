@@ -20,9 +20,9 @@ fn nat(n: usize) -> Term {
 fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let mut context = context();
     context.define(
-        "partial",
+        &crate::fixture_binder("partial"),
         &Term::func(
-            [("ignored", Term::prim(Prim::NatType))],
+            [(crate::fixture_binder("ignored"), Term::prim(Prim::NatType))],
             Term::prim(Prim::bin_get(
                 Grain::X,
                 Term::prim(Prim::Bin(Grain::X, PackedBin::from_bytes(Vec::<u8>::new()))),
@@ -34,7 +34,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let applied = |universe| {
         Term::apply(
             Term::universe_inst(
-                Term::free_var("partial"),
+                Term::free_var(&crate::fixture_binder("partial")),
                 vec![Level::meta(UniverseMetaId(universe))],
             ),
             [nat(0)],
@@ -55,16 +55,25 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
 /// Build a lambda whose argument domains are irrelevant to conversion (which
 /// compares only bodies); each parameter gets a placeholder `Type` domain.
 fn func<const N: usize>(labels: [&str; N], body: impl Into<Term>) -> Term {
-    Term::func(labels.map(|l| (l, Term::type_ground())), body.into())
+    Term::func(
+        labels.map(|l| (crate::fixture_binder(l), Term::type_ground())),
+        body.into(),
+    )
 }
 
 #[test]
 fn convert_func_type_is_alpha_equivalent() {
     let mut context = context();
 
-    let this = Term::func_type([("x", Term::type_ground())], Term::free_var("x"));
+    let this = Term::func_type(
+        [(crate::fixture_binder("x"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("x")),
+    );
 
-    let that = Term::func_type([("y", Term::type_ground())], Term::free_var("y"));
+    let that = Term::func_type(
+        [(crate::fixture_binder("y"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("y")),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -73,9 +82,9 @@ fn convert_func_type_is_alpha_equivalent() {
 fn convert_func_is_alpha_equivalent() {
     let mut context = context();
 
-    let this = func(["x"], Term::free_var("x"));
+    let this = func(["x"], Term::free_var(&crate::fixture_binder("x")));
 
-    let that = func(["y"], Term::free_var("y"));
+    let that = func(["y"], Term::free_var(&crate::fixture_binder("y")));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -86,13 +95,24 @@ fn convert_func_type_distinguishes_plicity() {
 
     // Three telescopes with identical domains and results, differing only in the
     // one binder's plicity.
-    let explicit = Term::func_type([("x", Term::type_ground())], Term::type_ground());
+    let explicit = Term::func_type(
+        [(crate::fixture_binder("x"), Term::type_ground())],
+        Term::type_ground(),
+    );
     let implicit = Term::func_type_marked(
-        [(Plicity::Implicit, "x", Term::type_ground())],
+        [(
+            Plicity::Implicit,
+            crate::fixture_binder("x"),
+            Term::type_ground(),
+        )],
         Term::type_ground(),
     );
     let witness = Term::func_type_marked(
-        [(Plicity::Witness, "x", Term::type_ground())],
+        [(
+            Plicity::Witness,
+            crate::fixture_binder("x"),
+            Term::type_ground(),
+        )],
         Term::type_ground(),
     );
 
@@ -104,7 +124,11 @@ fn convert_func_type_distinguishes_plicity() {
 
     // Same plicity, alpha-renamed binder: still convertible.
     let implicit_y = Term::func_type_marked(
-        [(Plicity::Implicit, "y", Term::type_ground())],
+        [(
+            Plicity::Implicit,
+            crate::fixture_binder("y"),
+            Term::type_ground(),
+        )],
         Term::type_ground(),
     );
     assert_eq!(conv(&mut context, &implicit, &implicit_y), Ok(true));
@@ -115,13 +139,14 @@ fn convert_inductive_match_compares_cases_and_motive() {
     let mut context = context();
 
     let make = |motive_label: &str, binder: &str| {
+        let binder = crate::fixture_binder(binder);
         Term::induct_match(
-            Term::free_var("r"),
-            Some(motive_label),
+            Term::free_var(&crate::fixture_binder("r")),
+            Some(&crate::fixture_binder(motive_label)),
             Term::prim(Prim::NatType),
             [
-                ("none", Vec::<&str>::new(), nat(0)),
-                ("some", vec![binder], Term::free_var(binder)),
+                ("none", Vec::<crate::Free>::new(), nat(0)),
+                ("some", vec![binder.clone()], Term::free_var(&binder)),
             ],
         )
     };
@@ -133,12 +158,16 @@ fn convert_inductive_match_compares_cases_and_motive() {
     );
 
     let different = Term::induct_match(
-        Term::free_var("r"),
-        Some("m"),
+        Term::free_var(&crate::fixture_binder("r")),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<&str>::new(), nat(1)),
-            ("some", vec!["x"], Term::free_var("x")),
+            ("none", Vec::<crate::Free>::new(), nat(1)),
+            (
+                "some",
+                vec![crate::fixture_binder("x")],
+                Term::free_var(&crate::fixture_binder("x")),
+            ),
         ],
     );
 
@@ -151,10 +180,10 @@ fn convert_inductive_match_compares_default() {
 
     let with_default = |d: usize| {
         Term::induct_match_default(
-            Term::free_var("r"),
-            Some("m"),
+            Term::free_var(&crate::fixture_binder("r")),
+            Some(&crate::fixture_binder("m")),
             Term::prim(Prim::NatType),
-            [("none", Vec::<&str>::new(), nat(0))],
+            [("none", Vec::<crate::Free>::new(), nat(0))],
             nat(d),
         )
     };
@@ -175,10 +204,10 @@ fn convert_inductive_match_compares_default() {
     // A defaulted match never converts with an otherwise-identical bare one:
     // presence of the catch-all is itself a difference.
     let bare = Term::induct_match(
-        Term::free_var("r"),
-        Some("m"),
+        Term::free_var(&crate::fixture_binder("r")),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::NatType),
-        [("none", Vec::<&str>::new(), nat(0))],
+        [("none", Vec::<crate::Free>::new(), nat(0))],
     );
     assert_eq!(conv(&mut context, &with_default(9), &bare), Ok(false));
 }
@@ -190,7 +219,7 @@ fn convert_prim_recurses_into_operands() {
     let this = func(
         ["x"],
         Subterm::Prim(Prim::int_add(
-            Term::free_var("x"),
+            Term::free_var(&crate::fixture_binder("x")),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -198,7 +227,7 @@ fn convert_prim_recurses_into_operands() {
     let that = func(
         ["y"],
         Subterm::Prim(Prim::int_add(
-            Term::free_var("y"),
+            Term::free_var(&crate::fixture_binder("y")),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -213,7 +242,7 @@ fn convert_prim_distinguishes_operator_kind() {
     let this = func(
         ["x"],
         Subterm::Prim(Prim::int_add(
-            Term::free_var("x"),
+            Term::free_var(&crate::fixture_binder("x")),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -221,7 +250,7 @@ fn convert_prim_distinguishes_operator_kind() {
     let that = func(
         ["x"],
         Subterm::Prim(Prim::int_sub(
-            Term::free_var("x"),
+            Term::free_var(&crate::fixture_binder("x")),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -234,19 +263,22 @@ fn convert_prim_distinguishes_operator_kind() {
 /// `λx. match x | none() => <none_value> | some(p) => head(p) end` — stuck at
 /// a neutral scrutinee, with a `head`-call in an arm to make unfolding
 /// self-feeding.
-fn recursive_matcher(head: &str, none_value: usize) -> Term {
+fn recursive_matcher(head: &Free, none_value: usize) -> Term {
     Term::func(
-        [("x", Term::prim(Prim::NatType))],
+        [(crate::fixture_binder("x"), Term::prim(Prim::NatType))],
         Term::induct_match(
-            Term::free_var("x"),
-            Some("m"),
+            Term::free_var(&crate::fixture_binder("x")),
+            Some(&crate::fixture_binder("m")),
             Term::prim(Prim::NatType),
             [
-                ("none", Vec::<&str>::new(), nat(none_value)),
+                ("none", Vec::<crate::Free>::new(), nat(none_value)),
                 (
                     "some",
-                    vec!["p"],
-                    Term::apply(Term::free_var(head), [Term::free_var("p")]),
+                    vec![crate::fixture_binder("p")],
+                    Term::apply(
+                        Term::free_var(head),
+                        [Term::free_var(&crate::fixture_binder("p"))],
+                    ),
                 ),
             ],
         ),
@@ -256,28 +288,35 @@ fn recursive_matcher(head: &str, none_value: usize) -> Term {
 #[test]
 fn convert_folded_recursive_call_against_its_unfolding() {
     let mut context = context();
-    context.define("f", &recursive_matcher("f", 0), None);
+    context.define(
+        &crate::fixture_binder("f"),
+        &recursive_matcher(&crate::fixture_binder("f"), 0),
+        None,
+    );
 
-    let folded = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let folded = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
 
     // The literal stuck body, spelled reducibly (the η-redex around `p`) so
     // the sides are not syntactically equal: the folded call meets a
     // non-apply shape, lazy delta unfolds it once, and the two stuck
     // matches compare structurally.
     let unfolded = Term::induct_match(
-        Term::free_var("a"),
-        Some("m"),
+        Term::free_var(&crate::fixture_binder("a")),
+        Some(&crate::fixture_binder("m")),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<&str>::new(), nat(0)),
+            ("none", Vec::<crate::Free>::new(), nat(0)),
             (
                 "some",
-                vec!["p"],
+                vec![crate::fixture_binder("p")],
                 Term::apply(
-                    Term::free_var("f"),
+                    Term::free_var(&crate::fixture_binder("f")),
                     [Term::apply(
-                        func(["z"], Term::free_var("z")),
-                        [Term::free_var("p")],
+                        func(["z"], Term::free_var(&crate::fixture_binder("z"))),
+                        [Term::free_var(&crate::fixture_binder("p"))],
                     )],
                 ),
             ),
@@ -290,21 +329,31 @@ fn convert_folded_recursive_call_against_its_unfolding() {
 #[test]
 fn convert_same_recursive_head_compares_spines() {
     let mut context = context();
-    context.define("f", &recursive_matcher("f", 0), None);
+    context.define(
+        &crate::fixture_binder("f"),
+        &recursive_matcher(&crate::fixture_binder("f"), 0),
+        None,
+    );
 
     // Convertible (but not syntactically equal) spines: true.
-    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let this = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
     let that = Term::apply(
-        Term::free_var("f"),
+        Term::free_var(&crate::fixture_binder("f")),
         [Term::apply(
-            func(["z"], Term::free_var("z")),
-            [Term::free_var("a")],
+            func(["z"], Term::free_var(&crate::fixture_binder("z"))),
+            [Term::free_var(&crate::fixture_binder("a"))],
         )],
     );
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 
     // Mismatching spines: committal false, no unfolding retry.
-    let other = Term::apply(Term::free_var("f"), [Term::free_var("b")]);
+    let other = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("b"))],
+    );
     assert_eq!(conv(&mut context, &this, &other), Ok(false));
 }
 
@@ -312,11 +361,14 @@ fn structural_rec_member(body: Term) -> Term {
     let nat_type = Term::prim(Prim::NatType);
     let rec = Term::rec(
         [(
-            "f",
-            Term::func_type([("x", nat_type.clone())], nat_type),
-            Term::func([("x", Term::prim(Prim::NatType))], body),
+            crate::fixture_binder("f"),
+            Term::func_type([(crate::fixture_binder("x"), nat_type.clone())], nat_type),
+            Term::func(
+                [(crate::fixture_binder("x"), Term::prim(Prim::NatType))],
+                body,
+            ),
         )],
-        Term::free_var("f"),
+        Term::free_var(&crate::fixture_binder("f")),
     );
     let Subterm::Rec(rec) = Term::unwrap_or_clone(rec) else {
         unreachable!()
@@ -328,13 +380,19 @@ fn structural_rec_member(body: Term) -> Term {
 fn same_structural_recursive_head_does_not_assume_injective_spines() {
     let mut context = context();
     let constant = structural_rec_member(nat(0));
-    let this = Term::apply(constant.clone(), [Term::free_var("a")]);
-    let that = Term::apply(constant, [Term::free_var("b")]);
+    let this = Term::apply(
+        constant.clone(),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
+    let that = Term::apply(constant, [Term::free_var(&crate::fixture_binder("b"))]);
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 
-    let identity = structural_rec_member(Term::free_var("x"));
-    let this = Term::apply(identity.clone(), [Term::free_var("a")]);
-    let that = Term::apply(identity, [Term::free_var("b")]);
+    let identity = structural_rec_member(Term::free_var(&crate::fixture_binder("x")));
+    let this = Term::apply(
+        identity.clone(),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
+    let that = Term::apply(identity, [Term::free_var(&crate::fixture_binder("b"))]);
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
 
@@ -347,11 +405,25 @@ fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively
     // entropy, so the canonicalized history recognizes the cycle and assumes
     // it. No finite disagreement exists: the functions are bisimilar. Before
     // goal canonicalization this pair spun to `Err(Preempted)`.
-    context.define("f", &recursive_matcher("f", 0), None);
-    context.define("g", &recursive_matcher("g", 0), None);
+    context.define(
+        &crate::fixture_binder("f"),
+        &recursive_matcher(&crate::fixture_binder("f"), 0),
+        None,
+    );
+    context.define(
+        &crate::fixture_binder("g"),
+        &recursive_matcher(&crate::fixture_binder("g"), 0),
+        None,
+    );
 
-    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
-    let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
+    let this = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
+    let that = Term::apply(
+        Term::free_var(&crate::fixture_binder("g")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
@@ -360,11 +432,25 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
     let mut context = context();
     // The `none` arms disagree: the first unfolding round surfaces the
     // finite disagreement on a sibling goal, well before any deadline.
-    context.define("f", &recursive_matcher("f", 0), None);
-    context.define("g", &recursive_matcher("g", 1), None);
+    context.define(
+        &crate::fixture_binder("f"),
+        &recursive_matcher(&crate::fixture_binder("f"), 0),
+        None,
+    );
+    context.define(
+        &crate::fixture_binder("g"),
+        &recursive_matcher(&crate::fixture_binder("g"), 1),
+        None,
+    );
 
-    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
-    let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
+    let this = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
+    let that = Term::apply(
+        Term::free_var(&crate::fixture_binder("g")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
 
@@ -379,31 +465,41 @@ fn convert_growing_recursive_unfolding_spends_the_deadline() {
     // returns to the drain queue; bare `f = λx. f(s(x))` growth would nest
     // inside one `reduce` call instead.)
     let growing = |head: &str| {
+        let head = &crate::fixture_binder(head);
         Term::func(
-            [("x", Term::prim(Prim::NatType))],
+            [(crate::fixture_binder("x"), Term::prim(Prim::NatType))],
             Term::induct_match(
-                Term::free_var("x"),
-                Some("m"),
+                Term::free_var(&crate::fixture_binder("x")),
+                Some(&crate::fixture_binder("m")),
                 Term::prim(Prim::NatType),
                 [
                     (
                         "none",
-                        Vec::<&str>::new(),
+                        Vec::<crate::Free>::new(),
                         Term::apply(
                             Term::free_var(head),
-                            [Term::apply(Term::free_var("s"), [Term::free_var("x")])],
+                            [Term::apply(
+                                Term::free_var(&crate::fixture_binder("s")),
+                                [Term::free_var(&crate::fixture_binder("x"))],
+                            )],
                         ),
                     ),
-                    ("some", vec!["p"], nat(0)),
+                    ("some", vec![crate::fixture_binder("p")], nat(0)),
                 ],
             ),
         )
     };
-    context.define("f", &growing("f"), None);
-    context.define("g", &growing("g"), None);
+    context.define(&crate::fixture_binder("f"), &growing("f"), None);
+    context.define(&crate::fixture_binder("g"), &growing("g"), None);
 
-    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
-    let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
+    let this = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
+    let that = Term::apply(
+        Term::free_var(&crate::fixture_binder("g")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
     assert_eq!(
         conv(&mut context, &this, &that),
         Err(ReduceError::Preempted)
@@ -421,14 +517,18 @@ fn convert_recursive_values_are_bisimilar() {
             "E",
             Vec::<Term>::new(),
             "cons",
-            [nat(1), Term::free_var(name)],
+            [nat(1), Term::free_var(&crate::fixture_binder(name))],
         )
     };
-    context.define("xs", &stream("xs"), None);
-    context.define("ys", &stream("ys"), None);
+    context.define(&crate::fixture_binder("xs"), &stream("xs"), None);
+    context.define(&crate::fixture_binder("ys"), &stream("ys"), None);
 
     assert_eq!(
-        conv(&mut context, &Term::free_var("xs"), &Term::free_var("ys")),
+        conv(
+            &mut context,
+            &Term::free_var(&crate::fixture_binder("xs")),
+            &Term::free_var(&crate::fixture_binder("ys"))
+        ),
         Ok(true)
     );
 }
@@ -436,13 +536,23 @@ fn convert_recursive_values_are_bisimilar() {
 #[test]
 fn convert_folded_recursive_call_against_neutral_head_is_false() {
     let mut context = context();
-    context.define("f", &recursive_matcher("f", 0), None);
+    context.define(
+        &crate::fixture_binder("f"),
+        &recursive_matcher(&crate::fixture_binder("f"), 0),
+        None,
+    );
 
     // The recursive side unfolds to its stuck match, the neutral side
     // cannot unfold at all: a structural mismatch, decided well within the
     // deadline.
-    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
-    let neutral = Term::apply(Term::free_var("h"), [Term::free_var("a")]);
+    let this = Term::apply(
+        Term::free_var(&crate::fixture_binder("f")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
+    let neutral = Term::apply(
+        Term::free_var(&crate::fixture_binder("h")),
+        [Term::free_var(&crate::fixture_binder("a"))],
+    );
     assert_eq!(conv(&mut context, &this, &neutral), Ok(false));
 }
 
@@ -454,13 +564,21 @@ fn convert_rec_is_alpha_equivalent() {
     let mut context = context();
 
     let this = Term::rec(
-        vec![("x", Term::type_ground(), Term::free_var("x"))],
-        Term::free_var("x"),
+        vec![(
+            crate::fixture_binder("x"),
+            Term::type_ground(),
+            Term::free_var(&crate::fixture_binder("x")),
+        )],
+        Term::free_var(&crate::fixture_binder("x")),
     );
 
     let that = Term::rec(
-        vec![("y", Term::type_ground(), Term::free_var("y"))],
-        Term::free_var("y"),
+        vec![(
+            crate::fixture_binder("y"),
+            Term::type_ground(),
+            Term::free_var(&crate::fixture_binder("y")),
+        )],
+        Term::free_var(&crate::fixture_binder("y")),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -473,7 +591,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
     let this = func(
         ["x"],
         Subterm::Prim(Prim::nat_add(
-            Term::free_var("x"),
+            Term::free_var(&crate::fixture_binder("x")),
             Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         )),
     );
@@ -481,7 +599,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
     let that = func(
         ["y"],
         Subterm::Prim(Prim::nat_add(
-            Term::free_var("y"),
+            Term::free_var(&crate::fixture_binder("y")),
             Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         )),
     );
@@ -493,9 +611,15 @@ fn convert_prim_nat_add_recurses_into_operands() {
 fn convert_prim_flt_neg_recurses_into_operand() {
     let mut context = context();
 
-    let this = func(["x"], Subterm::Prim(Prim::flt_neg(Term::free_var("x"))));
+    let this = func(
+        ["x"],
+        Subterm::Prim(Prim::flt_neg(Term::free_var(&crate::fixture_binder("x")))),
+    );
 
-    let that = func(["y"], Subterm::Prim(Prim::flt_neg(Term::free_var("y"))));
+    let that = func(
+        ["y"],
+        Subterm::Prim(Prim::flt_neg(Term::free_var(&crate::fixture_binder("y")))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -504,9 +628,19 @@ fn convert_prim_flt_neg_recurses_into_operand() {
 fn convert_prim_nat_to_int_recurses_into_operand() {
     let mut context = context();
 
-    let this = func(["x"], Subterm::Prim(Prim::nat_to_int(Term::free_var("x"))));
+    let this = func(
+        ["x"],
+        Subterm::Prim(Prim::nat_to_int(Term::free_var(&crate::fixture_binder(
+            "x",
+        )))),
+    );
 
-    let that = func(["y"], Subterm::Prim(Prim::nat_to_int(Term::free_var("y"))));
+    let that = func(
+        ["y"],
+        Subterm::Prim(Prim::nat_to_int(Term::free_var(&crate::fixture_binder(
+            "y",
+        )))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -584,11 +718,17 @@ fn convert_prim_bin_len_recurses_into_operand() {
 
     let this = func(
         ["x"],
-        Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var("x"))),
+        Subterm::Prim(Prim::bin_len(
+            Grain::X,
+            Term::free_var(&crate::fixture_binder("x")),
+        )),
     );
     let that = func(
         ["y"],
-        Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var("y"))),
+        Subterm::Prim(Prim::bin_len(
+            Grain::X,
+            Term::free_var(&crate::fixture_binder("y")),
+        )),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -604,8 +744,8 @@ fn convert_prim_bin_get_recurses_into_operands() {
             ["a"],
             Subterm::Prim(Prim::bin_get(
                 Grain::X,
-                Term::free_var("x"),
-                Term::free_var("a"),
+                Term::free_var(&crate::fixture_binder("x")),
+                Term::free_var(&crate::fixture_binder("a")),
             )),
         ),
     );
@@ -616,8 +756,8 @@ fn convert_prim_bin_get_recurses_into_operands() {
             ["b"],
             Subterm::Prim(Prim::bin_get(
                 Grain::X,
-                Term::free_var("y"),
-                Term::free_var("b"),
+                Term::free_var(&crate::fixture_binder("y")),
+                Term::free_var(&crate::fixture_binder("b")),
             )),
         ),
     );
@@ -635,7 +775,10 @@ fn convert_prim_bin_concat_recurses_into_operands() {
             ["a"],
             Subterm::Prim(Prim::bin_concat(
                 Grain::X,
-                [Term::free_var("x"), Term::free_var("a")],
+                [
+                    Term::free_var(&crate::fixture_binder("x")),
+                    Term::free_var(&crate::fixture_binder("a")),
+                ],
             )),
         ),
     );
@@ -646,7 +789,10 @@ fn convert_prim_bin_concat_recurses_into_operands() {
             ["b"],
             Subterm::Prim(Prim::bin_concat(
                 Grain::X,
-                [Term::free_var("y"), Term::free_var("b")],
+                [
+                    Term::free_var(&crate::fixture_binder("y")),
+                    Term::free_var(&crate::fixture_binder("b")),
+                ],
             )),
         ),
     );
@@ -666,9 +812,9 @@ fn convert_prim_bin_slice_recurses_into_operands() {
                 ["p"],
                 Subterm::Prim(Prim::bin_slice(
                     Grain::X,
-                    Term::free_var("x"),
-                    Term::free_var("a"),
-                    Term::free_var("p"),
+                    Term::free_var(&crate::fixture_binder("x")),
+                    Term::free_var(&crate::fixture_binder("a")),
+                    Term::free_var(&crate::fixture_binder("p")),
                 )),
             ),
         ),
@@ -682,9 +828,9 @@ fn convert_prim_bin_slice_recurses_into_operands() {
                 ["q"],
                 Subterm::Prim(Prim::bin_slice(
                     Grain::X,
-                    Term::free_var("y"),
-                    Term::free_var("b"),
-                    Term::free_var("q"),
+                    Term::free_var(&crate::fixture_binder("y")),
+                    Term::free_var(&crate::fixture_binder("b")),
+                    Term::free_var(&crate::fixture_binder("q")),
                 )),
             ),
         ),
@@ -717,8 +863,8 @@ fn convert_tuple_unequal_field() {
 fn convert_proj_same_index_and_head() {
     let mut context = context();
 
-    let this = Term::proj(Term::free_var("r"), 0);
-    let that = Term::proj(Term::free_var("r"), 0);
+    let this = Term::proj(Term::free_var(&crate::fixture_binder("r")), 0);
+    let that = Term::proj(Term::free_var(&crate::fixture_binder("r")), 0);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -727,8 +873,8 @@ fn convert_proj_same_index_and_head() {
 fn convert_proj_different_index_is_false() {
     let mut context = context();
 
-    let this = Term::proj(Term::free_var("r"), 0);
-    let that = Term::proj(Term::free_var("r"), 1);
+    let this = Term::proj(Term::free_var(&crate::fixture_binder("r")), 0);
+    let that = Term::proj(Term::free_var(&crate::fixture_binder("r")), 1);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
@@ -738,12 +884,12 @@ fn convert_eta_tuple_neutral_with_known_type() {
     let mut context = context();
 
     let tuple_type: Term = Term::tuple_type([
-        ("x", Term::prim(Prim::NatType)),
-        ("y", Term::prim(Prim::BoolType)),
+        (crate::fixture_binder("x"), Term::prim(Prim::NatType)),
+        (crate::fixture_binder("y"), Term::prim(Prim::BoolType)),
     ]);
 
-    let r: Term = Term::free_var("r");
-    let s: Term = Term::free_var("s");
+    let r: Term = Term::free_var(&crate::fixture_binder("r"));
+    let s: Term = Term::free_var(&crate::fixture_binder("s"));
 
     assert_eq!(convert(&mut context, &tuple_type, &r, &r), Ok(true));
 
@@ -755,16 +901,24 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     let mut context = context();
 
     // p = (1, 2), q = (1, 3) — both 2-tuples agreeing on field 0, differing on field 1.
-    context.define("p", &Term::tuple([nat(1), nat(2)]), None);
-    context.define("q", &Term::tuple([nat(1), nat(3)]), None);
+    context.define(
+        &crate::fixture_binder("p"),
+        &Term::tuple([nat(1), nat(2)]),
+        None,
+    );
+    context.define(
+        &crate::fixture_binder("q"),
+        &Term::tuple([nat(1), nat(3)]),
+        None,
+    );
 
     // A 1-field tuple type {x : Nat}.
-    let type_: Term = Term::tuple_type([("x", Term::prim(Prim::NatType))]);
+    let type_: Term = Term::tuple_type([(crate::fixture_binder("x"), Term::prim(Prim::NatType))]);
 
     // this = (p.0), that = (q.0). At the 1-field type both denote (a),
     // so conversion should return true.
-    let this: Term = Term::tuple([Term::proj(Term::free_var("p"), 0)]);
-    let that: Term = Term::tuple([Term::proj(Term::free_var("q"), 0)]);
+    let this: Term = Term::tuple([Term::proj(Term::free_var(&crate::fixture_binder("p")), 0)]);
+    let that: Term = Term::tuple([Term::proj(Term::free_var(&crate::fixture_binder("q")), 0)]);
 
     // Even though eta_reduce_tuple widens each 1-tuple to its bare base
     // (`Var p`, `Var q`), the convert loop then routes the neutral pair
@@ -778,17 +932,36 @@ fn convert_partial_projection_tuple_at_narrow_type() {
 fn convert_times_out_on_pathological_inputs() {
     let mut context = context();
 
-    context.define("loop", &Term::free_var("loop"), None);
+    context.define(
+        &crate::fixture_binder("loop"),
+        &Term::free_var(&crate::fixture_binder("loop")),
+        None,
+    );
 
     let this = Term::tuple_type([
         (
-            "x",
-            Term::apply(func(["z"], Term::free_var("z")), [Term::free_var("loop")]),
+            crate::fixture_binder("x"),
+            Term::apply(
+                func(["z"], Term::free_var(&crate::fixture_binder("z"))),
+                [Term::free_var(&crate::fixture_binder("loop"))],
+            ),
         ),
-        ("y", Term::free_var("x")),
+        (
+            crate::fixture_binder("y"),
+            Term::free_var(&crate::fixture_binder("x")),
+        ),
     ]);
 
-    let that = Term::tuple_type([("x", Term::free_var("loop")), ("y", Term::free_var("x"))]);
+    let that = Term::tuple_type([
+        (
+            crate::fixture_binder("x"),
+            Term::free_var(&crate::fixture_binder("loop")),
+        ),
+        (
+            crate::fixture_binder("y"),
+            Term::free_var(&crate::fixture_binder("x")),
+        ),
+    ]);
 
     assert_eq!(
         conv(&mut context, &this, &that),
@@ -804,15 +977,18 @@ fn convert_unit_typed_neutrals_in_type_argument() {
     // r ≡ s by η for the empty tuple (unit / proof irrelevance), so F r ≡ F s.
     // `conv` compares at `Type`, exactly as the pipeline does via `expect`.
     context.assume(
-        "F",
-        &Term::func_type([("_", Term::tuple_type_unit())], Term::type_ground()),
+        &crate::fixture_binder("F"),
+        &Term::func_type(
+            [(crate::fixture_binder("_"), Term::tuple_type_unit())],
+            Term::type_ground(),
+        ),
     );
-    context.assume("r", &Term::tuple_type_unit());
-    context.assume("s", &Term::tuple_type_unit());
+    context.assume(&crate::fixture_binder("r"), &Term::tuple_type_unit());
+    context.assume(&crate::fixture_binder("s"), &Term::tuple_type_unit());
 
-    let f = Term::free_var("F");
-    let r = Term::free_var("r");
-    let s = Term::free_var("s");
+    let f = Term::free_var(&crate::fixture_binder("F"));
+    let r = Term::free_var(&crate::fixture_binder("r"));
+    let s = Term::free_var(&crate::fixture_binder("s"));
 
     let this = Term::apply(f.clone(), [r]); // F r
     let that = Term::apply(f, [s]); // F s
@@ -836,8 +1012,8 @@ fn convert_struct_unit_field_is_irrelevant() {
                 params: Telescope::done(()),
                 fields: Telescope::build(
                     [
-                        ("x", Term::prim(Prim::NatType)),
-                        ("u", Term::tuple_type_unit()),
+                        (crate::fixture_binder("x"), Term::prim(Prim::NatType)),
+                        (crate::fixture_binder("u"), Term::tuple_type_unit()),
                     ],
                     (),
                 ),
@@ -849,11 +1025,11 @@ fn convert_struct_unit_field_is_irrelevant() {
         )
         .unwrap();
 
-    context.assume("r", &Term::tuple_type_unit());
-    context.assume("s", &Term::tuple_type_unit());
+    context.assume(&crate::fixture_binder("r"), &Term::tuple_type_unit());
+    context.assume(&crate::fixture_binder("s"), &Term::tuple_type_unit());
 
-    let r = Term::free_var("r");
-    let s = Term::free_var("s");
+    let r = Term::free_var(&crate::fixture_binder("r"));
+    let s = Term::free_var(&crate::fixture_binder("s"));
 
     // Wrap { 1, r } and Wrap { 1, s } differ only in the unit field's neutral.
     let this = Term::struct_("Wrap", Vec::<Term>::new(), [nat(1), r]);
@@ -881,8 +1057,8 @@ fn convert_variant_unit_payload_is_irrelevant() {
                     InductParam {
                         telescope: Telescope::build(
                             [
-                                ("x", Term::prim(Prim::NatType)),
-                                ("u", Term::tuple_type_unit()),
+                                (crate::fixture_binder("x"), Term::prim(Prim::NatType)),
+                                (crate::fixture_binder("u"), Term::tuple_type_unit()),
                             ],
                             Term::induct_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
                         ),
@@ -897,11 +1073,11 @@ fn convert_variant_unit_payload_is_irrelevant() {
         )
         .unwrap();
 
-    context.assume("r", &Term::tuple_type_unit());
-    context.assume("s", &Term::tuple_type_unit());
+    context.assume(&crate::fixture_binder("r"), &Term::tuple_type_unit());
+    context.assume(&crate::fixture_binder("s"), &Term::tuple_type_unit());
 
-    let r = Term::free_var("r");
-    let s = Term::free_var("s");
+    let r = Term::free_var(&crate::fixture_binder("r"));
+    let s = Term::free_var(&crate::fixture_binder("s"));
 
     // wrap(1, r) and wrap(1, s) differ only in the unit payload's neutral.
     let this = Term::variant("Wrap", Vec::<Term>::new(), "wrap", [nat(1), r]);
@@ -940,7 +1116,10 @@ fn occurs_check_rejects_cyclic_solution() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     // ?0 ≟ (x : ?0) -> Nat  — the candidate mentions ?0 itself.
-    let cyclic = Term::func_type([("x", Term::metavar(0))], Term::prim(Prim::NatType));
+    let cyclic = Term::func_type(
+        [(crate::fixture_binder("x"), Term::metavar(0))],
+        Term::prim(Prim::NatType),
+    );
     assert_eq!(conv(&mut context, &Term::metavar(0), &cyclic), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -952,7 +1131,7 @@ fn scope_check_rejects_out_of_context_variable() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     // ?0 ≟ x  — `x` is not available to ?0.
-    let x = Term::free_var("x");
+    let x = Term::free_var(&crate::fixture_binder("x"));
     assert_eq!(conv(&mut context, &Term::metavar(0), &x), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -961,14 +1140,14 @@ fn scope_check_rejects_out_of_context_variable() {
 fn scope_check_allows_in_context_variable() {
     let mut context = context();
     // Γ = (x : Type); result is Type, and the candidate `x` is in scope.
-    context.assume("x", &Term::type_ground());
+    context.assume(&crate::fixture_binder("x"), &Term::type_ground());
     context.birth_metavar(
         MetaId(0),
-        vec![("x".to_string(), Term::type_ground())],
+        vec![(crate::fixture_binder("x"), Term::type_ground())],
         Term::type_ground(),
     );
 
-    let x = Term::free_var("x");
+    let x = Term::free_var(&crate::fixture_binder("x"));
     let occurrence = Term::metavar_birthed(0, None, vec![x.clone()]);
     assert_eq!(conv(&mut context, &occurrence, &x), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&x));
@@ -979,8 +1158,8 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
     let mut context = context();
     // ?0 : (x : Nat, y : Nat) — a tuple type, born in empty Γ.
     let pair_type = Term::tuple_type([
-        ("x", Term::prim(Prim::NatType)),
-        ("y", Term::prim(Prim::NatType)),
+        (crate::fixture_binder("x"), Term::prim(Prim::NatType)),
+        (crate::fixture_binder("y"), Term::prim(Prim::NatType)),
     ]);
     context.birth_metavar(MetaId(0), Vec::new(), pair_type);
 
@@ -997,8 +1176,8 @@ fn revalidation_rejects_ill_typed_candidate_through_checking() {
     let mut context = context();
     // ?0 : (x : Nat, y : Nat).
     let pair_type = Term::tuple_type([
-        ("x", Term::prim(Prim::NatType)),
-        ("y", Term::prim(Prim::NatType)),
+        (crate::fixture_binder("x"), Term::prim(Prim::NatType)),
+        (crate::fixture_binder("y"), Term::prim(Prim::NatType)),
     ]);
     context.birth_metavar(MetaId(0), Vec::new(), pair_type);
 
@@ -1059,7 +1238,10 @@ fn embedded_metavar_postpones_to_residual() {
 
     // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the
     // solve is postponed; nothing solves ?1, so it stays residual.
-    let candidate = Term::func_type([("x", Term::metavar(1))], Term::prim(Prim::NatType));
+    let candidate = Term::func_type(
+        [(crate::fixture_binder("x"), Term::metavar(1))],
+        Term::prim(Prim::NatType),
+    );
     assert_eq!(conv(&mut context, &Term::metavar(0), &candidate), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -1084,18 +1266,18 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     // Γ = (t : Type) — its result type depends on the refined head, mirroring
     // `m : T(b)`.
     let mut context = context();
-    context.assume("t", &Term::type_ground());
-    context.refine("t", &Term::prim(Prim::NatType));
+    context.assume(&crate::fixture_binder("t"), &Term::type_ground());
+    context.refine(&crate::fixture_binder("t"), &Term::prim(Prim::NatType));
     context.birth_metavar(
         MetaId(0),
-        vec![("t".to_string(), Term::type_ground())],
-        Term::free_var("t"),
+        vec![(crate::fixture_binder("t"), Term::type_ground())],
+        Term::free_var(&crate::fixture_binder("t")),
     );
 
     // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds,
     // but re-validation suppresses refinements, leaving `t` abstract, so `5 : t`
     // fails and the solution is rejected — the program is unsound otherwise.
-    let t = Term::free_var("t");
+    let t = Term::free_var(&crate::fixture_binder("t"));
     let occurrence = Term::metavar_birthed(0, None, vec![t.clone()]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
@@ -1108,16 +1290,17 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     // type is `Nat` directly — it does not depend on the refined head. Re-validation
     // checks `5 : Nat` with refinements suppressed (none are needed) and commits.
     let mut context = context();
-    context.assume("t", &Term::type_ground());
-    context.refine("t", &Term::prim(Prim::NatType));
+    context.assume(&crate::fixture_binder("t"), &Term::type_ground());
+    context.refine(&crate::fixture_binder("t"), &Term::prim(Prim::NatType));
     context.birth_metavar(
         MetaId(0),
-        vec![("t".to_string(), Term::type_ground())],
+        vec![(crate::fixture_binder("t"), Term::type_ground())],
         Term::prim(Prim::NatType),
     );
 
     let nat = Term::prim(Prim::NatType);
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("t")]);
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("t"))]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &nat, &occurrence, &five), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&five));
@@ -1134,26 +1317,40 @@ fn solve_inverts_a_renaming() {
     let mut context = context();
     // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the
     // live name `y` (the enclosing binders were re-closed and reopened).
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y")]);
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("y"))]);
 
     // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named
     // form: `a`, not `y`.
     assert_eq!(
-        conv(&mut context, &occurrence, &Term::free_var("y")),
+        conv(
+            &mut context,
+            &occurrence,
+            &Term::free_var(&crate::fixture_binder("y"))
+        ),
         Ok(true)
     );
     assert_eq!(
         context.metavar_solution(MetaId(0)),
-        Some(&Term::free_var("a"))
+        Some(&Term::free_var(&crate::fixture_binder("a")))
     );
 }
 
 #[test]
 fn solve_through_an_identity_spine_matches_legacy() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("a")]);
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("a"))]);
 
     // The identity spine behaves exactly like the empty (legacy bare-hole)
     // spine: the candidate is stored unchanged.
@@ -1166,18 +1363,28 @@ fn solve_postpones_a_duplicated_renaming() {
     let mut context = context();
     context.birth_metavar(
         MetaId(0),
-        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        vec![
+            (crate::fixture_binder("a"), nat_type()),
+            (crate::fixture_binder("b"), nat_type()),
+        ],
         nat_type(),
     );
     // Both entries are the same live name: which birth binder `y` stands for
     // is ambiguous, so a candidate mentioning it is undecided, not unequal.
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), Term::free_var("y")]);
+    let occurrence = Term::metavar_birthed(
+        0,
+        None,
+        vec![
+            Term::free_var(&crate::fixture_binder("y")),
+            Term::free_var(&crate::fixture_binder("y")),
+        ],
+    );
 
     let outcome = convert_outcome(
         &mut context,
         &Term::type_ground(),
         &occurrence,
-        &Term::free_var("y"),
+        &Term::free_var(&crate::fixture_binder("y")),
     );
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1188,22 +1395,40 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
     let mut context = context();
     context.birth_metavar(
         MetaId(0),
-        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        vec![
+            (crate::fixture_binder("a"), nat_type()),
+            (crate::fixture_binder("b"), nat_type()),
+        ],
         nat_type(),
     );
     // First slot a pattern variable, second a compound term: the candidate
     // may depend on the first but not (yet) on the second.
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
+    let compound: Term = Subterm::Prim(Prim::nat_add(
+        Term::free_var(&crate::fixture_binder("z")),
+        nat(1),
+    ))
+    .into();
+    let occurrence = Term::metavar_birthed(
+        0,
+        None,
+        vec![
+            Term::free_var(&crate::fixture_binder("y")),
+            compound.clone(),
+        ],
+    );
 
     // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
     assert_eq!(
-        conv(&mut context, &occurrence, &Term::free_var("y")),
+        conv(
+            &mut context,
+            &occurrence,
+            &Term::free_var(&crate::fixture_binder("y"))
+        ),
         Ok(true)
     );
     assert_eq!(
         context.metavar_solution(MetaId(0)),
-        Some(&Term::free_var("a"))
+        Some(&Term::free_var(&crate::fixture_binder("a")))
     );
 }
 
@@ -1212,11 +1437,22 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
     let mut context = context();
     context.birth_metavar(
         MetaId(0),
-        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        vec![
+            (crate::fixture_binder("a"), nat_type()),
+            (crate::fixture_binder("b"), nat_type()),
+        ],
         nat_type(),
     );
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound]);
+    let compound: Term = Subterm::Prim(Prim::nat_add(
+        Term::free_var(&crate::fixture_binder("z")),
+        nat(1),
+    ))
+    .into();
+    let occurrence = Term::metavar_birthed(
+        0,
+        None,
+        vec![Term::free_var(&crate::fixture_binder("y")), compound],
+    );
 
     // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot
     // (and is not an occurrence of the whole entry): undecided.
@@ -1224,7 +1460,7 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
         &mut context,
         &Term::type_ground(),
         &occurrence,
-        &Term::free_var("z"),
+        &Term::free_var(&crate::fixture_binder("z")),
     );
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1233,8 +1469,13 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
 #[test]
 fn solve_rejects_an_out_of_image_variable() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y")]);
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("y"))]);
 
     // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard
     // mismatch, not a postponement.
@@ -1242,7 +1483,7 @@ fn solve_rejects_an_out_of_image_variable() {
         &mut context,
         &Term::type_ground(),
         &occurrence,
-        &Term::free_var("z"),
+        &Term::free_var(&crate::fixture_binder("z")),
     );
     assert!(matches!(outcome, Ok(Outcome::Mismatch)));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1253,21 +1494,33 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
     let mut context = context();
     // ?0 is already solved to its own binder, so an occurrence ?0[y] stands
     // for `y` — a perfectly good pattern variable hiding behind a node.
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    context.solve_metavar(MetaId(0), Term::free_var("a"));
-    let entry = Term::metavar_birthed(0, None, vec![Term::free_var("y")]);
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    context.solve_metavar(MetaId(0), Term::free_var(&crate::fixture_binder("a")));
+    let entry = Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("y"))]);
 
-    context.birth_metavar(MetaId(1), vec![("b".into(), nat_type())], nat_type());
+    context.birth_metavar(
+        MetaId(1),
+        vec![(crate::fixture_binder("b"), nat_type())],
+        nat_type(),
+    );
     let occurrence = Term::metavar_birthed(1, None, vec![entry]);
 
     // ?1[?0[y]] ≟ y — the entry resolves to `y` and inverts to `b`.
     assert_eq!(
-        conv(&mut context, &occurrence, &Term::free_var("y")),
+        conv(
+            &mut context,
+            &occurrence,
+            &Term::free_var(&crate::fixture_binder("y"))
+        ),
         Ok(true)
     );
     assert_eq!(
         context.metavar_solution(MetaId(1)),
-        Some(&Term::free_var("b"))
+        Some(&Term::free_var(&crate::fixture_binder("b")))
     );
 }
 
@@ -1276,20 +1529,30 @@ fn solve_abstracts_a_non_pattern_occurrence() {
     let mut context = context();
     context.birth_metavar(
         MetaId(0),
-        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        vec![
+            (crate::fixture_binder("a"), nat_type()),
+            (crate::fixture_binder("b"), nat_type()),
+        ],
         nat_type(),
     );
     // A reduce-stable compound (a tuple is a normal form), matched by the
     // raw spelling; the reduced-spelling case is the next test.
-    let compound = Term::tuple([Term::free_var("z")]);
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
+    let compound = Term::tuple([Term::free_var(&crate::fixture_binder("z"))]);
+    let occurrence = Term::metavar_birthed(
+        0,
+        None,
+        vec![
+            Term::free_var(&crate::fixture_binder("y")),
+            compound.clone(),
+        ],
+    );
 
     // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the
     // non-pattern entry, which abstracts to its birth binder `b`.
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(
         context.metavar_solution(MetaId(0)),
-        Some(&Term::free_var("b"))
+        Some(&Term::free_var(&crate::fixture_binder("b")))
     );
 }
 
@@ -1303,15 +1566,15 @@ fn parked_goals_retry_under_their_frozen_refinements() {
     // frame's counterfactual refinement: `b` reduces to `Nat` via `refine`,
     // not via any definition.
     context.with_frame(|context| {
-        context.assume("b", &Term::type_ground());
-        context.refine("b", &nat_type());
+        context.assume(&crate::fixture_binder("b"), &Term::type_ground());
+        context.refine(&crate::fixture_binder("b"), &nat_type());
         context.park(
             ParkedWork::Conversion(Goal {
                 type_: Term::type_ground(),
-                this: Term::free_var("b"),
+                this: Term::free_var(&crate::fixture_binder("b")),
                 that: nat_type(),
             }),
-            Term::free_var("b"),
+            Term::free_var(&crate::fixture_binder("b")),
         );
     });
 
@@ -1327,14 +1590,14 @@ fn parked_goals_without_their_refinement_mismatch() {
     // Control: the same goal parked without the refinement cannot convert,
     // and the drain reports it at its origin.
     context.with_frame(|context| {
-        context.assume("b", &Term::type_ground());
+        context.assume(&crate::fixture_binder("b"), &Term::type_ground());
         context.park(
             ParkedWork::Conversion(Goal {
                 type_: Term::type_ground(),
-                this: Term::free_var("b"),
+                this: Term::free_var(&crate::fixture_binder("b")),
                 that: nat_type(),
             }),
-            Term::free_var("b"),
+            Term::free_var(&crate::fixture_binder("b")),
         );
     });
 
@@ -1346,27 +1609,45 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
     let mut context = context();
     context.birth_metavar(
         MetaId(0),
-        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        vec![
+            (crate::fixture_binder("a"), nat_type()),
+            (crate::fixture_binder("b"), nat_type()),
+        ],
         nat_type(),
     );
     // `z + 1` successor-peels under reduction, and the candidate side arrives
     // reduced — each subject contributes both spellings, so the occurrence
     // still abstracts, and the round-trip verification accepts the pair by
     // definitional (not syntactic) equality.
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
+    let compound: Term = Subterm::Prim(Prim::nat_add(
+        Term::free_var(&crate::fixture_binder("z")),
+        nat(1),
+    ))
+    .into();
+    let occurrence = Term::metavar_birthed(
+        0,
+        None,
+        vec![
+            Term::free_var(&crate::fixture_binder("y")),
+            compound.clone(),
+        ],
+    );
 
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(
         context.metavar_solution(MetaId(0)),
-        Some(&Term::free_var("b"))
+        Some(&Term::free_var(&crate::fixture_binder("b")))
     );
 }
 
 #[test]
 fn flex_flex_same_id_converts_through_equal_spines() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
 
     // Two occurrences of the same unsolved metavariable whose spines differ
     // syntactically but agree definitionally (`1 + 1` reduces to `2`): the
@@ -1382,7 +1663,11 @@ fn flex_flex_same_id_converts_through_equal_spines() {
 #[test]
 fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
 
     // Disagreeing spines are not *unequal* — the solution may ignore the
     // slot — so the pair parks rather than mismatching.
@@ -1403,11 +1688,19 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     // is built, this test should flip to `Converts` with `?0` solved to an
     // occurrence of `?1` (and this comment retired).
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    context.birth_metavar(MetaId(1), vec![("b".into(), nat_type())], nat_type());
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    context.birth_metavar(
+        MetaId(1),
+        vec![(crate::fixture_binder("b"), nat_type())],
+        nat_type(),
+    );
 
-    let this = Term::metavar_birthed(0, None, vec![Term::free_var("x")]);
-    let that = Term::metavar_birthed(1, None, vec![Term::free_var("x")]);
+    let this = Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("x"))]);
+    let that = Term::metavar_birthed(1, None, vec![Term::free_var(&crate::fixture_binder("x"))]);
 
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &this, &that);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
@@ -1418,8 +1711,16 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
 #[test]
 fn rollback_solutions_unwinds_to_the_mark() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    context.birth_metavar(MetaId(1), vec![("a".into(), nat_type())], nat_type());
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    context.birth_metavar(
+        MetaId(1),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
 
     context.solve_metavar(MetaId(0), nat(1));
     let mark = context.solution_mark();
@@ -1437,8 +1738,12 @@ fn rollback_solutions_unwinds_to_the_mark() {
 #[test]
 fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    let m = Term::metavar_birthed(0, None, vec![Term::free_var("a")]);
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    let m = Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("a"))]);
     let stuck: Term = Subterm::Prim(Prim::NatSub(m.clone(), nat(1))).into();
 
     // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the
@@ -1459,8 +1764,12 @@ fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
 #[test]
 fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     let mut context = context();
-    context.birth_metavar(MetaId(0), vec![("a".into(), nat_type())], nat_type());
-    let m = Term::metavar_birthed(0, None, vec![Term::free_var("a")]);
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("a"), nat_type())],
+        nat_type(),
+    );
+    let m = Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("a"))]);
 
     // An inductive type against `Nat` is provably unequal whatever `?0` becomes —
     // the heads are rigid — so the mismatch stays hard (and is reported at
@@ -1478,22 +1787,31 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
 #[test]
 fn arm_refinement_does_not_taint_a_committed_solution() {
     let mut context = context();
-    context.assume("n", &nat_type());
-    context.birth_metavar(MetaId(0), vec![("n".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("n")]);
+    context.assume(&crate::fixture_binder("n"), &nat_type());
+    context.birth_metavar(
+        MetaId(0),
+        vec![(crate::fixture_binder("n"), nat_type())],
+        nat_type(),
+    );
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::free_var(&crate::fixture_binder("n"))]);
 
     // Inside a frame that counterfactually refines `n := 0` (a match arm),
     // the goal `?0[n] ≈ n` still discharges — but the *committed* solution is
     // the refinement-free `n`, not the arm-local `0`: a metavariable must not
     // be pinned to a value that holds only counterfactually inside the arm.
     let converts = context.with_frame(|context| {
-        context.refine("n", &nat(0));
-        conv(context, &occurrence, &Term::free_var("n"))
+        context.refine(&crate::fixture_binder("n"), &nat(0));
+        conv(
+            context,
+            &occurrence,
+            &Term::free_var(&crate::fixture_binder("n")),
+        )
     });
     assert_eq!(converts, Ok(true));
     assert_eq!(
         context.metavar_solution(MetaId(0)),
-        Some(&Term::free_var("n"))
+        Some(&Term::free_var(&crate::fixture_binder("n")))
     );
 }
 
@@ -1531,8 +1849,8 @@ fn register_lst(context: &mut Context) {
             "Lst",
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::build([("A", Term::type_ground())], ()),
-                indices: Telescope::build([("A", Term::type_ground())], ()),
+                params: Telescope::build([(crate::fixture_binder("A"), Term::type_ground())], ()),
+                indices: Telescope::build([(crate::fixture_binder("A"), Term::type_ground())], ()),
                 constructors: Vec::new(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
@@ -1550,9 +1868,12 @@ fn register_vec(context: &mut Context) {
             "Vec",
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::build([("T", Term::type_ground())], ()),
+                params: Telescope::build([(crate::fixture_binder("T"), Term::type_ground())], ()),
                 indices: Telescope::build(
-                    [("T", Term::type_ground()), ("n", Term::prim(Prim::NatType))],
+                    [
+                        (crate::fixture_binder("T"), Term::type_ground()),
+                        (crate::fixture_binder("n"), Term::prim(Prim::NatType)),
+                    ],
                     (),
                 ),
                 constructors: Vec::new(),
@@ -1567,7 +1888,10 @@ fn register_vec(context: &mut Context) {
 
 /// The kind `(Type) -> Type`.
 fn type_to_type() -> Term {
-    Term::func_type([("A", Term::type_ground())], Term::type_ground())
+    Term::func_type(
+        [(crate::fixture_binder("A"), Term::type_ground())],
+        Term::type_ground(),
+    )
 }
 
 #[test]
@@ -1625,7 +1949,10 @@ fn imitation_splits_params_and_indices() {
         MetaId(0),
         Vec::new(),
         Term::func_type(
-            [("T", Term::type_ground()), ("n", Term::prim(Prim::NatType))],
+            [
+                (crate::fixture_binder("T"), Term::type_ground()),
+                (crate::fixture_binder("n"), Term::prim(Prim::NatType)),
+            ],
             Term::type_ground(),
         ),
     );
@@ -1651,11 +1978,17 @@ fn imitation_solves_against_struct_type() {
             StructDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::build(
-                    [("A", Term::type_ground()), ("B", Term::type_ground())],
+                    [
+                        (crate::fixture_binder("A"), Term::type_ground()),
+                        (crate::fixture_binder("B"), Term::type_ground()),
+                    ],
                     (),
                 ),
                 fields: Telescope::build(
-                    [("A", Term::type_ground()), ("B", Term::type_ground())],
+                    [
+                        (crate::fixture_binder("A"), Term::type_ground()),
+                        (crate::fixture_binder("B"), Term::type_ground()),
+                    ],
                     (),
                 ),
                 result_sort: Term::type_ground(),
@@ -1669,7 +2002,10 @@ fn imitation_solves_against_struct_type() {
         MetaId(0),
         Vec::new(),
         Term::func_type(
-            [("A", Term::type_ground()), ("B", Term::type_ground())],
+            [
+                (crate::fixture_binder("A"), Term::type_ground()),
+                (crate::fixture_binder("B"), Term::type_ground()),
+            ],
             Term::type_ground(),
         ),
     );
@@ -1714,12 +2050,12 @@ fn imitation_non_function_birth_type_blocks() {
 fn imitation_leaves_rigid_apply_pairs_alone() {
     let mut context = context();
     register_lst(&mut context);
-    context.assume("f", &type_to_type());
+    context.assume(&crate::fixture_binder("f"), &type_to_type());
 
     // A *rigid* stuck application against a nominal type is not the imitation
     // case: the guard falls back to the neutral path, which cannot equate
     // them — a definite mismatch, exactly as before the rule existed.
-    let stuck = Term::apply(Term::free_var("f"), [nat_type()]);
+    let stuck = Term::apply(Term::free_var(&crate::fixture_binder("f")), [nat_type()]);
     let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
 }

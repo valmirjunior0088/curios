@@ -33,11 +33,16 @@ fn witnesses_sharing_a_module_stay_distinct() {
 }
 
 // A global and a local are different kinds of thing, not two spellings — the
-// distinction `has_local_free` currently draws by testing for a marker
-// character, and which a marker collision has already broken once.
+// distinction `has_local_free` used to draw by testing for a marker character,
+// and which a marker collision has already broken once.
 #[test]
 fn a_global_never_equals_a_local() {
-    assert_ne!(Free::Global(authored(["std", "Nat"])), Free::Local(Mint(0)),);
+    assert_ne!(
+        Free::Global(authored(["std", "Nat"])),
+        Free::local(0, Some("Nat")),
+    );
+    assert!(Free::local(0, None).is_local());
+    assert!(!Free::Global(authored(["std", "Nat"])).is_local());
 }
 
 // Identity is the qualifier's segments, not its rendered spelling: `/Foo/bar`
@@ -53,11 +58,27 @@ fn segment_structure_decides_identity_not_rendered_text() {
 }
 
 // Distinct mints are distinct identities regardless of what a binder chose to
-// call itself: the hint lives on the binder, so it cannot make two identities
+// call itself: the hint is display metadata, so it cannot make two identities
 // collide or one identity split.
 #[test]
 fn mints_are_identities_independent_of_any_hint() {
-    let mints = (0..64).map(|n| Free::Local(Mint(n)));
+    let mints = (0..64).map(|n| Free::local(n, Some("x")));
 
     assert_eq!(mints.collect::<HashSet<_>>().len(), 64);
+}
+
+// The half of that law the collection test cannot see: one identity under two
+// hints is one binder, everywhere identity is consulted.
+#[test]
+fn a_hint_never_splits_one_identity() {
+    let written = Mint::new(7, Some("xs"));
+    let rebuilt = Mint::new(7, None);
+
+    assert_eq!(written, rebuilt);
+    assert_eq!(
+        HashSet::from([Free::Local(written.clone()), Free::Local(rebuilt)]).len(),
+        1
+    );
+    assert_eq!(written.hint(), Some("xs"));
+    assert_eq!(written.with_hint(Some("ys")).hint(), Some("ys"));
 }

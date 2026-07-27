@@ -27,6 +27,21 @@ fn syntax() -> &'static crate::SyntaxRegistry {
     &SYNTAX
 }
 
+/// A top-level definition's identity, from the path a test writes. Fixture-only
+/// — production code carries the `Qualifier` from resolution instead of
+/// recovering it from a spelling.
+fn global(path: &str) -> curios_core::Free {
+    curios_core::Free::global(curios_base::Qualifier::from(
+        path.trim_start_matches('/').split('/'),
+    ))
+}
+
+fn global_name(path: &str) -> curios_core::Global {
+    curios_core::Global::Authored(curios_base::Qualifier::from(
+        path.trim_start_matches('/').split('/'),
+    ))
+}
+
 fn run(src: &str) -> curios_core::Term {
     let (module, _, _, _) = super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
@@ -219,7 +234,9 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name == "/id" => Some(definition),
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/id" => {
+                Some(definition)
+            }
             _ => None,
         })
         .unwrap();
@@ -281,12 +298,12 @@ fn inductive_constructor_ownership_is_explicit() {
         schemes,
         vec![
             (
-                "/Result".into(),
+                global_name("/Result"),
                 curios_core::DefinitionKind::InductiveType,
                 2,
             ),
             (
-                "/Result/success".into(),
+                global_name("/Result/success"),
                 curios_core::DefinitionKind::InductiveConstructor {
                     owner: curios_base::Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("success"),
@@ -294,7 +311,7 @@ fn inductive_constructor_ownership_is_explicit() {
                 2,
             ),
             (
-                "/Result/failure".into(),
+                global_name("/Result/failure"),
                 curios_core::DefinitionKind::InductiveConstructor {
                     owner: curios_base::Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("failure"),
@@ -321,7 +338,9 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name == "/outer" => Some(definition),
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+                Some(definition)
+            }
             _ => None,
         })
         .unwrap();
@@ -342,7 +361,9 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name == "/outer" => Some(definition),
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+                Some(definition)
+            }
             _ => None,
         })
         .unwrap();
@@ -357,7 +378,7 @@ fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name == name => {
+            curios_core::Item::Let(definition) if definition.name.symbol() == name => {
                 Some(definition.universe_context.parameter_count)
             }
             // An inductive and its constructors are one recursive group, so a
@@ -365,7 +386,7 @@ fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
             curios_core::Item::Rec(rec) => rec
                 .definitions()
                 .iter()
-                .find(|definition| definition.name == name)
+                .find(|definition| definition.name.symbol() == name)
                 .map(|definition| definition.universe_context.parameter_count),
             _ => None,
         })
@@ -434,10 +455,10 @@ fn single_let_binding() {
             x
         "#),
         curios_core::Term::let_(
-            "/x",
+            &global("/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/x"))
+            curios_core::Term::var(curios_core::Var::free(global("/x")))
         ),
     );
 }
@@ -452,10 +473,10 @@ fn nested_module_binding_reference() {
             Foo/f
         "#),
         curios_core::Term::let_(
-            "/Foo/f",
+            &global("/Foo/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/Foo/f"))
+            curios_core::Term::var(curios_core::Var::free(global("/Foo/f")))
         ),
     );
 }
@@ -470,10 +491,10 @@ fn module_named_after_type_resolves_by_qualified_path() {
             Nat/double
         "#),
         curios_core::Term::let_(
-            "/Nat/double",
+            &global("/Nat/double"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/Nat/double"))
+            curios_core::Term::var(curios_core::Var::free(global("/Nat/double")))
         ),
     );
 }
@@ -491,10 +512,10 @@ fn use_shorthand_resolves_qualifier() {
             Bar/f
         "#),
         curios_core::Term::let_(
-            "/Foo/Bar/f",
+            &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
+            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
         ),
     );
 }
@@ -614,10 +635,10 @@ fn pub_use_exposes_qualifier() {
             MyMod/Bar/f
         "#),
         curios_core::Term::let_(
-            "/Foo/Bar/f",
+            &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
+            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
         ),
     );
 }
@@ -658,10 +679,10 @@ fn use_of_pub_use_path_resolves_through_alias() {
             Bar/f
         "#),
         curios_core::Term::let_(
-            "/Foo/Bar/f",
+            &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
+            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
         ),
     );
 }
@@ -684,10 +705,10 @@ fn chained_pub_use_re_exports_transitively() {
             C/X/f
         "#),
         curios_core::Term::let_(
-            "/A/X/f",
+            &global("/A/X/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/A/X/f"))
+            curios_core::Term::var(curios_core::Var::free(global("/A/X/f")))
         ),
     );
 }
@@ -713,10 +734,10 @@ fn chained_re_export_resolves_out_of_order() {
             A/x
         "#),
         curios_core::Term::let_(
-            "/C/x",
+            &global("/C/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/C/x"))
+            curios_core::Term::var(curios_core::Var::free(global("/C/x")))
         ),
     );
 }
@@ -784,10 +805,10 @@ fn deep_facade_traversal_through_re_exported_module() {
             x
         "#),
         curios_core::Term::let_(
-            "/B/M/x",
+            &global("/B/M/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/B/M/x"))
+            curios_core::Term::var(curios_core::Var::free(global("/B/M/x")))
         ),
     );
 }
@@ -809,10 +830,10 @@ fn re_exports_from_own_private_child() {
             helper
         "#),
         curios_core::Term::let_(
-            "/Facade/Impl/helper",
+            &global("/Facade/Impl/helper"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free("/Facade/Impl/helper"))
+            curios_core::Term::var(curios_core::Var::free(global("/Facade/Impl/helper")))
         ),
     );
 }
@@ -857,7 +878,13 @@ fn re_exports_inductive_constructor_by_name() {
         A
     "#);
 
-    assert!(format!("{term:?}").contains("Foo/U/A"));
+    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug`
+    // shows its segments, deliberately, so that `/Foo/bar` and a single
+    // segment spelled `Foo/bar` never look alike in a dump.
+    assert!(
+        format!("{term}").contains("Foo/U/A"),
+        "unexpected term: {term}"
+    );
 }
 
 #[test]
@@ -876,7 +903,13 @@ fn re_exports_inductive_constructors_by_glob() {
         A
     "#);
 
-    assert!(format!("{term:?}").contains("Foo/U/A"));
+    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug`
+    // shows its segments, deliberately, so that `/Foo/bar` and a single
+    // segment spelled `Foo/bar` never look alike in a dump.
+    assert!(
+        format!("{term}").contains("Foo/U/A"),
+        "unexpected term: {term}"
+    );
 }
 
 #[test]
@@ -970,7 +1003,13 @@ fn private_inductive_with_public_representation_can_export_constructor_facade() 
         A
     "#);
 
-    assert!(format!("{term:?}").contains("Foo/U/A"));
+    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug`
+    // shows its segments, deliberately, so that `/Foo/bar` and a single
+    // segment spelled `Foo/bar` never look alike in a dump.
+    assert!(
+        format!("{term}").contains("Foo/U/A"),
+        "unexpected term: {term}"
+    );
 }
 
 #[test]
@@ -1662,7 +1701,9 @@ fn module_member_is_not_classified_as_a_generated_nominal_member() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name == "/Foo/bar" => Some(definition),
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/Foo/bar" => {
+                Some(definition)
+            }
             _ => None,
         })
         .expect("module member definition");
@@ -1808,14 +1849,14 @@ fn use_glob_imports_all_public_bindings() {
             x
         "#),
         curios_core::Term::let_(
-            "/Foo/x",
+            &global("/Foo/x"),
             written_type(0),
             written_type(1),
             curios_core::Term::let_(
-                "/Foo/y",
+                &global("/Foo/y"),
                 written_type(2),
                 written_type(3),
-                curios_core::Term::var(curios_core::Var::free("/Foo/x"))
+                curios_core::Term::var(curios_core::Var::free(global("/Foo/x")))
             )
         ),
     );
@@ -1963,12 +2004,21 @@ fn bang_desugars_through_syn_monad_bind() {
     // continuation over a gensym'd binder. The witness slot and implicits are
     // inserted during core elaboration.
     let expected = curios_core::Term::apply(
-        curios_core::Term::var(curios_core::Var::free("/syn/Monad/bind")),
+        curios_core::Term::var(curios_core::Var::free(global("/syn/Monad/bind"))),
         [
-            curios_core::Term::var(curios_core::Var::free("x")),
+            // `x` resolves to nothing, so it lowers to a binder identity that
+            // core will report as unbound — never to a global that a same-named
+            // root-level definition could satisfy.
+            curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
+                0,
+                Some("x"),
+            ))),
             curios_core::Term::func(
-                [("#0".to_string(), curios_core::Term::metavar(0))],
-                curios_core::Term::var(curios_core::Var::free("#0")),
+                [(
+                    curios_core::Free::local(1, None),
+                    curios_core::Term::metavar(0),
+                )],
+                curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(1, None))),
             ),
         ],
     );
@@ -2272,14 +2322,27 @@ fn glob_does_not_import_subtree_private_bindings() {
         Type
     "#);
 
-    let term = format!("{term:?}");
+    // The reference is left for core to reject. What it must *not* be is any
+    // global: `/Owner/helper` would mean the glob leaked a private binding, and
+    // a root-level `/helper` would silently capture an entry-module definition
+    // of the same name. A binder identity can be neither.
+    // The reference is left for core to reject. What it must *not* be is any
+    // global: `/Owner/helper` would mean the glob leaked a private binding, and
+    // a root-level `/helper` would silently capture an entry-module definition
+    // of the same name. A binder identity can be neither.
+    let dumped = format!("{term:?}");
     assert!(
-        term.contains("Opaque(\"helper\")"),
-        "unexpected term: {term}"
+        dumped.contains("Local(Mint { index: 0, hint: Some(\"helper\") })"),
+        "unexpected term: {dumped}"
     );
-    assert!(
-        !term.contains("Opaque(\"/Owner/helper\")"),
-        "unexpected term: {term}"
+    // `/Owner/helper` occurs exactly once — as the binder the declaration
+    // introduces. A second occurrence would be the reference resolving to it.
+    assert_eq!(
+        dumped
+            .matches("Authored(Qualifier([\"Owner\", \"helper\"]))")
+            .count(),
+        1,
+        "the glob leaked a private binding: {dumped}"
     );
 }
 
@@ -2343,7 +2406,7 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
         module
             .items
             .iter()
-            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name == "/outer")),
+            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.symbol() == "/outer")),
         "outer elaborated"
     );
 }
