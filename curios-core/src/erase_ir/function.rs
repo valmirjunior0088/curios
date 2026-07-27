@@ -174,19 +174,10 @@ impl Lowering {
         // polymorphic domain is instantiated at a prop here; the kept walk
         // erases against the instantiated (dependent) domain.
         let mask = erasure_mask(context, ft.clone())?;
-        let mut arguments = Vec::with_capacity(params.len());
-        let mut telescope = ft;
-        for (index, value) in params.iter().enumerate() {
-            match telescope {
-                Telescope::Cons(type_, rest) => {
-                    if !mask[index] {
-                        arguments.push(emitted!(self.kept_operand(context, value, &type_)?));
-                    }
-                    telescope = rest.open(&[value]);
-                }
-                Telescope::Done(_) => unreachable!("erase_ir: arity checked by elaborate"),
-            }
-        }
+        let arguments = match self.masked_fields(context, &mask, ft, params)? {
+            Ok(arguments) => arguments,
+            Err(diverged) => return Ok(diverged),
+        };
 
         Ok(self.bind(hint, curios_ersd::Rhs::Apply { callee, arguments }))
     }

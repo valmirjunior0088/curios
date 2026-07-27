@@ -12,8 +12,8 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, InductDecl, Item, Let, Module, Subterm, Term,
-        emitted, prim,
+        Binding, Bound, Context, Environment, Error, InductDecl, Item, Let, Module, Subterm,
+        Telescope, Term, emitted, prim,
     },
     crate::{
         Concept, Definition, Free, Global, InductParam, StructDecl, project_erased_universes,
@@ -305,6 +305,41 @@ impl Lowering {
     /// The unit constant — the value of a retained-but-erased slot.
     pub(super) fn unit(&mut self) -> curios_ersd::Atom {
         curios_ersd::Atom::Constant(self.builder.constant(curios_ersd::Constant::Unit))
+    }
+
+    /// Erase each value against its telescope domain under `mask`, opening the
+    /// telescope with the un-erased value so later dependent domains stay
+    /// correct. Erasable slots are dropped entirely; kept slots erase through
+    /// [`kept_operand`](Self::kept_operand).
+    ///
+    /// The one walk that consumes a signature mask, shared by every site that
+    /// fills a telescope: struct, variant, and tuple construction, and the
+    /// argument list of an application. Its slot-for-slot agreement with
+    /// [`erasure_mask`](super::erasure_mask) is what fixes a function's runtime
+    /// arity, so it must stay a single implementation.
+    pub(super) fn masked_fields<B: Bound>(
+        &mut self,
+        context: &mut Context,
+        mask: &[bool],
+        mut telescope: Telescope<B>,
+        values: &[Term],
+    ) -> Result<Result<Vec<curios_ersd::Atom>, Outcome>, Error> {
+        let mut atoms = Vec::with_capacity(values.len());
+        for (index, value) in values.iter().enumerate() {
+            match telescope {
+                Telescope::Cons(type_, rest) => {
+                    if !mask[index] {
+                        match self.kept_operand(context, value, &type_)? {
+                            Outcome::Emitted(atom) => atoms.push(atom),
+                            diverged => return Ok(Err(diverged)),
+                        }
+                    }
+                    telescope = rest.open(&[value]);
+                }
+                Telescope::Done(_) => unreachable!("erase_ir: arity checked by elaborate"),
+            }
+        }
+        Ok(Ok(atoms))
     }
 
     /// Erase one expression to an operand. `expected` is the type the

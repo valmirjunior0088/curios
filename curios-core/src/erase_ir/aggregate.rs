@@ -144,35 +144,6 @@ impl Lowering {
         schema
     }
 
-    /// Erase each value against its telescope domain under `mask`, opening the
-    /// telescope with the un-erased value so later dependent domains stay
-    /// correct. Erasable slots are dropped entirely; kept slots erase through
-    /// [`kept_operand`](Self::kept_operand).
-    fn masked_fields<B: super::Bound>(
-        &mut self,
-        context: &mut Context,
-        mask: &[bool],
-        mut telescope: Telescope<B>,
-        values: &[Term],
-    ) -> Result<Result<Vec<curios_ersd::Atom>, Outcome>, Error> {
-        let mut atoms = Vec::with_capacity(values.len());
-        for (index, value) in values.iter().enumerate() {
-            match telescope {
-                Telescope::Cons(type_, rest) => {
-                    if !mask[index] {
-                        match self.kept_operand(context, value, &type_)? {
-                            Outcome::Emitted(atom) => atoms.push(atom),
-                            diverged => return Ok(Err(diverged)),
-                        }
-                    }
-                    telescope = rest.open(&[value]);
-                }
-                Telescope::Done(_) => unreachable!("erase_ir: arity checked by elaborate"),
-            }
-        }
-        Ok(Ok(atoms))
-    }
-
     /// Lower a tuple against its checked tuple type. Erasable fields drop; a
     /// type left with one relevant field collapses to it, whether or not a drop
     /// produced that width — the same relevant-arity rule [`struct_row`]
