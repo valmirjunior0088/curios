@@ -16,8 +16,8 @@ use {
         emitted, prim,
     },
     crate::{
-        Concept, Definition, Free, Global, InductParam, RecItem, StructDecl,
-        project_erased_universes, validate_bound_universes, validate_universes,
+        Concept, Definition, Free, Global, InductParam, StructDecl, project_erased_universes,
+        validate_bound_universes, validate_universes,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -161,9 +161,11 @@ fn project_module(module: &Module) -> Module {
             .iter()
             .map(|item| match item {
                 Item::Let(definition) => Item::Let(project_definition(definition)),
-                Item::Rec(rec) => Item::Rec(RecItem::new(
-                    rec.definitions().iter().map(project_definition).collect(),
-                )),
+                // Projected in place. Opening the group and re-closing it
+                // rebuilds every node twice over and discards every memoized
+                // derivation on the way, where the rewrite itself is uniform
+                // under the group's own binders and needs neither.
+                Item::Rec(rec) => Item::Rec(rec.projected()),
             })
             .collect(),
         universe_seeds: Vec::new(),

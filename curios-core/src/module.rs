@@ -100,6 +100,20 @@ pub struct RecItem {
 }
 
 impl RecItem {
+    /// This group with universe data projected out of every member, in place.
+    ///
+    /// The universe context is cleared here as it is on a [`Definition`]: the
+    /// projection's whole purpose is that no universe data survives into Ersd.
+    pub(crate) fn projected(&self) -> Self {
+        Self {
+            definitions: self.definitions.clone(),
+            group: self
+                .group
+                .map_members(crate::project_erased_universes)
+                .with_universe_context(UniverseContext::empty()),
+        }
+    }
+
     pub fn new(definitions: Vec<Definition>) -> Self {
         Self::try_new(definitions).expect("a recursive group has one valid universe context")
     }
@@ -317,9 +331,23 @@ impl Module {
                 .iter()
                 .map(|item| match item {
                     Item::Let(let_) => Item::Let(definition(let_)),
-                    Item::Rec(rec) => Item::Rec(RecItem::new(
-                        rec.definitions().iter().map(definition).collect(),
-                    )),
+                    Item::Rec(rec) => Item::Rec(RecItem {
+                        definitions: rec
+                            .definitions
+                            .iter()
+                            .map(|member| RecDefinition {
+                                name: member.name.clone(),
+                                kind: member.kind.clone(),
+                                island: member.island.clone(),
+                                root: member.root,
+                            })
+                            .collect(),
+                        // Mapped in place rather than opened and re-closed: the
+                        // round trip rebuilds every node twice and drops every
+                        // memoized derivation with it, and the rebuilt nodes
+                        // would escape this very pass.
+                        group: rec.group.map_members(|term| sharing.share(term)),
+                    }),
                 })
                 .collect(),
             universe_seeds: self.universe_seeds.clone(),

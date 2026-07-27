@@ -988,7 +988,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             cases,
         }) => Subterm::Match(Match {
             head: zonk_term(context, head)?,
-            motive: motive.map_body(|b| zonk_term(context, b))?,
+            motive: motive.try_map_body(|b| zonk_term(context, b))?,
             cases: match cases {
                 Cases::Bool {
                     false_case,
@@ -1004,7 +1004,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                             cons_case,
                         } => Carrier::Nat {
                             empty_case: zonk_term(context, empty_case)?,
-                            cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
+                            cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
                         },
                         Carrier::Bin {
                             grain,
@@ -1013,7 +1013,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         } => Carrier::Bin {
                             grain: *grain,
                             empty_case: zonk_term(context, empty_case)?,
-                            cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
+                            cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
                         },
                         Carrier::Lst {
                             elem,
@@ -1022,7 +1022,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         } => Carrier::Lst {
                             elem: zonk_term(context, elem)?,
                             empty_case: zonk_term(context, empty_case)?,
-                            cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
+                            cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
                         },
                     },
                 },
@@ -1039,7 +1039,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         .map(|(atom, arm)| {
                             Ok((
                                 atom.clone(),
-                                arm.with_body(arm.body.map_body(|b| zonk_term(context, b))?),
+                                arm.with_body(arm.body.try_map_body(|b| zonk_term(context, b))?),
                             ))
                         })
                         .collect::<Result<_, Error>>()?,
@@ -1061,7 +1061,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
-            tail: tail.map_body(|b| zonk_term(context, b))?,
+            tail: tail.try_map_body(|b| zonk_term(context, b))?,
         }),
 
         Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
@@ -1070,14 +1070,14 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     .iter()
                     .map(|member| {
                         Ok(super::RecMemberScopes {
-                            type_: member.type_.map_body(|t| zonk_term(context, t))?,
-                            body: member.body.map_body(|b| zonk_term(context, b))?,
+                            type_: member.type_.try_map_body(|t| zonk_term(context, t))?,
+                            body: member.body.try_map_body(|b| zonk_term(context, b))?,
                         })
                     })
                     .collect::<Result<_, Error>>()?,
             )
             .with_universe_context(group.universe_context().clone()),
-            tail: tail.map_body(|b| zonk_term(context, b))?,
+            tail: tail.try_map_body(|b| zonk_term(context, b))?,
         }),
 
         Subterm::RecMember(member) => Subterm::RecMember(super::RecMember {
@@ -1087,8 +1087,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     .iter()
                     .map(|scopes| {
                         Ok(super::RecMemberScopes {
-                            type_: scopes.type_.map_body(|t| zonk_term(context, t))?,
-                            body: scopes.body.map_body(|b| zonk_term(context, b))?,
+                            type_: scopes.type_.try_map_body(|t| zonk_term(context, t))?,
+                            body: scopes.body.try_map_body(|b| zonk_term(context, b))?,
                         })
                     })
                     .collect::<Result<_, Error>>()?,

@@ -528,8 +528,23 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// Rebuild this scope with `f` applied to its body, preserving arity and
     /// binder names. The body keeps its de Bruijn structure, so `f` must be a
     /// transformation that does not disturb loose indices — e.g. zonking, which
-    /// only replaces closed metavariable nodes by closed solutions.
-    pub(crate) fn map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
+    /// only replaces closed metavariable nodes by closed solutions, or a
+    /// canonicalization, which replaces a node by a structurally equal one.
+    ///
+    /// Rewriting here rather than opening and re-closing is what keeps a term's
+    /// memoized derivations: `open` and `close` each rebuild every node they
+    /// touch, so the round trip discards all of them to arrive where this
+    /// arrives without moving.
+    pub(crate) fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
+        Self {
+            arity: self.arity,
+            names: self.names.clone(),
+            body: f(&self.body).into(),
+        }
+    }
+
+    /// Fallible [`Self::map_body`], for a rewrite that can reject its input.
+    pub(crate) fn try_map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
         Ok(Self {
             arity: self.arity,
             names: self.names.clone(),
@@ -886,7 +901,7 @@ impl Telescope<Term> {
             Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
             Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
                 zonk_term(context, ty)?,
-                rest.map_body(|inner| inner.zonk(context))?,
+                rest.try_map_body(|inner| inner.zonk(context))?,
             )),
         }
     }
@@ -935,7 +950,7 @@ impl Telescope<()> {
             Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
             Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
                 zonk_term(context, ty)?,
-                rest.map_body(|inner| inner.zonk(context))?,
+                rest.try_map_body(|inner| inner.zonk(context))?,
             )),
         }
     }

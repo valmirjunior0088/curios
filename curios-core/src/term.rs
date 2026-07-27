@@ -2336,6 +2336,28 @@ impl RecGroup {
         }
     }
 
+    /// This group with every member's closed scopes rewritten in place.
+    ///
+    /// The bodies stay closed throughout. Terms under a scope carry loose de
+    /// Bruijn indices, and two structurally identical such terms — indices
+    /// included — denote the same thing at the same depth, so canonicalizing
+    /// them together is sound without opening.
+    pub(crate) fn map_members(&self, mut map: impl FnMut(&Term) -> Term) -> Self {
+        Self {
+            scheme: UniverseScheme {
+                context: self.scheme.context.clone(),
+                value: Rc::new(
+                    self.iter()
+                        .map(|member| RecMemberScopes {
+                            type_: member.type_.map_body(&mut map),
+                            body: member.body.map_body(&mut map),
+                        })
+                        .collect(),
+                ),
+            },
+        }
+    }
+
     pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
         self.scheme.value.iter()
     }
@@ -2391,10 +2413,10 @@ impl RecGroup {
                     .iter()
                     .map(|member| {
                         Ok(RecMemberScopes {
-                            type_: member.type_.map_body(|body| {
+                            type_: member.type_.try_map_body(|body| {
                                 instantiate_universe_levels_scoped(body, arguments)
                             })?,
-                            body: member.body.map_body(|body| {
+                            body: member.body.try_map_body(|body| {
                                 instantiate_universe_levels_scoped(body, arguments)
                             })?,
                         })
