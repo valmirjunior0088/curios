@@ -323,10 +323,6 @@ pub struct Context {
     island: Option<Qualifier>,
 }
 
-// Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
-// interior mutability warning. However, the logical value is fully immutable, and the
-// hash/equality check remains stable.
-#[allow(clippy::mutable_key_type)]
 impl Context {
     // The deadline is set once at construction and shared across every
     // `reduce`/`convert`/`infer`/`erase` call that uses this context, so the
@@ -624,6 +620,11 @@ impl Context {
         self.witness_marks.push(self.witness_scope.len());
     }
 
+    // Safety: the popped refinement frames are keyed on `Term`, which carries
+    // `OnceCell` scalar caches and so trips Clippy's interior-mutability
+    // warning. The logical value is fully immutable, and hashing and equality
+    // stay stable across those caches filling.
+    #[allow(clippy::mutable_key_type)]
     fn leave_frame(&mut self) {
         self.locals_stamp.fresh();
         self.assumptions.pop().unwrap();
