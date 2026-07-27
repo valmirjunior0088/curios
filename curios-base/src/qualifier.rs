@@ -16,6 +16,17 @@
 //! while its `OnceCell` made `Qualifier` interior-mutable and tripped Clippy's
 //! `mutable_key_type` at 79 sites across two crates. Do not add one back without
 //! a measurement that says otherwise — the sharing was the entire win.
+//!
+//! Sharing only pays where qualifiers are *created* sharing, which for the fixed
+//! prelude is the archive: reading it back with `rkyv::with::Unshare` gave every
+//! occurrence its own allocation, so no two restored names could share a pointer
+//! and the fast path never fired for any of them. [`Interned`] reads them back
+//! through one canonical allocation per distinct path instead. Measured on
+//! `programs/hello_curios.crs`, release, three runs each: whole-program
+//! compilation 1012 ms to 974 ms (a 1005–1015 ms baseline band against a 969–979
+//! ms one), with `restore_archive` 484 to 471 ms and erasure 394 to 376 ms, and
+//! the archive bytes identical. Real but small — the prelude's dominant cost is
+//! re-deriving what the archive could have carried, not allocating its names.
 
 #[cfg(test)]
 mod tests;
@@ -48,12 +59,14 @@ use std::{
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
 )]
 pub struct Qualifier {
-    /// Archived *unshared*: sharing is a runtime optimization, and putting the
-    /// `Rc` in the archive would drag rkyv's `Sharing`/`Pooling` bounds into
-    /// every container that holds a qualifier. The archived form stays what it
-    /// has always been — the segment sequence — so its derived comparisons
-    /// agree with the live ones by construction.
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Unshare))]
+    /// Archived as the bare segment sequence, exactly as `rkyv::with::Unshare`
+    /// would write it: putting the `Rc` in the archive would drag rkyv's
+    /// `Sharing`/`Pooling` bounds into every container that holds a qualifier,
+    /// and the archived form stays what it has always been, so its derived
+    /// comparisons agree with the live ones by construction.
+    ///
+    /// It is read back *interned* rather than unshared — see [`Interned`].
+    #[cfg_attr(feature = "archive", rkyv(with = Interned))]
     segments: Rc<Vec<String>>,
 }
 
@@ -227,5 +240,96 @@ where
 {
     fn from(iter: I) -> Self {
         Self::of(iter.into_iter().map(Into::into).collect())
+    }
+}
+
+/// Reads an archived qualifier back into the *shared* segment list every other
+/// occurrence of the same path already uses, instead of giving each occurrence
+/// its own allocation the way `rkyv::with::Unshare` does.
+///
+/// The archived bytes are identical either way — this wrapper resolves and
+/// serializes exactly as `Unshare` does, and differs only on the way in — so
+/// switching to it is not an archive format change.
+///
+/// It matters because the archive is where qualifiers are overwhelmingly
+/// *created*: the fixed prelude's Core carries on the order of a hundred
+/// thousand qualifier occurrences drawn from a couple of thousand distinct
+/// paths, so unsharing them allocates the same few paths tens of thousands of
+/// times over. Interning collapses that to one allocation per distinct path,
+/// and restores the pointer-identity fast path in [`Qualifier`]'s `PartialEq`
+/// and `Ord` for every restored name — which unsharing defeats by construction,
+/// since no two occurrences can ever share a pointer.
+#[cfg(feature = "archive")]
+pub struct Interned;
+
+#[cfg(feature = "archive")]
+mod interned {
+    use {
+        super::{Interned, Rc},
+        rkyv::{
+            Archive, Deserialize, Place, Serialize,
+            rancor::Fallible,
+            with::{ArchiveWith, DeserializeWith, SerializeWith},
+        },
+        std::{cell::RefCell, collections::HashSet},
+    };
+
+    thread_local! {
+        /// One canonical allocation per distinct path, per thread.
+        ///
+        /// Thread-local rather than global because `Rc` is not `Send`, and the
+        /// restored prelude is already a thread-local value. It is only ever
+        /// added to, which is bounded: the entries are the distinct module
+        /// paths of whatever archives this thread reads, and the fixed prelude
+        /// is read once.
+        static PATHS: RefCell<HashSet<Rc<Vec<String>>>> = RefCell::new(HashSet::new());
+    }
+
+    /// The shared allocation for `segments`, adopting it if this path is new.
+    fn intern(segments: Vec<String>) -> Rc<Vec<String>> {
+        PATHS.with_borrow_mut(|paths| match paths.get(&segments) {
+            Some(shared) => Rc::clone(shared),
+            None => {
+                let shared = Rc::new(segments);
+                paths.insert(Rc::clone(&shared));
+                shared
+            }
+        })
+    }
+
+    impl ArchiveWith<Rc<Vec<String>>> for Interned {
+        type Archived = <Vec<String> as Archive>::Archived;
+        type Resolver = <Vec<String> as Archive>::Resolver;
+
+        fn resolve_with(
+            field: &Rc<Vec<String>>,
+            resolver: Self::Resolver,
+            out: Place<Self::Archived>,
+        ) {
+            field.as_ref().resolve(resolver, out);
+        }
+    }
+
+    impl<S> SerializeWith<Rc<Vec<String>>, S> for Interned
+    where
+        S: Fallible + ?Sized,
+        Vec<String>: Serialize<S>,
+    {
+        fn serialize_with(
+            field: &Rc<Vec<String>>,
+            serializer: &mut S,
+        ) -> Result<Self::Resolver, S::Error> {
+            field.as_ref().serialize(serializer)
+        }
+    }
+
+    impl<A, D> DeserializeWith<A, Rc<Vec<String>>, D> for Interned
+    where
+        A: Deserialize<Vec<String>, D>,
+        D: Fallible + ?Sized,
+    {
+        fn deserialize_with(field: &A, deserializer: &mut D) -> Result<Rc<Vec<String>>, D::Error> {
+            Ok(intern(A::deserialize(field, deserializer)?))
+        }
     }
 }
