@@ -118,13 +118,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (
             Prim::BinAppend(Grain::X, this_left, this_right),
             Prim::BinAppend(Grain::X, that_left, that_right),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_left, that_left);
-            cmp.enqueue(Term::type_ground(), this_right, that_right);
-
-            Ok(true)
-        }
-        (
+        )
+        | (
             Prim::BinEql(Grain::B, this_left, this_right),
             Prim::BinEql(Grain::B, that_left, that_right),
         )
@@ -138,6 +133,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         ) => {
             cmp.enqueue(Term::type_ground(), this_left, that_left);
             cmp.enqueue(Term::type_ground(), this_right, that_right);
+
             Ok(true)
         }
         (Prim::FltNeg(this), Prim::FltNeg(that))
@@ -174,20 +170,15 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         (
             Prim::BinSlice(Grain::X, this_bin, this_start, this_end),
             Prim::BinSlice(Grain::X, that_bin, that_start, that_end),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_bin, that_bin);
-            cmp.enqueue(Term::type_ground(), this_start, that_start);
-            cmp.enqueue(Term::type_ground(), this_end, that_end);
-
-            Ok(true)
-        }
-        (
+        )
+        | (
             Prim::BinSlice(Grain::B, this_bin, this_start, this_end),
             Prim::BinSlice(Grain::B, that_bin, that_start, that_end),
         ) => {
             cmp.enqueue(Term::type_ground(), this_bin, that_bin);
             cmp.enqueue(Term::type_ground(), this_start, that_start);
             cmp.enqueue(Term::type_ground(), this_end, that_end);
+
             Ok(true)
         }
         (
