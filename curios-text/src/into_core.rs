@@ -154,6 +154,19 @@ impl PreparedPrelude {
         &self.core
     }
 
+    /// This prepared prelude with its lowered module hash-consed against
+    /// `sharing`. Pass the same table used for the elaborated module so equal
+    /// structures collapse across the two snapshots, not merely within each.
+    ///
+    /// The rest of a `PreparedPrelude` is resolution metadata and floors — no
+    /// terms — so the lowered module is the whole of what there is to share.
+    pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
+        Self {
+            core: self.core.shared(sharing),
+            ..self
+        }
+    }
+
     pub fn metavariable_floor(&self) -> usize {
         self.metavariable_floor
     }

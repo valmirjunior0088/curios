@@ -1,6 +1,6 @@
 use {
     super::{
-        Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope,
+        Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
         StructDecl, Term, UniverseContext, UniverseSeed, build_shorten, with_short_names,
     },
     curios_base::{Qualifier, RootId},
@@ -287,6 +287,64 @@ pub struct Module {
 }
 
 impl Module {
+    /// This module with every term hash-consed against `sharing` — one shared
+    /// allocation per distinct structure.
+    ///
+    /// Built for the archived prelude. Elaboration constructs the same types,
+    /// telescopes, and proof spines independently in definition after
+    /// definition, and nothing deduplicates them, because `Rc` sharing only ever
+    /// arises from *cloning* a value: two definitions that build the same type
+    /// build it twice. Measured over the prelude, 389,264 nodes covered 19,908
+    /// distinct structures — a 19.6x expansion that the archive stores in full
+    /// and every restored traversal then walks in full.
+    ///
+    /// Pass the same [`Sharing`] to every snapshot archived together so equal
+    /// structures collapse across them as well as within each.
+    pub fn shared(&self, sharing: &Sharing) -> Module {
+        let definition = |definition: &Definition| Definition {
+            name: definition.name.clone(),
+            kind: definition.kind.clone(),
+            universe_context: definition.universe_context.clone(),
+            island: definition.island.clone(),
+            root: definition.root,
+            type_: sharing.share(&definition.type_),
+            body: sharing.share(&definition.body),
+        };
+
+        Module {
+            items: self
+                .items
+                .iter()
+                .map(|item| match item {
+                    Item::Let(let_) => Item::Let(definition(let_)),
+                    Item::Rec(rec) => Item::Rec(RecItem::new(
+                        rec.definitions().iter().map(definition).collect(),
+                    )),
+                })
+                .collect(),
+            universe_seeds: self.universe_seeds.clone(),
+            induct_decls: self
+                .induct_decls
+                .iter()
+                .map(|(name, declaration)| (name.clone(), declaration.shared(sharing)))
+                .collect(),
+            struct_decls: self
+                .struct_decls
+                .iter()
+                .map(|(name, declaration)| (name.clone(), declaration.shared(sharing)))
+                .collect(),
+            concepts: self
+                .concepts
+                .iter()
+                .map(|(name, concept)| (name.clone(), concept.shared(sharing)))
+                .collect(),
+            witnesses: self.witnesses.clone(),
+            binder_floor: self.binder_floor,
+            type_: self.type_.as_ref().map(|type_| sharing.share(type_)),
+            body: sharing.share(&self.body),
+        }
+    }
+
     /// Re-fold the flat module into the legacy nested `Let`/`Rec` `Term` it
     /// replaced (items are already in binding order). Test-only: lets the
     /// `into_core`/`erase` suites keep asserting against the historical shape — and

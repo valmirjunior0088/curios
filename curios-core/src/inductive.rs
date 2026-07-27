@@ -83,6 +83,33 @@ pub struct InductDecl {
 }
 
 impl InductDecl {
+    /// This declaration with every term hash-consed against `sharing`. See
+    /// [`Module::shared`](crate::Module::shared).
+    pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
+        Self {
+            universe_context: self.universe_context.clone(),
+            params: sharing.share(&self.params),
+            indices: sharing.share(&self.indices),
+            constructors: self
+                .constructors
+                .iter()
+                .map(|(tag, constructor)| {
+                    (
+                        tag.clone(),
+                        InductParam {
+                            telescope: sharing.share(&constructor.telescope),
+                            plicities: constructor.plicities.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            result_sort: sharing.share(&self.result_sort),
+            module: self.module.clone(),
+            root: self.root,
+            rep_public: self.rep_public,
+        }
+    }
+
     /// Instantiate `tag`'s signature at the given type parameters, yielding the
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
     /// `(_0 : Nat) -> InductType { Result, [Nat, Bin] }`.

@@ -2,13 +2,11 @@
 
 use {
     crate::{ArchivedPreludeArchive, PreludeArchive, SCHEMA},
-    sha2::{Digest, Sha256},
     std::{cell::LazyCell, sync::OnceLock},
 };
 
 const BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/prelude.rkyv"));
 const EXPECTED_FINGERPRINT: &str = env!("CURIOS_PRELUDE_FINGERPRINT");
-const EXPECTED_ARCHIVE_DIGEST: &str = env!("CURIOS_PRELUDE_ARCHIVE_DIGEST");
 
 static ARCHIVE: OnceLock<Result<&'static ArchivedPreludeArchive, String>> = OnceLock::new();
 
@@ -58,21 +56,28 @@ thread_local! {
 
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn validate_archive() -> Result<&'static ArchivedPreludeArchive, String> {
-    validate_bytes(BYTES, SCHEMA, EXPECTED_FINGERPRINT, EXPECTED_ARCHIVE_DIGEST)
+    validate_bytes(BYTES, SCHEMA, EXPECTED_FINGERPRINT)
 }
 
 /// Validate through the zero-copy view — bytecheck for structural validity,
 /// then the header fields — without deserializing the image, whose full
 /// restoration is per-thread and on demand.
+///
+/// There is deliberately no content-digest check. The archive reaches this
+/// function through `include_bytes!`, so it is a constant in the executable's
+/// own read-only data, and the digest `build.rs` exported alongside it is
+/// another constant from the same build: hashing one to compare it against the
+/// other cannot fail except under corruption of our own image, and covers only
+/// the prelude rather than any of the compiler's code. It could not detect a
+/// stale or substituted archive, because there is no runtime file to be stale or
+/// substituted. Bytecheck below is the part that does real work — it is what
+/// makes handing out references into these bytes sound — and the schema and
+/// fingerprint reject an image from any other build.
 fn validate_bytes<'bytes>(
     bytes: &'bytes [u8],
     schema: u32,
     fingerprint: &str,
-    archive_digest: &str,
 ) -> Result<&'bytes ArchivedPreludeArchive, String> {
-    if hex(&Sha256::digest(bytes)) != archive_digest {
-        return Err("archived prelude content digest mismatch".into());
-    }
     let image = rkyv::access::<ArchivedPreludeArchive, rkyv::rancor::Error>(bytes)
         .map_err(|error| format!("invalid archived prelude: {error}"))?;
 
@@ -200,37 +205,13 @@ mod tests {
     #[test]
     fn truncated_archive_is_rejected() {
         let truncated = &BYTES[..BYTES.len() / 2];
-        assert!(
-            validate_bytes(
-                truncated,
-                SCHEMA,
-                EXPECTED_FINGERPRINT,
-                EXPECTED_ARCHIVE_DIGEST
-            )
-            .is_err()
-        );
+        assert!(validate_bytes(truncated, SCHEMA, EXPECTED_FINGERPRINT).is_err());
     }
 
     #[test]
     fn schema_and_fingerprint_are_checked() {
-        assert!(
-            validate_bytes(
-                BYTES,
-                SCHEMA + 1,
-                EXPECTED_FINGERPRINT,
-                EXPECTED_ARCHIVE_DIGEST
-            )
-            .is_err()
-        );
-        assert!(
-            validate_bytes(
-                BYTES,
-                SCHEMA,
-                "not-the-build-fingerprint",
-                EXPECTED_ARCHIVE_DIGEST
-            )
-            .is_err()
-        );
+        assert!(validate_bytes(BYTES, SCHEMA + 1, EXPECTED_FINGERPRINT).is_err());
+        assert!(validate_bytes(BYTES, SCHEMA, "not-the-build-fingerprint").is_err());
     }
 
     #[test]

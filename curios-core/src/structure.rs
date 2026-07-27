@@ -47,6 +47,20 @@ pub struct StructDecl {
 }
 
 impl StructDecl {
+    /// This declaration with every term hash-consed against `sharing`. See
+    /// [`Module::shared`](crate::Module::shared).
+    pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
+        Self {
+            universe_context: self.universe_context.clone(),
+            params: sharing.share(&self.params),
+            fields: sharing.share(&self.fields),
+            result_sort: sharing.share(&self.result_sort),
+            module: self.module.clone(),
+            root: self.root,
+            rep_public: self.rep_public,
+        }
+    }
+
     /// Instantiate the field telescope at known parameters, yielding the
     /// field-only telescope: `fields_at([Nat, Bin])` for `Pair` becomes
     /// `(fst : Nat, snd : Bin)`. Peels the leading `params.len()` binders by

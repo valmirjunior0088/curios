@@ -99,6 +99,27 @@ fn main() {
         )
     });
 
+    // Hash-cons every archived Core snapshot against one table, so structurally
+    // equal subterms collapse onto a single allocation across the lowered and
+    // elaborated views as well as within each. Elaboration builds the same
+    // types, telescopes, and proof spines independently in definition after
+    // definition and nothing deduplicates them, because `Rc` sharing only ever
+    // arises from cloning: two definitions that build the same type build it
+    // twice. rkyv shares by pointer address, so collapsing them here is also
+    // what lets the archive store each distinct structure once.
+    //
+    // `ersd` is deliberately not included: it is a flat, index-addressed arena
+    // with no shared pointers to collapse, and it already interns its constants
+    // by value.
+    let sharing = curios_core::Sharing::new();
+    let prepared = prepared.shared(&sharing);
+    let core = core.shared(&sharing);
+    let body_type = sharing.share(&body_type);
+    println!(
+        "cargo:warning=fixed prelude hash-consed to {} distinct structures",
+        sharing.structures()
+    );
+
     let image = PreludeArchive {
         schema: SCHEMA,
         fingerprint,

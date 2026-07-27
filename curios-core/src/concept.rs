@@ -43,6 +43,20 @@ pub struct Concept {
     pub root: RootId,
 }
 
+impl Concept {
+    /// This concept with every term hash-consed against `sharing`. See
+    /// [`Module::shared`](crate::Module::shared).
+    pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
+        Self {
+            universe_context: self.universe_context.clone(),
+            params: sharing.share(&self.params),
+            fields: self.fields.clone(),
+            supers: self.supers.clone(),
+            root: self.root,
+        }
+    }
+}
+
 /// One registered witness: the qualified name of its backing definition and
 /// that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution
 /// instantiates the telescope fresh at every use.

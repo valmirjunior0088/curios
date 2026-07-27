@@ -12,7 +12,7 @@ use {
     },
     std::{
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         convert::Infallible,
         fmt,
         hash::Hash,
@@ -175,7 +175,7 @@ impl Var {
 /// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); everything else here — `shift`, `capture`, `release`, `free_vars` — is derived from `traverse` alone.
 pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single primitive the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
-    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>;
 
@@ -249,7 +249,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 }
 
 impl Bound for () {
-    fn traverse<F>(&self, _: &mut Visit<F>) -> Self
+    fn traverse<F, S: SharingPolicy>(&self, _: &mut Visit<F, S>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -997,7 +997,7 @@ impl<B: Bound> Hash for Telescope<B> {
 }
 
 impl<B: Bound> Bound for Telescope<B> {
-    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1026,13 +1026,78 @@ impl<B: Bound> Bound for Telescope<B> {
 
 // === Visit ===================================================================
 
+/// Whether a traversal replaces each rebuilt node with the canonical node of
+/// its structure, and if so, against which table.
+///
+/// A type parameter rather than a field, because whether a traversal hash-conses
+/// is fixed where it is constructed and never changes mid-flight. [`NoSharing`]
+/// is zero-sized and its `canonical` is a constant `None`, so every traversal
+/// that does not cons — which is all of the kernel's — carries no field and pays
+/// no branch.
+pub trait SharingPolicy {
+    /// The canonical node for `rebuilt`, or `None` when not consing.
+    fn canonical(&self, rebuilt: &Term) -> Option<Term>;
+}
+
+/// The default: rebuild nodes as they come.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoSharing;
+
+impl SharingPolicy for NoSharing {
+    fn canonical(&self, _rebuilt: &Term) -> Option<Term> {
+        None
+    }
+}
+
+/// A hash-consing table, shared rather than owned so one canonicalization spans
+/// a whole module: two definitions that build the same type collapse onto one
+/// node only if they consult the same table.
+#[derive(Debug, Clone, Default)]
+pub struct Sharing {
+    table: Rc<RefCell<HashMap<Term, Term>>>,
+}
+
+impl Sharing {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// `value` with every node replaced by the canonical node of its structure.
+    ///
+    /// One `Sharing` must span every snapshot being canonicalized together: the
+    /// duplication worth collapsing is overwhelmingly *between* definitions, and
+    /// between the lowered and elaborated views of the same prelude, so a table
+    /// per term or per module would collapse almost none of it.
+    pub fn share<B: Bound>(&self, value: &B) -> B {
+        value.traverse(&mut Visit::sharing(|_, _| None, self.clone()))
+    }
+
+    /// Distinct structures adopted so far — the census this pass is justified by.
+    pub fn structures(&self) -> usize {
+        self.table.borrow().len()
+    }
+}
+
+impl SharingPolicy for Sharing {
+    fn canonical(&self, rebuilt: &Term) -> Option<Term> {
+        let mut table = self.table.borrow_mut();
+        Some(match table.get(rebuilt) {
+            Some(canonical) => canonical.clone(),
+            None => {
+                table.insert(rebuilt.clone(), rebuilt.clone());
+                rebuilt.clone()
+            }
+        })
+    }
+}
+
 /// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the
 /// whole node at the current depth.
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
 
 /// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. `Visit::rewriting` is the crate-visible constructor; `Visit::new` and `Visit::pruning` are module-internal to this file.
-pub struct Visit<F> {
+pub struct Visit<F, S = NoSharing> {
     depth: usize,
     universe_depth: usize,
     prune: bool,
@@ -1050,7 +1115,8 @@ pub struct Visit<F> {
     /// result. Keys are addresses of *input* nodes, which the caller's value
     /// keeps alive for the whole traversal, so an address cannot be recycled
     /// under the memo.
-    shared_memo: Option<std::collections::HashMap<usize, Term>>,
+    shared_memo: Option<HashMap<usize, Term>>,
+    sharing: S,
 }
 
 impl<F> Visit<F>
@@ -1068,6 +1134,7 @@ where
             erase_universes: false,
             universes_only: false,
             shared_memo: None,
+            sharing: NoSharing,
         }
     }
 
@@ -1087,6 +1154,7 @@ where
             erase_universes: false,
             universes_only: false,
             shared_memo: None,
+            sharing: NoSharing,
         }
     }
 
@@ -1104,6 +1172,7 @@ where
             erase_universes: false,
             universes_only: false,
             shared_memo: None,
+            sharing: NoSharing,
         }
     }
 
@@ -1133,7 +1202,8 @@ where
             level_rewrite: None,
             erase_universes: false,
             universes_only: false,
-            shared_memo: Some(std::collections::HashMap::new()),
+            shared_memo: Some(HashMap::new()),
+            sharing: NoSharing,
         }
     }
 
@@ -1148,6 +1218,7 @@ where
             erase_universes: false,
             universes_only: true,
             shared_memo: None,
+            sharing: NoSharing,
         }
     }
 
@@ -1162,6 +1233,7 @@ where
             erase_universes: false,
             universes_only: true,
             shared_memo: None,
+            sharing: NoSharing,
         }
     }
 
@@ -1176,7 +1248,45 @@ where
             erase_universes: true,
             universes_only: true,
             shared_memo: None,
+            sharing: NoSharing,
         }
+    }
+}
+
+/// A hash-consing traversal: structure-preserving, but replacing every rebuilt
+/// node with the canonical node of its shape.
+///
+/// The rebuild is already post-order — a node is constructed only after its
+/// children are traversed — so consulting the table on the rebuilt node
+/// canonicalizes bottom-up with no extra pass. Spans survive: they sit on the
+/// `Term` wrapper, outside the shared node, so each occurrence keeps its own.
+impl<F> Visit<F, Sharing>
+where
+    F: FnMut(usize, &Var) -> Option<Subterm>,
+{
+    pub(crate) fn sharing(visit: F, table: Sharing) -> Self {
+        Self {
+            depth: 0,
+            universe_depth: 0,
+            prune: false,
+            visit,
+            rewrite: None,
+            level_rewrite: None,
+            erase_universes: false,
+            universes_only: false,
+            shared_memo: Some(HashMap::new()),
+            sharing: table,
+        }
+    }
+}
+
+impl<F, S: SharingPolicy> Visit<F, S>
+where
+    F: FnMut(usize, &Var) -> Option<Subterm>,
+{
+    /// The canonical node for a rebuilt term, or `None` when not consing.
+    pub(crate) fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
+        self.sharing.canonical(rebuilt)
     }
 
     pub(crate) fn depth(&self) -> usize {
