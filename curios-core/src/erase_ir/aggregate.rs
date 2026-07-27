@@ -16,30 +16,8 @@
 
 use super::{
     Context, Error, Field, Lowering, Outcome, Proj, Struct, StructType, Subterm, Telescope, Term,
-    Tuple, TupleType, Variant, emitted, is_erasable, reduce_with,
+    Tuple, TupleType, Variant, emitted, erasure_mask, reduce_with, signature_entries,
 };
-
-/// The opaque signature view of a telescope: one entry per binder — its label
-/// and whether it is erased — classified with the preceding binders opened as
-/// fresh abstract variables.
-fn signature_entries<B: super::Bound>(
-    context: &mut Context,
-    mut telescope: Telescope<B>,
-) -> Result<Vec<(Option<String>, bool)>, Error> {
-    let mut entries = Vec::new();
-    loop {
-        match telescope {
-            Telescope::Cons(type_, rest) => {
-                let label = rest.first_hint().map(str::to_string);
-                let erasable = is_erasable(context, &type_)?;
-                let variable = Term::free_var(&context.fresh(label.as_deref()));
-                entries.push((label, erasable));
-                telescope = rest.open(&[&variable]);
-            }
-            Telescope::Done(_) => break Ok(entries),
-        }
-    }
-}
 
 /// Open a parameter telescope with fresh assumed variables, handing back the
 /// abstract parameter terms a declaration's fields are instantiated at.
@@ -222,10 +200,7 @@ impl Lowering {
         // Anonymous tuples have no declaration; the per-site signature mask is
         // the layout, and construction and projection read the same concrete
         // tuple type, so they agree.
-        let mask: Vec<bool> = signature_entries(context, telescope.clone())?
-            .into_iter()
-            .map(|(_, erased)| erased)
-            .collect();
+        let mask = erasure_mask(context, telescope.clone())?;
         let atoms = match self.masked_fields(context, &mask, telescope, &tuple.fields)? {
             Ok(atoms) => atoms,
             Err(diverged) => return Ok(diverged),
@@ -339,10 +314,7 @@ impl Lowering {
 
         let (row, width) = match &*head_type {
             Subterm::TupleType(TupleType { telescope }) => {
-                let mask: Vec<bool> = signature_entries(context, telescope.clone())?
-                    .into_iter()
-                    .map(|(_, erased)| erased)
-                    .collect();
+                let mask = erasure_mask(context, telescope.clone())?;
                 let relevant = mask.iter().filter(|&&erased| !erased).count();
                 let schema = (relevant != 1).then(|| self.tuple_schema(relevant));
                 (super::ProductRow { schema, mask }, telescope.len())
