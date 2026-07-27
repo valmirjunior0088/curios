@@ -270,21 +270,18 @@ impl Lowering {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let head_type = expect_prim_head(context, head, PrimHead::Bool)?;
-        let (head, scrutinee) = match self.scrutinee_operand(context, head, &head_type)? {
-            Ok(pair) => pair,
-            Err(diverged) => return Ok(diverged),
-        };
+        let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let if_false = self.refined_arm(
             context,
-            &head,
+            head,
             &Term::prim(Prim::Bool(false)),
             motive,
             false_case,
         )?;
         let if_true = self.refined_arm(
             context,
-            &head,
+            head,
             &Term::prim(Prim::Bool(true)),
             motive,
             true_case,
