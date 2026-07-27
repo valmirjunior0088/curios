@@ -196,9 +196,12 @@ impl Lowering {
     }
 
     /// Lower a tuple against its checked tuple type. Erasable fields drop; a
-    /// subset type left with one relevant field collapses to it (guarded on a
-    /// drop having happened, so an ordinary one-field tuple keeps its
-    /// product).
+    /// type left with one relevant field collapses to it, whether or not a drop
+    /// produced that width — the same relevant-arity rule [`struct_row`]
+    /// applies, and the rule [`erase_proj`] reads back.
+    ///
+    /// [`struct_row`]: Self::struct_row
+    /// [`erase_proj`]: Self::erase_proj
     pub(super) fn erase_tuple(
         &mut self,
         context: &mut Context,
@@ -228,8 +231,7 @@ impl Lowering {
             Err(diverged) => return Ok(diverged),
         };
 
-        let dropped_any = atoms.len() != tuple.fields.len();
-        if atoms.len() == 1 && dropped_any {
+        if atoms.len() == 1 {
             return Ok(Outcome::Emitted(
                 atoms.into_iter().next().expect("one field"),
             ));
