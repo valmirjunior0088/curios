@@ -919,12 +919,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     };
     context.set_island(item_module);
 
-    let item_names = item
-        .declared_names()
-        .iter()
-        .map(|name| name.symbol())
-        .collect::<Vec<_>>()
-        .join(", ");
+    let item_names = item.describe();
     // One span per top-level item is the natural unit for the fixed prelude:
     // its close event attributes elapsed time to a declaration by name, which
     // is the breakdown a whole-module timing cannot give.

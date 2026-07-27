@@ -14,7 +14,7 @@ use {
 
 #[derive(Clone)]
 pub(super) struct FlatLet {
-    pub name: Qualifier,
+    pub name: curios_core::Global,
     pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
@@ -27,7 +27,7 @@ impl FlatLet {
         curios_core::Definition {
             root: self.root,
             island: self.island,
-            name: curios_core::Global::Authored(self.name),
+            name: self.name,
             kind: self.kind,
             universe_context: UniverseContext::empty(),
             type_: self.type_,
@@ -57,10 +57,9 @@ impl FlatItem {
     }
 
     pub(super) fn names(&self) -> Vec<curios_core::Global> {
-        let global = |let_: &FlatLet| curios_core::Global::Authored(let_.name.clone());
         match self {
-            FlatItem::Let(let_) => vec![global(let_)],
-            FlatItem::Rec(lets) => lets.iter().map(global).collect(),
+            FlatItem::Let(let_) => vec![let_.name.clone()],
+            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.clone()).collect(),
         }
     }
 
@@ -267,6 +266,11 @@ pub(super) struct Context<'a> {
     // same source must mint the same identities, or terms that should be equal
     // would differ.
     binders: &'a Entropy,
+    // Program-global witness identities. A `satisfy` declaration is anonymous,
+    // so its identity is an id rather than a name — and the id must be unique
+    // across the whole program, not per module, because nothing else
+    // distinguishes two of them.
+    witnesses: &'a Entropy,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -282,6 +286,7 @@ impl<'a> Context<'a> {
         universe_seeds: &'a RefCell<Vec<UniverseSeed>>,
         universe_allocations: &'a RefCell<HashMap<Span, UniverseMetaId>>,
         binders: &'a Entropy,
+        witnesses: &'a Entropy,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -297,6 +302,7 @@ impl<'a> Context<'a> {
             universe_seeds,
             universe_allocations,
             binders,
+            witnesses,
             syntax,
         }
     }
@@ -315,6 +321,7 @@ impl<'a> Context<'a> {
             universe_seeds: self.universe_seeds,
             universe_allocations: self.universe_allocations,
             binders: self.binders,
+            witnesses: self.witnesses,
             syntax: self.syntax,
         }
     }
@@ -391,12 +398,23 @@ impl<'a> Context<'a> {
         result
     }
 
+    /// Mint a witness identity. A `satisfy` declaration is anonymous by design,
+    /// so it gets an identity rather than a manufactured name — see
+    /// [`curios_core::Global::Witness`]. The counter is program-global, not
+    /// per-module: nothing but the id distinguishes two witnesses.
+    pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
+        curios_core::WitnessId::new(
+            u32::try_from(self.witnesses.fresh()).expect("witness space exhausted"),
+        )
+    }
+
     /// Mint a binder identity, rendering as `hint`.
     ///
     /// Every binder a lowered term closes over comes from here, including the
     /// continuation binders `!` desugaring introduces. `curios-core` mints more
-    /// while elaborating and seeds its counter above [`Self::binder_floor`], so
-    /// the two sources share one identity space without colliding.
+    /// while elaborating and seeds its counter above
+    /// [`PreparedPrelude::binder_floor`](super::PreparedPrelude::binder_floor),
+    /// so the two sources share one identity space without colliding.
     pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
         curios_core::Free::local(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),

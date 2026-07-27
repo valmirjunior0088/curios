@@ -8,7 +8,9 @@ When this work lands, fold the permanent rule and the resulting type contracts i
 
 ## Status
 
-Investigated 2026-07-26. Phases 0, A, B, and C are implemented; `SCHEMA` is at 12. Phase D is specified and now unblocked; its two audits can also run independently (the `name!` half of the `Ord` audit landed with Phase B).
+Investigated 2026-07-26. Phases 0, A, B, C, and D are implemented, and the witness slice that Phase C deferred has landed; `SCHEMA` is at 14. What remains is retirement: fold the permanent rule into the owning module documentation, record the outcome in `ROADMAP.md`, move the rejected de Bruijn level analysis to `DESIGN.md`, and delete this document.
+
+`Global::Witness` is now constructed. Phase 0's `@` marker is gone with it — no manufactured witness name survives anywhere in the compiler, so there is no sigil left for a downstream site to key on.
 
 Phase C landed with one deviation from what this document specified, recorded under "Hint and identity" below: the hint sits on `Mint` rather than beside it on the binder. Read that section before extending the vocabulary — the reason the original decision was made still stands, and the reason it was overruled is a property of `Scope`, not a convenience.
 
@@ -100,8 +102,8 @@ Encoders — the same convention written by hand, with no shared definition. A d
 | `curios-text/src/into_core.rs:891` | `Qualifier::with(tag)` | 5 | remains (this is the mint site) |
 | ~~`curios-core/src/zonk.rs:472`~~ | `format!("{name}/{tag}")` | 5 | Phase A — done |
 | `curios-core/src/print.rs:974,977` | `format!("{name}/{tag}")` | 5 | remains (rendering) |
-| `curios-core/src/context.rs:363` | `format!("{h}#{counter}")` | 3, 4 | Phase C |
-| `curios-text/src/into_core.rs:1168` | `format!("witness@{ordinal}")` | — | Phase C |
+| ~~`curios-core/src/context.rs:363`~~ | `format!("{h}#{counter}")` | 3, 4 | Phase C — done |
+| ~~`curios-text/src/into_core.rs:1168`~~ | `format!("witness@{ordinal}")` | — | witness slice — done |
 
 Carriers holding a flattened name where a structured value is the honest type. These are the supply side of the decoders above: fixing the carrier deletes the consumer.
 
@@ -205,7 +207,7 @@ enum VarType {
 
 **`Qualifier` means one thing everywhere, with no exception.** The rejected alternative was a flat `Global { qualifier, disambiguator: Option<u32> }`, whose `qualifier` would have meant *module plus the item's own name* for an authored global but *the declaring module alone* for a witness — one field with two readings, selected by whether another field is populated. That is the merge this specification exists to remove, reintroduced by the fix for it. The sum states the two cases, and `Qualifier` stays exactly what `curios-base` says it is.
 
-It also retires Phase 0's marker completely rather than relocating it. There is no `witness@N` text left to render, so nothing downstream can key on the sigil — which forces a live defect to be fixed rather than carried: the `while elaborating /witness@1:` prefix on a witness diagnostic is today the one place a compiler-minted name reaches a user, and under `WitnessId` it must become the module coordinate `Definition.island` already holds.
+It also retires Phase 0's marker completely rather than relocating it. There is no `witness@N` text left to render, so nothing downstream can key on the sigil — which forced a live defect to be fixed rather than carried: the `while elaborating /witness@1:` prefix on a witness diagnostic was the one place a compiler-minted name reached a user, and under `WitnessId` it became the module coordinate `Definition.island` already holds.
 
 `WitnessId` needs the same archive discipline as `Mint`: the prelude's ids are fixed when it is archived, so entry-module lowering mints strictly above the restored floor. See the invariant below.
 
@@ -230,9 +232,18 @@ The sites that built a free variable from an unminted label mint instead: `imita
 - Every decoder of facts 2 and 3 became a `matches!`. `has_local_free` is `var.as_free().is_some_and(Free::is_local)` — exact, so the misfires vanish by construction.
 - `Definition.name` and `RecDefinition.name` became `Global`: a bare `Qualifier` cannot name a witness, which has no authored path. `Witness.name` follows, which turns `update_witness_scheme`'s scan into a comparison on identities.
 - Keys landed: `assumptions`, `assumption_universes`, `definitions`, and `refinements` take `Free`; so do `local`, `witness_scope`, `MetaEntry::telescope`, the erasure `Environment`, and `Term::free_vars`. The nominal registries followed in the next commit — `induct_decls`, `struct_decls`, `concepts`, `witness_declarations`, `Module::witnesses`, `witness_table`, `HeadKey::Nominal`, and the four nominal normal forms' `name` fields all take `Global`. Their iteration order is now segment-wise rather than over joined text, which is arbitrary-but-deterministic; whether it should become *declaration* order is still Phase D's question.
-- `Global::Witness` is declared and tested but **still not constructed**, and the registry retyping did not change that. `into_core`'s `witness_ordinal` is a local in `process_items`, which recurses per module, so ordinals restart at zero in every module: `/A/witness@0` and `/B/witness@0` are distinct only because their qualifiers differ. A flat `WitnessId(0)` would collide silently. Constructing it needs a program-global counter threaded through `into_core::Context` (like `metavars`/`binders`/`universes`), a floor on `Module` and `PreparedPrelude` exactly like `binder_floor`, and the witness diagnostic switched to `Definition::island`. That is its own slice with its own archive invariant, and until it lands the `while elaborating /witness@1:` prefix stays.
 - `module_symbols()` and the alias-source map, orphaned by Phase A, landed here. `flat_aliases` now asks `Free::as_global` where it used to prefix-test for `/`, and the visibility audit takes `Global`s so `referent_audience` reads the `Qualifier` off the name instead of re-splitting it.
-- `SCHEMA` bumped to 12, then to 13 with the registry retyping (Phase A took it to 10, Phase B to 11).
+- `SCHEMA` bumped to 12, then to 13 with the registry retyping, then to 14 with the witness slice (Phase A took it to 10, Phase B to 11).
+
+**The witness slice.** `Global::Witness` was declared and tested two commits before it was ever constructed, because constructing it is not a retyping — it is a change of identity scheme with its own archive invariant. `into_core`'s `witness_ordinal` was a local in `process_items`, which recurses per module, so ordinals restarted at zero in every module: `/A/witness@0` and `/B/witness@0` were distinct only because their qualifiers differed. A flat `WitnessId(0)` collides silently.
+
+So the counter is program-global — an `Entropy` threaded through `into_core::Context` beside `metavars`/`binders`/`universes` — and `PreparedPrelude::witness_floor` reseeds it on replay, the same shape as `binder_floor`. This is the invariant that matters: a replayed witness's identity was fixed in an earlier compiler run, and a fresh mint that aliased one would silently rebind a coherence-table entry. No `Module` floor is needed, unlike binders, because nothing downstream of `into_core` mints a witness.
+
+Three things fell out, each a fact that had been riding on the manufactured name:
+
+- **The exposure audit had been auditing witnesses by accident.** It compares `name.without_last()` against `island`, which held for `witness@N` because the lowerer prefixed it with the declaring module. A witness has no authored path, so the audit now skips it explicitly — the same answer arrived at structurally. "Who can see this by its name" is not a question an anonymous declaration has; its reach is the coherence table's, governed by the orphan rule at registration.
+- **The per-item tracing span named items by `symbol()`.** For a witness that rendered the manufactured name. `Item::describe()` replaces it: an authored declaration is named by its path, a witness by the module it was declared in, which is the coordinate a reader can act on. This is also what retires the `while elaborating /witness@1:` prefix — the one place a compiler-minted name reached a user.
+- **`register_witness` takes the definition's `Global`, not a qualifier and label.** Rebuilding the name from `module.with(label)` was possible while a witness had a path, and wrong: it produced `/std/Nat//std/Nat/witness@0`. Passing the identity that was already computed removes the opportunity.
 
 **Mint floors are an archive invariant, not an implementation detail.** The counters are compilation-scoped and minted locals reach `assumptions`/`definitions`, so they are *in* the archived Core. `Module::binder_floor` carries `into_core`'s high-water mark; `elaborate_module` seeds `Context::fresh` above it (`Context::set_local_floor`), and `PreparedPrelude::binder_floor` reseeds the text-side counter on replay — the same shape as `metavar_floor`. Without it a freshly minted `Mint(7)` silently aliases an archived one: no error, no diagnostic, a wrong binder.
 

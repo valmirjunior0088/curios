@@ -199,6 +199,30 @@ pub enum Item {
 }
 
 impl Item {
+    /// How a diagnostic names this item.
+    ///
+    /// An authored declaration is named by its path. A witness has no authored
+    /// path — that is the point of `satisfy` — so it is named by the module it
+    /// was declared in, which is the coordinate a reader can actually act on.
+    pub(crate) fn describe(&self) -> String {
+        let described = |definition: &Definition| match definition.name.qualifier() {
+            Some(path) => path.join(),
+            None => match definition.island.is_root() {
+                true => "the witness in the entry module".to_string(),
+                false => format!("the witness in '{}'", definition.island.join()),
+            },
+        };
+        match self {
+            Item::Let(definition) => described(definition),
+            Item::Rec(rec) => rec
+                .definitions()
+                .iter()
+                .map(described)
+                .collect::<Vec<_>>()
+                .join(", "),
+        }
+    }
+
     /// The names exported by this top-level item, in declaration order.
     pub fn declared_names(&self) -> Vec<&Global> {
         match self {

@@ -145,6 +145,7 @@ pub struct PreparedPrelude {
     core: curios_core::Module,
     metavariable_floor: usize,
     binder_floor: usize,
+    witness_floor: usize,
     universe_floor: usize,
 }
 
@@ -159,6 +160,14 @@ impl PreparedPrelude {
 
     pub fn binder_floor(&self) -> usize {
         self.binder_floor
+    }
+
+    /// One past the highest witness identity the fixed prelude minted. Entry
+    /// lowering resumes strictly above it: a replayed witness's identity was
+    /// fixed in an earlier compiler run, and a fresh mint that aliased one
+    /// would silently rebind a coherence-table entry.
+    pub fn witness_floor(&self) -> usize {
+        self.witness_floor
     }
 
     pub fn universe_floor(&self) -> usize {
@@ -478,20 +487,6 @@ fn process_items(
         }
     }
 
-    // Anonymous witnesses get deterministic compiler names — `witness@N` by
-    // per-module declaration ordinal, under the module prefix. Determinism
-    // matters (the cached-prelude replay compares by name); the `@` sigil is
-    // illegal in source identifiers, so no user name can collide. (It is the
-    // implicit-plicity mark in surface syntax, but that is a token in the
-    // grammar, never a character inside an identifier — the two never meet.)
-    //
-    // The sigil is `@`, not `#`, deliberately: `#` is reserved for the
-    // elaborator's minted *locals* (`Context::fresh`), and `Term::has_local_free`
-    // reads a label's `#` as proof that the term is context-dependent. A
-    // `#`-bearing global would make that bit misfire, needlessly invalidating
-    // three elaboration caches. Keep the two namespaces disjoint.
-    let mut witness_ordinal = 0usize;
-
     for top_item in top_items {
         match top_item {
             TopItem::Mod(mod_item) => match &mod_item.module {
@@ -559,7 +554,7 @@ fn process_items(
                 let type_ = lower.term(&let_item.signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: DefinitionKind::Authored,
-                    name: context.prefixed(&let_item.label),
+                    name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -571,14 +566,14 @@ fn process_items(
                 // registration, and `host_fn`'s wire-typed signature shape)
                 // stays inside `prelude`; from here a `foreign` declaration
                 // lowers exactly like an ordinary `TopItem::Let`.
-                let name = context.prefixed(&f.label);
-                let signature = foreign_signature(f, foreigns, name.join());
+                let path = context.prefixed(&f.label);
+                let signature = foreign_signature(f, foreigns, path.join());
 
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: DefinitionKind::Authored,
-                    name,
+                    name: curios_core::Global::Authored(path),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -593,7 +588,7 @@ fn process_items(
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
                             kind: DefinitionKind::Authored,
-                            name: context.prefixed(&let_item.label),
+                            name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             root: context.root(),
                             type_,
@@ -806,7 +801,7 @@ fn process_items(
                         };
                         Ok(FlatLet {
                             kind: DefinitionKind::InductiveType,
-                            name: context.prefixed(&u.label),
+                            name: curios_core::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
                             root: context.root(),
                             type_,
@@ -930,7 +925,9 @@ fn process_items(
                                 owner: context.prefixed(&u.label),
                                 tag: curios_core::Atom::from(c.label.as_str()),
                             },
-                            name: context.prefixed(&u.label).with(&c.label),
+                            name: curios_core::Global::Authored(
+                                context.prefixed(&u.label).with(&c.label),
+                            ),
                             island: context.island(),
                             root: context.root(),
                             type_: ctor_type,
@@ -1032,7 +1029,7 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: DefinitionKind::StructType,
-                    name: context.prefixed(&s.label),
+                    name: curios_core::Global::Authored(context.prefixed(&s.label)),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -1164,7 +1161,7 @@ fn process_items(
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: DefinitionKind::ConceptType,
-                    name: context.prefixed(&concept.label),
+                    name: curios_core::Global::Authored(context.prefixed(&concept.label)),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -1209,7 +1206,9 @@ fn process_items(
                         kind: DefinitionKind::ConceptMethod {
                             owner: context.prefixed(&concept.label),
                         },
-                        name: context.prefixed(&concept.label).with(&field.label),
+                        name: curios_core::Global::Authored(
+                            context.prefixed(&concept.label).with(&field.label),
+                        ),
                         island: context.island(),
                         root: context.root(),
                         type_: lower.term(&signature.type_())?,
@@ -1217,12 +1216,14 @@ fn process_items(
                     }));
                 }
             }
-            // A witness desugars to an ordinary compiler-named definition
-            //   let witness@N(tele) -> C(args) = C(args) { f = e, … };
+            // A witness desugars to an anonymous top-level definition
+            //   satisfy (tele) -> C(args) = C(args) { f = e, … };
             // and marks it for registration in the program-wide witness table.
+            // It gets an *identity*, not a manufactured name: a `satisfy` block
+            // has no name a programmer wrote, and the module a diagnostic
+            // reports for it comes from `Definition::island`.
             TopItem::Witness(witness) => {
-                let label = format!("witness@{witness_ordinal}");
-                witness_ordinal += 1;
+                let name = curios_core::Global::Witness(context.fresh_witness());
 
                 let concept_app = witness_concept_application(&witness.concept, &witness.args);
                 let body: Term = Subterm::StructLit(StructLit {
@@ -1259,13 +1260,13 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: DefinitionKind::Witness,
-                    name: context.prefixed(&label),
+                    name: name.clone(),
                     island: context.island(),
                     root: context.root(),
                     type_: lower.term(&signature.type_())?,
                     body: lower.value(&signature.body())?,
                 }));
-                witnesses.insert(curios_core::Global::Authored(context.prefixed(&label)));
+                witnesses.insert(name);
             }
         }
     }
@@ -1530,7 +1531,7 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
             .clone();
 
         Some((
-            curios_core::Global::Authored(let_.name.clone()),
+            let_.name.clone(),
             AliasEdge {
                 target,
                 dependencies: direct.map(|_| {
@@ -1710,16 +1711,24 @@ fn audit_public_exposures(
         // signature is the declaration's business, not an interface the author
         // wrote: a constructor facade may legitimately hand out values of a
         // type the consumer cannot name.
-        if let_.name.without_last() != let_.island {
+        //
+        // A witness has no authored path at all, which is the same answer
+        // arrived at structurally: "who can see this by its name" is not a
+        // question an anonymous declaration has. Its reach is the coherence
+        // table's, governed by the orphan rule at registration.
+        let Some(path) = let_.name.qualifier() else {
+            continue;
+        };
+        if path.without_last() != let_.island {
             continue;
         }
 
-        let exposure = audiences.binding(&let_.name);
+        let exposure = audiences.binding(path);
         audit_dependencies(
             &audiences,
             &sources,
             &exposure,
-            &let_.name.join(),
+            &let_.name.symbol(),
             globals(let_.type_.free_vars()),
         )?;
     }
@@ -1807,6 +1816,7 @@ pub fn into_core(
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
+    let witness_ids = Entropy::<usize>::new();
 
     let mut context = Context::new(
         &table,
@@ -1818,6 +1828,7 @@ pub fn into_core(
         &universe_seeds,
         &universe_allocations,
         &binders,
+        &witness_ids,
         syntax,
     );
 
@@ -1899,6 +1910,7 @@ pub fn prepare_prelude(
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
+    let witness_ids = Entropy::<usize>::new();
     let mut context = Context::new(
         &table,
         &public,
@@ -1909,6 +1921,7 @@ pub fn prepare_prelude(
         &universe_seeds,
         &universe_allocations,
         &binders,
+        &witness_ids,
         syntax,
     );
     for (name, _) in &roots {
@@ -1964,6 +1977,7 @@ pub fn prepare_prelude(
         core,
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
+        witness_floor: witness_ids.count(),
         universe_floor: universes.count(),
     })
 }
@@ -1998,6 +2012,8 @@ pub fn into_core_with_prelude(
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
     binders.seed(prepared.binder_floor);
+    let witness_ids = Entropy::<usize>::new();
+    witness_ids.seed(prepared.witness_floor);
     let mut context = Context::new(
         &table,
         &public,
@@ -2008,6 +2024,7 @@ pub fn into_core_with_prelude(
         &universe_seeds,
         &universe_allocations,
         &binders,
+        &witness_ids,
         syntax,
     );
     for (name, _) in &prepared.roots {

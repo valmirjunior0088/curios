@@ -19,6 +19,14 @@ name!(Atom; archive);
 
 id!(WitnessId, "witness"; archive);
 
+impl WitnessId {
+    /// A witness identity at `index`. Minted by `into_core` from one
+    /// program-global counter, seeded above the archived prelude's floor.
+    pub fn new(index: u32) -> Self {
+        Self(index)
+    }
+}
+
 /// A compiler-minted binder's identity: a dense index, plus the display hint the
 /// minting site chose.
 ///
@@ -115,9 +123,10 @@ pub enum Global {
     /// identity rather than a manufactured name; the declaring module a
     /// diagnostic reports comes from `Definition::island`.
     ///
-    /// Not yet constructed: a witness still reaches `core` as an authored path
-    /// whose last segment the lowerer manufactured. Retyping it is the slice
-    /// that turns `Definition::name` into a `Global`.
+    /// The identity is minted from one program-global counter, seeded above the
+    /// archived prelude's floor — see `PreparedPrelude::witness_floor`. Nothing
+    /// else distinguishes two witnesses, so a per-module ordinal would not do:
+    /// aliasing one would silently rebind a coherence-table entry.
     Witness(WitnessId),
 }
 
