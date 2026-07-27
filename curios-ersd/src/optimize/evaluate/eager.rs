@@ -19,9 +19,11 @@ use {
 /// The item statements whose eager evaluation the interpreter proves performs
 /// no effect.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub(crate) fn prove_eager_groups_pure(module: &Module) -> BTreeSet<StatementId> {
-    let analysis = Analysis::analyze(module);
-    let mut evaluator = Evaluator::new(module, &analysis);
+pub(crate) fn prove_eager_groups_pure(
+    module: &Module,
+    analysis: &Analysis,
+) -> BTreeSet<StatementId> {
+    let mut evaluator = Evaluator::new(module, analysis);
     let mut pure = BTreeSet::new();
     for &item in module.items() {
         let Some(Statement::Rec { group }) = module.statement(item) else {

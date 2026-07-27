@@ -59,6 +59,7 @@ impl Subtree {
 pub(super) fn prune_unreachable(
     module: &mut Module,
     proven_pure: &std::collections::BTreeSet<StatementId>,
+    analysis: &Analysis,
 ) {
     let Some(entry) = module.entry() else { return };
     let items = module.items().to_vec();
@@ -84,7 +85,7 @@ pub(super) fn prune_unreachable(
 
     // Roots: whatever the entry block references, plus every item whose eager
     // evaluation is observable.
-    let summary = Summary::analyze(module, &Analysis::analyze(module));
+    let summary = Summary::analyze(module, analysis);
     let mut kept = BTreeSet::<usize>::new();
     let mut work = Vec::<usize>::new();
     for function in entry_subtree.free_functions() {

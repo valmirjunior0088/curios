@@ -21,7 +21,7 @@ mod prune_tests;
 #[cfg(test)]
 mod rebase_tests;
 
-use super::Module;
+use super::{Analysis, Module};
 
 /// Run the arena transformations in place: prune, evaluate, specialize, and
 /// prune again (evaluation and specialization strand the code they collapse).
@@ -33,8 +33,12 @@ pub fn optimize_ir(module: &mut Module) {
     module
         .verify()
         .expect("a module entering optimization verifies");
-    let proven_pure = evaluate::prove_eager_groups_pure(module);
-    prune::prune_unreachable(module, &proven_pure);
+    // One snapshot serves both: proving purity does not mutate, and pruning
+    // reads its analysis before it tombstones anything, so the module they see
+    // is the same module.
+    let analysis = Analysis::analyze(module);
+    let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
+    prune::prune_unreachable(module, &proven_pure, &analysis);
     // A curried chain folds one application per round; eight rounds cover
     // any corpus chain with room to spare, and the shared pass budget caps
     // the total work regardless.
@@ -45,6 +49,7 @@ pub fn optimize_ir(module: &mut Module) {
     }
     evaluate::specialize_literal_spines(module);
     rebase::rebase_monoid_recursion(module);
-    let proven_pure = evaluate::prove_eager_groups_pure(module);
-    prune::prune_unreachable(module, &proven_pure);
+    let analysis = Analysis::analyze(module);
+    let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
+    prune::prune_unreachable(module, &proven_pure, &analysis);
 }

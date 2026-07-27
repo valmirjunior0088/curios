@@ -21,7 +21,11 @@ use {
 /// An immutable analysis snapshot of one module state.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Analysis {
-    value_uses: BTreeMap<ValueId, usize>,
+    /// Use counts, indexed by `ValueId`. A dense arena index, so a `Vec` is
+    /// both faster and *more* obviously deterministic than a map: it cannot be
+    /// iterated in any order but id order. Never iterated in practice — read
+    /// only through [`Analysis::value_uses`].
+    value_uses: Vec<usize>,
     free_values: BTreeMap<FunctionId, BTreeSet<ValueId>>,
     references: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
     components: Vec<Vec<FunctionId>>,
@@ -42,7 +46,7 @@ struct Region {
 impl Analysis {
     /// Analyze the module's current state.
     pub fn analyze(module: &Module) -> Self {
-        let mut value_uses = BTreeMap::new();
+        let mut value_uses = vec![0usize; module.values().len()];
 
         // Walk the top level and every live function as separate regions. The
         // top level contributes use counts but is not itself a function region.
@@ -132,7 +136,7 @@ impl Analysis {
     /// anywhere in the module. Definitions are not uses; an unreferenced value
     /// is absent.
     pub fn value_uses(&self, value: ValueId) -> usize {
-        self.value_uses.get(&value).copied().unwrap_or(0)
+        self.value_uses.get(value.index()).copied().unwrap_or(0)
     }
 
     /// The values a function references but does not bind — its derived
@@ -180,7 +184,7 @@ fn walk_region(
     module: &Module,
     items: impl IntoIterator<Item = StatementId>,
     blocks: Vec<BlockId>,
-    value_uses: &mut BTreeMap<ValueId, usize>,
+    value_uses: &mut [usize],
 ) -> Region {
     let mut region = Region::default();
     let mut statements: Vec<StatementId> = items.into_iter().collect();
@@ -188,7 +192,9 @@ fn walk_region(
 
     let mut use_atom = |region: &mut Region, atom: Atom| match atom {
         Atom::Value(value) => {
-            *value_uses.entry(value).or_default() += 1;
+            if let Some(count) = value_uses.get_mut(value.index()) {
+                *count += 1;
+            }
             region.used.insert(value);
         }
         Atom::Function(function) => {
