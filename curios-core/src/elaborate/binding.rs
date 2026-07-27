@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::Global};
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node,
 /// so this loops over them — elaborating each binding's type/body, minting its
@@ -398,12 +398,13 @@ pub(super) fn elaborate_infix(
     let left = left.unwrap();
     let right = right.unwrap();
 
-    let (concept_name, field_name) = infix.op.concept_field();
+    let (concept_path, field_name) = infix.op.concept_field();
+    let concept_name = Global::Authored(concept_path);
 
     // The concept registry entry — absent only in an exotic embedding that
     // elaborates without the embedded prelude, where the operator has nothing to
     // dispatch through.
-    let Some(concept) = context.concept(concept_name).cloned() else {
+    let Some(concept) = context.concept(&concept_name).cloned() else {
         let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
         return Err(Error::operator_undefined(
             infix.op.symbol().to_string(),
@@ -426,7 +427,7 @@ pub(super) fn elaborate_infix(
     // later witness registration, and a definite miss reports
     // `no witness of Add(Point)` — the single operator error vocabulary.
     let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
-    let goal = Term::struct_type_at(concept_name, universes, vec![operand_type.clone()]);
+    let goal = Term::struct_type_at(concept_name.clone(), universes, vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: infix.op.symbol().to_string(),
         binder: field_name.to_string(),

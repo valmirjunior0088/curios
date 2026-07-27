@@ -7,6 +7,11 @@ use {
     },
 };
 
+/// A declaration's name, from the path a test writes. Fixture-only.
+fn nominal(path: &str) -> crate::Global {
+    crate::Global::Authored(curios_base::Qualifier::from([path]))
+}
+
 fn context() -> Context {
     Context::new(Duration::from_secs(1))
 }
@@ -259,7 +264,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         root: RootId::Entry,
         type_: Term::type_at(parameter.succ().unwrap()),
         body: Term::induct_type_at(
-            "Family",
+            nominal("Family"),
             [parameter],
             Vec::<Term>::new(),
             Vec::<Term>::new(),
@@ -394,7 +399,7 @@ fn a_capturing_closure_stores_no_capture_list() {
 }
 
 fn opt_type() -> Term {
-    Term::induct_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
+    Term::induct_type(nominal("Opt"), Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 // induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some`
@@ -436,8 +441,13 @@ fn opt_induct() -> InductDecl {
 fn a_variant_constructs_with_its_registered_schema() {
     let mut context = context();
     let mut induct_decls = BTreeMap::new();
-    induct_decls.insert("Opt".to_string(), opt_induct());
-    let body = Term::variant("Opt", Vec::<Term>::new(), Atom::from("some"), [nat_lit(6)]);
+    induct_decls.insert(nominal("Opt"), opt_induct());
+    let body = Term::variant(
+        nominal("Opt"),
+        Vec::<Term>::new(),
+        Atom::from("some"),
+        [nat_lit(6)],
+    );
     let erased = erase_module_to_ir(
         &mut context,
         &Module {
@@ -457,7 +467,7 @@ fn a_variant_constructs_with_its_registered_schema() {
     assert_eq!(
         erased.to_string(),
         "\
-family ~d0$Opt { ~t0$none() ~t1$some(x) }
+family ~d0$/Opt { ~t0$none() ~t1$some(x) }
 entry {
   ~v0 = construct ~t1(6)
   return ~v0
@@ -700,8 +710,13 @@ fn a_variant_match_binds_payload_without_projections() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let mut induct_decls = BTreeMap::new();
-    induct_decls.insert("Opt".to_string(), opt_induct());
-    let scrutinee = Term::variant("Opt", Vec::<Term>::new(), Atom::from("some"), [nat_lit(6)]);
+    induct_decls.insert(nominal("Opt"), opt_induct());
+    let scrutinee = Term::variant(
+        nominal("Opt"),
+        Vec::<Term>::new(),
+        Atom::from("some"),
+        [nat_lit(6)],
+    );
     let body = Term::induct_match(
         scrutinee,
         None,
@@ -730,7 +745,7 @@ fn a_variant_match_binds_payload_without_projections() {
     assert_eq!(
         erased.to_string(),
         "\
-family ~d0$Opt { ~t0$none() ~t1$some(x) }
+family ~d0$/Opt { ~t0$none() ~t1$some(x) }
 entry {
   ~v0$scrutinee = construct ~t1(6)
   ~v2 = match ~d0 ~v0$scrutinee {

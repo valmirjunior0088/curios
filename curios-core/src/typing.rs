@@ -2,9 +2,9 @@
 mod tests;
 
 use super::{
-    Apply, Context, Error, Field, Free, Func, Level, Many, MetaId, Mode, Outcome, Prim, PrimHead,
-    Proj, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-    UniverseRole, elaborate,
+    Apply, Context, Error, Field, Free, Func, Global, Level, Many, MetaId, Mode, Outcome, Prim,
+    PrimHead, Proj, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
+    UniverseConstraintOrigin, UniverseRole, elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -484,7 +484,7 @@ pub(crate) enum MotiveShape<'a> {
     /// (`InductDecl::indices` under `open_params`), and the scrutinee binder
     /// takes `I(p̄, ī)` at those index binders.
     Induct {
-        name: &'a str,
+        name: &'a Global,
         universes: &'a [Level],
         params: &'a [Term],
         indices: Telescope<()>,
@@ -501,7 +501,7 @@ impl MotiveShape<'_> {
     }
 
     /// The eliminated family's name, for diagnostics.
-    fn name(&self) -> Option<&str> {
+    fn name(&self) -> Option<&Global> {
         match self {
             MotiveShape::Prim(_) => None,
             MotiveShape::Induct { name, .. } => Some(name),
@@ -539,7 +539,12 @@ impl MotiveShape<'_> {
                     };
                     index_vars.push(var);
                 }
-                Term::induct_type_at(*name, universes.to_vec(), params.to_vec(), index_vars)
+                Term::induct_type_at(
+                    (*name).clone(),
+                    universes.to_vec(),
+                    params.to_vec(),
+                    index_vars,
+                )
             }
         };
 
@@ -571,7 +576,12 @@ impl MotiveShape<'_> {
                     binders.push((label, ty));
                     index_vars.push(var);
                 }
-                Term::induct_type_at(*name, universes.to_vec(), params.to_vec(), index_vars)
+                Term::induct_type_at(
+                    (*name).clone(),
+                    universes.to_vec(),
+                    params.to_vec(),
+                    index_vars,
+                )
             }
         };
 
@@ -617,7 +627,7 @@ pub(crate) fn check_motive(
         },
         written if written == arity => check_closed_motive(context, shape, motive),
         written => Err(Error::motive_binder_count(
-            shape.name().map(str::to_string),
+            shape.name().map(Global::symbol),
             arity,
             written,
         )),
@@ -672,7 +682,7 @@ fn check_written_motive(
         && telescope.len() != arity
     {
         return Err(Error::motive_binder_count(
-            shape.name().map(str::to_string),
+            shape.name().map(Global::symbol),
             arity,
             telescope.len(),
         ));

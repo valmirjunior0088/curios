@@ -56,18 +56,18 @@ impl FlatItem {
         !lets.is_empty() && lets.iter().all(|let_| let_.root.kind().is_privileged())
     }
 
-    pub(super) fn names(&self) -> Vec<String> {
+    pub(super) fn names(&self) -> Vec<curios_core::Global> {
+        let global = |let_: &FlatLet| curios_core::Global::Authored(let_.name.clone());
         match self {
-            FlatItem::Let(let_) => vec![let_.name.join()],
-            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.join()).collect(),
+            FlatItem::Let(let_) => vec![global(let_)],
+            FlatItem::Rec(lets) => lets.iter().map(global).collect(),
         }
     }
 
-    /// Every global this item names, as the flattened spelling the reachability
-    /// prune keys on (see [`FlatItem::names`]). Locals are dropped: an item's
-    /// binders are its own business, and reachability is a question about
-    /// definitions.
-    pub(super) fn free_vars(&self) -> HashSet<String> {
+    /// Every global this item names — the reachability prune's edges (see
+    /// [`FlatItem::names`]). Locals are dropped: an item's binders are its own
+    /// business, and reachability is a question about definitions.
+    pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
             FlatItem::Rec(lets) => lets.as_slice(),
@@ -84,7 +84,7 @@ impl FlatItem {
                     .free_vars()
                     .into_iter()
                     .chain(let_.body.free_vars())
-                    .filter_map(|name| name.as_global().map(curios_core::Global::symbol))
+                    .filter_map(|name| name.as_global().cloned())
                     .chain(let_.type_.construction_names())
                     .chain(let_.body.construction_names())
             })

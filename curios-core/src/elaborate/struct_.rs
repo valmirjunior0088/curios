@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{Level, UniverseContext, instantiate_universe_levels_scoped},
+    crate::{Global, Level, UniverseContext, instantiate_universe_levels_scoped},
 };
 
 fn instantiate_struct_decl(
@@ -60,9 +60,9 @@ pub(super) fn elaborate_struct_type(
     } = st;
 
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return Err(match context.assumption_of_symbol(name) {
+        return Err(match context.assumption(&Free::from(name)) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unknown_declaration(name.clone()),
+            None => Error::unknown_declaration(name.symbol()),
         });
     };
     let explicit_universes = (!universes.is_empty()).then_some(universes.as_slice());
@@ -78,7 +78,7 @@ pub(super) fn elaborate_struct_type(
                 ty.clone(),
                 term.span(),
                 ImplicitOrigin {
-                    func: name.clone(),
+                    func: name.symbol(),
                     binder,
                 },
             );
@@ -86,14 +86,14 @@ pub(super) fn elaborate_struct_type(
             resolved.push(arg);
         }
         return Ok((
-            Term::struct_type_at(name, universes, resolved),
+            Term::struct_type_at(name.clone(), universes, resolved),
             struct_decl.result_sort.clone(),
         ));
     }
 
     if params.len() != struct_decl.params.len() {
         return Err(Error::struct_arity_mismatch(
-            name.clone(),
+            name.symbol(),
             struct_decl.params.len(),
             params.len(),
         ));
@@ -102,7 +102,7 @@ pub(super) fn elaborate_struct_type(
     let (elaborated, ()) = check_args_against(context, struct_decl.params, params)?;
 
     Ok((
-        Term::struct_type_at(name, universes, elaborated),
+        Term::struct_type_at(name.clone(), universes, elaborated),
         struct_decl.result_sort,
     ))
 }
@@ -181,9 +181,9 @@ pub(super) fn elaborate_struct(
     } = s;
 
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return Err(match context.assumption_of_symbol(name) {
+        return Err(match context.assumption(&Free::from(name)) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unknown_declaration(name.clone()),
+            None => Error::unknown_declaration(name.symbol()),
         });
     };
     let explicit_universes =
@@ -200,14 +200,14 @@ pub(super) fn elaborate_struct(
             .island()
             .is_some_and(|island| !island.is_within(&struct_decl.module))
     {
-        return Err(Error::private_representation(name.clone()));
+        return Err(Error::private_representation(name.symbol()));
     }
 
     // A written-but-wrong parameter count is an error; an *empty* list is the
     // bare-name head, which mints one fresh metavariable per parameter.
     if !params.is_empty() && params.len() != struct_decl.params.len() {
         return Err(Error::struct_arity_mismatch(
-            name.clone(),
+            name.symbol(),
             struct_decl.params.len(),
             params.len(),
         ));
@@ -225,8 +225,8 @@ pub(super) fn elaborate_struct(
         1 if matches!(entries[0], StructEntry::Spread) => {
             return elaborate_struct_spread(context, &struct_decl, &universes, s, term, mode);
         }
-        1 => return Err(Error::spread_not_first(name.clone())),
-        _ => return Err(Error::multiple_spreads(name.clone())),
+        1 => return Err(Error::spread_not_first(name.symbol())),
+        _ => return Err(Error::multiple_spreads(name.symbol())),
     }
 
     let resolved = resolve_struct_params(context, name, &struct_decl, params, term)?;
@@ -265,12 +265,12 @@ pub(super) fn elaborate_struct(
     }
 
     if !fills.is_empty() && context.concept(name).is_none() {
-        return Err(Error::use_entry_outside_concept(name.clone()));
+        return Err(Error::use_entry_outside_concept(name.symbol()));
     }
 
     if fills.len() > use_positions.len() {
         return Err(Error::too_many_use_entries(
-            name.clone(),
+            name.symbol(),
             use_positions.len(),
             fills.len(),
         ));
@@ -289,7 +289,7 @@ pub(super) fn elaborate_struct(
 
     if plain.len() != plain_labels.len() {
         return Err(Error::wrong_number_of_fields(
-            name.clone(),
+            name.symbol(),
             plain_labels.len(),
             plain.len(),
         ));
@@ -303,7 +303,7 @@ pub(super) fn elaborate_struct(
         let declared = plain_labels.get(position).copied().unwrap_or_default();
         if declared != *written {
             return Err(Error::unknown_struct_field(
-                name.clone(),
+                name.symbol(),
                 (*written).to_string(),
                 plain_labels
                     .iter()
@@ -328,7 +328,7 @@ pub(super) fn elaborate_struct(
                 // internal label must never surface, so the goal's provenance
                 // names it `_` (the goal itself already shows the concept).
                 None => FieldSource::Resolve {
-                    func: name.clone(),
+                    func: name.symbol(),
                     binder: "_".to_string(),
                 },
             });
@@ -344,8 +344,13 @@ pub(super) fn elaborate_struct(
     check_dependent_fields(context, field_telescope, &sources, term, &mut elaborated)?;
 
     Ok((
-        Term::struct_at(name, universes.clone(), resolved.clone(), elaborated),
-        Term::struct_type_at(name, universes, resolved),
+        Term::struct_at(
+            name.clone(),
+            universes.clone(),
+            resolved.clone(),
+            elaborated,
+        ),
+        Term::struct_type_at(name.clone(), universes, resolved),
     ))
 }
 
@@ -354,7 +359,7 @@ pub(super) fn elaborate_struct(
 /// instantiated type: written arguments are checked, omitted ones minted fresh.
 pub(super) fn resolve_struct_params(
     context: &mut Context,
-    name: &str,
+    name: &Global,
     struct_decl: &StructDecl,
     params: &[Term],
     term: &Term,
@@ -392,7 +397,7 @@ pub(super) fn resolve_struct_params(
 /// ordinary mismatch diagnostics.
 pub(super) fn seed_struct_expectation(
     context: &mut Context,
-    name: &str,
+    name: &Global,
     universes: &[Level],
     resolved: &[Term],
     term: &Term,
@@ -403,9 +408,9 @@ pub(super) fn seed_struct_expectation(
             name: expected_name,
             ..
         }) = Term::unwrap_or_clone(reduce_with(context, expected)?)
-        && expected_name == name
+        && expected_name == name.clone()
     {
-        let seeded = Term::struct_type_at(name, universes.to_vec(), resolved.to_vec());
+        let seeded = Term::struct_type_at(name.clone(), universes.to_vec(), resolved.to_vec());
         expect(context, term, &seeded, expected)?;
     }
     Ok(())
@@ -453,7 +458,7 @@ pub(super) fn elaborate_struct_spread(
         Subterm::StructType(StructType { name: base_name, .. }) if base_name == name
     ) {
         return Err(Error::spread_base_type_mismatch(
-            name.clone(),
+            name.symbol(),
             base_type.clone(),
         ));
     }
@@ -483,7 +488,7 @@ pub(super) fn elaborate_struct_spread(
             match entry {
                 StructEntry::Field(Some(written)) => plain.push((written, field)),
                 StructEntry::Field(None) => {
-                    return Err(Error::unlabeled_spread_override(name.clone()));
+                    return Err(Error::unlabeled_spread_override(name.symbol()));
                 }
                 StructEntry::Use => fills.push(field),
                 StructEntry::Spread => unreachable!("spread multiplicity was validated"),
@@ -491,12 +496,12 @@ pub(super) fn elaborate_struct_spread(
         }
 
         if !fills.is_empty() && context.concept(name).is_none() {
-            return Err(Error::use_entry_outside_concept(name.clone()));
+            return Err(Error::use_entry_outside_concept(name.symbol()));
         }
 
         if fills.len() > use_positions.len() {
             return Err(Error::too_many_use_entries(
-                name.clone(),
+                name.symbol(),
                 use_positions.len(),
                 fills.len(),
             ));
@@ -538,14 +543,14 @@ pub(super) fn elaborate_struct_spread(
                     .any(|(_, declared)| *declared == written) =>
                 {
                     return Err(Error::spread_override_out_of_order(
-                        name.clone(),
+                        name.symbol(),
                         written.to_string(),
                         listed(),
                     ));
                 }
                 None => {
                     return Err(Error::unknown_struct_field(
-                        name.clone(),
+                        name.symbol(),
                         written.to_string(),
                         listed(),
                     ));
@@ -586,7 +591,7 @@ pub(super) fn elaborate_struct_spread(
         )?;
 
         Ok::<_, Error>((
-            Term::struct_at(name, universes.to_vec(), resolved, elaborated),
+            Term::struct_at(name.clone(), universes.to_vec(), resolved, elaborated),
             result_type,
         ))
     })?;

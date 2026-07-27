@@ -420,15 +420,16 @@ impl Term {
 // Resolve a super concept's head to its qualified core name — the same rule
 // `Lowerer`'s term-reference arm uses, minus the local-binder shadowing (a
 // declaration-site super edge has no enclosing value scope).
-fn resolve_concept_head(context: &Context, name: &Name) -> Result<String, Error> {
-    if name.is_abs() || !name.is_single() {
-        Ok(context.resolve_term_name(name)?.join())
+fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_core::Global, Error> {
+    let qualifier = if name.is_abs() || !name.is_single() {
+        context.resolve_term_name(name)?
     } else {
         match context.bindings().get(name.head()) {
-            Some(qualifier) => Ok(qualifier.join()),
-            None => Ok(name.head().to_string()),
+            Some(qualifier) => qualifier.clone(),
+            None => Qualifier::from([name.head()]),
         }
-    }
+    };
+    Ok(curios_core::Global::Authored(qualifier))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -436,10 +437,10 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    induct_decls: &mut BTreeMap<String, curios_core::InductDecl>,
-    struct_decls: &mut BTreeMap<String, curios_core::StructDecl>,
-    concepts: &mut BTreeMap<String, curios_core::Concept>,
-    witnesses: &mut BTreeSet<String>,
+    induct_decls: &mut BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &mut BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    concepts: &mut BTreeMap<curios_core::Global, curios_core::Concept>,
+    witnesses: &mut BTreeSet<curios_core::Global>,
     foreigns: &mut ForeignStore,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
@@ -618,7 +619,7 @@ fn process_items(
                     .iter()
                     .map(|u| {
                         let lower = Lowerer::new(context);
-                        let name = context.prefixed(&u.label).join();
+                        let name = curios_core::Global::Authored(context.prefixed(&u.label));
 
                         // Parameters and indices are minted before any of their
                         // types is lowered, and each type sees the binders
@@ -718,7 +719,7 @@ fn process_items(
                                 let telescope = curios_core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
                                     curios_core::Term::induct_type(
-                                        &name,
+                                        name.clone(),
                                         param_vars.clone(),
                                         target,
                                     ),
@@ -778,7 +779,7 @@ fn process_items(
                         );
 
                         let induct_decl =
-                            curios_core::Term::induct_type(&name, param_vars, index_vars);
+                            curios_core::Term::induct_type(name.clone(), param_vars, index_vars);
 
                         // The type constructor is flat over params then
                         // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
@@ -915,7 +916,7 @@ fn process_items(
                             })
                             .collect();
                         let inject = curios_core::Term::variant(
-                            context.prefixed(&u.label).join(),
+                            curios_core::Global::Authored(context.prefixed(&u.label)),
                             param_binders.iter().map(|(_, id)| {
                                 curios_core::Term::var(curios_core::Var::free(id.clone()))
                             }),
@@ -947,7 +948,7 @@ fn process_items(
             TopItem::Struct(s) => {
                 let lower = Lowerer::new(context);
 
-                let name = context.prefixed(&s.label).join();
+                let name = curios_core::Global::Authored(context.prefixed(&s.label));
                 // Declaring module: the type-former's qualifier prefix —
                 // identical to core's per-item `island` — for the
                 // representation-privacy checks.
@@ -1022,7 +1023,7 @@ fn process_items(
                 // body is the `StructType` normal form (the bare node when
                 // parameterless), so `Pair(Nat, Bin)` reduces to
                 // `StructType { Pair, [Nat, Bin] }`. No value constructor.
-                let struct_type = curios_core::Term::struct_type(&name, param_vars);
+                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
                 } else {
@@ -1047,7 +1048,7 @@ fn process_items(
             // parameter telescope) and one method-wrapper `let` per field, synthed
             // into the concept's own namespace (§4.1).
             TopItem::Concept(concept) => {
-                let name = context.prefixed(&concept.label).join();
+                let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                 let module = context.prefixed(&concept.label).without_last();
                 let root = context.root();
 
@@ -1155,7 +1156,7 @@ fn process_items(
                 );
 
                 // The type-former, exactly like a representation-public struct's.
-                let struct_type = curios_core::Term::struct_type(&name, param_vars);
+                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
                 } else {
@@ -1267,7 +1268,7 @@ fn process_items(
                     type_: lower.term(&signature.type_())?,
                     body: lower.value(&signature.body())?,
                 }));
-                witnesses.insert(context.prefixed(&label).join());
+                witnesses.insert(curios_core::Global::Authored(context.prefixed(&label)));
             }
         }
     }
@@ -1303,10 +1304,10 @@ fn process_items(
 /// registry too.
 fn node_reference_names(
     item: &FlatItem,
-    declared: &[String],
-    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
-) -> HashSet<String> {
+    declared: &[curios_core::Global],
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+) -> HashSet<curios_core::Global> {
     let mut names = item.free_vars();
     for name in declared {
         if let Some(induct_decl) = induct_decls.get(name) {
@@ -1324,8 +1325,8 @@ fn node_reference_names(
 /// the partition `owner` was restricted to) drop out.
 fn dep_nodes(
     node: usize,
-    names: &HashSet<String>,
-    owner: &HashMap<String, usize>,
+    names: &HashSet<curios_core::Global>,
+    owner: &HashMap<curios_core::Global, usize>,
 ) -> HashSet<usize> {
     names
         .iter()
@@ -1335,7 +1336,7 @@ fn dep_nodes(
 }
 
 /// Owner index (declared name → node) over the given nodes only.
-fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<String, usize> {
+fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global, usize> {
     nodes
         .iter()
         .flat_map(|&n| items[n].names().into_iter().map(move |name| (name, n)))
@@ -1377,9 +1378,9 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
-    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
-    rest_owner: &HashMap<String, usize>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    rest_owner: &HashMap<curios_core::Global, usize>,
 ) -> Vec<usize> {
     let owner = owner_of(items, prelude_nodes);
     let deps = prelude_nodes
@@ -1387,14 +1388,18 @@ fn prelude_permutation(
         .map(|&n| {
             let declared = items[n].names();
             let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
-            if let Some(name) = names.iter().find(|name| {
-                !owner.contains_key(name.as_str()) && rest_owner.contains_key(name.as_str())
-            }) {
+            if let Some(name) = names
+                .iter()
+                .find(|name| !owner.contains_key(*name) && rest_owner.contains_key(*name))
+            {
                 panic!(
-                    "'{}' (in the standard library) references '{name}', which is only declared \
+                    "'{}' (in the standard library) references '{}', which is only declared \
                      in the entry program — the standard library is always compiled before the \
                      entry program, so this is a bug in the embedded prelude source",
-                    declared.first().map_or("<anonymous>", String::as_str),
+                    declared
+                        .first()
+                        .map_or("<anonymous>".to_string(), curios_core::Global::symbol),
+                    name.symbol(),
                 );
             }
             (n, dep_nodes(n, &names, &owner))
@@ -1415,8 +1420,8 @@ fn prelude_permutation(
 
 fn order_flat_items(
     items: Vec<FlatItem>,
-    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
 ) -> Vec<FlatItem> {
     let count = items.len();
 
@@ -1474,7 +1479,7 @@ fn order_flat_items(
 /// its telescopes. Binder names (parameters, payload binders) are captured by
 /// `Telescope::build` and never appear here; the index types' references also
 /// live in the type binding's own signature, but are included for robustness.
-fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<String> {
+fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
     induct_decl
         .params
         .free_vars()
@@ -1486,7 +1491,7 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<String> {
                 .iter()
                 .flat_map(|(_, param)| param.telescope.free_vars()),
         )
-        .filter_map(|name| name.as_global().map(curios_core::Global::symbol))
+        .filter_map(|name| name.as_global().cloned())
         .collect()
 }
 
@@ -1495,23 +1500,23 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<String> {
 /// makes a struct's type-former node depend on the (e.g. primitive) types its
 /// fields mention — they live nowhere in the type-former's own body, which is
 /// just the `StructType` normal form.
-fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<String> {
+fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
     struct_decl
         .params
         .free_vars()
         .into_iter()
         .chain(struct_decl.fields.free_vars())
-        .filter_map(|name| name.as_global().map(curios_core::Global::symbol))
+        .filter_map(|name| name.as_global().cloned())
         .collect()
 }
 
 #[derive(Clone)]
 struct AliasEdge {
-    target: String,
+    target: curios_core::Global,
     dependencies: Option<BTreeSet<curios_core::Global>>,
 }
 
-fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
+fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
     let lets = items.iter().flat_map(|item| match item {
         FlatItem::Let(let_) => std::slice::from_ref(let_),
         FlatItem::Rec(lets) => lets.as_slice(),
@@ -1525,10 +1530,10 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
         let target = direct
             .or_else(|| let_.body.transparent_alias_target())
             .and_then(curios_core::Free::as_global)?
-            .symbol();
+            .clone();
 
         Some((
-            let_.name.join(),
+            curios_core::Global::Authored(let_.name.clone()),
             AliasEdge {
                 target,
                 dependencies: direct.map(|_| {
@@ -1548,15 +1553,17 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
 /// transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal(
     entry: &Entry,
-    aliases: &HashMap<String, AliasEdge>,
-    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
-) -> Option<(String, Vec<AliasEdge>)> {
-    let mut current = entry
-        .representation
-        .as_ref()
-        .unwrap_or(&entry.target)
-        .join();
+    aliases: &HashMap<curios_core::Global, AliasEdge>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+) -> Option<(curios_core::Global, Vec<AliasEdge>)> {
+    let mut current = curios_core::Global::Authored(
+        entry
+            .representation
+            .as_ref()
+            .unwrap_or(&entry.target)
+            .clone(),
+    );
     let mut seen = HashSet::new();
     let mut traversed = Vec::new();
 
@@ -1577,8 +1584,10 @@ fn exposed_nominal(
 /// bare transparent aliases that reach it. A name is as visible as the widest
 /// alias that stands for it, so an exported alias carries its target's audience
 /// even when the target itself is never exported.
-fn alias_sources(aliases: &HashMap<String, AliasEdge>) -> HashMap<String, HashSet<String>> {
-    let mut sources: HashMap<String, HashSet<String>> = HashMap::new();
+fn alias_sources(
+    aliases: &HashMap<curios_core::Global, AliasEdge>,
+) -> HashMap<curios_core::Global, HashSet<curios_core::Global>> {
+    let mut sources: HashMap<curios_core::Global, HashSet<curios_core::Global>> = HashMap::new();
 
     for (name, edge) in aliases {
         sources
@@ -1589,7 +1598,7 @@ fn alias_sources(aliases: &HashMap<String, AliasEdge>) -> HashMap<String, HashSe
 
     loop {
         let mut changed = false;
-        let pairs: Vec<(String, Vec<String>)> = sources
+        let pairs: Vec<(curios_core::Global, Vec<curios_core::Global>)> = sources
             .iter()
             .map(|(target, names)| (target.clone(), names.iter().cloned().collect()))
             .collect();
@@ -1628,7 +1637,7 @@ fn globals(
 /// transparent alias that stands for it.
 fn referent_audience(
     audiences: &Audiences,
-    sources: &HashMap<String, HashSet<String>>,
+    sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
     referent: &curios_core::Global,
 ) -> Vec<Qualifier> {
     let Some(qualifier) = referent.qualifier() else {
@@ -1636,13 +1645,13 @@ fn referent_audience(
     };
     let mut audience = audiences.binding(qualifier);
 
-    // The alias table is still keyed by the flattened spelling, so a hop is
-    // matched by rendering rather than by identity.
-    for alias in sources.get(&referent.symbol()).into_iter().flatten() {
-        let Some(path) = alias.strip_prefix('/') else {
+    // A hop is matched by identity, and its qualifier is read off the name
+    // rather than split back out of a rendering.
+    for alias in sources.get(referent).into_iter().flatten() {
+        let Some(qualifier) = alias.qualifier() else {
             continue;
         };
-        audience.extend(audiences.binding(&Qualifier::from(path.split('/'))));
+        audience.extend(audiences.binding(qualifier));
     }
 
     audience
@@ -1654,7 +1663,7 @@ fn referent_audience(
 /// counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: &Audiences,
-    sources: &HashMap<String, HashSet<String>>,
+    sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
     exposure: &[Qualifier],
     item: &str,
     dependencies: impl IntoIterator<Item = curios_core::Global>,
@@ -1687,8 +1696,8 @@ fn audit_public_exposures(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
     items: &[FlatItem],
-    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
 ) -> Result<(), Error> {
     let aliases = flat_aliases(items);
     let sources = alias_sources(&aliases);

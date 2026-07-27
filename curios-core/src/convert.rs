@@ -1742,7 +1742,7 @@ impl Convert {
                     Box::new(move |vars| {
                         let (params, indices) = vars.split_at(n_params);
                         Term::induct_type_at(
-                            &name,
+                            name.clone(),
                             universes.clone(),
                             params.iter().cloned(),
                             indices.iter().cloned(),
@@ -1757,7 +1757,7 @@ impl Convert {
                 (
                     struct_decl.params.clone(),
                     Box::new(move |vars| {
-                        Term::struct_type_at(&name, universes.clone(), vars.iter().cloned())
+                        Term::struct_type_at(name.clone(), universes.clone(), vars.iter().cloned())
                     }),
                 )
             }

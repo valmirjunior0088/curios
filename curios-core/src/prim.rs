@@ -952,7 +952,7 @@ impl Prim {
     // Recurse into every operand `Term` so a construction nested inside a primitive
     // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 

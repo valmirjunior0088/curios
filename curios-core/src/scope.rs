@@ -7,7 +7,7 @@
 
 use {
     super::{
-        Context, Error, Free, Level, LevelHead, MetaId, Subterm, Term, UniverseError,
+        Context, Error, Free, Global, Level, LevelHead, MetaId, Subterm, Term, UniverseError,
         UniverseMetaId, UniverseParam, UniverseSolver, zonk_term,
     },
     std::{
@@ -445,7 +445,7 @@ pub(crate) enum SelfReference {
 /// single comparison rather than a traversal.
 pub(crate) fn stamp_declaration_instance<B: Bound>(
     value: &B,
-    names: &BTreeSet<String>,
+    names: &BTreeSet<Global>,
     self_reference: SelfReference,
     levels: &[Level],
 ) -> B {
@@ -894,7 +894,7 @@ impl Telescope<Term> {
     /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and
     /// the trailing body/return type. Concrete in `Term` — no collector trait
     /// needed. See [`Subterm::collect_construction_names`](super::Subterm::collect_construction_names).
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Telescope::Cons(ty, rest) => {
                 ty.collect_construction_names(names);
@@ -942,7 +942,7 @@ impl Telescope<()> {
 
     /// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body
     /// is `()`, which contributes no names.
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         if let Telescope::Cons(ty, rest) = self {
             ty.collect_construction_names(names);
             rest.body().collect_construction_names(names);

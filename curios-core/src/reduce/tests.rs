@@ -4,6 +4,11 @@ use {
     std::time::{Duration, Instant},
 };
 
+/// A declaration's name, from the path a test writes. Fixture-only.
+fn nominal(path: &str) -> crate::Global {
+    crate::Global::Authored(curios_base::Qualifier::from([path]))
+}
+
 fn context() -> Context {
     Context::new(Duration::from_millis(10))
 }
@@ -97,7 +102,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
     // bound call-by-name to the flat projection `head.1`, which then reduces
     // to the payload component.
     let term: Term = Term::induct_match(
-        Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
+        Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
         Term::prim(Prim::NatType),
         [
@@ -118,7 +123,7 @@ fn reduce_inductive_match_absent_tag_takes_default() {
     // `some` tag is absent from the cases, so dispatch falls through to the
     // binding-free `| _ =>` default (no payload projected).
     let term: Term = Term::induct_match_default(
-        Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
+        Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
         Term::prim(Prim::NatType),
         [("none", Vec::<crate::Free>::new(), nat(0))],
@@ -137,7 +142,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
     // With the `some` arm present, dispatch selects it (binding the payload)
     // rather than the default — the default is only for absent tags.
     let term: Term = Term::induct_match_default(
-        Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
+        Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
         Term::prim(Prim::NatType),
         [

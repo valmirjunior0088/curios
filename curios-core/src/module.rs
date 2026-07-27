@@ -235,21 +235,21 @@ pub struct Module {
     /// name. Carried on the module — not on a `Context` — because elaboration
     /// and erasure each run with their *own* `Context` (see `run::compile`);
     /// both seed their context's flat inductive store from here on entry.
-    pub induct_decls: BTreeMap<String, InductDecl>,
+    pub induct_decls: BTreeMap<Global, InductDecl>,
     /// Struct declarations' registry entries, keyed by the type's qualified
     /// name. Carried on the module like `induct_decls` (and for the same reason):
     /// elaboration and erasure each seed their own `Context` from here on entry.
-    pub struct_decls: BTreeMap<String, StructDecl>,
+    pub struct_decls: BTreeMap<Global, StructDecl>,
     /// Concept declarations' resolution metadata, keyed by the concept's
     /// qualified name (each concept's record shape also lives in
     /// `struct_decls`). Seeded into the elaboration `Context` on entry; erasure
     /// never consults it.
-    pub concepts: BTreeMap<String, Concept>,
+    pub concepts: BTreeMap<Global, Concept>,
     /// The definition names that are witness declarations. Elaboration
     /// registers each into the witness table when its signature elaborates —
     /// carried as names (not keys) because the table key needs the
     /// *elaborated* head, which only exists once elaboration runs.
-    pub witnesses: BTreeSet<String>,
+    pub witnesses: BTreeSet<Global>,
     /// One past the highest binder index `into_core` minted for this module.
     ///
     /// Binder identities are one space shared with `Context::fresh`, so
@@ -299,8 +299,8 @@ impl Module {
                 ),
             }
         }
-        symbols.extend(self.induct_decls.keys().cloned());
-        symbols.extend(self.struct_decls.keys().cloned());
+        symbols.extend(self.induct_decls.keys().map(Global::symbol));
+        symbols.extend(self.struct_decls.keys().map(Global::symbol));
         symbols
     }
 }

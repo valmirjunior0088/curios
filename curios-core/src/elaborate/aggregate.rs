@@ -64,7 +64,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             params,
         }) => {
             let Some(struct_decl) = context.struct_decl(name).cloned() else {
-                return Err(Error::unknown_declaration(name.clone()));
+                return Err(Error::unknown_declaration(name.symbol()));
             };
             let fields = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
@@ -87,7 +87,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
                     Field::Index(index) => index.to_string(),
                     Field::Label(label) => label.clone(),
                 };
-                return Err(Error::private_field(name.clone(), field));
+                return Err(Error::private_field(name.symbol(), field));
             }
 
             fields.open_params(params)
@@ -157,7 +157,7 @@ pub(super) fn elaborate_induct_type(
     } = ut;
 
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Err(Error::unknown_declaration(name.clone()));
+        return Err(Error::unknown_declaration(name.symbol()));
     };
     let (indices_telescope, result_sort, universes) = if written_universes.is_empty() {
         let (indices_telescope, universes) = context
@@ -187,7 +187,7 @@ pub(super) fn elaborate_induct_type(
 
     Ok((
         Term::induct_type_at(
-            name,
+            name.clone(),
             universes,
             elaborated[..params.len()].iter().cloned(),
             elaborated[params.len()..].iter().cloned(),
@@ -214,7 +214,7 @@ pub(super) fn elaborate_variant(
     } = uc;
 
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Err(Error::unknown_declaration(name.clone()));
+        return Err(Error::unknown_declaration(name.symbol()));
     };
 
     if !induct_decl.rep_public
@@ -222,7 +222,7 @@ pub(super) fn elaborate_variant(
             .island()
             .is_some_and(|island| !island.is_within(&induct_decl.module))
     {
-        return Err(Error::private_representation(name.clone()));
+        return Err(Error::private_representation(name.symbol()));
     }
 
     let (signature, universes) = if written_universes.is_empty() {
@@ -261,7 +261,7 @@ pub(super) fn elaborate_variant(
         &universes,
     );
     let rebuilt = Term::variant_at(
-        name,
+        name.clone(),
         universes,
         elaborated[..params.len()].iter().cloned(),
         tag.clone(),

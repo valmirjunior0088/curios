@@ -15,7 +15,9 @@ fn witness_key_displays_bare_for_arity_one() {
 fn witness_key_displays_as_a_tuple_for_higher_arities() {
     let key = WitnessKey(vec![
         HeadKey::Nat,
-        HeadKey::Nominal("/std/Str/Str".to_string()),
+        HeadKey::Nominal(crate::Global::Authored(curios_base::Qualifier::from([
+            "std", "Str", "Str",
+        ]))),
     ]);
     assert_eq!(key.to_string(), "(Nat, /std/Str/Str)");
 }

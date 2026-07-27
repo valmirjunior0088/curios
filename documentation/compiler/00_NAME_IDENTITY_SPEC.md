@@ -14,11 +14,9 @@ Phase C landed with one deviation from what this document specified, recorded un
 
 Phase C was never the only phase that changes the archive schema, which is what the sequencing was originally argued from — Phase A bumped it and Phase B bumped it again. The bump is a one-line constant and was never the real constraint; the reason to sequence after the universe work was that it was still churning the same Core types, `InductDecl`/`Definition`/`Module`. It no longer is.
 
-Three decoders survive C, each for a stated reason and none of them a fact-recovery:
+**No decoder survives.** A search for `split('/')`, `starts_with('/')`, `trim_start_matches('/')`, `split_once('#')`, and `rsplit` across non-test source outside `curios-text`'s own surface printer returns nothing. The nominal registries were retyped to `Global` in a follow-up commit, which retired the last three at once: `Global::symbol`'s registry bridge, the alias-source hop in `into_core.rs`, and `Context::assumption_of_symbol`'s rendering scan (now an exact lookup, because Γ and the nominal heads finally key on the same thing).
 
-- `curios-text/src/names.rs:55` renders a surface `Name`; that is the front end printing user input.
-- `Lowerer::syn_name` (`into_core/lowerer.rs`) builds a global from a `SyntaxRegistry` path constant. The registry stores `&'static str`; giving it `Qualifier`s retires the last construction-side parse.
-- `Global::symbol` is the declared boundary against the still-`String`-keyed nominal registries (`induct_decls`, `struct_decls`, `concepts`, `witness_table`, `Module::witnesses`). Retyping those keys is the remaining slice of C's key ledger and the one Phase D's `Ord` audit wants.
+`Global::symbol` still exists, and every one of its ~80 remaining callers renders a name *into* a diagnostic, an IR display hint, or the printer's shortening table. Nothing reads structure back out of one. `Qualifier::joins_to` — added in C purely to compare a typed name against an untyped one without allocating — is deleted.
 
 ## Objective
 
@@ -231,10 +229,10 @@ The sites that built a free variable from an unminted label mint instead: `imita
 
 - Every decoder of facts 2 and 3 became a `matches!`. `has_local_free` is `var.as_free().is_some_and(Free::is_local)` — exact, so the misfires vanish by construction.
 - `Definition.name` and `RecDefinition.name` became `Global`: a bare `Qualifier` cannot name a witness, which has no authored path. `Witness.name` follows, which turns `update_witness_scheme`'s scan into a comparison on identities.
-- Keys landed: `assumptions`, `assumption_universes`, `definitions`, and `refinements` take `Free`; so do `local`, `witness_scope`, `MetaEntry::telescope`, the erasure `Environment`, and `Term::free_vars`. **The nominal registries did not**: `induct_decls`, `struct_decls`, `concepts`, `witness_declarations`, and `Module::witnesses` are still `String`-keyed, bridged by `Global::symbol`. That is the remaining slice, and it is what makes `InductType::name`/`Struct::name` still `String`.
-- `Global::Witness` is declared and tested but **not yet constructed**: a witness still reaches Core as an authored path whose last segment the lowerer manufactured (`witness@N`). Retiring that spelling is part of the same remaining slice, and until it lands the `while elaborating /witness@1:` diagnostic prefix stays.
+- Keys landed: `assumptions`, `assumption_universes`, `definitions`, and `refinements` take `Free`; so do `local`, `witness_scope`, `MetaEntry::telescope`, the erasure `Environment`, and `Term::free_vars`. The nominal registries followed in the next commit — `induct_decls`, `struct_decls`, `concepts`, `witness_declarations`, `Module::witnesses`, `witness_table`, `HeadKey::Nominal`, and the four nominal normal forms' `name` fields all take `Global`. Their iteration order is now segment-wise rather than over joined text, which is arbitrary-but-deterministic; whether it should become *declaration* order is still Phase D's question.
+- `Global::Witness` is declared and tested but **still not constructed**, and the registry retyping did not change that. `into_core`'s `witness_ordinal` is a local in `process_items`, which recurses per module, so ordinals restart at zero in every module: `/A/witness@0` and `/B/witness@0` are distinct only because their qualifiers differ. A flat `WitnessId(0)` would collide silently. Constructing it needs a program-global counter threaded through `into_core::Context` (like `metavars`/`binders`/`universes`), a floor on `Module` and `PreparedPrelude` exactly like `binder_floor`, and the witness diagnostic switched to `Definition::island`. That is its own slice with its own archive invariant, and until it lands the `while elaborating /witness@1:` prefix stays.
 - `module_symbols()` and the alias-source map, orphaned by Phase A, landed here. `flat_aliases` now asks `Free::as_global` where it used to prefix-test for `/`, and the visibility audit takes `Global`s so `referent_audience` reads the `Qualifier` off the name instead of re-splitting it.
-- `SCHEMA` bumped to 12 (Phase A took it to 10, Phase B to 11).
+- `SCHEMA` bumped to 12, then to 13 with the registry retyping (Phase A took it to 10, Phase B to 11).
 
 **Mint floors are an archive invariant, not an implementation detail.** The counters are compilation-scoped and minted locals reach `assumptions`/`definitions`, so they are *in* the archived Core. `Module::binder_floor` carries `into_core`'s high-water mark; `elaborate_module` seeds `Context::fresh` above it (`Context::set_local_floor`), and `PreparedPrelude::binder_floor` reseeds the text-side counter on replay — the same shape as `metavar_floor`. Without it a freshly minted `Mint(7)` silently aliases an archived one: no error, no diagnostic, a wrong binder.
 
@@ -270,7 +268,7 @@ The phase is done when the objective's own test passes against the *reachable* A
 Phase C left two accessors on that path, and D's first bullet is about both, not just `Var`:
 
 - `Free::hint` yields `Option<&str>`. It is display metadata by construction, but it is a `&str` reachable from a `Free`, so the audit must decide whether it belongs behind the printer too.
-- `Global::symbol` yields a `String` and is the declared bridge to the `String`-keyed registries. **It disappears when those keys are retyped, and not before** — which makes retyping them a prerequisite for D rather than an optional follow-on.
+- `Global::symbol` yields a `String`. Its registry-bridge role is gone; what remains is rendering, and `build_shorten` is where most of it lands. Routing `module_symbols()` and `build_shorten` through `Qualifier::segments()` — this phase's own first bullet — is what finally confines it.
 - Nothing else. There is no spelling-to-identity path left in the crate, test-only or otherwise.
 
 ## Evidence

@@ -69,7 +69,7 @@ fn flex_head(context: &Context, term: &Term) -> bool {
 
 /// The goal type as a concept application: its (reduced) `StructType` name and
 /// parameters, when that name is a registered concept.
-fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(String, Vec<Level>, Vec<Term>)> {
+fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Vec<Level>, Vec<Term>)> {
     let Subterm::StructType(StructType {
         name,
         universes,
@@ -346,7 +346,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             let struct_decl = context
                 .struct_decl(name)
                 .cloned()
-                .ok_or_else(|| Error::unknown_declaration(name.clone()))?;
+                .ok_or_else(|| Error::unknown_declaration(name.symbol()))?;
             let fields = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
                 &struct_decl.fields,
@@ -800,7 +800,7 @@ pub(crate) fn register_witness(
         && !key.0.iter().any(|head| context.root_of_head(head) == root)
     {
         return Err(Error::orphan_witness(
-            concept_name.clone(),
+            concept_name.symbol(),
             key,
             module.clone(),
         ));
@@ -818,7 +818,7 @@ pub(crate) fn register_witness(
         },
     ) {
         return Err(Error::duplicate_witness(
-            concept_name.clone(),
+            concept_name.symbol(),
             key,
             first_module,
             module.clone(),
@@ -836,26 +836,26 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     for (name, concept) in concepts {
         for (_, target) in &concept.supers {
             if target == name {
-                return Err(Error::cyclic_superclass(name.clone()));
+                return Err(Error::cyclic_superclass(name.symbol()));
             }
             if !concepts.contains_key(target) {
-                return Err(Error::unknown_superclass(name.clone(), target.clone()));
+                return Err(Error::unknown_superclass(name.symbol(), target.symbol()));
             }
         }
     }
 
     // Three-color DFS over the superclass edges.
     fn visit(
-        concepts: &std::collections::BTreeMap<String, super::Concept>,
-        name: &str,
-        visiting: &mut BTreeSet<String>,
-        done: &mut BTreeSet<String>,
+        concepts: &std::collections::BTreeMap<Global, super::Concept>,
+        name: &Global,
+        visiting: &mut BTreeSet<Global>,
+        done: &mut BTreeSet<Global>,
     ) -> Result<(), Error> {
         if done.contains(name) {
             return Ok(());
         }
-        if !visiting.insert(name.to_string()) {
-            return Err(Error::cyclic_superclass(name));
+        if !visiting.insert(name.clone()) {
+            return Err(Error::cyclic_superclass(name.symbol()));
         }
         if let Some(concept) = concepts.get(name) {
             for (_, target) in &concept.supers {
@@ -863,7 +863,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
             }
         }
         visiting.remove(name);
-        done.insert(name.to_string());
+        done.insert(name.clone());
         Ok(())
     }
 

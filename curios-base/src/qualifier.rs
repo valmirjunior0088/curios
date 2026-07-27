@@ -139,27 +139,6 @@ impl Qualifier {
         }
     }
 
-    /// Whether this qualifier's canonical flattened spelling is exactly `path`
-    /// — [`Qualifier::join`] without building the string.
-    ///
-    /// A comparison against an already-flattened name, for the boundaries where
-    /// one side is a declaration name that has not been retyped yet. Nothing
-    /// here reads structure *out of* `path`; it only asks whether the two
-    /// render alike.
-    pub fn joins_to(&self, path: &str) -> bool {
-        let mut rest = path;
-        for segment in self.segments_slice() {
-            let Some(tail) = rest
-                .strip_prefix('/')
-                .and_then(|t| t.strip_prefix(segment.as_str()))
-            else {
-                return false;
-            };
-            rest = tail;
-        }
-        rest.is_empty()
-    }
-
     /// Whether this is exactly one segment — a root-level name, whose `head` and `last` coincide.
     pub fn is_single(&self) -> bool {
         self.segments_slice().len() == 1

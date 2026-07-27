@@ -9,7 +9,10 @@
 //! already defined — so a type constructed or matched at many sites shares
 //! one schema.
 
-use {super::BTreeMap, crate::Free};
+use {
+    super::BTreeMap,
+    crate::{Free, Global},
+};
 
 /// What a Core name erases to.
 #[derive(Debug, Clone, Copy)]
@@ -81,8 +84,8 @@ pub(super) struct FamilyRow {
 )]
 pub(super) struct Environment {
     values: BTreeMap<Free, Binding>,
-    struct_decls: BTreeMap<String, ProductRow>,
-    induct_decls: BTreeMap<String, FamilyRow>,
+    struct_decls: BTreeMap<Global, ProductRow>,
+    induct_decls: BTreeMap<Global, FamilyRow>,
     /// Anonymous tuple schemas, interned by relevant-field width — an
     /// arity-`n` product is one untyped layout regardless of which tuple
     /// built it.
@@ -102,20 +105,20 @@ impl Environment {
         self.values.get(name).copied()
     }
 
-    pub(super) fn struct_row(&self, name: &str) -> Option<&ProductRow> {
+    pub(super) fn struct_row(&self, name: &Global) -> Option<&ProductRow> {
         self.struct_decls.get(name)
     }
 
-    pub(super) fn register_struct_row(&mut self, name: impl Into<String>, row: ProductRow) {
-        self.struct_decls.insert(name.into(), row);
+    pub(super) fn register_struct_row(&mut self, name: &Global, row: ProductRow) {
+        self.struct_decls.insert(name.clone(), row);
     }
 
-    pub(super) fn induct_row(&self, name: &str) -> Option<&FamilyRow> {
+    pub(super) fn induct_row(&self, name: &Global) -> Option<&FamilyRow> {
         self.induct_decls.get(name)
     }
 
-    pub(super) fn register_induct_row(&mut self, name: impl Into<String>, row: FamilyRow) {
-        self.induct_decls.insert(name.into(), row);
+    pub(super) fn register_induct_row(&mut self, name: &Global, row: FamilyRow) {
+        self.induct_decls.insert(name.clone(), row);
     }
 
     pub(super) fn tuple_schema(&self, width: usize) -> Option<curios_ersd::ProductId> {

@@ -4,6 +4,11 @@ use {
     std::time::Duration,
 };
 
+/// A declaration's name, from the path a test writes. Fixture-only.
+fn nominal(path: &str) -> crate::Global {
+    crate::Global::Authored(curios_base::Qualifier::from([path]))
+}
+
 fn context() -> Context {
     Context::new(Duration::from_secs(1))
 }
@@ -17,7 +22,7 @@ fn nat_lit(n: usize) -> Term {
 }
 
 fn opt_type() -> Term {
-    Term::induct_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
+    Term::induct_type(nominal("Opt"), Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 // induct Opt : Type | none() | some(x : Nat) end — an unindexed, two-constructor
@@ -26,7 +31,7 @@ fn register_opt(context: &mut Context) {
     let payload = context.fresh(Some("x"));
     context
         .register_induct(
-            "Opt",
+            &nominal("Opt"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
@@ -60,10 +65,10 @@ fn register_opt(context: &mut Context) {
 }
 
 fn make_opt_opaque(context: &mut Context) {
-    let mut induct_decl = context.induct_decl("Opt").unwrap().clone();
+    let mut induct_decl = context.induct_decl(&nominal("Opt")).unwrap().clone();
     induct_decl.module = Qualifier::from(["Owner"]);
     induct_decl.rep_public = false;
-    context.update_induct("Opt", induct_decl);
+    context.update_induct(&nominal("Opt"), induct_decl);
 }
 
 #[test]
@@ -72,10 +77,15 @@ fn opaque_inductive_construction_is_rejected_outside_declaring_module() {
     register_opt(&mut context);
     make_opt_opaque(&mut context);
 
-    let term = Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new());
+    let term = Term::variant(
+        nominal("Opt"),
+        Vec::<Term>::new(),
+        "none",
+        Vec::<Term>::new(),
+    );
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::PrivateRepresentation { name }) if name == "Opt"
+        Err(Error::PrivateRepresentation { name }) if name == "/Opt"
     ));
 
     context.set_island(Qualifier::from(["Owner"]));
@@ -117,7 +127,7 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     for term in [empty, named, defaulted] {
         assert!(matches!(
             elaborate(&mut context, &term, Mode::Infer),
-            Err(Error::PrivateRepresentation { name }) if name == "Opt"
+            Err(Error::PrivateRepresentation { name }) if name == "/Opt"
         ));
     }
 }
@@ -132,10 +142,15 @@ fn privacy_suppression_admits_machinery_rederivation() {
     register_opt(&mut context);
     make_opt_opaque(&mut context);
 
-    let term = Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new());
+    let term = Term::variant(
+        nominal("Opt"),
+        Vec::<Term>::new(),
+        "none",
+        Vec::<Term>::new(),
+    );
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::PrivateRepresentation { name }) if name == "Opt"
+        Err(Error::PrivateRepresentation { name }) if name == "/Opt"
     ));
 
     let admitted =
@@ -144,7 +159,7 @@ fn privacy_suppression_admits_machinery_rederivation() {
 
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::PrivateRepresentation { name }) if name == "Opt"
+        Err(Error::PrivateRepresentation { name }) if name == "/Opt"
     ));
 }
 
@@ -157,7 +172,12 @@ fn oracle_suppresses_privacy_as_part_of_its_package() {
     register_opt(&mut context);
     make_opt_opaque(&mut context);
 
-    let term = Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new());
+    let term = Term::variant(
+        nominal("Opt"),
+        Vec::<Term>::new(),
+        "none",
+        Vec::<Term>::new(),
+    );
     let admitted = context.with_oracle(|context| elaborate(context, &term, Mode::Infer).is_ok());
     assert!(admitted);
 }
@@ -317,7 +337,7 @@ fn inductive_match_default_relaxes_coverage() {
     // enumerated; the un-written `some` constructor is covered by the catch-all,
     // so this otherwise-incomplete match elaborates, at the motive's type.
     let term = Term::induct_match_default(
-        Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
+        Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some(&motive),
         nat(),
         [("none", Vec::<crate::Free>::new(), nat_lit(0))],
@@ -337,7 +357,7 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
     // The same match without the catch-all: `some` is genuinely missing from an
     // unindexed inductive, so coverage fails.
     let term = Term::induct_match(
-        Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
+        Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some(&motive),
         nat(),
         [("none", Vec::<crate::Free>::new(), nat_lit(0))],
@@ -349,14 +369,14 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
 // induct Flag : (b : Nat) -> Type | off() : (0) | on() : (1) end — the minimal
 // indexed family, for the motive binders a catch-all has to ride along with.
 fn flag_type(index: Term) -> Term {
-    Term::induct_type("Flag", Vec::<Term>::new(), vec![index])
+    Term::induct_type(nominal("Flag"), Vec::<Term>::new(), vec![index])
 }
 
 fn register_flag(context: &mut Context) {
     let index = context.fresh(Some("b"));
     context
         .register_induct(
-            "Flag",
+            &nominal("Flag"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
@@ -398,7 +418,12 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
     // motive" for a default to conflict with: the enumerated arm is checked at
     // its own case target index and the default at the scrutinee's actual one.
     let term: Term = Subterm::Match(Match {
-        head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
+        head: Term::variant(
+            nominal("Flag"),
+            Vec::<Term>::new(),
+            "on",
+            Vec::<Term>::new(),
+        ),
         motive: Scope::close(Many(2), &[&index, &motive], nat()),
         cases: Cases::Induct {
             cases: Vec::from([(
@@ -427,7 +452,12 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
     // eliminator's motive binds two names. A written motive that binds one is
     // reported as itself, not as a downstream domain mismatch.
     let term: Term = Subterm::Match(Match {
-        head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
+        head: Term::variant(
+            nominal("Flag"),
+            Vec::<Term>::new(),
+            "on",
+            Vec::<Term>::new(),
+        ),
         motive: Term::match_motive_written(Term::func([(motive, flag_type(nat_lit(1)))], nat())),
         cases: Cases::Induct {
             cases: Vec::from([(

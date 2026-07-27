@@ -617,7 +617,7 @@ fn elaborate_induct_match(
         .collect::<Result<Vec<_>, _>>()?;
 
     let Some(induct_decl) = context.induct_decl(&name).cloned() else {
-        return Err(Error::unknown_declaration(name.clone()));
+        return Err(Error::unknown_declaration(name.symbol()));
     };
     let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
 
@@ -629,7 +629,7 @@ fn elaborate_induct_match(
             .island()
             .is_some_and(|island| !island.is_within(&induct_decl.module))
     {
-        return Err(Error::private_representation(name));
+        return Err(Error::private_representation(name.symbol()));
     }
 
     // The motive abstracts the index telescope instantiated at the scrutinee's
@@ -724,7 +724,7 @@ fn elaborate_induct_match(
                 _ => false,
             };
         if !permitted {
-            return Err(Error::large_elim_of_prop(name.clone()));
+            return Err(Error::large_elim_of_prop(name.symbol()));
         }
     }
 
@@ -737,7 +737,7 @@ fn elaborate_induct_match(
         .find(|tag| !induct_decl.declares(tag))
     {
         return Err(Error::unknown_match_constructor(
-            name.clone(),
+            name.symbol(),
             tag.to_string(),
         ));
     }

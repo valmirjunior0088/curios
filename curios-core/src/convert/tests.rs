@@ -4,6 +4,11 @@ use {
     std::time::Duration,
 };
 
+/// A declaration's name, from the path a test writes. Fixture-only.
+fn nominal(path: &str) -> crate::Global {
+    crate::Global::Authored(curios_base::Qualifier::from([path]))
+}
+
 fn context() -> Context {
     Context::new(Duration::from_millis(10))
 }
@@ -480,7 +485,7 @@ fn convert_recursive_values_are_bisimilar() {
     // involved), history cuts it, and the streams are equal coinductively.
     let stream = |name: &Free| {
         Term::variant(
-            "E",
+            nominal("E"),
             Vec::<Term>::new(),
             "cons",
             [nat(1), Term::free_var(name)],
@@ -946,7 +951,7 @@ fn convert_struct_unit_field_is_irrelevant() {
     // struct Wrap { x : Nat, u : () }
     context
         .register_struct(
-            "Wrap",
+            &nominal("Wrap"),
             StructDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
@@ -972,8 +977,8 @@ fn convert_struct_unit_field_is_irrelevant() {
     let s = Term::free_var(&s_binder);
 
     // Wrap { 1, r } and Wrap { 1, s } differ only in the unit field's neutral.
-    let this = Term::struct_("Wrap", Vec::<Term>::new(), [nat(1), r]);
-    let that = Term::struct_("Wrap", Vec::<Term>::new(), [nat(1), s]);
+    let this = Term::struct_(nominal("Wrap"), Vec::<Term>::new(), [nat(1), r]);
+    let that = Term::struct_(nominal("Wrap"), Vec::<Term>::new(), [nat(1), s]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -991,7 +996,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
     // induct Wrap | wrap(x : Nat, u : ()) end
     context
         .register_induct(
-            "Wrap",
+            &nominal("Wrap"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::done(()),
@@ -1004,7 +1009,11 @@ fn convert_variant_unit_payload_is_irrelevant() {
                                 (x.clone(), Term::prim(Prim::NatType)),
                                 (u.clone(), Term::tuple_type_unit()),
                             ],
-                            Term::induct_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
+                            Term::induct_type(
+                                nominal("Wrap"),
+                                Vec::<Term>::new(),
+                                Vec::<Term>::new(),
+                            ),
                         ),
                         plicities: vec![Plicity::Explicit, Plicity::Explicit],
                     },
@@ -1024,8 +1033,8 @@ fn convert_variant_unit_payload_is_irrelevant() {
     let s = Term::free_var(&s_binder);
 
     // wrap(1, r) and wrap(1, s) differ only in the unit payload's neutral.
-    let this = Term::variant("Wrap", Vec::<Term>::new(), "wrap", [nat(1), r]);
-    let that = Term::variant("Wrap", Vec::<Term>::new(), "wrap", [nat(1), s]);
+    let this = Term::variant(nominal("Wrap"), Vec::<Term>::new(), "wrap", [nat(1), r]);
+    let that = Term::variant(nominal("Wrap"), Vec::<Term>::new(), "wrap", [nat(1), s]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -1633,7 +1642,7 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     // An inductive type against `Nat` is provably unequal whatever `?0` becomes —
     // the heads are rigid — so the mismatch stays hard (and is reported at
     // the use site, not deferred to the drain).
-    let induct_decl = Term::induct_type("Vec", [m], Vec::<Term>::new());
+    let induct_decl = Term::induct_type(nominal("Vec"), [m], Vec::<Term>::new());
     let outcome = convert_outcome(
         &mut context,
         &Term::type_ground(),
@@ -1698,7 +1707,7 @@ fn register_lst(context: &mut Context) {
     let elem = context.fresh(Some("A"));
     context
         .register_induct(
-            "Lst",
+            &nominal("Lst"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::build([(elem.clone(), Term::type_ground())], ()),
@@ -1719,7 +1728,7 @@ fn register_vec(context: &mut Context) {
     let length = context.fresh(Some("n"));
     context
         .register_induct(
-            "Vec",
+            &nominal("Vec"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::build([(elem.clone(), Term::type_ground())], ()),
@@ -1757,14 +1766,18 @@ fn imitation_solves_flex_apply_against_inductive() {
 
     // ?0(Nat) ≟ Lst(Nat)  — commits ?0 := λA. Lst(A).
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
     // The committed solution is the imitation, not the constant: applied to a
     // different argument it yields Lst of *that* argument.
     let at_bln = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
-    let lst_bln = Term::induct_type("Lst", [Term::prim(Prim::BoolType)], Vec::<Term>::new());
+    let lst_bln = Term::induct_type(
+        nominal("Lst"),
+        [Term::prim(Prim::BoolType)],
+        Vec::<Term>::new(),
+    );
     assert_eq!(conv(&mut context, &at_bln, &lst_bln), Ok(true));
 }
 
@@ -1777,7 +1790,7 @@ fn imitation_is_symmetric() {
 
     // Rigid on the left, stuck application on the right.
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 }
@@ -1792,7 +1805,7 @@ fn imitation_equates_arguments_pairwise() {
 
     // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0, the pairwise equation ?1.
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
-    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
     assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
@@ -1819,12 +1832,12 @@ fn imitation_splits_params_and_indices() {
     // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's
     // body must mirror the rigid node's split or re-validation rejects it.
     let flex = Term::apply(Term::metavar(0), [nat_type(), nat(3)]);
-    let rigid = Term::induct_type("Vec", [nat_type()], [nat(3)]);
+    let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
     let at_two = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType), nat(2)]);
-    let vec_two = Term::induct_type("Vec", [Term::prim(Prim::BoolType)], [nat(2)]);
+    let vec_two = Term::induct_type(nominal("Vec"), [Term::prim(Prim::BoolType)], [nat(2)]);
     assert_eq!(conv(&mut context, &at_two, &vec_two), Ok(true));
 }
 
@@ -1835,7 +1848,7 @@ fn imitation_solves_against_struct_type() {
     let second = context.fresh(Some("B"));
     context
         .register_struct(
-            "Pair",
+            &nominal("Pair"),
             StructDecl {
                 universe_context: UniverseContext::empty(),
                 params: Telescope::build(
@@ -1872,7 +1885,7 @@ fn imitation_solves_against_struct_type() {
     );
 
     let flex = Term::apply(Term::metavar(0), [nat_type(), nat_type()]);
-    let rigid = Term::struct_type("Pair", [nat_type(), nat_type()]);
+    let rigid = Term::struct_type(nominal("Pair"), [nat_type(), nat_type()]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 }
@@ -1888,7 +1901,7 @@ fn imitation_arity_mismatch_blocks() {
     // v1 has no partial-application solutions, so the goal blocks (it is not
     // provably unequal — a constant solution could exist).
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type("Vec", [nat_type()], [nat(3)]);
+    let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1902,7 +1915,7 @@ fn imitation_non_function_birth_type_blocks() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1920,7 +1933,7 @@ fn imitation_leaves_rigid_apply_pairs_alone() {
     // case: the guard falls back to the neutral path, which cannot equate
     // them — a definite mismatch, exactly as before the rule existed.
     let stuck = Term::apply(Term::free_var(&f), [nat_type()]);
-    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
 }
 

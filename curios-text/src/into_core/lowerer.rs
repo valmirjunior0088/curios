@@ -163,7 +163,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // exactly what a `Bytes` literal does.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::Term::struct_(
-            self.context.syntax().string().string().symbol(),
+            curios_core::Global::Authored(self.context.syntax().string().string().qualifier()),
             Vec::<curios_core::Term>::new(),
             [
                 curios_core::Term::prim(curios_core::Prim::Bin(
@@ -200,7 +200,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         );
 
         curios_core::Term::struct_(
-            self.context.syntax().character().character().symbol(),
+            curios_core::Global::Authored(
+                self.context.syntax().character().character().qualifier(),
+            ),
             Vec::<curios_core::Term>::new(),
             [code, scalar],
         )
@@ -369,7 +371,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // privacy and spread shape are enforced in core
             // (`elaborate_struct`), alongside projection privacy.
             Subterm::StructLit(lit) => curios_core::Term::struct_entries(
-                self.resolve_symbol(&lit.head)?,
+                self.resolve_nominal(&lit.head)?,
                 lit.params
                     .iter()
                     .map(|p| self.term(p))
@@ -663,7 +665,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A struct literal's entry values hoist their bangs into this
             // region, exactly like a tuple's fields.
             Subterm::StructLit(lit) => curios_core::Term::struct_entries(
-                self.resolve_symbol(&lit.head)?,
+                self.resolve_nominal(&lit.head)?,
                 lit.params
                     .iter()
                     .map(|p| self.collect(p, binds))
@@ -852,14 +854,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    /// A nominal head's resolved name, flattened — the registries `curios-core`
-    /// keys on still use the spelling. Only a global can head a nominal literal.
-    pub(super) fn resolve_symbol(&self, name: &Name) -> Result<String, Error> {
-        Ok(self
-            .resolve_name(name)?
-            .as_global()
-            .map(curios_core::Global::symbol)
-            .unwrap_or_default())
+    /// A nominal head's resolved name. Only a global can head a nominal
+    /// literal; a local in that position is a resolution error the core stage
+    /// reports, so an unresolved one keeps its own unbindable identity.
+    pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_core::Global, Error> {
+        Ok(match self.resolve_name(name)?.as_global() {
+            Some(global) => global.clone(),
+            None => curios_core::Global::Authored(curios_base::Qualifier::from([name.head()])),
+        })
     }
 
     /// Builds `let pat = value : type_; tail` for a pattern in any of the

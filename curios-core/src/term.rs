@@ -32,12 +32,6 @@ pub(crate) enum HeadTag<'a> {
     Prim(&'static str),
 }
 
-fn names_declaration(names: &BTreeSet<String>, name: &Free) -> bool {
-    name.as_global()
-        .and_then(Global::qualifier)
-        .is_some_and(|qualifier| names.iter().any(|declared| qualifier.joins_to(declared)))
-}
-
 /// A core-calculus term: an `Rc`-shared [`Node`] — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
 #[cfg_attr(
@@ -317,13 +311,13 @@ impl Term {
     /// receive the same instance as the occurrence containing it.
     pub(crate) fn stamp_declaration_node(
         &self,
-        names: &BTreeSet<String>,
+        names: &BTreeSet<Global>,
         self_reference: SelfReference,
         levels: &[Level],
     ) -> Option<Self> {
         fn stamp(
             terms: &[Term],
-            names: &BTreeSet<String>,
+            names: &BTreeSet<Global>,
             self_reference: SelfReference,
             levels: &[Level],
         ) -> Vec<Term> {
@@ -369,7 +363,8 @@ impl Term {
                 if instance
                     .head
                     .head_name()
-                    .is_some_and(|name| names_declaration(names, name)) =>
+                    .and_then(Free::as_global)
+                    .is_some_and(|name| names.contains(name)) =>
             {
                 return Some(self.clone());
             }
@@ -377,7 +372,8 @@ impl Term {
                 if self_reference == SelfReference::Free
                     && var
                         .as_free()
-                        .is_some_and(|name| names_declaration(names, name)) =>
+                        .and_then(Free::as_global)
+                        .is_some_and(|name| names.contains(name)) =>
             {
                 return Some(Term::universe_inst(self.clone(), levels.to_vec()));
             }
@@ -822,9 +818,8 @@ impl Term {
     }
 
     /// Build an [`InductType`] normal form — the body of the generated type-constructor function. See the type's docs for the `params`/`indices` split.
-    pub fn induct_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
+    pub fn induct_type<I, P, J, Q>(name: Global, params: I, indices: J) -> Self
     where
-        N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         J: IntoIterator<Item = Q>,
@@ -833,14 +828,13 @@ impl Term {
         Self::induct_type_at(name, Vec::<Level>::new(), params, indices)
     }
 
-    pub(crate) fn induct_type_at<N, U, I, P, J, Q>(
-        name: N,
+    pub(crate) fn induct_type_at<U, I, P, J, Q>(
+        name: Global,
         universes: U,
         params: I,
         indices: J,
     ) -> Self
     where
-        N: Into<String>,
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
@@ -848,7 +842,7 @@ impl Term {
         Q: Into<Term>,
     {
         Self::from(Subterm::InductType(InductType {
-            name: name.into(),
+            name,
             universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
             indices: indices.into_iter().map(|i| i.into()).collect(),
@@ -856,9 +850,8 @@ impl Term {
     }
 
     /// Build a [`Variant`] normal form — the body of a generated value-constructor function. `name`/`params` are stored redundantly on purpose; see the type's docs.
-    pub fn variant<N, I, P, A, J, Q>(name: N, params: I, tag: A, payload: J) -> Self
+    pub fn variant<I, P, A, J, Q>(name: Global, params: I, tag: A, payload: J) -> Self
     where
-        N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         A: Into<Atom>,
@@ -868,15 +861,14 @@ impl Term {
         Self::variant_at(name, Vec::<Level>::new(), params, tag, payload)
     }
 
-    pub(crate) fn variant_at<N, U, I, P, A, J, Q>(
-        name: N,
+    pub(crate) fn variant_at<U, I, P, A, J, Q>(
+        name: Global,
         universes: U,
         params: I,
         tag: A,
         payload: J,
     ) -> Self
     where
-        N: Into<String>,
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
@@ -885,7 +877,7 @@ impl Term {
         Q: Into<Term>,
     {
         Self::from(Subterm::Variant(Variant {
-            name: name.into(),
+            name,
             universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
             tag: tag.into(),
@@ -894,24 +886,22 @@ impl Term {
     }
 
     /// Build a [`StructType`] normal form — what the generated type-former's body reduces to. Users never write one directly; see the type's docs.
-    pub fn struct_type<N, I, P>(name: N, params: I) -> Self
+    pub fn struct_type<I, P>(name: Global, params: I) -> Self
     where
-        N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
     {
         Self::struct_type_at(name, Vec::<Level>::new(), params)
     }
 
-    pub(crate) fn struct_type_at<N, U, I, P>(name: N, universes: U, params: I) -> Self
+    pub(crate) fn struct_type_at<U, I, P>(name: Global, universes: U, params: I) -> Self
     where
-        N: Into<String>,
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
     {
         Self::from(Subterm::StructType(StructType {
-            name: name.into(),
+            name,
             universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
         }))
@@ -919,9 +909,8 @@ impl Term {
 
     /// A struct value with no written field names — the positional normal form
     /// (post-elaboration and every internal build), mirroring `tuple`.
-    pub fn struct_<N, I, P, J, Q>(name: N, params: I, fields: J) -> Self
+    pub fn struct_<I, P, J, Q>(name: Global, params: I, fields: J) -> Self
     where
-        N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         J: IntoIterator<Item = Q>,
@@ -930,9 +919,8 @@ impl Term {
         Self::struct_at(name, Vec::<Level>::new(), params, fields)
     }
 
-    pub(crate) fn struct_at<N, U, I, P, J, Q>(name: N, universes: U, params: I, fields: J) -> Self
+    pub(crate) fn struct_at<U, I, P, J, Q>(name: Global, universes: U, params: I, fields: J) -> Self
     where
-        N: Into<String>,
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
@@ -940,7 +928,7 @@ impl Term {
         Q: Into<Term>,
     {
         Self::from(Subterm::Struct(Struct {
-            name: name.into(),
+            name,
             universes: universes.into_iter().collect(),
             params: params.into_iter().map(|p| p.into()).collect(),
             fields: fields.into_iter().map(|f| f.into()).collect(),
@@ -951,9 +939,8 @@ impl Term {
     /// A struct literal carrying the written entry shapes from `into_core`;
     /// elaboration validates them against the declared fields and rebuilds
     /// entry-free, exactly like `tuple_named`.
-    pub fn struct_entries<N, I, P, J, T>(name: N, params: I, fields: J) -> Self
+    pub fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self
     where
-        N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         J: IntoIterator<Item = (StructEntry, T)>,
@@ -969,7 +956,7 @@ impl Term {
         }
 
         Self::from(Subterm::Struct(Struct {
-            name: name.into(),
+            name,
             universes: vec![],
             params: params.into_iter().map(|p| p.into()).collect(),
             fields,
@@ -2008,7 +1995,7 @@ pub struct Proj {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct InductType {
-    pub name: String,
+    pub name: Global,
     pub universes: Vec<Level>,
     pub params: Vec<Term>,
     pub indices: Vec<Term>,
@@ -2028,7 +2015,7 @@ pub struct InductType {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Variant {
-    pub name: String,
+    pub name: Global,
     pub universes: Vec<Level>,
     pub params: Vec<Term>,
     pub tag: Atom,
@@ -2045,7 +2032,7 @@ pub struct Variant {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct StructType {
-    pub name: String,
+    pub name: Global,
     pub universes: Vec<Level>,
     pub params: Vec<Term>,
 }
@@ -2084,7 +2071,7 @@ pub enum StructEntry {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct Struct {
-    pub name: String,
+    pub name: Global,
     pub universes: Vec<Level>,
     pub params: Vec<Term>,
     pub fields: Vec<Term>,
@@ -2687,13 +2674,13 @@ impl Subterm {
     /// them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the
     /// string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former
     /// and field-type definitions alive even when no `Var` mentions them.
-    pub fn construction_names(&self) -> BTreeSet<String> {
+    pub fn construction_names(&self) -> BTreeSet<Global> {
         let mut names = BTreeSet::new();
         self.collect_construction_names(&mut names);
         names
     }
 
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => {}
             Subterm::UniverseInst(UniverseInst { head, .. }) => {

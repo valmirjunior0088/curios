@@ -4,6 +4,11 @@ use {
     std::{collections::BTreeSet, rc::Rc},
 };
 
+/// A declaration's name, from the path a test writes. Fixture-only.
+fn nominal(path: &str) -> crate::Global {
+    crate::Global::Authored(curios_base::Qualifier::from([path]))
+}
+
 #[cfg(feature = "archive")]
 #[test]
 fn archive_resets_caches_and_preserves_rc_sharing() {
@@ -214,17 +219,22 @@ fn metavar_is_inert_under_traversal() {
 
 #[test]
 fn variant_collects_metavars_and_prints_as_function_call() {
-    let ctor = Term::variant("Result", [Term::metavar(1)], "success", [Term::metavar(2)]);
+    let ctor = Term::variant(
+        nominal("Result"),
+        [Term::metavar(1)],
+        "success",
+        [Term::metavar(2)],
+    );
     assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetaId)));
-    assert_eq!(format!("{ctor}"), "Result/success(?2)");
+    assert_eq!(format!("{ctor}"), "/Result/success(?2)");
 
     let type_ = Term::induct_type(
-        "Result",
+        nominal("Result"),
         [Term::prim(Prim::NatType), Term::metavar(3)],
         Vec::<Term>::new(),
     );
     assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetaId)));
-    assert_eq!(format!("{type_}"), "Result(Nat, ?3)");
+    assert_eq!(format!("{type_}"), "/Result(Nat, ?3)");
 }
 
 #[test]
@@ -306,12 +316,17 @@ fn inductive_match_default_prints_a_catch_all_arm() {
 #[test]
 fn inductive_variants_reach_spans_components() {
     assert_eq!(
-        Term::induct_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),
+        Term::induct_type(
+            nominal("Result"),
+            [Term::var(Var::bound(2))],
+            Vec::<Term>::new()
+        )
+        .reach(),
         3
     );
     assert_eq!(
         Term::variant(
-            "Result",
+            nominal("Result"),
             [Term::var(Var::bound(0))],
             "success",
             [Term::var(Var::bound(4))],

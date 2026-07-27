@@ -37,7 +37,7 @@ pub struct Concept {
     /// Superclass edges: `(field position, super concept qualified name)` for
     /// each `use`-marked field. The graph over all concepts must be acyclic
     /// (checked when the registries are seeded).
-    pub supers: Vec<(usize, String)>,
+    pub supers: Vec<(usize, Global)>,
     /// The compilation root that declares this concept — consulted by the
     /// orphan-rule ownership check in `register_witness`.
     pub root: RootId,
@@ -106,7 +106,7 @@ impl std::fmt::Display for WitnessKey {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum HeadKey {
-    Nominal(String),
+    Nominal(Global),
     Nat,
     Byte,
     Int,

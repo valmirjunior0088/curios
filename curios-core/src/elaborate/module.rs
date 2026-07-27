@@ -1,8 +1,8 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Concept, Definition, DefinitionKind, Free, FuncType, InductDecl, InductParam, Item, Level,
-        Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
+        Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl, InductParam, Item,
+        Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
         retry_deferred_witnesses, sort_term, zonk, zonk_module, zonk_solved_term_metas,
@@ -24,10 +24,10 @@ use {
 /// declaration normalizes to is what distinguishes a concept from an inductive
 /// here. Nothing about the *name* does — deciding by inspecting `name` would be
 /// guessing at a fact the term already states.
-fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
+fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
     let found = Rc::new(RefCell::new(None));
     let sink = Rc::clone(&found);
-    let name = name.to_string();
+    let name = name.clone();
     let mut visit = Visit::rewriting(
         |_, _| None,
         Box::new(move |_, term: &Term| {
@@ -43,7 +43,7 @@ fn declaration_instance(value: &Term, name: &str) -> Option<Vec<Level>> {
                         .head
                         .head_name()
                         .and_then(Free::as_global)
-                        .is_some_and(|head| head.symbol() == name) =>
+                        .is_some_and(|head| *head == name) =>
                 {
                     Some(instance.levels.clone())
                 }
@@ -87,7 +87,7 @@ fn check_telescope_entries<B: Bound>(
 
 fn add_declaration_sizing<B: Bound>(
     context: &mut Context,
-    declaration: &str,
+    declaration: &Global,
     telescope: &Telescope<B>,
     uniform_count: usize,
     result_sort: &Term,
@@ -147,7 +147,7 @@ fn add_declaration_sizing<B: Bound>(
 /// and the type-constructor bodies' `InductType` nodes check their arguments
 /// against this very telescope. A name with no registry entry is an ordinary
 /// binding; no-op.
-fn elaborate_induct_indices(context: &mut Context, name: &str) -> Result<(), Error> {
+fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
     };
@@ -196,7 +196,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &str) -> Result<(), Err
 /// checks the parameters and the case's target indices against the
 /// already-rebuilt index telescope and returns another `InductType` node, the
 /// shape `case_target_indices` and the match elaborators rely on.
-fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<(), Error> {
+fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result<(), Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
     };
@@ -252,7 +252,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
 /// telescope. Called from `elaborate_module_let` once the type-former is
 /// defined (field types may mention the struct itself and earlier items). A
 /// name with no registry entry is an ordinary binding; no-op.
-fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
+fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(());
     };
@@ -286,7 +286,11 @@ fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
             for (i, (_, ty)) in entries[n_params..].iter().enumerate() {
                 if !is_prop(context, ty)? {
                     let field = labels[n_params + i].clone();
-                    return Err(Error::informative_prop_struct(name, field, ty.clone()));
+                    return Err(Error::informative_prop_struct(
+                        name.symbol(),
+                        field,
+                        ty.clone(),
+                    ));
                 }
             }
         }
@@ -375,7 +379,7 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
 
 fn finalize_definition(
     context: &mut Context,
-    name: &str,
+    name: &Global,
     kind: &DefinitionKind,
     type_: Term,
     body: Term,
@@ -402,19 +406,21 @@ fn finalize_definition(
     // own parameters in its own order. `finalize_at_instance` binds the concept
     // application's arguments to the inherited parameters positionally instead.
     if let DefinitionKind::ConceptMethod { owner } = kind {
-        let owner = owner.join();
+        let owner = Global::Authored(owner.clone());
         let universe_context = context
             .concept(&owner)
             .ok_or_else(|| {
                 Error::UniverseInvariant(format!(
-                    "{name}: method wrapper names an unregistered concept '{owner}'"
+                    "{name}: method wrapper names an unregistered concept '{}'",
+                    owner.symbol()
                 ))
             })?
             .universe_context
             .clone();
         let instance = declaration_instance(&type_, &owner).ok_or_else(|| {
             Error::UniverseInvariant(format!(
-                "{name}: method wrapper does not apply its concept '{owner}'"
+                "{name}: method wrapper does not apply its concept '{}'",
+                owner.symbol()
             ))
         })?;
         let mut metas = context.universe_metas_in(&type_);
@@ -441,12 +447,13 @@ fn finalize_definition(
     // Like `ConceptMethod`, the owner is a field `into_core` records where the
     // constructor is generated, not something recovered from `name`.
     if let DefinitionKind::InductiveConstructor { owner, .. } = kind {
-        let owner = owner.join();
+        let owner = Global::Authored(owner.clone());
         let universe_context = context
             .induct_decl(&owner)
             .ok_or_else(|| {
                 Error::UniverseInvariant(format!(
-                    "{name}: constructor names an unregistered inductive '{owner}'"
+                    "{name}: constructor names an unregistered inductive '{}'",
+                    owner.symbol()
                 ))
             })?
             .universe_context
@@ -520,7 +527,7 @@ fn finalize_definition(
 
     let universe_context = context.finalize_universe_metas(interface, internal)?;
     let levels = universe_context.identity_instance();
-    let owned = BTreeSet::from([name.to_string()]);
+    let owned = BTreeSet::from([name.clone()]);
     // A non-recursive definition's own name stays free in its signature, body,
     // and registry entry: nothing captures it, so each occurrence carries the
     // instance itself.
@@ -596,17 +603,16 @@ fn finalize_definition(
 /// the lowered one no longer interchangeable; see the comment below), and the
 /// rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
-    // `name` keys Γ and the definition store; `symbol` keys the nominal
-    // registries, which are still indexed by the flattened spelling.
+    // Γ and the definition store key on the free-variable identity; the nominal
+    // registries key on the definition's own name.
     let name = Free::from(&def.name);
-    let symbol = def.name.symbol();
     let type_ = crate::check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as
     // its signature is known — *before* its body elaborates, so a recursive
     // witness (a `Show(Tree)` whose fields show subtrees) can resolve through
     // its own entry.
-    if context.is_witness_declaration(&symbol) {
+    if context.is_witness_declaration(&def.name) {
         register_witness(
             context,
             &def.name,
@@ -630,15 +636,15 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry
     // telescopes now that the former is defined (no-op for an ordinary let).
-    elaborate_struct(context, &symbol)?;
+    elaborate_struct(context, &def.name)?;
 
     let (universe_context, type_, body) =
-        finalize_definition(context, &symbol, &def.kind, type_, body)?;
+        finalize_definition(context, &def.name, &def.kind, type_, body)?;
     context.reassume(&name, &type_);
     context.define(&name, &body, Some(&def.kind));
     context.set_assumption_universe_context(&name, universe_context.clone());
-    if context.is_witness_declaration(&symbol) {
-        context.update_witness_scheme(&symbol, universe_context.clone(), type_.clone());
+    if context.is_witness_declaration(&def.name) {
+        context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
     }
 
     Ok(Definition {
@@ -658,13 +664,11 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
 /// its folded structural member.
 fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
     let defs = rec.definitions();
-    // See `elaborate_module_let`: identities key Γ, flattened spellings key the
-    // nominal registries.
+    // See `elaborate_module_let`: Γ keys on identities, the registries on names.
     let names = defs
         .iter()
         .map(|def| Free::from(&def.name))
         .collect::<Vec<_>>();
-    let symbols = defs.iter().map(|def| def.name.symbol()).collect::<Vec<_>>();
     for (def, name) in defs.iter().zip(&names) {
         context.assume(name, &def.type_);
     }
@@ -686,8 +690,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // names are the registry keys. Rebuild the registry index telescopes here
     // — after the rebuilt signatures are assumed (index types may mention the
     // group), before any body's `InductType` node checks against them.
-    for symbol in &symbols {
-        elaborate_induct_indices(context, symbol)?;
+    for def in &defs {
+        elaborate_induct_indices(context, &def.name)?;
     }
 
     let slots = defs
@@ -712,15 +716,15 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // Registry rebuild, phase two: constructor payload types may apply the
     // group's type constructors, so their signatures (and `InductType`
     // terminals) elaborate only now that the rebuilt bodies are defined.
-    for symbol in &symbols {
-        elaborate_induct_constructors(context, symbol)?;
+    for def in &defs {
+        elaborate_induct_constructors(context, &def.name)?;
     }
-    for symbol in &symbols {
-        if let Some(induct_decl) = context.induct_decl(symbol).cloned() {
+    for def in &defs {
+        if let Some(induct_decl) = context.induct_decl(&def.name).cloned() {
             for constructor in induct_decl.signatures() {
                 add_declaration_sizing(
                     context,
-                    symbol,
+                    &def.name,
                     &constructor.telescope,
                     induct_decl.params.len(),
                     &induct_decl.result_sort,
@@ -739,12 +743,12 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .map(|body| zonk_solved_term_metas(context, body))
         .collect::<Vec<_>>();
-    for symbol in &symbols {
-        let Some(induct_decl) = context.induct_decl(symbol).cloned() else {
+    for def in &defs {
+        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
             continue;
         };
         context.update_induct(
-            symbol,
+            &def.name,
             InductDecl {
                 universe_context: induct_decl.universe_context,
                 params: zonk_solved_term_metas(context, &induct_decl.params),
@@ -777,8 +781,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .flat_map(|type_| context.universe_metas_in(type_))
         .collect::<BTreeSet<_>>();
-    for symbol in &symbols {
-        if let Some(induct_decl) = context.induct_decl(symbol) {
+    for def in &defs {
+        if let Some(induct_decl) = context.induct_decl(&def.name) {
             interface.extend(crate::universe_metas(&induct_decl.params));
             interface.extend(crate::universe_metas(&induct_decl.indices));
             interface.extend(induct_decl.result_sort.universe_metas());
@@ -799,11 +803,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // occurrences were elaborated before the parameters existed and carry no
     // instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();
-    let owned = symbols.iter().cloned().collect::<BTreeSet<_>>();
+    let owned = defs
+        .iter()
+        .map(|def| def.name.clone())
+        .collect::<BTreeSet<_>>();
     fn stamp<B: Bound>(
         context: &Context,
         value: &B,
-        owned: &BTreeSet<String>,
+        owned: &BTreeSet<Global>,
         self_reference: SelfReference,
         instance: &[Level],
     ) -> Result<B, Error> {
@@ -826,8 +833,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .map(|body| stamp(context, body, &owned, SelfReference::Bound, &instance))
         .collect::<Result<Vec<_>, _>>()?;
 
-    for symbol in &symbols {
-        let Some(induct_decl) = context.induct_decl(symbol).cloned() else {
+    for def in &defs {
+        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
             continue;
         };
         let constructors = induct_decl
@@ -857,7 +864,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         let indices = stamp(context, &induct_decl.indices, &owned, free, &instance)?;
         let result_sort = stamp(context, &induct_decl.result_sort, &owned, free, &instance)?;
         context.update_induct(
-            symbol,
+            &def.name,
             InductDecl {
                 universe_context: universe_context.clone(),
                 params,
@@ -1132,13 +1139,13 @@ pub fn elaborate_and_zonk_with_prelude(
         .keys()
         .filter(|name| !prelude.induct_decls.contains_key(*name))
         .cloned()
-        .collect::<Vec<String>>();
+        .collect::<Vec<Global>>();
     let user_struct_keys = module
         .struct_decls
         .keys()
         .filter(|name| !prelude.struct_decls.contains_key(*name))
         .cloned()
-        .collect::<Vec<String>>();
+        .collect::<Vec<Global>>();
     for name in &user_induct_keys {
         context.register_induct(name, module.induct_decls[name].clone())?;
     }
@@ -1164,7 +1171,6 @@ pub fn elaborate_and_zonk_with_prelude(
     for item in &prelude.items {
         match item {
             Item::Let(def) => {
-                let symbol = def.name.symbol();
                 context.define_assuming_scheme(
                     &Free::from(&def.name),
                     &def.type_,
@@ -1172,7 +1178,7 @@ pub fn elaborate_and_zonk_with_prelude(
                     Some(&def.kind),
                     def.universe_context.clone(),
                 );
-                if prelude.witnesses.contains(&symbol) {
+                if prelude.witnesses.contains(&def.name) {
                     register_witness(
                         context,
                         &def.name,

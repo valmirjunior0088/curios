@@ -936,7 +936,11 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             params,
             indices,
         }) => {
-            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
+            let name = format!(
+                "{}{}",
+                display_symbol(&name.symbol()),
+                universe_suffix(&universes)
+            );
             if params.is_empty() && indices.is_empty() {
                 pure(name)
             } else {
@@ -964,7 +968,11 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             payload,
             ..
         }) => {
-            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
+            let name = format!(
+                "{}{}",
+                display_symbol(&name.symbol()),
+                universe_suffix(&universes)
+            );
             if payload.is_empty() {
                 pure(format!("{name}/{tag}"))
             } else {
@@ -988,7 +996,11 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             universes,
             params,
         }) => {
-            let name = format!("{}{}", display_symbol(&name), universe_suffix(&universes));
+            let name = format!(
+                "{}{}",
+                display_symbol(&name.symbol()),
+                universe_suffix(&universes)
+            );
             if params.is_empty() {
                 pure(name)
             } else {
@@ -1016,7 +1028,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }) => flat([
             pure(format!(
                 "{}{} {{ ",
-                display_symbol(&name),
+                display_symbol(&name.symbol()),
                 universe_suffix(&universes)
             )),
             sep_flat(

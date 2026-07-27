@@ -1,5 +1,7 @@
 //! Fixed infix operators and their `/syn` concept dispatch targets.
 
+use crate::Qualifier;
+
 /// A fixed infix operator. The surface parser maps an operator symbol (with
 /// its precedence) onto one of these; elaboration dispatches it through its
 /// `/syn` operator concept once the operand type is known (`elaborate_infix`,
@@ -57,26 +59,26 @@ impl NumOp {
         )
     }
 
-    /// The `/syn` concept (by qualified name) and method field this operator
+    /// The `/syn` concept (by module segments) and method field this operator
     /// dispatches through — the whole operator→concept table backing
     /// `elaborate_infix`. Every operator, `&&`/`||` included, resolves through
     /// a witness projection of its concept: infix dispatch is one path, with
     /// no carved-out exceptions. `Neq` shares `Eql`'s entry; negating the
     /// rebuilt equality is the caller's job.
-    pub fn concept_field(self) -> (&'static str, &'static str) {
+    pub fn concept_field(self) -> (Qualifier, &'static str) {
         match self {
-            NumOp::Add => ("/syn/Add", "add"),
-            NumOp::Sub => ("/syn/Sub", "sub"),
-            NumOp::Mul => ("/syn/Mul", "mul"),
-            NumOp::Div => ("/syn/Div", "div"),
-            NumOp::Rem => ("/syn/Rem", "rem"),
-            NumOp::Eql | NumOp::Neq => ("/syn/Eql", "eql"),
-            NumOp::Lt => ("/syn/Cmp", "lt"),
-            NumOp::Gt => ("/syn/Cmp", "gt"),
-            NumOp::Lte => ("/syn/Cmp", "lte"),
-            NumOp::Gte => ("/syn/Cmp", "gte"),
-            NumOp::And => ("/syn/And", "and"),
-            NumOp::Or => ("/syn/Or", "or"),
+            NumOp::Add => (Qualifier::from(["syn", "Add"]), "add"),
+            NumOp::Sub => (Qualifier::from(["syn", "Sub"]), "sub"),
+            NumOp::Mul => (Qualifier::from(["syn", "Mul"]), "mul"),
+            NumOp::Div => (Qualifier::from(["syn", "Div"]), "div"),
+            NumOp::Rem => (Qualifier::from(["syn", "Rem"]), "rem"),
+            NumOp::Eql | NumOp::Neq => (Qualifier::from(["syn", "Eql"]), "eql"),
+            NumOp::Lt => (Qualifier::from(["syn", "Cmp"]), "lt"),
+            NumOp::Gt => (Qualifier::from(["syn", "Cmp"]), "gt"),
+            NumOp::Lte => (Qualifier::from(["syn", "Cmp"]), "lte"),
+            NumOp::Gte => (Qualifier::from(["syn", "Cmp"]), "gte"),
+            NumOp::And => (Qualifier::from(["syn", "And"]), "and"),
+            NumOp::Or => (Qualifier::from(["syn", "Or"]), "or"),
         }
     }
 }

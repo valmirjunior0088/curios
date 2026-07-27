@@ -1,8 +1,8 @@
 use {
     super::{
-        Bound, Concept, DefinitionKind, Error, Free, Goal, HeadKey, HeadTag, ImplicitOrigin,
-        InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Subterm, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        Bound, Concept, DefinitionKind, Error, Free, Global, Goal, HeadKey, HeadTag,
+        ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Subterm,
+        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
         UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
     },
@@ -284,21 +284,21 @@ pub struct Context {
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
-    induct_decls: BTreeMap<String, InductDecl>,
+    induct_decls: BTreeMap<Global, InductDecl>,
     // Struct declarations, keyed the same way — a flat monotonic store like
     // `induct_decls`. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
-    struct_decls: BTreeMap<String, StructDecl>,
+    struct_decls: BTreeMap<Global, StructDecl>,
     // Concept declarations, keyed by the concept's qualified name — a flat
     // monotonic store like `struct_decls` (which also holds each concept's
     // record entry; this adds the resolution metadata).
-    concepts: BTreeMap<String, Concept>,
+    concepts: BTreeMap<Global, Concept>,
     // The definition names `into_core` marked as witness declarations; each
     // registers into `witness_table` when its signature elaborates
     // (`elaborate_module_let` → `register_witness`).
-    witness_declarations: BTreeSet<String>,
+    witness_declarations: BTreeSet<Global>,
     // The program-wide witness table: one witness per (concept, parameter-head
     // tuple) key — global coherence, checked at registration.
-    witness_table: BTreeMap<(String, WitnessKey), Witness>,
+    witness_table: BTreeMap<(Global, WitnessKey), Witness>,
     // The `use`-plicity binders currently in scope, in binding order (a
     // subset of `local`), with frame boundaries in `witness_marks` —
     // resolution's step-1/2 search space, scanned innermost-first.
@@ -732,21 +732,6 @@ impl Context {
                 panic!("reassume: '{name}' has no assumption-frame entry to replace")
             });
         assumptions.insert(name.clone(), type_.clone());
-    }
-
-    /// The assumed type of the global that renders as `symbol`.
-    ///
-    /// A scan rather than a lookup: the nominal registries key on the flattened
-    /// spelling while Γ keys on identity, so this bridges the two by rendering.
-    /// Confined to diagnostic paths, where the scan is already past the point of
-    /// no return. Retired when the nominal heads carry a [`Global`].
-    pub(crate) fn assumption_of_symbol(&self, symbol: &str) -> Option<&Term> {
-        self.assumptions.iter().rev().find_map(|assumptions| {
-            assumptions
-                .iter()
-                .find(|(name, _)| name.as_global().is_some_and(|g| g.symbol() == symbol))
-                .map(|(_, type_)| type_)
-        })
     }
 
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -1333,19 +1318,15 @@ impl Context {
     /// silently overwriting a prior root's declaration. Mid-elaboration
     /// rebuilds of an already-registered entry go through
     /// [`Context::update_induct`] instead.
-    pub(crate) fn register_induct<N>(
+    pub(crate) fn register_induct(
         &mut self,
-        name: N,
+        name: &Global,
         induct_decl: InductDecl,
-    ) -> Result<(), Error>
-    where
-        N: Into<String>,
-    {
-        let name = name.into();
-        if self.induct_decls.contains_key(&name) {
-            return Err(Error::duplicate_induct(name));
+    ) -> Result<(), Error> {
+        if self.induct_decls.contains_key(name) {
+            return Err(Error::duplicate_induct(name.symbol()));
         }
-        self.induct_decls.insert(name, induct_decl);
+        self.induct_decls.insert(name.clone(), induct_decl);
         Ok(())
     }
 
@@ -1357,20 +1338,16 @@ impl Context {
     /// `name` has no prior entry — every caller is expected to have checked
     /// `Context::induct_decl` first (a construction bug otherwise, not a
     /// user-facing case).
-    pub(crate) fn update_induct<N>(&mut self, name: N, induct_decl: InductDecl)
-    where
-        N: Into<String>,
-    {
-        let name = name.into();
+    pub(crate) fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
         assert!(
-            self.induct_decls.contains_key(&name),
+            self.induct_decls.contains_key(name),
             "update_induct: '{name}' is not already registered"
         );
-        self.induct_decls.insert(name, induct_decl);
+        self.induct_decls.insert(name.clone(), induct_decl);
     }
 
     /// Look up an inductive declaration by the type's qualified name.
-    pub(crate) fn induct_decl(&self, name: &str) -> Option<&InductDecl> {
+    pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.induct_decls.get(name)
     }
 
@@ -1384,19 +1361,15 @@ impl Context {
     /// rejected rather than silently overwriting a prior root's declaration.
     /// Mid-elaboration rebuilds of an already-registered entry go through
     /// [`Context::update_struct`] instead.
-    pub(crate) fn register_struct<N>(
+    pub(crate) fn register_struct(
         &mut self,
-        name: N,
+        name: &Global,
         struct_decl: StructDecl,
-    ) -> Result<(), Error>
-    where
-        N: Into<String>,
-    {
-        let name = name.into();
-        if self.struct_decls.contains_key(&name) {
-            return Err(Error::duplicate_struct(name));
+    ) -> Result<(), Error> {
+        if self.struct_decls.contains_key(name) {
+            return Err(Error::duplicate_struct(name.symbol()));
         }
-        self.struct_decls.insert(name, struct_decl);
+        self.struct_decls.insert(name.clone(), struct_decl);
         Ok(())
     }
 
@@ -1407,13 +1380,9 @@ impl Context {
     /// `name` has no prior entry — every caller is expected to have checked
     /// `Context::struct_decl` first (a construction bug otherwise, not a
     /// user-facing case).
-    pub(crate) fn update_struct<N>(&mut self, name: N, struct_decl: StructDecl)
-    where
-        N: Into<String>,
-    {
-        let name = name.into();
+    pub(crate) fn update_struct(&mut self, name: &Global, struct_decl: StructDecl) {
         assert!(
-            self.struct_decls.contains_key(&name),
+            self.struct_decls.contains_key(name),
             "update_struct: '{name}' is not already registered"
         );
         #[cfg(feature = "profile")]
@@ -1421,14 +1390,14 @@ impl Context {
             target: "curios_core::universe",
             %name,
             params = struct_decl.universe_context.parameter_count,
-            was = self.struct_decls[&name].universe_context.parameter_count,
+            was = self.struct_decls[name].universe_context.parameter_count,
             "struct scheme rewritten",
         );
-        self.struct_decls.insert(name, struct_decl);
+        self.struct_decls.insert(name.clone(), struct_decl);
     }
 
     /// Look up a struct declaration by the type's qualified name.
-    pub(crate) fn struct_decl(&self, name: &str) -> Option<&StructDecl> {
+    pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.struct_decls.get(name)
     }
 
@@ -1441,38 +1410,34 @@ impl Context {
     /// `name` is already registered — the registry is shared across every
     /// root elaborated into this `Context`, so a collision is rejected rather
     /// than silently overwriting a prior root's declaration.
-    pub(crate) fn register_concept<N>(&mut self, name: N, concept: Concept) -> Result<(), Error>
-    where
-        N: Into<String>,
-    {
-        let name = name.into();
-        if self.concepts.contains_key(&name) {
-            return Err(Error::duplicate_concept(name));
+    pub(crate) fn register_concept(
+        &mut self,
+        name: &Global,
+        concept: Concept,
+    ) -> Result<(), Error> {
+        if self.concepts.contains_key(name) {
+            return Err(Error::duplicate_concept(name.symbol()));
         }
-        self.concepts.insert(name, concept);
+        self.concepts.insert(name.clone(), concept);
         Ok(())
     }
 
     /// Look up a concept by its qualified name.
-    pub(crate) fn concept(&self, name: &str) -> Option<&Concept> {
+    pub(crate) fn concept(&self, name: &Global) -> Option<&Concept> {
         self.concepts.get(name)
     }
 
-    pub(crate) fn update_concept<N>(&mut self, name: N, concept: Concept)
-    where
-        N: Into<String>,
-    {
-        let name = name.into();
+    pub(crate) fn update_concept(&mut self, name: &Global, concept: Concept) {
         assert!(
-            self.concepts.contains_key(&name),
+            self.concepts.contains_key(name),
             "update_concept: '{name}' is not already registered"
         );
-        self.concepts.insert(name, concept);
+        self.concepts.insert(name.clone(), concept);
     }
 
     /// The registered concepts, for whole-registry validation (superclass
     /// acyclicity) at seed time.
-    pub(crate) fn concepts(&self) -> &BTreeMap<String, Concept> {
+    pub(crate) fn concepts(&self) -> &BTreeMap<Global, Concept> {
         &self.concepts
     }
 
@@ -1494,17 +1459,17 @@ impl Context {
 
     /// Mark a definition name as a witness declaration; when its signature
     /// elaborates, `elaborate_module` registers it into the witness table.
-    pub(crate) fn mark_witness_declaration<N: Into<String>>(&mut self, name: N) {
-        self.witness_declarations.insert(name.into());
+    pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
+        self.witness_declarations.insert(name.clone());
     }
 
-    pub(crate) fn is_witness_declaration(&self, name: &str) -> bool {
+    pub(crate) fn is_witness_declaration(&self, name: &Global) -> bool {
         self.witness_declarations.contains(name)
     }
 
     /// The witness registered under `(concept, key)`, if any.
-    pub(crate) fn witness(&self, concept: &str, key: &WitnessKey) -> Option<&Witness> {
-        self.witness_table.get(&(concept.to_string(), key.clone()))
+    pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
+        self.witness_table.get(&(concept.clone(), key.clone()))
     }
 
     /// Insert a witness under its key, returning the previous occupant's
@@ -1513,7 +1478,7 @@ impl Context {
     /// witnesses' compiler-minted names).
     pub(crate) fn insert_witness(
         &mut self,
-        concept: String,
+        concept: Global,
         key: WitnessKey,
         witness: Witness,
     ) -> Option<Qualifier> {
@@ -1529,14 +1494,14 @@ impl Context {
 
     pub(crate) fn update_witness_scheme(
         &mut self,
-        name: &str,
+        name: &Global,
         universe_context: UniverseContext,
         signature: Term,
     ) {
         let witness = self
             .witness_table
             .values_mut()
-            .find(|witness| witness.name.symbol() == name)
+            .find(|witness| witness.name == *name)
             .unwrap_or_else(|| panic!("witness '{name}' was not registered"));
         witness.universe_context = universe_context;
         witness.signature = signature;

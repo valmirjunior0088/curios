@@ -25,6 +25,7 @@ use {
         emitted, erasure_mask, infer, is_erasable, reduce_with,
     },
     crate::DefinitionKind,
+    crate::Global,
 };
 
 impl Lowering {
@@ -239,7 +240,10 @@ fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Erro
     else {
         return Ok(false);
     };
-    let Some(declaration) = context.induct_decl(&owner.join()).cloned() else {
+    let Some(declaration) = context
+        .induct_decl(&Global::Authored(owner.clone()))
+        .cloned()
+    else {
         return Ok(false);
     };
 

@@ -64,7 +64,7 @@ impl Lowering {
     pub(super) fn struct_row(
         &mut self,
         context: &mut Context,
-        name: &str,
+        name: &crate::Global,
     ) -> Result<super::ProductRow, Error> {
         if let Some(row) = self.environment.struct_row(name) {
             return Ok(row.clone());
@@ -99,7 +99,7 @@ impl Lowering {
     pub(super) fn induct_row(
         &mut self,
         context: &mut Context,
-        name: &str,
+        name: &crate::Global,
     ) -> Result<super::FamilyRow, Error> {
         if let Some(row) = self.environment.induct_row(name) {
             return Ok(row.clone());

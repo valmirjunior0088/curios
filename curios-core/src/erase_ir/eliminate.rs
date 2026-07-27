@@ -129,7 +129,7 @@ impl SeqCarrier<'_> {
 struct InductMatch<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
-    name: &'a str,
+    name: &'a crate::Global,
     universes: &'a [Level],
     params: &'a [Term],
     actual_indices: &'a [Term],
@@ -798,7 +798,7 @@ fn refine_arm(
     };
 
     let constructor_value = Term::variant_at(
-        m.name.to_string(),
+        m.name.clone(),
         m.universes.to_vec(),
         m.params.to_vec(),
         tag.clone(),

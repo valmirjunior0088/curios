@@ -296,8 +296,8 @@ pub(crate) fn validate_bound_universes<B: Bound>(
 fn validate_instance_arities<B: Bound>(
     value: &B,
     definitions: &BTreeMap<Global, usize>,
-    inducts: &BTreeMap<String, usize>,
-    structs: &BTreeMap<String, usize>,
+    inducts: &BTreeMap<Global, usize>,
+    structs: &BTreeMap<Global, usize>,
     owner: &str,
 ) -> Result<(), Error> {
     let definitions = definitions.clone();
@@ -349,7 +349,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::InductType(induct) => inducts.get(&induct.name).and_then(|expected| {
                     mismatch(
                         "inductive occurrence",
-                        &induct.name,
+                        &induct.name.symbol(),
                         *expected,
                         induct.universes.len(),
                     )
@@ -357,7 +357,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::Variant(variant) => inducts.get(&variant.name).and_then(|expected| {
                     mismatch(
                         "constructor occurrence",
-                        &variant.name,
+                        &variant.name.symbol(),
                         *expected,
                         variant.universes.len(),
                     )
@@ -365,7 +365,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::StructType(struct_) => structs.get(&struct_.name).and_then(|expected| {
                     mismatch(
                         "structure occurrence",
-                        &struct_.name,
+                        &struct_.name.symbol(),
                         *expected,
                         struct_.universes.len(),
                     )
@@ -373,7 +373,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::Struct(struct_) => structs.get(&struct_.name).and_then(|expected| {
                     mismatch(
                         "structure value",
-                        &struct_.name,
+                        &struct_.name.symbol(),
                         *expected,
                         struct_.universes.len(),
                     )
@@ -416,12 +416,6 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
     let definitions = definition_schemes
         .iter()
         .map(|(name, (_, context))| (name.clone(), context.parameter_count))
-        .collect::<BTreeMap<_, _>>();
-    // The nominal registries are still keyed by the flattened spelling, so the
-    // cross-checks below need the same schemes under that key.
-    let nominal_schemes = definition_schemes
-        .iter()
-        .map(|(name, scheme)| (name.symbol(), scheme))
         .collect::<BTreeMap<_, _>>();
     let inducts = module
         .induct_decls
@@ -468,7 +462,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             )?;
         }
 
-        if let Some((kind, actual)) = nominal_schemes.get(name).copied()
+        if let Some((kind, actual)) = definition_schemes.get(name)
             && (kind != &DefinitionKind::InductiveType || actual != &declaration.universe_context)
         {
             return Err(Error::UniverseInvariant(format!(
@@ -483,7 +477,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             &declaration.result_sort,
             &format!("structure {name} result sort"),
         )?;
-        if let Some((kind, actual)) = nominal_schemes.get(name).copied()
+        if let Some((kind, actual)) = definition_schemes.get(name)
             && (!matches!(
                 kind,
                 DefinitionKind::StructType | DefinitionKind::ConceptType
@@ -515,7 +509,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
     for (name, (kind, _)) in &definition_schemes {
         match kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
-                let owner = owner.join();
+                let owner = Global::Authored(owner.clone());
                 let Some(declaration) = module.induct_decls.get(&owner) else {
                     return Err(Error::UniverseInvariant(format!(
                         "constructor definition {name} names missing owner {owner}"
@@ -528,7 +522,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
                 }
             }
             DefinitionKind::ConceptMethod { owner } => {
-                let owner = owner.join();
+                let owner = Global::Authored(owner.clone());
                 if !module.concepts.contains_key(&owner) {
                     return Err(Error::UniverseInvariant(format!(
                         "concept method {name} names missing owner {owner}"
