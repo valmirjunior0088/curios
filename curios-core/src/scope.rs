@@ -175,7 +175,7 @@ impl Var {
 /// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); everything else here — `shift`, `capture`, `release`, `free_vars` — is derived from `traverse` alone.
 pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single primitive the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
-    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>;
 
@@ -249,7 +249,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 }
 
 impl Bound for () {
-    fn traverse<F, S: SharingPolicy>(&self, _: &mut Visit<F, S>) -> Self
+    fn traverse<F>(&self, _: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1012,7 +1012,7 @@ impl<B: Bound> Hash for Telescope<B> {
 }
 
 impl<B: Bound> Bound for Telescope<B> {
-    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1040,29 +1040,6 @@ impl<B: Bound> Bound for Telescope<B> {
 }
 
 // === Visit ===================================================================
-
-/// Whether a traversal replaces each rebuilt node with the canonical node of
-/// its structure, and if so, against which table.
-///
-/// A type parameter rather than a field, because whether a traversal hash-conses
-/// is fixed where it is constructed and never changes mid-flight. [`NoSharing`]
-/// is zero-sized and its `canonical` is a constant `None`, so every traversal
-/// that does not cons — which is all of the kernel's — carries no field and pays
-/// no branch.
-pub trait SharingPolicy {
-    /// The canonical node for `rebuilt`, or `None` when not consing.
-    fn canonical(&self, rebuilt: &Term) -> Option<Term>;
-}
-
-/// The default: rebuild nodes as they come.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoSharing;
-
-impl SharingPolicy for NoSharing {
-    fn canonical(&self, _rebuilt: &Term) -> Option<Term> {
-        None
-    }
-}
 
 /// A hash-consing table, shared rather than owned so one canonicalization spans
 /// a whole module: two definitions that build the same type collapse onto one
@@ -1093,7 +1070,8 @@ impl Sharing {
     }
 }
 
-impl SharingPolicy for Sharing {
+impl Sharing {
+    /// The canonical node for `rebuilt`, adopting it if this structure is new.
     fn canonical(&self, rebuilt: &Term) -> Option<Term> {
         let mut table = self.table.borrow_mut();
         Some(match table.get(rebuilt) {
@@ -1111,27 +1089,52 @@ impl SharingPolicy for Sharing {
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
 
-/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. `Visit::rewriting` is the crate-visible constructor; `Visit::new` and `Visit::pruning` are module-internal to this file.
-pub struct Visit<F, S = NoSharing> {
-    depth: usize,
+/// The traversal driver threaded through [`Bound::traverse`]: it owns the
+/// current binder depth (bumped and restored by `visit_scope` as scopes are
+/// crossed), the variable callback, and what the traversal does beyond
+/// rewriting variables ([`Mode`]).
+pub struct Visit<F> {
+    term_depth: usize,
     universe_depth: usize,
-    prune: bool,
     visit: F,
-    // An optional *term-level* pre-hook, consulted at every recursion point
-    // before descending: `Some(replacement)` substitutes the whole node (and
-    // is not descended into). Incompatible with pruning, which may skip the
-    // very nodes the hook would match.
-    rewrite: Option<Rewrite>,
-    level_rewrite: Option<LevelRewrite>,
-    erase_universes: bool,
-    universes_only: bool,
-    /// Pointer-keyed memo for a depth-independent rewriting visit: each input
-    /// node is rebuilt once and every later occurrence of it reuses that
-    /// result. Keys are addresses of *input* nodes, which the caller's value
-    /// keeps alive for the whole traversal, so an address cannot be recycled
-    /// under the memo.
-    shared_memo: Option<HashMap<usize, Term>>,
-    sharing: S,
+    mode: Mode,
+}
+
+/// What a traversal does beyond rewriting variables.
+///
+/// A closed set, stated as a sum. These were six independent fields — a `prune`
+/// flag, two optional boxed hooks, two more flags, and an optional memo — of
+/// which only the eight combinations below were ever constructed, out of the
+/// sixty-four the fields could express. Every consumer re-derived which
+/// combination it was looking at by testing the fields one at a time.
+///
+/// Naming the combinations makes adding a ninth a change the compiler checks:
+/// every `match` below stops compiling until the new case has been decided.
+/// Closed on purpose — a traversal mode is compiler-internal vocabulary, and
+/// all of its construction sites live in this crate.
+enum Mode {
+    /// Rebuild every node, rewriting variables only.
+    Plain,
+    /// Skip subtrees whose `reach` proves no loose index can be touched.
+    Pruning,
+    /// A term-level pre-hook substitutes whole nodes before descending. A
+    /// substituted node is not descended into.
+    Rewriting(Rewrite),
+    /// [`Mode::Rewriting`], memoized on *input* node identity so a structurally
+    /// shared input stays shared in the output instead of expanding to a tree.
+    /// Keys are addresses of input nodes, which the caller's value keeps alive
+    /// for the whole traversal, so an address cannot be recycled under the memo.
+    RewritingShared(Rewrite, HashMap<usize, Term>),
+    /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
+    RewritingUniverses(Rewrite),
+    /// A level-level hook, visiting only nodes that carry universe data.
+    RewritingLevels(LevelRewrite),
+    /// Replace every level with the ground representative, visiting only nodes
+    /// that carry universe data.
+    ErasingUniverses,
+    /// Hash-consing: memoize on input identity, and replace each rebuilt node
+    /// with the canonical node of its structure.
+    Sharing(HashMap<usize, Term>, Sharing),
 }
 
 impl<F> Visit<F>
@@ -1140,16 +1143,10 @@ where
 {
     pub(crate) fn new(visit: F) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: None,
-            level_rewrite: None,
-            erase_universes: false,
-            universes_only: false,
-            shared_memo: None,
-            sharing: NoSharing,
+            mode: Mode::Plain,
         }
     }
 
@@ -1160,16 +1157,10 @@ where
     /// (rewrites free names) or `free_vars` (must observe every node).
     fn pruning(visit: F) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: true,
             visit,
-            rewrite: None,
-            level_rewrite: None,
-            erase_universes: false,
-            universes_only: false,
-            shared_memo: None,
-            sharing: NoSharing,
+            mode: Mode::Pruning,
         }
     }
 
@@ -1178,16 +1169,10 @@ where
     /// body of a scope or telescope terminal.
     pub(crate) fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: Some(rewrite),
-            level_rewrite: None,
-            erase_universes: false,
-            universes_only: false,
-            shared_memo: None,
-            sharing: NoSharing,
+            mode: Mode::Rewriting(rewrite),
         }
     }
 
@@ -1209,107 +1194,68 @@ where
     /// occurrence.
     pub(crate) fn rewriting_shared(visit: F, rewrite: Rewrite) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: Some(rewrite),
-            level_rewrite: None,
-            erase_universes: false,
-            universes_only: false,
-            shared_memo: Some(HashMap::new()),
-            sharing: NoSharing,
+            mode: Mode::RewritingShared(rewrite, HashMap::new()),
         }
     }
 
     pub(crate) fn rewriting_universes(visit: F, rewrite: Rewrite) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: Some(rewrite),
-            level_rewrite: None,
-            erase_universes: false,
-            universes_only: true,
-            shared_memo: None,
-            sharing: NoSharing,
+            mode: Mode::RewritingUniverses(rewrite),
         }
     }
 
     pub(crate) fn rewriting_levels_scoped(visit: F, rewrite: LevelRewrite) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: None,
-            level_rewrite: Some(rewrite),
-            erase_universes: false,
-            universes_only: true,
-            shared_memo: None,
-            sharing: NoSharing,
+            mode: Mode::RewritingLevels(rewrite),
         }
     }
 
     fn erasing_universes(visit: F) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: None,
-            level_rewrite: None,
-            erase_universes: true,
-            universes_only: true,
-            shared_memo: None,
-            sharing: NoSharing,
+            mode: Mode::ErasingUniverses,
         }
     }
-}
 
-/// A hash-consing traversal: structure-preserving, but replacing every rebuilt
-/// node with the canonical node of its shape.
-///
-/// The rebuild is already post-order — a node is constructed only after its
-/// children are traversed — so consulting the table on the rebuilt node
-/// canonicalizes bottom-up with no extra pass. Spans survive: they sit on the
-/// `Term` wrapper, outside the shared node, so each occurrence keeps its own.
-impl<F> Visit<F, Sharing>
-where
-    F: FnMut(usize, &Var) -> Option<Subterm>,
-{
+    /// A hash-consing traversal: structure-preserving, but replacing every
+    /// rebuilt node with the canonical node of its shape.
+    ///
+    /// The rebuild is already post-order — a node is constructed only after its
+    /// children are traversed — so consulting the table on the rebuilt node
+    /// canonicalizes bottom-up with no extra pass. Spans survive: they sit on
+    /// the `Term` wrapper, outside the shared node, so each occurrence keeps its
+    /// own while the structure underneath is shared.
     pub(crate) fn sharing(visit: F, table: Sharing) -> Self {
         Self {
-            depth: 0,
+            term_depth: 0,
             universe_depth: 0,
-            prune: false,
             visit,
-            rewrite: None,
-            level_rewrite: None,
-            erase_universes: false,
-            universes_only: false,
-            shared_memo: Some(HashMap::new()),
-            sharing: table,
+            mode: Mode::Sharing(HashMap::new(), table),
         }
     }
 }
 
-impl<F, S: SharingPolicy> Visit<F, S>
+impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    /// The canonical node for a rebuilt term, or `None` when not consing.
-    pub(crate) fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
-        self.sharing.canonical(rebuilt)
-    }
-
-    pub(crate) fn depth(&self) -> usize {
-        self.depth
+    pub(crate) fn term_depth(&self) -> usize {
+        self.term_depth
     }
 
     pub(crate) fn prune(&self) -> bool {
-        self.prune
+        matches!(self.mode, Mode::Pruning)
     }
 
     /// Enter `amount` binders without visiting a whole scope body in one call
@@ -1318,11 +1264,11 @@ where
     /// of recursing once per binding. Pair with `leave_scope` in the reverse
     /// order links were entered.
     pub(crate) fn enter_scope(&mut self, amount: usize) {
-        self.depth += amount;
+        self.term_depth += amount;
     }
 
     pub(crate) fn leave_scope(&mut self, amount: usize) {
-        self.depth -= amount;
+        self.term_depth -= amount;
     }
 
     pub(crate) fn enter_universe_scope(&mut self, amount: usize) {
@@ -1335,52 +1281,80 @@ where
 
     /// Invoke the underlying visit callback on a variable at the current depth.
     pub(crate) fn call(&mut self, var: &Var) -> Option<Subterm> {
-        (self.visit)(self.depth, var)
+        (self.visit)(self.term_depth, var)
     }
 
     pub(crate) fn visit_level(&mut self, level: &Level) -> Level {
-        if self.erase_universes {
+        if self.erases_universes() {
             // Every other level-bearing container is removed structurally in
             // `Subterm::traverse`; this is the unavoidable payload of Core's
             // still-level-indexed `Type` variant, not an erasure sentinel.
             return Level::zero();
         }
-        match &mut self.level_rewrite {
-            Some(rewrite) => rewrite(self.universe_depth, level),
-            None => level.clone(),
+        match &mut self.mode {
+            Mode::RewritingLevels(rewrite) => rewrite(self.universe_depth, level),
+            _ => level.clone(),
         }
     }
 
     pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
-        self.rewrite
-            .as_mut()
-            .and_then(|rewrite| rewrite(self.depth, term))
+        let term_depth = self.term_depth;
+        match &mut self.mode {
+            Mode::Rewriting(rewrite)
+            | Mode::RewritingShared(rewrite, _)
+            | Mode::RewritingUniverses(rewrite) => rewrite(term_depth, term),
+            Mode::Plain
+            | Mode::Pruning
+            | Mode::RewritingLevels(_)
+            | Mode::ErasingUniverses
+            | Mode::Sharing(..) => None,
+        }
     }
 
     pub(crate) fn erases_universes(&self) -> bool {
-        self.erase_universes
+        matches!(self.mode, Mode::ErasingUniverses)
     }
 
     pub(crate) fn universes_only(&self) -> bool {
-        self.universes_only
+        matches!(
+            self.mode,
+            Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses
+        )
     }
 
     pub(crate) fn memoizes(&self) -> bool {
-        self.shared_memo.is_some()
+        matches!(self.mode, Mode::RewritingShared(..) | Mode::Sharing(..))
     }
 
     pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
-        self.shared_memo.as_ref()?.get(&key).cloned()
+        match &self.mode {
+            Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => memo.get(&key).cloned(),
+            _ => None,
+        }
     }
 
     pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
-        if let Some(memo) = self.shared_memo.as_mut() {
-            memo.insert(key, term);
+        match &mut self.mode {
+            Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => {
+                memo.insert(key, term);
+            }
+            _ => {}
         }
     }
 
     pub(crate) fn rewrites_terms(&self) -> bool {
-        self.rewrite.is_some()
+        matches!(
+            self.mode,
+            Mode::Rewriting(_) | Mode::RewritingShared(..) | Mode::RewritingUniverses(_)
+        )
+    }
+
+    /// The canonical node for a rebuilt term, or `None` when not hash-consing.
+    pub(crate) fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
+        match &self.mode {
+            Mode::Sharing(_, sharing) => sharing.canonical(rebuilt),
+            _ => None,
+        }
     }
 
     pub(crate) fn visit_subterm(&mut self, term: &Term) -> Term {
@@ -1388,9 +1362,9 @@ where
     }
 
     pub(crate) fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
-        self.depth += scope.arity.arity();
+        self.term_depth += scope.arity.arity();
         let body = scope.body.traverse(self).into();
-        self.depth -= scope.arity.arity();
+        self.term_depth -= scope.arity.arity();
 
         Scope {
             arity: scope.arity,

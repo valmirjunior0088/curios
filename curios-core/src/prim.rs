@@ -1,5 +1,5 @@
 use {
-    super::{Bound, MetaId, Nat, SharingPolicy, Subterm, Term, Var, Visit},
+    super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ForeignFunction, WireType},
     curios_base::{Flt, Grain, Int, PackedBin},
     std::{collections::BTreeSet, sync::Arc},
@@ -956,7 +956,7 @@ impl Prim {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 
-    pub(crate) fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Prim
+    pub(crate) fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1155,10 +1155,10 @@ impl Prim {
 /// constructor is taken generically (not as a `fn` pointer) so every call site
 /// monomorphises to the same direct construction — this is the de Bruijn
 /// traversal hot path, so the indirection must vanish.
-fn traverse_binary<F, S: SharingPolicy>(
+fn traverse_binary<F>(
     left: &Term,
     right: &Term,
-    visit: &mut Visit<F, S>,
+    visit: &mut Visit<F>,
     build: impl FnOnce(Term, Term) -> Prim,
 ) -> Prim
 where

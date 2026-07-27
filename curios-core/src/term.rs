@@ -3,9 +3,9 @@ mod tests;
 
 use {
     super::{
-        Atom, Bound, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, SharingPolicy,
-        Telescope, Three, Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var,
-        Visit, instantiate_universe_levels_scoped, print_term,
+        Atom, Bound, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Telescope, Three,
+        Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
+        instantiate_universe_levels_scoped, print_term,
     },
     curios_base::{Flt, Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
     num_bigint::BigUint,
@@ -1566,7 +1566,7 @@ impl fmt::Display for Term {
 }
 
 impl Bound for Term {
-    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1614,7 +1614,7 @@ impl Term {
     /// than on the shared node, so canonicalizing never moves a span from one
     /// occurrence to another — which is what makes sharing by structure safe
     /// here at all.
-    fn canonicalized<F, S: SharingPolicy>(self, visit: &Visit<F, S>) -> Self
+    fn canonicalized<F>(self, visit: &Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1627,7 +1627,7 @@ impl Term {
         }
     }
 
-    fn traverse_unmemoized<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse_unmemoized<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1637,7 +1637,7 @@ impl Term {
         if visit.universes_only() && !self.has_universe_data() {
             return self.clone();
         }
-        if visit.prune() && self.reach() <= visit.depth() {
+        if visit.prune() && self.reach() <= visit.term_depth() {
             return self.clone();
         }
         if (visit.universes_only() || visit.rewrites_terms())
@@ -1649,7 +1649,7 @@ impl Term {
         self.traverse_children(visit)
     }
 
-    fn traverse_children<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse_children<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1666,7 +1666,7 @@ impl Term {
     /// universe-level rewrites are structurally local at these nodes: neither
     /// former changes binder depth, and every nested scope still delegates to
     /// ordinary traversal.
-    fn traverse_rewrite_spine<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse_rewrite_spine<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -2428,7 +2428,7 @@ impl RecGroup {
         })
     }
 
-    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -3177,7 +3177,7 @@ impl fmt::Display for Subterm {
 }
 
 impl Bound for Subterm {
-    fn traverse<F, S: SharingPolicy>(&self, visit: &mut Visit<F, S>) -> Self
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
