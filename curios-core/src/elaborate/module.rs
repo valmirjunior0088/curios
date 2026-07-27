@@ -1107,6 +1107,14 @@ pub fn elaborate_and_zonk_module(
 /// the solutions (and the zonked output) are identical. The cached prelude is
 /// meta-free, so its ids never collide with the user metavariable range that
 /// `seed_metavars(metavar_floor)` floors.
+///
+/// The returned module keeps that shape: its items are `prelude`'s own, cloned
+/// unchanged and in order, followed by the user's, and its registries are
+/// `prelude`'s extended in place. That is a contract, not an artifact of how the
+/// splice happens to be written — [`crate::erase_module_with_prelude_to_ir`]
+/// skips the prefix by `prelude.items.len()` and reuses the prelude's already
+/// projected terms for it rather than re-deriving the standard library on every
+/// compilation.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn elaborate_and_zonk_with_prelude(
     context: &mut Context,

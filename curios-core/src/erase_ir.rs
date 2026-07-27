@@ -21,11 +21,20 @@
 //! compilation erases the fixed prelude once at compiler build time
 //! ([`erase_prelude_to_ir_prefix`], archived by `curios-prelude`) and replays
 //! it under each program's user suffix ([`erase_module_with_prelude_to_ir`]).
-//! Each entrypoint first validates the universe-closed Core module and projects
-//! it through the private `UniverseErased<Module>` boundary. That projection
-//! removes universe instances, declaration contexts, and nominal vectors once;
-//! no universe data reaches Ersd and reduction never specializes runtime code
-//! by universe instance.
+//! Every entrypoint projects its Core module through the private
+//! `UniverseErased<Module>` boundary, which removes universe instances,
+//! declaration contexts, and nominal vectors once; no universe data reaches Ersd
+//! and reduction never specializes runtime code by universe instance.
+//!
+//! The boundary validates what it has not already seen validated, and projects
+//! what is not already projected — which for the replay entrypoint is only the
+//! user suffix. The prelude arrives immutable and checked from
+//! `curios-prelude`'s restore, and the merged module's leading items are that
+//! same prelude, so validating and projecting either of them again is a walk of
+//! the whole standard library for an answer already in hand. Doing both was
+//! measured at ~320 ms of a ~1000 ms release compilation of a one-line program,
+//! and it fell inside the erasure context's reduction deadline, which a debug
+//! build then exceeded on `programs/hello_curios.crs`.
 
 use {
     super::{

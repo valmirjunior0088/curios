@@ -16,10 +16,10 @@ use {
         emitted, prim,
     },
     crate::{
-        Concept, Definition, Free, InductParam, RecItem, StructDecl, project_erased_universes,
-        validate_bound_universes, validate_universes,
+        Concept, Definition, Free, Global, InductParam, RecItem, StructDecl,
+        project_erased_universes, validate_bound_universes, validate_universes,
     },
-    std::collections::BTreeSet,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// What one expression erased to. See the module documentation.
@@ -61,6 +61,81 @@ impl UniverseErased<Module> {
         validate_universes(module)?;
         Ok(Self(project_module(module)))
     }
+
+    /// Project a module whose universes were already validated by the boundary
+    /// that produced it, skipping the check rather than repeating it.
+    ///
+    /// The archived prelude is the case this exists for: `curios-prelude`
+    /// validates it as it restores, which is the point where untrusted bytes
+    /// become a `Module`, and the value is immutable from then on. Re-validating
+    /// at every use walked the whole standard library a second time per
+    /// compilation — inside the erasure context's reduction deadline, at that —
+    /// to re-derive an answer the restore already had.
+    pub(super) fn project_validated(module: &Module) -> Self {
+        Self(project_module(module))
+    }
+
+    /// Project a module that extends an already-projected `prefix`, validating
+    /// and projecting only what it adds.
+    ///
+    /// `elaborate_module_with_prelude` returns the prelude's declarations
+    /// concatenated with the user's, so the merged module's leading items *are*
+    /// the prelude's — cloned, not re-elaborated. Projecting it whole therefore
+    /// walked the entire standard library a second time to produce terms
+    /// [`Lowering::erase_items`] then skips. Splicing the prefix back in keeps
+    /// the item indices the skip count relies on while validating and rebuilding
+    /// only the suffix.
+    pub(super) fn project_extending(prefix: &Self, module: &Module) -> Result<Self, Error> {
+        let prefix = &prefix.0;
+        let residual = Module {
+            items: module.items[prefix.items.len()..].to_vec(),
+            universe_seeds: module.universe_seeds.clone(),
+            induct_decls: added(&module.induct_decls, &prefix.induct_decls),
+            struct_decls: added(&module.struct_decls, &prefix.struct_decls),
+            concepts: added(&module.concepts, &prefix.concepts),
+            witnesses: module.witnesses.clone(),
+            binder_floor: module.binder_floor,
+            type_: module.type_.clone(),
+            body: module.body.clone(),
+        };
+        validate_universes(&residual)?;
+        let residual = project_module(&residual);
+
+        Ok(Self(Module {
+            items: prefix.items.iter().cloned().chain(residual.items).collect(),
+            universe_seeds: residual.universe_seeds,
+            induct_decls: merged(&prefix.induct_decls, residual.induct_decls),
+            struct_decls: merged(&prefix.struct_decls, residual.struct_decls),
+            concepts: merged(&prefix.concepts, residual.concepts),
+            witnesses: residual.witnesses,
+            binder_floor: residual.binder_floor,
+            type_: residual.type_,
+            body: residual.body,
+        }))
+    }
+}
+
+/// The entries `module` declares that `prefix` does not — the user's own, given
+/// that the merged module's tables are the prelude's extended in place.
+fn added<T: Clone>(
+    module: &BTreeMap<Global, T>,
+    prefix: &BTreeMap<Global, T>,
+) -> BTreeMap<Global, T> {
+    module
+        .iter()
+        .filter(|(name, _)| !prefix.contains_key(*name))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect()
+}
+
+/// `prefix` extended by `added`, restoring what [`added`] split apart.
+fn merged<T: Clone>(
+    prefix: &BTreeMap<Global, T>,
+    added: BTreeMap<Global, T>,
+) -> BTreeMap<Global, T> {
+    let mut merged = prefix.clone();
+    merged.extend(added);
+    merged
 }
 
 fn project_definition(definition: &Definition) -> Definition {
@@ -406,6 +481,14 @@ pub fn erase_prelude_to_ir_prefix(
 /// builder resumes over the restored arenas, and the suffix items erase in
 /// dominance order among themselves — every prelude reference is already
 /// bound.
+///
+/// Two things about `prelude` are the caller's to guarantee, and both hold for
+/// the archived prelude that `curios-prelude` restores — the only prelude this
+/// is called with. Its universes are taken as already validated, at the restore
+/// boundary where the bytes became a `Module`; and `module` must be it extended
+/// in place, its items the prelude's own followed by the user's, which is what
+/// `elaborate_module_with_prelude` returns. Both are what let this skip
+/// re-deriving the standard library on every compilation.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn erase_module_with_prelude_to_ir(
     context: &mut Context,
@@ -414,8 +497,9 @@ pub fn erase_module_with_prelude_to_ir(
     expected: &Term,
     prefix: ErasedPrelude,
 ) -> Result<curios_ersd::Module, Error> {
-    let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
-    let module = UniverseErased::<Module>::project(module)?.into_inner();
+    let prelude = UniverseErased::<Module>::project_validated(prelude);
+    let module = UniverseErased::<Module>::project_extending(&prelude, module)?.into_inner();
+    let prelude = prelude.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
     context.with_suppressed_privacy(|context| {
