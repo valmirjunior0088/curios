@@ -225,7 +225,7 @@ The merge is not preserved: identity is the index, and the hint has no effect on
 
 The rest of the section held. Every reader of fact 4 was already walking binder structure when it asked: `elaborate/apply.rs`'s `binder_name` now takes the hint directly, and `strip_fresh` and `build_rename`'s spelling test **are gone** — `build_rename` existed only to decide which names were prettifiable by testing for a non-empty hint before `#`, and now partitions on `hint().is_some()`.
 
-The sites that built a free variable from an unminted label mint instead: `imitate_flex_apply` mints from the `context` it already holds and keeps `first_hint()` as the rebuilt binder's hint, which also removes the `"_"` collision above; the printer needs no identity for display and keys its stand-ins off the `depth` it already tracks. Admitting an unminted case was rejected — it would put spelling back into identity, which is the property being removed. `Free::fixture_binder` is the one interning-by-spelling constructor, `#[doc(hidden)]`, for hand-built test terms that have no counter to draw from; it allocates from the top of the index space downwards so a fixture binder cannot alias a minted one.
+The sites that built a free variable from an unminted label mint instead: `imitate_flex_apply` mints from the `context` it already holds and keeps `first_hint()` as the rebuilt binder's hint, which also removes the `"_"` collision above; the printer needs no identity for display and keys its stand-ins off the `depth` it already tracks. Admitting an unminted case was rejected — it would put spelling back into identity, which is the property being removed. There is no interning-by-spelling constructor at all, not even a test-only one: the fixtures mint from `Context::fresh` exactly as the compiler does, or state `Free::local` indices outright where no context exists (`term/tests.rs`, which never mints). An interning helper existed briefly and was deleted — it let a test *look* like it built an identity function while the helper's parameter and the caller's like-named binder were two different identities, a bug the rewrite surfaced.
 
 ### Consequences
 
@@ -267,11 +267,11 @@ Verify by deletion: remove the accessors, then confirm nothing needed them. A si
 
 The phase is done when the objective's own test passes against the *reachable* API rather than against `Var` alone: starting from a `Free`, no path to a `&str` exists except through the printer. Until the second bullet lands, that path is two ordinary method calls long, which is why retyping the sites is necessary and not sufficient.
 
-Phase C left three accessors on that path, and D's first bullet is about all three, not just `Var`:
+Phase C left two accessors on that path, and D's first bullet is about both, not just `Var`:
 
 - `Free::hint` yields `Option<&str>`. It is display metadata by construction, but it is a `&str` reachable from a `Free`, so the audit must decide whether it belongs behind the printer too.
 - `Global::symbol` yields a `String` and is the declared bridge to the `String`-keyed registries. **It disappears when those keys are retyped, and not before** — which makes retyping them a prerequisite for D rather than an optional follow-on.
-- `Free::fixture_binder` is spelling-to-identity, the exact inverse. It is `#[doc(hidden)]` and fixture-only; D should decide whether that is enough or whether it moves behind a feature the dev-dependencies enable.
+- Nothing else. There is no spelling-to-identity path left in the crate, test-only or otherwise.
 
 ## Evidence
 

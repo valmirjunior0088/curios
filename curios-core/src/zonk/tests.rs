@@ -54,12 +54,10 @@ fn lowered_module_validation_rejects_a_seed_floor_mismatch() {
 
 #[test]
 fn zonk_leaves_a_meta_free_term_unchanged() {
-    let context = context();
+    let mut context = context();
+    let x = context.fresh(Some("x"));
 
-    let term = Term::func(
-        [(crate::fixture_binder("x"), Term::type_ground())],
-        nat_lit(0),
-    );
+    let term = Term::func([(x, Term::type_ground())], nat_lit(0));
     let zonked = zonk(&context, &term).unwrap();
 
     assert_eq!(zonked, term);
@@ -86,17 +84,19 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
 
     // The catch-all default is a real term position, so a solved metavar sitting
     // in it is resolved like any other.
+    let scrutinee = context.fresh(Some("r"));
+    let motive = context.fresh(Some("m"));
     let term = Term::induct_match_default(
-        Term::free_var(&crate::fixture_binder("r")),
-        Some(&crate::fixture_binder("m")),
+        Term::free_var(&scrutinee),
+        Some(&motive),
         nat(),
         [("none", Vec::<crate::Free>::new(), nat_lit(0))],
         Term::metavar(0),
     );
 
     let expected = Term::induct_match_default(
-        Term::free_var(&crate::fixture_binder("r")),
-        Some(&crate::fixture_binder("m")),
+        Term::free_var(&scrutinee),
+        Some(&motive),
         nat(),
         [("none", Vec::<crate::Free>::new(), nat_lit(0))],
         nat_lit(7),
@@ -153,12 +153,10 @@ fn universe_dependencies_of_a_solved_meta_follow_only_its_materialized_solution(
     let telescope = UniverseMetaId(1);
     let solution = UniverseMetaId(2);
 
+    let x = context.fresh(Some("x"));
     context.birth_metavar(
         MetaId(0),
-        vec![(
-            crate::fixture_binder("x"),
-            Term::type_at(Level::meta(telescope)),
-        )],
+        vec![(x, Term::type_at(Level::meta(telescope)))],
         Term::type_at(Level::meta(result)),
     );
     context.solve_metavar(MetaId(0), Term::type_at(Level::meta(solution)));
@@ -175,12 +173,10 @@ fn universe_dependencies_of_an_unsolved_meta_keep_its_birth_context() {
     let result = UniverseMetaId(0);
     let telescope = UniverseMetaId(1);
 
+    let x = context.fresh(Some("x"));
     context.birth_metavar(
         MetaId(0),
-        vec![(
-            crate::fixture_binder("x"),
-            Term::type_at(Level::meta(telescope)),
-        )],
+        vec![(x, Term::type_at(Level::meta(telescope)))],
         Term::type_at(Level::meta(result)),
     );
 
@@ -207,7 +203,8 @@ fn zonk_reports_a_solved_goal() {
 
     // A written goal `?` errors even when solved — the report carries the
     // frozen scope, the goal's type, and the committed solution.
-    context.birth_metavar(MetaId(0), vec![(crate::fixture_binder("x"), nat())], nat());
+    let x = context.fresh(Some("x"));
+    context.birth_metavar(MetaId(0), vec![(x.clone(), nat())], nat());
     context.solve_metavar(MetaId(0), nat_lit(7));
 
     let error = zonk(&context, &Term::goal(0)).unwrap_err();
@@ -216,7 +213,7 @@ fn zonk_reports_a_solved_goal() {
         &error,
         Error::Goal { scope, goal, solution: Some(solution) }
             if **goal == nat() && **solution == nat_lit(7)
-                && *scope == vec![(Term::free_var(&crate::fixture_binder("x")), nat())]
+                && *scope == vec![(Term::free_var(&x), nat())]
     ));
 }
 

@@ -251,34 +251,6 @@ mod archived_mint {
     }
 }
 
-/// A binder identity interned by written name: the same name always yields the
-/// same binder, and two different names never collide.
-///
-/// **Test fixtures only, and it does not exist outside them.** Hand-built core
-/// terms have no minting counter to draw from, and their whole vocabulary is
-/// the spelling. Deriving an identity from a spelling is exactly the coupling
-/// this vocabulary exists to remove, so this is `cfg(test)`-gated rather than
-/// merely discouraged: no shipped build contains it, and no other crate can
-/// reach it. A production binder comes from `Context::fresh` or `into_core`'s
-/// counter. Indices are handed out from the top of the space downwards, so a
-/// fixture binder cannot alias a minted one.
-#[cfg(test)]
-pub(crate) fn fixture_binder(name: &str) -> Free {
-    use std::{
-        collections::HashMap,
-        sync::{LazyLock, Mutex},
-    };
-
-    static INTERNED: LazyLock<Mutex<HashMap<String, u32>>> =
-        LazyLock::new(|| Mutex::new(HashMap::new()));
-
-    let mut interned = INTERNED.lock().expect("the fixture intern table");
-    let next = u32::MAX - u32::try_from(interned.len()).expect("fixture binder space");
-    let index = *interned.entry(name.to_string()).or_insert(next);
-
-    Free::local(index, (!name.is_empty()).then_some(name))
-}
-
 impl From<&Global> for Free {
     fn from(global: &Global) -> Self {
         Free::Global(global.clone())
