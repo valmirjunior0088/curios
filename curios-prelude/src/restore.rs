@@ -97,23 +97,20 @@ fn archived() -> &'static ArchivedPreludeArchive {
     }
 }
 
+/// Deserialize the validated image.
+///
+/// The universe invariants are *not* re-checked here. They are asserted once by
+/// `build.rs`, on the value it is about to serialize, and [`validate_bytes`]
+/// establishes that these bytes are exactly the bytes written from that value:
+/// the content digest pins them, bytecheck confirms the archived graph is
+/// structurally sound, and the schema and source fingerprint reject an image
+/// from any other build. Walking the whole standard library again per
+/// compilation to re-derive an answer already settled cost ~175 ms of a ~680 ms
+/// release compile of a one-line program.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn restore_archive() -> PreludeArchive {
-    let image = rkyv::deserialize::<PreludeArchive, rkyv::rancor::Error>(archived())
-        .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"));
-    assert_eq!(
-        image.prepared.core().universe_seeds.len(),
-        image.prepared.universe_floor(),
-        "restored Text universe floor does not match its seed table"
-    );
-    curios_core::validate_lowered_universe_seeds(
-        image.prepared.core(),
-        image.prepared.universe_floor(),
-    )
-    .unwrap_or_else(|error| panic!("restored Text universe seeds are invalid: {error}"));
-    curios_core::validate_universes(&image.core)
-        .unwrap_or_else(|error| panic!("restored Core universe schemes are invalid: {error}"));
-    image
+    rkyv::deserialize::<PreludeArchive, rkyv::rancor::Error>(archived())
+        .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"))
 }
 
 fn hex(bytes: &[u8]) -> String {

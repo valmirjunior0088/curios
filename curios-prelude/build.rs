@@ -53,6 +53,13 @@ fn main() {
     let prepared = curios_text::prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));
     validate_syntax_targets(prepared.core());
+    assert_eq!(
+        prepared.core().universe_seeds.len(),
+        prepared.universe_floor(),
+        "lowered Text universe floor does not match its seed table"
+    );
+    curios_core::validate_lowered_universe_seeds(prepared.core(), prepared.universe_floor())
+        .unwrap_or_else(|error| panic!("lowered Text universe seeds are invalid: {error}"));
 
     let lowered = prepared.core().clone();
     let mut context = curios_core::Context::new(Duration::from_secs(3000));
@@ -69,6 +76,17 @@ fn main() {
             error.format_with(&lowered)
         )
     });
+
+    // Every universe invariant the archive is trusted to satisfy is asserted
+    // here, on the value about to be serialized, and nowhere else. Restoration
+    // establishes that the bytes it reads are exactly the bytes written from
+    // this value — content digest, schema, source fingerprint, and bytecheck —
+    // so re-deriving the invariants per compilation only re-answers a question
+    // already settled. `erase_prelude_to_ir_prefix` below happens to project
+    // through the same check, but inheriting the guarantee from an unrelated
+    // call is not the same as stating it.
+    curios_core::validate_universes(&core)
+        .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
     let ersd = curios_core::erase_prelude_to_ir_prefix(
         &mut curios_core::Context::new(Duration::from_secs(3000)),
