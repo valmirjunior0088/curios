@@ -60,7 +60,7 @@ pub struct InductDecl {
     ///
     /// A sequence rather than a map, because the order is load-bearing: a
     /// constructor's position here *is* its runtime tag
-    /// ([`Self::constructor_index`]). A `BTreeMap<Atom, _>` made that position
+    /// (`Self::constructor_index`). A `BTreeMap<Atom, _>` made that position
     /// the collation order over constructor spellings, so renaming a case
     /// silently renumbered the emitted tags of every case it sorted past.
     /// Declaration order is predictable from the source, stable under a rename,

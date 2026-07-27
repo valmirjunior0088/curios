@@ -6,6 +6,16 @@
 //! foundational value type with no dependency of its own on the rest of the
 //! core calculus — `curios-base` is the shared leaf every pipeline crate
 //! already depends on.
+//!
+//! The sharing below is load-bearing and was measured: when `curios-core`'s
+//! names were retyped from `String` to structured identities, an owned
+//! `Vec<String>` per qualifier made whole-program compilation 1.82x slower, and
+//! `Rc` sharing with a pointer-identity fast path brought it to 12% *below* the
+//! original. A memoized structural hash on top of the sharing was then written,
+//! measured, and removed: it was indistinguishable from the uncached version,
+//! while its `OnceCell` made `Qualifier` interior-mutable and tripped Clippy's
+//! `mutable_key_type` at 79 sites across two crates. Do not add one back without
+//! a measurement that says otherwise — the sharing was the entire win.
 
 #[cfg(test)]
 mod tests;

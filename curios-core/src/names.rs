@@ -6,6 +6,19 @@
 //! module a definition belongs to, which inductive a constructor came from —
 //! that structure is carried as a value by the site that knew it, never
 //! recovered by taking a name apart.
+//!
+//! The rule holds because the *capability* is absent, not because every site
+//! remembers it. A name's spelling was once an undocumented wire format between
+//! stages — five structured facts flattened into one `String`, each recovered by
+//! a hand-rolled parser whose correctness rested on an invariant enforced in
+//! another crate and stated nowhere near the parse. Two of those parsers were
+//! provably wrong about their own premise. The types below unmerge the facts:
+//! [`Free`] discriminates global from local, [`Global`] discriminates an authored
+//! path from an anonymous witness, and [`Mint`] separates a binder's identity
+//! from its display hint. No path leads from a `Free` to a `&str` except through
+//! the printer, so reintroducing behavior-from-spelling means adding a method to
+//! a name type — which cannot happen by accident and appears in review as what
+//! it is. That is the property to preserve when extending this vocabulary.
 
 #[cfg(test)]
 mod tests;
@@ -226,6 +239,12 @@ impl Free {
 /// A key set that could occur has at most one entry per index — two mints with
 /// the same index are one value — so this also agrees with the structural order
 /// on every map that survives a round trip.
+///
+/// Both halves are written by hand for that reason, and **a third comparison
+/// surface on [`Mint`](super::Mint) must be written by hand too — a derive there
+/// is the bug this note exists to prevent.** A derived comparison reads the hint, so the
+/// live and archived orderings would disagree only on maps that round-trip, with
+/// nothing to surface the divergence.
 #[cfg(feature = "archive")]
 mod archived_mint {
     use {
