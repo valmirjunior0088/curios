@@ -154,7 +154,7 @@ impl Lowering {
             match member {
                 Member::Function(function) => {
                     let Subterm::Func(func) = &**body else {
-                        unreachable!("erase_ir: a function member's body is a lambda")
+                        unreachable!("erase: a function member's body is a lambda")
                     };
                     self.define_lambda(context, *function, func, type_, hint.as_deref())?;
                     functions.push(*function);

@@ -178,7 +178,7 @@ where
         elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
     let ersd_module = curios_prelude::with_prelude(|prelude| {
-        curios_core::erase_module_with_prelude_to_ir(
+        curios_core::erase_module_with_prelude(
             &mut curios_core::Context::new(timeout),
             prelude.core(),
             &module,

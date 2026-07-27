@@ -19,8 +19,8 @@
 //!
 //! Core classifies and traverses; the builder owns construction. Production
 //! compilation erases the fixed prelude once at compiler build time
-//! ([`erase_prelude_to_ir_prefix`], archived by `curios-prelude`) and replays
-//! it under each program's user suffix ([`erase_module_with_prelude_to_ir`]).
+//! ([`erase_prelude_prefix`], archived by `curios-prelude`) and replays
+//! it under each program's user suffix ([`erase_module_with_prelude`]).
 //! Every entrypoint projects its Core module through the private
 //! `UniverseErased<Module>` boundary, which removes universe instances,
 //! declaration contexts, and nominal vectors once; no universe data reaches Ersd
@@ -55,9 +55,7 @@ mod environment;
 use environment::*;
 
 mod lower;
-pub use lower::{
-    ErasedPrelude, erase_module_to_ir, erase_module_with_prelude_to_ir, erase_prelude_to_ir_prefix,
-};
+pub use lower::{ErasedPrelude, erase_module, erase_module_with_prelude, erase_prelude_prefix};
 use lower::{Lowering, Outcome};
 
 mod binding;
@@ -80,8 +78,8 @@ mod tests;
 macro_rules! emitted {
     ($outcome:expr) => {
         match $outcome {
-            $crate::erase_ir::Outcome::Emitted(atom) => atom,
-            diverged @ $crate::erase_ir::Outcome::Diverged(_) => return Ok(diverged),
+            $crate::into_ersd::Outcome::Emitted(atom) => atom,
+            diverged @ $crate::into_ersd::Outcome::Diverged(_) => return Ok(diverged),
         }
     };
 }

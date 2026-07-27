@@ -50,7 +50,7 @@ impl Lowering {
         let struct_decl = context
             .struct_decl(name)
             .cloned()
-            .expect("erase_ir: a registered struct");
+            .expect("erase: a registered struct");
         let entries = context.with_frame(|context| {
             let params = open_opaque(context, struct_decl.params.clone());
             signature_entries(context, struct_decl.fields_at(&params))
@@ -85,7 +85,7 @@ impl Lowering {
         let induct_decl = context
             .induct_decl(name)
             .cloned()
-            .expect("erase_ir: a registered inductive");
+            .expect("erase: a registered inductive");
         let family = self.builder.family(Some(name.to_string()));
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its
         // inhabitants wholesale — payloads included. Classifying each payload
@@ -105,7 +105,7 @@ impl Lowering {
                 let params = open_opaque(context, induct_decl.params.clone());
                 let telescope = induct_decl
                     .instantiate(tag, &params)
-                    .expect("erase_ir: constructor instantiates at its inductive's parameters");
+                    .expect("erase: constructor instantiates at its inductive's parameters");
                 signature_entries(context, telescope)
             })?;
             let entries: Vec<(Option<String>, bool)> = entries
@@ -160,12 +160,12 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         let telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
             Subterm::TupleType(TupleType { telescope }) => telescope,
-            _ => unreachable!("erase_ir: tuple checked against non-tuple type"),
+            _ => unreachable!("erase: tuple checked against non-tuple type"),
         };
         assert_eq!(
             tuple.fields.len(),
             telescope.len(),
-            "erase_ir: tuple width disagrees with the tuple type",
+            "erase: tuple width disagrees with the tuple type",
         );
 
         // Anonymous tuples have no declaration; the per-site signature mask is
@@ -204,7 +204,7 @@ impl Lowering {
         let struct_decl = context
             .struct_decl(&value.name)
             .cloned()
-            .expect("erase_ir: a registered struct");
+            .expect("erase: a registered struct");
         let struct_decl = context.instantiate_struct_decl_at(&struct_decl, &value.universes)?;
         let telescope = struct_decl.fields_at(&value.params);
         let atoms = match self.masked_fields(context, &row.mask, telescope, &value.fields)? {
@@ -238,15 +238,15 @@ impl Lowering {
         let induct_decl = context
             .induct_decl(&variant.name)
             .cloned()
-            .expect("erase_ir: a registered inductive");
+            .expect("erase: a registered inductive");
         let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &variant.universes)?;
         let index = induct_decl
             .constructor_index(&variant.tag)
-            .expect("erase_ir: constructor tag registered with its inductive");
+            .expect("erase: constructor tag registered with its inductive");
         let constructor = &row.constructors[index];
         let telescope = induct_decl
             .instantiate(&variant.tag, &variant.params)
-            .expect("erase_ir: constructor instantiates at its inductive's parameters");
+            .expect("erase: constructor instantiates at its inductive's parameters");
         let mask = constructor.mask.clone();
         let id = constructor.id;
         let atoms = match self.masked_fields(context, &mask, telescope, &variant.payload)? {
@@ -273,7 +273,7 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         let Proj { head, field } = proj;
         let Field::Index(index) = field else {
-            unreachable!("unresolved label projection reached erase_ir");
+            unreachable!("unresolved label projection reached erasure");
         };
 
         let head_type = super::infer(context, head)?;
@@ -295,9 +295,9 @@ impl Lowering {
                 let width = row.mask.len();
                 (row, width)
             }
-            _ => unreachable!("erase_ir: projected a non-tuple/struct"),
+            _ => unreachable!("erase: projected a non-tuple/struct"),
         };
-        assert!(*index < width, "erase_ir: projection out of range");
+        assert!(*index < width, "erase: projection out of range");
 
         if erased_field(&row.mask, *index) {
             return Ok(Outcome::Emitted(self.unit()));

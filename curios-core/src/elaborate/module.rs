@@ -1111,7 +1111,7 @@ pub fn elaborate_and_zonk_module(
 /// The returned module keeps that shape: its items are `prelude`'s own, cloned
 /// unchanged and in order, followed by the user's, and its registries are
 /// `prelude`'s extended in place. That is a contract, not an artifact of how the
-/// splice happens to be written — [`crate::erase_module_with_prelude_to_ir`]
+/// splice happens to be written — [`crate::erase_module_with_prelude`]
 /// skips the prefix by `prelude.items.len()` and reuses the prelude's already
 /// projected terms for it rather than re-deriving the standard library on every
 /// compilation.

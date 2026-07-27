@@ -246,7 +246,7 @@ fn project_module(module: &Module) -> Module {
 /// module's item chain; the entrypoint body becomes the entry block, checked
 /// against `expected`.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn erase_module_to_ir(
+pub fn erase_module(
     context: &mut Context,
     module: &Module,
     expected: &Term,
@@ -336,7 +336,7 @@ impl Lowering {
                     }
                     telescope = rest.open(&[value]);
                 }
-                Telescope::Done(_) => unreachable!("erase_ir: arity checked by elaborate"),
+                Telescope::Done(_) => unreachable!("erase: arity checked by elaborate"),
             }
         }
         Ok(Ok(atoms))
@@ -389,7 +389,7 @@ impl Lowering {
                         self.dangled.insert(name.clone());
                         Ok(Outcome::Emitted(self.unit()))
                     }
-                    None => unreachable!("erase_ir: unbound variable {name}"),
+                    None => unreachable!("erase: unbound variable {name}"),
                 }
             }
             Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
@@ -403,10 +403,10 @@ impl Lowering {
             Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
             Subterm::RecMember(member) => self.erase_rec_member(context, member, expected, hint),
             // Erasure runs downstream of zonking and elaboration.
-            Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erase_ir"),
-            Subterm::Infix(_) => unreachable!("infix node survived elaboration into erase_ir"),
+            Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
+            Subterm::Infix(_) => unreachable!("infix node survived elaboration into erasure"),
             Subterm::NumLit(_) => {
-                unreachable!("numeric-literal node survived elaboration into erase_ir")
+                unreachable!("numeric-literal node survived elaboration into erasure")
             }
         }
     }
@@ -490,12 +490,12 @@ impl ErasedPrelude {
 /// Erase the fixed prelude's items into a replayable prefix. The prelude
 /// module carries no entrypoint of its own; only its item chain is erased.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn erase_prelude_to_ir_prefix(
+pub fn erase_prelude_prefix(
     context: &mut Context,
     prelude: &Module,
 ) -> Result<ErasedPrelude, Error> {
     let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
-    // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
+    // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
         for (name, induct_decl) in &prelude.induct_decls {
             context.register_induct(name, induct_decl.clone())?;
@@ -527,7 +527,7 @@ pub fn erase_prelude_to_ir_prefix(
 /// `elaborate_module_with_prelude` returns. Both are what let this skip
 /// re-deriving the standard library on every compilation.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn erase_module_with_prelude_to_ir(
+pub fn erase_module_with_prelude(
     context: &mut Context,
     prelude: &Module,
     module: &Module,
@@ -538,7 +538,7 @@ pub fn erase_module_with_prelude_to_ir(
     let module = UniverseErased::<Module>::project_extending(&prelude, module)?.into_inner();
     let prelude = prelude.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
-    // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
+    // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
         for (name, induct_decl) in &module.induct_decls {
             context.register_induct(name, induct_decl.clone())?;

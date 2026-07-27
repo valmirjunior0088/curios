@@ -82,13 +82,13 @@ fn main() {
     // establishes that the bytes it reads are exactly the bytes written from
     // this value — content digest, schema, source fingerprint, and bytecheck —
     // so re-deriving the invariants per compilation only re-answers a question
-    // already settled. `erase_prelude_to_ir_prefix` below happens to project
+    // already settled. `erase_prelude_prefix` below happens to project
     // through the same check, but inheriting the guarantee from an unrelated
     // call is not the same as stating it.
     curios_core::validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
-    let ersd = curios_core::erase_prelude_to_ir_prefix(
+    let ersd = curios_core::erase_prelude_prefix(
         &mut curios_core::Context::new(Duration::from_secs(3000)),
         &core,
     )

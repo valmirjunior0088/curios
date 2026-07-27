@@ -319,7 +319,7 @@ pub(super) fn erase_prim(
             // element type is re-derived only to lower the elements.
             let element_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
                 Subterm::Prim(Prim::LstType(element_type)) => element_type,
-                _ => unreachable!("erase_ir: list literal checked against non-list type"),
+                _ => unreachable!("erase: list literal checked against non-list type"),
             };
             let pairs = elements
                 .iter()

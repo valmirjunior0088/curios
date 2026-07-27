@@ -56,7 +56,7 @@ impl Lowering {
         let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
             Subterm::FuncType(ft) => ft,
             // Elaborate already checked this function against a function type.
-            _ => unreachable!("erase_ir: function checked against non-function type"),
+            _ => unreachable!("erase: function checked against non-function type"),
         };
 
         let mut params = Vec::new();
@@ -91,7 +91,7 @@ impl Lowering {
                         body_telescope = body_rest.open(&[&variable]);
                         type_telescope = type_rest.open(&[&variable]);
                     }
-                    _ => unreachable!("erase_ir: function/type telescope arity mismatch"),
+                    _ => unreachable!("erase: function/type telescope arity mismatch"),
                 }
             };
 
@@ -136,12 +136,12 @@ impl Lowering {
         let head_type = reduce_with(context, &head_type)?;
         let ft = match &*head_type {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.clone(),
-            _ => unreachable!("erase_ir: applied a non-function"),
+            _ => unreachable!("erase: applied a non-function"),
         };
         assert_eq!(
             params.len(),
             ft.len(),
-            "erase_ir: application arity disagrees with the function type",
+            "erase: application arity disagrees with the function type",
         );
 
         let callee = emitted!(self.walk(context, head, &head_type, None)?);

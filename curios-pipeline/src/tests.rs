@@ -1400,7 +1400,7 @@ fn erase_to_ir(source: &str) -> curios_ersd::Module {
         &mut |_| {},
     )
     .unwrap();
-    curios_core::erase_module_to_ir(
+    curios_core::erase_module(
         &mut curios_core::Context::new(Duration::from_secs(60)),
         &module,
         &core_type,

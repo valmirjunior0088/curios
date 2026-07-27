@@ -571,12 +571,12 @@ impl Lowering {
                 params.clone(),
                 indices.clone(),
             ),
-            _ => unreachable!("erase_ir: inductive match scrutinee checked by elaborate"),
+            _ => unreachable!("erase: inductive match scrutinee checked by elaborate"),
         };
         let induct_decl = context
             .induct_decl(&name)
             .cloned()
-            .expect("erase_ir: scrutinee type names a registered inductive");
+            .expect("erase: scrutinee type names a registered inductive");
         let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
 
         let m = InductMatch {
@@ -609,7 +609,7 @@ impl Lowering {
                 Some(arm) => {
                     let telescope = induct_decl
                         .instantiate(tag, m.params)
-                        .expect("erase_ir: constructor instantiates at its inductive's parameters");
+                        .expect("erase: constructor instantiates at its inductive's parameters");
                     // Erasure opens the arm positionally; plicity is irrelevant.
                     let arm = self.variant_arm(
                         context,
@@ -738,7 +738,7 @@ impl Lowering {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the
         // default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
-            let default = default.expect("erase_ir: erasable match with no arms has a default");
+            let default = default.expect("erase: erasable match with no arms has a default");
             let default_refs = m.actual_indices.iter().chain([m.head]).collect::<Vec<_>>();
             let expected = m.motive.open(&default_refs);
             return self.walk(context, default, &expected, None);
@@ -746,7 +746,7 @@ impl Lowering {
 
         let telescope = induct_decl
             .instantiate(tag, m.params)
-            .expect("erase_ir: constructor instantiates at its inductive's parameters");
+            .expect("erase: constructor instantiates at its inductive's parameters");
         let labels = scope
             .hint_iter()
             .map(|label| context.fresh(label))
@@ -785,16 +785,16 @@ fn refine_arm(
                 context.assume(label, &type_);
                 telescope = rest.open(&[var]);
             }
-            Telescope::Done(_) => unreachable!("erase_ir: constructor arity checked by elaborate"),
+            Telescope::Done(_) => unreachable!("erase: constructor arity checked by elaborate"),
         }
     }
 
     let target_indices = match &telescope {
         Telescope::Done(terminal) => match &***terminal {
             Subterm::InductType(InductType { indices, .. }) => indices.clone(),
-            _ => unreachable!("erase_ir: constructor terminal is its inductive type"),
+            _ => unreachable!("erase: constructor terminal is its inductive type"),
         },
-        Telescope::Cons(..) => unreachable!("erase_ir: constructor arity checked by elaborate"),
+        Telescope::Cons(..) => unreachable!("erase: constructor arity checked by elaborate"),
     };
 
     let constructor_value = Term::variant_at(

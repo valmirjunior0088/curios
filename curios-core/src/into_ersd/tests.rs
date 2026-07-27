@@ -53,7 +53,7 @@ fn module(items: Vec<Item>, body: Term) -> Module {
 }
 
 fn erase(context: &mut Context, module: &Module, expected: Term) -> curios_ersd::Module {
-    erase_module_to_ir(context, module, &expected).expect("the module erases")
+    erase_module(context, module, &expected).expect("the module erases")
 }
 
 #[test]
@@ -448,7 +448,7 @@ fn a_variant_constructs_with_its_registered_schema() {
         Atom::from("some"),
         [nat_lit(6)],
     );
-    let erased = erase_module_to_ir(
+    let erased = erase_module(
         &mut context,
         &Module {
             items: Vec::new(),
@@ -726,7 +726,7 @@ fn a_variant_match_binds_payload_without_projections() {
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
-    let erased = erase_module_to_ir(
+    let erased = erase_module(
         &mut context,
         &Module {
             items: Vec::new(),
@@ -912,7 +912,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
         ],
         Term::free_var(&a),
     );
-    let error = erase_module_to_ir(&mut context, &module(Vec::new(), body), &type_)
+    let error = erase_module(&mut context, &module(Vec::new(), body), &type_)
         .expect_err("the value-level cycle is rejected");
     assert!(
         matches!(error, Error::ErasedModuleInvalid { .. }),
