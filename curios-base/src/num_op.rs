@@ -52,7 +52,7 @@ impl NumOp {
 
     /// Comparison and equality operators yield `Bool` regardless of operand type;
     /// arithmetic operators yield the operand type.
-    pub fn result_is_bln(self) -> bool {
+    pub fn result_is_bool(self) -> bool {
         matches!(
             self,
             NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte

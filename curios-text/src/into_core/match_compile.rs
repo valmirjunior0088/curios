@@ -431,7 +431,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 {
                     return Err(Error::MatrixInconsistentShape);
                 }
-                self.compile_bln(columns, rows, top_motive, leaf)
+                self.compile_bool(columns, rows, top_motive, leaf)
             }
             MatchPattern::Nat(_) => {
                 if rows
@@ -599,10 +599,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ///
     /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to
     /// `induct_match`'s Rung-C vacuity inversion), `Cases::Bool` has no
-    /// core-side exhaustiveness escape hatch (`elaborate_bln_match`) — both
+    /// core-side exhaustiveness escape hatch (`elaborate_bool_match`) — both
     /// groups must be present here, checked eagerly before recursing on
     /// either.
-    fn compile_bln(
+    fn compile_bool(
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
@@ -688,7 +688,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// [`Self::compile`]'s own all-`Binder`-column-retirement path.
     ///
     /// Both groups must be present — `Cases::FreeMonoid` has no vacuity
-    /// escape hatch either (same point as [`Self::compile_bln`]'s doc
+    /// escape hatch either (same point as [`Self::compile_bool`]'s doc
     /// comment). Checking this eagerly, before recursing on either group,
     /// also avoids indexing into an empty `rows` slice or a misleading
     /// [`Error::MatrixDuplicateRow`] from [`Self::compile`]'s base case.

@@ -189,7 +189,7 @@ fn infix_resolves_against_a_bound_variable_type() {
 }
 
 #[test]
-fn infix_comparison_yields_a_bln_scrutinee() {
+fn infix_comparison_yields_a_bool_scrutinee() {
     // A comparison resolves on its operand type and yields `Bool`, usable directly
     // as a `match` scrutinee. `2 + 2 == 4` is true; `3 < 1` is false.
     assert_eq!(
@@ -215,7 +215,7 @@ fn infix_comparison_yields_a_bln_scrutinee() {
 }
 
 #[test]
-fn infix_equality_is_overloaded_for_bln() {
+fn infix_equality_is_overloaded_for_bool() {
     // `==` resolves at `Bool` too (`BoolEql`), so `(1 < 2) == (3 < 4)` is `true`.
     assert_eq!(
         run(r#"
@@ -278,7 +278,7 @@ fn infix_rem_on_flt_computes_fmod() {
 }
 
 #[test]
-fn infix_not_equal_on_bln_resolves_to_bln_neq() {
+fn infix_not_equal_on_bool_resolves_to_bool_neq() {
     // `bool_ != bool_` now resolves to the `BoolNeq` primitive. `true != false` is `true`.
     assert_eq!(
         run(r#"

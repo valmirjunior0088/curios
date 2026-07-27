@@ -152,7 +152,7 @@ impl Lowering {
             Cases::Bool {
                 false_case,
                 true_case,
-            } => self.erase_bln(context, head, motive, false_case, true_case, hint),
+            } => self.erase_bool(context, head, motive, false_case, true_case, hint),
             Cases::Switch { cases, default } => {
                 self.erase_switch(context, head, motive, cases, default, hint)
             }
@@ -260,7 +260,7 @@ impl Lowering {
 
     /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct
     /// from a `Nat` dispatch.
-    fn erase_bln(
+    fn erase_bool(
         &mut self,
         context: &mut Context,
         head: &Term,

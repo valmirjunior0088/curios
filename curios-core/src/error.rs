@@ -567,7 +567,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_bln_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_bool_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotBoolType {
             head_type: Box::new(head_type.into()),
         }

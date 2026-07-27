@@ -237,7 +237,7 @@ pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // doesn't itself reject keyword text, mirroring the same precedent already
 // used for `Bool` literals at term level (see the `Subterm::Prim(Prim::Bool)`
 // case above).
-pub(super) fn parse_bln_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+pub(super) fn parse_bool_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_keyword("false"))
         .map(|()| MatchPattern::Bool(false))
         .or(catch(parse_keyword("true")).map(|()| MatchPattern::Bool(true)))
@@ -386,7 +386,7 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
         .or(parse_bin_end_match_pattern())
         .or(parse_struct_match_pattern())
         .or(parse_ctor_match_pattern())
-        .or(parse_bln_match_pattern())
+        .or(parse_bool_match_pattern())
         .or(parse_nat_zero_match_pattern())
         .or(parse_nat_succ_match_pattern())
         .or(parse_nat_lit_match_pattern())

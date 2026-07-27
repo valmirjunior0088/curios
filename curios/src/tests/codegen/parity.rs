@@ -96,7 +96,7 @@ fn concept_method_call_matches_direct_primitive_codegen() {
 /// comparison. A runtime operand (`Lst/len(proc/args())`) keeps the ladder from
 /// folding to a constant.
 #[test]
-fn choose_matches_hand_nested_bln_codegen() {
+fn choose_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, Lst, Handle, Str, proc};
         let n : Nat = Lst/len(proc/args());

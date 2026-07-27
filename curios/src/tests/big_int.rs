@@ -111,7 +111,7 @@ fn bigint_operators_dispatch_through_concepts() {
         use /std/{Handle, Str, Bool, Lst, BigInt, Show};
         let a = BigInt/of_int(-6);
         let b = BigInt/of_int(+2);
-        let show_bln(v : Bool) -> Str =
+        let show_bool(v : Bool) -> Str =
             match v : (_) => Str
             | true => "T"
             | false => "F"
@@ -120,8 +120,8 @@ fn bigint_operators_dispatch_through_concepts() {
             Show/show(a + b),
             Show/show(a - b),
             Show/show(a * b),
-            show_bln(a == b),
-            show_bln(a < b)]))
+            show_bool(a == b),
+            show_bool(a < b)]))
         "#;
     assert_eq!(run(source), b"-4,-8,-12,F,T");
 }

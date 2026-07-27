@@ -2033,7 +2033,7 @@ fn bang_desugars_through_syn_monad_bind() {
 }
 
 #[test]
-fn choose_lowers_to_nested_bln_matches() {
+fn choose_lowers_to_nested_bool_matches() {
     // `choose | p => a | q => b | _ => ? end` right-folds into two nested
     // `Bool` matches: the first condition's false branch holds the second,
     // whose own false branch is the `_` default (a plain hole here).

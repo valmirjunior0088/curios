@@ -361,7 +361,7 @@ pub(super) fn elaborate_infix(
     // An arithmetic operator returns its operand type, so an expected result
     // type pins `?T` straight away; a comparison returns `Bool`, which says
     // nothing about the operands, so only the operands can pin it.
-    if !infix.op.result_is_bln()
+    if !infix.op.result_is_bool()
         && let Mode::Check(expected) = &mode
     {
         expect(context, term, &operand_type, expected)?;
@@ -443,7 +443,7 @@ pub(super) fn elaborate_infix(
         _ => call,
     };
 
-    let result_type = if infix.op.result_is_bln() {
+    let result_type = if infix.op.result_is_bool() {
         bool_type
     } else {
         operand_type

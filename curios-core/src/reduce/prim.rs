@@ -19,7 +19,7 @@ fn as_index(term: &Term) -> Option<usize> {
 /// Reduce both operands of a `Bool` binary primitive, then either `fold` the two
 /// literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the
 /// type level, so the fold reads the `true`/`false` constructors directly.
-fn reduce_bln_binary(
+fn reduce_bool_binary(
     context: &mut Context,
     left: &Term,
     right: &Term,
@@ -29,7 +29,7 @@ fn reduce_bln_binary(
     let left = reduce_forced(context, left.clone())?;
     let right = reduce_forced(context, right.clone())?;
 
-    Ok(Subterm::Prim(match (left.as_bln(), right.as_bln()) {
+    Ok(Subterm::Prim(match (left.as_bool(), right.as_bool()) {
         (Some(l), Some(r)) => Prim::Bool(fold(l, r)),
         _ => rebuild(left, right),
     }))
@@ -407,19 +407,19 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::BoolType => Ok(Subterm::Prim(Prim::BoolType)),
         Prim::Bool(value) => Ok(Subterm::Prim(Prim::Bool(*value))),
         Prim::BoolAnd(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l && r, Prim::BoolAnd)
+            reduce_bool_binary(context, left, right, |l, r| l && r, Prim::BoolAnd)
         }
         Prim::BoolOr(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l || r, Prim::BoolOr)
+            reduce_bool_binary(context, left, right, |l, r| l || r, Prim::BoolOr)
         }
         Prim::BoolXor(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BoolXor)
+            reduce_bool_binary(context, left, right, |l, r| l != r, Prim::BoolXor)
         }
         Prim::BoolEql(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l == r, Prim::BoolEql)
+            reduce_bool_binary(context, left, right, |l, r| l == r, Prim::BoolEql)
         }
         Prim::BoolNeq(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BoolNeq)
+            reduce_bool_binary(context, left, right, |l, r| l != r, Prim::BoolNeq)
         }
         Prim::NatType => Ok(Subterm::Prim(Prim::NatType)),
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
@@ -1464,7 +1464,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::BinAppend(Grain::B, bin, bit) => {
             let bin = reduce_forced(context, bin.clone())?;
             let bit = reduce_forced(context, bit.clone())?;
-            Ok(Subterm::Prim(match (&*bin, bit.as_bln()) {
+            Ok(Subterm::Prim(match (&*bin, bit.as_bool()) {
                 (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(bit)) => {
                     Prim::Bin(Grain::B, bits.append_bit(bit))
                 }

@@ -138,7 +138,7 @@ pub(super) fn parse_choose<'a>() -> Parser<'a, Term> {
 // matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal
 // dispatch), `Lst`, `Bin` — is just a matrix whose arm patterns are that
 // carrier's leaves (see `parse_match_pattern`), lowered by
-// `into_core::match_compile`'s `compile_bln`/`compile_nat`/`compile_lst`/`compile_bin`.
+// `into_core::match_compile`'s `compile_bool`/`compile_nat`/`compile_lst`/`compile_bin`.
 // The headless ladder is `choose` (`parse_choose`), parsed separately.
 // Zero arms are legal: under inversion (Rung C) every impossible arm is
 // silently omittable, and a scrutinee whose indices clash with *every*

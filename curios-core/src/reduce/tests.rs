@@ -375,7 +375,7 @@ fn reduce_int_add_computes() {
 }
 
 #[test]
-fn reduce_int_eql_returns_true_or_false_bln() {
+fn reduce_int_eql_returns_true_or_false_bool() {
     let mut context = context();
 
     assert_eq!(

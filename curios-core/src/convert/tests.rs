@@ -1772,13 +1772,13 @@ fn imitation_solves_flex_apply_against_inductive() {
 
     // The committed solution is the imitation, not the constant: applied to a
     // different argument it yields Lst of *that* argument.
-    let at_bln = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
-    let lst_bln = Term::induct_type(
+    let at_bool = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
+    let lst_bool = Term::induct_type(
         nominal("Lst"),
         [Term::prim(Prim::BoolType)],
         Vec::<Term>::new(),
     );
-    assert_eq!(conv(&mut context, &at_bln, &lst_bln), Ok(true));
+    assert_eq!(conv(&mut context, &at_bool, &lst_bool), Ok(true));
 }
 
 #[test]

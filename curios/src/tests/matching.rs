@@ -369,10 +369,10 @@ fn nested_bin_pattern_dispatches_by_shape() {
 
 // A `Bool` literal leaf (`true`/`false`) nested inside a constructor payload —
 // two full rows, since a bare top-level `true`/`false` would otherwise be
-// swallowed by the separate flat `parse_bln_match` before ever reaching the
+// swallowed by the separate flat `parse_bool_match` before ever reaching the
 // matrix grammar.
 #[test]
-fn nested_bln_pattern_dispatches_by_shape() {
+fn nested_bool_pattern_dispatches_by_shape() {
     let source = r#"
         use /std/{Bool, Nat, Handle};
          pub induct Pair(A : Type, B : Type) : pub Type

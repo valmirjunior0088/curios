@@ -544,7 +544,7 @@ entry {
 }
 
 #[test]
-fn a_bln_match_erases_to_a_switch_bool() {
+fn a_bool_match_erases_to_a_switch_bool() {
     let mut context = context();
     let body = Term::bool_match(
         Term::prim(Prim::Bool(true)),

@@ -400,7 +400,7 @@ pub(crate) fn elaborate_match(
         Cases::Bool {
             false_case,
             true_case,
-        } => elaborate_bln_match(context, head, motive, false_case, true_case, term, mode),
+        } => elaborate_bool_match(context, head, motive, false_case, true_case, term, mode),
         Cases::Switch { cases, default } => {
             elaborate_switch(context, head, motive, cases, default, term, mode)
         }
@@ -457,7 +457,7 @@ struct InductMatchInput<'a> {
     term: &'a Term,
 }
 
-fn elaborate_bln_match(
+fn elaborate_bool_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,

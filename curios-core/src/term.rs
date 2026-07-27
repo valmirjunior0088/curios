@@ -2700,7 +2700,7 @@ impl Subterm {
         }
     }
 
-    pub(crate) fn as_bln(&self) -> Option<bool> {
+    pub(crate) fn as_bool(&self) -> Option<bool> {
         match self {
             Subterm::Prim(Prim::Bool(value)) => Some(*value),
             _ => None,
