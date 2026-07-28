@@ -16,6 +16,7 @@ mod matching;
 mod network;
 mod numeric;
 mod operators;
+mod perimeter;
 mod plicity;
 mod positivity;
 mod runtime;

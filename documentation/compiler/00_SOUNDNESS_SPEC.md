@@ -331,7 +331,7 @@ Three more, ordered by how much each would change what the claim is worth. Three
 
 **(T) is a walk, and walks are what this effort kept finding defects in.** Step 8 removed (V)'s, and the differential showed why (T)'s cannot go the same way: its aggressive reading deliberately seeds more than any typing judgment does, so `hook-T` measured a strict subset of it. That justifies the walk but does not audit it. Every rule of (T) has now been counted exactly once, in one configuration, and the entrypoint blind spot it once had was found by reading a lowering contract rather than by a count.
 
-**What is enforced is narrower than what `DESIGN.md` claims.** `DESIGN.md` states "there is no closed term of type `/syn/False`". The mechanism enforces that no term *at a `Prop`-sorted type* and nothing in a type position is partial, which is the term-level property and stronger than the value-level one an erasure-seeded design would have given — the distinction is recorded under step 8 because it decided that design. The two are not obviously the same statement, and the difference should be settled in `DESIGN.md` rather than left to the reader.
+**~~What is enforced is narrower than what `DESIGN.md` claims.~~** **Closed.** `DESIGN.md` now states the enforced property rather than the intended one, and records that the two coincide only if the perimeter is complete and each entry correct. See "The soundness perimeter" there, which also enumerates every rule the claim rests on, marks each *probed* / *argued* / *auditable only*, and names the three that no surface program can reach.
 
 ## Appendix: the fork on (T), and how it closed
 
