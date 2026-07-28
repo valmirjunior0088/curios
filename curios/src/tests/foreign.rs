@@ -11,7 +11,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     // implementations.
     let source = r#"
         foreign double : (Nat) -> Nat;
-        let _ : std/False = /std/proc/exit(double(21));
+        let _ : std/Never = /std/proc/exit(double(21));
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))
         "#
     .parse::<curios_text::Entrypoint>()

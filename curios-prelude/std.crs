@@ -100,6 +100,9 @@ pub use Eq/{let Eq};
 pub mod False;
 pub use False/{let False};
 
+pub mod Never;
+pub use Never/{let Never};
+
 pub mod True;
 pub use True/{let True};
 

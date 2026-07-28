@@ -158,6 +158,16 @@ pub(super) fn elaborate_rec(
             Subterm::Rec(rec) => rec.group,
             _ => unreachable!("rec constructs a recursive block"),
         };
+        // Before the members are defined and the tail elaborated: a local
+        // `rec Bad : Type = (Bad) -> False` overflows the stack at its first
+        // use, which is in that tail. Named by the hints the program wrote,
+        // not by the gensyms elaboration minted for them.
+        let names = rec
+            .tail
+            .hint_iter()
+            .map(|hint| hint.unwrap_or("_").to_string())
+            .collect::<Vec<_>>();
+        crate::check_rec_totality(context, &group, &names)?;
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
             context.define(label, &Term::rec_member(group.clone(), index), None);

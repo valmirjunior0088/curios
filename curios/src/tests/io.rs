@@ -221,7 +221,7 @@ fn proc_env_absent_is_none() {
 fn proc_exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
-        let _ : std/False = /std/proc/exit(7);
+        let _ : std/Never = /std/proc/exit(7);
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))
         "#
     .parse::<curios_text::Entrypoint>()

@@ -50,6 +50,9 @@ pub use concept::*;
 mod positivity;
 pub use positivity::*;
 
+mod totality;
+pub use totality::*;
+
 mod print;
 use print::*;
 

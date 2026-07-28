@@ -20,6 +20,7 @@ mod plicity;
 mod positivity;
 mod runtime;
 mod scheduler;
+mod soundness;
 mod strings;
 mod structs;
 mod toml;

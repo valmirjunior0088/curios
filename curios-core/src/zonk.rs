@@ -736,6 +736,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
         universe_context: def.universe_context.clone(),
         island: def.island.clone(),
         root: def.root,
+        totality: def.totality,
         type_,
         body,
     })

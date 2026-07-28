@@ -1,7 +1,7 @@
 use {
     super::{
         Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
-        StructDecl, Term, UniverseContext, UniverseSeed, build_shorten, with_short_names,
+        StructDecl, Term, Totality, UniverseContext, UniverseSeed, build_shorten, with_short_names,
     },
     curios_base::{Qualifier, RootId},
     std::{
@@ -66,6 +66,18 @@ pub struct Definition {
     /// `InductDecl` are, so `Context::set_island` (and, downstream, the
     /// orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,
+    /// Whether this definition terminates on every input, together with
+    /// everything it reaches. Written back by [`crate::record_totality`] after
+    /// zonking — like `polarities` on a declaration, and for the same reason:
+    /// the analysis needs final, meta-free terms, so construction cannot know
+    /// the answer. It defaults to [`Totality::Partial`], which is what makes a
+    /// site that forgets to stamp it fail closed rather than open.
+    ///
+    /// This is the cross-module summary the erasure gates read. A user program
+    /// that mentions a prelude definition inherits the flag rather than
+    /// re-analyzing the prelude, which is sound because "partial" already means
+    /// "something partial is in its closure".
+    pub totality: Totality,
     pub type_: Term,
     pub body: Term,
 }
@@ -83,6 +95,11 @@ pub(crate) struct RecDefinition {
     pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
+    /// Per member, not per group. The group's *descent* is decided once for all
+    /// of them, but the transitive closure is not: an accepted group can still
+    /// have one member that reaches something partial while its sibling does
+    /// not. See [`Definition::totality`].
+    pub totality: Totality,
 }
 
 /// A flat top-level recursive item backed by the same structural fixed-point
@@ -153,6 +170,7 @@ impl RecItem {
                 kind: definition.kind,
                 island: definition.island,
                 root: definition.root,
+                totality: definition.totality,
             })
             .collect();
 
@@ -180,6 +198,7 @@ impl RecItem {
                 universe_context: self.group.universe_context().clone(),
                 island: definition.island.clone(),
                 root: definition.root,
+                totality: definition.totality,
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
             })
@@ -321,6 +340,7 @@ impl Module {
             universe_context: definition.universe_context.clone(),
             island: definition.island.clone(),
             root: definition.root,
+            totality: definition.totality,
             type_: sharing.share(&definition.type_),
             body: sharing.share(&definition.body),
         };
@@ -340,6 +360,7 @@ impl Module {
                                 kind: member.kind.clone(),
                                 island: member.island.clone(),
                                 root: member.root,
+                                totality: member.totality,
                             })
                             .collect(),
                         // Mapped in place rather than opened and re-closed: the
@@ -465,6 +486,7 @@ mod tests {
             universe_context,
             island: Qualifier::empty(),
             root: RootId::Entry,
+            totality: Totality::default(),
             type_: Term::type_ground(),
             body: Term::free_var(&Free::from(&global)),
         }

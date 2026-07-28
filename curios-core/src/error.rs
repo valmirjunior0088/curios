@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Level, Module, Polarity, Term, UniverseConstraintOrigin, UniverseError},
+    super::{Atom, Erased, Level, Module, Polarity, Term, UniverseConstraintOrigin, UniverseError},
     curios_base::{Int, Plicity, Qualifier, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
@@ -251,6 +251,21 @@ pub enum Error {
         site: String,
         site_type: Box<Term>,
         polarity: Polarity,
+    },
+    /// A position erasure deletes is not known to terminate.
+    ///
+    /// Erasure deletes types and it deletes `Prop`-sorted proofs, and both must
+    /// be total: a divergent type breaks type formation, and a divergent proof
+    /// proves anything. General recursion is untouched everywhere erasure keeps
+    /// it, so this rejects a *position*, never a definition.
+    ///
+    /// `offender` is the partial definition the position reaches, or `None`
+    /// when the position is partial on its own account — an inline `rec` that
+    /// does not descend, or an exit, neither of which has a name to blame.
+    PartialInErasedPosition {
+        erased: Erased,
+        site: String,
+        offender: Option<String>,
     },
     /// A struct literal's (or struct type's) head names a binding that is not a
     /// struct; `found` is that binding's type.
@@ -1260,6 +1275,30 @@ impl fmt::Display for Error {
                     f,
                     "'{name}' is not strictly positive: through '{site} : {site_type}' it occurs in itself {polarity}\n  a recursive occurrence must be a plain payload, never left of an arrow"
                 )
+            }
+            Error::PartialInErasedPosition {
+                erased,
+                site,
+                offender,
+            } => {
+                let advice = match erased {
+                    Erased::Type => {
+                        "everything a type reaches must terminate, or type formation may not"
+                    }
+                    Erased::Proof => {
+                        "erasure deletes proofs, so a proof that may not terminate proves anything"
+                    }
+                };
+                match offender {
+                    Some(offender) => write!(
+                        f,
+                        "{site} is a {erased} position but reaches '{offender}', which is not known to terminate\n  {advice}"
+                    ),
+                    None => write!(
+                        f,
+                        "{site} is a {erased} position but does not terminate on every input\n  {advice}"
+                    ),
+                }
             }
             Error::NotAStructType { found } => {
                 write!(f, "expected a struct type here\n  found: {found}")

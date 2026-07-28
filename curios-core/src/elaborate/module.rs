@@ -4,12 +4,17 @@ use {
         Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl, InductParam, Item,
         Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
-        check_concept_registry, check_positivity, finish_deferred_witnesses, is_prop, reduce_with,
+        check_concept_registry, check_positivity, check_rec_item_totality, check_type_totality,
+        finish_deferred_witnesses, is_prop, record_totality, recorded_totality, reduce_with,
         register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
         zonk_solved_term_metas,
     },
     curios_base::Qualifier,
-    std::{cell::RefCell, collections::BTreeSet, rc::Rc},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 /// The universe arguments `value` applies to `name`'s declaration, at the first
@@ -659,6 +664,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
         universe_context,
         island: def.island.clone(),
         root: def.root,
+        totality: def.totality,
         type_,
         body,
     })
@@ -896,11 +902,15 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             universe_context: universe_context.clone(),
             island: def.island.clone(),
             root: def.root,
+            totality: def.totality,
             type_,
             body,
         })
         .collect();
     let rec = RecItem::try_new(definitions)?;
+    // Before the members are defined into the context, because the shape this
+    // rejects makes reducing a *use* of one of them overflow the stack.
+    check_rec_item_totality(context, &rec)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
         let name = Free::from(&definition.name);
@@ -1095,6 +1105,10 @@ pub fn elaborate_and_zonk_module(
     // telescopes it reads are final here, and meta-free, so an unsolved hole
     // reports as an unsolved hole instead of as an unseeable occurrence.
     check_positivity(context, &mut module)?;
+    // Nothing is inherited here: `module` is the whole program, so every name
+    // it mentions it also defines.
+    record_totality(context, &mut module, &BTreeMap::new());
+    check_type_totality(context, &module, &BTreeMap::new())?;
     Ok((module, body_type))
 }
 
@@ -1320,6 +1334,12 @@ pub fn elaborate_and_zonk_with_prelude(
     // cannot mention user code they are sinks of the occurrence relation, so
     // no cycle crosses the boundary.
     check_positivity(context, &mut user_module)?;
+    // Same boundary, same reason. The prelude's own stamps come out of the
+    // archive already closed, so inheriting them is what lets a user proof see
+    // that `/std/Async/bind` is partial without walking `/std` again.
+    let inherited = recorded_totality(prelude);
+    record_totality(context, &mut user_module, &inherited);
+    check_type_totality(context, &user_module, &inherited)?;
 
     let mut items = prelude.items.clone();
     items.extend(user_module.items);

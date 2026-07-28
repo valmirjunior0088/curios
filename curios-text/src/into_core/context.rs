@@ -30,6 +30,10 @@ impl FlatLet {
             name: self.name,
             kind: self.kind,
             universe_context: UniverseContext::empty(),
+            // Lowering cannot know this. `curios_core::record_totality`
+            // computes the definition's totality after elaboration and zonking
+            // and writes it back here.
+            totality: curios_core::Totality::default(),
             type_: self.type_,
             body: self.body,
         }

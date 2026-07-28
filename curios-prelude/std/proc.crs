@@ -1,5 +1,5 @@
 pub use /sys/{args};
-use /std/{Bytes, Nat, Str, Option, False};
+use /std/{Bytes, Nat, Str, Option, Never};
 
 pub let env(name : Str) -> Option(Bytes) =
     let r = /sys/env(Str/to_bytes(name));
@@ -8,5 +8,9 @@ pub let env(name : Str) -> Option(Bytes) =
     | false => Option/none()
     end;
 
-pub let exit(code : Nat) -> False =
+-- `Never`, not `False`: the result is `Type`-sorted, so erasure keeps the call
+-- and the process actually exits wherever this is written. Typed at `False` the
+-- result was a proof, erasure dropped it, and the exit silently did not fire —
+-- which also made this a closed inhabitant of `False`.
+pub let exit(code : Nat) -> Never =
     /sys/exit(code);

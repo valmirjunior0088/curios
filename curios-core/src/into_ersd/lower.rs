@@ -145,6 +145,11 @@ fn project_definition(definition: &Definition) -> Definition {
         universe_context: Default::default(),
         island: definition.island.clone(),
         root: definition.root,
+        // Totality is elaboration-only metadata, projected out here alongside
+        // the universe context: the gates run before erasure and nothing past
+        // it reads the flag, so archiving a second copy per definition would
+        // pay for a fact no consumer of this representation asks.
+        totality: Default::default(),
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
     }
