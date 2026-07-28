@@ -379,6 +379,80 @@ fn a_partial_definition_stays_usable_in_a_program() {
     assert_eq!(run(source), b"8");
 }
 
+// The three fixtures below probe the *erasure premise*: that everything erasure
+// deletes lies within a term one of the obligations covers.
+//
+// Erasure deletes more than types and proofs. Each of these sites drops a whole
+// construct, arguments included, and those arguments are ordinary values —
+// neither a type nor a proof, so nothing seeds them directly. What makes that
+// safe is containment rather than coverage: the *enclosing* term is a proof
+// position, and the reachability closure walks into it. Each fixture therefore
+// hides a partial `Nat` computation inside one deleted construct, and each must
+// be rejected for reaching it.
+
+// `erase_apply`'s proof-valued callee: the application collapses to the unit
+// constant, discarding every argument unevaluated.
+#[test]
+fn a_partial_argument_to_an_erased_call_is_still_reached() {
+    let source = r#"
+        use /std/{Nat, True};
+
+        rec spin(n : Nat) -> Nat = spin(n);
+
+        let mk_proof(n : Nat) -> True = True/qed();
+
+        let use_it(n : Nat) -> Nat =
+            let witness : True = mk_proof(spin(0));
+            n;
+
+        /std/print(Nat/to_str(use_it(5)))
+        "#;
+    rejected_as_a_proof(source);
+}
+
+// `is_proof_constructor`: a `Prop` family's constructor is the one direct call
+// erasure drops whole, on a predicate that never consults `is_erasable`.
+#[test]
+fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
+    let source = r#"
+        use /std/{Nat};
+
+        rec spin(n : Nat) -> Nat = spin(n);
+
+        induct Tagged : pub Prop
+        | tag(n : Nat)
+        end
+
+        let use_it(n : Nat) -> Nat =
+            let witness : Tagged = Tagged/tag(spin(0));
+            n;
+
+        /std/print(Nat/to_str(use_it(5)))
+        "#;
+    rejected_as_a_proof(source);
+}
+
+// An erasable scrutinee: the elimination reduces to its single live arm and the
+// scrutinee is never emitted.
+#[test]
+fn a_partial_erased_scrutinee_is_still_reached() {
+    let source = r#"
+        use /std/{Nat, True};
+
+        rec spin(n : Nat) -> Nat = spin(n);
+
+        let mk(n : Nat) -> True = True/qed();
+
+        let use_it(n : Nat) -> Nat =
+            match mk(spin(0))
+            | qed() => n
+            end;
+
+        /std/print(Nat/to_str(use_it(5)))
+        "#;
+    rejected_as_a_proof(source);
+}
+
 // (V) is seeded where elaboration *settles* a term, so its coverage argument
 // rests on every `Prop`-typed term in the accepted module having been settled.
 // A metavariable solution is the one way a term reaches the module without
