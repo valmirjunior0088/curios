@@ -26,9 +26,10 @@
 //! why partiality persists on the definition rather than being recomputed.
 
 use {
-    super::super::{
-        Bound, Context, Definition, Error, FuncType, Global, Item, Module, Struct, Subterm,
-        Telescope, Term, Variant, is_prop,
+    crate::{
+        Apply, Bound, Carrier, Cases, Context, Definition, Error, Free, Func, FuncType, Global,
+        Item, Let, Many, Match, Module, Rec, Scope, Struct, Subterm, Telescope, Term, Three,
+        TupleType, Two, Variant, is_prop, is_prop_in, synth_neutral,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -125,12 +126,15 @@ pub(crate) fn seeds(positions: &[Position]) -> BTreeSet<Global> {
 
 /// Every definition named by a term checked against a `Prop`-sorted type.
 ///
-/// Three positions carry proofs across a boundary the closure would otherwise
+/// Four positions carry proofs across a boundary the closure would otherwise
 /// not cross: a definition that *is* a proof, a structure field declared at a
-/// proposition — the certificate idiom, `Str { bytes, valid }` — and a
-/// constructor payload declared at one. A proof written inline inside another
-/// proof needs no rule of its own: seeding a proof-valued definition takes the
-/// free variables of its whole body, arguments included.
+/// proposition — the certificate idiom, `Str { bytes, valid }` — a constructor
+/// payload declared at one, and an argument at a `Prop`-declared parameter.
+///
+/// The last of those is why an inline proof inside an ordinary function is
+/// seen at all. A proof inside a *proof-valued* definition needs no rule,
+/// because seeding that definition takes its whole body; the same proof handed
+/// to `consume(x, p)` inside a `Nat`-valued function has no such umbrella.
 pub(crate) fn proof_positions(
     context: &mut Context,
     module: &Module,
@@ -139,38 +143,54 @@ pub(crate) fn proof_positions(
 
     for definition in definitions(module) {
         let name = definition.name.to_string();
-        if definition.type_.reach() == 0 && is_prop(context, &definition.type_)? {
+        if is_prop(context, &definition.type_)? {
             push(
                 &mut positions,
                 &format!("the proof '{name}'"),
                 &definition.body,
             );
         }
-        certificates(
+        positions.extend(certificates(
             context,
             module,
             &definition.body,
             &format!("a certificate in '{name}'"),
-            &mut positions,
-        )?;
+        )?);
     }
 
     // The entrypoint, for the same reason type positions cover it.
     if let Some(type_) = &module.type_
-        && type_.reach() == 0
         && is_prop(context, type_)?
     {
         push(&mut positions, "the entrypoint", &module.body);
     }
-    certificates(
+    positions.extend(certificates(
         context,
         module,
         &module.body,
         "a certificate in the entrypoint",
-        &mut positions,
-    )?;
+    )?);
 
     Ok(positions)
+}
+
+/// Run the seeding walk over one term.
+fn certificates(
+    context: &mut Context,
+    module: &Module,
+    term: &Term,
+    site: &str,
+) -> Result<Vec<Position>, Error> {
+    let mut walk = Certificates {
+        context,
+        module,
+        site: site.to_string(),
+        opened: Vec::new(),
+        positions: Vec::new(),
+    };
+    walk.walk(term)?;
+
+    Ok(walk.positions)
 }
 
 /// Close `seeds` over the definitions they name, following each into both its
@@ -317,91 +337,301 @@ fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
     });
 }
 
-/// Mark every proof handed to a `Prop`-declared structure field or constructor
-/// payload.
-fn certificates(
-    context: &mut Context,
-    module: &Module,
-    term: &Term,
-    site: &str,
-    positions: &mut Vec<Position>,
-) -> Result<(), Error> {
-    match &**term {
-        Subterm::Struct(Struct {
-            name,
-            params,
-            fields,
-            ..
-        }) => {
-            if let Some(declaration) = module.struct_decls.get(name) {
-                let declared = declaration.fields.clone().open_params(params);
-                prop_positions(context, declared, fields, site, positions)?;
-            }
-        }
-        Subterm::Variant(Variant {
-            name,
-            params,
-            tag,
-            payload,
-            ..
-        }) => {
-            if let Some(constructor) = module.induct_decls.get(name).and_then(|declaration| {
-                declaration
-                    .constructors
-                    .iter()
-                    .find(|(candidate, _)| candidate == tag)
-                    .map(|(_, constructor)| constructor)
-            }) {
-                let declared = constructor.telescope.clone().open_params(params);
-                prop_positions(context, declared, payload, site, positions)?;
-            }
-        }
-        _ => {}
-    }
-
-    let subterm: &Subterm = term;
-    let mut failure = None;
-    subterm.any_child_term(
-        &mut |child| match certificates(context, module, child, site, positions) {
-            Ok(()) => false,
-            Err(error) => {
-                failure = Some(error);
-                true
-            }
-        },
-    );
-    match failure {
-        Some(error) => Err(error),
-        None => Ok(()),
-    }
+/// The (V) seeding walk.
+///
+/// Descends the whole term, opening every binder against a fresh name so that
+/// nothing it inspects carries a loose de Bruijn index. That is what an earlier
+/// version could not do: it descended with `any_child_term`, which hands back a
+/// scope body unopened, and guarded the resulting positions with `reach() == 0`
+/// — which *skipped* every certificate built inside a function body.
+///
+/// The opened binders are threaded in `opened` rather than assumed into the
+/// context, because `Context::assume` bumps the stamp that validates the
+/// memoization caches; see [`is_prop_in`]. Binders whose type this walk
+/// cannot name are opened but not recorded, which costs a seed rather than
+/// risking a wrong one: an unresolvable name makes sort synthesis answer
+/// conservatively.
+struct Certificates<'a> {
+    context: &'a mut Context,
+    module: &'a Module,
+    site: String,
+    opened: Vec<(Free, Term)>,
+    positions: Vec<Position>,
 }
 
-/// Mark the actual terms sitting at the `Prop`-sorted entries of a declared
-/// telescope.
-fn prop_positions<B: Bound>(
-    context: &mut Context,
-    declared: Telescope<B>,
-    actuals: &[Term],
-    site: &str,
-    positions: &mut Vec<Position>,
-) -> Result<(), Error> {
-    let mut declared = declared;
-    let mut index = 0;
-    while let Telescope::Cons(entry, rest) = declared {
-        let Some(actual) = actuals.get(index) else {
-            return Ok(());
-        };
-        // A construction found under a binder still carries loose indices, and
-        // deciding a sort means reducing, which assumes free occurrences. Such
-        // a position is left to the definition-level rule above rather than
-        // reduced here.
-        if entry.reach() == 0 && actual.reach() == 0 && is_prop(context, &entry)? {
-            push(positions, site, actual);
+impl Certificates<'_> {
+    /// Seed this node, then its children.
+    fn walk(&mut self, term: &Term) -> Result<(), Error> {
+        self.seed(term)?;
+
+        match &**term {
+            // Binder-bearing forms open as they descend.
+            Subterm::Func(Func { telescope, .. })
+            | Subterm::FuncType(FuncType { telescope, .. }) => {
+                self.telescope_terms(telescope.clone())?;
+            }
+
+            Subterm::TupleType(TupleType { telescope }) => {
+                self.telescope_units(telescope.clone())?;
+            }
+
+            Subterm::Let(Let { bindings, tail }) => {
+                for binding in bindings {
+                    self.walk(binding.type_())?;
+                    self.walk(binding.value())?;
+                }
+                let body = self.open_many(tail);
+                self.walk(&body)?;
+            }
+
+            Subterm::Rec(Rec { group, tail }) => {
+                for index in 0..group.len() {
+                    let body = group.member_body(index);
+                    self.walk(&body)?;
+                }
+                let body = self.open_many(tail);
+                self.walk(&body)?;
+            }
+
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => {
+                self.walk(head)?;
+                let body = self.open_many(motive);
+                self.walk(&body)?;
+                self.arms(cases)?;
+            }
+
+            // Everything else binds nothing, so its children are already
+            // closed to the same degree this node is.
+            _ => {
+                let subterm: &Subterm = term;
+                let mut failure = None;
+                subterm.any_child_term(&mut |child| match self.walk(child) {
+                    Ok(()) => false,
+                    Err(error) => {
+                        failure = Some(error);
+                        true
+                    }
+                });
+                if let Some(error) = failure {
+                    return Err(error);
+                }
+            }
         }
-        declared = rest.open(&[actual]);
-        index += 1;
+
+        Ok(())
     }
-    Ok(())
+
+    /// Every proof this node hands to a `Prop`-declared position.
+    ///
+    /// **Known gap.** A node still carrying a loose index is skipped, because
+    /// sort synthesis assumes free occurrences and asserts on a bound one. The
+    /// walk opens every binder it descends through, so the only remaining
+    /// source is a `Let`: its bindings are a flat vector under one tail scope,
+    /// and a later binding is closed over the earlier binders, so walking them
+    /// side by side hands out loose indices. Opening them one at a time is
+    /// what closes this, and until it does a certificate built inside a
+    /// `let`-bound value is not seeded.
+    fn seed(&mut self, term: &Term) -> Result<(), Error> {
+        if term.reach() != 0 {
+            return Ok(());
+        }
+
+        match &**term {
+            Subterm::Struct(Struct {
+                name,
+                params,
+                fields,
+                ..
+            }) => {
+                if let Some(declaration) = self.module.struct_decls.get(name) {
+                    let declared = declaration.fields.clone().open_params(params);
+                    self.prop_positions(declared, fields)?;
+                }
+            }
+
+            Subterm::Variant(Variant {
+                name,
+                params,
+                tag,
+                payload,
+                ..
+            }) => {
+                let constructor = self.module.induct_decls.get(name).and_then(|declaration| {
+                    declaration
+                        .constructors
+                        .iter()
+                        .find(|(candidate, _)| candidate == tag)
+                        .map(|(_, constructor)| constructor.clone())
+                });
+                if let Some(constructor) = constructor {
+                    let declared = constructor.telescope.open_params(params);
+                    self.prop_positions(declared, payload)?;
+                }
+            }
+
+            // An argument at a `Prop`-declared parameter. The head's type comes
+            // from `synth_neutral`, the judgment `infer` itself is built from,
+            // so a local, a global, a curried spine, and a projection are all
+            // covered by one rule rather than by a lookup that would only find
+            // globals. It answers `None` rather than guessing, and a `None`
+            // costs a seed instead of risking a wrong one.
+            Subterm::Apply(Apply { head, params, .. }) => {
+                let synthesized = synth_neutral(self.context, &self.opened, head)
+                    .map_err(|error| error.into_error(|| Error::reduce_exhausted(head.clone())))?;
+                if let Some(type_) = synthesized
+                    && let Subterm::FuncType(FuncType { telescope, .. }) = &*type_
+                {
+                    self.prop_positions(telescope.clone(), params)?;
+                }
+            }
+
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Mark the actual terms sitting at the `Prop`-sorted entries of a declared
+    /// telescope.
+    fn prop_positions<B: Bound>(
+        &mut self,
+        declared: Telescope<B>,
+        actuals: &[Term],
+    ) -> Result<(), Error> {
+        let mut declared = declared;
+        let mut index = 0;
+        while let Telescope::Cons(entry, rest) = declared {
+            let Some(actual) = actuals.get(index) else {
+                return Ok(());
+            };
+            if is_prop_in(self.context, &mut self.opened, &entry)? {
+                push(&mut self.positions, &self.site, actual);
+            }
+            declared = rest.open(&[actual]);
+            index += 1;
+        }
+        Ok(())
+    }
+
+    fn arms(&mut self, cases: &Cases) -> Result<(), Error> {
+        match cases {
+            Cases::Bool {
+                false_case,
+                true_case,
+            } => {
+                self.walk(false_case)?;
+                self.walk(true_case)?;
+            }
+            Cases::Switch { cases, default } => {
+                for body in cases.values() {
+                    self.walk(body)?;
+                }
+                self.walk(default)?;
+            }
+            Cases::Induct { cases, default } => {
+                for (_, arm) in cases {
+                    let body = self.open_many(&arm.body);
+                    self.walk(&body)?;
+                }
+                if let Some(default) = default {
+                    self.walk(default)?;
+                }
+            }
+            Cases::FreeMonoid { carrier } => match carrier {
+                Carrier::Nat {
+                    empty_case,
+                    cons_case,
+                } => {
+                    self.walk(empty_case)?;
+                    let body = self.open_two(cons_case);
+                    self.walk(&body)?;
+                }
+                Carrier::Bin {
+                    empty_case,
+                    cons_case,
+                    ..
+                } => {
+                    self.walk(empty_case)?;
+                    let body = self.open_three(cons_case);
+                    self.walk(&body)?;
+                }
+                Carrier::Lst {
+                    elem,
+                    empty_case,
+                    cons_case,
+                } => {
+                    self.walk(elem)?;
+                    self.walk(empty_case)?;
+                    let body = self.open_three(cons_case);
+                    self.walk(&body)?;
+                }
+            },
+        }
+        Ok(())
+    }
+
+    /// Fresh binders for a scope, in order.
+    ///
+    /// Their types are deliberately not recorded: an arm binder's type lives in
+    /// the constructor telescope rather than the scope, and a binder this walk
+    /// cannot name is one sort synthesis answers conservatively about — which
+    /// costs a seed rather than risking a wrong one.
+    fn fresh_binders(&mut self, arity: usize, hints: &[Option<&str>]) -> Vec<Term> {
+        (0..arity)
+            .map(|index| {
+                let binder = self.context.fresh(hints.get(index).copied().flatten());
+                Term::free_var(&binder)
+            })
+            .collect()
+    }
+
+    fn open_many(&mut self, scope: &Scope<Many>) -> Term {
+        let hints = scope.hint_iter().collect::<Vec<_>>();
+        let terms = self.fresh_binders(scope.arity(), &hints);
+        scope.open(&terms.iter().collect::<Vec<_>>())
+    }
+
+    fn open_two(&mut self, scope: &Scope<Two>) -> Term {
+        let hints = scope.hint_iter().collect::<Vec<_>>();
+        let terms = self.fresh_binders(Two::ARITY, &hints);
+        scope.open(&[&terms[0], &terms[1]])
+    }
+
+    fn open_three(&mut self, scope: &Scope<Three>) -> Term {
+        let hints = scope.hint_iter().collect::<Vec<_>>();
+        let terms = self.fresh_binders(Three::ARITY, &hints);
+        scope.open(&[&terms[0], &terms[1], &terms[2]])
+    }
+
+    fn telescope_terms(&mut self, telescope: Telescope<Term>) -> Result<(), Error> {
+        let mut telescope = telescope;
+        loop {
+            match telescope {
+                Telescope::Done(terminal) => return self.walk(&terminal),
+                Telescope::Cons(entry, rest) => {
+                    self.walk(&entry)?;
+                    let binder = self.context.fresh(rest.first_hint());
+                    self.opened.push((binder.clone(), entry));
+                    telescope = rest.open(&[&Term::free_var(&binder)]);
+                }
+            }
+        }
+    }
+
+    fn telescope_units(&mut self, telescope: Telescope<()>) -> Result<(), Error> {
+        let mut telescope = telescope;
+        while let Telescope::Cons(entry, rest) = telescope {
+            self.walk(&entry)?;
+            let binder = self.context.fresh(rest.first_hint());
+            self.opened.push((binder.clone(), entry));
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+        }
+        Ok(())
+    }
 }
 
 /// One reachability answer: which partial definitions the seeds reach.

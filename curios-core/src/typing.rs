@@ -3,7 +3,7 @@ mod tests;
 
 use super::{
     Apply, Context, Error, Field, Free, Func, Global, Level, Many, MetaId, Mode, Outcome, Prim,
-    PrimHead, Proj, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
+    PrimHead, Proj, Scope, Sort, Subterm, Telescope, Term, UniverseConstraintKind,
     UniverseConstraintOrigin, UniverseRole, elaborate,
 };
 
@@ -43,27 +43,38 @@ pub(crate) fn convert_at(
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
 /// as its type-of-a-type, so a proposition checks against `Prop`. Wraps
-/// `super::Sort::of`, mapping an exhausted budget to an error like the helpers above.
+/// `Sort::of`, mapping an exhausted budget to an error like the helpers above.
 pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
-    super::Sort::of(context, type_)
-        .map(super::Sort::term)
+    Sort::of(context, type_)
+        .map(Sort::term)
         .map_err(|error| error.into_error(|| Error::reduce_exhausted(type_.clone())))
 }
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps
-/// `super::Sort::of`, mapping an exhausted budget like the helpers above.
+/// `Sort::of`, mapping an exhausted budget like the helpers above.
 pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
-    super::Sort::of(context, type_)
-        .map(|sort| matches!(sort, super::Sort::Prop))
+    is_prop_in(context, &mut Vec::new(), type_)
+}
+
+/// [`is_prop`] under the binders a surrounding walk has opened.
+///
+/// The binders are threaded rather than assumed into the [`Context`], because
+/// `Context::assume` bumps the mutation stamp that validates the memoization
+/// caches — see `convert::Opened`. A seeding walk that assumed instead would
+/// invalidate them at every binder it descended through.
+pub(crate) fn is_prop_in(
+    context: &mut Context,
+    opened: &mut Vec<(Free, Term)>,
+    type_: &Term,
+) -> Result<bool, Error> {
+    Sort::of_in(context, opened, type_)
+        .map(|sort| matches!(sort, Sort::Prop))
         .map_err(|error| error.into_error(|| Error::reduce_exhausted(type_.clone())))
 }
 
 /// Elaborate `term` as a type/proposition without inventing an arbitrary
 /// expected universe upper bound.
-pub(crate) fn check_is_sort(
-    context: &mut Context,
-    term: &Term,
-) -> Result<(Term, super::Sort), Error> {
+pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {
         let classifier = context.fresh_classifier_type("written type hole");
         elaborate(context, term, Mode::Check(classifier))?
@@ -72,8 +83,8 @@ pub(crate) fn check_is_sort(
     };
 
     match &*reduce_with(context, &inferred)? {
-        Subterm::Prop => Ok((rebuilt, super::Sort::Prop)),
-        Subterm::Type(level) => Ok((rebuilt, super::Sort::Type(level.clone()))),
+        Subterm::Prop => Ok((rebuilt, Sort::Prop)),
+        Subterm::Type(level) => Ok((rebuilt, Sort::Type(level.clone()))),
         other => Err(Error::type_mismatch(other.clone(), Term::type_ground())),
     }
 }

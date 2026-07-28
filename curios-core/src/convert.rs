@@ -88,14 +88,14 @@ pub(crate) enum Outcome {
 /// observationally read-only, which the conversion history relies on: labels
 /// minted here are never recorded in `Convert::minted`, so they must never
 /// reach a goal. They cannot, because `Sort::of` returns a `Sort`.
-type Opened = [(Free, Term)];
+pub(crate) type Opened = [(Free, Term)];
 
 /// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating
 /// its subterms. Returns `None` when the head is out of scope or the spine is not a
 /// typeable neutral — callers fall back conservatively. Built only from the same
 /// primitives `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so
 /// there is no duplicated typing judgment to drift from `infer`.
-fn synth_neutral(
+pub(crate) fn synth_neutral(
     context: &mut Context,
     opened: &Opened,
     term: &Term,
@@ -214,7 +214,7 @@ impl Sort {
     /// [`Sort::of`] under the binders a surrounding telescope walk has opened.
     /// The `opened` scope is threaded rather than installed on the [`Context`] —
     /// see [`Opened`] for why that distinction is load-bearing.
-    fn of_in(
+    pub(crate) fn of_in(
         context: &mut Context,
         opened: &mut Vec<(Free, Term)>,
         type_: &Term,
