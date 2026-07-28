@@ -50,6 +50,7 @@ use {
         Global, InductArm, Item, Layer, Let, Match, Module, Nat, Prim, Proj, Rec, RecGroup,
         RecItem, RecMember, Scope, Struct, Subterm, Telescope, Term, Tuple, Variant, reduce_forced,
     },
+    num_bigint::BigUint,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -262,6 +263,15 @@ enum Shape {
     Atom(Free),
     /// A constructor applied to its arguments.
     Node(Tag, Vec<Shape>),
+    /// A `Nat` strictly below the binder it names, established arithmetically
+    /// rather than structurally: `n / k` for a literal `k >= 2`, or `n - k` for
+    /// a literal `k >= 1`, at a point where `n` is known nonzero.
+    ///
+    /// It is a claim *about* another shape rather than a shape of its own, so
+    /// it is inert everywhere the constructor order is read — never equal to
+    /// anything, never a subterm of anything — and is consulted only by
+    /// [`Shape::against`].
+    Smaller(Free),
     /// Anything else. Never equal to, and never a subterm of, anything —
     /// including another `Opaque`, since two unreadable terms are not thereby
     /// the same term.
@@ -299,6 +309,17 @@ impl Shape {
     /// This argument's size against a parameter whose expanded value is
     /// `parameter` — the whole size order, applied to one entry.
     fn against(&self, parameter: &Shape) -> Size {
+        // An arithmetic decrease names the binder it is below, so it grades
+        // only against a parameter still standing for exactly that binder. A
+        // parameter an enclosing arm has refined to a constructor is a
+        // different value, and withholding the claim there is the conservative
+        // reading rather than a missed case.
+        if let Shape::Smaller(below) = self {
+            return match parameter {
+                Shape::Atom(atom) if atom == below => Size::Less,
+                _ => Size::Unknown,
+            };
+        }
         if self.same_as(parameter) {
             return Size::Same;
         }
@@ -306,6 +327,103 @@ impl Shape {
             return Size::Less;
         }
         Size::Unknown
+    }
+}
+
+/// How a [`Guard`] relates its binder to its literal, always read with the
+/// binder on the left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Relation {
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+    Eql,
+    Neq,
+}
+
+impl Relation {
+    /// The same relation with the operands exchanged, for a guard written with
+    /// its literal first (`10 > n`).
+    fn flipped(self) -> Relation {
+        match self {
+            Relation::Lt => Relation::Gt,
+            Relation::Lte => Relation::Gte,
+            Relation::Gt => Relation::Lt,
+            Relation::Gte => Relation::Lte,
+            Relation::Eql => Relation::Eql,
+            Relation::Neq => Relation::Neq,
+        }
+    }
+}
+
+/// A boolean scrutinee read as a comparison between a tracked binder and a
+/// `Nat` literal — the only shape from which an arm can conclude that the
+/// binder is not zero.
+struct Guard {
+    atom: Free,
+    literal: BigUint,
+    relation: Relation,
+}
+
+impl Guard {
+    fn read(term: &Term) -> Option<Guard> {
+        let (left, right, relation) = match &**term {
+            Subterm::Prim(Prim::NatLt(left, right)) => (left, right, Relation::Lt),
+            Subterm::Prim(Prim::NatLte(left, right)) => (left, right, Relation::Lte),
+            Subterm::Prim(Prim::NatGt(left, right)) => (left, right, Relation::Gt),
+            Subterm::Prim(Prim::NatGte(left, right)) => (left, right, Relation::Gte),
+            Subterm::Prim(Prim::NatEql(left, right)) => (left, right, Relation::Eql),
+            Subterm::Prim(Prim::NatNeq(left, right)) => (left, right, Relation::Neq),
+            _ => return None,
+        };
+
+        let atom = |term: &Term| match &**term {
+            Subterm::Var(var) => var.as_free().cloned(),
+            _ => None,
+        };
+        let literal = |term: &Term| term.as_nat().and_then(|nat| nat.to_big_uint());
+
+        if let (Some(atom), Some(literal)) = (atom(left), literal(right)) {
+            return Some(Guard {
+                atom,
+                literal,
+                relation,
+            });
+        }
+        match (literal(left), atom(right)) {
+            (Some(literal), Some(atom)) => Some(Guard {
+                atom,
+                literal,
+                relation: relation.flipped(),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Whether the arm in which this guard evaluated to `taken` proves the
+    /// binder is not zero.
+    ///
+    /// Each row is the arm's fact about `atom` followed by what it takes for
+    /// that fact to exclude zero: `atom >= k` excludes it only for `k >= 1`,
+    /// while `atom > k` excludes it for every `k`.
+    fn establishes_nonzero(&self, taken: bool) -> bool {
+        let zero = BigUint::from(0usize);
+        let one = BigUint::from(1usize);
+
+        match (self.relation, taken) {
+            // atom > k, hence atom >= k + 1 >= 1.
+            (Relation::Gt, true) | (Relation::Lte, false) => true,
+            // atom >= k.
+            (Relation::Gte, true) | (Relation::Lt, false) => self.literal >= one,
+            // atom == k.
+            (Relation::Eql, true) | (Relation::Neq, false) => self.literal >= one,
+            // atom != k.
+            (Relation::Neq, true) | (Relation::Eql, false) => self.literal == zero,
+            // atom < k and atom <= k both admit zero.
+            (Relation::Lt, true) | (Relation::Lte, true) => false,
+            (Relation::Gt, false) | (Relation::Gte, false) => false,
+        }
     }
 }
 
@@ -333,6 +451,7 @@ pub(crate) fn group_totality(context: &mut Context, group: &RecGroup) -> Totalit
             caller: index,
             params: &member.params,
             refined: BTreeMap::new(),
+            nonzero: BTreeSet::new(),
             calls: Vec::new(),
         };
         walk.walk(&member.body);
@@ -439,6 +558,14 @@ struct Walk<'a> {
     /// the way out, so a refinement never escapes the branch that established
     /// it.
     refined: BTreeMap<Free, Shape>,
+    /// The binders an enclosing arm has established are not zero, entered and
+    /// left exactly like `refined`.
+    ///
+    /// This is what makes an arithmetic decrease sound rather than merely
+    /// plausible: `n / k` is below `n` only when `n` is nonzero, and without
+    /// the guard `rec loop(n : Nat) -> Nat = loop(n / 10)` would be accepted
+    /// while looping forever at zero.
+    nonzero: BTreeSet<Free>,
     calls: Vec<(usize, usize, Matrix)>,
 }
 
@@ -480,6 +607,9 @@ impl Walk<'_> {
     fn expand_shape(&self, shape: &Shape, fuel: usize) -> Shape {
         match shape {
             Shape::Atom(var) => self.expand(var, fuel),
+            // Already relative to a binder; expanding that binder would only
+            // lose the identity the claim is stated against.
+            Shape::Smaller(below) => Shape::Smaller(below.clone()),
             Shape::Opaque => Shape::Opaque,
             Shape::Node(tag, kids) => Shape::Node(
                 tag.clone(),
@@ -550,7 +680,52 @@ impl Walk<'_> {
                 Prim::Lst(_) | Prim::LstAppend(..) | Prim::LstConcat(..) | Prim::LstSlice(..),
             ) => self.monoid_shape(FreeMonoid::Lst, term, fuel),
 
+            // Arithmetic descent. Both operations are monotone and floor-like
+            // on Core's unbounded `Nat` — `NatDiv` folds through `BigUint`
+            // division and `NatSub` truncates at zero — so each is below its
+            // left operand whenever that operand is nonzero.
+            Subterm::Prim(Prim::NatDiv(left, right)) => {
+                let (left, right) = (left.clone(), right.clone());
+                self.arithmetic_shape(&left, &right, &BigUint::from(2usize), fuel)
+            }
+
+            Subterm::Prim(Prim::NatSub(left, right)) => {
+                let (left, right) = (left.clone(), right.clone());
+                self.arithmetic_shape(&left, &right, &BigUint::from(1usize), fuel)
+            }
+
             _ => self.unfolded_shape(term, fuel),
+        }
+    }
+
+    /// Read `left op right` as a decrease on the binder `left` stands for.
+    ///
+    /// `least` is the smallest literal right-hand operand that makes the
+    /// operation strictly decreasing: `2` for division, because `n / 1` is `n`,
+    /// and `1` for subtraction, because `n - 0` is `n`. A non-literal operand,
+    /// an operand below `least`, or a left side that is neither the binder nor
+    /// already a decrease on one, all read as unread — which is what this term
+    /// read as before the rule existed.
+    fn arithmetic_shape(
+        &mut self,
+        left: &Term,
+        right: &Term,
+        least: &BigUint,
+        fuel: usize,
+    ) -> Shape {
+        let Some(divisor) = right.as_nat().and_then(|nat| nat.to_big_uint()) else {
+            return Shape::Opaque;
+        };
+        if divisor < *least {
+            return Shape::Opaque;
+        }
+        match self.shape_of(left, fuel) {
+            // `n` itself, and an arm has ruled out zero.
+            Shape::Atom(atom) if self.nonzero.contains(&atom) => Shape::Smaller(atom),
+            // Already below `below`, and these operations never grow: dividing
+            // or subtracting again keeps it below.
+            Shape::Smaller(below) => Shape::Smaller(below),
+            _ => Shape::Opaque,
         }
     }
 
@@ -599,6 +774,58 @@ impl Walk<'_> {
             return Shape::Opaque;
         }
         self.shape_of(&reduced, fuel - 1)
+    }
+
+    /// Read a boolean scrutinee as a comparison against a literal.
+    ///
+    /// The operator spellings (`n < 10`) elaborate straight to a primitive, but
+    /// the named ones (`Nat/lt(n, 10)`) stay applications of a one-line `/sys`
+    /// wrapper, so the same bounded weak-head unfolding [`Walk::shape_of`] uses
+    /// is what makes both readable.
+    fn guard(&mut self, head: &Term, fuel: usize) -> Option<Guard> {
+        if let Some(guard) = Guard::read(head) {
+            return Some(guard);
+        }
+        let reducible = matches!(
+            &**head,
+            Subterm::Var(_)
+                | Subterm::Apply(_)
+                | Subterm::UniverseInst(_)
+                | Subterm::Proj(_)
+                | Subterm::Match(_)
+                | Subterm::Let(_)
+                | Subterm::RecMember(_)
+        );
+        if fuel == 0 || !reducible || head.reach() != 0 {
+            return None;
+        }
+        let reduced = reduce_forced(self.context, head.clone()).ok()?;
+        if reduced == *head {
+            return None;
+        }
+        self.guard(&reduced, fuel - 1)
+    }
+
+    /// Walk `body` with `atom` additionally known nonzero, restoring the
+    /// previous knowledge afterwards.
+    ///
+    /// Entered and left around exactly the same walk as the refinement, so an
+    /// arm's arithmetic fact has precisely the arm's extent.
+    fn under_nonzero(
+        &mut self,
+        atom: Option<Free>,
+        scrutinee: Option<&Free>,
+        shape: Shape,
+        body: &Term,
+    ) {
+        let added = match &atom {
+            Some(atom) => self.nonzero.insert(atom.clone()),
+            None => false,
+        };
+        self.refine(scrutinee, shape, body);
+        if added && let Some(atom) = &atom {
+            self.nonzero.remove(atom);
+        }
     }
 
     /// Walk an arm with `scrutinee` refined to `shape`, restoring the previous
@@ -794,16 +1021,18 @@ impl Walk<'_> {
                 false_case,
                 true_case,
             } => {
-                self.refine(
-                    scrutinee,
-                    Shape::Node(Tag::Bool(false), Vec::new()),
-                    false_case,
-                );
-                self.refine(
-                    scrutinee,
-                    Shape::Node(Tag::Bool(true), Vec::new()),
-                    true_case,
-                );
+                // A boolean arm carries no binder, but when the scrutinee
+                // compares a binder against a literal the arm still settles
+                // whether that binder can be zero — which is what an
+                // arithmetic decrease on it needs.
+                for (taken, body) in [(false, false_case), (true, true_case)] {
+                    let atom = self
+                        .guard(head, UNFOLD_FUEL)
+                        .filter(|guard| guard.establishes_nonzero(taken))
+                        .map(|guard| guard.atom);
+                    let shape = Shape::Node(Tag::Bool(taken), Vec::new());
+                    self.under_nonzero(atom, scrutinee, shape, body);
+                }
             }
 
             Cases::Switch { cases, default } => {
@@ -813,8 +1042,17 @@ impl Walk<'_> {
                     self.refine(scrutinee, shape, body);
                 }
                 // The default arm stands for every value *not* enumerated, so
-                // it refines the scrutinee to nothing.
+                // it refines the scrutinee to nothing — but enumerating zero
+                // is exactly what rules zero out everywhere else.
+                let atom = scrutinee.filter(|_| cases.contains_key(&0)).cloned();
+                let added = match &atom {
+                    Some(atom) => self.nonzero.insert(atom.clone()),
+                    None => false,
+                };
                 self.walk(default);
+                if added && let Some(atom) = &atom {
+                    self.nonzero.remove(atom);
+                }
             }
 
             Cases::Induct { cases, default } => {

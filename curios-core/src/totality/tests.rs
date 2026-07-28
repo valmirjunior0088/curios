@@ -86,6 +86,75 @@ fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
 }
 
 #[test]
+fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
+    // `n / 10` is below `n` and says nothing about anything else. In
+    // particular it must not grade against a parameter an enclosing arm has
+    // refined to a constructor, because that parameter no longer stands for
+    // the binder the decrease was measured from.
+    let (n, other) = (Free::local(1, None), Free::local(2, None));
+    let smaller = Shape::Smaller(n.clone());
+
+    assert_eq!(smaller.against(&Shape::Atom(n.clone())), Size::Less);
+    assert_eq!(smaller.against(&Shape::Atom(other)), NONE);
+    assert_eq!(smaller.against(&Shape::Opaque), NONE);
+
+    let refined = Shape::Node(Tag::Cons(Carriers::Unary), vec![Shape::Atom(n)]);
+    assert_eq!(smaller.against(&refined), NONE);
+}
+
+#[test]
+fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
+    // It is a claim about a binder, not a value, so it can never be found
+    // equal to or inside a tree. Anything else would manufacture a decrease
+    // out of a term the walk never read.
+    let n = Free::local(1, None);
+    let smaller = Shape::Smaller(n.clone());
+    let tree = Shape::Node(
+        Tag::Cons(Carriers::Unary),
+        vec![smaller.clone(), Shape::Atom(n)],
+    );
+
+    assert!(!smaller.same_as(&smaller));
+    assert!(!smaller.proper_subterm_of(&tree));
+}
+
+#[test]
+fn a_guard_excludes_zero_only_when_its_arm_does() {
+    let guard = |relation, literal: usize| Guard {
+        atom: Free::local(1, None),
+        literal: BigUint::from(literal),
+        relation,
+    };
+
+    // `/std/Nat/to_str`: the false arm of `n < 10` gives `n >= 10`.
+    assert!(guard(Relation::Lt, 10).establishes_nonzero(false));
+    // ...but the true arm gives `n < 10`, which admits zero.
+    assert!(!guard(Relation::Lt, 10).establishes_nonzero(true));
+
+    // `/std/BigNat/of_nat`: the false arm of `n == 0` gives `n != 0`.
+    assert!(guard(Relation::Eql, 0).establishes_nonzero(false));
+    assert!(!guard(Relation::Eql, 0).establishes_nonzero(true));
+
+    // `n >= 0` is no information at all, and `n < 0` is unsatisfiable rather
+    // than informative — neither may be read as excluding zero.
+    assert!(!guard(Relation::Gte, 0).establishes_nonzero(true));
+    assert!(!guard(Relation::Lt, 0).establishes_nonzero(false));
+
+    // A strict lower bound excludes zero whatever the literal is.
+    assert!(guard(Relation::Gt, 0).establishes_nonzero(true));
+    assert!(guard(Relation::Lte, 0).establishes_nonzero(false));
+}
+
+#[test]
+fn a_guard_written_with_its_literal_first_reads_the_same() {
+    // `10 > n` is `n < 10`, so the arm that excludes zero is the same one.
+    assert_eq!(Relation::Gt.flipped(), Relation::Lt);
+    assert_eq!(Relation::Lte.flipped(), Relation::Gte);
+    assert_eq!(Relation::Eql.flipped(), Relation::Eql);
+    assert_eq!(Relation::Neq.flipped(), Relation::Neq);
+}
+
+#[test]
 fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
     // The three call matrices of `/std/BigNat/add/raw`, over `(x, y, carry)`.
     // In the empty-`x` arm the literal argument `b\` grades `Same` against `x`
