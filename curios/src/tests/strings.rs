@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 #[test]
 fn utf8_slice_proof_aligns_with_byte_walk() {
@@ -100,7 +100,7 @@ fn str_literal_prints_its_bytes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"hello");
 }
 
@@ -111,7 +111,7 @@ fn str_literal_prints_its_bytes() {
 // recursed one native frame per link and overflowed a default 2MB test thread
 // near ~50 bytes. Iterative (defunctionalized) elaboration now walks the spine
 // on an explicit heap frame stack at O(1) native depth per link, so the length
-// a literal can reach is bounded by the reduction deadline, not the stack. This
+// a literal can reach is bounded by the reduction budget, not the stack. This
 // 500-byte literal sits an order of magnitude past that old cliff. See
 // documentation/DESIGN.md.
 #[test]
@@ -138,7 +138,7 @@ fn str_of_bytes_accepts_multibyte_utf8() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), [0xc3, 0xa9]);
 }
 
@@ -154,7 +154,7 @@ fn str_of_bytes_rejects_invalid_utf8() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"rejected");
 }
 
@@ -171,7 +171,7 @@ fn str_of_bytes_rejects_truncated_multibyte() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"rejected");
 }
 
@@ -193,7 +193,7 @@ fn utf8_decode_lemmas_type_check() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -217,7 +217,7 @@ fn str_get_indexes_codepoints_of_every_width() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"3,97,8364,128512");
 }
 
@@ -251,7 +251,7 @@ fn str_at_reads_codepoints_with_the_proof() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"97,8364,128512");
 }
 
@@ -268,7 +268,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), [0xe2, 0x82, 0xac]);
 }
 
@@ -287,7 +287,7 @@ fn str_slice_spans_every_codepoint_width() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(
         io.output(),
         [0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]
@@ -308,7 +308,7 @@ fn str_trim_keeps_interior_multibyte() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), [0x63, 0x61, 0x66, 0xc3, 0xa9]);
 }
 
@@ -325,7 +325,7 @@ fn str_trim_all_whitespace_is_empty() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"!");
 }
 
@@ -446,12 +446,12 @@ fn character_literals_do_not_coerce_to_numeric_domains() {
         "use /std/{Char, Byte}; let c : Char = 'a'; c == (0x61 : Byte)",
     ] {
         let (system, _io) = MockHost::builder().build();
-        assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+        assert!(crate::run_text(source, system).is_err());
     }
 }
 
 // A *non-productive* inner `rec` forced in a type position must degrade to the
-// reduce deadline (an error), never hang or panic — the regression guard for
+// reduce budget (an error), never hang or panic — the regression guard for
 // inner-`rec` reduction at the type level (a `Subterm::Rec` demanded by an
 // eliminator is now forced, not left stuck).
 #[test]

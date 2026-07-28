@@ -1,4 +1,4 @@
-use {curios_runtime::MockHost, std::time::Duration};
+use curios_runtime::MockHost;
 
 #[test]
 fn task_scheduler_parks_polls_and_resumes() {
@@ -9,7 +9,6 @@ fn task_scheduler_parks_polls_and_resumes() {
     // closure through erasure and codegen.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str};
         let prog : Async({}) =
@@ -32,7 +31,6 @@ fn task_bind_reads_and_echoes() {
     // do-notation against the new module.
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle};
         let prog : Async({}) =
@@ -60,9 +58,7 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
     // the future, so the child is polled awake, writes "child;", and fulfils the
     // future with 5; the root resumes and `block_on` hands back 5 + 2 = 7.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         let root : Async(Nat) =
             let f = Async/spawn(() =>
@@ -87,9 +83,7 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
     // children complete synchronously when scheduled, writing "a;" then "b;", and
     // the gathered results [1, 2] sum to 3.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat, Lst};
         let main : Async({}) =
             let rs = Async/join_all([
@@ -116,7 +110,6 @@ fn map_transforms_a_tasks_result() {
     // 42 into its decimal string, with no explicit `bind`/`pure` at the call site.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str, Nat};
         let main : Async({}) =
@@ -140,9 +133,7 @@ fn race_returns_the_first_and_runs_a_cancelled_losers_finalizer() {
     // scheduler reclaims it on exit. Output proves the winner's value AND that the
     // loser's cleanup fired without the loser's body completing.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         let main : Async({}) =
             let v = Async/race([
@@ -174,7 +165,6 @@ fn block_on_drops_a_parked_child_when_root_done() {
     // returns rather than hanging.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str};
         let child : Async({}) =
@@ -203,7 +193,6 @@ fn constructing_a_leaf_task_performs_no_effect() {
     // the direct read saw EOF.
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str};
         let discarded : Async(Handle/Read) = Async/read(Handle/stdin, 100);
@@ -231,9 +220,7 @@ fn finalizer_runs_for_a_child_parked_on_an_unwoken_fiber() {
     // and runs the child's finalizer exactly once. Before the fix the "released;"
     // marker leaked and the output was just "root;".
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str};
         use /std/Async/{Waker};
         let main : Async({}) =
@@ -257,9 +244,7 @@ fn an_acquired_finalizer_runs_when_the_fiber_completes() {
     // `release`. The scheduler runs the finalizer on completion, so the output is
     // "body;closed;" — cleanup happens for free on the success path.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str};
         let main : Async({}) =
             let _ = Async/acquire(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("closed;")); ())!;
@@ -281,9 +266,7 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
     // completion drain does not run it again. The single "closed;" between "body;"
     // and "after;" proves it fired exactly once — at the release, not again at the end.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str};
         let main : Async({}) =
             let _ = Async/acquire(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("closed;")); ())!;
@@ -308,7 +291,6 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     // codegen path that needs the call-site arity registered for `envr`/`clsr`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Str, Nat, Lst};
         induct Susp(A : Type) : Type
@@ -340,7 +322,6 @@ fn sleep_parks_until_the_clock_passes_the_deadline() {
     // when the scripted ramp passes the deadline — no readiness event involved.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
@@ -362,9 +343,7 @@ fn sleepers_wake_in_deadline_order() {
     // the earliest deadline for each poll timeout and expire the timers in due
     // order even though the six-second child was pushed onto `sleeping` later.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let mark(m : Str) -> Async({}) =
@@ -390,9 +369,7 @@ fn timeout_returns_some_when_the_body_finishes_first() {
     // fiber's timer matters; the cancelled timer is reclaimed on exit without
     // ever waking. The result carries the body's value through `some`.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
@@ -416,9 +393,7 @@ fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
     // cancelled while still sleeping. Its finalizer runs when the scheduler
     // reclaims it on exit, after the root has already reported `none`.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
@@ -446,9 +421,7 @@ fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
     // writes, and wins with 1; the sixty-second loser is cancelled and its
     // `using` finalizer fires on reclamation — its body never runs.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
@@ -478,9 +451,7 @@ fn block_on_drops_a_sleeping_child_when_root_done() {
     // immediately. `block_on` must return without waiting out the timer, running
     // the child's finalizer as it drains the `sleeping` registry.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let child : Async({}) =

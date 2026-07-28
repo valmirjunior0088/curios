@@ -4,11 +4,11 @@
 
 use super::run;
 use crate::run_text;
-use {curios_runtime::MockHost, std::time::Duration};
+use curios_runtime::MockHost;
 
 fn error(source: &str) -> String {
     let (system, _io) = MockHost::builder().build();
-    match run_text(Duration::from_secs(10), source, system) {
+    match run_text(source, system) {
         Ok(_) => panic!("expected an error, program succeeded"),
         Err(error) => error.to_string(),
     }

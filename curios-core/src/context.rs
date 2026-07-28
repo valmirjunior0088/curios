@@ -6,16 +6,26 @@ use {
         UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
         UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
     },
-    crate::Instant,
+    crate::ReduceError,
     curios_base::{Entropy, Qualifier, RootId, Span},
     std::{
+        cell::Cell,
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         ops::{Deref, DerefMut},
         rc::Rc,
-        time::Duration,
     },
 };
+
+/// Reduction steps one declaration may spend before its budget is exhausted.
+///
+/// Sized from measurement rather than taste: the heaviest declaration in the
+/// whole fixed prelude is `/std/BigNat/add/raw_assoc` at about 91,000 steps,
+/// with a median near 150, so this clears the worst real declaration by better
+/// than an order of magnitude. It bounds *reduction*, not elapsed time — the
+/// cost of a step varies by roughly 8x across the prelude — so it is a
+/// reproducibility guarantee, not a latency one.
+pub const DEFAULT_STEP_BUDGET: u64 = 1_000_000;
 
 /// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta
 /// born under the same Γ shares one allocation (see
@@ -209,11 +219,16 @@ pub(crate) struct ElaborationStamp {
     universes: Entropy,
 }
 
-/// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. The single deadline fixed at construction bounds *total* work across every call sharing the context — see [`Context::new`].
+/// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
     fresh_names: Entropy,
-    deadline: Instant,
+    /// Reduction steps each declaration may spend, restored by
+    /// [`Context::restore_budget`] at every declaration boundary.
+    budget: u64,
+    /// Steps left in the current declaration's budget. `Cell` because the
+    /// conversion queue spends through a shared borrow.
+    remaining: Cell<u64>,
     reduction_cache: HashMap<Term, Term>,
     // Memoized `elaborate` results for ground, local-free subterms (see
     // `ElaborationKey`), holding the un-span-stamped (rebuilt, type) pair.
@@ -324,14 +339,26 @@ pub struct Context {
 }
 
 impl Context {
-    // The deadline is set once at construction and shared across every
-    // `reduce`/`convert`/`infer`/`erase` call that uses this context, so the
-    // timeout bounds total work, not per-call work.
-    /// A fresh, empty context whose deadline is fixed at `now + timeout`. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module` as it walks the lowered module.
-    pub fn new(timeout: Duration) -> Self {
+    /// A fresh, empty context at [`DEFAULT_STEP_BUDGET`] — what every caller
+    /// that is not threading a user-supplied budget wants.
+    pub fn with_default_budget() -> Self {
+        Self::new(DEFAULT_STEP_BUDGET)
+    }
+
+    /// A fresh, empty context in which each declaration may spend `budget` reduction steps. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module` as it walks the lowered module.
+    ///
+    /// The budget is *per declaration*, not per compilation: `elaborate_module`
+    /// calls [`Context::restore_budget`] at every item boundary. A cumulative budget
+    /// would make whether one declaration typechecks depend on how much the
+    /// declarations before it had already spent, which is not a property of the
+    /// declaration. Counting steps rather than elapsed time is what makes the
+    /// answer a fact about the program instead of about the machine that ran
+    /// it, so acceptance is reproducible across hosts, loads, and runs.
+    pub fn new(budget: u64) -> Self {
         Self {
             fresh_names: Entropy::<usize>::new(),
-            deadline: Instant::now() + timeout,
+            budget,
+            remaining: Cell::new(budget),
             reduction_cache: HashMap::new(),
             elaboration_cache: HashMap::new(),
             assumptions: vec![HashMap::new()],
@@ -388,8 +415,30 @@ impl Context {
         self.fresh_names.seed(floor);
     }
 
-    pub(crate) fn deadline(&self) -> Instant {
-        self.deadline
+    /// Charge one reduction step, failing when the current declaration's budget
+    /// is spent.
+    ///
+    /// Called at the three loops that drive reduction and conversion, which is
+    /// what makes the budget bound every route into unbounded computation.
+    pub(crate) fn spend(&self) -> Result<(), ReduceError> {
+        match self.remaining.get() {
+            0 => Err(ReduceError::Exhausted),
+            remaining => {
+                self.remaining.set(remaining - 1);
+                Ok(())
+            }
+        }
+    }
+
+    /// Restore the full budget for a new declaration.
+    pub(crate) fn restore_budget(&mut self) {
+        self.remaining.set(self.budget);
+    }
+
+    /// Steps spent in the current declaration.
+    #[cfg(feature = "profile")]
+    pub(crate) fn spent(&self) -> u64 {
+        self.budget - self.remaining.get()
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a

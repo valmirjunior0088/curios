@@ -9,7 +9,7 @@ use {
 };
 
 #[cfg(test)]
-use {curios_pipeline::compile_entrypoint, std::time::Duration};
+use curios_pipeline::compile_entrypoint;
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
 /// payload the runtime deserializes — the same payload a bundled executable
@@ -45,20 +45,22 @@ pub fn run_wasm<H: HostOps + Send + Sync + 'static>(
 /// from the returned store and calling [`run_wasm`] itself.
 #[cfg(test)]
 pub(crate) fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
-    timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
     host: H,
 ) -> Result<(), String> {
-    let (module, _foreigns) = compile_entrypoint(timeout, entrypoint, loader, |_| {})?;
+    let (module, _foreigns) = compile_entrypoint(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
 
     run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
 }
 
+/// The default reduction budget, re-exported beside the compile helpers that
+/// take it.
+pub use curios_pipeline::DEFAULT_STEP_BUDGET;
+
 /// Parse `source` (no external modules) and run it.
 #[cfg(test)]
 pub(crate) fn run_text<H: HostOps + Send + Sync + 'static>(
-    timeout: Duration,
     source: &str,
     host: H,
 ) -> Result<(), String> {
@@ -66,7 +68,7 @@ pub(crate) fn run_text<H: HostOps + Send + Sync + 'static>(
         .parse::<curios_text::Entrypoint>()
         .map_err(|error| error.format())?;
 
-    run_entrypoint(timeout, &entrypoint, curios_text::RootSource::none(), host)
+    run_entrypoint(&entrypoint, curios_text::RootSource::none(), host)
 }
 
 /// Open a `.crs` entrypoint at `path`, paired with a

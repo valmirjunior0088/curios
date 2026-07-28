@@ -16,7 +16,6 @@ use {
         collections::BTreeSet,
         env, fs,
         path::{Path, PathBuf},
-        time::Duration,
     },
 };
 
@@ -62,7 +61,7 @@ fn main() {
         .unwrap_or_else(|error| panic!("lowered Text universe seeds are invalid: {error}"));
 
     let lowered = prepared.core().clone();
-    let mut context = curios_core::Context::new(Duration::from_secs(3000));
+    let mut context = curios_core::Context::with_default_budget();
     let (core, body_type) = curios_core::elaborate_and_zonk_module(
         &mut context,
         &lowered,
@@ -126,16 +125,14 @@ fn main() {
     curios_core::validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
-    let ersd = curios_core::erase_prelude_prefix(
-        &mut curios_core::Context::new(Duration::from_secs(3000)),
-        &core,
-    )
-    .unwrap_or_else(|error| {
-        panic!(
-            "fixed prelude failed to erase into the arena prefix: {}",
-            error.format_with(&core)
-        )
-    });
+    let ersd =
+        curios_core::erase_prelude_prefix(&mut curios_core::Context::with_default_budget(), &core)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "fixed prelude failed to erase into the arena prefix: {}",
+                    error.format_with(&core)
+                )
+            });
 
     // Hash-cons every archived Core snapshot against one table, so structurally
     // equal subterms collapse onto a single allocation across the lowered and

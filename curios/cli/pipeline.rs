@@ -5,7 +5,7 @@
 use {
     curios::load,
     curios_pipeline::{Stage, compile_entrypoint},
-    std::{path::Path, time::Duration},
+    std::path::Path,
 };
 
 /// Build the observer closure that prints each requested IR stage to stderr.
@@ -24,7 +24,7 @@ fn stage_printer(print: &str) -> impl Fn(Stage<'_>) + '_ {
 /// Compile `input_path` through the full pipeline to a wasm module, printing any
 /// requested IR stages along the way.
 pub(crate) fn compile_file(
-    timeout: Duration,
+    budget: u64,
     print: &str,
     input_path: &Path,
 ) -> Result<curios_wasm::Module, String> {
@@ -32,6 +32,6 @@ pub(crate) fn compile_file(
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations,
     // so its `ForeignStore` is dropped here.
-    compile_entrypoint(timeout, &entrypoint, loader, stage_printer(print))
+    compile_entrypoint(budget, &entrypoint, loader, stage_printer(print))
         .map(|(module, _foreigns)| module)
 }

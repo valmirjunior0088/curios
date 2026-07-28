@@ -18,7 +18,7 @@
 use {
     curios_pipeline::{Stage, compile_entrypoint},
     curios_runtime::{ForeignBindings, MockHost, run_bytes, shared_engine},
-    std::{collections::BTreeSet, time::Duration},
+    std::collections::BTreeSet,
 };
 
 // -- fixtures ---------------------------------------------------------------
@@ -121,7 +121,7 @@ fn compile_raw(source: &str) -> curios_wasm::Module {
         .expect("fixture parses");
 
     let (module, _foreigns) = compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},
@@ -145,7 +145,7 @@ fn cont_optm_text(source: &str) -> String {
 
     let mut dump = String::new();
     compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {

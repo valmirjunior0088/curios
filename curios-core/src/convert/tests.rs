@@ -1,7 +1,6 @@
 use {
     crate::*,
     curios_base::{Grain, Int, PackedBin, Plicity, Qualifier, RootId},
-    std::time::Duration,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -10,7 +9,7 @@ fn nominal(path: &str) -> crate::Global {
 }
 
 fn context() -> Context {
-    Context::new(Duration::from_millis(10))
+    Context::new(100_000)
 }
 
 fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
@@ -395,7 +394,7 @@ fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively
     // recurrence differs from the previous round only in that opening
     // entropy, so the canonicalized history recognizes the cycle and assumes
     // it. No finite disagreement exists: the functions are bisimilar. Before
-    // goal canonicalization this pair spun to `Err(Preempted)`.
+    // goal canonicalization this pair spun to `Err(Exhausted)`.
     let body = recursive_matcher(&mut context, &f, 0);
     context.define(&f, &body, None);
     let body = recursive_matcher(&mut context, &g, 0);
@@ -413,7 +412,7 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
     let g = context.fresh(Some("g"));
     let a = context.fresh(Some("a"));
     // The `none` arms disagree: the first unfolding round surfaces the
-    // finite disagreement on a sibling goal, well before any deadline.
+    // finite disagreement on a sibling goal, well before the budget runs out.
     let body = recursive_matcher(&mut context, &f, 0);
     context.define(&f, &body, None);
     let body = recursive_matcher(&mut context, &g, 1);
@@ -425,8 +424,12 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
 }
 
 #[test]
-fn convert_growing_recursive_unfolding_spends_the_deadline() {
-    let mut context = context();
+fn convert_growing_recursive_unfolding_spends_the_budget() {
+    // Its own small budget: the subject here is that the budget stops an
+    // unfolding that grows without bound, and this shape drives native
+    // recursion deep enough to overflow the stack somewhere above 20,000
+    // steps — well under the shipped default. See the note in `Context::new`.
+    let mut context = Context::new(20_000);
     let x = context.fresh(Some("x"));
     let m = context.fresh(Some("m"));
     let s = context.fresh(Some("s"));
@@ -437,7 +440,7 @@ fn convert_growing_recursive_unfolding_spends_the_deadline() {
     // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs —
     // every unfolding round's arm goal is structurally new, one more `s` on
     // the folded argument — so no cycle exists to detect and the comparison
-    // rightly spends the deadline: the accepted cost of fully general
+    // rightly spends the budget: the accepted cost of fully general
     // recursion. (The growth rides the match arm so each round refolds and
     // returns to the drain queue; bare `f = λx. f(s(x))` growth would nest
     // inside one `reduce` call instead.)
@@ -471,7 +474,7 @@ fn convert_growing_recursive_unfolding_spends_the_deadline() {
     let that = Term::apply(Term::free_var(&g), [Term::free_var(&a)]);
     assert_eq!(
         conv(&mut context, &this, &that),
-        Err(ReduceError::Preempted)
+        Err(ReduceError::Exhausted)
     );
 }
 
@@ -511,7 +514,7 @@ fn convert_folded_recursive_call_against_neutral_head_is_false() {
 
     // The recursive side unfolds to its stuck match, the neutral side
     // cannot unfold at all: a structural mismatch, decided well within the
-    // deadline.
+    // budget.
     let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
     let neutral = Term::apply(Term::free_var(&h), [Term::free_var(&a)]);
     assert_eq!(conv(&mut context, &this, &neutral), Ok(false));
@@ -902,7 +905,7 @@ fn convert_times_out_on_pathological_inputs() {
 
     assert_eq!(
         conv(&mut context, &this, &that),
-        Err(ReduceError::Preempted)
+        Err(ReduceError::Exhausted)
     );
 }
 

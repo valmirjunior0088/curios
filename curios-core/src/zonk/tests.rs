@@ -1,7 +1,7 @@
-use {crate::*, std::time::Duration};
+use crate::*;
 
 fn context() -> Context {
-    Context::new(Duration::from_secs(1))
+    Context::with_default_budget()
 }
 
 fn nat() -> Term {

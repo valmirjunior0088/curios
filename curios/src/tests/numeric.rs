@@ -7,7 +7,7 @@
 //! the emitted Wasm) — and demands identical output, pinning the folders and
 //! the backend to one semantics.
 
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 /// Wrap `body` (an expression over the runtime-zero binder `n`, and its
 /// `Int`-carrier twin `i`) in a program that reads `n` from the host so the
@@ -43,7 +43,7 @@ fn closed(body: &str) -> String {
 
 fn run_tainted(body: &str) -> Result<Vec<u8>, String> {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
-    crate::run_text(Duration::from_secs(10), &tainted(body), system)?;
+    crate::run_text(&tainted(body), system)?;
     Ok(io.output().to_vec())
 }
 

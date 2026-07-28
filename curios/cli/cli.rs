@@ -1,22 +1,14 @@
-//! The clap command-line surface: the `Cli` root, its `Mode` subcommands, and the
-//! timeout parser. Parsing only — the dispatch on the parsed value lives in
-//! `main.rs`.
+//! The clap command-line surface: the `Cli` root and its `Mode` subcommands.
+//! Parsing only — the dispatch on the parsed value lives in `main.rs`.
 
 use {
     clap::{Parser, Subcommand},
-    std::{path::PathBuf, sync::LazyLock, time::Duration},
+    std::{path::PathBuf, sync::LazyLock},
 };
 
 /// [`curios_pipeline::Stage::NAMES`] joined with `,`, computed once on first
 /// use — the `--print` flag's default and help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| curios_pipeline::Stage::NAMES.join(","));
-
-fn parse_timeout(input: &str) -> Result<Duration, String> {
-    input
-        .parse::<u64>()
-        .map(Duration::from_millis)
-        .map_err(|error| format!("invalid timeout in milliseconds: {error}"))
-}
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
@@ -52,8 +44,13 @@ pub(crate) enum Mode {
 #[derive(Debug, Parser)]
 #[command(version, about)]
 pub(crate) struct Cli {
-    #[arg(long, default_value = "1000", value_name = "MILLIS", value_parser = parse_timeout, help = "Type-checker reduction timeout in milliseconds")]
-    pub(crate) timeout: Duration,
+    #[arg(
+        long,
+        default_value_t = curios::DEFAULT_STEP_BUDGET,
+        value_name = "STEPS",
+        help = "Reduction steps each declaration may spend while type checking"
+    )]
+    pub(crate) budget: u64,
 
     #[arg(
         long,

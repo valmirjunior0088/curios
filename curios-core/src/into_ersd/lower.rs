@@ -69,7 +69,7 @@ impl UniverseErased<Module> {
     /// validates it as it restores, which is the point where untrusted bytes
     /// become a `Module`, and the value is immutable from then on. Re-validating
     /// at every use walked the whole standard library a second time per
-    /// compilation — inside the erasure context's reduction deadline, at that —
+    /// compilation — inside the erasure context's step budget, at that —
     /// to re-derive an answer the restore already had.
     pub(super) fn project_validated(module: &Module) -> Self {
         Self(project_module(module))

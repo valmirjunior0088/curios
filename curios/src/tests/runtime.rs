@@ -1,7 +1,7 @@
 use {
     super::run,
     curios_runtime::{ForeignBindings, MockHost},
-    std::{path::Path, time::Duration},
+    std::path::Path,
 };
 
 #[test]
@@ -13,7 +13,6 @@ fn nullary_closure_survives_erasure_and_codegen() {
     // proves the suspended effect fired on `force`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Str};
         induct Susp(A : Type) : Type
@@ -55,7 +54,7 @@ fn end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"+42");
 }
 
@@ -83,7 +82,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"37");
 }
 
@@ -102,7 +101,7 @@ fn triangular_sum() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"10");
 }
 
@@ -114,7 +113,7 @@ fn multi_arg_function() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"+7");
 }
 
@@ -126,7 +125,7 @@ fn curried_function() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"+7");
 }
 
@@ -151,7 +150,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -182,8 +181,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
     let loader = curios_text::RootSource::file_system(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
-    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
-        .expect("expected result");
+    crate::run_entrypoint(&entrypoint, loader, system).expect("expected result");
     assert_eq!(io.output(), b"1");
 }
 
@@ -221,8 +219,7 @@ fn bang_region_mixes_action_types() {
     let loader = curios_text::RootSource::file_system(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
-    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
-        .expect("expected result");
+    crate::run_entrypoint(&entrypoint, loader, system).expect("expected result");
     assert_eq!(io.output(), b"AB");
 }
 
@@ -240,7 +237,7 @@ fn folds_constant_arg_through_let_function() {
 
     let mut optimized = None;
     curios_pipeline::compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {
@@ -311,7 +308,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let mut cont_optm = None;
 
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
-        Duration::from_secs(15),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {
@@ -364,7 +361,7 @@ fn fmt_print_runtime_args_specializes_spine() {
     let mut ersd_optm = None;
 
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
-        Duration::from_secs(15),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {
@@ -397,7 +394,6 @@ fn fmt_print_err_formats_to_stderr() {
     // also shows the stderr write really happened between the stdout ones.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Fmt, Handle};
         let a = /std/print("before;");
@@ -433,7 +429,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let mut cont_optm = None;
 
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
-        Duration::from_secs(15),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| match stage {
@@ -478,7 +474,7 @@ fn diagnostic_uses_source_binder_names() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("inferred: (n : Nat) -> Nat"),
         "binder lost its source name: {error}"
@@ -499,7 +495,7 @@ fn diagnostic_disambiguates_shadowed_binders() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("inferred: (n : Nat) -> (n2 : Nat) -> Nat"),
         "shadowed binders not disambiguated: {error}"
@@ -519,7 +515,7 @@ fn diagnostic_shortens_global_names() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("inferred: Vec.{") && error.contains("}(Nat, n)"),
         "globals not shortened: {error}"
@@ -548,7 +544,7 @@ fn diagnostic_collapses_witness_dispatch_in_index() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("inferred: Vec.{") && error.contains("}(Nat, 1)"),
         "witness dispatch not collapsed to its value: {error}"
@@ -572,7 +568,7 @@ fn diagnostic_spells_index_arithmetic_infix() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("inferred: Vec.{") && error.contains("}(Nat, (n + m) + 1)"),
         "index arithmetic not spelled infix: {error}"
@@ -585,7 +581,6 @@ fn diagnostic_spells_index_arithmetic_infix() {
 fn random_bin_returns_requested_length() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"std/Handle/write(std/Handle/stdout, /std/rand/bin(8))"#,
         system,
     )
@@ -601,7 +596,6 @@ fn nat_of_str_returns_option() {
     // the `unwrap_or` defaults — `123 + 7 + 9`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Nat, Str, Option, Handle};
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
@@ -621,7 +615,6 @@ fn int_of_str_returns_option() {
     // `-5` and `+7` parse (compared by magnitude); `x` is `none` → default `+3`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Nat, Int, Str, Option, Handle};
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
@@ -642,9 +635,7 @@ fn flt_of_str_returns_option() {
     // default `+4.0`. Values are truncated to `Nat` for an exact assertion:
     // `12 + (0.5*2) + 1000 + 4`.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Nat, Flt, Str, Option, Handle};
         let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
         let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
@@ -662,9 +653,7 @@ fn flt_of_str_returns_option() {
 #[test]
 fn option_result_char_helpers() {
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Option, Result, Char, Nat, Str, Handle};
         let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
         let res0 : Result(Nat, Nat) = Result/success(5);
@@ -689,9 +678,7 @@ fn clock_diff_of_two_distinct_now_readings() {
     let (system, io) = MockHost::builder()
         .wall([(1, 100, 500), (1, 130, 900)])
         .build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         let a = /std/time/Instant/now();
         let b = /std/time/Instant/now();
         let d = /std/time/Instant/diff(b, a);
@@ -707,9 +694,7 @@ fn clock_diff_of_two_distinct_now_readings() {
 #[test]
 fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7)]).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         let e = /std/time/Duration/now();
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))
         "#,
@@ -799,7 +784,6 @@ fn accumulation_loops_are_linear_by_construction() {
     // slice + print also pins the force → memo → host-write path end to end.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(60),
         r#"
         use /std/{Handle, Bytes, Nat, Str};
         rec go(i : Nat, acc : Bytes) -> Bytes =
@@ -832,7 +816,6 @@ fn peel_loops_are_linear_by_construction() {
     // projection (the head read lands *after* the `Cell/set` otherwise).
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(60),
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Cell};
         rec build(i : Nat, acc : Bytes) -> Bytes =
@@ -870,7 +853,6 @@ fn peel_loops_are_linear_by_construction() {
 fn nested_local_rec_runs_correctly() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
@@ -897,7 +879,6 @@ fn nested_local_rec_runs_correctly() {
 fn local_rec_calls_enclosing_rec_member() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
@@ -924,7 +905,6 @@ fn local_rec_calls_enclosing_rec_member() {
 fn self_referential_value_rec_never_forced_compiles_and_runs() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Nat, Str, Bytes};
         let make(n : Nat) -> Nat =
@@ -947,7 +927,6 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
 fn recursive_group_signature_reduces_concrete_type_family() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Nat, Str, Bytes};
         rec T(n : Nat) -> Type =

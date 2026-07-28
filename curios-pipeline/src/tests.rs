@@ -1,6 +1,6 @@
 //! The pipeline's test suite, kept beside `lib.rs`.
 
-use {super::*, std::time::Duration};
+use super::*;
 
 #[test]
 fn entrypoint_type_is_used_as_expected_type() {
@@ -10,7 +10,7 @@ fn entrypoint_type_is_used_as_expected_type() {
         .with_type("/std/Bool".parse().unwrap());
 
     let error = compile_entrypoint(
-        Duration::from_secs(5),
+        curios_core::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},
@@ -29,7 +29,7 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
     };
 
     compile_entrypoint(
-        Duration::from_secs(5),
+        curios_core::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},
@@ -107,7 +107,7 @@ fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     let mut cont = String::new();
 
     compile_entrypoint(
-        Duration::from_secs(5),
+        curios_core::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| match stage {
@@ -1172,7 +1172,7 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 fn typecheck(source: &str) -> Result<(), String> {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
     super::elaborate_and_zonk(
-        Duration::from_secs(5),
+        curios_core::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         &mut |_| {},
@@ -1394,14 +1394,14 @@ fn dead_user_definition_is_still_typechecked() {
 fn erase_to_ir(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
-        Duration::from_secs(60),
+        curios_core::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         &mut |_| {},
     )
     .unwrap();
     curios_core::erase_module(
-        &mut curios_core::Context::new(Duration::from_secs(60)),
+        &mut curios_core::Context::with_default_budget(),
         &module,
         &core_type,
     )

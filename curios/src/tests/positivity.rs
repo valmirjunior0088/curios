@@ -12,12 +12,12 @@
 //! path a user program actually takes, where the analysis sees only the user
 //! suffix and reads the prelude's polarity vectors back from the archive.
 
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 fn rejected(source: &str) {
     let (system, _io) = MockHost::builder().build();
     assert!(
-        crate::run_text(Duration::from_secs(10), source, system).is_err(),
+        crate::run_text(source, system).is_err(),
         "expected the declaration to be rejected",
     );
 }

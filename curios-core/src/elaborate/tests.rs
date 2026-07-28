@@ -1,7 +1,6 @@
 use {
     crate::*,
     curios_base::{Plicity, Qualifier, RootId},
-    std::time::Duration,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -10,7 +9,7 @@ fn nominal(path: &str) -> crate::Global {
 }
 
 fn context() -> Context {
-    Context::new(Duration::from_secs(1))
+    Context::with_default_budget()
 }
 
 fn nat() -> Term {

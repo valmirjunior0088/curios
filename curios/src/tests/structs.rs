@@ -1,4 +1,4 @@
-use {curios_runtime::MockHost, std::time::Duration};
+use curios_runtime::MockHost;
 
 #[test]
 fn named_fields_run_end_to_end() {
@@ -15,7 +15,7 @@ fn named_fields_run_end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -31,7 +31,7 @@ fn struct_transparent_pair_projects() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -47,7 +47,7 @@ fn struct_parameter_inference_at_construction() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"12");
 }
 
@@ -63,7 +63,7 @@ fn struct_newtype_projects() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"5");
 }
 
@@ -84,7 +84,7 @@ fn struct_dependent_fields_run_end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -104,7 +104,7 @@ fn struct_abstract_smart_constructor_round_trips() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -123,7 +123,7 @@ fn struct_private_construction_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -146,7 +146,7 @@ fn struct_private_projection_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("field") && error.contains("private"),
         "unexpected error: {error}"
@@ -166,7 +166,7 @@ fn struct_is_not_a_tuple() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // A struct literal must supply exactly the declared fields, in order.
@@ -180,7 +180,7 @@ fn struct_wrong_field_count_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // Written field labels are validated positionally — no reordering.
@@ -194,7 +194,7 @@ fn struct_field_label_out_of_order_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // A struct literal whose head names a non-struct binding is rejected as
@@ -209,7 +209,7 @@ fn struct_literal_non_struct_head_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
 
@@ -229,7 +229,7 @@ fn prop_struct_with_prop_fields_runs() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -251,7 +251,7 @@ fn prop_struct_with_informative_field_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("informative"), "unexpected error: {error}");
 }
 
@@ -271,7 +271,7 @@ fn type_struct_distinct_values_not_convertible() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // The function-field sugar, end to end: `label(params) -> T` in a struct
@@ -290,7 +290,7 @@ fn function_field_sugar_runs_end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"8");
 }
 
@@ -310,7 +310,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("exposes private item '/M/Secret'"),
         "unexpected error: {error}"
@@ -338,7 +338,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("exposes private item '/M/Inner/T'"),
         "unexpected error: {error}"
@@ -365,7 +365,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("exposes private item '/M/Hidden'"),
         "unexpected error: {error}"
@@ -393,7 +393,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -415,7 +415,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("exposes private item '/M/Secret'"),
         "unexpected error: {error}"
@@ -438,7 +438,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
         /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), hidden, system).expect("expected result");
+    crate::run_text(hidden, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 
     let exposed = r#"
@@ -451,7 +451,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
         /std/print("no")
         "#;
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), exposed, system).unwrap_err();
+    let error = crate::run_text(exposed, system).unwrap_err();
     assert!(
         error.contains("exposes private item '/M/Secret'"),
         "unexpected error: {error}"
@@ -471,7 +471,7 @@ fn struct_spread_identity_copy() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"12");
 }
 
@@ -487,7 +487,7 @@ fn struct_spread_single_override() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"13");
 }
 
@@ -504,7 +504,7 @@ fn struct_spread_multi_override_with_gap() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -526,7 +526,7 @@ fn struct_spread_dependent_override_runs() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -543,7 +543,7 @@ fn struct_spread_dependent_field_mismatch_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // The head may re-pin parameters, so an update can change them: the base is a
@@ -560,7 +560,7 @@ fn struct_spread_parameter_changing_update() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -577,7 +577,7 @@ fn struct_spread_bare_head_inference() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"13");
 }
 
@@ -593,7 +593,7 @@ fn struct_spread_function_field_override() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -609,7 +609,7 @@ fn struct_spread_unlabeled_override_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("labeled"), "unexpected error: {error}");
 }
 
@@ -626,7 +626,7 @@ fn struct_spread_out_of_order_override_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("order"), "unexpected error: {error}");
 }
 
@@ -642,7 +642,7 @@ fn struct_spread_duplicate_override_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("order"), "unexpected error: {error}");
 }
 
@@ -658,7 +658,7 @@ fn struct_spread_unknown_field_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("no field"), "unexpected error: {error}");
 }
 
@@ -674,7 +674,7 @@ fn struct_spread_not_first_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("first"), "unexpected error: {error}");
 }
 
@@ -690,7 +690,7 @@ fn struct_spread_multiple_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(error.contains("at most one"), "unexpected error: {error}");
 }
 
@@ -706,7 +706,7 @@ fn struct_spread_non_struct_base_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("must itself be"),
         "unexpected error: {error}"
@@ -726,7 +726,7 @@ fn struct_spread_wrong_struct_base_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("must itself be"),
         "unexpected error: {error}"
@@ -750,7 +750,7 @@ fn struct_spread_private_outside_module_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -778,7 +778,7 @@ fn struct_private_representation_open_in_descendant() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -803,7 +803,7 @@ fn struct_private_representation_closed_to_siblings() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -837,7 +837,7 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -853,7 +853,7 @@ fn async_future_plumbing_is_not_reachable_from_user_code() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("private child module"),
         "unexpected error: {error}"

@@ -1,7 +1,4 @@
-use {
-    curios_runtime::{ForeignBindings, MockHost},
-    std::time::Duration,
-};
+use curios_runtime::{ForeignBindings, MockHost};
 
 #[test]
 fn foreign_declaration_runs_through_supplied_bindings() {
@@ -18,7 +15,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .expect("failed to parse source");
 
     let (module, foreigns) = curios_pipeline::compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &source,
         curios_text::RootSource::none(),
         |_| {},

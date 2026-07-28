@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 #[test]
 fn lst_match_is_a_foldr() {
@@ -106,7 +106,7 @@ fn bin_concat_leading_byte_clash_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -210,7 +210,7 @@ fn lst_slice_window_seam_mismatch_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn lst_concat_length_clash_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -319,7 +319,6 @@ fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"std/Handle/write(std/Handle/stdout, std/Bytes/concat(x\, /std/Str/to_bytes("ok")))"#,
         system,
     )
@@ -347,7 +346,7 @@ fn vec_cons_with_nat_succ() {
     "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -384,7 +383,7 @@ fn indexed_vec_append_executes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -396,7 +395,7 @@ fn lst_fold_sums_elements() {
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"60");
 }
 
@@ -464,7 +463,7 @@ fn lst_spread_of_non_list_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -476,7 +475,7 @@ fn lst_spread_element_type_clash_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -485,7 +484,6 @@ fn lst_spread_operand_hoists_bangs() {
     // like one inside a plain element — the literal is collected, not sealed.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Str, Nat, Lst};
         let prog : Async({}) =
@@ -539,7 +537,7 @@ fn bin_spread_of_non_bin_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -548,7 +546,6 @@ fn bin_spread_operand_hoists_bangs() {
     // dedicated `Prim::Bytes` collect arm — the glued `!` binds to the operand.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Async, Handle, Bytes};
         let prog : Async({}) =
@@ -571,7 +568,7 @@ fn bin_fold_sums_bytes() {
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"60");
 }
 

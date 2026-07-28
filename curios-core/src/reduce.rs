@@ -11,7 +11,6 @@ use {
         StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
         instantiate_universe_levels_scoped,
     },
-    crate::Instant,
     num_traits::ToPrimitive,
 };
 
@@ -85,7 +84,7 @@ pub(crate) fn unfold_rec_apply(
 /// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a
 /// normal form, so an eliminator that demands its value unfolds it here and
 /// re-reduces, repeating if the opened tail is itself a `rec`. A non-productive
-/// group spins until the reduce deadline — exactly as a top-level `rec` does.
+/// group spins until the step budget runs out — exactly as a top-level `rec` does.
 ///
 /// The force either reaches a value some eliminator can absorb or returns the
 /// input unchanged: an unfolding that lands on a stuck neutral (a blocked
@@ -95,9 +94,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     let folded = term.clone();
     let mut term = term;
     loop {
-        if Instant::now() > context.deadline() {
-            return Err(ReduceError::Preempted);
-        }
+        context.spend()?;
 
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => {
@@ -145,8 +142,8 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 /// result, or an out-of-range access) is kept verbatim rather than forced. Such
 /// an argument was never going to differ in spelling — the only occurrence is
 /// the scrutinee itself, which matches the key raw — so keeping it raw both
-/// avoids forcing effects at elaboration and still matches. A `Preempted`
-/// deadline is the one error that propagates.
+/// avoids forcing effects at elaboration and still matches. An `Exhausted`
+/// budget is the one error that propagates.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     let canonical = match &**term {
         Subterm::Apply(Apply {
@@ -158,7 +155,7 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
                 .iter()
                 .map(|p| match reduce(context, p.clone()) {
                     Ok(reduced) => Ok(reduced),
-                    Err(ReduceError::Preempted) => Err(ReduceError::Preempted),
+                    Err(ReduceError::Exhausted) => Err(ReduceError::Exhausted),
                     Err(_) => Ok(p.clone()),
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -515,9 +512,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
     let mut pending: Vec<PendingMatch> = Vec::new();
 
     loop {
-        if Instant::now() > context.deadline() {
-            return Err(ReduceError::Preempted);
-        }
+        context.spend()?;
 
         let mut step = 'step: {
             // Rung B for stuck applications (convertibility-keyed). Gated cheaply
@@ -610,7 +605,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
 /// operator primitive (`Vec(Nat, n + m)`) the printer spells infix.
 ///
 /// Display-only and best-effort: the result is never fed back into the kernel,
-/// and a preemption (the reduce deadline) propagates so callers can fall back
+/// and an exhausted step budget propagates so callers can fall back
 /// to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`)
 /// keep their WHNF shape rather than being reduced under their own binders —
 /// they seldom carry the arithmetic this targets, and opening every case arm

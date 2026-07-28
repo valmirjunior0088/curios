@@ -33,7 +33,7 @@
 //! same prelude, so validating and projecting either of them again is a walk of
 //! the whole standard library for an answer already in hand. Doing both was
 //! measured at ~320 ms of a ~1000 ms release compilation of a one-line program,
-//! and it fell inside the erasure context's reduction deadline, which a debug
+//! and it fell inside the erasure context's step budget, which a debug
 //! build then exceeded on `programs/hello_curios.crs`.
 
 use {

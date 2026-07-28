@@ -15,12 +15,12 @@
 //! A soundness test that accepts any error is worthless: a typo in the fixture
 //! would pass it while the hole stayed open.
 
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 fn rejected(source: &str) {
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system)
-        .expect_err("expected the erased position to be rejected");
+    let error =
+        crate::run_text(source, system).expect_err("expected the erased position to be rejected");
     assert!(
         error.contains("not known to terminate") || error.contains("does not terminate"),
         "rejected, but not by the totality gate:\n{error}",

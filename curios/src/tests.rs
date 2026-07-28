@@ -26,10 +26,10 @@ mod structs;
 mod toml;
 mod universes;
 
-use {curios_runtime::MockHost, std::time::Duration};
+use curios_runtime::MockHost;
 
 fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     io.output().to_vec()
 }

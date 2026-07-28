@@ -1751,7 +1751,6 @@ mod tests {
     use {
         super::{compare_nat, from_ordering},
         crate::{Context, Nat, Prim, Term},
-        std::time::Duration,
     };
 
     fn lit(n: u32) -> Term {
@@ -1763,7 +1762,7 @@ mod tests {
     // `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
     #[test]
     fn compare_nat_agrees_with_literal_ordering() {
-        let mut context = Context::new(Duration::from_millis(50));
+        let mut context = Context::with_default_budget();
         let samples = [0u32, 1, 2, 5, 42, 128, 255, 256, 1000];
         for &m in &samples {
             for &n in &samples {

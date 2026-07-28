@@ -12,7 +12,6 @@ use {
         UniverseContext, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
         unfold_rec_apply,
     },
-    crate::Instant,
     curios_base::Plicity,
     std::collections::{HashMap, HashSet, VecDeque},
 };
@@ -85,7 +84,7 @@ pub(crate) enum Outcome {
 /// conversion goal (through `is_prop`), and `Context::assume` bumps
 /// `mutation_stamp`, which is what validates the memoization caches — assuming
 /// here would invalidate them continuously and starve a coinductive comparison
-/// of its deadline. Keeping the binders local also keeps `Sort::of`
+/// of its budget. Keeping the binders local also keeps `Sort::of`
 /// observationally read-only, which the conversion history relies on: labels
 /// minted here are never recorded in `Convert::minted`, so they must never
 /// reach a goal. They cannot, because `Sort::of` returns a `Sort`.
@@ -511,7 +510,7 @@ impl Convert {
     /// rename collapses the rounds onto one `history` entry and the
     /// recurrence rule in `drain` fires: a cycle with no finite disagreement
     /// is definitional equality, as for equirecursive types. Genuinely
-    /// growing comparisons never recur and still spend the deadline.
+    /// growing comparisons never recur and still spend the budget.
     ///
     /// A pure key transform: the goal conversion processes keeps its
     /// globally-unique labels, so no freshness contract (`capture` inversion,
@@ -575,9 +574,7 @@ impl Convert {
     }
 
     fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, ReduceError> {
-        if Instant::now() > context.deadline() {
-            return Err(ReduceError::Preempted);
-        }
+        context.spend()?;
 
         Ok(self.pending.pop_front())
     }
@@ -1521,11 +1518,11 @@ impl Convert {
             subjects.push((entry.clone(), birth.clone()));
 
             // An entry the type level may not reduce (an effectful scrutinee,
-            // say) simply contributes no reduced spelling — only preemption
+            // say) simply contributes no reduced spelling — only an exhausted budget
             // propagates.
             let reduced = match reduce(context, entry.clone()) {
                 Ok(reduced) => reduced,
-                Err(ReduceError::Preempted) => return Err(ReduceError::Preempted),
+                Err(ReduceError::Exhausted) => return Err(ReduceError::Exhausted),
                 Err(_) => continue,
             };
             let ambiguous = matches!(&*reduced, Subterm::Var(_))
@@ -2108,7 +2105,7 @@ impl Convert {
                 // solves the head). The canonicalized `history` (see
                 // `history_key`) still recognizes a coinductive recurrence
                 // across repeated rounds of an unfolding cycle; a genuinely
-                // growing comparison spends the deadline instead.
+                // growing comparison spends the budget instead.
                 (Subterm::Apply(this_a), Subterm::Apply(that_a)) => {
                     match (&*this_a.head, &*that_a.head) {
                         (Subterm::RecMember(this), Subterm::RecMember(that)) if this == that => {

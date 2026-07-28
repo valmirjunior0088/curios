@@ -1,4 +1,4 @@
-use {curios_runtime::MockHost, std::time::Duration};
+use curios_runtime::MockHost;
 
 #[test]
 fn match_omitted_motive_infers() {
@@ -15,7 +15,7 @@ fn match_omitted_motive_infers() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"10");
 }
 
@@ -46,7 +46,7 @@ fn implicit_inductive_type_param_executes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -65,7 +65,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"3");
 }
 
@@ -112,7 +112,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"4");
 }
 
@@ -163,7 +163,7 @@ fn bare_tuple_continuation_tail_infers() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"104");
 }
 
@@ -186,7 +186,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -202,7 +202,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is
@@ -221,15 +221,15 @@ fn subst_motive_inserts_implicit_in_eq() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
 // A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in
 // type position — same infinite-spin behavior as a top-level `rec` — so a
-// short reduce deadline preempts it with a timeout error rather than hanging.
+// step budget stops it with an error rather than hanging.
 #[test]
-fn nonproductive_inner_rec_in_type_position_is_preempted() {
+fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
     let source = r#"
         use /std/{Bool};
         let spin : Bool =
@@ -245,7 +245,7 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(1), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // The flex-apply imitation rule: an implicit higher-kinded binder `@M` is
@@ -263,7 +263,7 @@ fn higher_kinded_implicit_infers_by_imitation() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -292,7 +292,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -324,6 +324,6 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"refined");
 }

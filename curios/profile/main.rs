@@ -8,7 +8,7 @@ use {
     clap::Parser,
     curios::{ProfileReport, capture},
     curios_pipeline::compile_entrypoint,
-    std::{path::PathBuf, process::ExitCode, time::Duration},
+    std::{path::PathBuf, process::ExitCode},
 };
 
 #[derive(Parser)]
@@ -17,20 +17,16 @@ struct Args {
     /// Curios entrypoint to compile.
     input_path: PathBuf,
 
-    /// Compiler timeout in seconds.
-    #[arg(long, default_value_t = 300)]
-    timeout: u64,
+    /// Reduction steps each declaration may spend while type checking.
+    #[arg(long, default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET)]
+    budget: u64,
 }
 
 fn run() -> Result<(), String> {
-    let Args {
-        input_path,
-        timeout,
-    } = Args::parse();
+    let Args { input_path, budget } = Args::parse();
     let (entrypoint, loader) = curios::load(&input_path)?;
 
-    let (compilation, report) =
-        capture(|| compile_entrypoint(Duration::from_secs(timeout), &entrypoint, loader, |_| {}));
+    let (compilation, report) = capture(|| compile_entrypoint(budget, &entrypoint, loader, |_| {}));
 
     print_report(&report);
     compilation.map(|_| ())

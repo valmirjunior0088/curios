@@ -2,7 +2,6 @@ use {
     super::*,
     crate::{DefinitionKind, UniverseContext},
     curios_base::{Qualifier, RootId},
-    std::time::Duration,
 };
 
 /// Build a matrix from a row-major grid of size grades.
@@ -258,7 +257,7 @@ fn a_partial_name_from_outside_the_module_still_taints_what_mentions_it() {
     // definition this module does not contain. Without the inherited verdict
     // the walk sees an unresolvable name and calls `caller` total, which is the
     // hole that would let a user proof mention a divergent prelude function.
-    let mut context = Context::new(Duration::from_secs(5));
+    let mut context = Context::with_default_budget();
     let module = module(vec![mentioning("caller", "prelude_partial")]);
 
     let inherited = BTreeMap::from([(name("prelude_partial"), Totality::Partial)]);
@@ -277,7 +276,7 @@ fn inherited_partiality_propagates_through_a_local_chain() {
     // `first → second → outside`. The taint has to cross the module boundary
     // once and then travel the local closure, which is the fixpoint doing work
     // a single ordered pass would miss.
-    let mut context = Context::new(Duration::from_secs(5));
+    let mut context = Context::with_default_budget();
     let module = module(vec![
         mentioning("first", "second"),
         mentioning("second", "outside"),
@@ -294,7 +293,7 @@ fn stamping_a_module_is_what_the_next_compilation_reads_back() {
     // `record_totality` writes the flag and `recorded_totality` reads it: the
     // round trip the archive relies on to hand a user program the prelude's
     // verdicts without re-analyzing `/std`.
-    let mut context = Context::new(Duration::from_secs(5));
+    let mut context = Context::with_default_budget();
     let mut module = module(vec![mentioning("caller", "prelude_partial")]);
     let inherited = BTreeMap::from([(name("prelude_partial"), Totality::Partial)]);
 

@@ -1,13 +1,9 @@
-use {
-    curios_runtime::{ForeignBindings, MockHost},
-    std::time::Duration,
-};
+use curios_runtime::{ForeignBindings, MockHost};
 
 #[test]
 fn io_write() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("hello"))"#,
         system,
     )
@@ -19,7 +15,6 @@ fn io_write() {
 fn io_write_stderr() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"std/Handle/write(std/Handle/stderr, /std/Str/to_bytes("oops"))"#,
         system,
     )
@@ -31,7 +26,6 @@ fn io_write_stderr() {
 fn io_read() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         match std/Handle/read(std/Handle/stdin, 1024) : (_) => {}
         | chunk(b) => let w = std/Handle/write(std/Handle/stdout, b); ()
@@ -64,7 +58,7 @@ fn io_read_short_reads_and_eof() {
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"abc\n1");
 }
 
@@ -85,7 +79,7 @@ fn file_read_all_reads_a_seeded_file() {
     let (system, io) = MockHost::builder()
         .files([("data.txt", "file contents")])
         .build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"file contents");
 }
 
@@ -113,7 +107,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"not found");
 }
 
@@ -132,7 +126,7 @@ fn file_with_write_mode_persists_through_close() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
     assert_eq!(io.file(b"out.txt"), Some(b"written".to_vec()));
 }
@@ -163,7 +157,7 @@ fn file_read_pulls_bytes_inside_the_bracket() {
     let (system, io) = MockHost::builder()
         .files([("lines.txt", "first\nsecond\n")])
         .build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"first\nsecond\n");
 }
 
@@ -171,9 +165,7 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 fn proc_args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `Lst(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x\))"#,
+    crate::run_text(r#"std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x\))"#,
         system,
     )
     .expect("expected result");
@@ -185,7 +177,6 @@ fn proc_args_indexes_the_argv_snapshot() {
 fn proc_env_found_unwraps_to_some() {
     let (system, io) = MockHost::builder().env([("HOME", "/root")]).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         match /std/proc/env("HOME") : (_) => {}
         | some(v) => let _ = std/Handle/write(std/Handle/stdout, v); ()
@@ -203,7 +194,6 @@ fn proc_env_found_unwraps_to_some() {
 fn proc_env_absent_is_none() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         match /std/proc/env("NOPE") : (_) => {}
         | some(v) => let _ = std/Handle/write(std/Handle/stdout, v); ()
@@ -228,7 +218,7 @@ fn proc_exit_halts_with_code() {
     .expect("failed to parse source");
 
     let (module, _foreigns) = curios_pipeline::compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},
@@ -260,7 +250,7 @@ fn proc_exit_in_local_binding_halts() {
     .expect("failed to parse source");
 
     let (module, _foreigns) = curios_pipeline::compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},

@@ -1,4 +1,4 @@
-use {curios_runtime::MockHost, std::time::Duration};
+use curios_runtime::MockHost;
 
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {
@@ -19,7 +19,7 @@ fn opaque_inductive_is_usable_through_declaring_module_api() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -39,7 +39,7 @@ fn opaque_inductive_empty_elimination_is_private() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("representation of type '/Secret/T' is private"),
         "unexpected error: {error}"
@@ -65,7 +65,7 @@ fn flat_option_match_lowers_without_synthetic_indirection() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"5");
 }
 
@@ -84,7 +84,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"845");
 }
 
@@ -105,7 +105,7 @@ fn nested_ctor_pattern_dispatches_by_shape() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -126,7 +126,7 @@ fn choose_allows_condition_before_bind_arm() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"5");
 }
 
@@ -144,7 +144,7 @@ fn tuple_match_target_projects_fields() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -162,7 +162,7 @@ fn struct_match_target_projects_fields() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -186,7 +186,7 @@ fn struct_arm_privacy_is_enforced() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("field") && error.contains("private"),
         "unexpected error: {error}"
@@ -208,7 +208,7 @@ fn matrix_match_rejects_inconsistent_tuple_arity() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("disagree on shape"),
         "unexpected error: {error}"
@@ -234,7 +234,7 @@ fn matrix_match_rejects_duplicate_row() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("duplicate or overlapping"),
         "unexpected error: {error}"
@@ -258,7 +258,7 @@ fn matrix_match_rejects_duplicate_flat_tag() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("duplicate or overlapping"),
         "unexpected error: {error}"
@@ -280,7 +280,7 @@ fn matrix_match_rejects_mixed_binder_and_ctor_column() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("disagree on shape"),
         "unexpected error: {error}"
@@ -305,7 +305,7 @@ fn matrix_match_rejects_a_motive_on_tuple_head() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("written motive"),
         "unexpected error: {error}"
@@ -327,7 +327,7 @@ fn nested_nat_pattern_dispatches_by_shape() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -345,7 +345,7 @@ fn nested_lst_pattern_dispatches_by_shape() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -363,7 +363,7 @@ fn nested_bin_pattern_dispatches_by_shape() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"65");
 }
 
@@ -387,7 +387,7 @@ fn nested_bool_pattern_dispatches_by_shape() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"5");
 }
 
@@ -408,7 +408,7 @@ fn matrix_match_rejects_incomplete_nat_pattern() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("both of its cases"),
         "unexpected error: {error}"
@@ -436,7 +436,7 @@ fn matrix_match_allows_dependent_motive_on_nat_head() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -459,7 +459,7 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"0");
 }
 
@@ -482,7 +482,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"700");
 }
 
@@ -501,7 +501,7 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"999");
 }
 
@@ -520,7 +520,7 @@ fn effectful_match_scrutinee_runs_once() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
@@ -546,7 +546,7 @@ fn choose_selects_first_true_arm() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"300");
 }
 
@@ -565,7 +565,7 @@ fn choose_default_only() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
 
@@ -591,7 +591,7 @@ fn choose_evaluates_conditions_lazily() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     // "a" from the winning first condition, then "1" — "b" is never evaluated.
     assert_eq!(io.output(), b"a1");
 }
@@ -612,7 +612,7 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     // some(5) → 15 via its arm; none() → 99 via the catch-all; 15 + 99 = 114.
     assert_eq!(io.output(), b"114");
 }
@@ -633,7 +633,7 @@ fn choose_bind_arm_destructures_or_falls_through() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"114");
 }
 
@@ -657,7 +657,7 @@ fn choose_nested_bind_shares_the_fallthrough() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     // some([5,..]) → 6; some([]) → 99 (inner cons fails); none() → 99 (outer
     // some fails). 6 + 99 + 99 = 204.
     assert_eq!(io.output(), b"204");
@@ -686,7 +686,7 @@ fn a_motive_may_name_a_top_level_family() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"4");
 }
 
@@ -706,7 +706,7 @@ fn a_constant_motive_on_an_indexed_family_binds_placeholders() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -727,7 +727,7 @@ fn a_motive_binder_annotation_may_name_earlier_index_binders() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"6");
 }
 
@@ -747,7 +747,7 @@ fn a_motive_binder_annotation_obeys_the_families_plicity() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -769,7 +769,7 @@ fn a_default_arm_is_allowed_on_an_indexed_family() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"8");
 }
 
@@ -788,7 +788,7 @@ fn an_under_bound_motive_reports_its_binder_count() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    let error = crate::run_text(source, system).unwrap_err();
     assert!(
         error.contains("motive binds 1 name(s)") && error.contains("needs 2"),
         "unexpected error: {error}"

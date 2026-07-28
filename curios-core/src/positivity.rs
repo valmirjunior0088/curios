@@ -588,7 +588,7 @@ impl Walk<'_> {
     /// opaque, which is conservative. A term whose `reach` is non-zero still
     /// sits under enclosing binders, and reduction assumes free occurrences —
     /// it would panic on a dangling de Bruijn index. And a reduction that
-    /// exhausts the deadline (a type-level `rec` that will not converge)
+    /// exhausts the budget (a type-level `rec` that will not converge)
     /// reports nothing rather than failing the compilation.
     fn forced(&mut self, term: &Term) -> Term {
         let reducible = matches!(

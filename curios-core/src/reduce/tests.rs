@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_base::{Flt, Grain, Int, PackedBin},
-    std::time::{Duration, Instant},
+    std::time::Instant,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -10,7 +10,7 @@ fn nominal(path: &str) -> crate::Global {
 }
 
 fn context() -> Context {
-    Context::new(Duration::from_millis(10))
+    Context::new(100_000)
 }
 
 fn nat(n: usize) -> Term {
@@ -307,7 +307,7 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     // every walk over it — `reduce` here, and `traverse` via `reach` — to a loop
     // instead of one native stack frame per binding.
     let depth = 1000;
-    let mut context = Context::new(Duration::from_secs(30));
+    let mut context = Context::with_default_budget();
     let binders = (0..depth)
         .map(|i| context.fresh(Some(&format!("x{i}"))))
         .collect::<Vec<_>>();
@@ -353,7 +353,7 @@ fn reduce_var_cycle_times_out() {
 
     assert_eq!(
         reduce(&mut context, Term::free_var(&loop_)),
-        Err(ReduceError::Preempted)
+        Err(ReduceError::Exhausted)
     );
 }
 
@@ -896,11 +896,10 @@ mod prim {
         crate::{Context, Nat, Prim, Subterm, Term, reduce},
         curios_base::{Grain, PackedBin},
         num_bigint::BigUint,
-        std::time::Duration,
     };
 
     fn context() -> Context {
-        Context::new(Duration::from_millis(50))
+        Context::with_default_budget()
     }
 
     fn lit(n: u32) -> Term {

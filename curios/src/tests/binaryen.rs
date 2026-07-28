@@ -1,4 +1,4 @@
-use {curios_pipeline::compile_entrypoint, std::time::Duration};
+use curios_pipeline::compile_entrypoint;
 
 #[test]
 fn optimizes_to_a_smaller_valid_module() {
@@ -22,7 +22,7 @@ fn optimizes_to_a_smaller_valid_module() {
         .expect("failed to parse source");
 
     let (module, _foreigns) = compile_entrypoint(
-        Duration::from_secs(60),
+        curios_core::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},

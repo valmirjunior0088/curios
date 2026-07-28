@@ -3,7 +3,7 @@ use curios_base::RootId;
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 const fn syn_name(segments: &'static [&'static str]) -> crate::SyntaxName {
@@ -71,7 +71,7 @@ fn elaborate_source(src: &str) -> curios_core::Module {
         syntax(),
     )
     .unwrap();
-    let mut context = curios_core::Context::new(Duration::from_secs(1));
+    let mut context = curios_core::Context::with_default_budget();
     curios_core::elaborate_and_zonk_module(
         &mut context,
         &module,
@@ -101,7 +101,7 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     lowered_prefix.type_ = None;
     lowered_prefix.body = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero));
     let prelude = curios_core::elaborate_and_zonk_module(
-        &mut curios_core::Context::new(Duration::from_secs(1)),
+        &mut curios_core::Context::with_default_budget(),
         &lowered_prefix,
         metavar_floor,
         universe_floor,
@@ -111,7 +111,7 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     .0;
 
     let full = curios_core::elaborate_and_zonk_module(
-        &mut curios_core::Context::new(Duration::from_secs(1)),
+        &mut curios_core::Context::with_default_budget(),
         &lowered,
         metavar_floor,
         universe_floor,
@@ -120,7 +120,7 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     .unwrap()
     .0;
     let cached = curios_core::elaborate_and_zonk_with_prelude(
-        &mut curios_core::Context::new(Duration::from_secs(1)),
+        &mut curios_core::Context::with_default_budget(),
         &prelude,
         &lowered,
         metavar_floor,

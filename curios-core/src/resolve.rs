@@ -97,7 +97,7 @@ fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<P
     let mark = context.solution_mark();
     let outcome =
         convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {
-            error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
+            error.into_error(|| Error::convert_exhausted(candidate.clone(), goal.clone()))
         })?;
     context.rollback_solutions(mark);
 
@@ -114,7 +114,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
     let mark = context.solution_mark();
     let outcome =
         convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {
-            error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
+            error.into_error(|| Error::convert_exhausted(candidate.clone(), goal.clone()))
         })?;
 
     Ok(match outcome {

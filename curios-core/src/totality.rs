@@ -627,7 +627,7 @@ impl Walk<'_> {
     /// constructors: `/std/Bits/cons` is a `let`, so `cons(a2, b2)` is an
     /// application, and `add/raw_trimmed`'s descent is invisible until it is
     /// unfolded once. Unfolding is weak-head only and bounded, so it cannot
-    /// become a reduction; a reduction that fails or exhausts the deadline
+    /// become a reduction; a reduction that fails or exhausts the budget
     /// leaves the term unread rather than failing the compile.
     fn shape_of(&mut self, term: &Term, fuel: usize) -> Shape {
         match &**term {

@@ -21,7 +21,7 @@ use {
 
 fn dispatch() -> Result<(), String> {
     let Cli {
-        timeout,
+        budget,
         print,
         mode,
     } = Cli::parse();
@@ -30,7 +30,7 @@ fn dispatch() -> Result<(), String> {
 
     match mode {
         Mode::Run { input_path, args } => {
-            let module = compile_file(timeout, &print, &input_path)?;
+            let module = compile_file(budget, &print, &input_path)?;
 
             let code = run_wasm(
                 &module,
@@ -50,7 +50,7 @@ fn dispatch() -> Result<(), String> {
             input_path,
             output_path,
         } => {
-            let module = compile_file(timeout, &print, &input_path)?;
+            let module = compile_file(budget, &print, &input_path)?;
             let cwasm = to_cwasm(&module)?;
             let output = output_path.unwrap_or_else(|| exe_output_path(&input_path));
 

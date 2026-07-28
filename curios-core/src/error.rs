@@ -5,10 +5,13 @@ use {
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
 
-/// The failure mode of type-level evaluation (`reduce`/`convert`): either the context's shared deadline fired (`Preempted`) or a partial primitive was folded outside its domain, carrying the offending redex's span. Converted into the user-facing [`Error`] at the driver boundary by `into_error`, whose callback lets each caller decide what a preemption reports — the term being reduced, or the pair being compared.
+/// The failure mode of type-level evaluation (`reduce`/`convert`): either the declaration's step budget ran out (`Exhausted`) or a partial primitive was folded outside its domain, carrying the offending redex's span. Converted into the user-facing [`Error`] at the driver boundary by `into_error`, whose callback lets each caller decide what an exhausted budget reports — the term being reduced, or the pair being compared.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ReduceError {
-    Preempted,
+    /// The declaration's step budget ran out. Deterministic: the same program
+    /// spends the same steps on every machine, so this is a fact about the
+    /// program rather than about the host that compiled it.
+    Exhausted,
     BinGetOutOfBounds {
         len: usize,
         index: usize,
@@ -48,9 +51,9 @@ pub(crate) enum ReduceError {
 }
 
 impl ReduceError {
-    pub(crate) fn into_error(self, preempted: impl FnOnce() -> Error) -> Error {
+    pub(crate) fn into_error(self, exhausted: impl FnOnce() -> Error) -> Error {
         match self {
-            Self::Preempted => preempted(),
+            Self::Exhausted => exhausted(),
             Self::BinGetOutOfBounds { len, index, span } => {
                 Error::BinGetOutOfBounds { len, index }.at_opt(span)
             }
@@ -84,10 +87,10 @@ impl ReduceError {
 /// variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
-    ReducePreempted {
+    ReduceExhausted {
         term: Box<Term>,
     },
-    ConvertPreempted {
+    ConvertExhausted {
         this: Box<Term>,
         that: Box<Term>,
     },
@@ -508,14 +511,14 @@ pub enum Error {
 }
 
 impl Error {
-    pub(crate) fn reduce_preempted<T: Into<Term>>(term: T) -> Self {
-        Self::ReducePreempted {
+    pub(crate) fn reduce_exhausted<T: Into<Term>>(term: T) -> Self {
+        Self::ReduceExhausted {
             term: Box::new(term.into()),
         }
     }
 
-    pub(crate) fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
-        Self::ConvertPreempted {
+    pub(crate) fn convert_exhausted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
+        Self::ConvertExhausted {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
         }
@@ -1022,8 +1025,8 @@ impl Error {
             Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
                 error.collect_terms(out)
             }
-            Self::ReducePreempted { term } => out.push(term),
-            Self::ConvertPreempted { this, that } => {
+            Self::ReduceExhausted { term } => out.push(term),
+            Self::ConvertExhausted { this, that } => {
                 out.push(this);
                 out.push(that);
             }
@@ -1101,11 +1104,11 @@ fn declaring_module(module: &Qualifier) -> String {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::ReducePreempted { term } => {
-                write!(f, "reduction preempted on: {term}")
+            Error::ReduceExhausted { term } => {
+                write!(f, "reduction ran out of steps on: {term}")
             }
-            Error::ConvertPreempted { this, that } => {
-                write!(f, "conversion preempted between {this} and {that}")
+            Error::ConvertExhausted { this, that } => {
+                write!(f, "conversion ran out of steps between {this} and {that}")
             }
             Error::TypeMismatch { inferred, expected } => {
                 write!(

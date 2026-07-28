@@ -12,7 +12,7 @@ fn cont_optm(source: &str) -> String {
         .expect("fixture parses");
     let mut printed = String::new();
     let (_module, _foreigns) = curios_pipeline::compile_entrypoint(
-        std::time::Duration::from_secs(60),
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {

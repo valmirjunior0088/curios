@@ -5,12 +5,13 @@
 #[cfg(test)]
 mod tests;
 
-use {
-    curios_abi::ForeignStore,
-    std::{fmt, time::Duration},
-};
+use {curios_abi::ForeignStore, std::fmt};
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
+/// The default reduction budget, re-exported so every caller of
+/// [`compile_entrypoint`] can name it without depending on `curios-core`.
+pub use curios_core::DEFAULT_STEP_BUDGET;
+
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
     Core(&'a curios_core::Module),
@@ -80,7 +81,7 @@ impl fmt::Display for Stage<'_> {
 /// prefix is replayed and only the user suffix is type-checked.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn elaborate_and_zonk<O>(
-    timeout: Duration,
+    budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
     observe: &mut O,
@@ -109,7 +110,7 @@ where
     };
 
     let (module, core_type) = curios_prelude::with_prelude(|prelude| {
-        let mut context = curios_core::Context::new(timeout);
+        let mut context = curios_core::Context::new(budget);
 
         curios_core::elaborate_and_zonk_with_prelude(
             &mut context,
@@ -166,7 +167,7 @@ where
 /// makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint<O>(
-    timeout: Duration,
+    budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
     mut observe: O,
@@ -175,11 +176,11 @@ where
     O: FnMut(Stage<'_>),
 {
     let (module, core_type, foreigns) =
-        elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
+        elaborate_and_zonk(budget, entrypoint, loader, &mut observe)?;
 
     let ersd_module = curios_prelude::with_prelude(|prelude| {
         curios_core::erase_module_with_prelude(
-            &mut curios_core::Context::new(timeout),
+            &mut curios_core::Context::new(budget),
             prelude.core(),
             &module,
             &core_type,

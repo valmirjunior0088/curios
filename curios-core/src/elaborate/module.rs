@@ -941,26 +941,39 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     // One span per top-level item is the natural unit for the fixed prelude:
     // its close event attributes elapsed time to a declaration by name, which
     // is the breakdown a whole-module timing cannot give.
+    // `steps` reports what the declaration spent of its budget.
     #[cfg(feature = "profile")]
     let _declaration = tracing::info_span!(
         target: "curios_core::declaration",
         "declaration",
         name = %item_names,
+        steps = tracing::field::Empty,
     )
     .entered();
+
+    // The step budget is per declaration, so it is restored here rather than
+    // drained across the module: whether this item typechecks must not depend
+    // on how much the items before it happened to spend.
+    context.restore_budget();
+
     let elaborated = match item {
         Item::Let(definition) => elaborate_module_let(context, definition).map(Item::Let),
         Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
     }
     // Attribute *every* failure to the item that caused it, not only universe
-    // invariants. A whole-module diagnostic with no declaration name — a bare
-    // deadline or an effect reduced at the type level — costs a full prelude
-    // rebuild to localize, which is the expensive way to learn one string.
+    // invariants. A whole-module diagnostic with no declaration name — an
+    // exhausted budget or an effect reduced at the type level — costs a full
+    // prelude rebuild to localize, which is the expensive way to learn one
+    // string.
     .map_err(|error| error.in_declaration(&item_names))?;
 
     retry_deferred_witnesses(context)?;
     context.drain_parked()?;
     context.finish_universe_transaction();
+
+    #[cfg(feature = "profile")]
+    _declaration.record("steps", context.spent());
+
     Ok(elaborated)
 }
 
@@ -1019,6 +1032,9 @@ pub fn elaborate_module(
     }
 
     context.set_island(Qualifier::empty());
+    // The entrypoint expression is not an item, so it gets its own budget on
+    // the same footing as one.
+    context.restore_budget();
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     // The whole program has elaborated: a witness goal still deferred will
     // never find a table entry — report it now.
@@ -1104,6 +1120,9 @@ pub fn elaborate_and_zonk_module(
     // (which `zonk_module` runs) rather than inside elaboration: the
     // telescopes it reads are final here, and meta-free, so an unsolved hole
     // reports as an unsolved hole instead of as an unseeable occurrence.
+    // The whole-module passes reduce too, and run after every item has spent
+    // its own budget.
+    context.restore_budget();
     check_positivity(context, &mut module)?;
     // Nothing is inherited here: `module` is the whole program, so every name
     // it mentions it also defines.
@@ -1251,6 +1270,9 @@ pub fn elaborate_and_zonk_with_prelude(
     }
 
     context.set_island(Qualifier::empty());
+    // The entrypoint expression is not an item, so it gets its own budget on
+    // the same footing as one.
+    context.restore_budget();
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     finish_deferred_witnesses(context)?;
     context.drain_parked()?;
@@ -1328,6 +1350,9 @@ pub fn elaborate_and_zonk_with_prelude(
     let body_type = entry_terms.next().expect("entry body type was finalized");
     let mut user_module = zonk_module(context, &user_module)?;
     let body_type = zonk(context, &body_type)?;
+    // The whole-module passes reduce too, and run after every item has spent
+    // its own budget.
+    context.restore_budget();
     // Before the splice, so the module handed to positivity is exactly the
     // user suffix. The replayed prelude is not re-analyzed: its declarations
     // carry the vectors the archive was built with, and since prelude items

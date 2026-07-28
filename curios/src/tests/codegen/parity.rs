@@ -13,10 +13,7 @@
 //! exactly. These gate (and then guard) the infix rewrite that routes every operator
 //! through the concepts.
 
-use {
-    curios_pipeline::{Stage, compile_entrypoint},
-    std::time::Duration,
-};
+use curios_pipeline::{Stage, compile_entrypoint};
 
 /// The optimized cont-stage dump for `source`, with every digit run replaced
 /// by `#`: entropy-derived name counters (`~v37`, `~f26`) are the
@@ -30,7 +27,7 @@ fn normalized_cont_optm(source: &str) -> String {
 
     let mut dump = String::new();
     compile_entrypoint(
-        Duration::from_secs(10),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {

@@ -23,12 +23,13 @@ use {
     curios_pipeline::compile_entrypoint,
     curios_text::{Entrypoint, RootSource},
     js_sys::{Object, Reflect, Uint8Array},
-    std::time::Duration,
     wasm_bindgen::prelude::*,
 };
 
-/// Generous but bounded: a playground compile should never hang the tab.
-const TIMEOUT: Duration = Duration::from_secs(10);
+/// The same budget the native compiler uses, so a program that compiles in the
+/// playground compiles at the command line and the reverse. A wall-clock bound
+/// could not promise that: the tab and the terminal are different machines.
+const BUDGET: u64 = curios_pipeline::DEFAULT_STEP_BUDGET;
 
 pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
@@ -45,7 +46,7 @@ pub fn compile(source: &str) -> Result<Uint8Array, String> {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    let (module, _foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, RootSource::none(), |_| {})?;
+    let (module, _foreigns) = compile_entrypoint(BUDGET, &entrypoint, RootSource::none(), |_| {})?;
 
     Ok(Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()))
 }

@@ -1,11 +1,9 @@
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 #[test]
 fn bool_logic_and_of_str() {
     let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(10),
-        r#"
+    crate::run_text(r#"
         use /std/{Bool, Str, Option, Handle};
         let computed = Bool/and(Bool/or(false, true), Bool/not(false));
         let parsed = match Bool/of_str("false") : (_) => Bool
@@ -25,7 +23,6 @@ fn bool_logic_and_of_str() {
 fn bool_xor_executes() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Bool, Str, Handle};
         let a = Bool/xor(true, false);
@@ -43,7 +40,6 @@ fn bool_xor_executes() {
 fn bool_eql_executes() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Bool, Str, Handle};
         let a = Bool/eql(true, true);
@@ -66,7 +62,6 @@ fn nat_bitwise_ops_execute() {
     // backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Option};
         let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
@@ -101,7 +96,6 @@ fn int_bitwise_ops_execute() {
     // at the backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
-        Duration::from_secs(10),
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Int, Str, Option};
         let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
@@ -258,7 +252,7 @@ fn infix_undefined_operator_for_type_is_rejected() {
         | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
         end
     "#;
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -302,7 +296,7 @@ fn infix_mismatched_operand_types_are_rejected() {
         let i : Int = -1;
         Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(n + i)))
     "#;
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // === Concept-dispatched operators (one path, no overload table) =============
@@ -365,8 +359,7 @@ fn infix_without_witness_reports_no_witness() {
         let b : Bool = true + false;
         Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str(b)))
     "#;
-    let error = crate::run_text(Duration::from_secs(10), source, system)
-        .expect_err("Add(Bool) has no witness");
+    let error = crate::run_text(source, system).expect_err("Add(Bool) has no witness");
     assert!(error.contains("no witness"), "unexpected error: {error}");
 }
 
@@ -385,7 +378,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
         let q : Point = p + 1;
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(q.x)))
     "#;
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 // Type-level operators: `a + 1` in `Lte`'s constructor indices elaborates to

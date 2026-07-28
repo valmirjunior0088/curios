@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost};
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {
@@ -27,7 +27,7 @@ fn data_is_not_proof_irrelevant() {
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn large_elimination_of_a_prop_is_rejected() {
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    assert!(crate::run_text(source, system).is_err());
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
     let mut ersd = None;
 
     curios_pipeline::compile_entrypoint(
-        Duration::from_secs(15),
+        crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {
@@ -204,7 +204,7 @@ fn erased_void_discharges_to_relevant_result() {
         /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -228,7 +228,7 @@ fn erased_indexed_relevant_repro() {
         /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -249,7 +249,7 @@ fn erased_index_in_type_valued_arg() {
         /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -269,7 +269,7 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
         /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -285,6 +285,6 @@ fn proof_in_an_erased_position_is_not_evaluated() {
         /std/print(Nat/to_str(consume(a, b, BigNat/add/comm(a, b))))
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"42");
 }
