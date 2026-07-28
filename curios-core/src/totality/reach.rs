@@ -375,12 +375,26 @@ impl Certificates<'_> {
                 self.telescope_units(telescope.clone())?;
             }
 
+            // A `let` block is flat, and binding `i` is closed over the `i`
+            // binders before it — index `j` naming `bindings[j]`'s binder, the
+            // same order the tail scope opens in. Walking them side by side
+            // would hand out loose indices, which is what sort synthesis
+            // asserts on, so each is opened against the binders already made.
             Subterm::Let(Let { bindings, tail }) => {
-                for binding in bindings {
-                    self.walk(binding.type_())?;
-                    self.walk(binding.value())?;
+                let hints = tail.hint_iter().collect::<Vec<_>>();
+                let mut binders: Vec<Term> = Vec::new();
+                for (index, binding) in bindings.iter().enumerate() {
+                    let opened = binders.iter().collect::<Vec<_>>();
+                    let type_ = binding.type_().release(&opened);
+                    let value = binding.value().release(&opened);
+                    self.walk(&type_)?;
+                    self.walk(&value)?;
+
+                    let binder = self.context.fresh(hints.get(index).copied().flatten());
+                    self.opened.push((binder.clone(), type_));
+                    binders.push(Term::free_var(&binder));
                 }
-                let body = self.open_many(tail);
+                let body = tail.open(&binders.iter().collect::<Vec<_>>());
                 self.walk(&body)?;
             }
 
@@ -428,13 +442,21 @@ impl Certificates<'_> {
     /// Every proof this node hands to a `Prop`-declared position.
     ///
     /// **Known gap.** A node still carrying a loose index is skipped, because
-    /// sort synthesis assumes free occurrences and asserts on a bound one. The
-    /// walk opens every binder it descends through, so the only remaining
-    /// source is a `Let`: its bindings are a flat vector under one tail scope,
-    /// and a later binding is closed over the earlier binders, so walking them
-    /// side by side hands out loose indices. Opening them one at a time is
-    /// what closes this, and until it does a certificate built inside a
-    /// `let`-bound value is not seeded.
+    /// sort synthesis assumes free occurrences and asserts on a bound one.
+    /// `Let` blocks are opened progressively above, which was one source; at
+    /// least one other remains unidentified, so a certificate under it is not
+    /// yet seeded. Finding it means running the prelude under a backtrace and
+    /// naming the node, not widening the walk speculatively.
+    /// **Known gap.** A node still carrying a loose index is skipped, because
+    /// sort synthesis assumes free occurrences and asserts on a bound one.
+    ///
+    /// `Let` blocks are opened progressively above, which removed one source.
+    /// At least one remains: a backtrace over the prelude puts it under a
+    /// `Cases::Bool` arm, reaching an `Apply` through the `any_child_term`
+    /// fallback with a loose index still on its head. The arm bodies are plain
+    /// terms and the enclosing `Let` tail is opened, so the unopened binder is
+    /// further out than either — name it from a backtrace before widening the
+    /// walk, because a wrong substitution here produces wrong seeds silently.
     fn seed(&mut self, term: &Term) -> Result<(), Error> {
         if term.reach() != 0 {
             return Ok(());
