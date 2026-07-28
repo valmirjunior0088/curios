@@ -6,7 +6,7 @@ This effort closes the three remaining routes to a closed inhabitant of `False`.
 
 When this work lands, fold the permanent calculus and compiler invariants into the owning `curios-core` module documentation, record the theorem and its trusted base in `DESIGN.md`, update `ROADMAP.md`, and delete this working specification after no remaining document refers to it.
 
-Steps 1 through 5 are implemented and verified. Step 6 is implemented and **blocked on a design decision** — see "Appendix: the open fork on (T)". Step 7 has not started. The amendments implementation forced are marked **Amended** in place, and the figures under "Measurements" are now computed rather than estimated.
+Steps 1 through 6 are implemented and verified, and the fork step 6 raised is closed — see "Appendix: the fork on (T), and how it closed". Step 7 is in progress. The amendments implementation forced are marked **Amended** in place, and the figures under "Measurements" are now computed rather than estimated.
 
 ## Objective
 
@@ -92,7 +92,7 @@ Separately, `rec Bad : Type = (Bad) -> False` is accepted at its declaration and
 - Making `/std/Json/decode`, `/std/Toml`, `/std/Flt`, `/std/Map`, `/std/Vec`, or `/std/BigNat/convert` total.
 - The precise reading of (T), and the interprocedural summary it requires.
 - An independent proof checker, a small kernel, or a verified implementation.
-- Removing the reduction deadline, or making acceptance machine-independent.
+- ~~Removing the reduction deadline, or making acceptance machine-independent.~~ **Superseded.** The wall-clock deadline is gone: reduction is bounded by a deterministic per-declaration step budget (`DEFAULT_STEP_BUDGET`), so acceptance is a fact about the program rather than about the machine. This mattered here rather than incidentally — the gates reduce, so totality's own verdicts were machine-dependent while the deadline stood.
 - Reconciling Core's unbounded `Nat` with the runtime's wrapping `u32` carrier.
 - Repairing effects dropped from erased arguments, which is a semantics defect rather than a forgery route.
 
@@ -177,9 +177,15 @@ The archived prelude is restored and trusted rather than re-typechecked (`curios
 
 **6. Gate (T)**, both the local form and the closure form.
 
-**Amended — implemented, and blocked.** Both forms work and every reproduction in "The unsoundness being closed" is now rejected with a diagnostic, including the two that previously aborted the compiler. The gate also rejects three existing tests, for a reason that invalidates the case made for the aggressive reading. See the appendix.
+**Amended — implemented, and unblocked.** Both forms work and every reproduction in "The unsoundness being closed" is now rejected with a diagnostic, including the two that previously aborted the compiler. The gate initially rejected three existing tests; teaching the descent analysis one shape retired all three without weakening (T). See the appendix.
 
 **7. Gate (V)**, with `Prim::Exit` folded into the partiality relation.
+
+**Amended — the two seeding gaps close against `convert.rs`'s primitives, not the classifier's walk.** The instruction below to give the seeding walk "the scope-opening traversal the classifier already has" is wrong, and following it would have done damage. The classifier mints binders with `Context::fresh` and never assumes their types, which is enough to compare shapes and useless for deciding sorts; assuming them instead is what the hazard actually is, because `Context::assume` bumps `mutation_stamp` and would invalidate the memoization caches continuously. `Sort::of` already faces exactly this and already solves it: `Opened = [(Free, Term)]` (`curios-core/src/convert.rs:91`) threads locally-opened binders *beside* the context rather than into it, which is what keeps sort decisions observationally read-only. The seeding walk carries the same vector, and both `reach() == 0` guards come out with it.
+
+The second gap has a ready answer in the same file. Resolving an application's parameter types by looking its head up among the module's definitions would cover only globals; `synth_neutral` (`curios-core/src/convert.rs:97`) synthesizes a neutral spine's type from the primitives `infer` itself uses, returns `None` conservatively, and covers locals, globals, curried spines, and projections alike — so the argument rule is stated against the existing judgment rather than a second one that could drift from it.
+
+Measure before rejecting, as step 3 did. Closing the gaps makes (V) see strictly more, and the report is what says whether the corpus pays for it.
 
 Steps 6 and 7 are independent and may ship separately.
 
@@ -193,6 +199,8 @@ Originally estimated by a throwaway extractor over `curios --print=core`, with t
 | classified `Partial` | 174 | 169 |
 | **(T) partial and reachable from a type** | **4** | **0** |
 | **(V) partial and reachable from a proof** | **1** | **0** |
+
+**Amended.** Teaching the descent analysis arithmetic descent on `Nat` — `n / k` and `n - k` for a literal `k`, under a guard that excludes zero — moved 23 more definitions to `Total`, taking the partial count from 169 to 146 with nothing moving the other way. `/std/Nat/to_str` and `/std/BigNat/of_nat` are among them, which is what retired the three rejected tests without touching (T) or any `/std` source.
 
 The (T) content was exactly the four the estimate predicted — `/std/Fmt/parse` and its three workers, reached because `format_type_with(Str, parse(s))` is the result type of `render` and `print`. The (V) content was `/sys/exit`, which the estimate did not anticipate.
 
@@ -230,9 +238,9 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 
 Two kernel rules are load-bearing once these gates exist and have no written argument. Definitional proof irrelevance (`curios-core/src/convert.rs:2046`) accepts without inspecting either term, which is correct precisely because every `Prop` inhabitant will now be total, and its side condition is the large-elimination guard. The conversion recurrence rule (`curios-core/src/convert.rs:2056`) accepts on the absence of finite disagreement; its canonicalization is alpha-renaming over binders minted during the run, its history is per-run with explicit removal on park and retry, and aggressive (T) removes its exposure to bottom-typed terms. Both appear sound. Both should be argued in `DESIGN.md` rather than assumed.
 
-## Appendix: the open fork on (T)
+## Appendix: the fork on (T), and how it closed
 
-Gate (T) is implemented and works. It also rejects three programs that compiled before and that the repository has tests for, and the shared reason contradicts the argument this specification gives for the aggressive reading. Resolving that is the next decision, and nothing further should be built on (T) until it is made.
+Gate (T) is implemented and works. It initially rejected three programs that compiled before and that the repository has tests for, and the shared reason contradicted the argument this specification gives for the aggressive reading. **It is closed: none of the three resolutions below was taken, because the premise they all shared turned out to be false.** All three rejections traced to one shape the descent analysis could not read, not to the aggressive reading being too strong. See "What actually happened" at the end.
 
 ### What is rejected
 
@@ -274,6 +282,24 @@ Whether a type-level eliminator *scrutinizes* the partial value — which is exa
 
 **Ship (V) first, hold (T) at report-only.** Land step 7 and decide (T) with more evidence. Note that (V) seeds a `Prop`-typed definition's whole body, so `let p : Eq(…) = BigNat/add/comm(a, b)` reaches `of_nat` from the other side; this likely defers the fork rather than avoiding it, and that should be measured before choosing it.
 
+### What actually happened
+
+None of the three. All three rejections were one shape the descent analysis could not read:
+
+```crs
+rec to_str(n : Nat) -> Str = match n < 10  | true => … | false => … to_str(n / 10) …
+rec of_nat(n : Nat) -> BigNat = match n == 0 | true => … | false => … of_nat(n / 2) …
+rec decimal(n : Nat) -> …  = match Nat/lt(n, 10) | true => … | false => … decimal(Nat/div(n, 10)) …
+```
+
+A guard comparing a `Nat` against a literal, and a recursive call on that `Nat` divided by a literal. Size-change graded the argument unknown because a quotient is not a constructor tree, so `to_str` and `of_nat` classified `Partial` — correctly, given what the checker could see, and uselessly, since both plainly terminate.
+
+The analysis now reads it. A `Cases::Bool` or `Cases::Switch` arm that excludes zero records the binder as nonzero, and `n / k` for a literal `k >= 2` (or `n - k` for `k >= 1`) then grades a decrease against it. The rule is sound on one line — `v >= 1` and `k >= 2` give `v / k <= v / 2 < v` — and the guard is not conservatism: without it `rec loop(n : Nat) -> Nat = loop(n / 10)` would be accepted, and it diverges at zero.
+
+**Nothing else moved.** (T) keeps the aggressive reading, no `/std` source changed, and no test source changed. The corpus paid nothing: 23 definitions moved to `Total` and none moved the other way.
+
+What survives is the *limit*, not the fork. A proposition still may not mention a function outside the checker's boundary, so `/std/Json/decode` and the rest of the deliberately-partial corpus remain unmentionable in a statement. That is now a documented boundary with a known shape rather than a decision blocking the work, and the case for widening it should come from a program that hits it.
+
 ### State of the worktree
 
-Everything above is committed. `make curios/runtime`, `cargo fmt --check`, and `RUSTFLAGS="-Dwarnings" cargo clippy` all pass. `cargo test --workspace` is **red at exactly these three tests**, 412 passing, and the eight new tests in `curios/src/tests/soundness.rs` all pass. Reverting the two `check_type_totality` calls in `curios-core/src/elaborate/module.rs` returns the suite to green without losing any analysis.
+Everything above is committed and the full gate passes: `make curios/runtime`, `cargo fmt --check`, `RUSTFLAGS="-Dwarnings" cargo clippy`, and `cargo test --workspace --all-targets --all-features` across 17 test binaries.
