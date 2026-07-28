@@ -4,10 +4,10 @@ use {
         Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl, InductParam, Item,
         Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
-        check_concept_registry, check_positivity, check_rec_item_totality, check_type_totality,
-        finish_deferred_witnesses, is_prop, record_totality, recorded_totality, reduce_with,
-        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
-        zonk_solved_term_metas,
+        check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
+        check_type_totality, finish_deferred_witnesses, is_prop, record_totality,
+        recorded_totality, reduce_with, register_witness, retry_deferred_witnesses, sort_term,
+        zonk, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     std::{
@@ -1128,6 +1128,7 @@ pub fn elaborate_and_zonk_module(
     // it mentions it also defines.
     record_totality(context, &mut module, &BTreeMap::new());
     check_type_totality(context, &module, &BTreeMap::new())?;
+    check_proof_totality(context, &module, &BTreeMap::new())?;
     Ok((module, body_type))
 }
 
@@ -1365,6 +1366,7 @@ pub fn elaborate_and_zonk_with_prelude(
     let inherited = recorded_totality(prelude);
     record_totality(context, &mut user_module, &inherited);
     check_type_totality(context, &user_module, &inherited)?;
+    check_proof_totality(context, &user_module, &inherited)?;
 
     let mut items = prelude.items.clone();
     items.extend(user_module.items);

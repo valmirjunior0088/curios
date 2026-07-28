@@ -28,8 +28,8 @@
 use {
     crate::{
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Free, Func, FuncType, Global,
-        Item, Let, Many, Match, Module, Rec, Scope, Struct, Subterm, Telescope, Term, Three,
-        TupleType, Two, Variant, is_prop, is_prop_in, synth_neutral,
+        Item, Let, Many, Match, Module, Rec, RecGroup, RecMember, Scope, Struct, Subterm,
+        Telescope, Term, Three, TupleType, Two, Variant, is_prop, is_prop_in, synth_neutral,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -140,6 +140,7 @@ pub(crate) fn proof_positions(
     module: &Module,
 ) -> Result<Vec<Position>, Error> {
     let mut positions = Vec::new();
+    let mut groups = Groups::default();
 
     for definition in definitions(module) {
         let name = definition.name.to_string();
@@ -155,6 +156,7 @@ pub(crate) fn proof_positions(
             module,
             &definition.body,
             &format!("a certificate in '{name}'"),
+            &mut groups,
         )?);
     }
 
@@ -169,17 +171,21 @@ pub(crate) fn proof_positions(
         module,
         &module.body,
         "a certificate in the entrypoint",
+        &mut groups,
     )?);
+
+    groups.drain(context, module, &mut positions)?;
 
     Ok(positions)
 }
 
-/// Run the seeding walk over one term.
+/// Run the seeding walk over one term, recording the `rec` groups it reached.
 fn certificates(
     context: &mut Context,
     module: &Module,
     term: &Term,
     site: &str,
+    groups: &mut Groups,
 ) -> Result<Vec<Position>, Error> {
     let mut walk = Certificates {
         context,
@@ -187,10 +193,60 @@ fn certificates(
         site: site.to_string(),
         opened: Vec::new(),
         positions: Vec::new(),
+        groups: Vec::new(),
     };
     walk.walk(term)?;
+    let positions = walk.positions;
 
-    Ok(walk.positions)
+    for witness in walk.groups {
+        groups.enqueue(witness, site);
+    }
+
+    Ok(positions)
+}
+
+/// The `rec` groups still to walk, and those already walked.
+///
+/// A group is walked once for the whole module rather than once per mention,
+/// and the site recorded is the first that reached it — which is the group's
+/// own definition whenever that definition is reached first, and an honest
+/// "reached from" otherwise.
+#[derive(Default)]
+struct Groups {
+    seen: Vec<Term>,
+    pending: Vec<(Term, String)>,
+}
+
+impl Groups {
+    fn enqueue(&mut self, witness: Term, site: &str) {
+        if self.seen.contains(&witness) {
+            return;
+        }
+        self.seen.push(witness.clone());
+        self.pending
+            .push((witness, format!("a recursive group reached from {site}")));
+    }
+
+    /// Walk every queued group's member bodies, following groups they reach.
+    fn drain(
+        &mut self,
+        context: &mut Context,
+        module: &Module,
+        positions: &mut Vec<Position>,
+    ) -> Result<(), Error> {
+        while let Some((witness, site)) = self.pending.pop() {
+            let Subterm::RecMember(RecMember { group, .. }) = &*witness else {
+                continue;
+            };
+            let group = group.clone();
+            for index in 0..group.len() {
+                let body = group.member_body(index);
+                positions.extend(certificates(context, module, &body, &site, self)?);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Close `seeds` over the definitions they name, following each into both its
@@ -345,6 +401,10 @@ fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
 /// scope body unopened, and guarded the resulting positions with `reach() == 0`
 /// — which *skipped* every certificate built inside a function body.
 ///
+/// A `rec` group is the one form this cannot open in place, because its member
+/// scopes bind the group's own members and `member_body` reintroduces the
+/// group; it is deferred to [`Groups`] and walked once for the module.
+///
 /// The opened binders are threaded in `opened` rather than assumed into the
 /// context, because `Context::assume` bumps the stamp that validates the
 /// memoization caches; see [`is_prop_in`]. Binders whose type this walk
@@ -357,27 +417,47 @@ struct Certificates<'a> {
     site: String,
     opened: Vec<(Free, Term)>,
     positions: Vec<Position>,
+    groups: Vec<Term>,
 }
 
 impl Certificates<'_> {
-    /// Seed this node, then its children.
+    /// Seed every node of `term`, opening binders on the way down.
+    ///
+    /// Iterative, on an explicit stack, because a term's depth is a property of
+    /// the *program*: a `Str` literal lowers to one certified-UTF-8 link per
+    /// byte, so a recursive walk overflows a default test stack at a few
+    /// hundred characters. Children are pushed in reverse so they pop in source
+    /// order, which keeps the pre-order a recursive walk would produce and with
+    /// it the first fault a diagnostic reports.
     fn walk(&mut self, term: &Term) -> Result<(), Error> {
-        self.seed(term)?;
+        let mut work = vec![term.clone()];
+        while let Some(term) = work.pop() {
+            self.seed(&term)?;
+            let mut children = Vec::new();
+            self.descend(&term, &mut children);
+            work.extend(children.into_iter().rev());
+        }
 
+        Ok(())
+    }
+
+    /// `term`'s children, in source order, each opened against a fresh binder
+    /// wherever `term` introduces one.
+    fn descend(&mut self, term: &Term, children: &mut Vec<Term>) {
         match &**term {
             // Binder-bearing forms open as they descend.
             Subterm::Func(Func { telescope, .. })
             | Subterm::FuncType(FuncType { telescope, .. }) => {
-                self.telescope_terms(telescope.clone())?;
+                self.telescope_terms(telescope.clone(), children);
             }
 
             Subterm::TupleType(TupleType { telescope }) => {
-                self.telescope_units(telescope.clone())?;
+                self.telescope_units(telescope.clone(), children);
             }
 
             // A `let` block is flat, and binding `i` is closed over the `i`
             // binders before it — index `j` naming `bindings[j]`'s binder, the
-            // same order the tail scope opens in. Walking them side by side
+            // same order the tail scope opens in. Collecting them side by side
             // would hand out loose indices, which is what sort synthesis
             // asserts on, so each is opened against the binders already made.
             Subterm::Let(Let { bindings, tail }) => {
@@ -387,24 +467,32 @@ impl Certificates<'_> {
                     let opened = binders.iter().collect::<Vec<_>>();
                     let type_ = binding.type_().release(&opened);
                     let value = binding.value().release(&opened);
-                    self.walk(&type_)?;
-                    self.walk(&value)?;
+                    children.push(type_.clone());
+                    children.push(value);
 
                     let binder = self.context.fresh(hints.get(index).copied().flatten());
                     self.opened.push((binder.clone(), type_));
                     binders.push(Term::free_var(&binder));
                 }
-                let body = tail.open(&binders.iter().collect::<Vec<_>>());
-                self.walk(&body)?;
+                children.push(tail.open(&binders.iter().collect::<Vec<_>>()));
             }
 
+            // A `rec` group is deferred to [`Groups`] rather than descended
+            // into here. Its member scopes bind the group's own members, so
+            // `any_child_term` would hand them back with loose indices — which
+            // is what sort synthesis asserts on — and `member_body` substitutes
+            // references to the same group, so descending directly would not
+            // terminate. Deferring also walks each group once instead of once
+            // per mention: elaboration inlines a recursive global as a
+            // `RecMember` carrying the whole group, and one prelude group is
+            // carried by thirty-nine definitions.
             Subterm::Rec(Rec { group, tail }) => {
-                for index in 0..group.len() {
-                    let body = group.member_body(index);
-                    self.walk(&body)?;
-                }
-                let body = self.open_many(tail);
-                self.walk(&body)?;
+                self.note(group.clone());
+                children.push(self.open_many(tail));
+            }
+
+            Subterm::RecMember(RecMember { group, .. }) => {
+                self.note(group.clone());
             }
 
             Subterm::Match(Match {
@@ -412,55 +500,33 @@ impl Certificates<'_> {
                 motive,
                 cases,
             }) => {
-                self.walk(head)?;
-                let body = self.open_many(motive);
-                self.walk(&body)?;
-                self.arms(cases)?;
+                children.push(head.clone());
+                children.push(self.open_many(motive));
+                self.arms(cases, children);
             }
 
             // Everything else binds nothing, so its children are already
             // closed to the same degree this node is.
             _ => {
                 let subterm: &Subterm = term;
-                let mut failure = None;
-                subterm.any_child_term(&mut |child| match self.walk(child) {
-                    Ok(()) => false,
-                    Err(error) => {
-                        failure = Some(error);
-                        true
-                    }
+                subterm.any_child_term(&mut |child| {
+                    children.push(child.clone());
+                    false
                 });
-                if let Some(error) = failure {
-                    return Err(error);
-                }
             }
         }
-
-        Ok(())
     }
 
     /// Every proof this node hands to a `Prop`-declared position.
     ///
-    /// **Known gap.** A node still carrying a loose index is skipped, because
-    /// sort synthesis assumes free occurrences and asserts on a bound one.
-    /// `Let` blocks are opened progressively above, which was one source; at
-    /// least one other remains unidentified, so a certificate under it is not
-    /// yet seeded. Finding it means running the prelude under a backtrace and
-    /// naming the node, not widening the walk speculatively.
-    /// **Known gap.** A node still carrying a loose index is skipped, because
-    /// sort synthesis assumes free occurrences and asserts on a bound one.
-    ///
-    /// `Let` blocks are opened progressively above, which removed one source.
-    /// At least one remains: a backtrace over the prelude puts it under a
-    /// `Cases::Bool` arm, reaching an `Apply` through the `any_child_term`
-    /// fallback with a loose index still on its head. The arm bodies are plain
-    /// terms and the enclosing `Let` tail is opened, so the unopened binder is
-    /// further out than either — name it from a backtrace before widening the
-    /// walk, because a wrong substitution here produces wrong seeds silently.
+    /// Every node reaching here is closed, because [`Certificates::walk`] opens
+    /// each binder it descends through and defers `rec` groups — the one form
+    /// whose children cannot be opened in place — to [`Groups`]. That matters
+    /// because sort synthesis assumes free occurrences and asserts on a bound
+    /// one, so an unopened child would not merely be skipped: it would abort
+    /// the walk.
     fn seed(&mut self, term: &Term) -> Result<(), Error> {
-        if term.reach() != 0 {
-            return Ok(());
-        }
+        debug_assert_eq!(term.reach(), 0, "the seeding walk opens what it descends");
 
         match &**term {
             Subterm::Struct(Struct {
@@ -539,28 +605,25 @@ impl Certificates<'_> {
         Ok(())
     }
 
-    fn arms(&mut self, cases: &Cases) -> Result<(), Error> {
+    fn arms(&mut self, cases: &Cases, children: &mut Vec<Term>) {
         match cases {
             Cases::Bool {
                 false_case,
                 true_case,
             } => {
-                self.walk(false_case)?;
-                self.walk(true_case)?;
+                children.push(false_case.clone());
+                children.push(true_case.clone());
             }
             Cases::Switch { cases, default } => {
-                for body in cases.values() {
-                    self.walk(body)?;
-                }
-                self.walk(default)?;
+                children.extend(cases.values().cloned());
+                children.push(default.clone());
             }
             Cases::Induct { cases, default } => {
                 for (_, arm) in cases {
-                    let body = self.open_many(&arm.body);
-                    self.walk(&body)?;
+                    children.push(self.open_many(&arm.body));
                 }
                 if let Some(default) = default {
-                    self.walk(default)?;
+                    children.push(default.clone());
                 }
             }
             Cases::FreeMonoid { carrier } => match carrier {
@@ -568,32 +631,36 @@ impl Certificates<'_> {
                     empty_case,
                     cons_case,
                 } => {
-                    self.walk(empty_case)?;
-                    let body = self.open_two(cons_case);
-                    self.walk(&body)?;
+                    children.push(empty_case.clone());
+                    children.push(self.open_two(cons_case));
                 }
                 Carrier::Bin {
                     empty_case,
                     cons_case,
                     ..
                 } => {
-                    self.walk(empty_case)?;
-                    let body = self.open_three(cons_case);
-                    self.walk(&body)?;
+                    children.push(empty_case.clone());
+                    children.push(self.open_three(cons_case));
                 }
                 Carrier::Lst {
                     elem,
                     empty_case,
                     cons_case,
                 } => {
-                    self.walk(elem)?;
-                    self.walk(empty_case)?;
-                    let body = self.open_three(cons_case);
-                    self.walk(&body)?;
+                    children.push(elem.clone());
+                    children.push(empty_case.clone());
+                    children.push(self.open_three(cons_case));
                 }
             },
         }
-        Ok(())
+    }
+
+    /// Record a `rec` group for the worklist, identified by its first member.
+    fn note(&mut self, group: RecGroup) {
+        let witness = Term::rec_member(group, 0);
+        if !self.groups.contains(&witness) {
+            self.groups.push(witness);
+        }
     }
 
     /// Fresh binders for a scope, in order.
@@ -629,13 +696,13 @@ impl Certificates<'_> {
         scope.open(&[&terms[0], &terms[1], &terms[2]])
     }
 
-    fn telescope_terms(&mut self, telescope: Telescope<Term>) -> Result<(), Error> {
+    fn telescope_terms(&mut self, telescope: Telescope<Term>, children: &mut Vec<Term>) {
         let mut telescope = telescope;
         loop {
             match telescope {
-                Telescope::Done(terminal) => return self.walk(&terminal),
+                Telescope::Done(terminal) => return children.push(*terminal),
                 Telescope::Cons(entry, rest) => {
-                    self.walk(&entry)?;
+                    children.push(entry.clone());
                     let binder = self.context.fresh(rest.first_hint());
                     self.opened.push((binder.clone(), entry));
                     telescope = rest.open(&[&Term::free_var(&binder)]);
@@ -644,15 +711,14 @@ impl Certificates<'_> {
         }
     }
 
-    fn telescope_units(&mut self, telescope: Telescope<()>) -> Result<(), Error> {
+    fn telescope_units(&mut self, telescope: Telescope<()>, children: &mut Vec<Term>) {
         let mut telescope = telescope;
         while let Telescope::Cons(entry, rest) = telescope {
-            self.walk(&entry)?;
+            children.push(entry.clone());
             let binder = self.context.fresh(rest.first_hint());
             self.opened.push((binder.clone(), entry));
             telescope = rest.open(&[&Term::free_var(&binder)]);
         }
-        Ok(())
     }
 }
 

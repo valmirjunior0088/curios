@@ -27,6 +27,21 @@ fn rejected(source: &str) {
     );
 }
 
+/// As [`rejected`], and by **(V)** rather than by (T).
+///
+/// Which gate fires is the whole claim of a (V)-only fixture: (T) runs first,
+/// so a fixture that accidentally put a partial definition in a type position
+/// would pass `rejected` while proving nothing about proof positions.
+fn rejected_as_a_proof(source: &str) {
+    let (system, _io) = MockHost::builder().build();
+    let error =
+        crate::run_text(source, system).expect_err("expected the proof position to be rejected");
+    assert!(
+        error.contains("is a proof position"),
+        "rejected, but not as a proof position:\n{error}",
+    );
+}
+
 /// The negative functor every exploit below is built from. It is *accepted* —
 /// strict positivity asks whether a declaration reaches itself, and `Sink`
 /// never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct`
@@ -174,6 +189,54 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
             let forge(x : (rec Bad : Type = (Bad) -> /std/False; Bad)) -> {} = ();
             ()
         )
+        "#,
+    );
+}
+
+// The first route (T) cannot see. `Never` is `Type`-sorted precisely so that
+// `proc/exit` is retained where it is written — but eliminating it into a
+// *proposition* puts the never-returning call back in a position erasure
+// deletes, so the exit does not fire and `boom` is a closed inhabitant of
+// `False`. No type here reaches anything partial: the offender is reached only
+// through a term whose declared type is `Prop`-sorted.
+#[test]
+fn an_exit_eliminated_into_a_proposition_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        use /std/{proc};
+
+        let forge() -> /std/False =
+            match proc/exit(1) : (_) => /std/False
+            end;
+
+        let boom : /std/False = forge();
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// The second route (T) cannot see, and the one that needs no `exit` at all.
+// `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing
+// about `Box` or its type mentions a partial definition — and the certificate
+// escapes through an arm binder, so `boom`'s body reaches `forge` without
+// naming a partial type anywhere.
+#[test]
+fn a_partial_carrier_releasing_a_proof_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        induct Box : pub Type
+        | box(p : /std/False)
+        end
+
+        rec forge(n : /std/Nat) -> Box = forge(n + 1);
+
+        let boom : /std/False =
+            match forge(0)
+            | box(p) => p
+            end;
+
+        /std/print("unreachable")
         "#,
     );
 }
