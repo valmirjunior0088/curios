@@ -379,6 +379,33 @@ fn a_partial_definition_stays_usable_in_a_program() {
     assert_eq!(run(source), b"8");
 }
 
+// (V) is seeded where elaboration *settles* a term, so its coverage argument
+// rests on every `Prop`-typed term in the accepted module having been settled.
+// A metavariable solution is the one way a term reaches the module without
+// that: witness resolution fills the slot rather than elaborating a written
+// argument. Here the witness of a `Prop`-sorted concept — a proof — is partial,
+// and it arrives entirely by resolution. If solutions were outside what the
+// seeding sees, this program would compile.
+#[test]
+fn a_partial_proof_cannot_arrive_through_witness_resolution() {
+    let source = r#"
+        use /std/{Nat, True};
+
+        concept Trivial(A : Type) : pub Prop {
+            fact(A) -> True,
+        }
+
+        satisfy Trivial(Nat) {
+            fact(n) = rec loop : True = loop; loop,
+        }
+
+        let needs_witness(@A : Type, use Trivial(A), x : A) -> Nat = 0;
+
+        /std/print(Nat/to_str(needs_witness(5)))
+        "#;
+    rejected_as_a_proof(source);
+}
+
 // The corpus shapes the design is keyed to, exercised through the replay path
 // rather than the prelude build. `BigNat`'s arithmetic rests on `add/raw`,
 // which descends on *either* of two `Bits` depending on the arm — a shape only
