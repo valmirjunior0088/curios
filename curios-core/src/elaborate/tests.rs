@@ -311,7 +311,7 @@ fn infer_on_an_unborn_hole_cannot_infer() {
 #[test]
 fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     let mut context = context();
-    // Mirror `elaborate_module`: written ids live below the floor, so the
+    // Mirror `elaborate_module_suffix`: written ids live below the floor, so the
     // stand-in type metavariable minted here cannot collide with the goal's.
     context.seed_metavars(1);
 

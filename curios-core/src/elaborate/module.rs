@@ -2,7 +2,7 @@ use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
         Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl, InductParam, Item,
-        Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
+        Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
         check_type_totality, finish_deferred_witnesses, is_prop, record_totality,
@@ -982,57 +982,140 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     Ok(elaborated)
 }
 
-/// Elaborate a whole [`Module`] (§9). Each top-level item is checked and `define`d
+/// Elaborate a [`Module`] against an already-elaborated *prefix*, returning the
+/// suffix it added (§9). Each top-level item is checked and `define`d
 /// *cumulatively in the persistent base frame* — never a popped `with_frame` —
 /// so every definition stays in scope for later items, the entrypoint `body`, and
-/// (through `mode`) its type annotation. Returns the rebuilt module (lambda
-/// domains solved, binders re-closed) alongside the body's type, reduced through
-/// the accumulated definitions.
+/// (through `mode`) its type annotation. Returns the rebuilt suffix alongside the
+/// body's type, reduced through the accumulated definitions.
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is
 /// what `zonk_module` then makes meta-free for `erase`.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn elaborate_module(
+///
+/// **One protocol serves both entry points**, and that is the point. `prefix` is
+/// `None` for a from-scratch elaboration and the cached prelude for a replay;
+/// every step below degenerates to the whole-module reading when it is `None`,
+/// so there is no second implementation to keep in agreement. There used to be:
+/// the replay path transcribed this function's thirteen steps inline and threaded
+/// the prelude through them, and the two copies agreeing was maintained by
+/// reading. That is the shape every configuration-dependent defect in this
+/// subsystem has had — a rule correct in the configuration its author was looking
+/// at and wrong in the other one.
+///
+/// The prefix diverges at exactly one point: after [`check_concept_registry`],
+/// its items are *replayed* into the context rather than elaborated.
+fn elaborate_module_suffix(
     context: &mut Context,
+    prefix: Option<&Module>,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
-    // Seed the context's inductive registry before any item is checked: an
-    // inductive's type-constructor and value-constructor definitions reference
-    // their own registry entry (`elaborate_induct_type` / `elaborate_variant`).
-    for (name, induct_decl) in &module.induct_decls {
-        context.register_induct(name, induct_decl.clone())?;
+    // Seed the context's registries before any item is checked: an inductive's
+    // type-constructor and value-constructor definitions reference their own
+    // registry entry (`elaborate_induct_type`/`elaborate_variant`), and
+    // `elaborate_struct`/`elaborate_proj` consult the struct registry (which
+    // `elaborate_struct` rebuilds). The prefix's entries go in verbatim, then
+    // the suffix's own — `register_*` rejects a duplicate key, so the suffix
+    // must exclude what the prefix already holds.
+    if let Some(prefix) = prefix {
+        for (name, induct_decl) in &prefix.induct_decls {
+            context.register_induct(name, induct_decl.clone())?;
+        }
+        for (name, struct_decl) in &prefix.struct_decls {
+            context.register_struct(name, struct_decl.clone())?;
+        }
+        for (name, concept) in &prefix.concepts {
+            context.register_concept(name, concept.clone())?;
+        }
     }
 
-    // Likewise seed the struct registry — `elaborate_struct`/`elaborate_proj`
-    // consult it (and `elaborate_struct` rebuilds each entry's telescopes).
-    for (name, struct_decl) in &module.struct_decls {
-        context.register_struct(name, struct_decl.clone())?;
-    }
+    // The suffix's own keys, kept so the rebuilt entries can be pulled back out
+    // below. With no prefix every key is the suffix's, which is exactly what a
+    // from-scratch elaboration wants.
+    let induct_keys = suffix_keys(&module.induct_decls, prefix.map(|p| &p.induct_decls));
+    let struct_keys = suffix_keys(&module.struct_decls, prefix.map(|p| &p.struct_decls));
 
-    // Concept metadata and witness markers, alongside — witness *table*
-    // entries register per item (`elaborate_module_let`), once the elaborated
-    // head exists. With every concept present, the superclass graph can be
-    // validated up front.
+    for name in &induct_keys {
+        context.register_induct(name, module.induct_decls[name].clone())?;
+    }
+    for name in &struct_keys {
+        context.register_struct(name, module.struct_decls[name].clone())?;
+    }
+    // Concept metadata and witness markers, alongside — witness *table* entries
+    // register per item (`elaborate_module_let`), once the elaborated head
+    // exists. With every concept present, the superclass graph can be validated
+    // up front.
     for (name, concept) in &module.concepts {
-        context.register_concept(name, concept.clone())?;
+        if !prefix.is_some_and(|prefix| prefix.concepts.contains_key(name)) {
+            context.register_concept(name, concept.clone())?;
+        }
     }
     for name in &module.witnesses {
         context.mark_witness_declaration(name);
     }
     check_concept_registry(context)?;
 
-    // Implicit-argument insertion mints metavariables during elaboration;
-    // floor the counter above `into_core`'s (which returns the count alongside
-    // the lowered module) so the id spaces never collide.
+    // Replay the cached prefix into the persistent base frame: `define_assuming`
+    // reproduces exactly the state `elaborate_module_let`/`_rec` leave behind
+    // (assume the type, define the body), but with no re-checking — these terms
+    // are already elaborated. A prefix witness re-registers its (already
+    // elaborated) signature into the witness table, which is per-elaboration
+    // state and not cached on the module.
+    if let Some(prefix) = prefix {
+        for item in &prefix.items {
+            match item {
+                Item::Let(def) => {
+                    context.define_assuming_scheme(
+                        &Free::from(&def.name),
+                        &def.type_,
+                        &def.body,
+                        Some(&def.kind),
+                        def.universe_context.clone(),
+                    );
+                    if prefix.witnesses.contains(&def.name) {
+                        register_witness(
+                            context,
+                            &def.name,
+                            &def.type_,
+                            def.universe_context.clone(),
+                            &def.island,
+                            def.root,
+                        )?;
+                    }
+                }
+                Item::Rec(rec) => {
+                    for (index, definition) in rec.definitions.iter().enumerate() {
+                        let name = Free::from(&definition.name);
+                        context.assume(&name, &rec.group.member_type(index));
+                        context.set_assumption_universe_context(
+                            &name,
+                            rec.group.universe_context().clone(),
+                        );
+                        context.define(
+                            &name,
+                            &Term::rec_member(rec.group.clone(), index),
+                            Some(&definition.kind),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Implicit-argument insertion mints metavariables during elaboration; floor
+    // the counter above `into_core`'s (which returns the count alongside the
+    // lowered module) so the id spaces never collide. A cached prefix is
+    // meta-free, so its ids never collide with the user range either.
     context.seed_metavars(metavar_floor);
     context.set_local_floor(module.binder_floor);
     context.seed_universes(&module.universe_seeds, universe_floor);
 
-    let mut items = Vec::with_capacity(module.items.len());
-    for item in &module.items {
+    // Elaborate only what the prefix did not already cover.
+    let replayed = prefix.map_or(0, |prefix| prefix.items.len());
+    let mut items = Vec::with_capacity(module.items.len() - replayed);
+    for item in module.items.iter().skip(replayed) {
         items.push(elaborate_module_item(context, item)?);
     }
 
@@ -1047,34 +1130,49 @@ pub fn elaborate_module(
     context.drain_parked()?;
     let body_type = reduce_with(context, &body_type)?;
 
-    // The output module carries the *rebuilt* registry entries (pulled back
-    // from the context, where the per-group rebuild re-registered them), so
-    // `zonk_module` and `erase` see elaborated telescopes. An entry whose
-    // declaring item was pruned keeps its lowered form — nothing consults it.
-    let induct_decls = module
-        .induct_decls
-        .keys()
+    // The output carries the *rebuilt* registry entries (pulled back from the
+    // context, where the per-group rebuild re-registered them), so `zonk_module`
+    // and `erase` see elaborated telescopes. An entry whose declaring item was
+    // pruned keeps its lowered form — nothing consults it.
+    let induct_decls = induct_keys
+        .into_iter()
         .map(|name| {
             let induct_decl = context
-                .induct_decl(name)
-                .expect("every module entry was registered above")
+                .induct_decl(&name)
+                .expect("every suffix entry was registered above")
                 .clone();
-            (name.clone(), induct_decl)
+            (name, induct_decl)
         })
         .collect();
-
-    // Same for the struct registry: pull back the entries rebuilt by
-    // `elaborate_struct` so `zonk_module`/`erase` see elaborated telescopes.
-    let struct_decls = module
-        .struct_decls
-        .keys()
+    let struct_decls = struct_keys
+        .into_iter()
         .map(|name| {
             let struct_decl = context
-                .struct_decl(name)
-                .expect("every module entry was registered above")
+                .struct_decl(&name)
+                .expect("every suffix entry was registered above")
                 .clone();
-            (name.clone(), struct_decl)
+            (name, struct_decl)
         })
+        .collect();
+    let concepts = module
+        .concepts
+        .keys()
+        .filter(|name| !prefix.is_some_and(|prefix| prefix.concepts.contains_key(*name)))
+        .map(|name| {
+            (
+                name.clone(),
+                context
+                    .concept(name)
+                    .expect("every suffix concept was registered above")
+                    .clone(),
+            )
+        })
+        .collect();
+    let witnesses = module
+        .witnesses
+        .iter()
+        .filter(|name| !prefix.is_some_and(|prefix| prefix.witnesses.contains(*name)))
+        .cloned()
         .collect();
 
     let module = Module {
@@ -1082,8 +1180,8 @@ pub fn elaborate_module(
         universe_seeds: module.universe_seeds.clone(),
         induct_decls,
         struct_decls,
-        concepts: context.concepts().clone(),
-        witnesses: module.witnesses.clone(),
+        concepts,
+        witnesses,
         binder_floor: module.binder_floor,
         type_: module.type_.clone(),
         body,
@@ -1092,19 +1190,50 @@ pub fn elaborate_module(
     Ok((module, body_type))
 }
 
-/// Elaborate and zonk a module and its inferred body type together. Artifact
-/// construction uses this paired operation so the cached module and body type
-/// can never come from different metavariable stores.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn elaborate_and_zonk_module(
+/// The keys `module` declares that `prefix` does not — every key when there is
+/// no prefix.
+fn suffix_keys<T>(
+    module: &BTreeMap<Global, T>,
+    prefix: Option<&BTreeMap<Global, T>>,
+) -> Vec<Global> {
+    module
+        .keys()
+        .filter(|name| !prefix.is_some_and(|prefix| prefix.contains_key(*name)))
+        .cloned()
+        .collect()
+}
+
+/// Finalize an elaborated module and run the **soundness perimeter** over it.
+///
+/// This is the single place every whole-module check the consistency claim rests
+/// on is applied, and every entry point that produces an elaborated module must
+/// come through it. Keeping the sequence in one function is not tidiness: the
+/// checks were previously written out at each entry point, so "what does
+/// soundness depend on?" was answered by diffing two call sites, and a check
+/// added to one and not the other would have degraded the claim silently for
+/// every real compilation.
+///
+/// The order is load-bearing, in three places:
+///
+/// - `default_universes` then `zonk_module` come first, which is what makes
+///   everything after metavariable-free by construction — `zonk_module` errors
+///   on an unsolved hole, so no metavariable can later be solved to a partial or
+///   negatively-occurring term. `zonk_module` also runs `validate_universes`.
+/// - [`Context::restore_budget`] precedes the passes because they reduce, and
+///   each has to spend on the same footing as an item rather than on whatever
+///   the last item left.
+/// - [`record_totality`] precedes both gates, which read the flags it stamps.
+///
+/// `check_positivity` is independent of the rest and could sit anywhere after
+/// the zonk. `inherited` carries the classifications of a replayed prefix, whose
+/// own verdicts were settled when its archive was built; it is empty for a
+/// from-scratch elaboration, where the module defines every name it mentions.
+fn finalize_and_check(
     context: &mut Context,
-    module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
-    mode: Mode,
+    mut module: Module,
+    body_type: Term,
+    inherited: &BTreeMap<Global, Totality>,
 ) -> Result<(Module, Term), Error> {
-    let (mut module, body_type) =
-        elaborate_module(context, module, metavar_floor, universe_floor, mode)?;
     let mut entry_terms = vec![module.body.clone()];
     let has_annotation = module.type_.is_some();
     if let Some(type_) = &module.type_ {
@@ -1119,22 +1248,43 @@ pub fn elaborate_and_zonk_module(
         module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
     }
     let body_type = entry_terms.next().expect("entry body type was finalized");
+
     let mut module = zonk_module(context, &module)?;
     let body_type = zonk(context, &body_type)?;
-    // Positivity gates the zonked registries, beside `validate_universes`
-    // (which `zonk_module` runs) rather than inside elaboration: the
-    // telescopes it reads are final here, and meta-free, so an unsolved hole
-    // reports as an unsolved hole instead of as an unseeable occurrence.
-    // The whole-module passes reduce too, and run after every item has spent
-    // its own budget.
     context.restore_budget();
+
+    // Positivity gates the zonked registries rather than running inside
+    // elaboration: the telescopes it reads are final here, and meta-free, so an
+    // unsolved hole reports as an unsolved hole instead of as an unseeable
+    // occurrence. At a replay the module in hand is the suffix alone, which is
+    // what this must see — the replayed prefix carries the vectors its archive
+    // was built with, and since prefix items cannot mention the suffix they are
+    // sinks of the occurrence relation, so no cycle crosses the boundary.
     check_positivity(context, &mut module)?;
-    // Nothing is inherited here: `module` is the whole program, so every name
-    // it mentions it also defines.
-    record_totality(context, &mut module, &BTreeMap::new());
-    check_type_totality(context, &module, &BTreeMap::new())?;
-    check_proof_totality(context, &module, &BTreeMap::new())?;
+    record_totality(context, &mut module, inherited);
+    check_type_totality(context, &module, inherited)?;
+    check_proof_totality(context, &module, inherited)?;
+
     Ok((module, body_type))
+}
+
+/// Elaborate a whole [`Module`] with no cached prefix, then zonk and check it.
+///
+/// The paired operation exists so a cached module and its body type can never
+/// come from different metavariable stores.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn elaborate_and_zonk_module(
+    context: &mut Context,
+    module: &Module,
+    metavar_floor: usize,
+    universe_floor: usize,
+    mode: Mode,
+) -> Result<(Module, Term), Error> {
+    let (module, body_type) =
+        elaborate_module_suffix(context, None, module, metavar_floor, universe_floor, mode)?;
+    // Nothing is inherited: `module` is the whole program, so every name it
+    // mentions it also defines.
+    finalize_and_check(context, module, body_type, &BTreeMap::new())
 }
 
 /// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already
@@ -1146,19 +1296,13 @@ pub fn elaborate_and_zonk_module(
 /// `text::into_core` produced it, and the prelude is its **leading prefix**: with
 /// the prune gone every program lowers the same prelude, and since prelude items
 /// depend only on each other they always topologically sort ahead of the user
-/// items. So this replays the cached prelude into `context` (registering its
-/// registries and `define`-ing its items — cheap map inserts, no checking) and
-/// then elaborates only the items past that prefix plus the entrypoint body,
-/// before zonking that user portion and splicing it onto the (already zonked)
-/// prelude.
+/// items.
 ///
 /// Sound because the prelude is program-independent: its items never see user
 /// code, and — since top-level definitions are excluded from a metavariable's Γ
 /// (`Context::identity_snapshot`) — a user item elaborates against the
-/// identical local context it would under a from-scratch [`elaborate_module`], so
-/// the solutions (and the zonked output) are identical. The cached prelude is
-/// meta-free, so its ids never collide with the user metavariable range that
-/// `seed_metavars(metavar_floor)` floors.
+/// identical local context it would with no prefix at all, so the solutions (and
+/// the zonked output) are identical.
 ///
 /// The returned module keeps that shape: its items are `prelude`'s own, cloned
 /// unchanged and in order, followed by the user's, and its registries are
@@ -1176,224 +1320,41 @@ pub fn elaborate_and_zonk_with_prelude(
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
-    // Seed the registries — cached prelude entries verbatim, then the user's
-    // (rebuilt by elaboration below). Keep the user keys to pull their rebuilt
-    // forms back out afterwards.
-    for (name, induct_decl) in &prelude.induct_decls {
-        context.register_induct(name, induct_decl.clone())?;
-    }
-    for (name, struct_decl) in &prelude.struct_decls {
-        context.register_struct(name, struct_decl.clone())?;
-    }
-    for (name, concept) in &prelude.concepts {
-        context.register_concept(name, concept.clone())?;
-    }
-
-    let user_induct_keys = module
-        .induct_decls
-        .keys()
-        .filter(|name| !prelude.induct_decls.contains_key(*name))
-        .cloned()
-        .collect::<Vec<Global>>();
-    let user_struct_keys = module
-        .struct_decls
-        .keys()
-        .filter(|name| !prelude.struct_decls.contains_key(*name))
-        .cloned()
-        .collect::<Vec<Global>>();
-    for name in &user_induct_keys {
-        context.register_induct(name, module.induct_decls[name].clone())?;
-    }
-    for name in &user_struct_keys {
-        context.register_struct(name, module.struct_decls[name].clone())?;
-    }
-    for (name, concept) in &module.concepts {
-        if !prelude.concepts.contains_key(name) {
-            context.register_concept(name, concept.clone())?;
-        }
-    }
-    for name in &module.witnesses {
-        context.mark_witness_declaration(name);
-    }
-    check_concept_registry(context)?;
-
-    // Replay the cached prelude into the persistent base frame: `define_assuming`
-    // reproduces exactly the state `elaborate_module_let`/`_rec` leave behind
-    // (assume the type, define the body), but with no re-checking — these terms
-    // are already elaborated. A prelude witness re-registers its (already
-    // elaborated) signature into the witness table, which is per-elaboration
-    // state and not cached on the module.
-    for item in &prelude.items {
-        match item {
-            Item::Let(def) => {
-                context.define_assuming_scheme(
-                    &Free::from(&def.name),
-                    &def.type_,
-                    &def.body,
-                    Some(&def.kind),
-                    def.universe_context.clone(),
-                );
-                if prelude.witnesses.contains(&def.name) {
-                    register_witness(
-                        context,
-                        &def.name,
-                        &def.type_,
-                        def.universe_context.clone(),
-                        &def.island,
-                        def.root,
-                    )?;
-                }
-            }
-            Item::Rec(rec) => {
-                for (index, definition) in rec.definitions.iter().enumerate() {
-                    let name = Free::from(&definition.name);
-                    context.assume(&name, &rec.group.member_type(index));
-                    context.set_assumption_universe_context(
-                        &name,
-                        rec.group.universe_context().clone(),
-                    );
-                    context.define(
-                        &name,
-                        &Term::rec_member(rec.group.clone(), index),
-                        Some(&definition.kind),
-                    );
-                }
-            }
-        }
-    }
-
-    // User-minted metavariables sit strictly above `into_core`'s ids (which already
-    // include the prelude's range); the cached prelude is meta-free, so nothing
-    // collides.
-    context.seed_metavars(metavar_floor);
-    context.set_local_floor(module.binder_floor);
-    context.seed_universes(&module.universe_seeds, universe_floor);
-
-    // Elaborate only the user items — everything past the cached prelude prefix.
-    let mut user_items = Vec::new();
-    for item in module.items.iter().skip(prelude.items.len()) {
-        user_items.push(elaborate_module_item(context, item)?);
-    }
-
-    context.set_island(Qualifier::empty());
-    // The entrypoint expression is not an item, so it gets its own budget on
-    // the same footing as one.
-    context.restore_budget();
-    let (body, body_type) = elaborate(context, &module.body, mode)?;
-    finish_deferred_witnesses(context)?;
-    context.drain_parked()?;
-    let body_type = reduce_with(context, &body_type)?;
-
-    // Pull the rebuilt user registry entries back out (mirrors `elaborate_module`).
-    let user_induct_decls = user_induct_keys
-        .into_iter()
-        .map(|name| {
-            let induct_decl = context
-                .induct_decl(&name)
-                .expect("user entry registered")
-                .clone();
-            (name, induct_decl)
-        })
-        .collect();
-    let user_struct_decls = user_struct_keys
-        .into_iter()
-        .map(|name| {
-            let struct_decl = context
-                .struct_decl(&name)
-                .expect("user entry registered")
-                .clone();
-            (name, struct_decl)
-        })
-        .collect();
-
-    // Zonk only the user portion (the cached prelude is already zonked), then
-    // splice: cached prelude prefix ++ zonked user items / registries.
-    let user_concepts = module
-        .concepts
-        .keys()
-        .filter(|name| !prelude.concepts.contains_key(*name))
-        .map(|name| {
-            (
-                name.clone(),
-                context
-                    .concept(name)
-                    .expect("user concept registered")
-                    .clone(),
-            )
-        })
-        .collect();
-    let user_witnesses = module
-        .witnesses
-        .iter()
-        .filter(|name| !prelude.witnesses.contains(*name))
-        .cloned()
-        .collect();
-
-    let mut user_module = Module {
-        items: user_items,
-        universe_seeds: module.universe_seeds.clone(),
-        induct_decls: user_induct_decls,
-        struct_decls: user_struct_decls,
-        concepts: user_concepts,
-        witnesses: user_witnesses,
-        binder_floor: module.binder_floor,
-        type_: module.type_.clone(),
-        body,
-    };
-    let mut entry_terms = vec![user_module.body.clone()];
-    let has_annotation = user_module.type_.is_some();
-    if let Some(type_) = &user_module.type_ {
-        entry_terms.push(type_.clone());
-    }
-    entry_terms.push(body_type);
-    let mut entry_terms = context
-        .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
-        .into_iter();
-    user_module.body = entry_terms.next().expect("entry body was finalized");
-    if has_annotation {
-        user_module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
-    }
-    let body_type = entry_terms.next().expect("entry body type was finalized");
-    let mut user_module = zonk_module(context, &user_module)?;
-    let body_type = zonk(context, &body_type)?;
-    // The whole-module passes reduce too, and run after every item has spent
-    // its own budget.
-    context.restore_budget();
-    // Before the splice, so the module handed to positivity is exactly the
-    // user suffix. The replayed prelude is not re-analyzed: its declarations
-    // carry the vectors the archive was built with, and since prelude items
-    // cannot mention user code they are sinks of the occurrence relation, so
-    // no cycle crosses the boundary.
-    check_positivity(context, &mut user_module)?;
-    // Same boundary, same reason. The prelude's own stamps come out of the
-    // archive already closed, so inheriting them is what lets a user proof see
-    // that `/std/Async/bind` is partial without walking `/std` again.
+    let (suffix, body_type) = elaborate_module_suffix(
+        context,
+        Some(prelude),
+        module,
+        metavar_floor,
+        universe_floor,
+        mode,
+    )?;
+    // The prelude's own stamps come out of the archive already closed, so
+    // inheriting them is what lets a user proof see that `/std/Async/bind` is
+    // partial without walking `/std` again.
     let inherited = recorded_totality(prelude);
-    record_totality(context, &mut user_module, &inherited);
-    check_type_totality(context, &user_module, &inherited)?;
-    check_proof_totality(context, &user_module, &inherited)?;
+    let (suffix, body_type) = finalize_and_check(context, suffix, body_type, &inherited)?;
 
     let mut items = prelude.items.clone();
-    items.extend(user_module.items);
+    items.extend(suffix.items);
     let mut induct_decls = prelude.induct_decls.clone();
-    induct_decls.extend(user_module.induct_decls);
+    induct_decls.extend(suffix.induct_decls);
     let mut struct_decls = prelude.struct_decls.clone();
-    struct_decls.extend(user_module.struct_decls);
+    struct_decls.extend(suffix.struct_decls);
     let mut concepts = prelude.concepts.clone();
-    concepts.extend(user_module.concepts);
+    concepts.extend(suffix.concepts);
     let mut witnesses = prelude.witnesses.clone();
-    witnesses.extend(user_module.witnesses);
+    witnesses.extend(suffix.witnesses);
 
     let module = Module {
         items,
-        universe_seeds: user_module.universe_seeds,
+        universe_seeds: suffix.universe_seeds,
         induct_decls,
         struct_decls,
         concepts,
         witnesses,
-        binder_floor: prelude.binder_floor.max(user_module.binder_floor),
-        type_: user_module.type_,
-        body: user_module.body,
+        binder_floor: prelude.binder_floor.max(suffix.binder_floor),
+        type_: suffix.type_,
+        body: suffix.body,
     };
 
     Ok((module, body_type))

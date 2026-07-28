@@ -293,7 +293,7 @@ pub struct Context {
     metas: MetaStore,
     universe_solver: UniverseSolver,
     // The next metavariable id this context may mint (implicit-argument
-    // insertion). Seeded by `elaborate_module` with its `metavar_floor`
+    // insertion). Seeded by `elaborate_module_suffix` with its `metavar_floor`
     // argument so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetaId>,
     // Inductive declarations, keyed by the type's qualified name ("Result").
@@ -326,7 +326,7 @@ pub struct Context {
     deferred_witnesses: Vec<ParkedGoal>,
     // The module whose item is currently being elaborated — the qualifier
     // prefix of that item's name (a fresh context starts at the root, the
-    // empty qualifier). Set by `elaborate_module` per item; read by the
+    // empty qualifier). Set by `elaborate_module_suffix` per item; read by the
     // representation-privacy checks (§7). `None` arises only through
     // `with_suppressed_privacy` and means there is no surface use site to
     // judge from, which suppresses the checks structurally: privacy is a
@@ -354,9 +354,9 @@ impl Context {
         Self::new(DEFAULT_STEP_BUDGET)
     }
 
-    /// A fresh, empty context in which each declaration may spend `budget` reduction steps. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module` as it walks the lowered module.
+    /// A fresh, empty context in which each declaration may spend `budget` reduction steps. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.
     ///
-    /// The budget is *per declaration*, not per compilation: `elaborate_module`
+    /// The budget is *per declaration*, not per compilation: `elaborate_module_suffix`
     /// calls [`Context::restore_budget`] at every item boundary. A cumulative budget
     /// would make whether one declaration typechecks depend on how much the
     /// declarations before it had already spent, which is not a property of the
@@ -1547,7 +1547,7 @@ impl Context {
     }
 
     /// Mark a definition name as a witness declaration; when its signature
-    /// elaborates, `elaborate_module` registers it into the witness table.
+    /// elaborates, `elaborate_module_suffix` registers it into the witness table.
     pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
         self.witness_declarations.insert(name.clone());
     }
@@ -1619,7 +1619,7 @@ impl Context {
     }
 
     /// Set the current module before elaborating an item (see
-    /// `elaborate_module`).
+    /// `elaborate_module_suffix`).
     pub(crate) fn set_island(&mut self, island: Qualifier) {
         // Representation-privacy checks are island-relative, so an entry
         // elaborated under one item's island must not answer for another's.
@@ -1762,7 +1762,7 @@ impl Context {
     }
 
     /// Raise the minting floor: every id `fresh_metavar` hands out will be
-    /// `>= floor`. Called by `elaborate_module` with its `metavar_floor`
+    /// `>= floor`. Called by `elaborate_module_suffix` with its `metavar_floor`
     /// argument (the count `into_core` minted) before any item is elaborated.
     pub(crate) fn seed_metavars(&mut self, floor: usize) {
         self.next_metavar.seed(floor);
