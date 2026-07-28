@@ -1391,8 +1391,52 @@ pub fn check_type_totality(
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<(), Error> {
-    let positions = type_positions(module);
+    let mut positions = type_positions(module);
+    positions.extend(checked_type_positions(context)?);
     report(context, module, &positions, inherited, Erased::Type)
+}
+
+/// The terms elaboration settled *at a sort* — a term whose type is `Type` or
+/// `Prop` is itself a type, wherever it was written.
+///
+/// This is the half [`type_positions`] structurally cannot reach. That walk is a
+/// syntactic reading of where types are *written*: an annotation, a motive, a
+/// declaration telescope, a definition whose type ends in a sort. A type passed
+/// as an *argument* is written nowhere it looks — `annotations` has no case for
+/// an application's parameters — so `ignore(@Shape(inf), 5)` handed a partial
+/// value to a type-level function with nothing seeded, while the same type in an
+/// annotation was rejected.
+///
+/// The two seedings are **incomparable**, not nested, which a count of each
+/// obscured: the walk sees definition bodies whose type ends in a sort, and no
+/// typing judgment classifies those as type positions; this sees type arguments,
+/// which no syntactic walk can find without re-deriving the head's telescope —
+/// the re-derivation that cost (V) six defects. Taking the union costs one pass
+/// over already-recorded terms and needs neither.
+fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
+    let settled = context.checked().to_vec();
+    let mut positions = Vec::new();
+
+    for (term, type_, site) in settled {
+        let type_ = zonk(context, &type_)?;
+        // The term *is* a type exactly when its own type is a sort. A universe
+        // instance wraps one without changing that.
+        let sort = match &*type_ {
+            Subterm::Type(_) | Subterm::Prop => true,
+            Subterm::UniverseInst(instance) => {
+                matches!(&*instance.head, Subterm::Type(_) | Subterm::Prop)
+            }
+            _ => false,
+        };
+        if sort {
+            positions.push(Position {
+                term: zonk(context, &term)?,
+                site: format!("a type in {site}"),
+            });
+        }
+    }
+
+    Ok(positions)
 }
 
 /// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.

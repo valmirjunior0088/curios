@@ -42,6 +42,20 @@ fn rejected_as_a_proof(source: &str) {
     );
 }
 
+/// As [`rejected`], and by **(T)** rather than by (V).
+///
+/// The mirror of [`rejected_as_a_proof`]: a fixture that means to pin a type
+/// position proves nothing if a stray proof position is what actually fired.
+fn rejected_as_a_type(source: &str) {
+    let (system, _io) = MockHost::builder().build();
+    let error =
+        crate::run_text(source, system).expect_err("expected the type position to be rejected");
+    assert!(
+        error.contains("is a type position"),
+        "rejected, but not as a type position:\n{error}",
+    );
+}
+
 /// The negative functor every exploit below is built from. It is *accepted* —
 /// strict positivity asks whether a declaration reaches itself, and `Sink`
 /// never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct`
@@ -378,6 +392,49 @@ fn a_partial_definition_stays_usable_in_a_program() {
         "#;
     assert_eq!(run(source), b"8");
 }
+
+// (T) is seeded two ways, because neither reaches what the other does. The walk
+// finds types where they are *written* — annotations, motives, telescopes, and
+// the body of any definition whose type ends in a sort. It has no case for an
+// application's arguments, so a type handed to a function is written nowhere it
+// looks. The settle records find those, because a term whose own type is a sort
+// is a type wherever it appears.
+//
+// The argument form is the one that reaches this gate at all. Written as an
+// annotation, `Shape(inf)` is *forced* while the binder elaborates and the step
+// budget stops it there — fail-closed, but before any whole-module pass runs.
+// Passed as a type argument it is never forced, so elaboration succeeds and only
+// the gate is left. That form was accepted until the settle records were added.
+//
+// Nothing here is `Prop`-typed, so (V) cannot fire and (T) is on its own:
+// `Shape` is total, descending structurally on `F`, and `inf` is an ordinary
+// partial value of a data type.
+#[test]
+fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
+    rejected_as_a_type(&format!(
+        "{SHAPE}\n let ignore(@A : Type, x : Nat) -> Nat = x;\n\n ignore(@Shape(inf), 5)"
+    ));
+}
+
+/// A *total* type-level function and a *partial* value of ordinary data type.
+/// `Shape` descends structurally on `F`; nothing here is a partial type former,
+/// which is why only the aggressive reading of (T) rejects the pair at all.
+const SHAPE: &str = r#"
+    use /std/{Nat};
+
+    induct F : pub Type
+    | stop()
+    | more(rest : F)
+    end
+
+    rec Shape(f : F) -> Type =
+        match f
+        | stop() => Nat
+        | more(rest) => Shape(rest)
+        end;
+
+    rec inf : F = F/more(inf);
+"#;
 
 // The three fixtures below probe the *erasure premise*: that everything erasure
 // deletes lies within a term one of the obligations covers.

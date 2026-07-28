@@ -427,6 +427,12 @@ impl Context {
         self.checked_site = site;
     }
 
+    /// Read the recorded terms without consuming them — obligation (T) reads
+    /// them first, and (V) drains afterwards.
+    pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
+        &self.checked
+    }
+
     /// Drain the recorded terms. The gate takes them once per module.
     pub(crate) fn take_checked(&mut self) -> Vec<(Term, Term, Rc<str>)> {
         mem::take(&mut self.checked)
