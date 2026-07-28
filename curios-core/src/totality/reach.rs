@@ -27,12 +27,22 @@
 
 use {
     crate::{
-        Apply, Bound, Carrier, Cases, Context, Definition, Error, Free, Func, FuncType, Global,
-        Item, Let, Many, Match, Module, Rec, RecGroup, RecMember, Scope, Struct, Subterm,
-        Telescope, Term, Three, TupleType, Two, Variant, is_prop, is_prop_in, synth_neutral,
+        Apply, Atom, Bound, Carrier, Cases, Context, Definition, Error, Free, Func, FuncType,
+        Global, InductType, Item, Let, Many, Match, Module, Prim, Rec, RecGroup, RecMember, Scope,
+        Struct, Subterm, Telescope, Term, Three, TupleType, Two, Variant, is_prop, is_prop_in,
+        reduce, synth_neutral,
     },
+    curios_base::Grain,
     std::collections::{BTreeMap, BTreeSet},
 };
+
+/// How many recursive-group members [`Certificates::scrutinee_type`] will
+/// unfold before giving up on naming a scrutinee's declaration.
+///
+/// Each unfold peels one nominal declaration, so a real chain is short; the
+/// bound exists to terminate on a self-referential member rather than to
+/// accommodate deep ones.
+const UNFOLD_LIMIT: usize = 32;
 
 /// A term the erased half of the program must be total in, and what a
 /// diagnostic should call it.
@@ -227,7 +237,11 @@ impl Groups {
             .push((witness, format!("a recursive group reached from {site}")));
     }
 
-    /// Walk every queued group's member bodies, following groups they reach.
+    /// Walk every queued group's members, following groups they reach.
+    ///
+    /// Both halves of each member. A member's *type* is as much a place to
+    /// hand a proof to a `Prop`-declared parameter as its body is, and a
+    /// group reached only from a type would otherwise never be queued at all.
     fn drain(
         &mut self,
         context: &mut Context,
@@ -240,8 +254,9 @@ impl Groups {
             };
             let group = group.clone();
             for index in 0..group.len() {
-                let body = group.member_body(index);
-                positions.extend(certificates(context, module, &body, &site, self)?);
+                for half in [group.member_type(index), group.member_body(index)] {
+                    positions.extend(certificates(context, module, &half, &site, self)?);
+                }
             }
         }
 
@@ -434,7 +449,7 @@ impl Certificates<'_> {
         while let Some(term) = work.pop() {
             self.seed(&term)?;
             let mut children = Vec::new();
-            self.descend(&term, &mut children);
+            self.descend(&term, &mut children)?;
             work.extend(children.into_iter().rev());
         }
 
@@ -443,7 +458,11 @@ impl Certificates<'_> {
 
     /// `term`'s children, in source order, each opened against a fresh binder
     /// wherever `term` introduces one.
-    fn descend(&mut self, term: &Term, children: &mut Vec<Term>) {
+    ///
+    /// Fallible because typing a `match` scrutinee reduces, and reduction is
+    /// budget-bounded: exhausting the budget is a compile error rather than a
+    /// silently untyped binder.
+    fn descend(&mut self, term: &Term, children: &mut Vec<Term>) -> Result<(), Error> {
         match &**term {
             // Binder-bearing forms open as they descend.
             Subterm::Func(Func { telescope, .. })
@@ -488,21 +507,30 @@ impl Certificates<'_> {
             // carried by thirty-nine definitions.
             Subterm::Rec(Rec { group, tail }) => {
                 self.note(group.clone());
-                children.push(self.open_many(tail));
+                let types = (0..group.len())
+                    .map(|index| group.member_type(index))
+                    .collect::<Vec<_>>();
+                children.push(self.open_annotated(&types, tail));
             }
 
             Subterm::RecMember(RecMember { group, .. }) => {
                 self.note(group.clone());
             }
 
+            // The eliminated declaration types the motive and arm binders. It
+            // is looked up once here and threaded into both, because a binder
+            // opened without a type is one sort synthesis answers `None`
+            // about — and a `None` at an application head silently skips the
+            // rule that seeds its `Prop`-declared arguments.
             Subterm::Match(Match {
                 head,
                 motive,
                 cases,
             }) => {
+                let scrutinee = self.scrutinee_type(head)?;
                 children.push(head.clone());
-                children.push(self.open_many(motive));
-                self.arms(cases, children);
+                children.push(self.open_motive(motive, scrutinee.as_ref(), cases));
+                self.arms(cases, scrutinee.as_ref(), motive, children);
             }
 
             // Everything else binds nothing, so its children are already
@@ -515,6 +543,40 @@ impl Certificates<'_> {
                 });
             }
         }
+
+        Ok(())
+    }
+
+    /// The scrutinee's inductive type, when this walk can name it.
+    ///
+    /// `None` where the head's type cannot be synthesized or is not a nominal
+    /// inductive — every primitive carrier reaches here — and the binders are
+    /// then opened untyped, exactly as they were before.
+    fn scrutinee_type(&mut self, head: &Term) -> Result<Option<InductType>, Error> {
+        let exhausted = || Error::reduce_exhausted(head.clone());
+
+        let synthesized =
+            synth_neutral(self.context, &self.opened, head).map_err(|e| e.into_error(exhausted))?;
+        let Some(type_) = synthesized else {
+            return Ok(None);
+        };
+
+        // A nominal declaration reaches here as a `RecMember`, not an
+        // `InductType`: elaboration turns `induct Holder` into a recursive
+        // group whose member body is the inductive. Unfold those, bounded,
+        // because a member whose body is itself — `rec X : Type = X` — would
+        // otherwise spin here rather than in the gate that rejects it.
+        let mut current = reduce(self.context, type_).map_err(|e| e.into_error(exhausted))?;
+        for _ in 0..UNFOLD_LIMIT {
+            let next = match &*current {
+                Subterm::InductType(induct) => return Ok(Some(induct.clone())),
+                Subterm::RecMember(RecMember { group, index }) => group.member_body(*index),
+                _ => return Ok(None),
+            };
+            current = reduce(self.context, next).map_err(|e| e.into_error(exhausted))?;
+        }
+
+        Ok(None)
     }
 
     /// Every proof this node hands to a `Prop`-declared position.
@@ -605,7 +667,13 @@ impl Certificates<'_> {
         Ok(())
     }
 
-    fn arms(&mut self, cases: &Cases, children: &mut Vec<Term>) {
+    fn arms(
+        &mut self,
+        cases: &Cases,
+        scrutinee: Option<&InductType>,
+        motive: &Scope<Many>,
+        children: &mut Vec<Term>,
+    ) {
         match cases {
             Cases::Bool {
                 false_case,
@@ -619,28 +687,44 @@ impl Certificates<'_> {
                 children.push(default.clone());
             }
             Cases::Induct { cases, default } => {
-                for (_, arm) in cases {
-                    children.push(self.open_many(&arm.body));
+                for (tag, arm) in cases {
+                    let declared =
+                        scrutinee.and_then(|induct| self.constructor_telescope(induct, tag));
+                    children.push(match declared {
+                        Some(declared) => self.open_telescoped(declared, &arm.body),
+                        None => self.open_many(&arm.body),
+                    });
                 }
                 if let Some(default) = default {
                     children.push(default.clone());
                 }
             }
+            // A primitive carrier's cons binders are typed by the carrier
+            // itself, and the induction hypothesis by the motive at the tail —
+            // the same assumptions `elaborate_lst_match` and its siblings make
+            // when they check these arms.
             Cases::FreeMonoid { carrier } => match carrier {
                 Carrier::Nat {
                     empty_case,
                     cons_case,
                 } => {
                     children.push(empty_case.clone());
-                    children.push(self.open_two(cons_case));
+                    let predecessor = Subterm::Prim(Prim::NatType).into();
+                    children.push(self.open_fold_two(cons_case, predecessor, motive));
                 }
                 Carrier::Bin {
+                    grain,
                     empty_case,
                     cons_case,
-                    ..
                 } => {
                     children.push(empty_case.clone());
-                    children.push(self.open_three(cons_case));
+                    let atom = Subterm::Prim(match grain {
+                        Grain::B => Prim::BoolType,
+                        Grain::X => Prim::ByteType,
+                    })
+                    .into();
+                    let tail = Subterm::Prim(Prim::BinType(*grain)).into();
+                    children.push(self.open_fold_three(cons_case, atom, tail, motive));
                 }
                 Carrier::Lst {
                     elem,
@@ -649,7 +733,8 @@ impl Certificates<'_> {
                 } => {
                     children.push(elem.clone());
                     children.push(empty_case.clone());
-                    children.push(self.open_three(cons_case));
+                    let tail = Subterm::Prim(Prim::LstType(elem.clone())).into();
+                    children.push(self.open_fold_three(cons_case, elem.clone(), tail, motive));
                 }
             },
         }
@@ -663,12 +748,199 @@ impl Certificates<'_> {
         }
     }
 
-    /// Fresh binders for a scope, in order.
+    /// The declared payload types of `tag`, at the scrutinee's parameters.
     ///
-    /// Their types are deliberately not recorded: an arm binder's type lives in
-    /// the constructor telescope rather than the scope, and a binder this walk
-    /// cannot name is one sort synthesis answers conservatively about — which
-    /// costs a seed rather than risking a wrong one.
+    /// The same telescope [`Certificates::seed`] reads to find `Prop`-declared
+    /// constructor payloads, read here to type the arm binders that receive
+    /// them.
+    fn constructor_telescope(&self, induct: &InductType, tag: &Atom) -> Option<Telescope<Term>> {
+        let declaration = self.module.induct_decls.get(&induct.name)?;
+        let (_, constructor) = declaration
+            .constructors
+            .iter()
+            .find(|(candidate, _)| candidate == tag)?;
+
+        // `open_params` panics rather than truncating, and a declaration
+        // whose telescope is shorter than the scrutinee's parameter list
+        // would be malformed — decline it instead of aborting the compiler.
+        (constructor.telescope.len() >= induct.params.len())
+            .then(|| constructor.telescope.clone().open_params(&induct.params))
+    }
+
+    /// Open `scope` against fresh binders typed by a dependent telescope.
+    ///
+    /// Entries are opened progressively, as [`Certificates::telescope_terms`]
+    /// does, because a later payload type may name an earlier payload. A
+    /// telescope shorter than the scope leaves the remaining binders untyped
+    /// rather than failing: an untyped binder costs a seed, a wrong one would
+    /// produce a wrong seed silently.
+    fn open_telescoped(&mut self, declared: Telescope<Term>, scope: &Scope<Many>) -> Term {
+        let hints = scope.hint_iter().collect::<Vec<_>>();
+        let mut declared = declared;
+        let mut binders = Vec::new();
+
+        for index in 0..scope.arity() {
+            let binder = self.context.fresh(hints.get(index).copied().flatten());
+            let term = Term::free_var(&binder);
+            declared = match declared {
+                Telescope::Cons(entry, rest) => {
+                    self.opened.push((binder, entry));
+                    rest.open(&[&term])
+                }
+                done => done,
+            };
+            binders.push(term);
+        }
+
+        scope.open(&binders.iter().collect::<Vec<_>>())
+    }
+
+    /// Open `scope` against fresh binders carrying `types` positionally.
+    ///
+    /// For binder groups whose types are already closed and independent of one
+    /// another — a `rec` tail, whose binders are the group's members.
+    fn open_annotated(&mut self, types: &[Term], scope: &Scope<Many>) -> Term {
+        let hints = scope.hint_iter().collect::<Vec<_>>();
+        let mut binders = Vec::new();
+
+        for index in 0..scope.arity() {
+            let binder = self.context.fresh(hints.get(index).copied().flatten());
+            if let Some(type_) = types.get(index) {
+                self.opened.push((binder.clone(), type_.clone()));
+            }
+            binders.push(Term::free_var(&binder));
+        }
+
+        scope.open(&binders.iter().collect::<Vec<_>>())
+    }
+
+    /// Open a match motive against typed binders.
+    ///
+    /// A nominal scrutinee gives one binder per index and then the scrutinee
+    /// itself; a primitive carrier has no indices, so its motive binds the
+    /// scrutinee alone and the carrier names its type.
+    fn open_motive(
+        &mut self,
+        motive: &Scope<Many>,
+        scrutinee: Option<&InductType>,
+        cases: &Cases,
+    ) -> Term {
+        if let Some(opened) = self.open_induct_motive(motive, scrutinee) {
+            return opened;
+        }
+        if motive.arity() == 1
+            && let Some(type_) = primitive_scrutinee(cases)
+        {
+            return self.open_annotated(&[type_], motive);
+        }
+
+        self.open_many(motive)
+    }
+
+    /// The nominal half of [`Certificates::open_motive`].
+    ///
+    /// The index types come from the declaration's index telescope past its
+    /// parameters, and the scrutinee binder is typed at those index binders.
+    /// `None` on any arity disagreement, which keeps a malformed declaration
+    /// from producing confidently wrong binder types — and every such check
+    /// precedes the first minted binder, so declining costs nothing.
+    fn open_induct_motive(
+        &mut self,
+        motive: &Scope<Many>,
+        scrutinee: Option<&InductType>,
+    ) -> Option<Term> {
+        let induct = scrutinee?;
+        let declaration = self.module.induct_decls.get(&induct.name)?;
+        let arity = declaration.indices.len().checked_sub(induct.params.len())?;
+        if arity + 1 != motive.arity() {
+            return None;
+        }
+
+        let hints = motive.hint_iter().collect::<Vec<_>>();
+        let mut telescope = declaration.indices.clone().open_params(&induct.params);
+        let mut binders = Vec::new();
+
+        while let Telescope::Cons(entry, rest) = telescope {
+            let binder = self
+                .context
+                .fresh(hints.get(binders.len()).copied().flatten());
+            let term = Term::free_var(&binder);
+            self.opened.push((binder, entry));
+            telescope = rest.open(&[&term]);
+            binders.push(term);
+        }
+
+        let binder = self
+            .context
+            .fresh(hints.get(binders.len()).copied().flatten());
+        let type_ = Term::induct_type_at(
+            induct.name.clone(),
+            induct.universes.clone(),
+            induct.params.clone(),
+            binders.clone(),
+        );
+        self.opened.push((binder.clone(), type_));
+        binders.push(Term::free_var(&binder));
+
+        Some(motive.open(&binders.iter().collect::<Vec<_>>()))
+    }
+
+    /// Open a `Nat` fold's cons arm: the predecessor, then the hypothesis at
+    /// it.
+    fn open_fold_two(
+        &mut self,
+        scope: &Scope<Two>,
+        predecessor_type: Term,
+        motive: &Scope<Many>,
+    ) -> Term {
+        let predecessor = self.context.fresh(scope.first_hint());
+        let hypothesis = self.context.fresh(scope.second_hint());
+        let value = Term::free_var(&predecessor);
+
+        self.opened.push((predecessor, predecessor_type));
+        self.note_hypothesis(hypothesis.clone(), motive, &value);
+
+        scope.open(&[&value, &Term::free_var(&hypothesis)])
+    }
+
+    /// Open a `Lst` or `Bin` fold's cons arm: the leading element, the tail,
+    /// then the hypothesis at the tail.
+    fn open_fold_three(
+        &mut self,
+        scope: &Scope<Three>,
+        atom_type: Term,
+        tail_type: Term,
+        motive: &Scope<Many>,
+    ) -> Term {
+        let atom = self.context.fresh(scope.first_hint());
+        let tail = self.context.fresh(scope.second_hint());
+        let hypothesis = self.context.fresh(scope.third_hint());
+        let value = Term::free_var(&tail);
+
+        self.opened.push((atom.clone(), atom_type));
+        self.opened.push((tail, tail_type));
+        self.note_hypothesis(hypothesis.clone(), motive, &value);
+
+        scope.open(&[&Term::free_var(&atom), &value, &Term::free_var(&hypothesis)])
+    }
+
+    /// Record a fold hypothesis's type: the motive at the recursive argument.
+    ///
+    /// A primitive carrier has no indices, so its motive binds the scrutinee
+    /// alone; anything else is a shape this walk does not recognize and the
+    /// binder is left untyped rather than opened at a guessed arity.
+    fn note_hypothesis(&mut self, binder: Free, motive: &Scope<Many>, argument: &Term) {
+        if motive.arity() == 1 {
+            self.opened.push((binder, motive.open(&[argument])));
+        }
+    }
+
+    /// Fresh binders for a scope, in order, with no recorded types.
+    ///
+    /// The fallback for binder groups this walk cannot type: a primitive
+    /// carrier's fold arms, and any scrutinee whose type sort synthesis
+    /// declines to answer for. Sort synthesis then answers conservatively
+    /// about them, which costs a seed rather than risking a wrong one.
     fn fresh_binders(&mut self, arity: usize, hints: &[Option<&str>]) -> Vec<Term> {
         (0..arity)
             .map(|index| {
@@ -682,18 +954,6 @@ impl Certificates<'_> {
         let hints = scope.hint_iter().collect::<Vec<_>>();
         let terms = self.fresh_binders(scope.arity(), &hints);
         scope.open(&terms.iter().collect::<Vec<_>>())
-    }
-
-    fn open_two(&mut self, scope: &Scope<Two>) -> Term {
-        let hints = scope.hint_iter().collect::<Vec<_>>();
-        let terms = self.fresh_binders(Two::ARITY, &hints);
-        scope.open(&[&terms[0], &terms[1]])
-    }
-
-    fn open_three(&mut self, scope: &Scope<Three>) -> Term {
-        let hints = scope.hint_iter().collect::<Vec<_>>();
-        let terms = self.fresh_binders(Three::ARITY, &hints);
-        scope.open(&[&terms[0], &terms[1], &terms[2]])
     }
 
     fn telescope_terms(&mut self, telescope: Telescope<Term>, children: &mut Vec<Term>) {
@@ -720,6 +980,25 @@ impl Certificates<'_> {
             telescope = rest.open(&[&Term::free_var(&binder)]);
         }
     }
+}
+
+/// The scrutinee type of a match on a primitive carrier.
+///
+/// `None` for a nominal inductive, whose scrutinee type carries parameters and
+/// indices and is recovered from the declaration instead.
+fn primitive_scrutinee(cases: &Cases) -> Option<Term> {
+    let prim = match cases {
+        Cases::Bool { .. } => Prim::BoolType,
+        Cases::Switch { .. } => Prim::NatType,
+        Cases::Induct { .. } => return None,
+        Cases::FreeMonoid { carrier } => match carrier {
+            Carrier::Nat { .. } => Prim::NatType,
+            Carrier::Bin { grain, .. } => Prim::BinType(*grain),
+            Carrier::Lst { elem, .. } => Prim::LstType(elem.clone()),
+        },
+    };
+
+    Some(Subterm::Prim(prim).into())
 }
 
 /// One reachability answer: which partial definitions the seeds reach.

@@ -241,6 +241,123 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
     );
 }
 
+// The tests below cover (V)'s *argument* rule: a proof handed to a
+// `Prop`-declared parameter of a definition that is not itself a proof.
+// Nothing above them catches these — the definition-level rule needs a
+// `Prop`-sorted declared type, and every offender here sits inside a
+// `Nat`-valued function, so no seed reaches it by name.
+//
+// Each is keyed to one shape of application *head*, because the rule can only
+// fire where the head's type can be synthesized: it reads the parameter
+// telescope off that type to learn which parameters are propositions. A head
+// shape sort synthesis cannot answer for is a silent hole rather than a
+// rejection, which is why the coverage is enumerated by shape and not by one
+// representative program.
+
+// A universe-polymorphic head. `@A : Type` generalizes the definition, so the
+// call site's head is a universe instance rather than a plain name — the most
+// common shape in the language, and the widest hole of this set: it admitted a
+// one-line helper with no `match`, no data type, and no recursion but the
+// forged proof's own.
+#[test]
+fn a_proof_at_a_polymorphic_head_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        let ignore(@A : Type, x : A, p : /std/False) -> A = x;
+
+        let leak() -> /std/Nat = ignore(0, rec b : /std/False = b; b);
+
+        /std/print(/std/Nat/to_str(leak()))
+        "#,
+    );
+}
+
+// A match arm binder as the head. An arm binder's type lives in the eliminated
+// constructor's telescope rather than in the arm scope, so opening the arm
+// without consulting the declaration leaves the binder untyped — and the
+// scrutinee's own type is a recursive group member wrapping the inductive, not
+// the inductive itself, so naming the declaration takes an unfolding step.
+#[test]
+fn a_proof_at_an_arm_binder_head_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        induct Holder : pub Type
+        | hold(f : (/std/False) -> /std/Nat)
+        end
+
+        let make() -> Holder = Holder/hold((p) => 0);
+
+        let leak(h : Holder) -> /std/Nat =
+            match h
+            | hold(f) => f(rec b : /std/False = b; b)
+            end;
+
+        /std/print(/std/Nat/to_str(leak(make())))
+        "#,
+    );
+}
+
+// A primitive fold binder as the head. `Lst`'s cons arm takes its element type
+// from the carrier rather than from any declaration, so this is a different
+// source of binder types than the inductive arm above and fails independently.
+#[test]
+fn a_proof_at_a_fold_binder_head_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        let apply_it(fs : /std/Lst((/std/False) -> /std/Nat)) -> /std/Nat =
+            match fs
+            | [] => 0
+            | [head, ..tail] => head(rec b : /std/False = b; b)
+            end;
+
+        /std/print(/std/Nat/to_str(apply_it([])))
+        "#,
+    );
+}
+
+// A nominal structure projection as the head. A structure's field types come
+// from its declaration, instantiated at the head's universes and then at its
+// parameters — two steps a tuple projection needs neither of.
+#[test]
+fn a_proof_at_a_struct_projection_head_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        struct Api : pub Type {
+            take : (/std/False) -> /std/Nat,
+        }
+
+        let api : Api = Api { take = (p) => 7 };
+
+        let leak() -> /std/Nat = api.take(rec b : /std/False = b; b);
+
+        /std/print(/std/Nat/to_str(leak()))
+        "#,
+    );
+}
+
+// The same projection route as a user would actually write it: concept
+// dispatch projects a method out of a resolved witness dictionary, so the
+// head of `Sink/drain` is a structure projection reached through resolution
+// rather than through a written `.field`.
+#[test]
+fn a_proof_at_a_concept_method_head_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        pub concept Sink(A : Type) : pub Type {
+            drain(x : A, p : /std/False) -> /std/Nat,
+        }
+
+        satisfy Sink(/std/Nat) {
+            drain(x, p) = x,
+        }
+
+        let leak() -> /std/Nat = Sink/drain(5, rec b : /std/False = b; b);
+
+        /std/print(/std/Nat/to_str(leak()))
+        "#,
+    );
+}
+
 // General recursion is untouched wherever erasure keeps it. `collatz` cannot
 // pass any size-change checker — it recurses on a computed quotient, and
 // whether it terminates at all is an open problem — and it runs anyway,

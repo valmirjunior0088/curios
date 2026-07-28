@@ -7,10 +7,10 @@ mod tests;
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, Free, Func, FuncType, InductType, Level,
-        Match, Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
-        unfold_rec_apply,
+        Match, Metavar, Prim, Proj, Rec, RecMember, ReduceError, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseInst, Variant, Visit, check,
+        instantiate_universe_levels_scoped, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
     },
     curios_base::Plicity,
     std::collections::{HashMap, HashSet, VecDeque},
@@ -112,6 +112,36 @@ pub(crate) fn synth_neutral(
                 .map(|instance| instance.map(|(type_, _)| type_))
                 .map_err(ReduceError::Universe)
         }
+        // A recursive member's type is carried by its own group — no lookup,
+        // and no unfolding, so this cannot re-enter the group it names.
+        Subterm::RecMember(RecMember { group, index }) => Ok(Some(group.member_type(*index))),
+
+        // A universe-polymorphic head, at the levels this occurrence chose.
+        // The scheme is read *uninstantiated* and substituted at `levels`;
+        // going through the `Var` arm below would instead instantiate it at
+        // fresh levels and then have nothing left to substitute.
+        Subterm::UniverseInst(UniverseInst { head, levels }) => match &**head {
+            Subterm::Var(var) => {
+                let name = var.unwrap();
+                if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
+                    return Ok(Some(type_.clone()));
+                }
+                let Some(scheme) = context.assumption(name).cloned() else {
+                    return Ok(None);
+                };
+                instantiate_universe_levels_scoped(&scheme, levels)
+                    .map(Some)
+                    .map_err(ReduceError::Universe)
+            }
+            Subterm::RecMember(RecMember { group, index }) => {
+                let group = group
+                    .instantiate_universes(levels)
+                    .map_err(ReduceError::Universe)?;
+                Ok(Some(group.member_type(*index)))
+            }
+            _ => Ok(None),
+        },
+
         Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(context, opened, head)? else {
                 return Ok(None);
@@ -123,6 +153,22 @@ pub(crate) fn synth_neutral(
                 {
                     let refs = params.iter().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
+                }
+                // A partially applied spine still has a type: the residual
+                // function type, with the supplied arguments substituted into
+                // the entries that remain.
+                Subterm::FuncType(FuncType {
+                    telescope,
+                    plicities,
+                }) if telescope.len() > params.len() => {
+                    let residual = telescope.open_params(params);
+                    Ok(Some(
+                        Subterm::FuncType(FuncType {
+                            telescope: residual,
+                            plicities: plicities[params.len()..].to_vec(),
+                        })
+                        .into(),
+                    ))
                 }
                 _ => Ok(None),
             }
@@ -138,6 +184,32 @@ pub(crate) fn synth_neutral(
             match Term::unwrap_or_clone(reduce(context, head_type)?) {
                 Subterm::TupleType(TupleType { telescope, .. }) => {
                     Ok(telescope.nth(*index, |j| Term::proj(head.clone(), j)))
+                }
+                // A nominal structure's field types live on its declaration,
+                // instantiated at the head's universes and then at its
+                // parameters — the same two steps `elaborate_proj` takes.
+                // Concept dispatch is a projection out of a witness
+                // dictionary, so this arm is what types a method call.
+                Subterm::StructType(StructType {
+                    name,
+                    universes,
+                    params,
+                }) => {
+                    let Some(declaration) = context.struct_decl(&name).cloned() else {
+                        return Ok(None);
+                    };
+                    if declaration.fields.len() < params.len() {
+                        return Ok(None);
+                    }
+                    let fields = instantiate_bound_at(
+                        context,
+                        &declaration.universe_context,
+                        &declaration.fields,
+                        &universes,
+                    )?;
+                    Ok(fields
+                        .open_params(&params)
+                        .nth(*index, |j| Term::proj(head.clone(), j)))
                 }
                 _ => Ok(None),
             }
