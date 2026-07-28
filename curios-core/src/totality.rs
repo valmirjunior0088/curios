@@ -1206,6 +1206,68 @@ fn flatten(term: &Term) -> (Term, Vec<Term>) {
 /// already a closure, the walk stops at that boundary instead of re-analyzing
 /// the standard library on every compilation. Pass an empty map when `module`
 /// is the whole program.
+/// Classify one definition against the verdicts already recorded, and record it.
+///
+/// The whole-module pass needs a fixpoint because it sees every item at once.
+/// Items arrive here in dependency order, so everything a definition mentions is
+/// already classified and a single pass suffices. A name with no verdict is a
+/// member of the group currently elaborating, which [`group_totality`] settles
+/// for the group as a whole.
+pub fn record_definition_totality(context: &mut Context, definition: &Definition, group: Totality) {
+    let partial = !group.is_total()
+        || definition_is_locally_partial(context, definition)
+        || mentioned(definition).iter().any(|name| {
+            context
+                .definition_totality(name)
+                .is_some_and(|totality| !totality.is_total())
+        });
+    let totality = match partial {
+        true => Totality::Partial,
+        false => Totality::Total,
+    };
+    context.record_definition_totality(&definition.name, totality);
+}
+
+/// Obligation (T), at the one point a non-productive type-level loop can still
+/// be diagnosed: before the type is reduced.
+///
+/// The whole-module gate runs post-zonk, which is after elaboration has already
+/// performed the type-level reduction it exists to make safe. A type that
+/// reaches a partial definition and *is productive* survives elaboration and the
+/// gate rejects it; one that is not productive spins until the step budget dies,
+/// and the program is refused for apparently running out of a resource that no
+/// amount of would have helped. This refuses it first, by name, for the reason
+/// it is actually wrong.
+///
+/// It reads the *lowered* type, before elaboration touches it, so the mentions
+/// it sees are the written ones. That is why it is an early net rather than a
+/// replacement: the post-zonk gate still runs, and still sees everything
+/// elaboration produces.
+pub fn check_written_type_totality(
+    context: &mut Context,
+    type_: &Term,
+    site: &str,
+) -> Result<(), Error> {
+    let offender = type_
+        .free_vars()
+        .into_iter()
+        .filter_map(|free| free.as_global().cloned())
+        .find(|name| {
+            context
+                .definition_totality(name)
+                .is_some_and(|totality| !totality.is_total())
+        });
+
+    match offender {
+        None => Ok(()),
+        Some(offender) => Err(Error::PartialInErasedPosition {
+            erased: Erased::Type,
+            site: site.to_string(),
+            offender: Some(offender.to_string()),
+        }),
+    }
+}
+
 pub fn classify_module(
     context: &mut Context,
     module: &Module,

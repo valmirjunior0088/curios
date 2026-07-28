@@ -2,8 +2,8 @@ use {
     super::{
         Bound, Concept, DefinitionKind, Error, Free, Global, Goal, HeadKey, HeadTag,
         ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Subterm,
-        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
+        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
         UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
     },
     crate::ReduceError,
@@ -345,6 +345,11 @@ pub struct Context {
     checked: Vec<(Term, Term, Rc<str>)>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
+    // Each definition's totality, recorded as it is defined. The whole-module
+    // pass recomputes these post-zonk; this copy exists so a type position can
+    // be refused *before* it is reduced, which is the only point at which a
+    // non-productive type-level loop can still be diagnosed rather than run.
+    totality: BTreeMap<Global, Totality>,
 }
 
 impl Context {
@@ -401,6 +406,7 @@ impl Context {
             universe_mutation_stamp: Entropy::new(),
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
+            totality: BTreeMap::new(),
         }
     }
 
@@ -431,6 +437,33 @@ impl Context {
     /// them first, and (V) drains afterwards.
     pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
         &self.checked
+    }
+
+    /// Record a definition's totality the moment it is defined.
+    ///
+    /// The whole-module pass computes the same verdicts by a fixpoint, and
+    /// needs one because it sees every item at once. Here the items arrive in
+    /// dependency order, so everything a definition mentions is already
+    /// classified and one pass per definition suffices.
+    pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
+        self.totality.insert(name.clone(), totality);
+    }
+
+    /// A definition's recorded totality, or `None` for a name not yet
+    /// classified — a member of the group currently elaborating, which
+    /// `group_totality` settles for the group as a whole.
+    pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
+        self.totality.get(name).copied()
+    }
+
+    /// Seed the recorded verdicts with a replayed prefix's, which its own
+    /// archive settled.
+    pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
+        self.totality.extend(
+            inherited
+                .iter()
+                .map(|(name, totality)| (name.clone(), *totality)),
+        );
     }
 
     /// Drain the recorded terms. The gate takes them once per module.

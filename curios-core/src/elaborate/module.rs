@@ -5,9 +5,10 @@ use {
         Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
-        check_type_totality, finish_deferred_witnesses, is_prop, record_totality,
-        recorded_totality, reduce_with, register_witness, retry_deferred_witnesses, sort_term,
-        zonk, zonk_module, zonk_solved_term_metas,
+        check_type_totality, check_written_type_totality, finish_deferred_witnesses,
+        group_totality, is_prop, record_definition_totality, record_totality, recorded_totality,
+        reduce_with, register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
+        zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     std::{
@@ -618,6 +619,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // registries key on the definition's own name.
     let name = Free::from(&def.name);
     let outer_site = context.set_checked_site(&format!("'{}'", def.name));
+    check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
     let type_ = crate::check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as
@@ -661,7 +663,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
 
     context.restore_checked_site(outer_site);
 
-    Ok(Definition {
+    let definition = Definition {
         name: def.name.clone(),
         kind: def.kind.clone(),
         universe_context,
@@ -670,7 +672,14 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
         totality: def.totality,
         type_,
         body,
-    })
+    };
+
+    // Classify now, so a later item's *written* type can be refused before it is
+    // reduced. A `let` is its own group, hence total as far as the group verdict
+    // is concerned.
+    record_definition_totality(context, &definition, Totality::Total);
+
+    Ok(definition)
 }
 
 /// Type-check a flat top-level `rec` item and return its rebuilt structural
@@ -690,6 +699,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
     let mut types = Vec::with_capacity(defs.len());
     for def in &defs {
+        check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
         types.push(crate::check_is_sort(context, &def.type_)?.0);
     }
 
@@ -928,6 +938,13 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         context.set_assumption_universe_context(&name, universe_context.clone());
     }
 
+    // Classify the whole group at once: its members may mention each other, so
+    // no member's verdict is settled until the group's descent is.
+    let group = group_totality(context, &rec.group);
+    for definition in rec.definitions() {
+        record_definition_totality(context, &definition, group);
+    }
+
     Ok(rec)
 }
 
@@ -1020,6 +1037,9 @@ fn elaborate_module_suffix(
     // the suffix's own — `register_*` rejects a duplicate key, so the suffix
     // must exclude what the prefix already holds.
     if let Some(prefix) = prefix {
+        // The prefix's verdicts, settled when its archive was built, so a user
+        // item's written type can be refused against them before it reduces.
+        context.seed_totality(&recorded_totality(prefix));
         for (name, induct_decl) in &prefix.induct_decls {
             context.register_induct(name, induct_decl.clone())?;
         }

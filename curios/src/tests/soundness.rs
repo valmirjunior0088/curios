@@ -409,6 +409,23 @@ fn a_partial_definition_stays_usable_in_a_program() {
 // Nothing here is `Prop`-typed, so (V) cannot fire and (T) is on its own:
 // `Shape` is total, descending structurally on `F`, and `inf` is an ordinary
 // partial value of a data type.
+// The whole-module gate runs post-zonk — after elaboration has already done the
+// type-level reduction (T) exists to make safe. A type that reaches a partial
+// definition and happens to be *productive* survives elaboration and the gate
+// rejects it. One that is not productive spins until the step budget dies, and
+// the program used to be refused for running out of a resource no amount of
+// would have helped. Refusing the written type up front is what makes both
+// shapes report the same thing, which is the thing that is actually wrong.
+//
+// `Shape(inf)` here reduces to itself with no progress; the productive sibling
+// is `a_total_type_function_applied_to_a_partial_value_is_rejected`.
+#[test]
+fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
+    rejected_as_a_type(&format!(
+        "{SHAPE}\n let here(x : Shape(inf)) -> Nat = 0;\n\n 0"
+    ));
+}
+
 #[test]
 fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
     rejected_as_a_type(&format!(
