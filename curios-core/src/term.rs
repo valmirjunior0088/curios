@@ -1518,6 +1518,21 @@ impl Term {
     }
 }
 
+/// Hold each of `subterm`'s children somewhere else, then stand `subterm` down
+/// to a childless node.
+///
+/// Every child is cloned into `work` *before* the old value is released, so
+/// releasing it can only decrement — the reference `work` now holds is what
+/// stops the drop cascading. What is left behind is `Prop`: no children, and
+/// no allocation, because it is a variant with no payload.
+fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
+    let detached = mem::replace(subterm, Subterm::Prop);
+    detached.any_child_term(&mut |child| {
+        work.push(child.clone());
+        false
+    });
+}
+
 /// Release the node's descendants iteratively.
 ///
 /// A term is an `Rc` chain, so the derived drop recurses once per link and a
@@ -1529,28 +1544,24 @@ impl Term {
 /// Only a node this drop holds the sole reference to is emptied — `get_mut`
 /// answers precisely that question — so a subterm shared with a live term is
 /// left untouched and merely loses a reference.
+///
+/// Nothing here allocates, which matters because releasing terms is constant
+/// work in the compiler: standing a node down costs a `Prop` and a refcount
+/// bump per child. An earlier version substituted a placeholder `Term` instead,
+/// and building one per drop cost about a fifth of a prelude build.
 impl Drop for Node {
     fn drop(&mut self) {
-        // A node with no children has nothing to dismantle, and saying so
-        // first is load-bearing rather than an optimization: the placeholder
-        // below is itself a `Term`, so without this its own drop would build
-        // another placeholder, and that one another, without end.
+        // Nothing to dismantle, and the case every husk left below lands in.
         if !self.subterm.any_child_term(&mut |_| true) {
             return;
         }
 
-        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
         let mut work = Vec::new();
-
-        // Nothing below this node is reachable any more, so take the children
-        // here rather than letting the field's own drop walk into them.
-        self.subterm = self.subterm.traverse(&mut visit);
-        work.extend(visit.take_masked_children());
+        detach_children(&mut self.subterm, &mut work);
 
         while let Some(mut term) = work.pop() {
             if let Some(node) = Rc::get_mut(&mut term.inner) {
-                node.subterm = node.subterm.traverse(&mut visit);
-                work.extend(visit.take_masked_children());
+                detach_children(&mut node.subterm, &mut work);
             }
         }
     }
