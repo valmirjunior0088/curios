@@ -14,6 +14,7 @@ use {
         collections::{BTreeMap, BTreeSet, HashSet, hash_map::DefaultHasher},
         fmt,
         hash::{Hash, Hasher},
+        mem,
         ops::Deref,
         rc::Rc,
     },
@@ -392,7 +393,10 @@ impl Term {
 
     pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
         match Rc::try_unwrap(this.inner) {
-            Ok(node) => node.subterm,
+            // Swapped out rather than moved out: [`Node`] dismantles itself on
+            // drop, and a type with a `Drop` impl cannot have a field moved
+            // away. The husk left behind is childless, so dropping it is free.
+            Ok(mut node) => mem::replace(&mut node.subterm, Subterm::Prop),
             Err(shared) => shared.subterm.clone(),
         }
     }
@@ -1514,23 +1518,104 @@ impl Term {
     }
 }
 
+/// Release the node's descendants iteratively.
+///
+/// A term is an `Rc` chain, so the derived drop recurses once per link and a
+/// deep term aborts the process on release exactly as deep equality used to on
+/// comparison. Emptying each node *before* it falls out of scope is what keeps
+/// its own drop from cascading: the husk left behind has no children to
+/// descend into, so every level is retired from this one loop.
+///
+/// Only a node this drop holds the sole reference to is emptied — `get_mut`
+/// answers precisely that question — so a subterm shared with a live term is
+/// left untouched and merely loses a reference.
+impl Drop for Node {
+    fn drop(&mut self) {
+        // A node with no children has nothing to dismantle, and saying so
+        // first is load-bearing rather than an optimization: the placeholder
+        // below is itself a `Term`, so without this its own drop would build
+        // another placeholder, and that one another, without end.
+        if !self.subterm.any_child_term(&mut |_| true) {
+            return;
+        }
+
+        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        let mut work = Vec::new();
+
+        // Nothing below this node is reachable any more, so take the children
+        // here rather than letting the field's own drop walk into them.
+        self.subterm = self.subterm.traverse(&mut visit);
+        work.extend(visit.take_masked_children());
+
+        while let Some(mut term) = work.pop() {
+            if let Some(node) = Rc::get_mut(&mut term.inner) {
+                node.subterm = node.subterm.traverse(&mut visit);
+                work.extend(visit.take_masked_children());
+            }
+        }
+    }
+}
+
 impl Hash for Term {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.get_or_init_hash());
     }
 }
 
+/// Structural equality, walked with an explicit worklist.
+///
+/// The recursion this replaces was native, and a term deep enough overflowed
+/// the stack rather than answering — which a kernel must not do, and which the
+/// step budget cannot prevent, because depth is not steps. Every other
+/// derivation over a term already avoids native depth the same way
+/// ([`Term::fill_post_order`], `traverse_rewrite_spine`); this closes the last
+/// one that decides acceptance.
+///
+/// Two shortcuts carry the common cases before any of that: pointer identity
+/// (hash-consing makes shared structure genuinely common) and the cached
+/// hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
-        if Rc::ptr_eq(&self.inner, &other.inner) {
-            return true;
+        // One visit for the whole comparison: the placeholder is allocated
+        // once, and each node's children are taken off it in turn.
+        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        // Entering as a `Subterm` is what keeps the node itself unmasked —
+        // the hook fires per `Term`, and the node being compared is not one.
+        let mut mask = |subterm: &Subterm| {
+            let masked = subterm.traverse(&mut visit);
+            (masked, visit.take_masked_children())
+        };
+
+        let mut work = vec![(self.clone(), other.clone())];
+
+        while let Some((this, that)) = work.pop() {
+            if Rc::ptr_eq(&this.inner, &that.inner) {
+                continue;
+            }
+            if this.get_or_init_hash() != that.get_or_init_hash() {
+                return false;
+            }
+
+            let (this_masked, this_children) = mask(&this.inner.subterm);
+            let (that_masked, that_children) = mask(&that.inner.subterm);
+
+            // Derived equality, over nodes whose children are all placeholders:
+            // it compares this node's own payload — variant, names, plicities,
+            // levels, scope labels and arities — and bottoms out immediately.
+            if this_masked != that_masked {
+                return false;
+            }
+            // The masks agree, so the shapes agree and the child counts with
+            // them; the check is kept because equal counts are what makes the
+            // zip below a total comparison rather than a prefix of one.
+            if this_children.len() != that_children.len() {
+                return false;
+            }
+
+            work.extend(this_children.into_iter().zip(that_children));
         }
 
-        if self.get_or_init_hash() != other.get_or_init_hash() {
-            return false;
-        }
-
-        self.inner.subterm == other.inner.subterm
+        true
     }
 }
 

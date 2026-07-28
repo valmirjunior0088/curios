@@ -530,3 +530,37 @@ fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
         "a memoized rewrite expanded the shared chain"
     );
 }
+
+/// Deeper than the ~50,000 steps at which a growing conversion used to abort
+/// the process, so a regression is a stack overflow rather than a slow test.
+const DEEP: u32 = 100_000;
+
+/// A left-nested application spine `((x a) a) …`, `DEEP` links tall.
+fn deep_spine(seed: u32) -> Term {
+    let argument = Term::free_var(&Free::local(seed, None));
+    let mut term = Term::free_var(&Free::local(seed, None));
+    for _ in 0..DEEP {
+        term = Term::apply(term, [argument.clone()]);
+    }
+    term
+}
+
+#[test]
+fn deep_terms_compare_without_native_recursion() {
+    // Equality used to recurse once per link, so a term this tall answered by
+    // aborting the process. Two independently built spines are structurally
+    // equal but share no node, which is exactly the case that has to walk.
+    assert_eq!(deep_spine(0), deep_spine(0));
+    assert_ne!(deep_spine(0), deep_spine(1));
+}
+
+#[test]
+fn deep_terms_are_released_without_native_recursion() {
+    // The other half: releasing a spine this tall used to recurse once per
+    // link through the derived drop of the `Rc` chain. Every term built here
+    // goes out of scope at the end of the test, which is the whole point.
+    let shared = deep_spine(0);
+    let sharing = Term::tuple([shared.clone(), shared.clone()]);
+
+    assert_eq!(sharing, Term::tuple([shared.clone(), shared]));
+}

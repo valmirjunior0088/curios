@@ -16,6 +16,7 @@ use {
         convert::Infallible,
         fmt,
         hash::Hash,
+        mem,
         ops::Deref,
         rc::Rc,
     },
@@ -1135,6 +1136,18 @@ enum Mode {
     /// Hash-consing: memoize on input identity, and replace each rebuilt node
     /// with the canonical node of its structure.
     Sharing(HashMap<usize, Term>, Sharing),
+    /// Stand every child term down to `placeholder`, keeping the ones removed
+    /// in `children`. Because a substituted node is never descended into, the
+    /// rebuilt node carries this level's own payload and nothing below it —
+    /// which is what lets [`Term`]'s equality compare one node at a time
+    /// instead of recursing to the bottom of the term.
+    ///
+    /// The removed children and the node they came out of are produced by the
+    /// same pass, so the two can never disagree about what a child is.
+    Masking {
+        placeholder: Term,
+        children: Vec<Term>,
+    },
 }
 
 impl<F> Visit<F>
@@ -1173,6 +1186,22 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Rewriting(rewrite),
+        }
+    }
+
+    /// Stand every child term down to `placeholder`, keeping what was removed
+    /// for [`Visit::take_masked_children`]. One visit masks any number of
+    /// nodes: the placeholder is built once, and the children are taken
+    /// between nodes.
+    pub(crate) fn masking(visit: F, placeholder: Term) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::Masking {
+                placeholder,
+                children: Vec::new(),
+            },
         }
     }
 
@@ -1303,11 +1332,27 @@ where
             Mode::Rewriting(rewrite)
             | Mode::RewritingShared(rewrite, _)
             | Mode::RewritingUniverses(rewrite) => rewrite(term_depth, term),
+            Mode::Masking {
+                placeholder,
+                children,
+            } => {
+                children.push(term.clone());
+                Some(placeholder.clone())
+            }
             Mode::Plain
             | Mode::Pruning
             | Mode::RewritingLevels(_)
             | Mode::ErasingUniverses
             | Mode::Sharing(..) => None,
+        }
+    }
+
+    /// The children [`Mode::Masking`] stood down, in traversal order, leaving
+    /// the visit ready to mask another node.
+    pub(crate) fn take_masked_children(&mut self) -> Vec<Term> {
+        match &mut self.mode {
+            Mode::Masking { children, .. } => mem::take(children),
+            _ => Vec::new(),
         }
     }
 
@@ -1345,7 +1390,10 @@ where
     pub(crate) fn rewrites_terms(&self) -> bool {
         matches!(
             self.mode,
-            Mode::Rewriting(_) | Mode::RewritingShared(..) | Mode::RewritingUniverses(_)
+            Mode::Rewriting(_)
+                | Mode::RewritingShared(..)
+                | Mode::RewritingUniverses(_)
+                | Mode::Masking { .. }
         )
     }
 
