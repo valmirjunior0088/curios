@@ -617,6 +617,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // Γ and the definition store key on the free-variable identity; the nominal
     // registries key on the definition's own name.
     let name = Free::from(&def.name);
+    let outer_site = context.set_checked_site(&format!("'{}'", def.name));
     let type_ = crate::check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as
@@ -657,6 +658,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     if context.is_witness_declaration(&def.name) {
         context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
     }
+
+    context.restore_checked_site(outer_site);
 
     Ok(Definition {
         name: def.name.clone(),
@@ -719,7 +722,9 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
     let mut bodies = Vec::with_capacity(defs.len());
     for ((def, type_), slot) in defs.iter().zip(&types).zip(slots) {
+        let outer_site = context.set_checked_site(&format!("'{}'", def.name));
         let body = check(context, &def.body, type_.clone())?;
+        context.restore_checked_site(outer_site);
         context.fill_rec_slot(slot, body.clone());
         bodies.push(body);
     }

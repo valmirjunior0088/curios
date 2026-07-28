@@ -40,18 +40,20 @@
 //! that erase.
 
 mod reach;
+use reach::*;
 
 #[cfg(test)]
 mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Definition, Free, FreeMonoid, Func, FuncType,
+        Apply, Bound, Carrier, Cases, Context, Definition, Error, Free, FreeMonoid, Func, FuncType,
         Global, InductArm, Item, Layer, Let, Match, Module, Nat, Prim, Proj, Rec, RecGroup,
-        RecItem, RecMember, Scope, Struct, Subterm, Telescope, Term, Tuple, Variant, reduce_forced,
+        RecItem, RecMember, Scope, Struct, Subterm, Telescope, Term, Tuple, Variant, is_prop,
+        reduce_forced, zonk,
     },
     num_bigint::BigUint,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
 /// How many times shape reading may unfold a definition before giving up.
@@ -1344,17 +1346,17 @@ fn settled(module: &Module, inherited: &BTreeMap<Global, Totality>) -> BTreeMap<
 fn faults(
     context: &mut Context,
     module: &Module,
-    positions: &[reach::Position],
+    positions: &[Position],
     inherited: &BTreeMap<Global, Totality>,
-) -> Vec<(String, reach::Fault)> {
-    let reached = reach::reachable(module, reach::seeds(positions));
+) -> Vec<(String, Fault)> {
+    let reached = reachable(module, seeds(positions));
     let settled = settled(module, inherited);
-    let named = reach::offenders(&reached, &settled);
+    let named = offenders(&reached, &settled);
 
     let mut faults = Vec::new();
     for position in positions {
         if term_is_locally_partial(context, &position.term) {
-            faults.push((position.site.clone(), reach::Fault::Inline));
+            faults.push((position.site.clone(), Fault::Inline));
         }
     }
     // One named fault per offending definition, attributed to the first
@@ -1373,36 +1375,9 @@ fn faults(
             })
             .map(|position| position.site.clone())
             .unwrap_or_else(|| "a position reached from here".to_string());
-        faults.push((site, reach::Fault::Named(name)));
+        faults.push((site, Fault::Named(name)));
     }
     faults
-}
-
-/// The partial definitions a type position reaches — obligation (T), reporting
-/// only. [`check_type_totality`] is the gate.
-///
-/// Reads the flags [`record_totality`] stamped, so it must run after it.
-pub fn type_reachable_partials(
-    module: &Module,
-    inherited: &BTreeMap<Global, Totality>,
-) -> Vec<Global> {
-    let positions = reach::type_positions(module);
-    let reached = reach::reachable(module, reach::seeds(&positions));
-    reach::offenders(&reached, &settled(module, inherited))
-}
-
-/// The partial definitions a `Prop`-checked term reaches — obligation (V),
-/// reporting only.
-///
-/// Reads the flags [`record_totality`] stamped, so it must run after it.
-pub fn proof_reachable_partials(
-    context: &mut Context,
-    module: &Module,
-    inherited: &BTreeMap<Global, Totality>,
-) -> Result<Vec<Global>, super::Error> {
-    let positions = reach::proof_positions(context, module)?;
-    let reached = reach::reachable(module, reach::seeds(&positions));
-    Ok(reach::offenders(&reached, &settled(module, inherited)))
 }
 
 /// Obligation **(T)**: everything a type position reaches must be total.
@@ -1415,8 +1390,8 @@ pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
-) -> Result<(), super::Error> {
-    let positions = reach::type_positions(module);
+) -> Result<(), Error> {
+    let positions = type_positions(module);
     report(context, module, &positions, inherited, Erased::Type)
 }
 
@@ -1430,29 +1405,79 @@ pub fn check_proof_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
-) -> Result<(), super::Error> {
-    let positions = reach::proof_positions(context, module)?;
+) -> Result<(), Error> {
+    let positions = checked_proof_positions(context)?;
     report(context, module, &positions, inherited, Erased::Proof)
+}
+
+/// Obligation (V)'s seed: every term elaboration settled at a `Prop`-sorted
+/// type.
+///
+/// Drains what [`Context::record_checked`] collected and keeps the
+/// propositions. This is the whole of (V)'s seeding. There is no walk, because
+/// there is nothing to look for — elaboration already decided, for every term
+/// in the program, what type that term has, and the only thing a later pass can
+/// do with that question is re-derive it, incompletely.
+///
+/// Two properties follow from the seed rather than from care. **Coverage** is a
+/// consequence of elaboration being a typechecker: a position it never settles
+/// is a position the program was never typed at. And the **prelude boundary** is
+/// a consequence of replay — the archived prefix is defined into the context
+/// rather than elaborated, so it settles nothing and seeds nothing, and its
+/// verdicts arrive through [`recorded_totality`] instead.
+///
+/// Sort-hood is decided here rather than at the hook because a type may still
+/// carry unsolved metavariables while elaborating. Post-zonk every solution is
+/// materialized, so [`is_prop`](crate::is_prop) is asked once per *distinct*
+/// type, and hash-consing keeps that set far smaller than the term count.
+// Safety: the memo is keyed on `Term`, which carries `OnceCell` scalar caches
+// and so trips Clippy's interior-mutability warning. The logical value is fully
+// immutable, and hashing and equality stay stable across those caches filling.
+#[allow(clippy::mutable_key_type)]
+fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
+    let checked = context.take_checked();
+    let mut memo: HashMap<Term, bool> = HashMap::new();
+    let mut positions = Vec::new();
+
+    for (term, type_, site) in checked {
+        let type_ = zonk(context, &type_)?;
+        let prop = match memo.get(&type_) {
+            Some(prop) => *prop,
+            None => {
+                let prop = is_prop(context, &type_)?;
+                memo.insert(type_, prop);
+                prop
+            }
+        };
+        if prop {
+            positions.push(Position {
+                term: zonk(context, &term)?,
+                site: format!("a proof in {site}"),
+            });
+        }
+    }
+
+    Ok(positions)
 }
 
 fn report(
     context: &mut Context,
     module: &Module,
-    positions: &[reach::Position],
+    positions: &[Position],
     inherited: &BTreeMap<Global, Totality>,
     erased: Erased,
-) -> Result<(), super::Error> {
+) -> Result<(), Error> {
     match faults(context, module, positions, inherited)
         .into_iter()
         .next()
     {
         None => Ok(()),
-        Some((site, reach::Fault::Named(name))) => Err(super::Error::PartialInErasedPosition {
+        Some((site, Fault::Named(name))) => Err(Error::PartialInErasedPosition {
             erased,
             site,
             offender: Some(name.to_string()),
         }),
-        Some((site, reach::Fault::Inline)) => Err(super::Error::PartialInErasedPosition {
+        Some((site, Fault::Inline)) => Err(Error::PartialInErasedPosition {
             erased,
             site,
             offender: None,
@@ -1476,7 +1501,7 @@ pub fn check_rec_totality(
     context: &mut Context,
     group: &RecGroup,
     names: &[String],
-) -> Result<(), super::Error> {
+) -> Result<(), Error> {
     let extractable = group
         .iter()
         .enumerate()
@@ -1495,7 +1520,7 @@ pub fn check_rec_totality(
         .collect::<Vec<_>>()
         .join(", ");
 
-    Err(super::Error::PartialInErasedPosition {
+    Err(Error::PartialInErasedPosition {
         erased: Erased::Type,
         site: format!("the recursive definition {site}"),
         offender: None,
@@ -1503,7 +1528,7 @@ pub fn check_rec_totality(
 }
 
 /// [`check_rec_totality`] for a top-level `rec`, which knows its own names.
-pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(), super::Error> {
+pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(), Error> {
     let names = rec
         .definitions()
         .into_iter()

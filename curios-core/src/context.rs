@@ -336,6 +336,15 @@ pub struct Context {
     // must not be re-adjudicated. A machinery path that forgets its bracket
     // fails loudly (a spurious privacy error), never silently.
     island: Option<Qualifier>,
+    // Every term elaboration settled, with the type it settled at — the seed of
+    // obligation (V). Recorded here rather than reconstructed afterwards
+    // because "what type was this checked against" is a fact elaboration
+    // computes for every term and a later walk can only re-derive, incompletely
+    // (see `crate::totality`). The site travels as an `Rc<str>` so recording is
+    // three pointer bumps.
+    checked: Vec<(Term, Term, Rc<str>)>,
+    // The definition whose body is currently elaborating, for those sites.
+    checked_site: Rc<str>,
 }
 
 impl Context {
@@ -390,7 +399,37 @@ impl Context {
             identity_cache: None,
             mutation_stamp: Entropy::new(),
             universe_mutation_stamp: Entropy::new(),
+            checked: Vec::new(),
+            checked_site: Rc::from("the entrypoint"),
         }
+    }
+
+    /// Record one settled term and the type it settled at — obligation (V)'s
+    /// seed, collected where elaboration already knows the answer.
+    ///
+    /// Sort-hood is *not* decided here. The type may still carry unsolved
+    /// metavariables, and deciding would both reduce on the hot path and risk
+    /// an answer a later solution invalidates; the gate classifies post-zonk,
+    /// memoized per distinct type.
+    pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
+        self.checked
+            .push((term.clone(), type_.clone(), Rc::clone(&self.checked_site)));
+    }
+
+    /// Name the definition whose body is elaborating, for (V)'s diagnostics.
+    /// Returns the previous site so the caller can restore it.
+    pub(crate) fn set_checked_site(&mut self, site: &str) -> Rc<str> {
+        mem::replace(&mut self.checked_site, Rc::from(site))
+    }
+
+    /// Restore a site saved by [`Context::set_checked_site`].
+    pub(crate) fn restore_checked_site(&mut self, site: Rc<str>) {
+        self.checked_site = site;
+    }
+
+    /// Drain the recorded terms. The gate takes them once per module.
+    pub(crate) fn take_checked(&mut self) -> Vec<(Term, Term, Rc<str>)> {
+        mem::take(&mut self.checked)
     }
 
     /// Mint a binder nothing else can name, rendering as `hint`.

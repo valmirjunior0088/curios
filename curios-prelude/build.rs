@@ -76,44 +76,6 @@ fn main() {
         )
     });
 
-    // Scaffolding for the totality work: with `CURIOS_TOTALITY_REPORT` set to a
-    // path, report the partial definitions of the whole from-scratch prelude.
-    // The flags are read back rather than recomputed — `elaborate_and_zonk_module`
-    // stamped them — so this also witnesses that the stamping ran. It is the
-    // measurement step, it changes no acceptance, and it comes out once the
-    // gates land.
-    println!("cargo:rerun-if-env-changed=CURIOS_TOTALITY_REPORT");
-    if let Ok(path) = std::env::var("CURIOS_TOTALITY_REPORT") {
-        let inherited = std::collections::BTreeMap::new();
-        let classified = curios_core::recorded_totality(&core);
-        let partial = classified
-            .iter()
-            .filter(|(_, totality)| !totality.is_total())
-            .map(|(name, _)| name.to_string())
-            .collect::<Vec<_>>();
-        let from_type = curios_core::type_reachable_partials(&core, &inherited);
-        let from_proof = curios_core::proof_reachable_partials(&mut context, &core, &inherited)
-            .expect("the proof closure is computable");
-        let names = |group: &[curios_core::Global]| {
-            group
-                .iter()
-                .map(|name| name.to_string())
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-        let report = format!(
-            "{} definitions, {} partial\n\n== (T) partial and reachable from a type: {}\n{}\n\n== (V) partial and reachable from a proof: {}\n{}\n\n== all partial\n{}\n",
-            classified.len(),
-            partial.len(),
-            from_type.len(),
-            names(&from_type),
-            from_proof.len(),
-            names(&from_proof),
-            partial.join("\n")
-        );
-        std::fs::write(&path, report).expect("totality report is writable");
-    }
-
     // Every universe invariant the archive is trusted to satisfy is asserted
     // here, on the value about to be serialized, and nowhere else. Restoration
     // establishes that the bytes it reads are exactly the bytes written from

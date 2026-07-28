@@ -114,6 +114,13 @@ pub(crate) fn elaborate(
                         Some(span) => rebuilt.with_span(span),
                         None => rebuilt,
                     };
+                    // Obligation (V)'s seed. Every settled node passes here with
+                    // the type it settled at, which is the judgment `reach.rs`
+                    // used to re-derive from the finished term. Taken after the
+                    // restamp so the recorded term is the one that reaches the
+                    // module, and independent of `Mode` because `type_` is the
+                    // term's type whether it was checked or inferred.
+                    context.record_checked(&rebuilt, &type_);
                     match frames.pop() {
                         None => return Ok((rebuilt, type_)),
                         Some(frame) => {
