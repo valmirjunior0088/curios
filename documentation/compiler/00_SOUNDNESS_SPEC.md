@@ -6,7 +6,7 @@ This effort closes the three remaining routes to a closed inhabitant of `False`.
 
 When this work lands, fold the permanent calculus and compiler invariants into the owning `curios-core` module documentation, record the theorem and its trusted base in `DESIGN.md`, update `ROADMAP.md`, and delete this working specification after no remaining document refers to it.
 
-Steps 1 through 6 are implemented and verified, and the fork step 6 raised is closed — see "Appendix: the fork on (T), and how it closed". Step 7 is in progress. The amendments implementation forced are marked **Amended** in place, and the figures under "Measurements" are now computed rather than estimated.
+Steps 1 through 7 are implemented, both gates reject, and the fork step 6 raised is closed — see "Appendix: the fork on (T), and how it closed". Step 7's own widening then exposed two things this specification had not anticipated: (V)'s argument rule had been near-inert, and the gates do not see prelude declarations at the replay site. The first is fixed and measured; the second is open and is the largest known hole. The amendments implementation forced are marked **Amended** in place, and the figures under "Measurements" are now computed rather than estimated.
 
 ## Objective
 
@@ -147,6 +147,20 @@ Both gates run post-zonk, as siblings of `validate_universes` and `check_positiv
 
 **Amended — step 3's (V) seeding has two gaps, and both must close before step 7 rejects anything.** The seeding walk descends with `any_child_term`, which hands back a scope body without opening it, so a `Struct` or `Variant` under a binder carries loose de Bruijn indices and `Sort::of` panics on the free occurrence rather than answering. It is currently guarded by a `reach() == 0` test, which *skips* those positions: a certificate constructed inside a function body is not seeded. The second gap is that argument positions at `Prop`-typed binders are not seeded at all; an inline proof inside a proof-valued definition is covered by that definition's whole-body seeding, but the same proof inside an ordinary function is not. Both are invisible while the pass only reports. Closing them means giving the seeding walk the scope-opening traversal the classifier already has, which is the first task of step 7 rather than a follow-up to it.
 
+**Both are closed, and "two gaps" understated the second by two orders of magnitude.** The `reach() == 0` guard is gone, replaced by a `debug_assert` that holds across the prelude: the walk opens every binder it descends through and defers `rec` groups — whose member scopes bind the group's own members — to a per-module worklist. The argument rule exists, but *stating* it was not the same as its firing; see the measurement amendment under "Measurements".
+
+**Amended — the gates do not see prelude declarations, and three seeding rules need them.** At the replay site both gates run on `user_module`, whose `induct_decls` and `struct_decls` are the *user suffix alone*; the prelude's are spliced in on the lines immediately after. Every seeding rule that resolves a declaration therefore finds nothing for `/std/Option`, `Result`, `Lst`, `Eq` and the rest, and silently skips — the constructor-payload rule, the struct-field rule, and the arm-binder typing that the argument rule depends on. The minimal pair differs only in where the inductive is declared:
+
+```crs
+induct Opt : pub Type | some(f : (False) -> Nat) | none() end     -- rejected
+match o | some(f) => f(rec b : False = b; b) | none() => 0 end
+
+                                                                  -- /std/Option: accepted
+match o | some(f) => f(rec b : False = b; b) | none() => 0 end
+```
+
+The boundary is correct where it was argued. Prelude items cannot mention user code, so they are sinks of the *occurrence* relation, and inheriting their recorded verdicts rather than re-analyzing them is sound — that is what `check_positivity` and `recorded_totality` rely on. The argument does not transfer to these three rules, because they ask a different question: not "what does this prelude definition reach" but "which fields of this declaration are `Prop`-sorted", asked about a *user* term whose type happens to be declared in the prelude. It is a lookup, not a reachability claim, and it was carried across the boundary by proximity. `Context` carries the full registries — elaboration could not typecheck `/std/Option` otherwise — so consulting those rather than `Module` is the likely fix.
+
 ### Rejection
 
 A gate fails when a `Partial` definition is reachable from a seed. (T) additionally needs a **local form** at `Item::Rec` elaboration: a partial member may not have a sort in an extractable position of its type — its codomain after peeling arrows, or any component reachable by projection. Parameter positions are exempt, so a partial polymorphic program keeping `@A : Type` is unaffected. This local form exists because `rec Bad : Type = (Bad) -> False` overflows the stack during elaboration of its first *use*, long before any post-zonk pass runs; without it the compiler aborts instead of diagnosing.
@@ -187,6 +201,10 @@ The second gap has a ready answer in the same file. Resolving an application's p
 
 Measure before rejecting, as step 3 did. Closing the gaps makes (V) see strictly more, and the report is what says whether the corpus pays for it.
 
+**Amended — implemented and gated; the corpus paid nothing, and the instruction to measure was the only thing that found the real defect.** Both gaps closed as directed above, the walk became iterative (a `Str` literal is one certified-UTF-8 link per byte, so a recursive walk overflows a default test stack), and `check_proof_totality` runs beside `check_type_totality` at both elaboration sites. No prelude source changed and no test changed.
+
+The direction to state the argument rule against `synth_neutral` rather than a second judgment was right, and it also understated what it was buying. `synth_neutral` had no case for a universe instance, a recursive member, a partially applied spine, or a structure projection, so the rule it backs almost never fired — see "Measurements". Extending it was not only a totality repair: `compare_same_rec_apply` (`curios-core/src/convert.rs`) exists to compare applications of the same recursive member, its head is by construction a `RecMember`, and with no such case `apply_param_types` fell back to `Term::type_ground()` unconditionally, silently disabling η and proof irrelevance on the one path written for them. The prelude hash-consed to 25976 distinct structures before and after every kernel change, which is the evidence that elaboration did not shift.
+
 Steps 6 and 7 are independent and may ship separately.
 
 ## Measurements
@@ -208,6 +226,28 @@ Every name the design depends on classifies `Total`: `add/raw`, `raw_assoc`, `ra
 
 The 169 remaining partials are concentrated where the design expects them and none is reachable from a type or a proof: `/std/Toml` (54), `/std/Async` (16), `/std/tcp` (12), `/std/Json` (11), `/std/Flt` (10), `/std/BigInt` (9), `/std/http` (8), `/std/File` and `/std/BigNat` (6 each), `/std/Map` (3), and a scattering of one- and two-name modules. `/std/print` and `/std/Fmt/print` are partial only because `/std/Handle/write` is, which is the classifier being honest about a retry loop rather than a problem.
 
+**Amended — (V)'s argument rule was near-inert, and the count that says so does not cover the path user programs take.** The rule recovers a head's parameter telescope through `synth_neutral` and seeds the arguments sitting at `Prop`-declared entries. Instrumenting every head `synth_neutral` declined, over a from-scratch prelude elaboration:
+
+| application head | before | after |
+| --- | --- | --- |
+| `UniverseInst` | 3429 | 0 |
+| `RecMember` | 1719 | 0 |
+| `Proj` | 751 | 3 |
+| `Apply`, curried | 83 | 0 |
+| `Var` / `Func` / `Match` | 28 | 28 |
+| **total** | **6010** | **31** |
+
+`@A : Type` generalizes nearly every `/std` definition, so the rule did not fire for polymorphic code at all. What that admitted needs no `match`, no data type, and no recursion but the forgery's own:
+
+```crs
+let ignore(@A : Type, x : A, p : False) -> A = x;
+let leak() -> Nat = ignore(0, rec b : False = b; b);
+```
+
+Two cautions on the figures, both larger than the figures. They count **one rule of one gate**: the definition-level, struct-field, and constructor-payload rules of (V), and every rule of (T), have never been instrumented. And they were computed during the *prelude build*, where `Module` is the prelude and every declaration lookup therefore succeeds — the one configuration in which the boundary defect amended under "The gates" cannot appear. **The replay path is unmeasured.**
+
+The method is worth recording with the numbers. Every attempt in this effort to locate the gaps by reading the seeding walk mis-scoped them — first as "two gaps", then as three narrow ones — and every attempt to count them found something the reading had missed. Instrumentation should lead here, and a count is only as good as the configuration it was taken in.
+
 ## Verification
 
 Regression tests in `curios/src/tests/soundness.rs`, using the `assert!(crate::run_text(…).is_err())` idiom already established in `curios/src/tests/positivity.rs`. Every reproduction in "The unsoundness being closed" becomes a rejection test, including the projection and total-function-on-partial-value variants and the `(Bad) -> False` shape whose current behavior is a stack overflow.
@@ -215,6 +255,8 @@ Regression tests in `curios/src/tests/soundness.rs`, using the `assert!(crate::r
 Acceptance tests must pin the classifications the design depends on: `add/raw` and `raw_assoc` accepted, which fails without refinement expansion; `raw_comm`/`raw_swap_step` accepted, which fails without the mutual closure; `format_type_with` accepted; `/std/Json/decode` and `/std/Async/bind` classified partial and still usable in a program; and a partial definition permitted in a runtime term while rejected in a proof.
 
 Unit tests in `curios-core/src/totality/tests.rs` for the size lattice, matrix composition, idempotent-closure acceptance, and the refinement-expansion cases above.
+
+**Amended — a (V) fixture must assert *which* gate fired, and the argument rule needs one fixture per head shape.** (T) runs first, so a fixture that accidentally put a partial definition in a type position would pass a bare `is_err` while proving nothing about proof positions; `rejected_as_a_proof` asserts the proof-position diagnostic instead. And because the argument rule can only fire where the head's type can be synthesized, one representative program does not cover it: the fixtures enumerate the head shapes — polymorphic, match-arm binder, primitive fold binder, structure projection, and concept method — because each fails independently of the others. Two of those five compiled and ran before this step.
 
 The full gate applies, in order, with the suite run once into a file and inspected there:
 
@@ -236,7 +278,17 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 
 ## Left open
 
-Two kernel rules are load-bearing once these gates exist and have no written argument. Definitional proof irrelevance (`curios-core/src/convert.rs:2046`) accepts without inspecting either term, which is correct precisely because every `Prop` inhabitant will now be total, and its side condition is the large-elimination guard. The conversion recurrence rule (`curios-core/src/convert.rs:2056`) accepts on the absence of finite disagreement; its canonicalization is alpha-renaming over binders minted during the run, its history is per-run with explicit removal on park and retry, and aggressive (T) removes its exposure to bottom-typed terms. Both appear sound. Both should be argued in `DESIGN.md` rather than assumed.
+Two kernel rules are load-bearing once these gates exist and have no written argument. Definitional proof irrelevance (`curios-core/src/convert.rs:2046`) accepts without inspecting either term, which is correct precisely because every `Prop` inhabitant will now be total, and its side condition is the large-elimination guard. The conversion recurrence rule (`curios-core/src/convert.rs:2056`) accepts on the absence of finite disagreement; its canonicalization is alpha-renaming over binders minted during the run, its history is per-run with explicit removal on park and retry, and aggressive (T) removes its exposure to bottom-typed terms. Both appear sound. Both should be argued in `DESIGN.md` rather than assumed. Neither has been probed.
+
+Four more, ordered by how much each would change what the claim is worth.
+
+**The gates do not see prelude declarations.** Amended under "The gates" above, with a reproduction. Live, exploitable in three lines, and reaches every type a real program uses. This is the next thing to fix, and re-measuring afterwards must be done *at replay*, not during the prelude build.
+
+**Only one seeding rule has been measured.** The instrumentation covered (V)'s argument rule and nothing else. That rule turned out blind at 6010 of 6041 sites; the rules that have not been counted should not be assumed clean on the strength of the corpus passing, since the corpus passed throughout the period the argument rule was inert.
+
+**The erasure premise is stated, not demonstrated.** Both obligations rest on the objective's second claim — that erasure deletes types and `Prop`-sorted proofs, and nothing else. If `into_ersd` deletes anything further, (T) and (V) are aimed at the wrong set of positions, and no amount of coverage in the seeding walk repairs it. It is the one assumption whose failure invalidates the structure rather than leaving a hole in it, and it is an argument about a single lowering pass against a specification that already states what it should delete.
+
+**The residual 31.** Thirty-one application heads still decline synthesis, concentrated in about fifteen definitions (`/std/Async/block_on`, `/std/Lst/fold`, `/std/Parse/sep_by0`). The heads are local `rec` members and let-bound functions. The binder class that leaves them untyped has not been identified — one hypothesis, primitive motive binders, was implemented and moved the count by zero — and probes at the obvious shapes are all rejected. Not known to be reachable; not shown to be unreachable.
 
 ## Appendix: the fork on (T), and how it closed
 
@@ -303,3 +355,5 @@ What survives is the *limit*, not the fork. A proposition still may not mention 
 ### State of the worktree
 
 Everything above is committed and the full gate passes: `make curios/runtime`, `cargo fmt --check`, `RUSTFLAGS="-Dwarnings" cargo clippy`, and `cargo test --workspace --all-targets --all-features` across 17 test binaries.
+
+Both gates now reject, so the specification's seven steps are implemented. That is not the same as the objective being met, and the gap should not be read as bookkeeping. The claim at the top — *there is no closed term of type `/syn/False`* — is stated over terms, and a program that constructs one through a prelude declaration is accepted today. Until the boundary defect under "The gates" is closed, what the compiler enforces is narrower than what this document claims it enforces.
