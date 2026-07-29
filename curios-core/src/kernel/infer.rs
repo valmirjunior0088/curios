@@ -54,8 +54,69 @@ use {
     },
 };
 
+/// Record `obligations` for [`infer`]'s loop, innermost-last.
+///
+/// Reversed on the way in so popping yields them in source order, which is the
+/// order the recursion they replace visited them in.
+fn defer(deferred: &mut Vec<Obligation>, obligations: Vec<Obligation>) {
+    deferred.extend(obligations.into_iter().rev());
+}
+
+/// A child whose type must be checked, deferred rather than descended into.
+///
+/// See [`infer`]: the pair is a term and the type it has to inhabit, recorded
+/// at the context it was written in.
+type Obligation = (Term, Term);
+
 /// The type of `term`.
+///
+/// # Why this drives a stack instead of recursing
+///
+/// `check` is `infer` followed by `subsumes`, and `infer` on an application
+/// checks each argument — so `infer → check → infer` descends two native frames
+/// per link of a right-nested chain. A `Str` literal's UTF-8 derivation is one
+/// such link per byte, which made the depth a function of the *data* rather
+/// than of what anyone wrote. Measured at 21.5KiB of stack per level in a debug
+/// build, that exhausted a 2MiB thread partway through `/std/Toml`, and no
+/// reduction budget can prevent it: a budget bounds steps, and depth is not
+/// steps.
+///
+/// The child obligations of an application, a constructor, and a record are
+/// therefore *deferred* to this loop rather than descended into. Those three
+/// open no binders — they instantiate their telescopes by substituting the
+/// child term, not by binding it — so every obligation they defer is checked in
+/// the same context it was recorded in. Arms that *do* open binders keep
+/// recursing, because their depth is the nesting someone wrote, which is the
+/// bound `AGENTS.md` allows.
+///
+/// Order is preserved exactly: obligations are pushed in reverse and popped, so
+/// a child is fully checked before its next sibling, which is what recursion
+/// did. `infer` drains before it returns, so nothing outside this function can
+/// observe an obligation in flight.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
+    let mut deferred = Vec::new();
+    let inferred = infer_node(kernel, term, &mut deferred)?;
+
+    while let Some((term, expected)) = deferred.pop() {
+        let actual = infer_node(kernel, &term, &mut deferred)?;
+
+        if !subsumes(kernel, &actual, &expected)? {
+            return Err(KernelError::Mismatch {
+                inferred: Box::new(actual),
+                expected: Box::new(expected),
+            });
+        }
+    }
+
+    Ok(inferred)
+}
+
+/// One node's type, with its deferrable children pushed onto `deferred`.
+fn infer_node(
+    kernel: &mut Kernel,
+    term: &Term,
+    deferred: &mut Vec<Obligation>,
+) -> Result<Term, KernelError> {
     kernel.spend()?;
 
     match &**term {
@@ -112,14 +173,18 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             }
 
             let mut telescope = telescope;
+            let mut obligations = Vec::with_capacity(params.len());
             for param in params {
                 let Telescope::Cons(domain, rest) = telescope else {
                     unreachable!("arity was checked above")
                 };
 
-                check(kernel, param, &domain)?;
+                // The codomain needs the argument *substituted*, not checked,
+                // so the result is available without descending into it.
+                obligations.push((param.clone(), domain));
                 telescope = rest.open(&[param]);
             }
+            defer(deferred, obligations);
 
             match telescope {
                 Telescope::Done(result) => Ok(*result),
@@ -212,14 +277,16 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             }
 
             let mut signature = signature;
+            let mut obligations = Vec::with_capacity(payload.len());
             for component in payload {
                 let Telescope::Cons(field, rest) = signature else {
                     unreachable!("arity was checked above")
                 };
 
-                check(kernel, component, &field)?;
+                obligations.push((component.clone(), field));
                 signature = rest.open(&[component]);
             }
+            defer(deferred, obligations);
 
             match signature {
                 Telescope::Done(constructed) => Ok(*constructed),
@@ -251,14 +318,16 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             }
 
             let mut telescope = telescope;
+            let mut obligations = Vec::with_capacity(fields.len());
             for field in fields {
                 let Telescope::Cons(expected, rest) = telescope else {
                     unreachable!("arity was checked above")
                 };
 
-                check(kernel, field, &expected)?;
+                obligations.push((field.clone(), expected));
                 telescope = rest.open(&[field]);
             }
+            defer(deferred, obligations);
 
             Ok(Subterm::StructType(StructType {
                 name: name.clone(),
