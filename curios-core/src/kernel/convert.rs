@@ -133,7 +133,7 @@ impl History {
 /// failing path as well as the succeeding one. A comparison that left binders
 /// behind would leak them into the conversion history, where the context is
 /// part of the key.
-fn scoped<T>(kernel: &mut Kernel, walk: impl FnOnce(&mut Kernel) -> T) -> T {
+pub(super) fn scoped<T>(kernel: &mut Kernel, walk: impl FnOnce(&mut Kernel) -> T) -> T {
     let mark = kernel.mark();
     let outcome = walk(kernel);
     kernel.retract(mark);

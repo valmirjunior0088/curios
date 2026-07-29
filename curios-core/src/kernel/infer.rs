@@ -44,7 +44,7 @@ mod tests;
 use {
     super::{
         Kernel, KernelError,
-        convert::convert,
+        convert::{convert, scoped},
         sort::{self, sort_of},
     },
     crate::{
@@ -451,13 +451,34 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
     }
 }
 
-/// Whether a term of type `inferred` may stand where `expected` is wanted.
+/// Whether a term of type `inferred` may stand where `expected` is wanted —
+/// the subsumption relation `inferred ≤ expected`.
 ///
-/// Conversion, plus cumulativity: a `Type u` sits inside every `Type v` above
-/// it, and `Prop` sits inside every `Type`. Cumulativity is checked only at the
-/// head, not under a function type's codomain. That is the incomplete
-/// direction, which refuses programs rather than admitting them.
+/// This states cumulativity as a rule rather than leaving it to a traversal
+/// order. `Γ ⊢ t : A` and `A ≤ B` give `Γ ⊢ t : B`, and `≤` is:
+///
+/// ```text
+/// Type u ≤ Type v          when the level algebra proves u ≤ v
+/// Prop   ≤ Type v          a proposition stands wherever a type is wanted
+/// Π(x:A).B ≤ Π(x:A').B'    when A ≡ A' and, under x, B ≤ B'
+/// A      ≤ B              otherwise, when A ≡ B
+/// ```
+///
+/// **Domains are invariant, codomains cumulative.** Comparing domains by
+/// conversion rather than contravariantly is the choice Coq makes, and it is
+/// the freely-revisable side of the fork: widening to contravariance later
+/// accepts strictly more, so it breaks nothing already accepted, while shipping
+/// contravariance and withdrawing it would break programs.
+///
+/// The elaborator reaches the same verdicts by a different route — it is
+/// bidirectional, so checking a λ against a Π pushes the comparison down to the
+/// leaves, where both sides are sorts and the head rule suffices, and it never
+/// forms the Π being subsumed here. Deciding this structurally instead is what
+/// makes the rule readable, and what lets the two checkers disagree if
+/// elaboration's traversal order ever changes.
 fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<bool, KernelError> {
+    kernel.spend()?;
+
     let lower = kernel.reduce_forced(inferred.clone())?;
     let upper = kernel.reduce_forced(expected.clone())?;
 
@@ -465,10 +486,59 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
         (Subterm::Type(lower), Subterm::Type(upper)) => return Ok(lower.structurally_leq(upper)),
         // `Prop : Type 0`, and a proposition is admitted wherever a type is.
         (Subterm::Prop, Subterm::Type(_)) => return Ok(true),
+        // Plicity is part of a function type's identity, exactly as in
+        // `convert`: `(A) -> A` and `(@A) -> A` have different calling
+        // conventions, so a difference there is a mismatch and not a codomain
+        // question.
+        (Subterm::FuncType(lower), Subterm::FuncType(upper))
+            if lower.plicities == upper.plicities =>
+        {
+            let (lower, upper) = (lower.telescope.clone(), upper.telescope.clone());
+
+            return scoped(kernel, |kernel| subsumes_telescope(kernel, lower, upper));
+        }
         _ => {}
     }
 
     convert(kernel, &Term::type_ground(), inferred, expected)
+}
+
+/// [`subsumes`] through a function type's telescope: each domain by conversion,
+/// the terminal codomains by subsumption, under one shared set of binders.
+///
+/// Opening both sides at the *same* occurrence is what makes the codomain
+/// comparison meaningful — the domains have just been shown convertible, so a
+/// single binder stands for both.
+fn subsumes_telescope(
+    kernel: &mut Kernel,
+    this: Telescope<Term>,
+    that: Telescope<Term>,
+) -> Result<bool, KernelError> {
+    let (mut this, mut that) = (this, that);
+
+    loop {
+        match (this, that) {
+            (Telescope::Cons(left, left_rest), Telescope::Cons(right, right_rest)) => {
+                if !convert(kernel, &Term::type_ground(), &left, &right)? {
+                    return Ok(false);
+                }
+
+                let binder = kernel.fresh(left_rest.first_hint());
+                kernel.assume(&binder, &left);
+                let occurrence = Term::free_var(&binder);
+
+                this = left_rest.open(&[&occurrence]);
+                that = right_rest.open(&[&occurrence]);
+            }
+            (Telescope::Done(left), Telescope::Done(right)) => {
+                return subsumes(kernel, &left, &right);
+            }
+            // Different arities. A function type is not curried in this
+            // representation, so this is a real mismatch rather than a shape to
+            // normalize.
+            _ => return Ok(false),
+        }
+    }
 }
 
 /// Check that every domain of a λ's telescope is a type, then its body under
