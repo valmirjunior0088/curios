@@ -97,17 +97,16 @@ Ranked by directness. This is the soundness statement, and it is the reason the 
 | | Route | Cite | Fixture |
 | --- | --- | --- | --- |
 | 1 | `rec f : False = f` — a member is assumed at its declared type and its body checks against it, with no totality condition anywhere | `infer.rs:418` | two lines of source |
-| 2 | `Exit(False, 0) : False` — `Exit`'s result is checked only to be *a sort*, and `Prop` is one | `infer/prim.rs:311`, `:362-368` | one line of source |
-| 3 | Strict positivity is not checked — no occurrence of the word and zero references to `Polarity` under `kernel/` | `curios-elab/src/positivity.rs:77` runs it; the kernel does not | `induct Bad \| c(f : (Bad) -> False) end` |
-| 4 | The constructor size condition is not checked — `check_definition` calls `sort_of` and **discards the result** | `kernel/module.rs:45` | hand-built `Module` |
-| 5 | Coverage is not verified — the arms present are checked and the absent ones are never asked to justify themselves | `infer/eliminate.rs:47-72` | an elimination with an arm removed |
-| 6 | A `Switch`'s default and the free-monoid carriers' arms are typed by their bodies and never verified against the motive | `infer.rs:492-506` | the one *acceptance*-direction hole |
+| 2 | Strict positivity is not checked — no occurrence of the word and zero references to `Polarity` under `kernel/` | `curios-elab/src/positivity.rs:77` runs it; the kernel does not | `induct Bad \| c(f : (Bad) -> False) end` |
+| 3 | The constructor size condition is not checked — `check_definition` calls `sort_of` and **discards the result** | `kernel/module.rs:45` | hand-built `Module` |
+| 4 | Coverage is not verified — the arms present are checked and the absent ones are never asked to justify themselves | `infer/eliminate.rs:47-72` | an elimination with an arm removed |
+| 5 | A `Switch`'s default and the free-monoid carriers' arms are typed by their bodies and never verified against the motive | `infer.rs:492-506` | the one *acceptance*-direction hole |
 
 **Route 1 is why totality is not deferrable.** `Subterm::RecMember(RecMember { group, index }) => Ok(group.member_type(*index))` returns the declared type unconditionally, and `check_rec_group` assumes every member at its declared type while checking bodies. So the shortest closed inhabitant of `False` the kernel will certify needs no primitive, no declaration, and no elimination. An earlier revision of this document offered "defer both (T) and (V)" as *"a defensible trade-off — it is what ships soonest"*. It is not a trade-off about coverage; it is the difference between a sound rule set and an unsound one, and that option is withdrawn.
 
-**Route 2 is reachable from surface syntax.** `/sys/exit` is generated as `(@A : Type, n : Nat) -> A` (`curios-text/src/prelude.rs:596-604`), and `Prop ≤ Type` holds by subsumption (`infer.rs:557`), so `exit(@False, 0)` elaborates and the kernel types it at `False`. Restricting the result to reject `Prop` is one line and closes the direct route, but not the empty-`Type`-inductive route — `Exit(Empty, 0)` at a constructor-free `Empty : Type`, then eliminated into `False`. Full closure comes from the partiality relation, which `Totality::Total` already defines as *"[e]very recursive group this definition contains descends, it does not mention `Prim::Exit`, and neither does anything it reaches"* (`curios-elab/src/totality.rs:91-94`): one relation, two seeds. Once the kernel has it for `rec`, `Exit` is a syntactic occurrence in the same walk.
+**A second route was here and is now closed, by a typing rule rather than by an obligation.** `Prim::Exit` used to carry its result type as an operand, so `exit(@False, 0) : False`. It is now typed at `{}`; see "Totality of the erased program" in `DESIGN.md` for the decision and for why the two weaker designs fail. The short version is that a non-returning term is unsound exactly when it inhabits a type nothing total inhabits, and restricting *which* type `exit` may be given cannot fix that — any constructor-free `Empty : Type` eliminates into `Prop` unguarded, because `guard_large_elimination` returns at its first check and zero constructors leave no arms to verify. Removing the choice is what works. `/std/Never` went with it, having existed only to give `exit` a `Type`-sorted carrier.
 
-Route 4 is not an unrecorded hole in the compiler. The elaborator enforces it: `add_declaration_sizing` (`curios-elab/src/elaborate/module.rs:95-140`) emits, per constructor, that each payload's level is `≤` the result level and each uniform parameter's is `≤` result + 1, under `UniverseConstraintKind::ConstructorSizing`, discharged by the universe solver. It sits in the perimeter table as `validate_universes`, graded *auditable only*. What is unrecorded is that the kernel does not duplicate it.
+Route 3 is not an unrecorded hole in the compiler. The elaborator enforces it: `add_declaration_sizing` (`curios-elab/src/elaborate/module.rs:95-140`) emits, per constructor, that each payload's level is `≤` the result level and each uniform parameter's is `≤` result + 1, under `UniverseConstraintKind::ConstructorSizing`, discharged by the universe solver. It sits in the perimeter table as `validate_universes`, graded *auditable only*. What is unrecorded is that the kernel does not duplicate it.
 
 ## What the kernel refuses that it must not
 
@@ -226,9 +225,9 @@ The sophistication of these analyses is corpus-forced, not discretionary, and ca
 
 ### B — Close the certifying holes
 
-**B1 — Reject `Prop` as `Exit`'s result type.** One line at `infer/prim.rs:362-368`. Nothing legitimate needs `exit` at a proposition. Record it in `DESIGN.md` as a **partial** mitigation: it does not close the empty-`Type`-inductive route and does nothing about `rec`.
+**B1 — Type `exit` at `{}`, and remove `/std/Never`. Done.** `Prim::Exit` carries only its code; the kernel's rule is `check(code, Nat)` with no side condition. Recorded in `DESIGN.md` under "Totality of the erased program", with the argument for why restricting the result type instead cannot work. The `SCHEMA` bumped to 19 and `soundness.rs`'s exit fixture was deleted rather than retargeted, because the program it asserted is now refused during elaboration.
 
-**B2 — Everything else in the certifying table falls out of A**: routes 1 and 2 fully from A4, route 3 from A3, route 5 from A2.
+**B2 — Everything else in the certifying table falls out of A**: route 1 from A4, route 2 from A3, route 4 from A2.
 
 ### C — Write what does not exist
 
@@ -265,7 +264,7 @@ The discipline this establishes and should be written into the `curios-core` doc
 1. A1, then A2, then re-run `kernel_disagreements` and record the new counts before planning further.
 2. A3, with the amended principle written into `DESIGN.md` in the same commit.
 3. Measure A4's cost, then A4 in its own commit with the `SCHEMA` bump.
-4. B1 at any time; it is independent and one line.
+4. ~~B1~~ done, ahead of A: it was self-contained and it shrinks the surface every later item walks.
 5. C1 after a probe on `/std/Map/get`. C2, C3, C4, C5 in any order.
 6. D throughout, by visibility first.
 7. E last.
@@ -278,7 +277,9 @@ Re-taken from the worktree, not estimated. Re-run the inventory after every item
 
 Crate sizes: `curios-core` 17,497 (15,065 non-test), `curios-elab` 31,702, `curios-base` 2,839, `curios-abi` 952.
 
-Kernel refusals: **90 of 1052 items**, identical across the `trivial`, `arithmetic`, and `literal` fixtures and across debug and release. By class: 25 bare universe-parameter mismatch, 16 `Unclassified` (all empty `Lst`), 13 zero-level-in-instance, 36 other.
+Kernel refusals: **90 of 1050 items**, identical across the `trivial`, `arithmetic`, and `literal` fixtures and across debug and release. By class: 25 bare universe-parameter mismatch, 16 `Unclassified` (all empty `Lst`), 13 zero-level-in-instance, 36 other.
+
+The count was 90 of 1052 before B1, and the two fewer items are the deleted `Never` group. **The refusal count did not move, and should not have**: B1 closed a route the kernel wrongly *accepted*, and the inventory only counts refusals. The standing rule — an item that does not move a class count has not been shown to do anything — governs the *refusing* half of the work, sections A and C. For the certifying half, the evidence is a fixture that stops being accepted, and for B1 it is a program that stops elaborating.
 
 Shared-analysis dependency surface: 16 `Context` call sites across 2,865 lines, per the table in A.
 
@@ -347,6 +348,8 @@ Recorded because the retractions are the useful part, and because all of them ha
 **`Exit` is not the largest hole and restricting a primitive does not close the class.** An intermediate revision called it the finding that reordered everything. `rec f : False = f` is smaller, needs no primitive, and cannot be closed by any typing-rule refinement — which is what makes totality forced rather than optional.
 
 **The 13-item zero-level cluster is not the largest identifiable class**, and the constraint measurement that closed the sizing fork was read one-sidedly. See "What the kernel refuses that it must not".
+
+**No typing-level restriction on `exit` closes its route — but removing its choice of result type does.** An intermediate revision of this analysis reached the first half and stopped there, having only considered restrictions on *which* type `exit` may be given. Every such restriction fails to the same counterexample: a constructor-free `Empty : Type` eliminates into `Prop` unguarded, so confining `exit` to relevant types still admits `Exit(Empty, 0)`. What that argument does not rule out is fixing the result at a single inhabited type, which is what landed. The near-miss is worth recording: the general claim was drawn from three failed attempts at one *shape* of fix, and stated as though it covered every shape.
 
 **A single-line regex undercounted the shared-analysis dependency surface.** `rg -o 'context\.[a-z_]+'` missed `context` and `.induct_decl` split across lines by rustfmt, which hid `Vectors::at`'s fallback onto archive-carried polarity vectors — the finding that settled how A3 should be driven and that reframed the recompute principle. The measurement was rerun with `-U` and a multiline pattern.
 
