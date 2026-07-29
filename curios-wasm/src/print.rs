@@ -8,43 +8,43 @@ use {
     curios_base::printer::{Printer, flat, indent, pure, sep_flat},
 };
 
-fn print_dollar_ident<'a>(name: &'a str) -> Printer {
+fn print_dollar_ident(name: &str) -> Printer {
     flat([pure("$"), pure(name)])
 }
 
-fn print_type_name<'a>(type_name: &'a TypeName) -> Printer {
+fn print_type_name(type_name: &TypeName) -> Printer {
     print_dollar_ident(type_name.as_str())
 }
 
-fn print_field_name<'a>(field_name: &'a FieldName) -> Printer {
+fn print_field_name(field_name: &FieldName) -> Printer {
     print_dollar_ident(field_name.as_str())
 }
 
-fn print_func_name<'a>(func_name: &'a FuncName) -> Printer {
+fn print_func_name(func_name: &FuncName) -> Printer {
     print_dollar_ident(func_name.as_str())
 }
 
-fn print_global_name<'a>(global_name: &'a GlobalName) -> Printer {
+fn print_global_name(global_name: &GlobalName) -> Printer {
     print_dollar_ident(global_name.as_str())
 }
 
-fn print_local_name<'a>(local_name: &'a LocalName) -> Printer {
+fn print_local_name(local_name: &LocalName) -> Printer {
     print_dollar_ident(local_name.as_str())
 }
 
-fn print_label_name<'a>(label_name: &'a LabelName) -> Printer {
+fn print_label_name(label_name: &LabelName) -> Printer {
     print_dollar_ident(label_name.as_str())
 }
 
-fn print_data_name<'a>(data_name: &'a DataName) -> Printer {
+fn print_data_name(data_name: &DataName) -> Printer {
     print_dollar_ident(data_name.as_str())
 }
 
-fn print_quoted_ident<'a>(string: &'a str) -> Printer {
+fn print_quoted_ident(string: &str) -> Printer {
     flat([pure("\""), pure(string), pure("\"")])
 }
 
-fn print_num_type<'a>(num_type: &'a NumType) -> Printer {
+fn print_num_type(num_type: &NumType) -> Printer {
     pure(match num_type {
         NumType::I32 => "i32",
         NumType::I64 => "i64",
@@ -53,7 +53,7 @@ fn print_num_type<'a>(num_type: &'a NumType) -> Printer {
     })
 }
 
-fn print_abs_heap_type<'a>(abs_heap_type: &'a AbsHeapType) -> Printer {
+fn print_abs_heap_type(abs_heap_type: &AbsHeapType) -> Printer {
     pure(match abs_heap_type {
         AbsHeapType::NoFunc => "nofunc",
         AbsHeapType::NoExtern => "noextern",
@@ -68,14 +68,14 @@ fn print_abs_heap_type<'a>(abs_heap_type: &'a AbsHeapType) -> Printer {
     })
 }
 
-fn print_heap_type<'a>(heap_type: &'a HeapType) -> Printer {
+fn print_heap_type(heap_type: &HeapType) -> Printer {
     match heap_type {
         HeapType::Abstract(abs_heap_type) => print_abs_heap_type(abs_heap_type),
         HeapType::Concrete(type_name) => print_type_name(type_name),
     }
 }
 
-fn print_ref_type<'a>(ref_type: &'a RefType) -> Printer {
+fn print_ref_type(ref_type: &RefType) -> Printer {
     flat([
         pure("(ref "),
         flat(match ref_type.is_nullable {
@@ -87,7 +87,7 @@ fn print_ref_type<'a>(ref_type: &'a RefType) -> Printer {
     ])
 }
 
-fn print_val_type<'a>(val_type: &'a ValType) -> Printer {
+fn print_val_type(val_type: &ValType) -> Printer {
     match val_type {
         ValType::Num(num_type) => print_num_type(num_type),
         ValType::Ref(ref_type) => print_ref_type(ref_type),
@@ -108,21 +108,21 @@ fn print_result_type<'a>(keyword: &'a str, result_type: &'a ResultType) -> Print
     ])
 }
 
-fn print_packed_type<'a>(packed_type: &'a PackedType) -> Printer {
+fn print_packed_type(packed_type: &PackedType) -> Printer {
     pure(match packed_type {
         PackedType::I8 => "i8",
         PackedType::I16 => "i16",
     })
 }
 
-fn print_storage_type<'a>(storage_type: &'a StorageType) -> Printer {
+fn print_storage_type(storage_type: &StorageType) -> Printer {
     match storage_type {
         StorageType::Val(val_type) => print_val_type(val_type),
         StorageType::Packed(packed_type) => print_packed_type(packed_type),
     }
 }
 
-fn print_field_type<'a>(field_type: &'a FieldType) -> Printer {
+fn print_field_type(field_type: &FieldType) -> Printer {
     match field_type.mutability {
         Mutability::Const => print_storage_type(&field_type.storage_type),
         Mutability::Var => flat([
@@ -133,7 +133,7 @@ fn print_field_type<'a>(field_type: &'a FieldType) -> Printer {
     }
 }
 
-fn print_array_type<'a>(array_type: &'a ArrayType) -> Printer {
+fn print_array_type(array_type: &ArrayType) -> Printer {
     flat([
         pure("(array "),
         print_field_type(&array_type.field_type),
@@ -141,7 +141,7 @@ fn print_array_type<'a>(array_type: &'a ArrayType) -> Printer {
     ])
 }
 
-fn print_struct_type<'a>(struct_type: &'a StructType) -> Printer {
+fn print_struct_type(struct_type: &StructType) -> Printer {
     flat([
         pure("(struct"),
         indent(flat(struct_type.fields.iter().map(
@@ -159,7 +159,7 @@ fn print_struct_type<'a>(struct_type: &'a StructType) -> Printer {
     ])
 }
 
-fn print_func_type<'a>(func_type: &'a FuncType) -> Printer {
+fn print_func_type(func_type: &FuncType) -> Printer {
     flat([
         pure("(func"),
         flat(match func_type.inputs.val_types.is_empty() {
@@ -180,7 +180,7 @@ fn print_func_type<'a>(func_type: &'a FuncType) -> Printer {
     ])
 }
 
-fn print_comp_type<'a>(comp_type: &'a CompType) -> Printer {
+fn print_comp_type(comp_type: &CompType) -> Printer {
     match comp_type {
         CompType::Func(func_type) => print_func_type(func_type),
         CompType::Array(array_type) => print_array_type(array_type),
@@ -216,7 +216,7 @@ fn print_sub_type<'a>(type_name: &'a TypeName, sub_type: &'a SubType) -> Printer
     ])
 }
 
-fn print_rec_type<'a>(rec_type: &'a RecType) -> Printer {
+fn print_rec_type(rec_type: &RecType) -> Printer {
     if let [(type_name, sub_type)] = &rec_type.sub_types[..] {
         print_sub_type(type_name, sub_type)
     } else {
@@ -230,7 +230,7 @@ fn print_rec_type<'a>(rec_type: &'a RecType) -> Printer {
     }
 }
 
-fn print_global_type<'a>(global_type: &'a GlobalType) -> Printer {
+fn print_global_type(global_type: &GlobalType) -> Printer {
     match global_type.mutability {
         Mutability::Const => print_val_type(&global_type.val_type),
         Mutability::Var => flat([
@@ -241,7 +241,7 @@ fn print_global_type<'a>(global_type: &'a GlobalType) -> Printer {
     }
 }
 
-fn print_block_type<'a>(block_type: &'a BlockType) -> Printer {
+fn print_block_type(block_type: &BlockType) -> Printer {
     flat(match block_type {
         BlockType::Empty => None,
         BlockType::Inline(val_type) => Some(flat([
@@ -257,7 +257,7 @@ fn print_block_type<'a>(block_type: &'a BlockType) -> Printer {
     })
 }
 
-fn print_instr<'a>(instr: &'a Instr) -> Printer {
+fn print_instr(instr: &Instr) -> Printer {
     match instr {
         Instr::Unreachable => pure("unreachable"),
         Instr::Nop => pure("nop"),
@@ -616,11 +616,11 @@ fn print_instr<'a>(instr: &'a Instr) -> Printer {
     }
 }
 
-fn print_instrs<'a>(instrs: &'a [Instr]) -> Printer {
+fn print_instrs(instrs: &[Instr]) -> Printer {
     sep_flat(instrs.iter().map(print_instr), || pure("\n"))
 }
 
-fn print_expr<'a>(expr: &'a Expr) -> Printer {
+fn print_expr(expr: &Expr) -> Printer {
     print_instrs(&expr.instrs)
 }
 
@@ -773,7 +773,7 @@ fn print_export<'a>(name: &'a str, export: &'a Export) -> Printer {
     ])
 }
 
-pub(crate) fn print_module<'a>(module: &'a Module) -> Printer {
+pub(crate) fn print_module(module: &Module) -> Printer {
     flat([
         pure("(module "),
         print_dollar_ident(module.name()),
