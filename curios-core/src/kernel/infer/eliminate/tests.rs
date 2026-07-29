@@ -1,0 +1,346 @@
+use {
+    crate::{
+        Atom, Free, Global, InductDecl, InductParam, Kernel, KernelError, Many, Prim, Scope,
+        Telescope, Term, UniverseContext, kernel::infer::infer,
+    },
+    curios_base::{Plicity, Qualifier, RootId},
+};
+
+fn kernel() -> Kernel {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+    kernel
+}
+
+fn binder(index: u32, hint: &str) -> Free {
+    Free::local(index, Some(hint))
+}
+
+fn nat(n: usize) -> Term {
+    Term::prim(Prim::Nat(crate::Nat::new(n)))
+}
+
+fn nat_type() -> Term {
+    Term::prim(Prim::NatType)
+}
+
+/// One constructor of a test family: its tag, the payload binder it carries if
+/// any, and the index target this case aims at.
+struct Case {
+    tag: &'static str,
+    payload: Option<(Free, Term)>,
+    index: Term,
+}
+
+/// A constructor carrying nothing, aimed at `index`.
+fn nullary(tag: &'static str, index: Term) -> Case {
+    Case {
+        tag,
+        payload: None,
+        index,
+    }
+}
+
+/// A constructor carrying `binder : type_`, aimed at `index`.
+fn carrying(tag: &'static str, binder: Free, type_: Term, index: Term) -> Case {
+    Case {
+        tag,
+        payload: Some((binder, type_)),
+        index,
+    }
+}
+
+/// Declare a one-index family from its constructors.
+fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec<Case>) -> Global {
+    let family = Global::Authored(Qualifier::from([path]));
+
+    let entries = constructors
+        .into_iter()
+        .map(|case| {
+            let constructed = Term::induct_type(family.clone(), Vec::<Term>::new(), [case.index]);
+            let (telescope, plicities) = match case.payload {
+                Some((field, type_)) => (
+                    Telescope::build([(field, type_)], constructed),
+                    vec![Plicity::Explicit],
+                ),
+                None => (Telescope::done(constructed), Vec::new()),
+            };
+
+            (
+                Atom::from(case.tag),
+                InductParam {
+                    telescope,
+                    plicities,
+                },
+            )
+        })
+        .collect();
+
+    kernel.declare_induct(
+        &family,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            params: Telescope::done(()),
+            indices: Telescope::done(()),
+            constructors: entries,
+            result_sort,
+            module: Qualifier::from([path]),
+            root: RootId::Entry,
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    family
+}
+
+/// `match subject : (i, s) => motive | tag(binders) => body ... end`, over a
+/// scrutinee assumed at `family(index)`.
+fn eliminate(
+    kernel: &mut Kernel,
+    family: &Global,
+    index: Term,
+    motive: Term,
+    arms: Vec<(&str, Vec<Free>, Term)>,
+) -> Term {
+    let subject = binder(50, "subject");
+    kernel.assume(
+        &subject,
+        &Term::induct_type(family.clone(), Vec::<Term>::new(), [index]),
+    );
+
+    let motive = Scope::close(Many(2), &[&binder(51, "i"), &binder(52, "s")], motive);
+
+    Term::induct_match_scoped_marked(
+        Term::free_var(&subject),
+        motive,
+        arms.into_iter().map(|(tag, binders, body)| {
+            (
+                tag,
+                binders
+                    .into_iter()
+                    .map(|b| (Plicity::Explicit, b))
+                    .collect::<Vec<_>>(),
+                body,
+            )
+        }),
+        None,
+    )
+}
+
+/// A proposition whose single constructor's payload is *pinned* by its index
+/// target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`,
+/// so eliminating tells a program nothing it did not already know, and the
+/// large elimination is admitted. Without this, `Eq/subst` is unstatable.
+#[test]
+fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
+    let mut kernel = kernel();
+    let z = binder(0, "z");
+    let arm_binder = binder(10, "z");
+
+    let family = declare(
+        &mut kernel,
+        "Pinned",
+        Term::prop(),
+        vec![carrying("refl", z.clone(), nat_type(), Term::free_var(&z))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        nat_type(),
+        vec![(
+            "refl",
+            vec![arm_binder.clone()],
+            Term::free_var(&arm_binder),
+        )],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
+/// The same shape with a *non-injective* index target. `blur(a)` mentions `a`,
+/// but knowing `blur(a)` recovers nothing — `blur` need not be injective, and
+/// in the program this rule exists for it is the constant zero. So the payload
+/// is not pinned, the proposition carries something a program could read back,
+/// and eliminating it into a relevant type is refused.
+///
+/// Reading occurrence as determination is exactly the defect this rule exists
+/// to avoid: it admits this elimination, and a closed inhabitant of `False`
+/// follows from it.
+#[test]
+fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
+    let mut kernel = kernel();
+    let a = binder(0, "a");
+    let blur = binder(1, "blur");
+    let arm_binder = binder(10, "a");
+
+    kernel.declare(
+        &blur,
+        &Term::func_type([(binder(2, "n"), nat_type())], nat_type()),
+        &UniverseContext::default(),
+    );
+
+    let family = declare(
+        &mut kernel,
+        "Loose",
+        Term::prop(),
+        vec![carrying(
+            "mk",
+            a.clone(),
+            nat_type(),
+            Term::apply(Term::free_var(&blur), [Term::free_var(&a)]),
+        )],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        nat_type(),
+        vec![("mk", vec![arm_binder.clone()], Term::free_var(&arm_binder))],
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Err(KernelError::LargeElimination(family)),
+    );
+}
+
+/// An empty proposition eliminates into anything: there is nothing to have
+/// received, so nothing to extract.
+#[test]
+fn an_empty_proposition_eliminates_into_a_type() {
+    let mut kernel = kernel();
+
+    let family = declare(&mut kernel, "Absurd", Term::prop(), Vec::new());
+    let term = eliminate(&mut kernel, &family, nat(0), nat_type(), Vec::new());
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
+/// Two constructors mean the value says *which*, which is information a
+/// relevant result could branch on.
+#[test]
+fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
+    let mut kernel = kernel();
+    let (left, right) = (binder(10, "l"), binder(11, "r"));
+
+    let family = declare(
+        &mut kernel,
+        "Two",
+        Term::prop(),
+        vec![nullary("here", nat(0)), nullary("there", nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        nat_type(),
+        vec![("here", Vec::new(), nat(1)), ("there", Vec::new(), nat(2))],
+    );
+    let _ = (left, right);
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Err(KernelError::LargeElimination(family)),
+    );
+}
+
+/// The guard is about *relevance*, not about propositions as such: eliminating
+/// a proposition into another proposition is always fine, since irrelevance
+/// makes the result indistinguishable either way.
+#[test]
+fn a_proposition_eliminates_into_a_proposition_however_many_constructors() {
+    let mut kernel = kernel();
+
+    let target = declare(
+        &mut kernel,
+        "Target",
+        Term::prop(),
+        vec![nullary("only", nat(0))],
+    );
+    let target_type = Term::induct_type(target.clone(), Vec::<Term>::new(), [nat(0)]);
+
+    let family = declare(
+        &mut kernel,
+        "Two",
+        Term::prop(),
+        vec![nullary("here", nat(0)), nullary("there", nat(0))],
+    );
+
+    let proof = Term::variant(target, Vec::<Term>::new(), "only", Vec::<Term>::new());
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        target_type.clone(),
+        vec![
+            ("here", Vec::new(), proof.clone()),
+            ("there", Vec::new(), proof),
+        ],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(target_type));
+}
+
+/// An arm is checked against the motive at *its own* constructor's index
+/// target, so a body of the wrong type is refused even where the elimination's
+/// overall type is fine.
+#[test]
+fn an_arm_body_of_the_wrong_type_is_refused() {
+    let mut kernel = kernel();
+
+    let family = declare(
+        &mut kernel,
+        "Flag",
+        Term::type_ground(),
+        vec![nullary("on", nat(0)), nullary("off", nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        nat_type(),
+        vec![
+            ("on", Vec::new(), nat(1)),
+            ("off", Vec::new(), Term::prim(Prim::Bool(true))),
+        ],
+    );
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::Mismatch { .. }),
+    ));
+}
+
+/// An arm binding the wrong number of payload components is refused: the count
+/// is the constructor's, not the arm's to choose.
+#[test]
+fn an_arm_of_the_wrong_payload_arity_is_refused() {
+    let mut kernel = kernel();
+    let value = binder(0, "value");
+
+    let family = declare(
+        &mut kernel,
+        "Wrapped",
+        Term::type_ground(),
+        vec![carrying("mk", value, nat_type(), nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        nat_type(),
+        vec![("mk", Vec::new(), nat(1))],
+    );
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::Arity { .. }),
+    ));
+}

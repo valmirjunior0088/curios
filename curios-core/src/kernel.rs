@@ -88,6 +88,10 @@ pub enum KernelError {
     /// A count that did not match: arguments against a telescope, a payload
     /// against a constructor's signature, a motive against a family's indices.
     Arity { expected: usize, actual: usize },
+    /// A proposition eliminated into a relevant result while carrying
+    /// something a program could read back. Permitted only for an empty
+    /// proposition or a singleton whose payload is entirely determined.
+    LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator,
     /// or a polymorphic numeric literal — reached the kernel. The term was
     /// handed over before elaboration finished with it.
@@ -131,6 +135,10 @@ impl fmt::Display for KernelError {
             KernelError::Arity { expected, actual } => {
                 write!(formatter, "expected {expected} of them, found {actual}")
             }
+            KernelError::LargeElimination(name) => write!(
+                formatter,
+                "cannot eliminate the proposition `{name}` into a relevant result",
+            ),
             KernelError::NotCore(term) => {
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }

@@ -32,6 +32,9 @@
 //! is in the [`kernel`](super) module documentation — a guessed answer from a
 //! second opinion is worse than no second opinion.
 
+mod eliminate;
+use eliminate::check_induct_arms;
+
 mod prim;
 use prim::infer_prim;
 
@@ -45,7 +48,7 @@ use {
         sort::{self, sort_of},
     },
     crate::{
-        Apply, Bound, Field, Func, FuncType, InductType, Let, Proj, Rec, RecMember, Reducer,
+        Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Proj, Rec, RecMember, Reducer,
         Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Variant,
         instantiate_universe_levels_scoped,
     },
@@ -265,20 +268,24 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             .into())
         }
 
-        // An elimination's type is its motive, at this scrutinee. The motive
+        // An elimination's type is its motive at this scrutinee. The motive
         // binds the family's indices and then the scrutinee itself, so opening
-        // it at those is the whole rule.
+        // it at those is the rule for the *type*.
         //
-        // The *arms* are not checked here. Checking them is what makes an
-        // elimination sound, and it needs the per-constructor index refinement
-        // the elaborator performs; until the kernel does that, an elimination is
-        // typed but not verified, and this is the largest gap in the judgment.
+        // Whether the term deserves that type is `eliminate`'s job: each arm
+        // must inhabit the motive at its own constructor's index targets, and a
+        // proposition may not be eliminated into a relevant result unless it
+        // carries nothing to extract.
         Subterm::Match(m) => {
             let scrutinee_type = infer(kernel, &m.head)?;
-            let indices = match Term::unwrap_or_clone(kernel.reduce_forced(scrutinee_type)?) {
-                Subterm::InductType(InductType { indices, .. }) => indices,
-                _ => Vec::new(),
+            let family = match Term::unwrap_or_clone(kernel.reduce_forced(scrutinee_type)?) {
+                Subterm::InductType(family) => Some(family),
+                _ => None,
             };
+            let indices = family
+                .as_ref()
+                .map(|family| family.indices.clone())
+                .unwrap_or_default();
 
             if m.motive.arity() != indices.len() + 1 {
                 return Err(KernelError::Arity {
@@ -286,6 +293,8 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                     actual: m.motive.arity(),
                 });
             }
+
+            check_cases(kernel, family.as_ref(), &m.motive, &m.cases, &m.head)?;
 
             let mut arguments = indices;
             arguments.push(m.head.clone());
@@ -355,6 +364,77 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
         Subterm::Metavar(_) | Subterm::Infix(_) | Subterm::NumLit(_) => {
             Err(KernelError::NotCore(term.clone()))
         }
+    }
+}
+
+/// Check an elimination's arms against its motive.
+///
+/// A nominal elimination is the one that can be unsound, and it is verified in
+/// full. The primitive carriers are checked where the arm's case is a value the
+/// motive can be opened at: `Bool` has two such cases, and a `Switch`'s
+/// enumerated cases are literals. What is *not* yet checked is a `Switch`'s
+/// default and the free-monoid carriers' arms, whose binders would have to be
+/// typed against the carrier's own successor structure. Those arms are typed by
+/// their bodies but not verified against the motive — a hole, and a narrower
+/// one than the whole of elimination was.
+fn check_cases(
+    kernel: &mut Kernel,
+    family: Option<&InductType>,
+    motive: &crate::Scope<crate::Many>,
+    cases: &Cases,
+    scrutinee: &Term,
+) -> Result<(), KernelError> {
+    let at = |kernel: &mut Kernel, value: Term, body: &Term| {
+        let refs = [&value];
+        let expected = motive.open(&refs);
+
+        check(kernel, body, &expected)
+    };
+
+    match cases {
+        Cases::Induct { cases, default } => {
+            let Some(family) = family else {
+                return Err(KernelError::Unclassified(scrutinee.clone()));
+            };
+            let declaration = kernel
+                .induct_decl(&family.name)
+                .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?
+                .clone();
+            let declaration = instantiate_induct_decl(&declaration, &family.universes)?;
+
+            check_induct_arms(
+                kernel,
+                &declaration,
+                family,
+                motive,
+                cases,
+                default.as_ref(),
+            )
+        }
+
+        Cases::Bool {
+            false_case,
+            true_case,
+        } => {
+            at(kernel, Term::prim(crate::Prim::Bool(false)), false_case)?;
+            at(kernel, Term::prim(crate::Prim::Bool(true)), true_case)
+        }
+
+        Cases::Switch { cases, default } => {
+            for (key, body) in cases {
+                let literal = Term::prim(crate::Prim::Nat(crate::Nat::new(*key as usize)));
+                at(kernel, literal, body)?;
+            }
+
+            // The default stands for every value not enumerated, so the only
+            // instance of the motive it can be checked at is the scrutinee's.
+            at(kernel, scrutinee.clone(), default)
+        }
+
+        // The free-monoid carriers bind a peeled generator, a tail, and an
+        // induction hypothesis, and checking their arms means typing those
+        // binders against the carrier's own structure. Not yet written.
+        Cases::FreeMonoid { .. } => Ok(()),
     }
 }
 
