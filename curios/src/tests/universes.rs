@@ -2,7 +2,7 @@
 //!
 //! The hierarchy exists to remove one source of unsoundness: under `Type :
 //! Type` a type could classify itself, which admits Girard's paradox. The
-//! solver's own rules are unit-tested in `curios-core/src/universe/tests.rs`;
+//! solver's own rules are unit-tested in `curios-elab/src/universe/tests.rs`;
 //! these check what a *user* can observe.
 //!
 //! There is deliberately no "the paradox is rejected" test here. Every

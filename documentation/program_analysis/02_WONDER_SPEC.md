@@ -180,7 +180,7 @@ A public type value initially has two textual forms:
 
 ### Diagnostics
 
-Diagnostics are public records rather than serialized `curios_text::Error` or `curios_core::Error` values. Every diagnostic has a stable code, kind, severity, compiler phase, message, optional primary location, and zero or more related locations. Variant-specific payloads carry structured facts such as inferred and expected types, witness keys, or written-goal scopes.
+Diagnostics are public records rather than serialized `curios_text::Error` or `curios_elab::Error` values. Every diagnostic has a stable code, kind, severity, compiler phase, message, optional primary location, and zero or more related locations. Variant-specific payloads carry structured facts such as inferred and expected types, witness keys, or written-goal scopes.
 
 Written goals use diagnostic kind `goal`. Every written-goal diagnostic carries its required source label; labels are metadata rather than unique identities, so the same label may occur in several diagnostics.
 
@@ -304,7 +304,7 @@ This keeps expected compiler diagnostics available to tool callers instead of tu
 
 ## Architecture
 
-The analysis substrate lives in a new pure `curios-analysis` crate rather than in the backend-owning `curios` CLI crate. It depends on `curios-abi`, `curios-base`, `curios-text`, and `curios-core`, and owns the reusable load-through-zonk front end plus the public source and semantic indexes.
+The analysis substrate lives in a new pure `curios-analysis` crate rather than in the backend-owning `curios` CLI crate. It depends on `curios-abi`, `curios-base`, `curios-text`, and `curios-elab`, and owns the reusable load-through-zonk front end plus the public source and semantic indexes.
 
 Its entry point accepts an `AnalysisInput` carrying a parsed entrypoint, `RootSource`, logical input identity, analysis configuration, and front-end observation callback. A path-based helper constructs that input for `wonder`; embedders can supply it directly without a filesystem.
 

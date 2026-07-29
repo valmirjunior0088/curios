@@ -14,9 +14,9 @@ static ARCHIVE: OnceLock<Result<&'static ArchivedPreludeArchive, String>> = Once
 /// cannot mutate compiler-global state between invocations.
 pub struct Prelude {
     prepared: curios_text::PreparedPrelude,
-    core: curios_core::Module,
-    body_type: curios_core::Term,
-    ersd: curios_core::ErasedPrelude,
+    core: curios_elab::Module,
+    body_type: curios_elab::Term,
+    ersd: curios_elab::ErasedPrelude,
 }
 
 impl Prelude {
@@ -24,11 +24,11 @@ impl Prelude {
         &self.prepared
     }
 
-    pub fn core(&self) -> &curios_core::Module {
+    pub fn core(&self) -> &curios_elab::Module {
         &self.core
     }
 
-    pub fn body_type(&self) -> &curios_core::Term {
+    pub fn body_type(&self) -> &curios_elab::Term {
         &self.body_type
     }
 
@@ -36,7 +36,7 @@ impl Prelude {
     /// production replay resumes over. Returned as an owned clone because
     /// replay consumes it by value, so a compile's mutation of its copy can
     /// never poison a later one.
-    pub fn ersd(&self) -> curios_core::ErasedPrelude {
+    pub fn ersd(&self) -> curios_elab::ErasedPrelude {
         self.ersd.clone()
     }
 }
@@ -165,13 +165,13 @@ mod tests {
             let mut parameters = std::collections::BTreeMap::new();
             for item in &prelude.core().items {
                 match item {
-                    curios_core::Item::Let(definition) => {
+                    curios_elab::Item::Let(definition) => {
                         parameters.insert(
                             definition.name.symbol(),
                             definition.universe_context.parameter_count,
                         );
                     }
-                    curios_core::Item::Rec(rec) => {
+                    curios_elab::Item::Rec(rec) => {
                         for definition in rec.definitions() {
                             parameters.insert(
                                 definition.name.symbol(),
@@ -231,12 +231,12 @@ mod tests {
                 .core()
                 .items
                 .iter()
-                .flat_map(curios_core::Item::declared_names)
+                .flat_map(curios_elab::Item::declared_names)
                 .cloned()
                 .collect::<BTreeSet<_>>();
             for target in SYNTAX.targets() {
                 assert!(
-                    names.contains(&curios_core::Global::Authored(target.qualifier())),
+                    names.contains(&curios_elab::Global::Authored(target.qualifier())),
                     "missing syntax target {}",
                     target.symbol()
                 );

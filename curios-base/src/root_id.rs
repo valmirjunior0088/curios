@@ -5,7 +5,7 @@
 //! equality instead of re-deriving "which root does this belong to" from a
 //! qualified-name string. It lives in `curios-base` — the compiler's shared
 //! vocabulary — because both `curios-text` (module resolution) and
-//! `curios-core` (on `Concept`, `Structure`, and `Inductive` registry entries)
+//! `curios-elab` (on `Concept`, `Structure`, and `Inductive` registry entries)
 //! key on it. Neither the host/guest wire ABI nor the runtime names it.
 
 #[cfg(test)]

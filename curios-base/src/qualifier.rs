@@ -1,13 +1,13 @@
 //! `Qualifier` is a canonical, resolved identity: a sequence of module segments
 //! rooted at the module root. It is what the resolution tables key on, and
-//! what `curios-core`'s `Structure`/`Context`/`Definition` use to track a
+//! what `curios-elab`'s `Structure`/`Context`/`Definition` use to track a
 //! binding's declaring/use-site module without re-deriving structure from a
-//! flattened string. Lives here (not `curios-core`, where it originated) as a
+//! flattened string. Lives here (not `curios-elab`, where it originated) as a
 //! foundational value type with no dependency of its own on the rest of the
 //! core calculus — `curios-base` is the shared leaf every pipeline crate
 //! already depends on.
 //!
-//! The sharing below is load-bearing and was measured: when `curios-core`'s
+//! The sharing below is load-bearing and was measured: when `curios-elab`'s
 //! names were retyped from `String` to structured identities, an owned
 //! `Vec<String>` per qualifier made whole-program compilation 1.82x slower, and
 //! `Rc` sharing with a pointer-identity fast path brought it to 12% *below* the

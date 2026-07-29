@@ -27,7 +27,7 @@ pub(crate) struct PreludeArchive {
     pub(crate) schema: u32,
     pub(crate) fingerprint: [u8; 32],
     pub(crate) prepared: PreparedPrelude,
-    pub(crate) core: curios_core::Module,
-    pub(crate) body_type: curios_core::Term,
-    pub(crate) ersd: curios_core::ErasedPrelude,
+    pub(crate) core: curios_elab::Module,
+    pub(crate) body_type: curios_elab::Term,
+    pub(crate) ersd: curios_elab::ErasedPrelude,
 }

@@ -37,19 +37,19 @@ fn syntax() -> &'static crate::SyntaxRegistry {
 /// A top-level definition's identity, from the path a test writes. Fixture-only
 /// — production code carries the `Qualifier` from resolution instead of
 /// recovering it from a spelling.
-fn global(path: &str) -> curios_core::Free {
-    curios_core::Free::global(curios_base::Qualifier::from(
+fn global(path: &str) -> curios_elab::Free {
+    curios_elab::Free::global(curios_base::Qualifier::from(
         path.trim_start_matches('/').split('/'),
     ))
 }
 
-fn global_name(path: &str) -> curios_core::Global {
-    curios_core::Global::Authored(curios_base::Qualifier::from(
+fn global_name(path: &str) -> curios_elab::Global {
+    curios_elab::Global::Authored(curios_base::Qualifier::from(
         path.trim_start_matches('/').split('/'),
     ))
 }
 
-fn run(src: &str) -> curios_core::Term {
+fn run(src: &str) -> curios_elab::Term {
     let (module, _, _, _) = super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
         &crate::RootSource::none(),
@@ -60,30 +60,30 @@ fn run(src: &str) -> curios_core::Term {
     module.into_nested_term()
 }
 
-fn written_type(id: usize) -> curios_core::Term {
-    curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(id)))
+fn written_type(id: usize) -> curios_elab::Term {
+    curios_elab::Term::type_at(curios_elab::Level::meta(curios_elab::UniverseMetaId(id)))
 }
 
-fn elaborate_source(src: &str) -> curios_core::Module {
+fn elaborate_source(src: &str) -> curios_elab::Module {
     let (module, metavar_floor, universe_floor, _) = super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
         &crate::RootSource::none(),
         syntax(),
     )
     .unwrap();
-    let mut context = curios_core::Context::with_default_budget();
-    curios_core::elaborate_and_zonk_module(
+    let mut context = curios_elab::Context::with_default_budget();
+    curios_elab::elaborate_and_zonk_module(
         &mut context,
         &module,
         metavar_floor,
         universe_floor,
-        curios_core::Mode::Infer,
+        curios_elab::Mode::Infer,
     )
     .unwrap()
     .0
 }
 
-fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
+fn elaboration_paths(src: &str) -> (curios_elab::Module, curios_elab::Module) {
     let (lowered, metavar_floor, universe_floor, _) = super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
         &crate::RootSource::none(),
@@ -99,33 +99,33 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
     lowered_prefix.type_ = None;
-    lowered_prefix.body = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero));
-    let prelude = curios_core::elaborate_and_zonk_module(
-        &mut curios_core::Context::with_default_budget(),
+    lowered_prefix.body = curios_elab::Term::prim(curios_elab::Prim::Nat(curios_elab::Nat::Zero));
+    let prelude = curios_elab::elaborate_and_zonk_module(
+        &mut curios_elab::Context::with_default_budget(),
         &lowered_prefix,
         metavar_floor,
         universe_floor,
-        curios_core::Mode::Infer,
+        curios_elab::Mode::Infer,
     )
     .unwrap()
     .0;
 
-    let full = curios_core::elaborate_and_zonk_module(
-        &mut curios_core::Context::with_default_budget(),
+    let full = curios_elab::elaborate_and_zonk_module(
+        &mut curios_elab::Context::with_default_budget(),
         &lowered,
         metavar_floor,
         universe_floor,
-        curios_core::Mode::Infer,
+        curios_elab::Mode::Infer,
     )
     .unwrap()
     .0;
-    let cached = curios_core::elaborate_and_zonk_with_prelude(
-        &mut curios_core::Context::with_default_budget(),
+    let cached = curios_elab::elaborate_and_zonk_with_prelude(
+        &mut curios_elab::Context::with_default_budget(),
         &prelude,
         &lowered,
         metavar_floor,
         universe_floor,
-        curios_core::Mode::Infer,
+        curios_elab::Mode::Infer,
     )
     .unwrap()
     .0;
@@ -211,8 +211,8 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
             .map(|seed| seed.role)
             .collect::<Vec<_>>(),
         vec![
-            curios_core::UniverseRole::Generalizable,
-            curios_core::UniverseRole::Flexible,
+            curios_elab::UniverseRole::Generalizable,
+            curios_elab::UniverseRole::Flexible,
         ],
     );
     assert!(
@@ -241,7 +241,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/id" => {
+            curios_elab::Item::Let(definition) if definition.name.symbol() == "/id" => {
                 Some(definition)
             }
             _ => None,
@@ -249,17 +249,17 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .unwrap();
     assert_eq!(definition.universe_context.parameter_count, 1);
 
-    let curios_core::Subterm::Tuple(tuple) = &*module.body else {
+    let curios_elab::Subterm::Tuple(tuple) = &*module.body else {
         panic!("the entrypoint is a tuple");
     };
     let levels = tuple
         .fields
         .iter()
         .map(|field| {
-            let curios_core::Subterm::Apply(apply) = &**field else {
+            let curios_elab::Subterm::Apply(apply) = &**field else {
                 panic!("each tuple field is an id application");
             };
-            let curios_core::Subterm::UniverseInst(instance) = &*apply.head else {
+            let curios_elab::Subterm::UniverseInst(instance) = &*apply.head else {
                 panic!("each external id use is universe-instantiated");
             };
             instance.levels.clone()
@@ -268,8 +268,8 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
     assert_eq!(
         levels,
         vec![
-            vec![curios_core::Level::constant(1)],
-            vec![curios_core::Level::constant(2)],
+            vec![curios_elab::Level::constant(1)],
+            vec![curios_elab::Level::constant(2)],
         ]
     );
 }
@@ -289,8 +289,8 @@ fn inductive_constructor_ownership_is_explicit() {
         .items
         .iter()
         .flat_map(|item| match item {
-            curios_core::Item::Let(definition) => vec![definition.clone()],
-            curios_core::Item::Rec(rec) => rec.definitions(),
+            curios_elab::Item::Let(definition) => vec![definition.clone()],
+            curios_elab::Item::Rec(rec) => rec.definitions(),
         })
         .map(|definition| {
             (
@@ -306,22 +306,22 @@ fn inductive_constructor_ownership_is_explicit() {
         vec![
             (
                 global_name("/Result"),
-                curios_core::DefinitionKind::InductiveType,
+                curios_elab::DefinitionKind::InductiveType,
                 2,
             ),
             (
                 global_name("/Result/success"),
-                curios_core::DefinitionKind::InductiveConstructor {
+                curios_elab::DefinitionKind::InductiveConstructor {
                     owner: curios_base::Qualifier::from(["Result"]),
-                    tag: curios_core::Atom::from("success"),
+                    tag: curios_elab::Atom::from("success"),
                 },
                 2,
             ),
             (
                 global_name("/Result/failure"),
-                curios_core::DefinitionKind::InductiveConstructor {
+                curios_elab::DefinitionKind::InductiveConstructor {
                     owner: curios_base::Qualifier::from(["Result"]),
-                    tag: curios_core::Atom::from("failure"),
+                    tag: curios_elab::Atom::from("failure"),
                 },
                 2,
             ),
@@ -345,13 +345,13 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+            curios_elab::Item::Let(definition) if definition.name.symbol() == "/outer" => {
                 Some(definition)
             }
             _ => None,
         })
         .unwrap();
-    let curios_core::Subterm::Let(let_) = &*definition.body else {
+    let curios_elab::Subterm::Let(let_) = &*definition.body else {
         panic!("outer contains the local let");
     };
     assert_eq!(let_.bindings.len(), 1);
@@ -368,29 +368,29 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+            curios_elab::Item::Let(definition) if definition.name.symbol() == "/outer" => {
                 Some(definition)
             }
             _ => None,
         })
         .unwrap();
-    let curios_core::Subterm::Let(let_) = &*definition.body else {
+    let curios_elab::Subterm::Let(let_) = &*definition.body else {
         panic!("outer contains the local lets");
     };
     assert_eq!(let_.bindings.len(), 2);
 }
 
-fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
+fn universe_parameters(module: &curios_elab::Module, name: &str) -> usize {
     module
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == name => {
+            curios_elab::Item::Let(definition) if definition.name.symbol() == name => {
                 Some(definition.universe_context.parameter_count)
             }
             // An inductive and its constructors are one recursive group, so a
             // lookup restricted to `Let` would miss every one of them.
-            curios_core::Item::Rec(rec) => rec
+            curios_elab::Item::Rec(rec) => rec
                 .definitions()
                 .iter()
                 .find(|definition| definition.name.symbol() == name)
@@ -461,11 +461,11 @@ fn single_let_binding() {
             let x : Type = Type;
             x
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/x")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/x")))
         ),
     );
 }
@@ -479,11 +479,11 @@ fn nested_module_binding_reference() {
             end
             Foo/f
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Foo/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/f")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/Foo/f")))
         ),
     );
 }
@@ -497,11 +497,11 @@ fn module_named_after_type_resolves_by_qualified_path() {
             end
             Nat/double
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Nat/double"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Nat/double")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/Nat/double")))
         ),
     );
 }
@@ -518,11 +518,11 @@ fn use_shorthand_resolves_qualifier() {
             use Foo/{Bar};
             Bar/f
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/Foo/Bar/f")))
         ),
     );
 }
@@ -641,11 +641,11 @@ fn pub_use_exposes_qualifier() {
             end
             MyMod/Bar/f
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/Foo/Bar/f")))
         ),
     );
 }
@@ -685,11 +685,11 @@ fn use_of_pub_use_path_resolves_through_alias() {
             use /MyMod/{Bar};
             Bar/f
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/Foo/Bar/f")))
         ),
     );
 }
@@ -711,11 +711,11 @@ fn chained_pub_use_re_exports_transitively() {
             end
             C/X/f
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/A/X/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/A/X/f")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/A/X/f")))
         ),
     );
 }
@@ -740,11 +740,11 @@ fn chained_re_export_resolves_out_of_order() {
             end
             A/x
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/C/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/C/x")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/C/x")))
         ),
     );
 }
@@ -811,11 +811,11 @@ fn deep_facade_traversal_through_re_exported_module() {
             use /A/M/{x};
             x
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/B/M/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/B/M/x")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/B/M/x")))
         ),
     );
 }
@@ -836,11 +836,11 @@ fn re_exports_from_own_private_child() {
             use /Facade/{helper};
             helper
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Facade/Impl/helper"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Facade/Impl/helper")))
+            curios_elab::Term::var(curios_elab::Var::free(global("/Facade/Impl/helper")))
         ),
     );
 }
@@ -1708,13 +1708,13 @@ fn module_member_is_not_classified_as_a_generated_nominal_member() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/Foo/bar" => {
+            curios_elab::Item::Let(definition) if definition.name.symbol() == "/Foo/bar" => {
                 Some(definition)
             }
             _ => None,
         })
         .expect("module member definition");
-    assert_eq!(bar.kind, curios_core::DefinitionKind::Authored);
+    assert_eq!(bar.kind, curios_elab::DefinitionKind::Authored);
 }
 
 #[test]
@@ -1855,15 +1855,15 @@ fn use_glob_imports_all_public_bindings() {
             use /Foo/*;
             x
         "#),
-        curios_core::Term::let_(
+        curios_elab::Term::let_(
             &global("/Foo/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::let_(
+            curios_elab::Term::let_(
                 &global("/Foo/y"),
                 written_type(2),
                 written_type(3),
-                curios_core::Term::var(curios_core::Var::free(global("/Foo/x")))
+                curios_elab::Term::var(curios_elab::Var::free(global("/Foo/x")))
             )
         ),
     );
@@ -1991,7 +1991,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
 fn goal_lowers_to_marked_metavar() {
     // A written `?` lowers to the same fresh metavariable a desugared hole
     // does, but marked `MetavarOrigin::Goal` so zonk reports it.
-    assert_eq!(run("?"), curios_core::Term::goal(0));
+    assert_eq!(run("?"), curios_elab::Term::goal(0));
 }
 
 #[test]
@@ -2000,7 +2000,7 @@ fn distinct_goals_get_distinct_ids() {
     let term = run("(?, ?)");
     assert_eq!(
         term,
-        curios_core::Term::tuple([curios_core::Term::goal(0), curios_core::Term::goal(1)]),
+        curios_elab::Term::tuple([curios_elab::Term::goal(0), curios_elab::Term::goal(1)]),
     );
 }
 
@@ -2010,22 +2010,22 @@ fn bang_desugars_through_syn_monad_bind() {
     // through the `/syn/Monad/bind` wrapper applied to the action and the
     // continuation over a gensym'd binder. The witness slot and implicits are
     // inserted during core elaboration.
-    let expected = curios_core::Term::apply(
-        curios_core::Term::var(curios_core::Var::free(global("/syn/Monad/bind"))),
+    let expected = curios_elab::Term::apply(
+        curios_elab::Term::var(curios_elab::Var::free(global("/syn/Monad/bind"))),
         [
             // `x` resolves to nothing, so it lowers to a binder identity that
             // core will report as unbound — never to a global that a same-named
             // root-level definition could satisfy.
-            curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
+            curios_elab::Term::var(curios_elab::Var::free(curios_elab::Free::local(
                 0,
                 Some("x"),
             ))),
-            curios_core::Term::func(
+            curios_elab::Term::func(
                 [(
-                    curios_core::Free::local(1, None),
-                    curios_core::Term::metavar(0),
+                    curios_elab::Free::local(1, None),
+                    curios_elab::Term::metavar(0),
                 )],
-                curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(1, None))),
+                curios_elab::Term::var(curios_elab::Var::free(curios_elab::Free::local(1, None))),
             ),
         ],
     );
@@ -2039,16 +2039,16 @@ fn choose_lowers_to_nested_bool_matches() {
     // whose own false branch is the `_` default (a plain hole here).
     let term = run("choose | p => a | q => b | _ => ? end");
 
-    let curios_core::Subterm::Match(outer) = &*term else {
+    let curios_elab::Subterm::Match(outer) = &*term else {
         panic!("expected a Match at the top, got {term:?}");
     };
-    let curios_core::Cases::Bool { false_case, .. } = &outer.cases else {
+    let curios_elab::Cases::Bool { false_case, .. } = &outer.cases else {
         panic!("expected the outer Cases::Bool, got {:?}", outer.cases);
     };
-    let curios_core::Subterm::Match(inner) = &**false_case else {
+    let curios_elab::Subterm::Match(inner) = &**false_case else {
         panic!("expected a nested Match in the outer false branch, got {false_case:?}");
     };
-    let curios_core::Cases::Bool {
+    let curios_elab::Cases::Bool {
         false_case: inner_false,
         ..
     } = &inner.cases
@@ -2056,7 +2056,7 @@ fn choose_lowers_to_nested_bool_matches() {
         panic!("expected the inner Cases::Bool, got {:?}", inner.cases);
     };
     assert!(
-        matches!(&**inner_false, curios_core::Subterm::Metavar(_)),
+        matches!(&**inner_false, curios_elab::Subterm::Metavar(_)),
         "the `_` default should sit at the innermost false branch, got {inner_false:?}"
     );
 }
@@ -2413,7 +2413,7 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
         module
             .items
             .iter()
-            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.symbol() == "/outer")),
+            .any(|item| matches!(item, curios_elab::Item::Let(d) if d.name.symbol() == "/outer")),
         "outer elaborated"
     );
 }

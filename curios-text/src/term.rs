@@ -144,7 +144,7 @@ pub struct FuncParam {
     pub plicity: Plicity,
     pub pattern: Pattern,
     /// `None` is the surface `(x) => …` form, sugar for `(x : _) => …`; it
-    /// lowers to a hole, solved by `curios_core::elaborate` against the
+    /// lowers to a hole, solved by `curios_elab::elaborate` against the
     /// expected function type when the lambda is checked, or synthesized from
     /// the annotation when inferred.
     pub annotation: Option<Term>,

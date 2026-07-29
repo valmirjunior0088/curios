@@ -4,7 +4,7 @@ Working implementation specification for making Curios sound as a logic by requi
 
 This effort closes the three remaining routes to a closed inhabitant of `False`. It does not make Curios strongly normalizing, does not remove `rec` or `exit`, and does not give canonicity: a closed `Str` may still be bottom. What it establishes is that no closed proof of `False` exists, and therefore that a `Str` which *is* a value satisfies its certificate.
 
-When this work lands, fold the permanent calculus and compiler invariants into the owning `curios-core` module documentation, record the theorem and its trusted base in `DESIGN.md`, update `ROADMAP.md`, and delete this working specification after no remaining document refers to it.
+When this work lands, fold the permanent calculus and compiler invariants into the owning `curios-elab` module documentation, record the theorem and its trusted base in `DESIGN.md`, update `ROADMAP.md`, and delete this working specification after no remaining document refers to it.
 
 Steps 1 through 7 are implemented, both gates reject, and the fork step 6 raised is closed — see "Appendix: the fork on (T), and how it closed". The amendments implementation forced are marked **Amended** in place, and the figures under "Measurements" are computed rather than estimated.
 
@@ -137,7 +137,7 @@ A definition is `Partial` if any `rec` group it contains is rejected, if it ment
 
 ## The gates
 
-Both gates run post-zonk, as siblings of `validate_universes` and `check_positivity`, at the two sites in `curios-core/src/elaborate/module.rs` those already use. Post-zonk placement is what makes them metavariable-free by construction: `zonk_module` errors on an unsolved hole first, so no metavariable can later be solved to a partial term.
+Both gates run post-zonk, as siblings of `validate_universes` and `check_positivity`, at the two sites in `curios-elab/src/elaborate/module.rs` those already use. Post-zonk placement is what makes them metavariable-free by construction: `zonk_module` errors on an unsolved hole first, so no metavariable can later be solved to a partial term.
 
 ### Seeding
 
@@ -190,11 +190,11 @@ A gate fails when a `Partial` definition is reachable from a seed. (T) additiona
 
 `Definition` gains a `totality: Totality` field, mirroring how `InductDecl` and `StructDecl` gained `polarities`. Carry it through the `zonk_module` rebuilds, initialize it at every remaining struct-literal site, and bump `SCHEMA` in `curios-prelude/src/archive.rs`.
 
-The archived prelude is restored and trusted rather than re-typechecked (`curios-core/src/into_ersd/lower.rs`), exactly as its polarity vectors are. The prelude is therefore gated at compiler-build time, on the from-scratch elaboration path, and the persisted flag is what lets a user program's gates see prelude partiality without re-analyzing it.
+The archived prelude is restored and trusted rather than re-typechecked (`curios-elab/src/into_ersd/lower.rs`), exactly as its polarity vectors are. The prelude is therefore gated at compiler-build time, on the from-scratch elaboration path, and the persisted flag is what lets a user program's gates see prelude partiality without re-analyzing it.
 
 ## Implementation steps
 
-**1. Record the theorem.** `DESIGN.md` gains the claim, the trusted base, the deadline's consequence for decidability, and definitional K as a permanent commitment against univalence — currently noted only in `curios-core/src/invert.rs`. Nothing else is measured against anything until this exists.
+**1. Record the theorem.** `DESIGN.md` gains the claim, the trusted base, the deadline's consequence for decidability, and definitional K as a permanent commitment against univalence — currently noted only in `curios-elab/src/invert.rs`. Nothing else is measured against anything until this exists.
 
 **2. The totality classifier, non-rejecting.** Implement the analysis above and emit a report. Change no acceptance. This is the largest and riskiest piece, and shipping it inert is what converts every hand classification below into a measurement.
 
@@ -214,15 +214,15 @@ The archived prelude is restored and trusted rather than re-typechecked (`curios
 
 **7. Gate (V)**, with `Prim::Exit` folded into the partiality relation.
 
-**Amended — the two seeding gaps close against `convert.rs`'s primitives, not the classifier's walk.** The instruction below to give the seeding walk "the scope-opening traversal the classifier already has" is wrong, and following it would have done damage. The classifier mints binders with `Context::fresh` and never assumes their types, which is enough to compare shapes and useless for deciding sorts; assuming them instead is what the hazard actually is, because `Context::assume` bumps `mutation_stamp` and would invalidate the memoization caches continuously. `Sort::of` already faces exactly this and already solves it: `Opened = [(Free, Term)]` (`curios-core/src/convert.rs:91`) threads locally-opened binders *beside* the context rather than into it, which is what keeps sort decisions observationally read-only. The seeding walk carries the same vector, and both `reach() == 0` guards come out with it.
+**Amended — the two seeding gaps close against `convert.rs`'s primitives, not the classifier's walk.** The instruction below to give the seeding walk "the scope-opening traversal the classifier already has" is wrong, and following it would have done damage. The classifier mints binders with `Context::fresh` and never assumes their types, which is enough to compare shapes and useless for deciding sorts; assuming them instead is what the hazard actually is, because `Context::assume` bumps `mutation_stamp` and would invalidate the memoization caches continuously. `Sort::of` already faces exactly this and already solves it: `Opened = [(Free, Term)]` (`curios-elab/src/convert.rs:91`) threads locally-opened binders *beside* the context rather than into it, which is what keeps sort decisions observationally read-only. The seeding walk carries the same vector, and both `reach() == 0` guards come out with it.
 
-The second gap has a ready answer in the same file. Resolving an application's parameter types by looking its head up among the module's definitions would cover only globals; `synth_neutral` (`curios-core/src/convert.rs:97`) synthesizes a neutral spine's type from the primitives `infer` itself uses, returns `None` conservatively, and covers locals, globals, curried spines, and projections alike — so the argument rule is stated against the existing judgment rather than a second one that could drift from it.
+The second gap has a ready answer in the same file. Resolving an application's parameter types by looking its head up among the module's definitions would cover only globals; `synth_neutral` (`curios-elab/src/convert.rs:97`) synthesizes a neutral spine's type from the primitives `infer` itself uses, returns `None` conservatively, and covers locals, globals, curried spines, and projections alike — so the argument rule is stated against the existing judgment rather than a second one that could drift from it.
 
 Measure before rejecting, as step 3 did. Closing the gaps makes (V) see strictly more, and the report is what says whether the corpus pays for it.
 
 **Amended — implemented and gated; the corpus paid nothing, and the instruction to measure was the only thing that found the real defect.** Both gaps closed as directed above, the walk became iterative (a `Str` literal is one certified-UTF-8 link per byte, so a recursive walk overflows a default test stack), and `check_proof_totality` runs beside `check_type_totality` at both elaboration sites. No prelude source changed and no test changed.
 
-The direction to state the argument rule against `synth_neutral` rather than a second judgment was right, and it also understated what it was buying. `synth_neutral` had no case for a universe instance, a recursive member, a partially applied spine, or a structure projection, so the rule it backs almost never fired — see "Measurements". Extending it was not only a totality repair: `compare_same_rec_apply` (`curios-core/src/convert.rs`) exists to compare applications of the same recursive member, its head is by construction a `RecMember`, and with no such case `apply_param_types` fell back to `Term::type_ground()` unconditionally, silently disabling η and proof irrelevance on the one path written for them. The prelude hash-consed to 25976 distinct structures before and after every kernel change, which is the evidence that elaboration did not shift.
+The direction to state the argument rule against `synth_neutral` rather than a second judgment was right, and it also understated what it was buying. `synth_neutral` had no case for a universe instance, a recursive member, a partially applied spine, or a structure projection, so the rule it backs almost never fired — see "Measurements". Extending it was not only a totality repair: `compare_same_rec_apply` (`curios-elab/src/convert.rs`) exists to compare applications of the same recursive member, its head is by construction a `RecMember`, and with no such case `apply_param_types` fell back to `Term::type_ground()` unconditionally, silently disabling η and proof irrelevance on the one path written for them. The prelude hash-consed to 25976 distinct structures before and after every kernel change, which is the evidence that elaboration did not shift.
 
 Steps 6 and 7 are independent and may ship separately.
 
@@ -295,7 +295,7 @@ Regression tests in `curios/src/tests/soundness.rs`, using the `assert!(crate::r
 
 Acceptance tests must pin the classifications the design depends on: `add/raw` and `raw_assoc` accepted, which fails without refinement expansion; `raw_comm`/`raw_swap_step` accepted, which fails without the mutual closure; `format_type_with` accepted; `/std/Json/decode` and `/std/Async/bind` classified partial and still usable in a program; and a partial definition permitted in a runtime term while rejected in a proof.
 
-Unit tests in `curios-core/src/totality/tests.rs` for the size lattice, matrix composition, idempotent-closure acceptance, and the refinement-expansion cases above.
+Unit tests in `curios-elab/src/totality/tests.rs` for the size lattice, matrix composition, idempotent-closure acceptance, and the refinement-expansion cases above.
 
 **Amended — a (V) fixture must assert *which* gate fired, and the argument rule needs one fixture per head shape.** (T) runs first, so a fixture that accidentally put a partial definition in a type position would pass a bare `is_err` while proving nothing about proof positions; `rejected_as_a_proof` asserts the proof-position diagnostic instead. And because the argument rule can only fire where the head's type can be synthesized, one representative program does not cover it: the fixtures enumerate the head shapes — polymorphic, match-arm binder, primitive fold binder, structure projection, and concept method — because each fails independently of the others. Two of those five compiled and ran before this step.
 
@@ -323,7 +323,7 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 
 ## Left open
 
-Two kernel rules are load-bearing once these gates exist and have no written argument. Definitional proof irrelevance (`curios-core/src/convert.rs:2046`) accepts without inspecting either term, which is correct precisely because every `Prop` inhabitant will now be total, and its side condition is the large-elimination guard. The conversion recurrence rule (`curios-core/src/convert.rs:2056`) accepts on the absence of finite disagreement; its canonicalization is alpha-renaming over binders minted during the run, its history is per-run with explicit removal on park and retry, and aggressive (T) removes its exposure to bottom-typed terms. Both appear sound. Both should be argued in `DESIGN.md` rather than assumed. Neither has been probed.
+Two kernel rules are load-bearing once these gates exist and have no written argument. Definitional proof irrelevance (`curios-elab/src/convert.rs:2046`) accepts without inspecting either term, which is correct precisely because every `Prop` inhabitant will now be total, and its side condition is the large-elimination guard. The conversion recurrence rule (`curios-elab/src/convert.rs:2056`) accepts on the absence of finite disagreement; its canonicalization is alpha-renaming over binders minted during the run, its history is per-run with explicit removal on park and retry, and aggressive (T) removes its exposure to bottom-typed terms. Both appear sound. Both should be argued in `DESIGN.md` rather than assumed. Neither has been probed.
 
 Three more, ordered by how much each would change what the claim is worth. Three earlier entries closed with step 8: the prelude-declaration defect, which had no fix because the lookup that needed it no longer exists; "only one seeding rule has been measured", since every (V) rule was counted at replay before being deleted; and the residual 31, which counted heads `synth_neutral` declined for a rule that is gone.
 

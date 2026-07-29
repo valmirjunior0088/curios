@@ -213,7 +213,7 @@ For ordinary term lowering, arm leaves should use the existing `MatchCompiler::t
 
 Freshness and metavariable allocation order should match the explicit lambda spelling as closely as practical, especially if diagnostics or golden core prints expose generated identifiers.
 
-No change is expected in `curios-core`, erasure, continuation lowering, wasm emission, the ABI, or the runtime specifically for this syntax. Its core output is an ordinary function containing an ordinary match.
+No change is expected in `curios-elab`, erasure, continuation lowering, wasm emission, the ABI, or the runtime specifically for this syntax. Its core output is an ordinary function containing an ordinary match.
 
 ## Implementation map
 

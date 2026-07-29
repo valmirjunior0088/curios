@@ -10,7 +10,7 @@ fn entrypoint_type_is_used_as_expected_type() {
         .with_type("/std/Bool".parse().unwrap());
 
     let error = compile_entrypoint(
-        curios_core::DEFAULT_STEP_BUDGET,
+        curios_elab::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},
@@ -29,7 +29,7 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
     };
 
     compile_entrypoint(
-        curios_core::DEFAULT_STEP_BUDGET,
+        curios_elab::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},
@@ -107,7 +107,7 @@ fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     let mut cont = String::new();
 
     compile_entrypoint(
-        curios_core::DEFAULT_STEP_BUDGET,
+        curios_elab::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| match stage {
@@ -142,7 +142,7 @@ fn meta_free_prelude_program_compiles_without_overflow() {
     // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
     // still pulls in the whole std/std prelude. Assembling and traversing the
     // old N-deep nested term overflowed the stack during construction and in
-    // every pass; the flat `curios_core::Module`/`curios_ersd::Module` representation lowers
+    // every pass; the flat `curios_elab::Module`/`curios_ersd::Module` representation lowers
     // it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
@@ -1172,7 +1172,7 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 fn typecheck(source: &str) -> Result<(), String> {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
     super::elaborate_and_zonk(
-        curios_core::DEFAULT_STEP_BUDGET,
+        curios_elab::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         &mut |_| {},
@@ -1394,14 +1394,14 @@ fn dead_user_definition_is_still_typechecked() {
 fn erase_to_ir(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
-        curios_core::DEFAULT_STEP_BUDGET,
+        curios_elab::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         &mut |_| {},
     )
     .unwrap();
-    curios_core::erase_module(
-        &mut curios_core::Context::with_default_budget(),
+    curios_elab::erase_module(
+        &mut curios_elab::Context::with_default_budget(),
         &module,
         &core_type,
     )

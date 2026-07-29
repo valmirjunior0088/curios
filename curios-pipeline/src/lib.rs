@@ -9,12 +9,12 @@ use {curios_abi::ForeignStore, std::fmt};
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 /// The default reduction budget, re-exported so every caller of
-/// [`compile_entrypoint`] can name it without depending on `curios-core`.
-pub use curios_core::DEFAULT_STEP_BUDGET;
+/// [`compile_entrypoint`] can name it without depending on `curios-elab`.
+pub use curios_elab::DEFAULT_STEP_BUDGET;
 
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
-    Core(&'a curios_core::Module),
+    Core(&'a curios_elab::Module),
     Ersd(&'a curios_ersd::Module),
     ErsdOptm(&'a curios_ersd::Module),
     Cont(&'a curios_cont::CpsModule),
@@ -85,7 +85,7 @@ fn elaborate_and_zonk<O>(
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
     observe: &mut O,
-) -> Result<(curios_core::Module, curios_core::Term, ForeignStore), String>
+) -> Result<(curios_elab::Module, curios_elab::Term, ForeignStore), String>
 where
     O: FnMut(Stage<'_>),
 {
@@ -105,14 +105,14 @@ where
     observe(Stage::Core(&lowered));
 
     let core_mode = match &lowered.type_ {
-        Some(type_) => curios_core::Mode::Check(type_.clone()),
-        None => curios_core::Mode::Infer,
+        Some(type_) => curios_elab::Mode::Check(type_.clone()),
+        None => curios_elab::Mode::Infer,
     };
 
     let (module, core_type) = curios_prelude::with_prelude(|prelude| {
-        let mut context = curios_core::Context::new(budget);
+        let mut context = curios_elab::Context::new(budget);
 
-        curios_core::elaborate_and_zonk_with_prelude(
+        curios_elab::elaborate_and_zonk_with_prelude(
             &mut context,
             prelude.core(),
             &lowered,
@@ -179,8 +179,8 @@ where
         elaborate_and_zonk(budget, entrypoint, loader, &mut observe)?;
 
     let ersd_module = curios_prelude::with_prelude(|prelude| {
-        curios_core::erase_module_with_prelude(
-            &mut curios_core::Context::new(budget),
+        curios_elab::erase_module_with_prelude(
+            &mut curios_elab::Context::new(budget),
             prelude.core(),
             &module,
             &core_type,

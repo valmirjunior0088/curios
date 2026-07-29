@@ -2,7 +2,7 @@
 
 Working implementation specification for monomorphic, use-driven inference of unannotated lambda parameters.
 
-This document is the implementation handoff for the feature. Its durable user-facing semantics belong in `SYNTAX.md`, while elaborator invariants belong in `curios-core` module documentation and tests.
+This document is the implementation handoff for the feature. Its durable user-facing semantics belong in `SYNTAX.md`, while elaborator invariants belong in `curios-elab` module documentation and tests.
 
 ## Status and relationship to anonymous match functions
 
@@ -87,7 +87,7 @@ Primitive match forms have an unambiguous carrier and should solve an unknown sc
 
 The core elaborator already has the necessary scheduling model:
 
-- `ParkedWork` in `curios-core/src/context.rs` represents delayed conversion, checking, and witness obligations.
+- `ParkedWork` in `curios-elab/src/context.rs` represents delayed conversion, checking, and witness obligations.
 - A parked obligation freezes the assumptions, definitions, refinements, scrutinee and projection refinements, and witness binders needed to retry it in the original lexical environment.
 - Solving a metavariable wakes obligations that directly watch it.
 - Retried checking uses a fresh placeholder and later solves that placeholder with the rebuilt term.
@@ -244,13 +244,13 @@ Definitions containing provisional placeholders are safe only if all outstanding
 
 The likely implementation surface is:
 
-- `curios-core/src/context.rs`: inference and groundness parked-work variants, blocker watchers, frozen-frame payloads, and obligation bookkeeping.
-- `curios-core/src/typing.rs`: retry behavior, placeholder solving, wake-up policy, and final draining diagnostics.
-- `curios-core/src/elaborate/binding.rs`: provisional unannotated lambda domains and groundness registration.
-- `curios-core/src/elaborate/apply.rs`: application blocking and shared transitive-groundness support.
-- `curios-core/src/elaborate/aggregate.rs`: projection blocking.
-- `curios-core/src/elaborate/match_.rs`: inductive match blocking and eager primitive carrier constraints.
-- `curios-core/src/elaborate/tests.rs` and focused neighboring test modules: elaboration and scheduler coverage.
+- `curios-elab/src/context.rs`: inference and groundness parked-work variants, blocker watchers, frozen-frame payloads, and obligation bookkeeping.
+- `curios-elab/src/typing.rs`: retry behavior, placeholder solving, wake-up policy, and final draining diagnostics.
+- `curios-elab/src/elaborate/binding.rs`: provisional unannotated lambda domains and groundness registration.
+- `curios-elab/src/elaborate/apply.rs`: application blocking and shared transitive-groundness support.
+- `curios-elab/src/elaborate/aggregate.rs`: projection blocking.
+- `curios-elab/src/elaborate/match_.rs`: inductive match blocking and eager primitive carrier constraints.
+- `curios-elab/src/elaborate/tests.rs` and focused neighboring test modules: elaboration and scheduler coverage.
 - `curios/src/tests/`: cross-stage programs proving that accepted inferred terms compile and run.
 - `documentation/SYNTAX.md`, `documentation/ROADMAP.md`, and affected module rustdocs: durable documentation once the feature lands.
 
@@ -321,8 +321,8 @@ cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features
 ```
 
-Because `curios-core` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
+Because `curios-elab` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
 
 ## Retirement criteria
 
-- Before this specification is deleted, lambda inference semantics are recorded in `SYNTAX.md`, parking and retry invariants are recorded in the owning `curios-core` module documentation and tests, remaining plans refer to the landed elaborator behavior rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.
+- Before this specification is deleted, lambda inference semantics are recorded in `SYNTAX.md`, parking and retry invariants are recorded in the owning `curios-elab` module documentation and tests, remaining plans refer to the landed elaborator behavior rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.

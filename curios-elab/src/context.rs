@@ -956,7 +956,7 @@ impl Context {
             .is_none_or(|context| context.parameter_count != levels.len())
         {
             tracing::debug!(
-                target: "curios_core::universe",
+                target: "curios_elab::universe",
                 %name,
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
@@ -1007,7 +1007,7 @@ impl Context {
         #[cfg(feature = "profile")]
         if levels.len() != universe_context.parameter_count {
             tracing::debug!(
-                target: "curios_core::universe",
+                target: "curios_elab::universe",
                 expected = universe_context.parameter_count,
                 got = levels.len(),
                 "bound instance arity mismatch",
@@ -1030,7 +1030,7 @@ impl Context {
         #[cfg(feature = "profile")]
         if levels.len() != induct_decl.universe_context.parameter_count {
             tracing::debug!(
-                target: "curios_core::universe",
+                target: "curios_elab::universe",
                 module = ?induct_decl.module,
                 expected = induct_decl.universe_context.parameter_count,
                 got = levels.len(),
@@ -1062,7 +1062,7 @@ impl Context {
         #[cfg(feature = "profile")]
         if levels.len() != struct_decl.universe_context.parameter_count {
             tracing::debug!(
-                target: "curios_core::universe",
+                target: "curios_elab::universe",
                 module = ?struct_decl.module,
                 expected = struct_decl.universe_context.parameter_count,
                 got = levels.len(),
@@ -1092,7 +1092,7 @@ impl Context {
             .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
         #[cfg(feature = "profile")]
         tracing::debug!(
-            target: "curios_core::universe",
+            target: "curios_elab::universe",
             %name,
             params = universe_context.parameter_count,
             was = contexts[name].parameter_count,
@@ -1109,7 +1109,7 @@ impl Context {
                 .map(|(index, contexts)| (index, contexts[name].parameter_count))
                 .collect::<Vec<_>>();
             tracing::debug!(
-                target: "curios_core::universe",
+                target: "curios_elab::universe",
                 %name,
                 frames = self.assumption_universes.len(),
                 ?holders,
@@ -1515,7 +1515,7 @@ impl Context {
         );
         #[cfg(feature = "profile")]
         tracing::debug!(
-            target: "curios_core::universe",
+            target: "curios_elab::universe",
             %name,
             params = struct_decl.universe_context.parameter_count,
             was = self.struct_decls[name].universe_context.parameter_count,
@@ -1947,7 +1947,7 @@ impl Context {
 
         for id in &unwound {
             #[cfg(feature = "profile")]
-            tracing::debug!(target: "curios_core::solve", meta = id.0, "solution unwound");
+            tracing::debug!(target: "curios_elab::solve", meta = id.0, "solution unwound");
             if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
                 entry.solution = None;
             }

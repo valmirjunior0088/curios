@@ -966,7 +966,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     // `steps` reports what the declaration spent of its budget.
     #[cfg(feature = "profile")]
     let _declaration = tracing::info_span!(
-        target: "curios_core::declaration",
+        target: "curios_elab::declaration",
         "declaration",
         name = %item_names,
         steps = tracing::field::Empty,

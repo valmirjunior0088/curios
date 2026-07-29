@@ -2,7 +2,7 @@ use {
     super::PublicInterface,
     crate::{Error, Name, SyntaxRegistry},
     curios_base::{Entropy, Qualifier, RootId, Span},
-    curios_core::{
+    curios_elab::{
         DefinitionKind, Level, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseMetaId, UniverseRole, UniverseSeed,
     },
@@ -14,26 +14,26 @@ use {
 
 #[derive(Clone)]
 pub(super) struct FlatLet {
-    pub name: curios_core::Global,
+    pub name: curios_elab::Global,
     pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
-    pub type_: curios_core::Term,
-    pub body: curios_core::Term,
+    pub type_: curios_elab::Term,
+    pub body: curios_elab::Term,
 }
 
 impl FlatLet {
-    pub(super) fn into_core(self) -> curios_core::Definition {
-        curios_core::Definition {
+    pub(super) fn into_core(self) -> curios_elab::Definition {
+        curios_elab::Definition {
             root: self.root,
             island: self.island,
             name: self.name,
             kind: self.kind,
             universe_context: UniverseContext::empty(),
-            // Lowering cannot know this. `curios_core::record_totality`
+            // Lowering cannot know this. `curios_elab::record_totality`
             // computes the definition's totality after elaboration and zonking
             // and writes it back here.
-            totality: curios_core::Totality::default(),
+            totality: curios_elab::Totality::default(),
             type_: self.type_,
             body: self.body,
         }
@@ -60,7 +60,7 @@ impl FlatItem {
         !lets.is_empty() && lets.iter().all(|let_| let_.root.kind().is_privileged())
     }
 
-    pub(super) fn names(&self) -> Vec<curios_core::Global> {
+    pub(super) fn names(&self) -> Vec<curios_elab::Global> {
         match self {
             FlatItem::Let(let_) => vec![let_.name.clone()],
             FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.clone()).collect(),
@@ -70,7 +70,7 @@ impl FlatItem {
     /// Every global this item names — the reachability prune's edges (see
     /// [`FlatItem::names`]). Locals are dropped: an item's binders are its own
     /// business, and reachability is a question about definitions.
-    pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
+    pub(super) fn free_vars(&self) -> HashSet<curios_elab::Global> {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
             FlatItem::Rec(lets) => lets.as_slice(),
@@ -94,10 +94,10 @@ impl FlatItem {
             .collect()
     }
 
-    pub(super) fn into_core(self) -> curios_core::Item {
+    pub(super) fn into_core(self) -> curios_elab::Item {
         match self {
-            FlatItem::Let(let_) => curios_core::Item::Let(let_.into_core()),
-            FlatItem::Rec(items) => curios_core::Item::Rec(curios_core::RecItem::new(
+            FlatItem::Let(let_) => curios_elab::Item::Let(let_.into_core()),
+            FlatItem::Rec(items) => curios_elab::Item::Rec(curios_elab::RecItem::new(
                 items.into_iter().map(FlatLet::into_core).collect(),
             )),
         }
@@ -256,7 +256,7 @@ pub(super) struct Context<'a> {
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
     // Shared, program-global metavariable-id counter. The whole program folds
-    // into one `curios_core::Term`, so holes in different module bodies (each its own
+    // into one `curios_elab::Term`, so holes in different module bodies (each its own
     // `Context` via `nested`) must draw from the same monotonic source. Shared
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
     // `Lowerer`'s immutable `&Context` borrow.
@@ -404,10 +404,10 @@ impl<'a> Context<'a> {
 
     /// Mint a witness identity. A `satisfy` declaration is anonymous by design,
     /// so it gets an identity rather than a manufactured name — see
-    /// [`curios_core::Global::Witness`]. The counter is program-global, not
+    /// [`curios_elab::Global::Witness`]. The counter is program-global, not
     /// per-module: nothing but the id distinguishes two witnesses.
-    pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
-        curios_core::WitnessId::new(
+    pub(super) fn fresh_witness(&self) -> curios_elab::WitnessId {
+        curios_elab::WitnessId::new(
             u32::try_from(self.witnesses.fresh()).expect("witness space exhausted"),
         )
     }
@@ -415,12 +415,12 @@ impl<'a> Context<'a> {
     /// Mint a binder identity, rendering as `hint`.
     ///
     /// Every binder a lowered term closes over comes from here, including the
-    /// continuation binders `!` desugaring introduces. `curios-core` mints more
+    /// continuation binders `!` desugaring introduces. `curios-elab` mints more
     /// while elaborating and seeds its counter above
     /// [`PreparedPrelude::binder_floor`](super::PreparedPrelude::binder_floor),
     /// so the two sources share one identity space without colliding.
-    pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
-        curios_core::Free::local(
+    pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_elab::Free {
+        curios_elab::Free::local(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
             hint,
         )

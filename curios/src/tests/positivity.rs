@@ -3,7 +3,7 @@
 //! The check exists to make `induct` and `struct` sound: an inductive
 //! declaration claims its functor has an initial algebra, and without the gate
 //! `induct Bad | c(f : (Bad) -> False) end` inhabits `False`. The lattice
-//! itself is unit-tested in `curios-core/src/positivity/tests.rs`; these check
+//! itself is unit-tested in `curios-elab/src/positivity/tests.rs`; these check
 //! what a *user* can observe.
 //!
 //! Every shape here is one the standard library already relies on. The prelude

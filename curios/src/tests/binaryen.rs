@@ -22,7 +22,7 @@ fn optimizes_to_a_smaller_valid_module() {
         .expect("failed to parse source");
 
     let (module, _foreigns) = compile_entrypoint(
-        curios_core::DEFAULT_STEP_BUDGET,
+        curios_elab::DEFAULT_STEP_BUDGET,
         &entrypoint,
         curios_text::RootSource::none(),
         |_| {},

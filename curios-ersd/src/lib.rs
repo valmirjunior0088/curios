@@ -1,8 +1,8 @@
-//! The erased, first-order IR — the pipeline stage between `curios-core`'s type-directed erasure and the continuation IR of `curios-cont`. Types, proofs, and erasable binders are gone by construction.
+//! The erased, first-order IR — the pipeline stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cont`. Types, proofs, and erasable binders are gone by construction.
 //!
 //! The program is flat, explicit, first-order data: a [`Module`] of arena-allocated blocks of single-operation statements over atomic operands, addressed by typed `u32` identities, with ordered top-level items plus an entry block at its top level. The alphabet is erased Core's vocabulary with its semantic identities intact — distinct scalar shapes, schema-carrying products and variants, Bool and Nat switches, and first-class Nat/sequence folds — because every encoding decision (carriers, tag layouts, dispatch, loop synthesis) belongs exclusively to the lowering into Cont. Functions store no capture lists; free values, uses, the call graph, and recursive components are derived on demand ([`Analysis`]).
 //!
-//! `curios_core`'s `into_ersd` is the sole producer, constructing through the checked [`ErsdBuilder`]. [`optimize_ir`] is the Ersd-level optimizer (behavior-summary pruning, closed-term evaluation, literal-spine specialization, monoid worker/wrapper), and [`lower_to_cont`] is the one-way door where every encoding decision is made, lowering the module to a `curios_cont::CpsModule`.
+//! `curios_elab`'s `into_ersd` is the sole producer, constructing through the checked [`ErsdBuilder`]. [`optimize_ir`] is the Ersd-level optimizer (behavior-summary pruning, closed-term evaluation, literal-spine specialization, monoid worker/wrapper), and [`lower_to_cont`] is the one-way door where every encoding decision is made, lowering the module to a `curios_cont::CpsModule`.
 
 mod id;
 pub use id::*;

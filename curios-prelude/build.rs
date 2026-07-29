@@ -57,17 +57,17 @@ fn main() {
         prepared.universe_floor(),
         "lowered Text universe floor does not match its seed table"
     );
-    curios_core::validate_lowered_universe_seeds(prepared.core(), prepared.universe_floor())
+    curios_elab::validate_lowered_universe_seeds(prepared.core(), prepared.universe_floor())
         .unwrap_or_else(|error| panic!("lowered Text universe seeds are invalid: {error}"));
 
     let lowered = prepared.core().clone();
-    let mut context = curios_core::Context::with_default_budget();
-    let (core, body_type) = curios_core::elaborate_and_zonk_module(
+    let mut context = curios_elab::Context::with_default_budget();
+    let (core, body_type) = curios_elab::elaborate_and_zonk_module(
         &mut context,
         &lowered,
         prepared.metavariable_floor(),
         prepared.universe_floor(),
-        curios_core::Mode::Infer,
+        curios_elab::Mode::Infer,
     )
     .unwrap_or_else(|error| {
         panic!(
@@ -84,11 +84,11 @@ fn main() {
     // already settled. `erase_prelude_prefix` below happens to project
     // through the same check, but inheriting the guarantee from an unrelated
     // call is not the same as stating it.
-    curios_core::validate_universes(&core)
+    curios_elab::validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
     let ersd =
-        curios_core::erase_prelude_prefix(&mut curios_core::Context::with_default_budget(), &core)
+        curios_elab::erase_prelude_prefix(&mut curios_elab::Context::with_default_budget(), &core)
             .unwrap_or_else(|error| {
                 panic!(
                     "fixed prelude failed to erase into the arena prefix: {}",
@@ -108,7 +108,7 @@ fn main() {
     // `ersd` is deliberately not included: it is a flat, index-addressed arena
     // with no shared pointers to collapse, and it already interns its constants
     // by value.
-    let sharing = curios_core::Sharing::new();
+    let sharing = curios_elab::Sharing::new();
     let prepared = prepared.shared(&sharing);
     let core = core.shared(&sharing);
     let body_type = sharing.share(&body_type);
@@ -252,21 +252,21 @@ fn fingerprint(manifest: &Path, sources: &[PathBuf]) -> [u8; 32] {
     digest.finalize().into()
 }
 
-fn validate_syntax_targets(module: &curios_core::Module) {
+fn validate_syntax_targets(module: &curios_elab::Module) {
     let names = module
         .items
         .iter()
-        .flat_map(curios_core::Item::declared_names)
+        .flat_map(curios_elab::Item::declared_names)
         .cloned()
         .collect::<BTreeSet<_>>();
     for target in SYNTAX.targets() {
         let symbol = target.symbol();
         assert!(
-            names.contains(&curios_core::Global::Authored(target.qualifier())),
+            names.contains(&curios_elab::Global::Authored(target.qualifier())),
             "registered syntax target '{symbol}' is absent from the lowered prelude; nearby names: {:?}",
             names
                 .iter()
-                .map(curios_core::Global::symbol)
+                .map(curios_elab::Global::symbol)
                 .filter(|name| name.contains(target.last()))
                 .collect::<Vec<_>>()
         );

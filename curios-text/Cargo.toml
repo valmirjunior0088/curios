@@ -9,13 +9,13 @@ description = "The curios surface syntax: lexer/parser and lowering to core"
 workspace = true
 
 [features]
-archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-core/archive"]
+archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-elab/archive"]
 profile = ["dep:tracing"]
 
 [dependencies]
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
-curios-core = { workspace = true }
+curios-elab = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 rkyv = { workspace = true, optional = true }

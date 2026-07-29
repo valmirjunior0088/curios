@@ -5,14 +5,14 @@ use {
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity},
-    curios_core::{Free, UniverseRole},
+    curios_elab::{Free, UniverseRole},
     num_bigint::BigUint,
     std::{cell::RefCell, sync::Arc},
 };
 
 /// A lowered function's binders: `(plicity, core binder, domain)` per slot,
 /// paralleling the surface parameter list.
-type LoweredParams = Vec<(Plicity, Free, curios_core::Term)>;
+type LoweredParams = Vec<(Plicity, Free, curios_elab::Term)>;
 
 /// A source binder brought into lexical scope: what it was written as, and the
 /// identity every reference to it lowers to.
@@ -93,11 +93,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// `rec` item re-roots) and is rewired through `/syn/Monad/bind`, whose
     /// `use` binder resolves the `Monad` witness per site. Types go through
     /// [`Self::term`], where `!` is rejected.
-    pub(super) fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub(super) fn value(&self, term: &Term) -> Result<curios_elab::Term, Error> {
         self.region(term)
     }
 
-    pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub(super) fn term(&self, term: &Term) -> Result<curios_elab::Term, Error> {
         let span = term.span().cloned();
         let elaborated = match span.as_ref() {
             Some(s) => self
@@ -106,7 +106,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             None => self.subterm(term.as_subterm(), None)?,
         };
         Ok(match span {
-            Some(s) => curios_core::Term::spanned(s, elaborated),
+            Some(s) => curios_elab::Term::spanned(s, elaborated),
             None => elaborated,
         })
     }
@@ -114,7 +114,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Lower a type in an input position. The role is lexical, so every
     /// written `Type` inside a nested higher-kinded domain remains eligible
     /// for declaration generalization.
-    pub(super) fn input_type(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub(super) fn input_type(&self, term: &Term) -> Result<curios_elab::Term, Error> {
         self.context
             .with_universe_role(UniverseRole::Generalizable, || self.term(term))
     }
@@ -140,7 +140,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
         match self.context.bindings().get(name.head()) {
             Some(full) => Ok(Free::global(full.clone())),
-            // Unresolved, and `curios-core` is what reports it — so this must
+            // Unresolved, and `curios-elab` is what reports it — so this must
             // lower to something no definition can ever be. A binder identity
             // is unbound by construction (nothing closes over it) and carries
             // the written name as its hint, so the diagnostic still names it.
@@ -161,12 +161,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // the `lead` state — `valid`'s type is `Valid(b) = Utf8(lead, b)`. `valid` is
     // erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs
     // exactly what a `Bytes` literal does.
-    pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
-        curios_core::Term::struct_(
-            curios_core::Global::Authored(self.context.syntax().string().string().qualifier()),
-            Vec::<curios_core::Term>::new(),
+    pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_elab::Term {
+        curios_elab::Term::struct_(
+            curios_elab::Global::Authored(self.context.syntax().string().string().qualifier()),
+            Vec::<curios_elab::Term>::new(),
             [
-                curios_core::Term::prim(curios_core::Prim::Bin(
+                curios_elab::Term::prim(curios_elab::Prim::Bin(
                     Grain::X,
                     PackedBin::from_bytes(bytes.to_vec()),
                 )),
@@ -176,18 +176,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// A Rust `char` is already a Unicode scalar, so the literal meta-emitter selects the corresponding `/syn/Char/Scalar` range constructor and supplies a closed reflected proof. The proof erases and the single relevant `code` field collapses to the ordinary Nat carrier.
-    pub(super) fn char_literal(&self, character: char) -> curios_core::Term {
-        let code = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Succ(
+    pub(super) fn char_literal(&self, character: char) -> curios_elab::Term {
+        let code = curios_elab::Term::prim(curios_elab::Prim::Nat(curios_elab::Nat::Succ(
             BigUint::from(character as u32),
-            curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
+            curios_elab::Term::prim(curios_elab::Prim::Nat(curios_elab::Nat::Zero)),
         )));
         let constructor = if (character as u32) < 0xD800 {
             self.context.syntax().character().scalar_below()
         } else {
             self.context.syntax().character().scalar_above()
         };
-        let scalar = curios_core::Term::apply_marked(
-            curios_core::Term::var(curios_core::Var::free(Free::global(
+        let scalar = curios_elab::Term::apply_marked(
+            curios_elab::Term::var(curios_elab::Var::free(Free::global(
                 constructor.qualifier(),
             ))),
             [
@@ -199,11 +199,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             ],
         );
 
-        curios_core::Term::struct_(
-            curios_core::Global::Authored(
+        curios_elab::Term::struct_(
+            curios_elab::Global::Authored(
                 self.context.syntax().character().character().qualifier(),
             ),
-            Vec::<curios_core::Term>::new(),
+            Vec::<curios_elab::Term>::new(),
             [code, scalar],
         )
     }
@@ -213,15 +213,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
     pub(super) fn syn_call(
         name: crate::SyntaxName,
-        args: impl IntoIterator<Item = curios_core::Term>,
-    ) -> curios_core::Term {
-        curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(Free::global(name.qualifier()))),
+        args: impl IntoIterator<Item = curios_elab::Term>,
+    ) -> curios_elab::Term {
+        curios_elab::Term::apply(
+            curios_elab::Term::var(curios_elab::Var::free(Free::global(name.qualifier()))),
             args.into_iter().collect::<Vec<_>>(),
         )
     }
 
-    pub(super) fn scan_lead(&self) -> curios_core::Term {
+    pub(super) fn scan_lead(&self) -> curios_elab::Term {
         Self::syn_call(self.context.syntax().string().scan_lead(), [])
     }
 
@@ -234,13 +234,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn utf8_derivation(
         &self,
         bytes: &[u8],
-        state: curios_core::Term,
-    ) -> curios_core::Term {
+        state: curios_elab::Term,
+    ) -> curios_elab::Term {
         match bytes.split_first() {
             None => Self::syn_call(self.context.syntax().string().utf8_stop(), []),
             Some((&head, tail)) => {
-                let byte: curios_core::Term =
-                    curios_core::Term::prim(curios_core::Prim::Byte(head));
+                let byte: curios_elab::Term =
+                    curios_elab::Term::prim(curios_elab::Prim::Byte(head));
                 let next = Self::syn_call(
                     self.context.syntax().string().step(),
                     [byte.clone(), state.clone()],
@@ -250,7 +250,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     [
                         byte,
                         state,
-                        curios_core::Term::prim(curios_core::Prim::Bin(
+                        curios_elab::Term::prim(curios_elab::Prim::Bin(
                             Grain::X,
                             PackedBin::from_bytes(tail.to_vec()),
                         )),
@@ -263,7 +263,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     // A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter
     // rather than lowered to a core primitive.
-    pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
+    pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_elab::Term, Error> {
         match syn {
             Syn::Char(character) => Ok(self.char_literal(*character)),
             Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
@@ -274,30 +274,30 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         term: &Subterm,
         span: Option<&curios_base::Span>,
-    ) -> Result<curios_core::Term, Error> {
+    ) -> Result<curios_elab::Term, Error> {
         Ok(match term {
-            Subterm::Type => curios_core::Term::type_at(self.context.fresh_universe(span)),
-            Subterm::Prop => curios_core::Term::prop(),
-            Subterm::Hole => curios_core::Term::metavar(self.context.fresh_metavar()),
+            Subterm::Type => curios_elab::Term::type_at(self.context.fresh_universe(span)),
+            Subterm::Prop => curios_elab::Term::prop(),
+            Subterm::Hole => curios_elab::Term::metavar(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk
             // reports what elaboration determined for it instead of splicing.
-            Subterm::Goal => curios_core::Term::goal(self.context.fresh_metavar()),
+            Subterm::Goal => curios_elab::Term::goal(self.context.fresh_metavar()),
             // A `/syn` literal (string or list) desugars via the meta-emitter to a
             // `/syn` construction (see `syn_literal`), never a core primitive.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
-            Subterm::Prim(prim) => curios_core::Term::prim(self.prim(prim)?),
-            Subterm::NumLit(num_lit) => curios_core::Term::num_lit(
+            Subterm::Prim(prim) => curios_elab::Term::prim(self.prim(prim)?),
+            Subterm::NumLit(num_lit) => curios_elab::Term::num_lit(
                 num_lit.magnitude.clone(),
                 num_lit.signed,
                 num_lit.negative,
             ),
-            Subterm::Infix(infix) => curios_core::Term::infix(
+            Subterm::Infix(infix) => curios_elab::Term::infix(
                 infix.op,
                 self.term(&infix.left)?,
                 self.term(&infix.right)?,
             ),
             Subterm::Name(name) => {
-                curios_core::Term::var(curios_core::Var::free(self.resolve_name(name)?))
+                curios_elab::Term::var(curios_elab::Var::free(self.resolve_name(name)?))
             }
             // Each parameter type sees the *preceding* parameters' binders, and
             // the output sees them all (a dependent Π-type), so they lower under a
@@ -314,15 +314,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     params.push((param.plicity, binders[index].1.clone(), domain));
                 }
                 let output = self.bound(&binders, || self.term(&ft.output))?;
-                curios_core::Term::func_type_marked(params, output)
+                curios_elab::Term::func_type_marked(params, output)
             }
             Subterm::Func(func) => {
                 let binders = self.mint(param_names(&func.params));
                 let body = self.bound(&binders, || self.term(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
-                curios_core::Term::func_marked(params, body)
+                curios_elab::Term::func_marked(params, body)
             }
-            Subterm::Apply(apply) => curios_core::Term::apply_marked(
+            Subterm::Apply(apply) => curios_elab::Term::apply_marked(
                 self.term(&apply.head)?,
                 apply
                     .params
@@ -345,10 +345,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     let lowered = self.bound(&binders[..index], || self.term(&type_))?;
                     fields.push((binders[index].1.clone(), lowered));
                 }
-                curios_core::Term::tuple_type(fields)
+                curios_elab::Term::tuple_type(fields)
             }
             // The definition sugar `f(params) = value` is undone here.
-            Subterm::Tuple(tuple) => curios_core::Term::tuple_named(
+            Subterm::Tuple(tuple) => curios_elab::Term::tuple_named(
                 tuple
                     .fields
                     .iter()
@@ -358,11 +358,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Proj(proj) => {
                 let head = self.term(&proj.head)?;
                 match &proj.field {
-                    Field::Index(index) => curios_core::Term::proj(head, *index),
-                    Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
+                    Field::Index(index) => curios_elab::Term::proj(head, *index),
+                    Field::Label(label) => curios_elab::Term::proj_label(head, label.clone()),
                 }
             }
-            // A struct literal lowers to a `curios_core::Struct` carrying the resolved
+            // A struct literal lowers to a `curios_elab::Struct` carrying the resolved
             // (qualified) struct name, the head parameters (empty → core
             // elaboration mints metavariables), and the written entries — plain
             // field values with their names (validated positionally and dropped
@@ -370,7 +370,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // positions, and a `..base` spread carrying its base. Construction
             // privacy and spread shape are enforced in core
             // (`elaborate_struct`), alongside projection privacy.
-            Subterm::StructLit(lit) => curios_core::Term::struct_entries(
+            Subterm::StructLit(lit) => curios_elab::Term::struct_entries(
                 self.resolve_nominal(&lit.head)?,
                 lit.params
                     .iter()
@@ -380,14 +380,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .iter()
                     .map(|entry| match entry {
                         StructLitEntry::Field(field) => Ok((
-                            curios_core::StructEntry::Field(field.label.clone()),
+                            curios_elab::StructEntry::Field(field.label.clone()),
                             self.term(&field.desugared_value())?,
                         )),
                         StructLitEntry::Use(term) => {
-                            Ok((curios_core::StructEntry::Use, self.term(term)?))
+                            Ok((curios_elab::StructEntry::Use, self.term(term)?))
                         }
                         StructLitEntry::Spread(term) => {
-                            Ok((curios_core::StructEntry::Spread, self.term(term)?))
+                            Ok((curios_elab::StructEntry::Spread, self.term(term)?))
                         }
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
@@ -403,10 +403,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let mut acc = self.term(default)?;
                 for arm in arms.iter().rev() {
                     acc = match &arm.test {
-                        ChooseTest::Cond(condition) => curios_core::Term::bool_match(
+                        ChooseTest::Cond(condition) => curios_elab::Term::bool_match(
                             self.term(condition)?,
                             None,
-                            curios_core::Term::metavar(self.context.fresh_metavar()),
+                            curios_elab::Term::metavar(self.context.fresh_metavar()),
                             acc,
                             self.term(&arm.body)?,
                         ),
@@ -467,7 +467,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Rec(rec) => {
                 let binders = self.mint(rec.items.iter().map(|it| it.label.clone()));
                 self.bound(&binders, || {
-                    Ok(curios_core::Term::rec(
+                    Ok(curios_elab::Term::rec(
                         rec.items
                             .iter()
                             .zip(&binders)
@@ -496,7 +496,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// the region, never past a boundary (lambda body, match arm, `rec` item).
     /// Boundaries re-root a region. Every hoisted action is sequenced through
     /// `/syn/Monad/bind` — see `wrap`.
-    pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub(super) fn region(&self, term: &Term) -> Result<curios_elab::Term, Error> {
         match term.as_subterm() {
             // A `let`'s bound expression evaluates in place (its bangs hoist to
             // this region); the tail continues the same region (a bang there
@@ -521,7 +521,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let binders = self.mint(param_names(&func.params));
                 let body = self.bound(&binders, || self.region(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
-                Ok(curios_core::Term::func_marked(params, body))
+                Ok(curios_elab::Term::func_marked(params, body))
             }
             // A `rec`'s item bodies are their own regions (hoisting an action
             // out of a recursive binding would change how often it runs); the
@@ -549,14 +549,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         bindings: &[LetBinding],
         tail: &Term,
-    ) -> Result<curios_core::Term, Error> {
+    ) -> Result<curios_elab::Term, Error> {
         struct PendingLet<'t> {
             mark: usize,
             binders: Vec<Bound>,
-            binds: Vec<(Free, curios_core::Term)>,
+            binds: Vec<(Free, curios_elab::Term)>,
             binder: &'t Pattern,
-            type_: curios_core::Term,
-            value: curios_core::Term,
+            type_: curios_elab::Term,
+            value: curios_elab::Term,
         }
 
         let mut pending = Vec::new();
@@ -598,10 +598,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Builds the core `rec` for a `rec` inside a value body: item types are
     /// types, item bodies are fresh region roots, and the tail continues as its
     /// own region (a bang there hoists after the bindings, not above them).
-    pub(super) fn build_rec(&self, rec: &Rec) -> Result<curios_core::Term, Error> {
+    pub(super) fn build_rec(&self, rec: &Rec) -> Result<curios_elab::Term, Error> {
         let binders = self.mint(rec.items.iter().map(|it| it.label.clone()));
         self.bound(&binders, || {
-            Ok(curios_core::Term::rec(
+            Ok(curios_elab::Term::rec(
                 rec.items
                     .iter()
                     .zip(&binders)
@@ -625,19 +625,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn collect(
         &self,
         term: &Term,
-        binds: &mut Vec<(Free, curios_core::Term)>,
-    ) -> Result<curios_core::Term, Error> {
+        binds: &mut Vec<(Free, curios_elab::Term)>,
+    ) -> Result<curios_elab::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
                 // The action is itself desugared first, so its inner bangs
                 // evaluate before this one (left-to-right).
                 let action = self.collect(action, binds)?;
                 let binder = self.context.fresh_binder(None);
-                let var = curios_core::Term::var(curios_core::Var::free(binder.clone()));
+                let var = curios_elab::Term::var(curios_elab::Var::free(binder.clone()));
                 binds.push((binder, action));
                 var
             }
-            Subterm::Apply(apply) => curios_core::Term::apply_marked(
+            Subterm::Apply(apply) => curios_elab::Term::apply_marked(
                 self.collect(&apply.head, binds)?,
                 apply
                     .params
@@ -645,7 +645,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .map(|(plicity, p)| Ok((*plicity, self.collect(p, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Subterm::Tuple(tuple) => curios_core::Term::tuple_named(
+            Subterm::Tuple(tuple) => curios_elab::Term::tuple_named(
                 tuple
                     .fields
                     .iter()
@@ -658,13 +658,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Proj(proj) => {
                 let head = self.collect(&proj.head, binds)?;
                 match &proj.field {
-                    Field::Index(index) => curios_core::Term::proj(head, *index),
-                    Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
+                    Field::Index(index) => curios_elab::Term::proj(head, *index),
+                    Field::Label(label) => curios_elab::Term::proj_label(head, label.clone()),
                 }
             }
             // A struct literal's entry values hoist their bangs into this
             // region, exactly like a tuple's fields.
-            Subterm::StructLit(lit) => curios_core::Term::struct_entries(
+            Subterm::StructLit(lit) => curios_elab::Term::struct_entries(
                 self.resolve_nominal(&lit.head)?,
                 lit.params
                     .iter()
@@ -676,35 +676,35 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         StructLitEntry::Field(field) => {
                             let value = field.desugared_value();
                             Ok((
-                                curios_core::StructEntry::Field(field.label.clone()),
+                                curios_elab::StructEntry::Field(field.label.clone()),
                                 self.collect(&value, binds)?,
                             ))
                         }
                         StructLitEntry::Use(term) => {
-                            Ok((curios_core::StructEntry::Use, self.collect(term, binds)?))
+                            Ok((curios_elab::StructEntry::Use, self.collect(term, binds)?))
                         }
                         StructLitEntry::Spread(term) => {
-                            Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
+                            Ok((curios_elab::StructEntry::Spread, self.collect(term, binds)?))
                         }
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             // An infix operator's operands hoist their bangs into this region,
             // exactly like an application's arguments.
-            Subterm::Infix(infix) => curios_core::Term::infix(
+            Subterm::Infix(infix) => curios_elab::Term::infix(
                 infix.op,
                 self.collect(&infix.left, binds)?,
                 self.collect(&infix.right, binds)?,
             ),
             // An `Lst` literal's elements and spread operands hoist their
             // bangs into this region, like an application's arguments.
-            Subterm::Prim(Prim::Lst(entries)) => curios_core::Term::prim(
+            Subterm::Prim(Prim::Lst(entries)) => curios_elab::Term::prim(
                 self.lower_lst_literal(entries, |term| self.collect(term, binds))?,
             ),
             // A `Bits`/`Bytes` literal's spread operands hoist likewise (a
             // spread-free literal has no subterms and lowers unchanged).
             Subterm::Prim(Prim::Bin(grain, segments)) => {
-                curios_core::Term::prim(Self::lower_bin_literal(*grain, segments, |term| {
+                curios_elab::Term::prim(Self::lower_bin_literal(*grain, segments, |term| {
                     self.collect(term, binds)
                 })?)
             }
@@ -730,8 +730,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn build_let(
         &self,
         let_: &Let,
-        binds: &mut Vec<(Free, curios_core::Term)>,
-    ) -> Result<curios_core::Term, Error> {
+        binds: &mut Vec<(Free, curios_elab::Term)>,
+    ) -> Result<curios_elab::Term, Error> {
         let (first, rest) = let_
             .bindings
             .split_first()
@@ -767,8 +767,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         params: &[FuncParam],
         binders: &[Bound],
-        body: curios_core::Term,
-    ) -> Result<(LoweredParams, curios_core::Term), Error> {
+        body: curios_elab::Term,
+    ) -> Result<(LoweredParams, curios_elab::Term), Error> {
         let mut lowered = Vec::with_capacity(params.len());
         // The binders already minted for the leaves, consumed in the same
         // pre-order `param_names` produced them, plus the field-`let` chains
@@ -788,7 +788,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         self.bound(&binders[..seen], || self.input_type(annotation))?;
                     self.wrap_pattern_chains(&chains, annotation)
                 }
-                None => curios_core::Term::metavar(self.context.fresh_metavar()),
+                None => curios_elab::Term::metavar(self.context.fresh_metavar()),
             };
             // The mark applies to the outer function slot the parameter
             // occupies, whatever the pattern shape: a compound pattern's fresh
@@ -827,8 +827,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     fn wrap_pattern_chains(
         &self,
         chains: &[(&[PatternField], Free, &[Bound])],
-        annotation: curios_core::Term,
-    ) -> curios_core::Term {
+        annotation: curios_elab::Term,
+    ) -> curios_elab::Term {
         chains
             .iter()
             .rev()
@@ -857,10 +857,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A nominal head's resolved name. Only a global can head a nominal
     /// literal; a local in that position is a resolution error the core stage
     /// reports, so an unresolved one keeps its own unbindable identity.
-    pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_core::Global, Error> {
+    pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_elab::Global, Error> {
         Ok(match self.resolve_name(name)?.as_global() {
             Some(global) => global.clone(),
-            None => curios_core::Global::Authored(curios_base::Qualifier::from([name.head()])),
+            None => curios_elab::Global::Authored(curios_base::Qualifier::from([name.head()])),
         })
     }
 
@@ -884,10 +884,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         pattern: &Pattern,
         binders: &[Bound],
-        type_: curios_core::Term,
-        value: curios_core::Term,
-        tail: curios_core::Term,
-    ) -> curios_core::Term {
+        type_: curios_elab::Term,
+        value: curios_elab::Term,
+        tail: curios_elab::Term,
+    ) -> curios_elab::Term {
         self.bind_pattern_from(pattern, &mut binders.iter(), type_, value, tail)
     }
 
@@ -895,22 +895,22 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         pattern: &Pattern,
         binders: &mut impl Iterator<Item = &'i Bound>,
-        type_: curios_core::Term,
-        value: curios_core::Term,
-        tail: curios_core::Term,
-    ) -> curios_core::Term {
+        type_: curios_elab::Term,
+        value: curios_elab::Term,
+        tail: curios_elab::Term,
+    ) -> curios_elab::Term {
         match pattern {
             Pattern::Binder(Some(_)) => {
                 let (_, id) = binders.next().expect("one mint per written leaf");
-                curios_core::Term::let_(id, type_, value, tail)
+                curios_elab::Term::let_(id, type_, value, tail)
             }
             Pattern::Binder(None) => {
-                curios_core::Term::let_(&self.context.fresh_binder(None), type_, value, tail)
+                curios_elab::Term::let_(&self.context.fresh_binder(None), type_, value, tail)
             }
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 let synthetic = self.context.fresh_binder(None);
                 let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail);
-                curios_core::Term::let_(&synthetic, type_, value, inner)
+                curios_elab::Term::let_(&synthetic, type_, value, inner)
             }
         }
     }
@@ -930,8 +930,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         fields: &[PatternField],
         scrutinee: &Free,
         leaves: &[Bound],
-        tail: curios_core::Term,
-    ) -> curios_core::Term {
+        tail: curios_elab::Term,
+    ) -> curios_elab::Term {
         self.lower_pattern_fields_from(fields, scrutinee, &mut leaves.iter(), tail)
     }
 
@@ -940,8 +940,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         fields: &[PatternField],
         scrutinee_name: &Free,
         binders: &mut impl Iterator<Item = &'i Bound>,
-        tail: curios_core::Term,
-    ) -> curios_core::Term {
+        tail: curios_elab::Term,
+    ) -> curios_elab::Term {
         // Right-to-left so the first field's `let` ends up outermost, but the
         // binders were minted left-to-right, so they are consumed in a forward
         // pass first.
@@ -956,12 +956,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
         let mut tail = tail;
         for ((index, field), taken) in fields.iter().enumerate().zip(&bound).rev() {
-            let scrutinee = curios_core::Term::var(curios_core::Var::free(scrutinee_name.clone()));
+            let scrutinee = curios_elab::Term::var(curios_elab::Var::free(scrutinee_name.clone()));
             let proj = match &field.label {
-                Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
-                None => curios_core::Term::proj(scrutinee, index),
+                Some(label) => curios_elab::Term::proj_label(scrutinee, label.clone()),
+                None => curios_elab::Term::proj(scrutinee, index),
             };
-            let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+            let hole = curios_elab::Term::metavar(self.context.fresh_metavar());
             tail = self.bind_pattern(&field.value, taken, hole, proj, tail);
         }
         tail
@@ -983,7 +983,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Wraps `body` in one `/syn/Monad/bind` application per collected bang.
     /// The first-collected bang (`binds[0]`) becomes the outermost bind, preserving
     /// left-to-right evaluation order. Continuation lambdas are built with
-    /// `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it
+    /// `curios_elab::Term::func` over the gensym'd free name, whose `capture` closes it
     /// robustly under nesting; the domain is a fresh hole, inference-solved.
     /// Elaborating each application inserts fresh implicits and a fresh `use`
     /// witness slot per `!` site: the action's type pins the constructor (via
@@ -992,15 +992,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// regions can use different monads.
     pub(super) fn wrap(
         &self,
-        binds: Vec<(Free, curios_core::Term)>,
-        body: curios_core::Term,
-    ) -> Result<curios_core::Term, Error> {
+        binds: Vec<(Free, curios_elab::Term)>,
+        body: curios_elab::Term,
+    ) -> Result<curios_elab::Term, Error> {
         binds
             .into_iter()
             .rev()
             .try_fold(body, |acc, (binder, action)| {
-                let domain = curios_core::Term::metavar(self.context.fresh_metavar());
-                let cont = curios_core::Term::func([(binder, domain)], acc);
+                let domain = curios_elab::Term::metavar(self.context.fresh_metavar());
+                let cont = curios_elab::Term::func([(binder, domain)], acc);
                 // The already-resolved core name: the `Monad` concept at
                 // `/syn`'s top level, method wrapper `bind`.
                 Ok(Self::syn_call(
@@ -1016,14 +1016,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// whole literal becomes an n-ary `LstConcat`; its element-type slot is a
     /// fresh metavar (an implicit the literal cannot name), solved by
     /// elaboration — bidirectionally from the expected type when checking
-    /// (see the `LstConcat` case in `curios_core`'s `elaborate_prim`).
+    /// (see the `LstConcat` case in `curios_elab`'s `elaborate_prim`).
     /// `lower` is the per-term lowering — [`Self::term`] on the plain path,
     /// the bang-collector on the region path — so both share this grouping.
     pub(super) fn lower_lst_literal(
         &self,
         entries: &[LstEntry],
-        mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
-    ) -> Result<curios_core::Prim, Error> {
+        mut lower: impl FnMut(&Term) -> Result<curios_elab::Term, Error>,
+    ) -> Result<curios_elab::Prim, Error> {
         let mut operands = Vec::new();
         let mut run = Vec::new();
 
@@ -1032,7 +1032,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 LstEntry::Elem(term) => run.push(lower(term)?),
                 LstEntry::Spread(term) => {
                     if !run.is_empty() {
-                        operands.push(curios_core::Term::prim(curios_core::Prim::Lst(
+                        operands.push(curios_elab::Term::prim(curios_elab::Prim::Lst(
                             std::mem::take(&mut run),
                         )));
                     }
@@ -1043,15 +1043,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
 
         if operands.is_empty() {
-            return Ok(curios_core::Prim::Lst(run));
+            return Ok(curios_elab::Prim::Lst(run));
         }
 
         if !run.is_empty() {
-            operands.push(curios_core::Term::prim(curios_core::Prim::Lst(run)));
+            operands.push(curios_elab::Term::prim(curios_elab::Prim::Lst(run)));
         }
 
-        Ok(curios_core::Prim::LstConcat(
-            curios_core::Term::metavar(self.context.fresh_metavar()),
+        Ok(curios_elab::Prim::LstConcat(
+            curios_elab::Term::metavar(self.context.fresh_metavar()),
             operands,
         ))
     }
@@ -1062,8 +1062,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn lower_bin_literal(
         grain: Grain,
         segments: &[BinSegment],
-        mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
-    ) -> Result<curios_core::Prim, Error> {
+        mut lower: impl FnMut(&Term) -> Result<curios_elab::Term, Error>,
+    ) -> Result<curios_elab::Prim, Error> {
         if segments
             .iter()
             .all(|segment| matches!(segment, BinSegment::Bytes(_)))
@@ -1082,7 +1082,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 Grain::B => PackedBin::from_bits(atoms.into_iter().map(|atom| atom != 0)),
                 Grain::X => PackedBin::from_bytes(atoms),
             };
-            return Ok(curios_core::Prim::Bin(grain, value));
+            return Ok(curios_elab::Prim::Bin(grain, value));
         }
 
         let operands = segments
@@ -1093,7 +1093,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         Grain::B => PackedBin::from_bits(run.iter().map(|atom| *atom != 0)),
                         Grain::X => PackedBin::from_bytes(run.clone()),
                     };
-                    Ok(curios_core::Term::prim(curios_core::Prim::Bin(
+                    Ok(curios_elab::Term::prim(curios_elab::Prim::Bin(
                         grain, value,
                     )))
                 }
@@ -1101,298 +1101,298 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
-        Ok(curios_core::Prim::BinConcat(grain, operands))
+        Ok(curios_elab::Prim::BinConcat(grain, operands))
     }
 
-    pub(super) fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
+    pub(super) fn prim(&self, prim: &Prim) -> Result<curios_elab::Prim, Error> {
         Ok(match prim {
-            Prim::BoolType => curios_core::Prim::BoolType,
-            Prim::Bool(b) => curios_core::Prim::Bool(*b),
+            Prim::BoolType => curios_elab::Prim::BoolType,
+            Prim::Bool(b) => curios_elab::Prim::Bool(*b),
             Prim::BoolAnd(left, right) => {
-                curios_core::Prim::BoolAnd(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::BoolAnd(self.term(left)?, self.term(right)?)
             }
             Prim::BoolOr(left, right) => {
-                curios_core::Prim::BoolOr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::BoolOr(self.term(left)?, self.term(right)?)
             }
             Prim::BoolXor(left, right) => {
-                curios_core::Prim::BoolXor(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::BoolXor(self.term(left)?, self.term(right)?)
             }
             Prim::BoolEql(left, right) => {
-                curios_core::Prim::BoolEql(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::BoolEql(self.term(left)?, self.term(right)?)
             }
             Prim::BoolNeq(left, right) => {
-                curios_core::Prim::BoolNeq(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::BoolNeq(self.term(left)?, self.term(right)?)
             }
-            Prim::NatType => curios_core::Prim::NatType,
-            Prim::Nat(Nat::Zero) => curios_core::Prim::Nat(curios_core::Nat::Zero),
+            Prim::NatType => curios_elab::Prim::NatType,
+            Prim::Nat(Nat::Zero) => curios_elab::Prim::Nat(curios_elab::Nat::Zero),
             Prim::Nat(Nat::Succ(NatLiteral(spine, _), inner)) => {
-                curios_core::Prim::Nat(curios_core::Nat::Succ(spine.clone(), self.term(inner)?))
+                curios_elab::Prim::Nat(curios_elab::Nat::Succ(spine.clone(), self.term(inner)?))
             }
-            Prim::ByteType => curios_core::Prim::ByteType,
-            Prim::Byte(value) => curios_core::Prim::Byte(*value),
-            Prim::ByteToNat(inner) => curios_core::Prim::ByteToNat(self.term(inner)?),
-            Prim::NatToByte(inner) => curios_core::Prim::NatToByte(self.term(inner)?),
+            Prim::ByteType => curios_elab::Prim::ByteType,
+            Prim::Byte(value) => curios_elab::Prim::Byte(*value),
+            Prim::ByteToNat(inner) => curios_elab::Prim::ByteToNat(self.term(inner)?),
+            Prim::NatToByte(inner) => curios_elab::Prim::NatToByte(self.term(inner)?),
             Prim::ByteEql(left, right) => {
-                curios_core::Prim::ByteEql(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::ByteEql(self.term(left)?, self.term(right)?)
             }
             Prim::ByteLt(left, right) => {
-                curios_core::Prim::ByteLt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::ByteLt(self.term(left)?, self.term(right)?)
             }
             Prim::ByteLte(left, right) => {
-                curios_core::Prim::ByteLte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::ByteLte(self.term(left)?, self.term(right)?)
             }
             Prim::ByteGt(left, right) => {
-                curios_core::Prim::ByteGt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::ByteGt(self.term(left)?, self.term(right)?)
             }
             Prim::ByteGte(left, right) => {
-                curios_core::Prim::ByteGte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::ByteGte(self.term(left)?, self.term(right)?)
             }
             Prim::NatEql(left, right) => {
-                curios_core::Prim::nat_eql(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_eql(self.term(left)?, self.term(right)?)
             }
             Prim::NatNeq(left, right) => {
-                curios_core::Prim::nat_neq(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_neq(self.term(left)?, self.term(right)?)
             }
             Prim::NatAdd(left, right) => {
-                curios_core::Prim::nat_add(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_add(self.term(left)?, self.term(right)?)
             }
             Prim::NatSub(left, right) => {
-                curios_core::Prim::nat_sub(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_sub(self.term(left)?, self.term(right)?)
             }
             Prim::NatMul(left, right) => {
-                curios_core::Prim::nat_mul(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_mul(self.term(left)?, self.term(right)?)
             }
             Prim::NatLt(left, right) => {
-                curios_core::Prim::nat_lt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_lt(self.term(left)?, self.term(right)?)
             }
             Prim::NatDiv(left, right) => {
-                curios_core::Prim::nat_div(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_div(self.term(left)?, self.term(right)?)
             }
             Prim::NatRem(left, right) => {
-                curios_core::Prim::nat_rem(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_rem(self.term(left)?, self.term(right)?)
             }
             Prim::NatGt(left, right) => {
-                curios_core::Prim::nat_gt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_gt(self.term(left)?, self.term(right)?)
             }
             Prim::NatLte(left, right) => {
-                curios_core::Prim::nat_lte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_lte(self.term(left)?, self.term(right)?)
             }
             Prim::NatGte(left, right) => {
-                curios_core::Prim::nat_gte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::nat_gte(self.term(left)?, self.term(right)?)
             }
             Prim::NatAnd(left, right) => {
-                curios_core::Prim::NatAnd(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatAnd(self.term(left)?, self.term(right)?)
             }
             Prim::NatOr(left, right) => {
-                curios_core::Prim::NatOr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatOr(self.term(left)?, self.term(right)?)
             }
             Prim::NatXor(left, right) => {
-                curios_core::Prim::NatXor(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatXor(self.term(left)?, self.term(right)?)
             }
             Prim::NatShl(left, right) => {
-                curios_core::Prim::NatShl(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatShl(self.term(left)?, self.term(right)?)
             }
             Prim::NatShr(left, right) => {
-                curios_core::Prim::NatShr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatShr(self.term(left)?, self.term(right)?)
             }
             Prim::NatRotl(left, right) => {
-                curios_core::Prim::NatRotl(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatRotl(self.term(left)?, self.term(right)?)
             }
             Prim::NatRotr(left, right) => {
-                curios_core::Prim::NatRotr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::NatRotr(self.term(left)?, self.term(right)?)
             }
-            Prim::NatClz(inner) => curios_core::Prim::NatClz(self.term(inner)?),
-            Prim::NatCtz(inner) => curios_core::Prim::NatCtz(self.term(inner)?),
-            Prim::NatPopcnt(inner) => curios_core::Prim::NatPopcnt(self.term(inner)?),
-            Prim::IntType => curios_core::Prim::IntType,
-            Prim::Int(value) => curios_core::Prim::Int(value.clone()),
+            Prim::NatClz(inner) => curios_elab::Prim::NatClz(self.term(inner)?),
+            Prim::NatCtz(inner) => curios_elab::Prim::NatCtz(self.term(inner)?),
+            Prim::NatPopcnt(inner) => curios_elab::Prim::NatPopcnt(self.term(inner)?),
+            Prim::IntType => curios_elab::Prim::IntType,
+            Prim::Int(value) => curios_elab::Prim::Int(value.clone()),
             Prim::IntEql(left, right) => {
-                curios_core::Prim::int_eql(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_eql(self.term(left)?, self.term(right)?)
             }
             Prim::IntNeq(left, right) => {
-                curios_core::Prim::int_neq(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_neq(self.term(left)?, self.term(right)?)
             }
             Prim::IntAdd(left, right) => {
-                curios_core::Prim::int_add(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_add(self.term(left)?, self.term(right)?)
             }
             Prim::IntSub(left, right) => {
-                curios_core::Prim::int_sub(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_sub(self.term(left)?, self.term(right)?)
             }
             Prim::IntMul(left, right) => {
-                curios_core::Prim::int_mul(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_mul(self.term(left)?, self.term(right)?)
             }
             Prim::IntDiv(left, right) => {
-                curios_core::Prim::int_div(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_div(self.term(left)?, self.term(right)?)
             }
             Prim::IntRem(left, right) => {
-                curios_core::Prim::int_rem(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_rem(self.term(left)?, self.term(right)?)
             }
             Prim::IntLt(left, right) => {
-                curios_core::Prim::int_lt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_lt(self.term(left)?, self.term(right)?)
             }
             Prim::IntGt(left, right) => {
-                curios_core::Prim::int_gt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_gt(self.term(left)?, self.term(right)?)
             }
             Prim::IntLte(left, right) => {
-                curios_core::Prim::int_lte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_lte(self.term(left)?, self.term(right)?)
             }
             Prim::IntGte(left, right) => {
-                curios_core::Prim::int_gte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::int_gte(self.term(left)?, self.term(right)?)
             }
             Prim::IntAnd(left, right) => {
-                curios_core::Prim::IntAnd(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntAnd(self.term(left)?, self.term(right)?)
             }
             Prim::IntOr(left, right) => {
-                curios_core::Prim::IntOr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntOr(self.term(left)?, self.term(right)?)
             }
             Prim::IntXor(left, right) => {
-                curios_core::Prim::IntXor(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntXor(self.term(left)?, self.term(right)?)
             }
             Prim::IntShl(left, right) => {
-                curios_core::Prim::IntShl(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntShl(self.term(left)?, self.term(right)?)
             }
             Prim::IntShr(left, right) => {
-                curios_core::Prim::IntShr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntShr(self.term(left)?, self.term(right)?)
             }
             Prim::IntRotl(left, right) => {
-                curios_core::Prim::IntRotl(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntRotl(self.term(left)?, self.term(right)?)
             }
             Prim::IntRotr(left, right) => {
-                curios_core::Prim::IntRotr(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::IntRotr(self.term(left)?, self.term(right)?)
             }
-            Prim::IntClz(inner) => curios_core::Prim::IntClz(self.term(inner)?),
-            Prim::IntCtz(inner) => curios_core::Prim::IntCtz(self.term(inner)?),
-            Prim::IntPopcnt(inner) => curios_core::Prim::IntPopcnt(self.term(inner)?),
-            Prim::FltType => curios_core::Prim::FltType,
-            Prim::Flt(flt) => curios_core::Prim::Flt(*flt),
+            Prim::IntClz(inner) => curios_elab::Prim::IntClz(self.term(inner)?),
+            Prim::IntCtz(inner) => curios_elab::Prim::IntCtz(self.term(inner)?),
+            Prim::IntPopcnt(inner) => curios_elab::Prim::IntPopcnt(self.term(inner)?),
+            Prim::FltType => curios_elab::Prim::FltType,
+            Prim::Flt(flt) => curios_elab::Prim::Flt(*flt),
             Prim::FltAdd(left, right) => {
-                curios_core::Prim::flt_add(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_add(self.term(left)?, self.term(right)?)
             }
             Prim::FltSub(left, right) => {
-                curios_core::Prim::flt_sub(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_sub(self.term(left)?, self.term(right)?)
             }
             Prim::FltMul(left, right) => {
-                curios_core::Prim::flt_mul(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_mul(self.term(left)?, self.term(right)?)
             }
             Prim::FltDiv(left, right) => {
-                curios_core::Prim::flt_div(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_div(self.term(left)?, self.term(right)?)
             }
             Prim::FltRem(left, right) => {
-                curios_core::Prim::FltRem(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::FltRem(self.term(left)?, self.term(right)?)
             }
             Prim::FltEql(left, right) => {
-                curios_core::Prim::flt_eql(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_eql(self.term(left)?, self.term(right)?)
             }
             Prim::FltNeq(left, right) => {
-                curios_core::Prim::flt_neq(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_neq(self.term(left)?, self.term(right)?)
             }
             Prim::FltLt(left, right) => {
-                curios_core::Prim::flt_lt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_lt(self.term(left)?, self.term(right)?)
             }
             Prim::FltGt(left, right) => {
-                curios_core::Prim::flt_gt(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_gt(self.term(left)?, self.term(right)?)
             }
             Prim::FltLte(left, right) => {
-                curios_core::Prim::flt_lte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_lte(self.term(left)?, self.term(right)?)
             }
             Prim::FltGte(left, right) => {
-                curios_core::Prim::flt_gte(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_gte(self.term(left)?, self.term(right)?)
             }
             Prim::FltMin(left, right) => {
-                curios_core::Prim::flt_min(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_min(self.term(left)?, self.term(right)?)
             }
             Prim::FltMax(left, right) => {
-                curios_core::Prim::flt_max(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::flt_max(self.term(left)?, self.term(right)?)
             }
-            Prim::FltNeg(inner) => curios_core::Prim::flt_neg(self.term(inner)?),
-            Prim::FltAbs(inner) => curios_core::Prim::flt_abs(self.term(inner)?),
+            Prim::FltNeg(inner) => curios_elab::Prim::flt_neg(self.term(inner)?),
+            Prim::FltAbs(inner) => curios_elab::Prim::flt_abs(self.term(inner)?),
             Prim::FltCopysign(left, right) => {
-                curios_core::Prim::FltCopysign(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::FltCopysign(self.term(left)?, self.term(right)?)
             }
-            Prim::FltSqrt(inner) => curios_core::Prim::flt_sqrt(self.term(inner)?),
-            Prim::FltFloor(inner) => curios_core::Prim::flt_floor(self.term(inner)?),
-            Prim::FltCeil(inner) => curios_core::Prim::flt_ceil(self.term(inner)?),
-            Prim::FltTrunc(inner) => curios_core::Prim::flt_trunc(self.term(inner)?),
-            Prim::FltNearest(inner) => curios_core::Prim::flt_nearest(self.term(inner)?),
-            Prim::FltToLeBytes(inner) => curios_core::Prim::flt_to_le_bytes(self.term(inner)?),
-            Prim::FltOfLeBytes(inner) => curios_core::Prim::flt_of_le_bytes(self.term(inner)?),
-            Prim::NatToInt(inner) => curios_core::Prim::nat_to_int(self.term(inner)?),
-            Prim::HandleType => curios_core::Prim::HandleType,
-            Prim::Handle(token) => curios_core::Prim::Handle(*token),
+            Prim::FltSqrt(inner) => curios_elab::Prim::flt_sqrt(self.term(inner)?),
+            Prim::FltFloor(inner) => curios_elab::Prim::flt_floor(self.term(inner)?),
+            Prim::FltCeil(inner) => curios_elab::Prim::flt_ceil(self.term(inner)?),
+            Prim::FltTrunc(inner) => curios_elab::Prim::flt_trunc(self.term(inner)?),
+            Prim::FltNearest(inner) => curios_elab::Prim::flt_nearest(self.term(inner)?),
+            Prim::FltToLeBytes(inner) => curios_elab::Prim::flt_to_le_bytes(self.term(inner)?),
+            Prim::FltOfLeBytes(inner) => curios_elab::Prim::flt_of_le_bytes(self.term(inner)?),
+            Prim::NatToInt(inner) => curios_elab::Prim::nat_to_int(self.term(inner)?),
+            Prim::HandleType => curios_elab::Prim::HandleType,
+            Prim::Handle(token) => curios_elab::Prim::Handle(*token),
             Prim::HandleEql(left, right) => {
-                curios_core::Prim::io_eql(self.term(left)?, self.term(right)?)
+                curios_elab::Prim::io_eql(self.term(left)?, self.term(right)?)
             }
-            Prim::Foreign(function, args) => curios_core::Prim::Foreign(
+            Prim::Foreign(function, args) => curios_elab::Prim::Foreign(
                 Arc::clone(function),
                 args.iter()
                     .map(|arg| self.term(arg))
                     .collect::<Result<_, _>>()?,
             ),
-            Prim::Exit(type_, code) => curios_core::Prim::Exit(self.term(type_)?, self.term(code)?),
-            Prim::NatToFlt(inner) => curios_core::Prim::nat_to_flt(self.term(inner)?),
-            Prim::IntToNat(inner) => curios_core::Prim::int_to_nat(self.term(inner)?),
-            Prim::IntToFlt(inner) => curios_core::Prim::int_to_flt(self.term(inner)?),
-            Prim::FltToNat(inner) => curios_core::Prim::flt_to_nat(self.term(inner)?),
-            Prim::FltToInt(inner) => curios_core::Prim::flt_to_int(self.term(inner)?),
-            Prim::BinType(grain) => curios_core::Prim::BinType(*grain),
+            Prim::Exit(type_, code) => curios_elab::Prim::Exit(self.term(type_)?, self.term(code)?),
+            Prim::NatToFlt(inner) => curios_elab::Prim::nat_to_flt(self.term(inner)?),
+            Prim::IntToNat(inner) => curios_elab::Prim::int_to_nat(self.term(inner)?),
+            Prim::IntToFlt(inner) => curios_elab::Prim::int_to_flt(self.term(inner)?),
+            Prim::FltToNat(inner) => curios_elab::Prim::flt_to_nat(self.term(inner)?),
+            Prim::FltToInt(inner) => curios_elab::Prim::flt_to_int(self.term(inner)?),
+            Prim::BinType(grain) => curios_elab::Prim::BinType(*grain),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
             Prim::Bin(grain, segments) => {
                 Self::lower_bin_literal(*grain, segments, |term| self.term(term))?
             }
-            Prim::BinLen(grain, inner) => curios_core::Prim::bin_len(*grain, self.term(inner)?),
+            Prim::BinLen(grain, inner) => curios_elab::Prim::bin_len(*grain, self.term(inner)?),
             Prim::BinEql(grain, left, right) => {
-                curios_core::Prim::bin_eql(*grain, self.term(left)?, self.term(right)?)
+                curios_elab::Prim::bin_eql(*grain, self.term(left)?, self.term(right)?)
             }
             Prim::BinGet(grain, bin, index) => {
-                curios_core::Prim::bin_get(*grain, self.term(bin)?, self.term(index)?)
+                curios_elab::Prim::bin_get(*grain, self.term(bin)?, self.term(index)?)
             }
-            Prim::BinSlice(grain, bin, start, end) => curios_core::Prim::bin_slice(
+            Prim::BinSlice(grain, bin, start, end) => curios_elab::Prim::bin_slice(
                 *grain,
                 self.term(bin)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
             Prim::BinAppend(grain, bin, atom) => {
-                curios_core::Prim::bin_append(*grain, self.term(bin)?, self.term(atom)?)
+                curios_elab::Prim::bin_append(*grain, self.term(bin)?, self.term(atom)?)
             }
             Prim::BinConcat(grain, left, right) => {
-                curios_core::Prim::bin_concat(*grain, [self.term(left)?, self.term(right)?])
+                curios_elab::Prim::bin_concat(*grain, [self.term(left)?, self.term(right)?])
             }
-            Prim::LstType(inner) => curios_core::Prim::lst_type(self.term(inner)?),
+            Prim::LstType(inner) => curios_elab::Prim::lst_type(self.term(inner)?),
             Prim::Lst(entries) => self.lower_lst_literal(entries, |term| self.term(term))?,
             Prim::LstLen(ty, inner) => {
-                curios_core::Prim::lst_len(self.term(ty)?, self.term(inner)?)
+                curios_elab::Prim::lst_len(self.term(ty)?, self.term(inner)?)
             }
             Prim::LstGet(ty, list, index) => {
-                curios_core::Prim::lst_get(self.term(ty)?, self.term(list)?, self.term(index)?)
+                curios_elab::Prim::lst_get(self.term(ty)?, self.term(list)?, self.term(index)?)
             }
-            Prim::LstSlice(ty, list, start, end) => curios_core::Prim::lst_slice(
+            Prim::LstSlice(ty, list, start, end) => curios_elab::Prim::lst_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
             Prim::LstAppend(ty, list, elem) => {
-                curios_core::Prim::lst_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
+                curios_elab::Prim::lst_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
             }
             Prim::LstConcat(ty, left, right) => {
-                curios_core::Prim::lst_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
+                curios_elab::Prim::lst_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
             }
-            Prim::LstMap(a, b, lst, f) => curios_core::Prim::lst_map(
+            Prim::LstMap(a, b, lst, f) => curios_elab::Prim::lst_map(
                 self.term(a)?,
                 self.term(b)?,
                 self.term(lst)?,
                 self.term(f)?,
             ),
-            Prim::CellType(inner) => curios_core::Prim::cell_type(self.term(inner)?),
+            Prim::CellType(inner) => curios_elab::Prim::cell_type(self.term(inner)?),
             Prim::Cell(type_, init) => {
-                curios_core::Prim::cell_new(self.term(type_)?, self.term(init)?)
+                curios_elab::Prim::cell_new(self.term(type_)?, self.term(init)?)
             }
             Prim::CellSet(type_, cell, value) => {
-                curios_core::Prim::cell_set(self.term(type_)?, self.term(cell)?, self.term(value)?)
+                curios_elab::Prim::cell_set(self.term(type_)?, self.term(cell)?, self.term(value)?)
             }
             Prim::CellGet(type_, cell) => {
-                curios_core::Prim::cell_get(self.term(type_)?, self.term(cell)?)
+                curios_elab::Prim::cell_get(self.term(type_)?, self.term(cell)?)
             }
         })
     }

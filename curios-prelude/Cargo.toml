@@ -14,7 +14,7 @@ profile = [
     "dep:tracing",
     "dep:tracing-subscriber",
     "curios-text/profile",
-    "curios-core/profile",
+    "curios-elab/profile",
     "curios-ersd/profile",
 ]
 
@@ -22,7 +22,7 @@ profile = [
 curios-abi = { workspace = true, features = ["archive"] }
 curios-base = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
-curios-core = { workspace = true, features = ["archive"] }
+curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
 rkyv = { workspace = true }
 sha2 = "0.11.0"
@@ -32,7 +32,7 @@ tracing = { workspace = true, optional = true }
 curios-abi = { workspace = true, features = ["archive"] }
 curios-base = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
-curios-core = { workspace = true, features = ["archive"] }
+curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
 rkyv = { workspace = true }
 sha2 = "0.11.0"

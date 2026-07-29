@@ -6,7 +6,7 @@
 //! rejection here is of a position and never of a definition.
 //!
 //! The size lattice and the classifier are unit-tested in
-//! `curios-core/src/totality/tests.rs`; these check what a user can observe,
+//! `curios-elab/src/totality/tests.rs`; these check what a user can observe,
 //! through the prelude-replay path a real program takes — where the analysis
 //! sees only the user suffix and reads the prelude's verdicts back from the
 //! archive.

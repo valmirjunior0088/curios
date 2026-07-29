@@ -254,7 +254,7 @@ fn apply_param_types(
 #[cfg(feature = "profile")]
 fn probe_level_fallback(site: &'static str, type_: &Term) {
     tracing::debug!(
-        target: "curios_core::sort",
+        target: "curios_elab::sort",
         site,
         type_ = %type_,
         "level defaulted to 0",
@@ -1467,7 +1467,7 @@ impl Convert {
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
         if metavars.contains(&id) {
             #[cfg(feature = "profile")]
-            tracing::debug!(target: "curios_core::solve", meta = id.0, "failed: occurs check");
+            tracing::debug!(target: "curios_elab::solve", meta = id.0, "failed: occurs check");
             return Ok(Solved::Failed);
         }
 
@@ -1480,7 +1480,7 @@ impl Convert {
         {
             #[cfg(feature = "profile")]
             tracing::debug!(
-                target: "curios_core::solve",
+                target: "curios_elab::solve",
                 meta = id.0,
                 blockers = %metavars
                     .iter()
@@ -1503,7 +1503,7 @@ impl Convert {
             // No birth record (e.g. a synthesis-position hole that never reached
             // a checking site): nothing to validate against, cannot solve.
             #[cfg(feature = "profile")]
-            tracing::debug!(target: "curios_core::solve", meta = id.0, "failed: no birth record");
+            tracing::debug!(target: "curios_elab::solve", meta = id.0, "failed: no birth record");
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope.clone();
@@ -1637,7 +1637,7 @@ impl Convert {
                     .any(|entry| entry.free_vars().contains(&name));
             #[cfg(feature = "profile")]
             tracing::debug!(
-                target: "curios_core::solve",
+                target: "curios_elab::solve",
                 meta = id.0,
                 %name,
                 mentioned,
@@ -1680,7 +1680,7 @@ impl Convert {
             if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
                 #[cfg(feature = "profile")]
                 tracing::debug!(
-                    target: "curios_core::solve",
+                    target: "curios_elab::solve",
                     meta = id.0,
                     "postponed: inversion round-trip disagreed",
                 );
@@ -1717,7 +1717,7 @@ impl Convert {
                     // rejected candidate that looks correct at the use site.
                     #[cfg(feature = "profile")]
                     tracing::debug!(
-                        target: "curios_core::solve",
+                        target: "curios_elab::solve",
                         meta = id.0,
                         error = %_error,
                         "re-validation rejected the candidate",
@@ -1730,7 +1730,7 @@ impl Convert {
         if !revalidated {
             #[cfg(feature = "profile")]
             tracing::debug!(
-                target: "curios_core::solve",
+                target: "curios_elab::solve",
                 meta = id.0,
                 against = %result,
                 "failed: re-validation",

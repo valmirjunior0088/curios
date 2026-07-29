@@ -1,6 +1,6 @@
 # Unification solver refinements
 
-Not refined yet. This umbrella placeholder reserves the specification location for the remaining unification solver work in `curios-core` until each item is refined into a working implementation specification.
+Not refined yet. This umbrella placeholder reserves the specification location for the remaining unification solver work in `curios-elab` until each item is refined into a working implementation specification.
 
 ## Covered roadmap items
 

@@ -13,7 +13,7 @@ profile = [
     "dep:tracing",
     "curios-text/profile",
     "curios-prelude/profile",
-    "curios-core/profile",
+    "curios-elab/profile",
     "curios-ersd/profile",
     "curios-cont/profile",
 ]
@@ -22,7 +22,7 @@ profile = [
 curios-abi = { workspace = true }
 curios-text = { workspace = true }
 curios-prelude = { workspace = true }
-curios-core = { workspace = true }
+curios-elab = { workspace = true }
 curios-ersd = { workspace = true }
 curios-cont = { workspace = true }
 curios-wasm = { workspace = true }

@@ -18,7 +18,7 @@ impl NatLiteral {
     }
 }
 
-/// A `Nat` primitive value in the literal-stride shape core uses: `Zero`, or `Succ(k, t)` — `k` successors applied to a base term `t`. A plain numeral is `Succ(n, Zero)`; the prelude's `Nat/succ(a)` body is `Succ(1, a)`. Mirrors `curios_core::Nat`, with the stride kept as a [`NatLiteral`] so the printer round-trips the written radix.
+/// A `Nat` primitive value in the literal-stride shape core uses: `Zero`, or `Succ(k, t)` — `k` successors applied to a base term `t`. A plain numeral is `Succ(n, Zero)`; the prelude's `Nat/succ(a)` body is `Succ(1, a)`. Mirrors `curios_elab::Nat`, with the stride kept as a [`NatLiteral`] so the printer round-trips the written radix.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Nat {
     Zero,

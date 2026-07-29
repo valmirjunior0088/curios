@@ -28,7 +28,7 @@ Curios is a functional, dependently typed language implemented in Rust 2024. It 
 ```text
 .crs source
   → curios-text       parse surface syntax and lower it to core
-  → curios-core       elaborate, typecheck, normalize, and erase types
+  → curios-elab       elaborate, typecheck, normalize, and erase types
   → curios-ersd       optimize erased terms and lower them to continuations
   → curios-cont       optimize continuation IR and emit WebAssembly
   → curios-wasm       model, parse, and encode WebAssembly modules
@@ -43,7 +43,7 @@ Browser path:
   → curios-web         expose curios-pipeline through wasm-bindgen
 ```
 
-Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-core`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`.
+Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-elab`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`.
 
 ### Ownership map
 
@@ -53,7 +53,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
 | Fixed prelude | `curios-prelude` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive |
-| Type theory | `curios-core` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
+| Type theory | `curios-elab` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
 | Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
 | WebAssembly model | `curios-wasm` | Wasm AST, parser, encoder, and binary writer |
@@ -69,9 +69,9 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | --- | --- | --- |
 | Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/SYNTAX.md` |
 | Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
-| Elaboration, typing, or conversion | `curios-core/src/` | Text lowering, erasure, diagnostics, and integration tests |
-| Concepts or witness resolution | `curios-core/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
-| Type erasure | `curios-core/src/into_ersd*` | `curios-ersd` representation and downstream tests |
+| Elaboration, typing, or conversion | `curios-elab/src/` | Text lowering, erasure, diagnostics, and integration tests |
+| Concepts or witness resolution | `curios-elab/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
+| Type erasure | `curios-elab/src/into_ersd*` | `curios-ersd` representation and downstream tests |
 | Erased optimization | `curios-ersd/src/optimize/` | `into_cont.rs`, derived analyses, deep-input and specialization tests |
 | CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |

@@ -6,7 +6,7 @@ use curios_base::Qualifier;
 ///
 /// Segments rather than a path string, because lowering needs the *identity*,
 /// and building one from `"/syn/Monad/bind"` would mean splitting a spelling —
-/// the coupling `curios-core`'s name vocabulary exists to remove. The registry
+/// the coupling `curios-elab`'s name vocabulary exists to remove. The registry
 /// is the site that knows the structure, so the registry states it.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxName {
@@ -23,7 +23,7 @@ impl SyntaxName {
         Qualifier::from(self.segments.iter().copied())
     }
 
-    /// The flattened spelling, for the nominal registries `curios-core` still
+    /// The flattened spelling, for the nominal registries `curios-elab` still
     /// keys by `String`, and for diagnostics. Rendering, not parsing: it goes
     /// out and never back in. Retired with those keys.
     pub fn symbol(self) -> String {
