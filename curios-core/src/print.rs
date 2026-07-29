@@ -408,15 +408,15 @@ fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((Free, Free, Free), T
     ((fst, snd, thd), body)
 }
 
-fn print_var(var: Var) -> Printer<'static> {
+fn print_var(var: Var) -> Printer {
     pure(display_label(var.unwrap()))
 }
 
-fn print_atom(atom: Atom) -> Printer<'static> {
+fn print_atom(atom: Atom) -> Printer {
     flat([pure("'"), pure(atom.as_string())])
 }
 
-fn print_flt(flt: Flt) -> Printer<'static> {
+fn print_flt(flt: Flt) -> Printer {
     let mut string = format!("{:+}", flt.to_f32());
 
     // string always starts with '+' or '-'; work on the digits after the sign
@@ -436,7 +436,7 @@ fn print_flt(flt: Flt) -> Printer<'static> {
 /// Render a binary primitive as `name left right`, the shape almost every
 /// scalar arithmetic/comparison/bitwise prim shares. `name` carries its own
 /// trailing space (`"Nat.add "`).
-fn print_binary(name: &'static str, left: Term, right: Term, depth: usize) -> Printer<'static> {
+fn print_binary(name: &'static str, left: Term, right: Term, depth: usize) -> Printer {
     flat([
         pure(name),
         print_term(left, depth),
@@ -446,7 +446,7 @@ fn print_binary(name: &'static str, left: Term, right: Term, depth: usize) -> Pr
 }
 
 /// The unary counterpart of [`print_binary`]: `name inner`.
-fn print_unary(name: &'static str, inner: Term, depth: usize) -> Printer<'static> {
+fn print_unary(name: &'static str, inner: Term, depth: usize) -> Printer {
     flat([pure(name), print_term(inner, depth)])
 }
 
@@ -483,7 +483,7 @@ fn infix_symbol(prim: &Prim) -> Option<&'static str> {
 /// Render an operator primitive as `left <symbol> right`, each operand
 /// parenthesized when it is itself an infix operator so nesting stays
 /// unambiguous — `(a + b) * c`, never `a + b * c`.
-fn print_infix(symbol: &'static str, left: Term, right: Term, depth: usize) -> Printer<'static> {
+fn print_infix(symbol: &'static str, left: Term, right: Term, depth: usize) -> Printer {
     flat([
         print_operand(left, depth),
         pure(format!(" {symbol} ")),
@@ -494,7 +494,7 @@ fn print_infix(symbol: &'static str, left: Term, right: Term, depth: usize) -> P
 /// An operand of [`print_infix`], wrapped in parentheses when it too prints as
 /// an infix operator (a nested operator primitive or a residual `Infix` node);
 /// self-delimiting operands (variables, literals, applications) print bare.
-fn print_operand(term: Term, depth: usize) -> Printer<'static> {
+fn print_operand(term: Term, depth: usize) -> Printer {
     let parenthesize = match &*term {
         Subterm::Prim(prim) => infix_symbol(prim).is_some(),
         Subterm::Infix(_) => true,
@@ -508,7 +508,7 @@ fn print_operand(term: Term, depth: usize) -> Printer<'static> {
     }
 }
 
-fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
+fn print_prim(prim: Prim, depth: usize) -> Printer {
     match prim {
         Prim::BoolType => pure("Bool"),
         Prim::Bool(false) => pure("false"),
@@ -759,7 +759,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     }
 }
 
-pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
+pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
     match Term::unwrap_or_clone(term) {
         Subterm::Type(level) => {
             if level.is_zero() {
@@ -792,7 +792,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 depth: usize,
                 total: usize,
                 idx: usize,
-                printers: &mut Vec<Printer<'static>>,
+                printers: &mut Vec<Printer>,
             ) -> Term {
                 match cur {
                     Telescope::Done(body) => *body,
@@ -887,7 +887,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 depth: usize,
                 total: usize,
                 idx: usize,
-                items: &mut Vec<Printer<'static>>,
+                items: &mut Vec<Printer>,
             ) {
                 match cur {
                     Telescope::Done(_) => {}

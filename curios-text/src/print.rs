@@ -22,7 +22,7 @@ use {
 /// `print_term`'s `(head).field` projection and `(term)!` bang forms would
 /// end the literal at their `)`. Anything else is wrapped in parens, matching
 /// the `\..(term)` operand form.
-fn print_bin_spread_operand(term: Term) -> Printer<'static> {
+fn print_bin_spread_operand(term: Term) -> Printer {
     fn is_bare(term: &Term) -> bool {
         match term.as_subterm() {
             Subterm::Name(_) => true,
@@ -33,7 +33,7 @@ fn print_bin_spread_operand(term: Term) -> Printer<'static> {
         }
     }
 
-    fn print_bare(term: Term) -> Printer<'static> {
+    fn print_bare(term: Term) -> Printer {
         match term.into_subterm() {
             Subterm::Name(name) => pure(name.join()),
             Subterm::Proj(Proj { head, field }) => flat([
@@ -65,7 +65,7 @@ fn print_bin_spread_operand(term: Term) -> Printer<'static> {
     }
 }
 
-fn print_plicity(plicity: Plicity) -> Printer<'static> {
+fn print_plicity(plicity: Plicity) -> Printer {
     match plicity {
         Plicity::Implicit => pure("@"),
         Plicity::Witness => pure("use "),
@@ -76,14 +76,14 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
 /// Prints a match's optional motive — ` : ` and the written term (ordinarily a
 /// lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in
 /// the source.
-fn print_motive(motive: Option<Term>) -> Printer<'static> {
+fn print_motive(motive: Option<Term>) -> Printer {
     match motive {
         Some(motive) => flat([pure(" : "), print_term(motive)]),
         None => pure(""),
     }
 }
 
-fn print_flt(value: f32) -> Printer<'static> {
+fn print_flt(value: f32) -> Printer {
     let mut string = value.to_string();
 
     if let Some(index) = string.find(['e', 'E']) {
@@ -102,7 +102,7 @@ fn print_flt(value: f32) -> Printer<'static> {
 }
 
 /// One Π-binder, as in a function type: `@?label : type` (the label optional).
-fn print_func_type_param(param: FuncTypeParam) -> Printer<'static> {
+fn print_func_type_param(param: FuncTypeParam) -> Printer {
     let typed = print_term(param.type_);
     let body = match param.label {
         Some(label) => flat([pure(label), pure(" : "), typed]),
@@ -114,7 +114,7 @@ fn print_func_type_param(param: FuncTypeParam) -> Printer<'static> {
 /// One function-sugar binder (a `let`/`rec`/`satisfy` telescope parameter). A
 /// `use` binder is anonymous — `use type`, no label; otherwise the plicity
 /// prefixes the name (`@x` = implicit).
-fn print_func_sugar_param(param: FuncSugarParam) -> Printer<'static> {
+fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
     if param.plicity == Plicity::Witness {
         flat([pure("use "), print_term(param.type_)])
     } else {
@@ -130,7 +130,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer<'static> {
 /// One lambda parameter: the binder name with its optional domain annotation.
 fn print_func_param(
     (plicity, name, annotation): (Plicity, String, Option<Term>),
-) -> Printer<'static> {
+) -> Printer {
     let bound = match annotation {
         Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
         None => pure(name),
@@ -141,7 +141,7 @@ fn print_func_param(
 /// A tuple-literal / struct-literal field: positional, `label = value`, or the
 /// definition sugar `label(params) = value` re-sugared from the retained
 /// parameter list.
-fn print_tuple_field(field: TupleField) -> Printer<'static> {
+fn print_tuple_field(field: TupleField) -> Printer {
     match (field.label, field.func_params) {
         (Some(label), Some(params)) => flat([
             pure(label),
@@ -157,7 +157,7 @@ fn print_tuple_field(field: TupleField) -> Printer<'static> {
 
 /// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a
 /// plain field.
-fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
+fn print_struct_entry(entry: StructLitEntry) -> Printer {
     match entry {
         StructLitEntry::Field(field) => print_tuple_field(field),
         StructLitEntry::Use(term) => flat([pure("use "), print_term(term)]),
@@ -171,14 +171,14 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
 /// The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin`
 /// fold's cons arm — `None` prints nothing at all (a plain case-split),
 /// matching how it was written.
-fn print_cons_ih(ih_label: Option<String>) -> Printer<'static> {
+fn print_cons_ih(ih_label: Option<String>) -> Printer {
     match ih_label {
         Some(ih_label) => flat([pure("; "), pure(ih_label)]),
         None => pure(""),
     }
 }
 
-fn print_pattern_field(field: PatternField) -> Printer<'static> {
+fn print_pattern_field(field: PatternField) -> Printer {
     match field.label {
         Some(label) => flat([pure(label), pure(" = "), print_pattern(field.value)]),
         None => print_pattern(field.value),
@@ -188,7 +188,7 @@ fn print_pattern_field(field: PatternField) -> Printer<'static> {
 /// A binder pattern: a plain name, a tuple pattern, or a struct pattern —
 /// the literal mirror of the `Tuple`/`StructLit` term-printing arms below,
 /// with `Term` replaced by `Pattern`.
-fn print_pattern(pattern: Pattern) -> Printer<'static> {
+fn print_pattern(pattern: Pattern) -> Printer {
     match pattern {
         Pattern::Binder(Some(name)) => pure(name),
         // Only a function-sugar `use` parameter (`Plicity::Witness`) has no
@@ -219,7 +219,7 @@ fn print_pattern(pattern: Pattern) -> Printer<'static> {
     }
 }
 
-fn print_match_pattern_field(field: MatchPatternField) -> Printer<'static> {
+fn print_match_pattern_field(field: MatchPatternField) -> Printer {
     match field.label {
         Some(label) => flat([pure(label), pure(" = "), print_match_pattern(field.value)]),
         None => print_match_pattern(field.value),
@@ -231,7 +231,7 @@ fn print_match_pattern_field(field: MatchPatternField) -> Printer<'static> {
 /// counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Ctor`
 /// stays positional (constructors have no field labels); `Tuple`/`Struct`
 /// mirror `print_pattern`'s own field-printing exactly.
-fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
+fn print_match_pattern(pattern: MatchPattern) -> Printer {
     match pattern {
         MatchPattern::Binder(name) => pure(name),
         MatchPattern::Variant { tag, args } => flat([
@@ -321,7 +321,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
 /// `print_func_param`, forked for the same reason `parse_func_pattern_param` is
 /// (see `parse.rs`). A lambda's `use` binder is named (`use show`), so the mark
 /// precedes the pattern rather than an anonymous domain type.
-fn print_func_pattern_param(param: FuncParam) -> Printer<'static> {
+fn print_func_pattern_param(param: FuncParam) -> Printer {
     let FuncParam {
         plicity,
         pattern,
@@ -334,7 +334,7 @@ fn print_func_pattern_param(param: FuncParam) -> Printer<'static> {
     flat([print_plicity(plicity), bound])
 }
 
-fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {
+fn print_labeled((label, ty): (Option<String>, Term)) -> Printer {
     match label {
         Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
         None => print_term(ty),
@@ -343,7 +343,7 @@ fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {
 
 /// A Σ-type / struct field: positional, `label : type`, or the signature sugar
 /// `label(params) -> type` re-sugared from the retained parameter list.
-fn print_field(param: TupleTypeParam) -> Printer<'static> {
+fn print_field(param: TupleTypeParam) -> Printer {
     match (param.label, param.func_params) {
         (Some(label), Some(params)) => flat([
             pure(label),
@@ -365,7 +365,7 @@ fn format_radix(n: &BigUint, radix: Radix) -> String {
     }
 }
 
-fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printer<'static> {
+fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printer {
     flat([
         pure(name),
         pure("("),
@@ -374,7 +374,7 @@ fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printe
     ])
 }
 
-fn print_prim(prim: Prim) -> Printer<'static> {
+fn print_prim(prim: Prim) -> Printer {
     match prim {
         Prim::BoolType => pure("Bool"),
         Prim::Bool(false) => pure("false"),
@@ -606,7 +606,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
     }
 }
 
-pub(crate) fn print_term(term: Term) -> Printer<'static> {
+pub(crate) fn print_term(term: Term) -> Printer {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
@@ -802,7 +802,7 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
     }
 }
 
-fn print_let_signature(signature: LetSignature) -> Printer<'static> {
+fn print_let_signature(signature: LetSignature) -> Printer {
     match signature {
         LetSignature::Name { type_, body } => flat([
             match type_ {
@@ -829,7 +829,7 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
     }
 }
 
-fn print_pub(vis_pub: bool) -> Printer<'static> {
+fn print_pub(vis_pub: bool) -> Printer {
     if vis_pub { pure("pub ") } else { pure("") }
 }
 
@@ -841,7 +841,7 @@ fn print_group_item(item: &GroupItem) -> String {
     }
 }
 
-fn print_top_use(item: TopUse) -> Printer<'static> {
+fn print_top_use(item: TopUse) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("use "),
@@ -861,7 +861,7 @@ fn print_top_use(item: TopUse) -> Printer<'static> {
     ])
 }
 
-fn print_top_let(item: TopLet) -> Printer<'static> {
+fn print_top_let(item: TopLet) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("let "),
@@ -871,7 +871,7 @@ fn print_top_let(item: TopLet) -> Printer<'static> {
     ])
 }
 
-fn print_wire_type(type_: WireType) -> Printer<'static> {
+fn print_wire_type(type_: WireType) -> Printer {
     match type_ {
         WireType::Nat => pure("Nat"),
         WireType::Int => pure("Int"),
@@ -885,7 +885,7 @@ fn print_wire_type(type_: WireType) -> Printer<'static> {
 // `parse_wire_signature` only ever produces exactly one, unnamed (`_`)
 // result — `foreign` has no surface syntax for `/sys/Handle`'s named-record
 // results — so the sole result is always present.
-fn print_wire_signature(signature: WireSignature) -> Printer<'static> {
+fn print_wire_signature(signature: WireSignature) -> Printer {
     let WireSignature { params, results } = signature;
     let output = results
         .into_iter()
@@ -908,7 +908,7 @@ fn print_wire_signature(signature: WireSignature) -> Printer<'static> {
     ])
 }
 
-fn print_top_foreign(item: TopForeign) -> Printer<'static> {
+fn print_top_foreign(item: TopForeign) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("foreign "),
@@ -919,7 +919,7 @@ fn print_top_foreign(item: TopForeign) -> Printer<'static> {
     ])
 }
 
-fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
+fn print_top_rec(items: Vec<TopLet>) -> Printer {
     let mut iter = items.into_iter();
     let first = iter.next().unwrap();
     let rest = iter.collect::<Vec<_>>();
@@ -945,7 +945,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
     ])
 }
 
-fn print_top_mod(item: TopMod) -> Printer<'static> {
+fn print_top_mod(item: TopMod) -> Printer {
     match item.module {
         None => flat([
             print_pub(item.vis_pub),
@@ -964,11 +964,11 @@ fn print_top_mod(item: TopMod) -> Printer<'static> {
     }
 }
 
-pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
+pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
     sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
 }
 
-fn print_top_induct_case(case: TopCase) -> Printer<'static> {
+fn print_top_induct_case(case: TopCase) -> Printer {
     let payload = sep_flat(
         case.payload.into_iter().map(|param| {
             // Plicity prefixes the name (`@x` = implicit) — shared with
@@ -1002,7 +1002,7 @@ fn print_top_induct_case(case: TopCase) -> Printer<'static> {
     ])
 }
 
-fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer<'static> {
+fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
     if params.is_empty() {
         return pure("");
     }
@@ -1032,7 +1032,7 @@ fn print_top_induct_arity(
     indices: Vec<(Option<String>, Term)>,
     rep_pub: bool,
     result_sort: Term,
-) -> Printer<'static> {
+) -> Printer {
     if indices.is_empty() {
         return flat([pure(" : "), print_pub(rep_pub), print_term(result_sort)]);
     }
@@ -1046,7 +1046,7 @@ fn print_top_induct_arity(
     ])
 }
 
-fn print_top_induct(group: Vec<TopInduct>) -> Printer<'static> {
+fn print_top_induct(group: Vec<TopInduct>) -> Printer {
     let mut iter = group.into_iter();
     let first = iter.next().unwrap();
     let rest = iter.collect::<Vec<_>>();
@@ -1088,7 +1088,7 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer<'static> {
     ])
 }
 
-fn print_top_struct(item: TopStruct) -> Printer<'static> {
+fn print_top_struct(item: TopStruct) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("struct "),
@@ -1104,7 +1104,7 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
     ])
 }
 
-fn print_concept_field(field: ConceptField) -> Printer<'static> {
+fn print_concept_field(field: ConceptField) -> Printer {
     // A superclass field is anonymous: `use <type>`, no label.
     if field.is_super {
         return flat([pure("use "), print_term(field.type_)]);
@@ -1123,7 +1123,7 @@ fn print_concept_field(field: ConceptField) -> Printer<'static> {
     }
 }
 
-fn print_top_concept(item: TopConcept) -> Printer<'static> {
+fn print_top_concept(item: TopConcept) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("concept "),
@@ -1140,7 +1140,7 @@ fn print_top_concept(item: TopConcept) -> Printer<'static> {
     ])
 }
 
-fn print_top_witness(item: TopWitness) -> Printer<'static> {
+fn print_top_witness(item: TopWitness) -> Printer {
     let params = if item.params.is_empty() {
         pure("")
     } else {
@@ -1180,7 +1180,7 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
 /// A witness-body entry: a `use <term>` fill or an implementation field —
 /// `label = value`, or the definition sugar `label(params) = value` re-sugared
 /// from the retained parameter list.
-fn print_witness_entry(entry: WitnessEntry) -> Printer<'static> {
+fn print_witness_entry(entry: WitnessEntry) -> Printer {
     let field = match entry {
         WitnessEntry::Use(term) => return flat([pure("use "), print_term(term)]),
         WitnessEntry::Field(field) => field,
@@ -1198,7 +1198,7 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer<'static> {
     }
 }
 
-fn print_top_item(item: TopItem) -> Printer<'static> {
+fn print_top_item(item: TopItem) -> Printer {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),
