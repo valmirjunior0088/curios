@@ -1,12 +1,12 @@
 # The trusted base
 
-Working implementation specification for making the independent kernel load-bearing: moving out of `curios-core` everything that cannot admit a program, moving into it every rule that can, and turning it on so that `curios-elab` leaves the trusted base.
+Working implementation specification for making the independent kernel load-bearing: enumerating what is trusted, closing every route by which the kernel certifies a false proposition, and turning it on so that the elaborator's rules leave the trusted base.
 
-This effort does not add a rule to the language, change what any program means, or make the kernel small. It changes *who is trusted*. Today the compiler's verdict is the elaborator's alone; when this lands, a program is accepted only if two independently written checkers agree.
+This effort does not add a rule to the language or change what any program means. It changes *who is trusted*. Today the compiler's verdict is the elaborator's alone; when this lands, a program is accepted only if two independently written checkers agree, and the trusted set is a table with a budget rather than a crate name.
 
-This specification refines the roadmap item at [ROADMAP.md](../ROADMAP.md) line 96, which should link here. When this work lands, fold the permanent boundary rules into the `curios-core` crate documentation, re-grade the perimeter table and the "What is not checked" list in `DESIGN.md`, update `ROADMAP.md`, and delete this working specification after no remaining document refers to it.
+This specification refines the independent-kernel item in [ROADMAP.md](../ROADMAP.md), which links here. When this work lands, fold the permanent boundary rules into the `curios-core` crate documentation, re-grade nothing in `DESIGN.md`'s perimeter table (see "What this may not claim"), update `ROADMAP.md`, and delete this working specification after no remaining document refers to it.
 
-**Step 7 is implemented; everything else here is not.** It landed first and out of order, because the kernel aborted on real input and nothing downstream could be measured against a real module until it stopped. The measurements below are computed from the worktree; every claim about what the kernel does or does not check was read out of the source and is cited to a line.
+**Only the defunctionalized typing judgment is implemented.** It landed first and out of order, because the kernel aborted on real input and nothing downstream could be measured until it stopped. Every claim below was read out of the source and is cited to a line, or measured and cited to its measurement.
 
 ## Objective
 
@@ -19,196 +19,286 @@ The kernel decides from the finished terms alone.
 
 `DESIGN.md` currently states the opposite, and states it correctly: *"An independent kernel is being built in `curios-core` and does not yet re-check anything, so it subtracts nothing from that base today."* `curios-elab/src/recheck.rs:25` says the same from the other side: *"Nothing in the pipeline calls this."*
 
+**The elaboration rules leave the trusted base; the module plumbing does not.** `recheck_module`'s item walk and its dependency sort, `zonk_module`, the `Module`/`Item`/`Definition` types, and the archive round trip all stay — they decide *what* the kernel is asked about, which no amount of re-checking can validate. That residue is of order 1,800 lines, against 31,702 for the crate. An earlier revision of this document claimed the crate leaves entirely; it does not, and the narrower claim is the one to make.
+
 The completed implementation must compile the existing `/sys`, `/syn`, `/std`, examples, benchmarks, and tests with `recheck_module` on the compile path and a kernel refusal failing the build.
 
-## What the trusted base is today
+## The trusted base, enumerated
 
-`curios-core` is 17,428 lines and `curios-elab` is 31,713. **Both are trusted, all 49,141 lines**, because the elaborator's verdict is the only one anything acts on and the kernel is inert.
+A line is trusted when a bug in it can admit a program. That set is the call closure of the kernel's three entry points — `check_definition`, `check_rec_group`, `check_entrypoint` — and it does not coincide with any crate boundary.
 
-That produces the measurement problem this specification has to settle before any sequencing makes sense. Moving code out of `curios-core` shrinks a crate that is not yet load-bearing and subtracts nothing from what is trusted. Moving checks into the kernel and turning it on is what subtracts — and it *adds* lines to `curios-core`.
+| Trusted | Lines | Why |
+| --- | --- | --- |
+| `curios-core`, non-test | 15,065 | The kernel and everything it calls: `term.rs`, `scope.rs`, `reduce/prim.rs`, `universe.rs`, `spine.rs`, `free_monoid.rs`, `inductive.rs`, `structure.rs`, `polarity.rs`, `nat.rs`, `names.rs` |
+| `curios-base` | 2,839 | `Flt`, `Int`, `PackedBin`, `Grain`, `NumOp`, `Scalar`, `Entropy`, the rotate helpers — the arithmetic every primitive fold performs |
+| `curios-abi` | 952 | `ForeignFunction` and `WireType`, against which the kernel re-decides the foreign wire contract |
+| `num-bigint` | external | `Nat::Succ(BigUint, Term)` — type-level natural arithmetic *is* `BigUint` arithmetic |
+| `curios-elab` residue | ~1,800 | `recheck.rs`, `zonk.rs`, the module types, the archive round trip |
 
-The expected net is out ≈ 3,100 lines and in ≈ 2,000–3,500 excluding totality, so `curios-core` lands between 17,000 and 20,000 lines: roughly where it started. What changes is that nearly all of it becomes trusted-and-load-bearing rather than partly trusted-and-inert, and that 31,713 lines of `curios-elab` stop being trusted at all.
+Total today, with the elaborator wholly trusted because its verdict is the only one anything acts on: `curios-core` 17,497 plus `curios-elab` 31,702 plus `curios-base` 2,839 plus `curios-abi` 952, and `num-bigint` besides. An earlier revision accounted 49,141 and omitted the last three. **A trusted base that has not been enumerated cannot be minimized**, and that omission is why the earlier line-count targets were unreachable.
 
-**The target is the trusted surface, not the line count.** Every step below is justified against that and not against the size of the crate.
+Expected after this work: of order **21,000–22,000**. A ~55% reduction, and not a small kernel.
+
+**The enumeration is the deliverable, not the estimate.** Add a test that computes the closure from those three entry points and asserts it against a recorded list with a line budget, so "did this change grow the trusted base" is a test result rather than an argument. Until that test exists the table above is a best reading, not a measurement — it was assembled by following imports, and the earlier omissions are what that method costs.
+
+`print.rs` (1,349 lines) is in `curios-core` and is *not* trusted. `curios-core/src/lib.rs:27` already concedes this.
 
 ## Permanent design decisions
 
-**Declaration acceptance is a typing rule, and belongs in the kernel.** `DESIGN.md` records the opposite — *"what it will not cover, by construction, is totality, positivity, and witness coherence, which are whole-module analyses rather than typing rules"* — and this specification reverses that for positivity and reopens it for totality. Two reasons. The kernel already has a module driver: `curios-core/src/kernel/module.rs` walks items in order and defines each as it goes, so "whole-module" does not describe a boundary it cannot cross. And positivity is not a whole-module analysis in the first place; it is a condition on accepting an `induct` or `struct` declaration, which every kernel in this family checks at that point.
+**Two independently written checkers is the objective.** Not a means to a smaller crate. `DESIGN.md`'s rationale stands: a second checker removes none of the perimeter's weaknesses and changes the cost of being wrong about one. The evidence that it earns its keep is already in hand — see "The elaborator is wrong where the kernel is right" below.
 
-**A kernel that uses a rule must check the rule's premise.** `DESIGN.md` establishes that definitional proof irrelevance is sound precisely because every `Prop` inhabitant is total — obligation (V)'s job — and that the conversion recurrence rule stands on aggressive (T). The kernel uses irrelevance (`curios-core/src/kernel/convert.rs:160`) and it uses the recurrence rule. The fixpoint argument that licenses both is an argument about *the elaborator's* pipeline; it does not transfer to a second checker that runs neither obligation. A kernel that declines to check totality is applying two rules on the elaborator's word, which is the exact dependency the split exists to sever.
+**Duplicate a check when the two sides see different inputs; share it when they do not.** This is the line, and it is new. Reduction, conversion, and the typing judgment stay duplicated: the elaborator sees metavariables, refinements, expected types, parked goals, and memoized derivations, while the kernel sees ground terms and holds no caches (`curios-core/src/kernel.rs:169`). Different inputs and different strategies are where a systematic mistake is both likely and costly, and where two verdicts are two samples.
 
-**The kernel recomputes; it does not read the elaborator's answers.** Where a check's result is already recorded on a registry entry — `InductDecl::polarities`, the `UniverseContext` constraint sets — the kernel must derive it again from the telescopes. Those fields are the elaborator's verdict and they ride the prelude archive. Reading them would let a bad archive through a checker whose entire purpose is not to trust `curios-elab`.
+Strict positivity, size-change totality, and index inversion are the other case. All three run post-zonk on final, meta-free terms — `curios-elab/src/positivity.rs:66` (*"Runs on zonked Core, so the telescopes it reads are final and meta-free"*) and the same for totality, whose flag is *"[w]ritten back … after zonking … the analysis needs final, meta-free terms"*. That is exactly the kernel's input. **Two runs of a total function on identical input is one sample, not two.** Duplicating them buys a diff test, which property-testing the single implementation buys more cheaply, and costs 2,865 trusted lines written twice.
 
-**Incompleteness is the safe direction, and it stays that way.** `curios-core/src/kernel/convert.rs:46` already states this for conversion. It governs every rule added here: a rule that refuses too much produces a disagreement, which is a signal; a rule that accepts too much is silent, which is what the second opinion exists to prevent. If a rule has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in `DESIGN.md`.
+`Reducer` is the precedent: `DESIGN.md` already draws this line for primitive folding — *"arithmetic over the representation and belongs here, while how far an operand reduces before a fold sees it is a strategy each side supplies for itself."* Positivity, totality, and inversion are algebra over the representation.
 
-**Printing is not a rule and does not belong in the trusted crate.** `curios-core/src/lib.rs:27` already concedes this. The only thing anchoring it is `impl Display for Term`, needed by `KernelError`'s own `Display`.
+**The kernel recomputes rather than reading the elaborator's answers — for duplicated checks.** Amended. Once an analysis is shared there is no elaborator answer distinct from the kernel's: the stored vector is the output of exactly the code the kernel would run. What survives is an **integrity check on the archive** — recomputing catches a stored value that no run of the analysis would produce. That is worth having and the kernel already provides its equivalent for the term half by re-typechecking, but it must be argued as integrity, not as independence. The earlier instruction to re-derive rather than read `InductDecl::polarities` was justified on the wrong ground.
+
+**Declaration acceptance is a typing rule, and belongs in the kernel.** `DESIGN.md` records the opposite — *"what it will not cover, by construction, is totality, positivity, and witness coherence, which are whole-module analyses rather than typing rules"* — and this specification reverses that for positivity and for totality. Two reasons. The kernel already has a module driver: `curios-core/src/kernel/module.rs` walks items in order and defines each as it goes, so "whole-module" does not describe a boundary it cannot cross. And positivity is not a whole-module analysis; it is a condition on accepting an `induct` or `struct` declaration, which every kernel in this family checks at that point.
+
+**A kernel that uses a rule must check the rule's premise, and for totality this is forced rather than argued.** `DESIGN.md` establishes that definitional proof irrelevance is sound precisely because every `Prop` inhabitant is total, and that the conversion recurrence rule stands on aggressive (T). Both are the elaborator's fixpoint argument and neither transfers to a second checker that runs neither obligation. That was the earlier argument and it was sound but weak, because it made totality a question of coverage. It is not: `rec f : False = f` is two lines and the kernel certifies it. Given general recursion, **a totality analysis is unavoidably in the trusted base**, and the only open question is whether it is written once or twice.
+
+**Incompleteness is the safe direction, with one stated exception.** `curios-core/src/kernel/convert.rs:46` already states this for conversion, and it governs every rule added here: a rule that refuses too much produces a disagreement, which is a signal; a rule that accepts too much is silent. The exception is `Cases::FreeMonoid { .. } => Ok(())` (`curios-core/src/kernel/infer.rs:506`), which is an *acceptance* hole and is the one place the invariant does not hold today. If a rule has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in `DESIGN.md`.
+
+**Printing is not a rule and does not belong in the trusted crate.** The only thing anchoring it is `impl Display for Term`, needed by `KernelError`'s own `Display`.
 
 ## Non-goals
 
-- A small kernel. `DESIGN.md` settles this: native inductive families, structures, a universe hierarchy, and a primitive roster with folds make any checker for this term language thousands of lines rather than hundreds.
-- Removing native inductive types, or replacing them with an encoding cheaper to verify.
-- A fresh, fully explicit, metavariable-free IR for the kernel to check. Rejected in `DESIGN.md` and not reopened here; see "The boundary is already enforced" below for why the alternative it named turned out to be unnecessary too.
-- Sharing the reduction driver between the two checkers. Rejected in `DESIGN.md`; the duplicate reduction is the point.
-- Witness coherence and the orphan rule. Incoherence means two call sites resolve the same key differently and both elaborate to well-typed terms — confusion, not unsoundness, and not a typing rule.
-- Cumulative inductive types. An open fork in `DESIGN.md`, deliberately not taken, and this work is the evidence it should be decided against.
-- Verifying the kernel itself, or any metatheory. The model that definitional proof irrelevance needs is out of scope here as it was for the totality work; `DESIGN.md` records it under "What is still missing is the model, not the reasoning".
-- Reducing the line count of `curios-core`.
+- A small kernel. Not because smallness is undesirable — it is the point of the enumeration — but because the measured floor is not small. Native inductive families, structures, a universe hierarchy, a primitive roster with folds, and an unavoidable termination analysis put any checker for this term language in the tens of thousands of lines. Every item below is justified against the budget in the table above.
+- Removing native inductive types or the free-monoid carriers, or replacing them with an encoding cheaper to verify.
+- Migrating from `Match` to generated recursors. It would delete coverage and inversion from the kernel and move the large-elimination guard from per-site to per-declaration, which is where it belongs — but the recursor generator is itself trusted, every backend stage would see a new elimination form, and the free-monoid carriers would need recursors too. The one benefit that is worth having independently is deciding the singleton condition once at declaration acceptance instead of per `Match`; take that without the migration.
+- A fresh, fully explicit, metavariable-free IR for the kernel to check. Rejected in `DESIGN.md` and not reopened.
+- Sharing the reduction driver. Rejected in `DESIGN.md`, and the rejection holds under this document's objective too: sharing would save **zero** trusted lines, because the kernel's reducer is trusted either way and the elaborator's copy is untrusted either way. It saves maintenance and costs the diff signal.
+- Witness coherence and the orphan rule. Incoherence means two call sites resolve the same key differently and both elaborate to well-typed terms — confusion, not unsoundness.
+- Cumulative inductive types. An open fork in `DESIGN.md`, deliberately not taken; **none** of the 90 measured refusals is inductive-parameter cumulativity, which is the evidence it should be decided against.
+- Verifying the kernel itself, or any metatheory.
 
 ## What the kernel already checks
 
-Stated because two rounds of investigation each began by claiming a hole that turned out to be covered, and because the steps below are sized against this list.
+Stated because three rounds of investigation each began by claiming a hole that turned out to be covered, and because the work below is sized against this list.
 
-**Elaboration-only syntax cannot reach it.** `zonk_module` (`curios-elab/src/zonk.rs:127`) is a total traversal covering `items`, `body`, `type_`, and both registries including constructor telescopes and `result_sort` (lines 144–190). Its `Subterm` match has `Infix`, `NumLit`, and `Metavar` as `unreachable!` arms (`curios-elab/src/zonk.rs:895`, `:896`, `:1106`). A zonked module cannot carry any of the three, and `recheck_module` is only ever handed a zonked module.
+**Elaboration-only syntax cannot reach it — but that guarantee is the elaborator's, not the kernel's.** `zonk_module` (`curios-elab/src/zonk.rs:127`) is a total traversal covering `items`, `body`, `type_`, and both registries including constructor telescopes and `result_sort`. Its `Subterm` match has `Infix`, `NumLit`, and `Metavar` as `unreachable!` arms, so a zonked module cannot carry any of the three, and `recheck_module` is only ever handed a zonked module. The kernel refuses all three in `infer` and in `sort_of`, but it *accepts* two metavariables with equal ids as convertible (`curios-core/src/kernel/convert.rs:284-287`) and treats one as a stuck neutral in `whnf` (`:447`), and `infer` does not reach every position — the free-monoid arms are skipped entirely. So the exclusion currently rests on a `curios-elab` pass. Closing that is work item C4.
 
-**Constructor payload types are well-sorted, and the registry agrees with the bindings.** An `induct` declaration lowers to a `rec` group of ordinary definitions (`curios-elab/src/elaborate/module.rs:690–740`), so the type constructor and every value constructor are real module items that `check_definition`/`check_rec_group` walk. Sorting a constructor's declared function type sorts every payload domain, and `infer` checks a `Variant`'s payload against `declaration.instantiate(tag, params)` (`curios-core/src/kernel/infer.rs:190–212`), so the registry entry is cross-checked against the bindings in both directions.
+**Constructor payload types are well-sorted, and the registry agrees with the bindings.** An `induct` declaration lowers to a `rec` group of ordinary definitions (`curios-elab/src/elaborate/module.rs:690-740`), so the type constructor and every value constructor are real module items that `check_definition`/`check_rec_group` walk. Sorting a constructor's declared function type sorts every payload domain, and `infer` checks a `Variant`'s payload against `declaration.instantiate(tag, params)` (`curios-core/src/kernel/infer.rs:255-295`), so the registry entry is cross-checked against the bindings in both directions.
 
 **Nominal elimination is verified in full**, each arm at its own constructor's index targets, with the large-elimination guard deciding its singleton side condition rather than approximating it (`curios-core/src/kernel/infer/eliminate.rs`).
 
-**The foreign wire contract is re-decided**, against `wire_term` rather than against the elaborator's record (`curios-core/src/kernel/infer/prim.rs:321–343`).
+**The foreign wire contract is re-decided**, against `wire_term` rather than against the elaborator's record (`curios-core/src/kernel/infer/prim.rs:318-343`).
 
 **Proof irrelevance, eta at Π and Σ, subsumption, and the recurrence rule** are all present in `curios-core/src/kernel/convert.rs`.
 
-## The boundary is already enforced
+**The typing judgment runs on a bounded stack.** `infer` drives an explicit obligation stack: the child obligations of an application, a constructor, and a record are deferred rather than descended into, because those three instantiate their telescopes by substituting the child term rather than binding it, so every deferred obligation is checked in the context it was recorded in. Arms that open binders still recurse, which is the written-nesting bound `AGENTS.md` allows.
 
-`DESIGN.md` rejects a separate kernel IR and says the three elaboration-only constructors are *"better excluded by a validation pass at the kernel's boundary, which is a few lines and is checkable."* That pass was never written, and it should not be: `zonk_module`'s total traversal already delivers the exclusion, and a second pass would duplicate a traversal to re-derive a guarantee that holds.
+## What the kernel certifies today that it must not
 
-`KernelError::NotCore` stays an error rather than becoming an assertion. The kernel's input contract is `&Module`, not "a zonked `&Module`", and that assumption has already been violated in practice — `curios/src/tests/kernel.rs:16–21` records the period during which the tests read `Stage::Core`, which the pipeline emitted before elaboration, and fed an un-typechecked module to the kernel. `NotCore` is what the kernel said about it, and a refusal is what made the thing diagnosable. An `unreachable!` there would have aborted instead.
+Ranked by directness. This is the soundness statement, and it is the reason the work below is ordered as it is.
 
-## What moves out of `curios-core`
-
-Every item below was selected mechanically: for each `pub fn` in the crate, whether anything under `curios-core/src/kernel/` references it. The kernel is the only part that can admit a program, so a public function the kernel never names is carried in the trusted crate for a downstream consumer's benefit.
-
-| Module | `pub fn` | Named by the kernel | Not named |
+| | Route | Cite | Fixture |
 | --- | --- | --- | --- |
-| `print.rs` | 5 | 0 | 5 |
-| `prim.rs` | 69 | 3 | 66 |
-| `term.rs` | 90 | 37 | 53 |
-| `scope.rs` | 45 | 21 | 24 |
-| `universe.rs` | 22 | 12 | 10 |
-| `inductive.rs` | 10 | 5 | 5 |
-| `polarity.rs` | 4 | 1 | 3 |
-| `structure.rs` | 3 | 1 | 2 |
+| 1 | `rec f : False = f` — a member is assumed at its declared type and its body checks against it, with no totality condition anywhere | `infer.rs:418` | two lines of source |
+| 2 | `Exit(False, 0) : False` — `Exit`'s result is checked only to be *a sort*, and `Prop` is one | `infer/prim.rs:311`, `:362-368` | one line of source |
+| 3 | Strict positivity is not checked — no occurrence of the word and zero references to `Polarity` under `kernel/` | `curios-elab/src/positivity.rs:77` runs it; the kernel does not | `induct Bad \| c(f : (Bad) -> False) end` |
+| 4 | The constructor size condition is not checked — `check_definition` calls `sort_of` and **discards the result** | `kernel/module.rs:45` | hand-built `Module` |
+| 5 | Coverage is not verified — the arms present are checked and the absent ones are never asked to justify themselves | `infer/eliminate.rs:47-72` | an elimination with an arm removed |
+| 6 | A `Switch`'s default and the free-monoid carriers' arms are typed by their bodies and never verified against the motive | `infer.rs:492-506` | the one *acceptance*-direction hole |
 
-**`print.rs`, 1,349 lines, zero kernel references.** Move in two parts. Lines 33–350 are the source-style-name machinery — two thread-locals, `display_names`, `build_rename`, `build_shorten`, `with_pretty_names`, `with_short_names`, `collect_labels` — which alpha-rename core's gensyms back toward what the user wrote. That is diagnostic presentation and moves with no argument. Whether the faithful printer follows is a separate decision, because moving it means dropping `impl Display for KernelError` and rendering kernel refusals from `curios-elab/src/error.rs` instead.
+**Route 1 is why totality is not deferrable.** `Subterm::RecMember(RecMember { group, index }) => Ok(group.member_type(*index))` returns the declared type unconditionally, and `check_rec_group` assumes every member at its declared type while checking bodies. So the shortest closed inhabitant of `False` the kernel will certify needs no primitive, no declaration, and no elimination. An earlier revision of this document offered "defer both (T) and (V)" as *"a defensible trade-off — it is what ships soonest"*. It is not a trade-off about coverage; it is the difference between a sound rule set and an unsound one, and that option is withdrawn.
 
-**The `impl Prim` constructor helpers, about 650 lines.** `curios-core/src/prim.rs:167–946` is 68 one-line `impl Into<Term>` wrappers — `int_add`, `flt_sqrt`, `cell_get` — of which the kernel names three. Fields are public, so these are call-site convenience for `curios-text`'s lowering and the elaborator's neutral rebuilds. The trusted content of the module is the `Prim` enum and the five internal methods from line 771.
+**Route 2 is reachable from surface syntax.** `/sys/exit` is generated as `(@A : Type, n : Nat) -> A` (`curios-text/src/prelude.rs:596-604`), and `Prop ≤ Type` holds by subsumption (`infer.rs:557`), so `exit(@False, 0)` elaborates and the kernel types it at `False`. Restricting the result to reject `Prop` is one line and closes the direct route, but not the empty-`Type`-inductive route — `Exit(Empty, 0)` at a constructor-free `Empty : Type`, then eliminated into `False`. Full closure comes from the partiality relation, which `Totality::Total` already defines as *"[e]very recursive group this definition contains descends, it does not mention `Prim::Exit`, and neither does anything it reaches"* (`curios-elab/src/totality.rs:91-94`): one relation, two seeds. Once the kernel has it for `rec`, `Exit` is a syntactic occurrence in the same walk.
 
-**The `Term` builder cluster, about 600 lines.** `curios-core/src/term.rs:828–1443`: the `induct_type_at`/`struct_at`/`struct_entries` family and the whole match-builder set — `induct_match`, `induct_match_default`, `bool_match`, `nat_match`, `lst_match`, `bin_match`, `switch_scoped`, and every `_scoped` variant. None is referenced by the kernel. An extension trait in `curios-elab` holds them identically, and most of `curios-core/src/term/tests.rs` (566 lines) follows them out.
+Route 4 is not an unrecorded hole in the compiler. The elaborator enforces it: `add_declaration_sizing` (`curios-elab/src/elaborate/module.rs:95-140`) emits, per constructor, that each payload's level is `≤` the result level and each uniform parameter's is `≤` result + 1, under `UniverseConstraintKind::ConstructorSizing`, discharged by the universe solver. It sits in the perimeter table as `validate_universes`, graded *auditable only*. What is unrecorded is that the kernel does not duplicate it.
 
-**Strays with no in-crate use, about 150 lines.** `transparent_alias_target` and `direct_type_alias_target` (`term.rs:474`, `:510`) are the elaborator's alias-unfolding heuristics living in the representation. `HeadTag` and `head_key` likewise. Ten solver-shaped predicates in `universe.rs` that the kernel never calls — `is_tautology`, `cancel_offset`, `is_closed`, `constant_part`, `identity_instance`, `from_constraints` — are luggage the universe solver left behind when it moved to `curios-elab`.
+## What the kernel refuses that it must not
 
-**`Metavar`, `Infix`, and `NumLit` out of `Subterm`, about 350 lines direct.** Deferred, and it is a legibility item rather than a soundness one: the exclusion already holds, so what this buys is making the excluded state unrepresentable instead of merely unreachable. `metavar` has 160 occurrences downstream and `goal` 313, which is the cost.
+This is the completeness statement, and unlike the one above it is measured rather than enumerated.
 
-**`polarity.rs` does not move.** It has one kernel reference today and is otherwise the elaborator's analysis result stored on a core declaration, which reads as misfiled. Under step 3 below the kernel becomes its second consumer and its placement becomes correct.
+`kernel_disagreements` in `curios/src/tests/kernel.rs` is an ignored inventory test that walks whole programs and tallies every refusal by class. It reports **90 of 1052 items refused**, identically across all three fixtures and identically in debug and release — the matching counts across profiles being the check that defunctionalizing the judgment was a restructuring and not a change of rule.
 
-## What moves into the kernel
+| Class | Count | Cause | Closed by |
+| --- | --- | --- | --- |
+| `Type.{u}` vs `Type.{w}` — two distinct rigid universe parameters | **25** | a scheme's own constraints are not **assumed** while it is checked generically | C1 |
+| `Unclassified` | **16** | every one is the empty `Lst` literal | C3 |
+| a zero level in an instance (`Async.{0,0,0}` vs `{u,v,w}`) | **13** | a use-site instance is not checked against its scheme's constraints | C1 |
+| other mismatches | **36** | index inversion, the four syntactically-compared conversion positions, and an unknown remainder | A2, and see below |
 
-Ordered by what each one lets through today.
+**The 25-item cluster is the largest, and an earlier revision misidentified it.** That revision named the 13-item zero-level cluster as *"the largest identifiable cluster"* and specified only the use-site obligation: *"[v]erify at each `UniverseInst` that the stated levels satisfy the scheme's constraint set."* The 25-item cluster is the dual. `check_definition` checks a universe-polymorphic definition *generically*, at its own parameters, which is the right reading and the only one available — so the scheme's constraints must be **assumed** as hypotheses. `generalize` retains exactly the non-tautological constraints relating generalized parameters (`curios-elab/src/universe_solver.rs:1035-1049`); `Kernel` stores them per definition (`kernel.rs:163`) and never reads them, and `subsumes` decides `Type.{u} ≤ Type.{w}` with `Level::structurally_leq` (`infer.rs:555`), false for distinct rigid parameters with no hypothesis available. Every recorded constraint is therefore unusable.
 
-**The universe constraint set is discarded, not discharged.** `curios-core/src/scope.rs:337–358` instantiates a scheme by pure substitution with no constraint check, and `RecGroup::instantiate_universes` (`curios-core/src/term.rs:2497–2523`) verifies instance arity and then sets `context: UniverseContext::empty()`. A grep for `constraints` across `curios-core/src/kernel/` returns nothing. So a polymorphic definition's declared constraints are decoration at every use site the kernel sees.
+That the mechanism is certain does not establish that it accounts for all 25; a probe on `/std/Map/get` would settle it, and should run before C1 is designed.
 
-This is also the kernel's only available route to the **constructor size condition**, which is what keeps inductives from re-admitting the paradox the hierarchy exists to exclude. The elaborator enforces it: `add_declaration_sizing` (`curios-elab/src/elaborate/module.rs:95–140`) emits, per constructor, that each payload's level is `≤` the result level and each uniform parameter's is `≤` result + 1, under `UniverseConstraintKind::ConstructorSizing`, discharged by the universe solver. The kernel neither re-derives nor discharges them, and `check_definition` (`curios-core/src/kernel/module.rs:45`) calls `sort_of(kernel, type_)?` and **discards the result** — it computes a sort and compares it to nothing. `induct Bad : Type 0 | mk(x : Type 0) end` is therefore certified by the kernel with `Bad : Type 0` while `Bad` contains `Type 0`.
+The same revision measured the recorded per-declaration constraints as 47 `SchemeInstantiation` and 13 `Cumulativity` with **zero** `ConstructorSizing` and zero `FieldSizing`, and read that as *"[t]here is nothing to discharge."* The measurement is right. Those 60 constraints are precisely the hypotheses the generic check needs; the reading was one-sided.
 
-The size condition is not an unrecorded hole in the compiler. It sits in the perimeter table as `validate_universes`, graded "auditable only". What is unrecorded is that the kernel does not duplicate it.
+And the shape of the whole problem generalizes: **the elaborator satisfies a level condition by choosing levels that make it hold; the kernel is handed levels already chosen and must verify that they do.** Those are different operations and only the second is a check. It is why the elaborator can discharge sizing without leaving a trace, why the kernel's version cannot be assembled from what the elaborator left behind, and why `check_definition` computing a sort and comparing it to nothing is the same omission one level down.
 
-**Strict positivity is not checked.** `check_positivity` runs at `curios-elab/src/elaborate/module.rs:1285`; `curios-core/src/kernel/` contains no occurrence of the word and zero references to `Polarity`. `DESIGN.md`'s own four-line exploit — `induct Bad | c(f : (Bad) -> False) end` — is well-typed by every rule the kernel has, so the kernel certifies it.
+**All 16 `Unclassified` items are the empty list literal** — `/std/Lst/nil`, `Lst/flatten`, `Map/entries|keys|values`, `Parse/many0`, `Parse/sep_by0`, `Toml/build/build_empty`, `Toml/decode/*`, `Toml/encode/*`, `http/get|post`. `Prim::Lst(Vec<Term>)` (`curios-core/src/prim.rs:135`) is the only `Lst` form that carries no element type; `LstType(Term)`, `LstLen(Term, Term)`, and `LstGet(Term, Term, Term)` all do. `infer/prim.rs:219-225` refuses rather than guesses, which is right.
 
-**Coverage is not verified.** `check_induct_arms` (`curios-core/src/kernel/infer/eliminate.rs:47–72`) iterates the arms that are present and never asks whether the absent ones were legitimately absent. An elimination missing an arm, with no catch-all, is a well-typed stuck term inhabiting the motive — an inhabitant of `False` with no proof for the missing case. The perimeter grades Coverage *probed*, but that grade is the elaborator's.
+No kernel work fixes this. `DESIGN.md` justifies the kernel being synthesis-directed on the grounds that *"a finished Core term has no omitted annotations to recover"*, and this is exactly an omitted annotation — so that premise is false for one term form. The fix is `Prim::Lst(Term, Vec<Term>)`, a representation change reaching erasure and `curios-ersd`.
 
-**Index inversion does not exist, and it is where the walk stops.** `/std/Nat/Lte/trans` refines `b` to `b2 + 1` in one arm and `b3 + 1` in another, and its recursive call is well-typed only given `b2 ≡ b3`. `curios-elab/src/invert.rs` supplies that in 235 lines; the kernel has no equivalent, so it refuses. Nothing downstream of this can be validated against a real module until it lands, and writing it independently — rather than sharing the elaborator's — is what keeps the split meaningful.
+**Conversion is incomplete in four named positions and no work item closed them.** `curios-core/src/kernel/convert.rs:46-60` names them: a stuck elimination's motive and arms, a `rec` group, and the arguments of a spine, which are compared at `Type` rather than at the types the head assigns. `recheck.rs` and `DESIGN.md` both repeat it. The earlier revision's acceptance gate was `kernel_disagreements` at zero, which those positions make unreachable. Either they get an item or the gate changes; this document takes the second option and states the gate as "zero refusals whose class is not a recorded conversion incompleteness."
 
-**A `Switch`'s default and the free-monoid carriers' arms are unchecked.** Documented in place at `curios-core/src/kernel/infer.rs:370`: those arms are typed by their bodies and never verified against the motive, because their binders would have to be typed against the carrier's own successor structure.
+## Defects found while writing this
 
-**Small declaration residue.** Constructor tag distinctness, index-telescope arity, and whether every registry constructor has a corresponding binding. Perhaps 100 lines, and it belongs with positivity rather than as its own piece.
+Neither is trusted-base work. Both need owners.
 
-**Totality is not checked, and the kernel uses two rules that need it.** See "Permanent design decisions" above. Note also that because an inductive's type bindings lower to a `rec` group, `DESIGN.md`'s third route — `rec Bad : Type = Sink(Bad)` — is structurally the same shape as a type-constructor binding, so positivity over registry entries does not reach it however well it is implemented.
-
-**The kernel aborts on real input.** A debug build overflows partway through `/std/Toml`, because judgment depth scales with a `Str` literal's *length* — 103 nested judgments at 40 bytes, 324 at 160, 494 at 640 — as `infer` and `check` descend a certified-UTF-8 chain two frames per link. `AGENTS.md` forbids exactly this shape, and a checker that aborts cannot be made load-bearing whatever else it decides. Step 7 is the fix and records the backtrace that identifies the chain.
-
-## Implementation steps
-
-Steps 1, 2, and 3 are independent of step 4 and deliver whether or not index inversion is quick.
-
-**1. Move what cannot admit a program.** `print.rs` lines 33–350, the `impl Prim` constructor helpers, the `Term` builder cluster, and the strays — as specified above. No behavior changes, no rule changes, and `curios-core` becomes readable as the statement of the rules it is meant to be. Take the `Display for KernelError` decision explicitly rather than by default.
-
-**2. Discharge universe constraints, and derive constructor sizing.** Verify at each `UniverseInst` that the stated levels satisfy the scheme's constraint set, and stop discarding the constraints in `RecGroup::instantiate_universes`. Then re-derive the `ConstructorSizing` inequalities from each declaration's telescopes and check them against the level algebra.
-
-**The fork this step used to record is settled, and one arm of it is empty.** The question was whether to **re-derive** the inequalities from the telescopes or **discharge** the set already recorded on the declaration's `UniverseContext`, and the answer was argued on trust: only the first is a second opinion. Measurement makes it forced instead. Across the whole prelude — 32 inductive and 42 structure declarations — the recorded per-declaration constraints are 47 `SchemeInstantiation` and 13 `Cumulativity`, and **zero `ConstructorSizing` and zero `FieldSizing`**. There is nothing to discharge, and nothing to cross-check a re-derivation against either.
-
-Constructor telescope metas *are* in the declaration's interface (`curios-elab/src/elaborate/module.rs:817`), so the visibility this step worried about is not what drops them. `generalize` (`curios-elab/src/universe_solver.rs:999`) drops a constraint that mentions no generalized meta, and again if it is a tautology — and a sizing constraint is exactly the thing the solver makes true by *choosing* the result level, so once solved it is a tautology and is discarded. It was never carried because it was never in doubt.
-
-That is the shape of the whole step, and it generalizes past sizing: **the elaborator satisfies a level condition by choosing levels that make it hold; the kernel is handed levels already chosen and must verify that they do.** Those are different operations, and only the second is a check. It is why the elaborator can discharge sizing without leaving a trace, why the kernel's version cannot be assembled from what the elaborator left behind, and why `check_definition` computing a sort and comparing it to nothing is the same omission one level down.
-
-**3. Strict positivity in the kernel**, plus the declaration residue from the previous section. Recompute the polarity vectors from the telescopes; do not read `InductDecl::polarities`. This is a clause of accepting a declaration and should land in the same place as the residue, not as a separate pass.
-
-**4. Index inversion**, written independently of `curios-elab/src/invert.rs`. The largest single piece, and the blocker for everything measured against a real module.
-
-**5. Coverage**, which depends on step 4 because legitimate absence has two sources — a catch-all, and a constructor pruned by inversion because it cannot produce a value at the scrutinee's indices.
-
-**6. The `Switch` default and the free-monoid carriers' arms.**
-
-**7. Defunctionalize `infer` and `check` onto an explicit frame stack.** The typing judgment must run on the default test-thread stack at a term nesting bounded by input rather than by written nesting, per `AGENTS.md`.
-
-**This step named the wrong functions, and the correction is the useful part.** It used to say the cycle to make iterative was `compare`/`sort_of`/`whnf`/`reduce_prim`, and to measure the depth watermark against the figures in `curios/src/tests/kernel.rs`. A backtrace captured at judgment depth 300 says the deep stack is:
+**`Flt/min` and `Flt/max` disagree between compile time and runtime.** Demonstrated: with `nan = Flt/of_le_bytes(x\00\00\c0\7f)`, the definition
 
 ```text
-300  curios_core::kernel::infer::infer
-298  curios_core::kernel::infer::check
-  1  curios_core::kernel::module::check_entrypoint
-  1  curios_elab::recheck::recheck_module_verdicts
+let fold_says_one : Eq(@Flt, Flt/min(nan, 1.0), 1.0) = Eq/refl();
 ```
 
-and nothing else — **zero frames of `compare`, `sort_of`, `whnf`, `reduce_prim`, `convert`, or `subsumes`.** Every function this step used to name is absent from the chain it exists to shorten. The watermark measurements that produced those names counted `infer` entries and attributed the span between them to the whole cycle; the cycle was never on the stack.
+typechecks, while the same expression at runtime prints `NaN`. The type-level fold is Rust's `f32::min` (`curios-base/src/flt.rs:54-56`), which returns the non-NaN operand; the runtime is wasm `f32.min`, which propagates NaN (`curios-cont`'s `FltMin` → `Instr::F32Min`, opcode `0x96` at `curios-wasm/src/writer.rs:827`).
 
-The real shape is two frames per level and nothing else. `check(t, T)` is `infer(t)` followed by `subsumes`, and `infer` on an application checks each argument, so a right-nested chain — one link per byte of a literal's UTF-8 derivation — descends `infer → check` per link. The judgment is structurally recursive over a term whose nesting is data-driven, and the only thing bounding it is the step budget, which permits about 1,000,000 where the stack affords roughly 95 levels in a debug build and 1,000 in release. A step budget is not a stack bound and was never going to be one.
+The acceptance is conclusive without a control: conversion compares `Flt` bitwise (`Flt { bits: u32 }` with derived equality, reaching `convert_prim`'s shape comparison), so an unfolded `Flt/min(nan, 1.0)` would be a stuck node and `refl` would be refused. Acceptance proves the fold fired and produced exactly `1.0`.
 
-**Frame size is a distraction, and rejecting it is what makes this the fix at the source.** Debug costs about 21.5KiB per level against release's 2.05KiB — the ordinary unoptimized-frame penalty — and the prelude needs 102 levels, so debug misses by roughly ten percent. Splitting `infer`'s arms into separate `#[inline(never)]` functions would clear that, and it would be wrong: it moves a threshold and leaves depth data-bound, so a deeper term fails again and the work bought nothing but headroom.
+So the compiler proves definitionally an equation its own runtime falsifies. This is not a `False`-inhabitation route; it is narrower and more mundane — `Eq` stops meaning what it says. It also cannot be fully repaired by rewriting the folds, because wasm's NaN payload propagation is nondeterministic by specification while conversion is bitwise, so every NaN-producing operation has a set of legal runtime results and one compile-time answer. Work item D1 is the recommended response.
 
-**The precedent is in the sibling checker, for the same terms.** `curios-elab` hit exactly this and defunctionalized its `elaborate → elaborate_apply → check` cycle onto a frame stack, for literal spines, for this reason. `curios-core` itself does the same everywhere else a walk meets data depth — `traverse_rewrite_spine` for `Apply`/`Variant` spines, `Term`'s worklist equality, `Node`'s iterative dismantle. The kernel's judgment is the one place in the crate that hand-rolls native recursion over a data-deep structure. `DESIGN.md` forbids sharing the driver and that stands: the technique transfers, the code must not.
+**The elaborator is wrong where the kernel is right.** `guard_large_elimination` (`curios-core/src/kernel/infer/eliminate.rs:55`, `:167`) decides the singleton side condition by whether the index targets *pin* a payload component. The elaborator's `singleton_eliminable` (`curios-elab/src/elaborate/match_.rs:526`) decides it with a syntactic occurrence test, and that is `DESIGN.md`'s one **open** forgery route. State this plainly in `DESIGN.md`: the kernel is already more correct than the elaborator on a live soundness hole, which is the strongest evidence the split earns its keep, and wiring it in is one of the two things that closes the route.
 
-Success criterion, already baselined: `kernel_disagreements` completes in a **debug** build, and judgment nesting stops appearing in the stack span.
+## The work
 
-**8. Totality, at a scope to be decided.** Three options, and this specification recommends the middle one.
+Four kinds, replacing the earlier nine steps. Only C writes a check that does not exist somewhere already.
 
-Full (T) and (V) is the complete answer and the largest piece: `curios-elab`'s implementation is 1,797 lines plus 331 of tests, and a kernel version is 800–1,200 before the position analysis that decides *where* a `Partial` classification is a rejection.
+### A — Relocate the shared analyses
 
-(V) alone checks the premise proof irrelevance actually needs. It is the smaller of the two, and `DESIGN.md` establishes that (V) needs no walk — a term is a proof exactly when its type is a proposition, which the kernel already decides through `sort_of`. (T)'s aggressive reading depends on the elaborator's settle records, which a second checker cannot inherit and would have to re-derive incompletely, and it backs only the recurrence rule.
+Sixteen `Context` call sites across 2,865 lines. Measured, multiline-safe:
 
-Deferring both leaves the kernel applying irrelevance and the recurrence rule on the elaborator's word. That is a defensible trade-off — it is what ships soonest — but it must be written into `DESIGN.md` as what the second opinion does not cover, rather than left implied.
+| | Lines | `fresh` | `unfold` | `assumption` | registry | `reduce_forced` | `convert_at` | driver-only |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `positivity.rs` | 833 | 3 | 1 | — | 2 | 2 | — | — |
+| `totality.rs` | 1,797 | 4 | — | — | — | 2 | — | 5 |
+| `invert.rs` | 235 | — | — | 1 | — | 1 | 1 | — |
 
-**9. Turn it on.** `recheck_module` runs in the pipeline and a refusal fails the compile. This is the step that subtracts `curios-elab` from the trusted base, and it is worth nothing before steps 4 through 7, because a checker that has to be bypassed is worth nothing.
+**A1 — The seam.** `Reducer` exists and is already implemented on both sides (`curios-core/src/kernel/whnf.rs:37`, `curios-elab/src/reduce.rs:18`). Add two traits in `curios-core`:
+
+```rust
+pub trait Env {
+    fn fresh(&self, hint: Option<&str>) -> Free;
+    fn assumption(&self, name: &Free) -> Option<&Term>;
+    fn unfold(&self, name: &Free) -> Option<&Term>;
+    fn induct_decl(&self, name: &Global) -> Option<&InductDecl>;
+    fn struct_decl(&self, name: &Global) -> Option<&StructDecl>;
+}
+
+pub trait Judge: Reducer + Env {
+    fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, ReduceError>;
+}
+```
+
+Consumers: `positivity: Reducer + Env`, `totality: Reducer + Env`, `invert: Judge`.
+
+Every method is verbatim on both implementations. `fresh` — `kernel.rs:340` and `context.rs:479` have identical bodies, both minting `Free::local(index, hint)` from `curios_base::Entropy`, whose `fresh(&self)` uses a `Cell` (`entropy.rs:47-52`), so the trait may take `&self` and `Context::fresh`'s `&mut self` is incidental. `assumption` — `type_of` at `kernel.rs:309`, `context.rs:865`. `induct_decl`/`struct_decl` — `kernel.rs:253`/`:257` and `context.rs:1478`/`:1528`, identical signatures. `convert_at` — `kernel/convert.rs:78` and `curios-elab/src/typing.rs:34`, the latter a thin wrapper mapping `ReduceError` to `Error`, so `curios-elab`'s adaptation is *deleting* two wrappers (`typing.rs:26-45`). Put `ReduceError` on the traits and let each side map, which is `ReduceError`'s stated design (`curios-core/src/reduce.rs:9`).
+
+**`unfold` means definitions only, on both sides.** This is the one method where the existing implementations differ: `Kernel::value_at` resolves definitions (`kernel.rs:358`), while `Context::var_reduct_at` resolves refinements *then* definitions (`context.rs:1266-1282`). Adding a refinement-free lookup to `Context` is the second half of `raw_var_reduct` — four lines — and it makes the two implementations semantically identical rather than merely agreeing in one position.
+
+The alternative, mapping to `var_reduct_at`, requires the invariant *"positivity never runs with refinements in scope"* to hold forever in `curios-elab` or the two checkers silently diverge in the **unsafe** direction: `blocked()` (`positivity.rs:609-623`) walks reachable bodies at `Polarity::Mixed`, `Mixed` fails `accepting()`, so resolving fewer names rejects less. Definitions-only removes the invariant instead of depending on it.
+
+That the change is behavior-preserving rests on two arguments. `Context::refine` has exactly two non-test callers — `typing.rs:419` inside `refine_head`, and `elaborate/match_.rs:883` — both match-scoped and inside `with_frame`, while `check_positivity` runs at module finalization (`elaborate/module.rs:1285`). And independently: `blocked()` looks up free variables of declaration telescopes, which are freshly-minted parameter binders and globals, never arm-local scrutinee heads, and `Entropy` never reuses an index — so a stale refinement could not be looked up even if one existed. Land a one-time assertion confirming the refinement store is empty there; do not make it a standing guard.
+
+Map `unfold` to `value_at`, **not** `value`: the latter filters `universes.parameter_count == 0` and would silently stop unfolding polymorphic definitions in `blocked()`, the same unsafe direction.
+
+**`Judge` is worth its own trait despite having one consumer**, because it records a trust concession in the type system. `Env` means no judgment is borrowed and one sample suffices. `Judge` means a judgment *is* borrowed, which is a real concession — see A2. When inversion later moves to emitted certificates, `Judge` disappearing is the visible signal the concession is gone, and having exactly one consumer is what makes that a one-line change.
+
+**A2 — Relocate `invert.rs`.** Smallest, and it unblocks the measurement: today the walk stops at `/std/Nat/Lte/trans` and this document's own complaint is that *"a walk over a real module stops at the first of [the kernel's gaps] and says nothing about what lies past it."* The 36-mismatch bucket is the last place a surprise can hide and inversion is what opens it. Re-run `kernel_disagreements` immediately after; that number is the input to everything that follows.
+
+Coverage falls out, so the earlier steps 4 and 5 both close here: `Invert::Impossible` (`invert.rs:20-24`) is what legitimizes an absent arm, and with it available, coverage is an arity check over the declaration's constructors.
+
+**Sharing inversion is weaker than the alternative, and the alternative is deferred deliberately.** If `invert.rs` pins a binder wrongly, a shared implementation means the kernel checks the arm at a wrong expected type and accepts it — one sample, and soundness-critical. The stronger design is for the elaborator to emit certificates the kernel type-checks: substitute the pinned solutions into the emitted arm rather than applying them as `context.refine` (`match_.rs:879-885`), and emit an absurdity witness per pruned arm rather than `continue` (`:780`). That leaves `invert.rs` fully untrusted at zero trusted lines, because the kernel would validate a *term* with machinery it already has.
+
+Most of that design is already built: `seed_motive` (`match_.rs:1004-1065`) generalizes ambient hypotheses into a Π-motive and `rebuilt` (`:935-940`) re-applies the eliminator to them, so the convoy pattern is already elaborated and already emitted. What is missing is only the two products above. It is deferred because it changes emitted terms — reaching erasure, `curios-ersd`, and `curios-cont` — and because it must preserve the `Eq : Prop` definitional-K argument that `Invert::Impossible` leans on (`invert.rs:50`). Record it as the named successor to A2, not as an abandoned option.
+
+**A3 — Relocate `positivity.rs`.** Cut at `reject` (`:354`): `check_positivity`, `Split`, `sweep`, `fixpoint`, `close`, `Vectors`, `Walk`, `binders`, and `labelled` move; `reject` stays, receiving a structured refusal carrying the polarity vectors, the closure, and the offending diagonal, and rendering spans and names itself. This diagnostics split is the largest non-mechanical piece of A.
+
+`Split::of` reads `module.induct_decls.get(name)` directly, so `Module` is not a real dependency — it becomes an `Env` registry lookup with the set-to-analyze passed in as `&[Global]`.
+
+**The kernel passes the full spliced module.** `Vectors::at` (`positivity.rs:441-455`) falls back, for any declaration outside the analyzed set, to `context.induct_decl(name).polarity(index)` — reading the archive-carried vector. That is the archive-replay design, argued at `positivity.rs:66-76`: prefix items cannot mention the suffix, so they are sinks of the occurrence relation. `recheck_module` splices the whole prelude into the module it walks, so if the kernel passes the full declaration set the fallback never fires and the integrity check comes for free — same analysis, different driver input, different trust posture, no branch and no mode flag.
+
+The cost is affordable and this is why: positivity's fixpoint ranges over **declarations, not items**. The prelude has of order 100 (a source grep finds 58 `induct` and 51 `struct` plus 3 `concept`; an earlier count of registry entries after replay gave 32 and 42), against 1,052 items the kernel already re-typechecks. Each iteration walks constructor payload telescopes.
+
+**A4 — Relocate `totality.rs`.** Cut at `group_totality` (`:440`). Everything it reaches — `Member::of`, `Walk`, `close`, and the `Matrix`/`Shape`/`Size`/`Relation`/`Guard`/`Carriers`/`Tag` data — needs exactly `Reducer` plus `fresh`, and nothing else. `Walk`'s own `refine` method operates on its own `refined: BTreeMap<Free, Shape>` and `nonzero: BTreeSet<Free>`, so totality never touches the elaborator's refinement store. `close` and the idempotency and descent checks are pure. The analysis-internal bounds — `UNFOLD_FUEL`, `EXPAND_FUEL`, `CLOSURE_LIMIT` — travel with it and become trusted; they are already strategy-free constants.
+
+The driver stays: `classify_module`, `record_totality`, `recorded_totality`, `check_written_type_totality`, `check_type_totality`, `check_proof_totality`, `checked_*_positions`, `report`, `check_rec_totality`, `check_rec_item_totality`, `mentioned`. That is where all five driver-only `Context` calls live, at `:1216` and beyond.
+
+**Measure the cost before wiring it, and do not let it inherit A3's answer.** `group_totality` runs per `rec` group across every item with `reduce_forced` in the shape reader — a different profile from positivity's ~100-declaration fixpoint. Time `recheck_module_verdicts` with and without the totality call over the full prelude. If it is unaffordable, the fallback is the pattern `positivity.rs:66-76` already uses — compute at archive-build time, read at replay — which under the amended principle is reading the kernel's own answer, not the elaborator's.
+
+`Totality` (`totality.rs:91`) derives the archive traits and is stored on `Definition`, so moving it to `curios-core` bumps `SCHEMA` and rebuilds the archive. Own commit.
+
+The sophistication of these analyses is corpus-forced, not discretionary, and cannot be traded away for a smaller trusted base. `totality.rs:19-24`: `/std/BigNat/add/raw` descends on *either* of two `Bits` arguments depending on the arm, `add/raw_assoc` over three, `add/raw_comm` needs the mutual closure across two members, and *"[a] rule keyed to one designated argument rejects all of them, and a fold cannot express them either."*
+
+### B — Close the certifying holes
+
+**B1 — Reject `Prop` as `Exit`'s result type.** One line at `infer/prim.rs:362-368`. Nothing legitimate needs `exit` at a proposition. Record it in `DESIGN.md` as a **partial** mitigation: it does not close the empty-`Type`-inductive route and does nothing about `rec`.
+
+**B2 — Everything else in the certifying table falls out of A**: routes 1 and 2 fully from A4, route 3 from A3, route 5 from A2.
+
+### C — Write what does not exist
+
+**C1 — Universe constraint entailment, in both directions.** Assume a scheme's own constraint set while checking it generically, and verify at each `UniverseInst` that the stated levels satisfy the scheme's set. Stop discarding constraints in `RecGroup::instantiate_universes` (`term.rs:2520`) and in `instantiate_induct_decl` (`infer.rs:658`). The largest measured class behind it, and the one where a probe should precede the design.
+
+**C2 — Constructor sizing, and the declaration residue.** Re-derive the `ConstructorSizing` and `FieldSizing` inequalities from each declaration's telescopes and check them against the level algebra; nothing recorded can be discharged instead, because the solver makes a sizing constraint true by *choosing* the result level and then drops it as a tautology. With it: constructor tag distinctness, index-telescope arity, whether every registry constructor has a corresponding binding, and the singleton side condition decided once at declaration acceptance rather than per `Match`.
+
+**C3 — Give the empty `Lst` literal an element type.** `Prim::Lst(Term, Vec<Term>)`, matching every other `Lst` form. Reaches erasure and `curios-ersd`; sized honestly as a cross-stage change, not a kernel patch. Sixteen refusals.
+
+**C4 — Make the elaboration-only exclusion the kernel's own.** Turn the `Metavar` arms in `convert` (`:284-287`) and `whnf` (`:447`) into refusals. `convert.rs:283` already says the refusal *"belongs at the boundary where a term enters the kernel"*; a separate boundary pass would duplicate `zonk_module`'s traversal to re-derive a guarantee that holds, but making these two arms refuse costs nothing and moves the guarantee inside the trusted crate, which is what the objective requires. `KernelError::NotCore` stays an error rather than an assertion: the input contract is `&Module`, not "a zonked `&Module`", and that assumption has been violated in practice — `curios/src/tests/kernel.rs` records the period during which the tests read `Stage::Core` and fed an un-typechecked module to the kernel. A refusal is what made that diagnosable; an `unreachable!` would have aborted.
+
+**C5 — The `Switch` default and the free-monoid carriers' arms.** The one acceptance-direction hole.
+
+### D — Cut what cannot admit a program
+
+Last, and by visibility before relocation, because A through C change what is left. The in-flight `pub` → `pub(crate)` narrowing is the right instrument and should continue: relocation cannot start until nothing outside uses an item, and demote-and-compile is how that gets known. `curios-core` has exactly **one** consumer, `curios-elab`, which is the single gate to push against — an earlier revision justified keeping the builder clusters as *"call-site convenience for `curios-text`'s lowering"*, which is wrong on its face, since `curios-text` reaches them through `curios-elab`'s re-exports.
+
+**D1 — Make `Flt` opaque at the type level.** The mechanism exists: `ReduceError::EffectAtTypeLevel` already refuses `Exit`, `Foreign`, and `Cell` (`reduce/prim.rs:1715-1739`). Constant folding moves to `curios-ersd`, where partial evaluation already lives and is untrusted. This is the recommended response to the divergence above, and its justification is correctness rather than line count — though ~64 fold arms and `curios-base/src/flt.rs` leaving the trusted base is a real side effect. The cost is a language decision: `refl : Eq(@Flt, 1.0 + 1.0, 2.0)` becomes unprovable. `/std/Flt.crs` is a two-line re-export facade with no lemmas and every prelude use of floats is codec work, so the corpus cost is zero.
+
+The discipline this establishes and should be written into the `curios-core` documentation: **a primitive needs a fold in the kernel only if a type or a proof can depend on its value.** Everything else is constant folding and belongs downstream. Fold arms by family today, for sizing the rest of the sweep: `Nat` 98, `Int` 64, `Flt` 64, `Bin` 50, `Bool` 34, `Lst` 24, `Byte` 14, and the already-opaque `Handle`, `Cell`, `Foreign`, and `Exit` at 4, 4, 1, and 1. `Int`'s status is undecided — `/std/BigInt.crs` has 56 `Int` references and whether any sits in a proof has not been traced.
+
+**D2 — `print.rs`, in two parts.** Lines 33-350 are the source-style-name machinery — two thread-locals, `display_names`, `build_rename`, `build_shorten`, `with_pretty_names`, `with_short_names`, `collect_labels` — which alpha-rename core's gensyms back toward what the user wrote. Diagnostic presentation; moves with no argument. Whether the faithful printer follows is a separate decision, because moving it means dropping `impl Display for KernelError` and rendering kernel refusals from `curios-elab/src/error.rs` instead. Take that decision explicitly rather than by default.
+
+**D3 — The builder clusters and the strays.** `curios-core/src/prim.rs`'s 68 one-line `impl Into<Term>` wrappers (~650 lines), of which the kernel names three; `curios-core/src/term.rs`'s `induct_type_at`/`struct_at`/`struct_entries` family and the whole match-builder set (~600 lines), none of which the kernel references, and most of `term/tests.rs` with them; `transparent_alias_target`, `direct_type_alias_target`, `HeadTag`, `head_key`, and the ten solver-shaped predicates in `universe.rs` the kernel never calls (~150 lines). An extension trait in `curios-elab` holds the builders identically.
+
+**D4 — `Metavar`, `Infix`, and `NumLit` out of `Subterm`.** Deferred, and a legibility item rather than a soundness one once C4 lands: what it buys is making the excluded state unrepresentable instead of merely refused. `metavar` has 160 occurrences downstream and `goal` 313, which is the cost. A `Subterm<X>` parameterization is the shape if it is ever taken.
+
+### E — Turn it on
+
+`recheck_module` runs in the pipeline and a refusal fails the compile. Worth nothing before A and C, because a checker that has to be bypassed is worth nothing.
+
+## Sequencing
+
+1. A1, then A2, then re-run `kernel_disagreements` and record the new counts before planning further.
+2. A3, with the amended principle written into `DESIGN.md` in the same commit.
+3. Measure A4's cost, then A4 in its own commit with the `SCHEMA` bump.
+4. B1 at any time; it is independent and one line.
+5. C1 after a probe on `/std/Map/get`. C2, C3, C4, C5 in any order.
+6. D throughout, by visibility first.
+7. E last.
+
+`positivity.rs`, `totality.rs`, `invert.rs`, and `elaborate/match_.rs` are outside the current in-flight naming work, so A does not collide with it. Two conventions that work has settled and this document follows: unit tests live in `foo/tests.rs` beside a `#[cfg(test)] mod tests;` declaration, and the pipeline entry points are `curios-pipeline/src/compile.rs` and `stage.rs`.
 
 ## Measurements
 
-Computed from the worktree at the time of writing, not estimated.
+Re-taken from the worktree, not estimated. Re-run the inventory after every item; **an item that does not move a class count has not been shown to do anything.**
 
-Crate sizes: `curios-core` 17,428 lines, `curios-elab` 31,713, both trusted, 49,141 total.
+Crate sizes: `curios-core` 17,497 (15,065 non-test), `curios-elab` 31,702, `curios-base` 2,839, `curios-abi` 952.
 
-Kernel-unreferenced public API, per module, in the table under "What moves out of `curios-core`". The aggregate: 168 of the 248 `pub fn` in the crate's non-kernel modules are never named by the kernel.
+Kernel refusals: **90 of 1052 items**, identical across the `trivial`, `arithmetic`, and `literal` fixtures and across debug and release. By class: 25 bare universe-parameter mismatch, 16 `Unclassified` (all empty `Lst`), 13 zero-level-in-instance, 36 other.
 
-Expected movement: out ≈ 3,100 lines; in ≈ 2,000–3,500 excluding step 8, or 3,000–5,000 including it.
+Shared-analysis dependency surface: 16 `Context` call sites across 2,865 lines, per the table in A.
 
-Kernel judgment depth on a `Str` literal, from `curios/src/tests/kernel.rs`: 103 nested judgments at 40 bytes, 324 at 160, 494 at 640. A 2 MiB thread runs out at roughly 120 nested judgments in a debug build.
+Positivity's fixpoint domain: of order 100 declarations, against 1,052 items.
 
-**The baseline.** `kernel_disagreements` in `curios/src/tests/kernel.rs` is an ignored inventory test that walks whole programs and tallies every refusal by class. Run it after every step and record the counts here.
+Primitive fold arms by family, per D1.
 
-It has to be run in release, and that is step 7's defect rather than a property of the test: a debug build aborts partway through `/std/Toml`. The depth is identical in both profiles and only the frame size differs, so release is a way to keep measuring until the abort is fixed — not evidence that it is tolerable. Until step 7 lands, every count below is taken in a configuration the compiler is not allowed to require. Its own documentation states why: *"The kernel is incomplete in known places, so a walk over a real module stops at the first of them and says nothing about what lies past it."* A step that does not move a class count has not been shown to do anything.
-
-Before step 2, over the whole standard library: **1,048 items, 90 refused — 74 `Mismatch`, 16 `Unclassified`.** Two cautions on reading it. `Unclassified` is a class the first-error walk never surfaced, so the inventory is already worth more than the walk it replaced. And the count is per *item*: an item stops at its own first refusal, so this classifies what is missing and does not size what is left.
-
-Of the 74 mismatches, 18 involve a zero universe level in an instance — `Async.{0,0,0}` against `Async.{u,v,w}`. That is a grep rather than a classification and should be treated as a signal, but it is the largest identifiable cluster and it points at step 2, which this document otherwise justifies by argument alone. **None** of the 90 is inductive-parameter cumulativity, which is the evidence the non-goal above claims.
+Expected movement: out of `curios-core` ~3,100 lines under D, in ~2,865 under A plus ~600 under C, landing the crate near where it started while nearly all of it becomes trusted-and-load-bearing rather than partly trusted-and-inert.
 
 ## Verification
 
-**Every hole named above becomes a rejection test**, using the `assert!(crate::run_text(…).is_err())` idiom from `curios/src/tests/soundness.rs` and `curios/src/tests/positivity.rs`, but asserting against the *kernel's* verdict rather than the compiler's — a fixture the elaborator accepts and the kernel must refuse. At minimum: `induct Bad | c(f : (Bad) -> False) end` for positivity; a constructor whose payload sits at or above its own result level, for constructor sizing; a `UniverseInst` at levels violating its scheme's constraints; and an elimination with an arm removed, for coverage.
+**Every route in the certifying table becomes a rejection test**, using the `assert!(crate::run_text(…).is_err())` idiom from `curios/src/tests/soundness.rs` and `curios/src/tests/positivity.rs`, but asserting against the *kernel's* verdict rather than the compiler's — a fixture the elaborator accepts and the kernel must refuse. At minimum: `rec f : False = f`; `exit(@False, 0)`; `induct Bad | c(f : (Bad) -> False) end`; a constructor whose payload sits at or above its own result level; a `UniverseInst` at levels violating its scheme's constraints; an elimination with an arm removed.
 
-The sizing fixture is one of the hand-built ones. An earlier revision gave it as `induct Bad : Type 0 | mk(x : Type 0) end`, which does not parse — levels have no surface syntax, so `Type 0` is rejected at `Type`. The nearest writable program, `induct Box : pub Type | mk(x : Type) end`, is *correctly accepted*: the solver simply assigns `Box : Type 1` and `x : Type 0`, which is the choosing-versus-verifying distinction under step 2 showing up in the test plan.
+Some fixtures cannot be surface programs. The sizing one is among them: an earlier revision gave it as `induct Bad : Type 0 | mk(x : Type 0) end`, which does not parse, since levels have no surface syntax. The nearest writable program, `induct Box : pub Type | mk(x : Type) end`, is *correctly accepted* — the solver assigns `Box : Type 1` and `x : Type 0`, which is the choosing-versus-verifying distinction showing up in the test plan. Where no source text reaches a rule, the fixture constructs the `Module` directly, in the style of the hand-built fixtures already in `curios-core/src/kernel/*/tests.rs`, and the perimeter entry stays *auditable only* rather than being re-graded.
 
-Those fixtures cannot be written as surface programs in every case. Where no source text reaches the rule — which `DESIGN.md` says is permanently true of the universe hierarchy — the fixture constructs the `Module` directly, in the style of the hand-built fixtures already in `curios-core/src/kernel/*/tests.rs`, and the perimeter entry stays *auditable only* rather than being re-graded.
+**Acceptance tests pin what must keep working.** The whole prelude passes the kernel; `/std/Nat/Lte/trans` passes after A2; the two currently-ignored tests `a_trivial_program_rechecks` and `arithmetic_rechecks` lose their `#[ignore]` at A2 and gate E.
 
-**Acceptance tests must pin what must keep working.** The whole prelude passes the kernel; `/std/Nat/Lte/trans` passes after step 4; the fixtures in `kernel_disagreements` reach zero refusals. The two currently-ignored tests `a_trivial_program_rechecks` and `arithmetic_rechecks` lose their `#[ignore]` at step 4 and are the gate on step 9.
+**The gate for E is zero refusals whose class is not a recorded conversion incompleteness**, not zero refusals. `convert.rs:46-60` names four positions compared syntactically and nothing here closes them; an unconditional gate would be unreachable, which is how an acceptance criterion quietly becomes a formality.
 
-**Unit tests** in `curios-core/src/kernel/` for each new judgment, beside the existing `convert/tests.rs`, `infer/tests.rs`, `sort/tests.rs`, and `whnf/tests.rs`.
+**Unit tests** for each new judgment in `curios-core/src/kernel/*/tests.rs`, beside the existing `convert/tests.rs`, `infer/tests.rs`, `sort/tests.rs`, and `whnf/tests.rs`. **Property tests** for the relocated analyses, because sharing removes the disagreement signal for them.
 
 The full gate applies, in order, with the suite run once into a file and inspected there:
 
@@ -220,42 +310,44 @@ RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 ```
 
-Step 9 additionally requires the release run of `kernel_disagreements` at zero, and a compile-time measurement: the kernel re-checks every item of every module, so `make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_curios.crs` before and after is what says whether turning it on is affordable.
+E additionally requires a compile-time measurement: the kernel re-checks every item of every module, so `make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_curios.crs` before and after is what says whether turning it on is affordable.
 
 ## Risks
 
-**The kernel refuses something real and the reflex is to weaken it.** `curios-elab/src/recheck.rs:19` already states the rule: a disagreement is a question with two answers, and if a rule has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in `DESIGN.md`. The risk is that step 9 creates schedule pressure the earlier steps do not.
+**Turning the kernel on doubles the checking work per module.** Partly measured. The kernel holds no caches by design (`kernel.rs:169`) and the elaborator's memoization is precisely what it declines to share, so the second walk cannot be made cheap the way the first was. A3 settles positivity's share by counting the fixpoint domain; A4's is the open one. The fallback is neither a flag nor a weakening but the pattern `positivity.rs:66-76` already uses — compute at archive-build time, read at replay — which under the amended principle reads the kernel's own answer.
 
-**Turning the kernel on doubles the checking work per module.** Unmeasured. The kernel holds no caches by design (`curios-core/src/kernel.rs:169`), and the elaborator's memoization is precisely what it declines to share, so the second walk cannot be made cheap the way the first was. If it proves unaffordable, the fallback is a flag rather than a weakening — but a kernel that is off by default is back to subtracting nothing.
+**The kernel refuses something real and the reflex is to weaken it.** `recheck.rs:19` already states the rule: a disagreement is a question with two answers. E creates schedule pressure the earlier items do not.
 
-~~**Step 7 may not be a local fix.**~~ **It is local, and narrower than this risk feared.** The worry was that the depth belongs to how a certified-UTF-8 chain is *represented* rather than to how it is walked, so no rewrite of the walkers would settle it. A backtrace settles it the other way: the chain is `infer`/`check` alone, in one file, and defunctionalizing them bounds the depth whatever the representation does. Representation still matters for the reduction *cost* — the budget spend is linear at roughly 43 steps per byte, capping a literal near 23KiB against the default 1,000,000 — but that is a separate question from the stack, and it is not what makes the kernel abort. The standing part of the risk is the rule it cited: `AGENTS.md` forbids hiding any of this behind `RUST_MIN_STACK`.
+**Sharing removes the disagreement signal for the analyses it shares.** Once positivity, totality, and inversion are one implementation, `kernel_disagreements` reports zero for those classes *by construction*. That is a loss, not a win, and the evidence for those analyses being right has to come from probes and property tests instead. This is the price of the share/duplicate line and should be recorded as such rather than discovered later.
 
-**Step 8 is a re-litigation of a written decision.** `DESIGN.md` says totality is out of the kernel by construction. Reopening it without settling it leaves the specification and the design document in contradiction, which is worse than either answer. Take the decision at step 8 and record it there in the same commit.
+**A2 borrows a judgment.** Shared inversion means a mispinned binder is accepted by both checkers. The certificate design named in A2 removes that concession; until it lands, inversion is the one place the second opinion does not apply, and it should be listed in `DESIGN.md` alongside what else the kernel takes on faith.
 
-**The prelude archive may be a hole that none of these steps closes.** The archive carries `polarities` and each declaration's `universe_context`, and a replayed prefix's verdicts were settled when the archive was built. If the kernel does not re-check a replayed prefix, steps 2 and 3 have a gap at the archive boundary regardless of how well they are implemented. This was not settled during investigation and should be settled before step 2.
+**The archive is an integrity boundary, not a soundness one.** The kernel re-typechecks every term it is handed, so a corrupted term is refused. A corrupted *derived value* — a polarity vector, a totality flag — is refused only where the kernel recomputes. A3 recomputes; A4 may not. Whichever way A4 lands, write down which values the kernel accepts from the archive without recomputing.
 
-## Left open
+## What this may not claim
 
-~~**Whether the `ConstructorSizing` constraints are visible per declaration.**~~ **Settled: they are not, in any declaration in the prelude.** Recorded under step 2, where it closes the fork rather than deciding it.
+**No perimeter entry in `DESIGN.md` may be re-graded on account of this work.** `DESIGN.md` is careful that a second checker removes none of the perimeter's weaknesses and only changes the cost of being wrong about one. What changes is that each entry acquires a second implementation to disagree with, and the disagreement count is the evidence. That is a weaker claim than it will be tempting to make at E.
 
-~~**Whether a replayed prelude prefix is re-checked by the kernel.**~~ **Settled: it is.** `recheck_module` walks `module.items`, and at a replay `elaborate_and_zonk_with_prelude` splices `prelude.items` ahead of the user suffix, so the module the kernel receives is the whole program. The inventory above walked all 1,048 items with refusals landing inside `/std/Async`, `/std/Map`, and `/std/Toml`. Steps 2 and 3 are worth their full value at the archive boundary. The narrower hazard survives and is already step 3's instruction: the archive-carried *verdicts* — `polarities`, `universe_context` — are read rather than recomputed.
+**`curios-elab` does not leave the trusted base**, only its rules do. See "Objective".
 
-**`Prop` non-informativeness for structures and concepts.** A perimeter entry, currently enforced at `curios-elab/src/elaborate/match_.rs:523`, and plausibly a clause of `StructDecl` acceptance in step 3. Not traced far enough to say whether it separates cleanly, and deliberately not folded into step 3 on a guess.
+**The two checkers are not independent on positivity, totality, or inversion.** By design, per the share/duplicate line.
 
-**What the second opinion is worth once it runs.** `DESIGN.md` is careful that a second checker removes none of the perimeter's weaknesses and only changes the cost of being wrong about one. No perimeter entry may be re-graded on account of this work; what changes is that each entry acquires a second implementation to disagree with, and the disagreement count is the evidence. That is a weaker claim than it will be tempting to make at step 9.
+## Retractions
 
-## State of the worktree
+Recorded because the retractions are the useful part, and because all of them have the same shape: a gap inferred by reading one crate and reasoning about what must be missing, where following the construction one stage further — or taking one direct measurement — would have settled it.
 
-**Step 7 is done and committed.** `infer` now drives an explicit obligation stack: the child obligations of an application, a constructor, and a record are deferred rather than descended into, because those three instantiate their telescopes by substituting the child term rather than binding it, so every deferred obligation is checked in the context it was recorded in. Arms that open binders still recurse, which is the written-nesting bound `AGENTS.md` allows. `kernel_disagreements` now completes in a **debug** build and reports the same 90 of 1,048 it reports in release — the identical count across profiles being the check that this was a restructuring and not a change of rule.
+**The validation pass at the kernel's boundary does not exist and should not be written.** `DESIGN.md` promised one. `zonk_module`'s total traversal already delivers the exclusion, and a second pass would duplicate a traversal to re-derive a guarantee that holds. What survived is C4: the guarantee is currently *the elaborator's*, and two arms in the kernel accept what the rest of it refuses.
 
-Nothing else in this document is implemented. Steps 1, 2, 3 remain independent and available; step 2 has its fork closed and both of its prerequisites settled, and it has the largest measured class behind it.
+**`declare_induct` and `declare_struct` are unchecked inserts, and the conclusion drawn from that was false.** The inserts are unchecked; the kernel does not thereby certify inductive declarations wholesale, because an `induct` lowers to a `rec` group of ordinary definitions, so payload sorting and registry-versus-binding agreement both fall out of the item walk. What survived was one clause — the size condition — which is not a declaration-checking problem at all but the universe constraint problem of C1.
 
-**One change outside this document's scope moved ground under it.** `/syn/Str` now proves a string literal valid by computation — `of_scan_eq(b, refl_scan(b))`, constant size — instead of by a `Utf8` derivation with one link per byte. That was forced by the same shape step 7 was: five separate defects, including both erasure obligations and three in the printer, traced to a derivation whose depth was the literal's length. Three consequences for this work. The kernel re-checks a different, far smaller term for every literal. `SCHEMA` moved to 18, so the archive rebuilds. And `/std/Str/utf8`'s lemmas are untouched, because the bridge rebuilds a derivation by reduction wherever one is actually eliminated — which is why the reflection was done as a bridge rather than by restating `Valid`.
+**The functions named as the recursion cycle to defunctionalize appear zero times in the stack that overflowed.** An earlier revision named `compare`, `sort_of`, `whnf`, and `reduce_prim`, measured from watermarks that counted `infer` entries and attributed the span between them to the whole cycle. A backtrace at judgment depth 300 showed 300 `infer` frames and 298 `check` frames and nothing else. Frame size was also a distraction: debug costs ~21.5KiB per level against release's 2.05KiB and the prelude needs 102 levels, so splitting arms into `#[inline(never)]` functions would have cleared the threshold and left depth data-bound.
 
-Two claims were made during the investigation that produced this document and then retracted against the source, and both are recorded because the retractions are the useful part.
+**Sharing the reduction driver does not become attractive under a trusted-surface objective.** An intermediate revision of this analysis claimed it did. It saves zero trusted lines: the kernel's reducer is trusted either way and the elaborator's copy is untrusted either way. `DESIGN.md`'s rejection stands under both objectives.
 
-The first was that the validation pass `DESIGN.md` promised at the kernel's boundary does not exist and should be written. It does not exist, and it should not be: `zonk_module`'s traversal already delivers the guarantee. The claim came from grepping `curios-core` for the check and finding nothing, without asking whether some pass upstream had already made it unnecessary.
+**`Exit` is not the largest hole and restricting a primitive does not close the class.** An intermediate revision called it the finding that reordered everything. `rec f : False = f` is smaller, needs no primitive, and cannot be closed by any typing-rule refinement — which is what makes totality forced rather than optional.
 
-The second was that `declare_induct` and `declare_struct` are unchecked inserts and therefore the kernel certifies inductive declarations wholesale. The inserts are unchecked and the conclusion is false: an `induct` lowers to a `rec` group of ordinary definitions, so payload sorting and registry-versus-binding agreement both fall out of the item walk. What survived was one clause — the size condition — which is not a declaration-checking problem at all but the universe constraint problem of step 2, and which promoted step 2 from a small hygiene fix to the item carrying the paradox guard.
+**The 13-item zero-level cluster is not the largest identifiable class**, and the constraint measurement that closed the sizing fork was read one-sidedly. See "What the kernel refuses that it must not".
 
-A third belongs with them, from implementing step 7. The functions this document named as the cycle to make iterative — `compare`, `sort_of`, `whnf`, `reduce_prim` — appear **zero** times in the stack that overflows. They were named from watermark measurements that counted `infer` entries and attributed the span between them to the whole cycle; a backtrace showed 300 `infer` and 298 `check` frames and nothing else. All three errors have the same shape as the ones the totality work produced before it: a gap inferred by reading one crate and reasoning about what must be missing, where following the construction one stage further — or taking one direct measurement — would have settled it. The instruction that follows is the same one that document reached: measure with `kernel_disagreements` before designing for a gap, because the classes are countable and the count is what says which gaps matter.
+**A single-line regex undercounted the shared-analysis dependency surface.** `rg -o 'context\.[a-z_]+'` missed `context` and `.induct_decl` split across lines by rustfmt, which hid `Vectors::at`'s fallback onto archive-carried polarity vectors — the finding that settled how A3 should be driven and that reframed the recompute principle. The measurement was rerun with `-U` and a multiline pattern.
+
+The instruction all of these produce is the same one the totality work reached: **measure with `kernel_disagreements` before designing for a gap**, because the classes are countable and the count is what says which gaps matter — and check that the instrument counts what it claims to.
