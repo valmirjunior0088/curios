@@ -214,7 +214,32 @@ fn ends_in_sort(type_: &Term) -> bool {
 /// Walk a term and mark every type written inside it: binder annotations,
 /// match motives, `let` and `rec` declared types, nominal and primitive type
 /// formers.
+#[allow(clippy::mutable_key_type)]
 fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
+    // Iterative, and deduplicated on node identity, for one reason each. A
+    // string literal's UTF-8 derivation threads its scanner state forwards, so
+    // link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain
+    // is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that
+    // revisits shared nodes pays the square while recursing one native frame per
+    // link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack
+    // overflow above 16KiB.
+    //
+    // Deduplicating is site-preserving because `site` is fixed for the whole
+    // walk: every position this pushes carries the site it was called with, so
+    // a node reached twice would only ever push the same position twice.
+    let mut seen: std::collections::HashSet<Term> = std::collections::HashSet::new();
+    let mut pending = vec![term.clone()];
+
+    while let Some(term) = pending.pop() {
+        if !seen.insert(term.clone()) {
+            continue;
+        }
+        annotate_node(&term, site, positions, &mut pending);
+    }
+}
+
+/// One node's contribution to [`annotations`], with its children queued.
+fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending: &mut Vec<Term>) {
     match &**term {
         // A type former stands for its whole self; nothing inside it is a
         // value position the aggressive reading would treat differently.
@@ -267,7 +292,7 @@ fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
 
     let subterm: &Subterm = term;
     subterm.any_child_term(&mut |child| {
-        annotations(child, site, positions);
+        pending.push(child.clone());
         false
     });
 }
