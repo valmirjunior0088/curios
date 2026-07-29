@@ -110,19 +110,21 @@ fn class(error: &KernelError) -> String {
 /// `recheck_module_verdicts`), which is what makes the classes countable rather
 /// than discovered one build at a time.
 ///
-/// # Run this in release
+/// # This aborts in a debug build, and that is a defect
 ///
-/// A debug build overflows partway through `/std/Toml`. That is not a property
-/// of the walk: the depth is identical in both profiles (measured — the same
-/// watermark), and only the frame size differs, so a 2MiB thread runs out at
-/// around 120 nested judgments. Release completes the whole standard library.
-///
-/// The depth itself is a real defect, and it is the one to fix rather than to
-/// budget around: it scales with a `Str` literal's *length* — 103 nested
-/// judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is one
-/// certified-UTF-8 link per scalar and the `compare`/`sort_of`/`whnf`/
+/// The kernel's judgment depth scales with a `Str` literal's *length* — 103
+/// nested judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is
+/// one certified-UTF-8 link per scalar and the `compare`/`sort_of`/`whnf`/
 /// `reduce_prim` cycle walks the chain natively. Bounded by data length rather
-/// than by written nesting is exactly what ROADMAP.md forbids.
+/// than by written nesting is exactly the shape `AGENTS.md` forbids, and a
+/// checker that aborts cannot be made load-bearing whatever else it decides.
+///
+/// Release completes the standard library only because its frames are smaller;
+/// the depth is identical in both profiles, measured at the same watermark. So
+/// running this in release is a way to take the measurement *until the defect
+/// is fixed*, not a property of the test and not a reason the defect is
+/// tolerable. Stack size is not something to hide behind — see the same rule
+/// about `RUST_MIN_STACK` in `AGENTS.md`.
 ///
 /// An abort rather than a tally is likewise a finding, not noise: nothing here
 /// is wrapped in a catch, because a kernel that aborts is a kernel to fix.
