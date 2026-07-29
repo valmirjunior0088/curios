@@ -76,7 +76,7 @@ impl Lowering {
         let rec = Rec {
             group: member.group.clone(),
             tail: Scope::constant(
-                super::Many(member.group.len()),
+                super::Many(member.group.length()),
                 Term::var(super::Var::bound(member.index)),
             ),
         };

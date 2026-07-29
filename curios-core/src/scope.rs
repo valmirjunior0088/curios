@@ -7,12 +7,12 @@
 
 use {
     super::{
-        Context, Error, Free, Global, Level, LevelHead, MetaId, Subterm, Term, UniverseError,
-        UniverseMetaId, UniverseParam, UniverseSolver, zonk_term,
+        Free, Global, Level, LevelHead, MetaId, Subterm, Term, UniverseError, UniverseMetaId,
+        UniverseParam,
     },
     std::{
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeSet, HashMap},
         convert::Infallible,
         fmt,
         hash::Hash,
@@ -150,13 +150,13 @@ impl Var {
         }
     }
 
-    pub(crate) fn bound(index: usize) -> Self {
+    pub fn bound(index: usize) -> Self {
         Self {
             type_: VarType::Bound(index),
         }
     }
 
-    pub(crate) fn as_bound(&self) -> Option<usize> {
+    pub fn as_bound(&self) -> Option<usize> {
         match &self.type_ {
             VarType::Free(_) => None,
             &VarType::Bound(index) => Some(index),
@@ -166,7 +166,7 @@ impl Var {
     /// This occurrence's identity, asserting it is free. Callers hold a term the
     /// scope machinery has not closed over, where a bound index is an invariant
     /// violation rather than a case to handle.
-    pub(crate) fn unwrap(&self) -> &Free {
+    pub fn unwrap(&self) -> &Free {
         self.as_free().expect("a free occurrence")
     }
 }
@@ -265,7 +265,7 @@ impl Bound for () {
     }
 }
 
-pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
+pub fn rewrite_universe_levels<B: Bound, E: 'static>(
     value: &B,
     rewrite: impl FnMut(&Level) -> Result<Level, E> + 'static,
 ) -> Result<B, E> {
@@ -277,11 +277,11 @@ pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
 /// projection. Nominal vectors, instances, and contexts are removed by their
 /// owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant
 /// payload is rebuilt with Core's private canonical ground representative.
-pub(crate) fn project_erased_universes<B: Bound>(value: &B) -> B {
+pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }
 
-pub(crate) fn rewrite_universe_levels_scoped<B: Bound, E: 'static>(
+pub fn rewrite_universe_levels_scoped<B: Bound, E: 'static>(
     value: &B,
     rewrite: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
 ) -> Result<B, E> {
@@ -311,7 +311,7 @@ pub(crate) fn rewrite_universe_levels_scoped<B: Bound, E: 'static>(
     }
 }
 
-fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, UniverseError> {
+pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, UniverseError> {
     level.substitute(|head| match head {
         LevelHead::Param(UniverseParam(index)) => index
             .checked_add(amount)
@@ -334,7 +334,7 @@ fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, Universe
 /// against its declared `parameter_count`. Rejecting an out-of-range index here
 /// instead would misread every legitimate outer-scheme reference as a missing
 /// argument.
-pub(crate) fn instantiate_universe_levels_scoped<B: Bound>(
+pub fn instantiate_universe_levels_scoped<B: Bound>(
     value: &B,
     arguments: &[Level],
 ) -> Result<B, UniverseError> {
@@ -357,48 +357,7 @@ pub(crate) fn instantiate_universe_levels_scoped<B: Bound>(
     })
 }
 
-pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
-    value: &B,
-    solver: &UniverseSolver,
-) -> Result<B, UniverseError> {
-    fn zonk_solution(
-        solver: &UniverseSolver,
-        level: &Level,
-        visiting: &mut BTreeSet<UniverseMetaId>,
-    ) -> Result<Level, UniverseError> {
-        let mut replacements = BTreeMap::new();
-        for meta in level.metas() {
-            if let Some(solution) = solver.solution(meta)
-                && visiting.insert(meta)
-            {
-                let zonked = zonk_solution(solver, solution, visiting)?;
-                visiting.remove(&meta);
-                replacements.insert(meta, zonked);
-            }
-        }
-        level.substitute(|head| match head {
-            LevelHead::Param(_) => None,
-            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
-        })
-    }
-
-    let solver = solver.clone();
-    rewrite_universe_levels_scoped(value, move |depth, level| {
-        let mut replacements = BTreeMap::new();
-        for meta in level.metas() {
-            if let Some(solution) = solver.solution(meta) {
-                let zonked = zonk_solution(&solver, solution, &mut BTreeSet::from([meta]))?;
-                replacements.insert(meta, shift_universe_params(&zonked, depth)?);
-            }
-        }
-        level.substitute(|head| match head {
-            LevelHead::Param(_) => None,
-            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
-        })
-    })
-}
-
-pub(crate) fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
+pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
     let metas = Rc::new(RefCell::new(BTreeSet::new()));
     let found = Rc::clone(&metas);
     let _: Result<_, Infallible> = rewrite_universe_levels(value, move |level| {
@@ -412,7 +371,7 @@ pub(crate) fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
 
 /// How a declaration's own name reaches the value being stamped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SelfReference {
+pub enum SelfReference {
     /// Still a free variable. Nothing else will supply the instance, so the
     /// occurrence must carry one explicitly: a later use site instantiates the
     /// stored scheme by substituting the declaration's universe parameters,
@@ -444,7 +403,7 @@ pub(crate) enum SelfReference {
 /// carries it through the binders and telescopes an arbitrary [`Bound`] holds.
 /// An empty instance is the identity, so a monomorphic declaration pays a
 /// single comparison rather than a traversal.
-pub(crate) fn stamp_declaration_instance<B: Bound>(
+pub fn stamp_declaration_instance<B: Bound>(
     value: &B,
     names: &BTreeSet<Global>,
     self_reference: SelfReference,
@@ -476,7 +435,7 @@ pub struct Scope<A: Arity, B: Bound = Term> {
 }
 
 impl<A: Arity, B: Bound> Scope<A, B> {
-    pub(crate) fn close<'a>(arity: A, binders: A::Params<'a, Free>, body: B) -> Self {
+    pub fn close<'a>(arity: A, binders: A::Params<'a, Free>, body: B) -> Self {
         assert!(
             arity.arity() == binders.as_ref().len(),
             "scope arity mismatch in `close`: expected {}, got {}",
@@ -491,23 +450,23 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         }
     }
 
-    pub(crate) fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         self.arity.arity()
     }
 
-    pub(crate) fn body(&self) -> &B {
+    pub fn body(&self) -> &B {
         &self.body
     }
 
-    pub(crate) fn names(&self) -> Option<&[Free]> {
+    pub fn names(&self) -> Option<&[Free]> {
         self.names.as_deref()
     }
 
-    pub(crate) fn reach(&self) -> usize {
+    pub fn reach(&self) -> usize {
         self.body.reach().saturating_sub(self.arity())
     }
 
-    pub(crate) fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
+    pub fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
         assert!(
             self.arity() == terms.as_ref().len(),
             "scope arity mismatch in `open`: expected {}, got {}",
@@ -518,7 +477,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         self.body.release(terms.as_ref())
     }
 
-    pub(crate) fn constant(arity: A, body: B) -> Self {
+    pub fn constant(arity: A, body: B) -> Self {
         Self {
             arity,
             names: None,
@@ -536,7 +495,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// memoized derivations: `open` and `close` each rebuild every node they
     /// touch, so the round trip discards all of them to arrive where this
     /// arrives without moving.
-    pub(crate) fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
+    pub fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
         Self {
             arity: self.arity,
             names: self.names.clone(),
@@ -545,7 +504,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     }
 
     /// Fallible [`Self::map_body`], for a rewrite that can reject its input.
-    pub(crate) fn try_map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
+    pub fn try_map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
         Ok(Self {
             arity: self.arity,
             names: self.names.clone(),
@@ -555,36 +514,36 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
     /// The identity of the binder at position `index` (0 = first/outermost),
     /// for a rebuild that must re-close over the very same binders.
-    pub(crate) fn binder(&self, index: usize) -> Option<&Free> {
+    pub fn binder(&self, index: usize) -> Option<&Free> {
         self.names.as_deref()?.get(index)
     }
 
     /// What the binder at position `index` was called where it was written — a
     /// rendering aid a rebuild carries onto the binder it re-mints, never a way
     /// to recognize which binder this is.
-    pub(crate) fn hint(&self, index: usize) -> Option<&str> {
+    pub fn hint(&self, index: usize) -> Option<&str> {
         self.binder(index)?.hint()
     }
 
-    pub(crate) fn first_hint(&self) -> Option<&str> {
+    pub fn first_hint(&self) -> Option<&str> {
         self.hint(0)
     }
 
-    pub(crate) fn second_hint(&self) -> Option<&str> {
+    pub fn second_hint(&self) -> Option<&str> {
         self.hint(1)
     }
 
-    pub(crate) fn third_hint(&self) -> Option<&str> {
+    pub fn third_hint(&self) -> Option<&str> {
         self.hint(2)
     }
 
-    pub(crate) fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
+    pub fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
         (0..self.arity()).map(move |index| self.hint(index))
     }
 
     /// The identity of each binder in order, `None` where the scope was built
     /// without them (`constant`).
-    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
+    pub fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
         (0..self.arity()).map(move |index| self.binder(index))
     }
 
@@ -593,7 +552,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// de Bruijn index equals `index` plus the number of binders entered since —
     /// which `Visit` tracks as `depth`. Used by erasure to spot an eliminator
     /// whose induction hypothesis is dead: that arm is a case-split, not a fold.
-    pub(crate) fn uses(&self, index: usize) -> bool {
+    pub fn uses(&self, index: usize) -> bool {
         let mut used = false;
         self.body.traverse(&mut Visit::new(|depth, var: &Var| {
             if var.as_bound() == Some(index + depth) {
@@ -614,7 +573,7 @@ impl<B: Bound> Scope<Many, B> {
     /// rather than an open/close round-trip through names, which would have to
     /// reopen inner binders into free occurrences and could not tell them from
     /// genuine outer references.
-    pub(crate) fn prepend(&self, binder: &Free) -> Self {
+    pub fn prepend(&self, binder: &Free) -> Self {
         let names = self.names.as_ref().map(|names| {
             [binder.clone()]
                 .into_iter()
@@ -689,11 +648,11 @@ pub enum Telescope<B: Bound> {
 }
 
 impl<B: Bound> Telescope<B> {
-    pub(crate) fn done(body: B) -> Self {
+    pub fn done(body: B) -> Self {
         Telescope::Done(body.into())
     }
 
-    pub(crate) fn cons<T>(binder: &Free, ty: T, rest: Telescope<B>) -> Self
+    pub fn cons<T>(binder: &Free, ty: T, rest: Telescope<B>) -> Self
     where
         T: Into<Term>,
     {
@@ -716,7 +675,7 @@ impl<B: Bound> Telescope<B> {
             })
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         let mut n = 0;
         let mut cur = self;
         while let Telescope::Cons(_, rest) = cur {
@@ -726,13 +685,13 @@ impl<B: Bound> Telescope<B> {
         n
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         matches!(self, Telescope::Done(_))
     }
 
     /// The final payload beneath every binder, without opening the telescope or
     /// substituting for any of its bound variables.
-    pub(crate) fn terminal(&self) -> &B {
+    pub fn terminal(&self) -> &B {
         let mut current = self;
         loop {
             match current {
@@ -744,7 +703,7 @@ impl<B: Bound> Telescope<B> {
 
     /// The binder hint at each position (`""` when unnamed), walking the spine
     /// without opening — names are structural, no substitution needed.
-    pub(crate) fn labels(&self) -> Vec<&str> {
+    pub fn labels(&self) -> Vec<&str> {
         let mut out = Vec::new();
         let mut cur = self;
         while let Telescope::Cons(_, rest) = cur {
@@ -760,7 +719,7 @@ impl<B: Bound> Telescope<B> {
     /// a rebuild that had to re-mint its binders (tuple-type labels are part of
     /// the type's identity and the target of `.label` resolution, so they must
     /// survive elaboration verbatim).
-    pub(crate) fn relabel(self, labels: &[&str]) -> Self {
+    pub fn relabel(self, labels: &[&str]) -> Self {
         match self {
             Telescope::Done(body) => Telescope::Done(body),
             Telescope::Cons(ty, rest) => {
@@ -782,7 +741,7 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    pub(crate) fn open(&self, args: &[&Term]) -> B {
+    pub fn open(&self, args: &[&Term]) -> B {
         assert!(
             self.len() == args.len(),
             "telescope arity mismatch in `open`: expected {}, got {}",
@@ -807,7 +766,7 @@ impl<B: Bound> Telescope<B> {
     /// returning the residual telescope. Every caller's telescope leads with the
     /// type parameters (constructor payloads, struct fields, inductive indices all
     /// follow them), so a telescope that runs out early is an invariant violation.
-    pub(crate) fn open_params(self, params: &[Term]) -> Telescope<B> {
+    pub fn open_params(self, params: &[Term]) -> Telescope<B> {
         let mut telescope = self;
         for param in params {
             telescope = match telescope {
@@ -821,7 +780,7 @@ impl<B: Bound> Telescope<B> {
     /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder
     /// before substituting that arg into the rest, and return the final `Done`
     /// body. The walk is infallible; the error type `E` belongs to the callback.
-    pub(crate) fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
+    pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
     where
         F: FnMut(usize, &Term, &Term) -> Result<(), E>,
     {
@@ -846,7 +805,7 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    pub(crate) fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
+    pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
     where
         F: FnMut(usize) -> Term,
     {
@@ -876,7 +835,7 @@ impl Telescope<Term> {
     /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) —
     /// the parameter types and the trailing body/return type — satisfies
     /// `pred`, short-circuiting on the first hit.
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             Telescope::Done(body) => body.any_metavar(pred),
@@ -888,29 +847,17 @@ impl Telescope<Term> {
     /// short-circuiting on the first hit. The telescope leg of
     /// `Subterm::any_child_term`: `pred` carries the per-node memoized
     /// recursion, so this visits each `Term` exactly once.
-    pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => pred(ty) || rest.body().any_term(pred),
             Telescope::Done(body) => pred(body),
         }
     }
 
-    /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and
-    /// its trailing body/return type, which is a real term to recurse into.
-    pub(crate) fn zonk(&self, context: &Context) -> Result<Self, Error> {
-        match self {
-            Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
-            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
-                zonk_term(context, ty)?,
-                rest.try_map_body(|inner| inner.zonk(context))?,
-            )),
-        }
-    }
-
     /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and
     /// the trailing body/return type. Concrete in `Term` — no collector trait
     /// needed. See [`Subterm::collect_construction_names`](super::Subterm::collect_construction_names).
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
+    pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Telescope::Cons(ty, rest) => {
                 ty.collect_construction_names(names);
@@ -925,7 +872,7 @@ impl Telescope<()> {
     /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field
     /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
     /// the first hit.
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
@@ -936,7 +883,7 @@ impl Telescope<()> {
     /// Whether any `Term` in a Σ telescope (`TupleType`) — only the field
     /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
     /// the first hit. See the `Telescope<Term>` counterpart above.
-    pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => pred(ty) || rest.body().any_term(pred),
             // The trailing body is `()`, which holds no terms.
@@ -944,21 +891,9 @@ impl Telescope<()> {
         }
     }
 
-    /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body
-    /// is `()`, which carries no metavariables and is rebuilt as-is.
-    pub(crate) fn zonk(&self, context: &Context) -> Result<Self, Error> {
-        match self {
-            Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
-            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
-                zonk_term(context, ty)?,
-                rest.try_map_body(|inner| inner.zonk(context))?,
-            )),
-        }
-    }
-
     /// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body
     /// is `()`, which contributes no names.
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
+    pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         if let Telescope::Cons(ty, rest) = self {
             ty.collect_construction_names(names);
             rest.body().collect_construction_names(names);
@@ -1154,7 +1089,7 @@ impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    pub(crate) fn new(visit: F) -> Self {
+    pub fn new(visit: F) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1180,7 +1115,7 @@ where
     /// Like `new`, additionally carrying a term-level rewrite hook fired at
     /// every [`Term::traverse`] entry, including terms that are the direct
     /// body of a scope or telescope terminal.
-    pub(crate) fn rewriting(visit: F, rewrite: Rewrite) -> Self {
+    pub fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1193,7 +1128,7 @@ where
     /// for [`Visit::take_masked_children`]. One visit masks any number of
     /// nodes: the placeholder is built once, and the children are taken
     /// between nodes.
-    pub(crate) fn masking(visit: F, placeholder: Term) -> Self {
+    pub fn masking(visit: F, placeholder: Term) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1221,7 +1156,7 @@ where
     /// would silently reuse a result computed at the wrong depth, and a
     /// stateful hook would see each shared node once rather than once per
     /// occurrence.
-    pub(crate) fn rewriting_shared(visit: F, rewrite: Rewrite) -> Self {
+    pub fn rewriting_shared(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1230,7 +1165,7 @@ where
         }
     }
 
-    pub(crate) fn rewriting_universes(visit: F, rewrite: Rewrite) -> Self {
+    pub fn rewriting_universes(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1239,7 +1174,7 @@ where
         }
     }
 
-    pub(crate) fn rewriting_levels_scoped(visit: F, rewrite: LevelRewrite) -> Self {
+    pub fn rewriting_levels_scoped(visit: F, rewrite: LevelRewrite) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1265,7 +1200,7 @@ where
     /// canonicalizes bottom-up with no extra pass. Spans survive: they sit on
     /// the `Term` wrapper, outside the shared node, so each occurrence keeps its
     /// own while the structure underneath is shared.
-    pub(crate) fn sharing(visit: F, table: Sharing) -> Self {
+    pub fn sharing(visit: F, table: Sharing) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1279,11 +1214,11 @@ impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    pub(crate) fn term_depth(&self) -> usize {
+    pub fn term_depth(&self) -> usize {
         self.term_depth
     }
 
-    pub(crate) fn prune(&self) -> bool {
+    pub fn prune(&self) -> bool {
         matches!(self.mode, Mode::Pruning)
     }
 
@@ -1292,28 +1227,28 @@ where
     /// impl that walks a `Let`/`Rec` spine one link at a time in a loop instead
     /// of recursing once per binding. Pair with `leave_scope` in the reverse
     /// order links were entered.
-    pub(crate) fn enter_scope(&mut self, amount: usize) {
+    pub fn enter_scope(&mut self, amount: usize) {
         self.term_depth += amount;
     }
 
-    pub(crate) fn leave_scope(&mut self, amount: usize) {
+    pub fn leave_scope(&mut self, amount: usize) {
         self.term_depth -= amount;
     }
 
-    pub(crate) fn enter_universe_scope(&mut self, amount: usize) {
+    pub fn enter_universe_scope(&mut self, amount: usize) {
         self.universe_depth += amount;
     }
 
-    pub(crate) fn leave_universe_scope(&mut self, amount: usize) {
+    pub fn leave_universe_scope(&mut self, amount: usize) {
         self.universe_depth -= amount;
     }
 
     /// Invoke the underlying visit callback on a variable at the current depth.
-    pub(crate) fn call(&mut self, var: &Var) -> Option<Subterm> {
+    pub fn call(&mut self, var: &Var) -> Option<Subterm> {
         (self.visit)(self.term_depth, var)
     }
 
-    pub(crate) fn visit_level(&mut self, level: &Level) -> Level {
+    pub fn visit_level(&mut self, level: &Level) -> Level {
         if self.erases_universes() {
             // Every other level-bearing container is removed structurally in
             // `Subterm::traverse`; this is the unavoidable payload of Core's
@@ -1326,7 +1261,7 @@ where
         }
     }
 
-    pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
+    pub fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
         let term_depth = self.term_depth;
         match &mut self.mode {
             Mode::Rewriting(rewrite)
@@ -1349,36 +1284,36 @@ where
 
     /// The children [`Mode::Masking`] stood down, in traversal order, leaving
     /// the visit ready to mask another node.
-    pub(crate) fn take_masked_children(&mut self) -> Vec<Term> {
+    pub fn take_masked_children(&mut self) -> Vec<Term> {
         match &mut self.mode {
             Mode::Masking { children, .. } => mem::take(children),
             _ => Vec::new(),
         }
     }
 
-    pub(crate) fn erases_universes(&self) -> bool {
+    pub fn erases_universes(&self) -> bool {
         matches!(self.mode, Mode::ErasingUniverses)
     }
 
-    pub(crate) fn universes_only(&self) -> bool {
+    pub fn universes_only(&self) -> bool {
         matches!(
             self.mode,
             Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses
         )
     }
 
-    pub(crate) fn memoizes(&self) -> bool {
+    pub fn memoizes(&self) -> bool {
         matches!(self.mode, Mode::RewritingShared(..) | Mode::Sharing(..))
     }
 
-    pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
+    pub fn memo_get(&self, key: usize) -> Option<Term> {
         match &self.mode {
             Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => memo.get(&key).cloned(),
             _ => None,
         }
     }
 
-    pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
+    pub fn memo_put(&mut self, key: usize, term: Term) {
         match &mut self.mode {
             Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => {
                 memo.insert(key, term);
@@ -1387,7 +1322,7 @@ where
         }
     }
 
-    pub(crate) fn rewrites_terms(&self) -> bool {
+    pub fn rewrites_terms(&self) -> bool {
         matches!(
             self.mode,
             Mode::Rewriting(_)
@@ -1398,18 +1333,18 @@ where
     }
 
     /// The canonical node for a rebuilt term, or `None` when not hash-consing.
-    pub(crate) fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
+    pub fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
         match &self.mode {
             Mode::Sharing(_, sharing) => sharing.canonical(rebuilt),
             _ => None,
         }
     }
 
-    pub(crate) fn visit_subterm(&mut self, term: &Term) -> Term {
+    pub fn visit_subterm(&mut self, term: &Term) -> Term {
         term.traverse(self)
     }
 
-    pub(crate) fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
+    pub fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
         self.term_depth += scope.arity.arity();
         let body = scope.body.traverse(self).into();
         self.term_depth -= scope.arity.arity();

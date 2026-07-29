@@ -423,10 +423,10 @@ fn reduce_flt_mul_computes() {
 fn reduce_lst_get_returns_element_at_index() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(10usize))),
-        Subterm::Prim(Prim::Nat(Nat::new(20usize))),
-        Subterm::Prim(Prim::Nat(Nat::new(30usize))),
+    let list = Subterm::Prim(Prim::Lst(vec![
+        Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
+        Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
+        Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
     ]));
 
     assert_eq!(
@@ -459,7 +459,9 @@ fn reduce_lst_get_returns_element_at_index() {
 fn reduce_lst_get_errors_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::lst(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))]));
+    let list = Subterm::Prim(Prim::Lst(vec![
+        Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
+    ]));
 
     assert!(matches!(
         reduce(
@@ -515,9 +517,9 @@ fn reduce_bin_append_adds_the_full_byte_range() {
 fn reduce_lst_append_adds_element() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(10usize))),
-        Subterm::Prim(Prim::Nat(Nat::new(20usize))),
+    let list = Subterm::Prim(Prim::Lst(vec![
+        Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
+        Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
     ]));
 
     assert_eq!(
@@ -530,10 +532,10 @@ fn reduce_lst_append_adds_element() {
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::lst(vec![
-            Subterm::Prim(Prim::Nat(Nat::new(10usize))),
-            Subterm::Prim(Prim::Nat(Nat::new(20usize))),
-            Subterm::Prim(Prim::Nat(Nat::new(30usize))),
+        Ok(Subterm::Prim(Prim::Lst(vec![
+            Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
         ]))
         .into())
     );

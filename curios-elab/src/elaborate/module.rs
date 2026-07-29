@@ -7,8 +7,8 @@ use {
         check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
         check_type_totality, check_written_type_totality, finish_deferred_witnesses,
         group_totality, is_prop, record_definition_totality, record_totality, recorded_totality,
-        reduce_with, register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_module,
-        zonk_solved_term_metas,
+        reduce_with, register_witness, retry_deferred_witnesses, sort_term, zonk,
+        zonk_field_telescope, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     std::{
@@ -488,8 +488,8 @@ fn finalize_definition(
         return Ok((universe_context, type_, body));
     }
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
-        let params = struct_decl.params.zonk(context)?;
-        let fields = struct_decl.fields.zonk(context)?;
+        let params = zonk_field_telescope(context, &struct_decl.params)?;
+        let fields = zonk_field_telescope(context, &struct_decl.fields)?;
         let result_sort = zonk(context, &struct_decl.result_sort)?;
         context.update_struct(
             name,

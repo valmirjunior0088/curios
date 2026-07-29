@@ -28,7 +28,7 @@ use curios_base::BigUintBytes;
 /// asks whether an authored path renders as one of the given names and reads no
 /// structure out of them. Retired when `Definition::name` becomes a [`Global`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HeadTag<'a> {
+pub enum HeadTag<'a> {
     Name(&'a Free),
     Prim(&'static str),
 }
@@ -177,7 +177,7 @@ impl Term {
     /// the children's cached cells, so a shared subterm — a DAG-shaped lowered
     /// literal — pays O(degree) here, not O(size): the elaboration cache gates
     /// every `elaborate` call on this bit and must not re-walk shared chains.
-    pub(crate) fn has_local_free(&self) -> bool {
+    pub fn has_local_free(&self) -> bool {
         if self.inner.has_local_free.get().is_none() {
             self.warm_scalars();
         }
@@ -191,7 +191,7 @@ impl Term {
     /// Whether any `Metavar` node occurs in this term. Cached per node like
     /// [`has_local_free`](Self::has_local_free) and for the same reason: the
     /// elaboration cache's O(1)-per-call gate.
-    pub(crate) fn has_metavar(&self) -> bool {
+    pub fn has_metavar(&self) -> bool {
         if self.inner.has_metavar.get().is_none() {
             self.warm_scalars();
         }
@@ -204,7 +204,7 @@ impl Term {
 
     /// Whether this term contains an unresolved universe metavariable in a
     /// `Type` level, universe instantiation, or nominal universe vector.
-    pub(crate) fn has_universe_meta(&self) -> bool {
+    pub fn has_universe_meta(&self) -> bool {
         if self.inner.has_universe_meta.get().is_none() {
             self.warm_scalars();
         }
@@ -221,7 +221,7 @@ impl Term {
     /// scalar derivations, so universe-only passes can structurally share a
     /// deep universe-free data spine without consuming one native frame per
     /// node.
-    pub(crate) fn has_universe_data(&self) -> bool {
+    pub fn has_universe_data(&self) -> bool {
         if self.inner.has_universe_data.get().is_none() {
             self.warm_scalars();
         }
@@ -232,7 +232,7 @@ impl Term {
             .expect("warm_scalars fills has_universe_data")
     }
 
-    pub(crate) fn universe_metas(&self) -> BTreeSet<UniverseMetaId> {
+    pub fn universe_metas(&self) -> BTreeSet<UniverseMetaId> {
         super::universe_metas(self)
     }
 
@@ -241,7 +241,7 @@ impl Term {
     /// The walk is iterative and pointer-deduplicated, matching the scalar
     /// cache fill: cache eligibility calls this on data-shaped terms and must
     /// not put their depth back onto the native stack.
-    pub(crate) fn any_universe_meta(&self, mut pred: impl FnMut(UniverseMetaId) -> bool) -> bool {
+    pub fn any_universe_meta(&self, mut pred: impl FnMut(UniverseMetaId) -> bool) -> bool {
         let mut seen: HashSet<*const Node> = HashSet::new();
         let mut pending = vec![self.clone()];
         while let Some(term) = pending.pop() {
@@ -267,7 +267,7 @@ impl Term {
     /// closure uses both sets together: direct level metas join the closure,
     /// while term metas lead to their result, telescope, and solved body in
     /// the context store.
-    pub(crate) fn collect_universe_dependencies(
+    pub fn collect_universe_dependencies(
         &self,
         universes: &mut BTreeSet<UniverseMetaId>,
         term_metas: &mut BTreeSet<MetaId>,
@@ -313,7 +313,7 @@ impl Term {
     /// Nominal children are stamped explicitly because a rewrite hook replaces
     /// its node wholesale: an occurrence nested in a parameter or index must
     /// receive the same instance as the occurrence containing it.
-    pub(crate) fn stamp_declaration_node(
+    pub fn stamp_declaration_node(
         &self,
         names: &BTreeSet<Global>,
         self_reference: SelfReference,
@@ -391,7 +391,7 @@ impl Term {
         })
     }
 
-    pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
+    pub fn unwrap_or_clone(this: Self) -> Subterm {
         match Rc::try_unwrap(this.inner) {
             // Swapped out rather than moved out: [`Node`] dismantles itself on
             // drop, and a type with a `Drop` impl cannot have a field moved
@@ -407,7 +407,7 @@ impl Term {
     /// else is `None`. Used to cheaply gate scrutinee-refinement
     /// canonicalization on the applied symbol before paying for argument
     /// reduction.
-    pub(crate) fn head_name(&self) -> Option<&Free> {
+    pub fn head_name(&self) -> Option<&Free> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_name(),
@@ -421,7 +421,7 @@ impl Term {
     /// normal form is a `Prim` node rather than an application. Never a name a
     /// program could write — the two sides of every comparison come from here,
     /// so this only ever has to agree with itself.
-    pub(crate) fn head_key(&self) -> Option<HeadTag<'_>> {
+    pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_key(),
@@ -539,14 +539,14 @@ impl Term {
             .filter(|target| !target.is_local())
     }
 
-    pub(crate) fn span(&self) -> Option<Span> {
+    pub fn span(&self) -> Option<Span> {
         self.span.clone()
     }
 
     /// Attaches a span to this term. If the term already carries a span (the innermost
     /// one), it is preserved — innermost wins, matching how `Error::at` keeps the first
     /// span it sees as errors propagate up.
-    pub(crate) fn with_span(mut self, span: Span) -> Self {
+    pub fn with_span(mut self, span: Span) -> Self {
         if self.span.is_none() {
             self.span = Some(span);
         }
@@ -579,7 +579,7 @@ impl Term {
         Self::from(Subterm::Var(var))
     }
 
-    pub(crate) fn free_var(name: &Free) -> Self {
+    pub fn free_var(name: &Free) -> Self {
         Self::var(Var::free(name.clone()))
     }
 
@@ -628,7 +628,7 @@ impl Term {
     /// a hole or goal rebuilt at its birth point with the identity spine over
     /// its frozen telescope, or an elaborator insertion minted with its
     /// provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
-    pub(crate) fn metavar_birthed(
+    pub fn metavar_birthed(
         id: impl Into<MetaId>,
         origin: Option<MetavarOrigin>,
         spine: impl Into<Rc<Vec<Term>>>,
@@ -645,7 +645,7 @@ impl Term {
         inner.into().with_span(span)
     }
 
-    pub(crate) fn func_type<I, T, O>(params: I, output: O) -> Self
+    pub fn func_type<I, T, O>(params: I, output: O) -> Self
     where
         I: IntoIterator<Item = (Free, T)>,
         T: Into<Term>,
@@ -758,7 +758,7 @@ impl Term {
         }))
     }
 
-    pub(crate) fn tuple_type_unit() -> Self {
+    pub fn tuple_type_unit() -> Self {
         Self::from(Subterm::TupleType(TupleType {
             telescope: Telescope::done(()),
         }))
@@ -835,12 +835,7 @@ impl Term {
         Self::induct_type_at(name, Vec::<Level>::new(), params, indices)
     }
 
-    pub(crate) fn induct_type_at<U, I, P, J, Q>(
-        name: Global,
-        universes: U,
-        params: I,
-        indices: J,
-    ) -> Self
+    pub fn induct_type_at<U, I, P, J, Q>(name: Global, universes: U, params: I, indices: J) -> Self
     where
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
@@ -868,7 +863,7 @@ impl Term {
         Self::variant_at(name, Vec::<Level>::new(), params, tag, payload)
     }
 
-    pub(crate) fn variant_at<U, I, P, A, J, Q>(
+    pub fn variant_at<U, I, P, A, J, Q>(
         name: Global,
         universes: U,
         params: I,
@@ -901,7 +896,7 @@ impl Term {
         Self::struct_type_at(name, Vec::<Level>::new(), params)
     }
 
-    pub(crate) fn struct_type_at<U, I, P>(name: Global, universes: U, params: I) -> Self
+    pub fn struct_type_at<U, I, P>(name: Global, universes: U, params: I) -> Self
     where
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
@@ -926,7 +921,7 @@ impl Term {
         Self::struct_at(name, Vec::<Level>::new(), params, fields)
     }
 
-    pub(crate) fn struct_at<U, I, P, J, Q>(name: Global, universes: U, params: I, fields: J) -> Self
+    pub fn struct_at<U, I, P, J, Q>(name: Global, universes: U, params: I, fields: J) -> Self
     where
         U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
@@ -1099,7 +1094,7 @@ impl Term {
 
     /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
     /// one plicity mark per payload binder (the [`InductArm`] invariant).
-    pub(crate) fn induct_cases_marked<I, A, B>(cases: I) -> Vec<(Atom, InductArm)>
+    pub fn induct_cases_marked<I, A, B>(cases: I) -> Vec<(Atom, InductArm)>
     where
         I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
@@ -1512,8 +1507,11 @@ impl Term {
         }))
     }
 
-    pub(crate) fn rec_member(group: RecGroup, index: usize) -> Self {
-        assert!(index < group.len(), "recursive member index out of bounds");
+    pub fn rec_member(group: RecGroup, index: usize) -> Self {
+        assert!(
+            index < group.length(),
+            "recursive member index out of bounds"
+        );
         Self::from(Subterm::RecMember(RecMember { group, index }))
     }
 }
@@ -1908,7 +1906,7 @@ impl Term {
     /// clone: `define`'s selective reduction-cache invalidation probes every
     /// cached WHNF, and cloning each entry's set there would swamp the walk
     /// it avoids.
-    pub(crate) fn mentions_free(&self, name: &Free) -> bool {
+    pub fn mentions_free(&self, name: &Free) -> bool {
         self.get_or_init_free_vars().contains(name)
     }
 
@@ -1925,7 +1923,7 @@ impl Term {
     /// spine) short-circuits without walking, so the enumeration only ever
     /// recurses through metavariable-bearing structure, whose depth is bounded
     /// by the written program.
-    pub(crate) fn metavars(&self) -> BTreeSet<MetaId> {
+    pub fn metavars(&self) -> BTreeSet<MetaId> {
         let mut ids = BTreeSet::new();
         if self.has_metavar() {
             self.inner.subterm.collect_metavars(&mut ids);
@@ -1937,7 +1935,7 @@ impl Term {
     /// gated on [`has_metavar`](Self::has_metavar) like [`metavars`](Self::metavars),
     /// and — since `Subterm::any_metavar`'s recursion re-enters through each
     /// child `Term` — every ground subtree it reaches short-circuits too.
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         self.has_metavar() && self.inner.subterm.any_metavar(pred)
     }
 }
@@ -2240,34 +2238,34 @@ pub struct InductArm {
 
 impl InductArm {
     /// The arm's payload arity — equal to `plicities.len()`.
-    pub(crate) fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         self.body.arity()
     }
 
     /// Open the arm body at its payload binders, positionally (plicity is not
     /// consulted by reduction or erasure).
-    pub(crate) fn open(&self, args: &[&Term]) -> Term {
+    pub fn open(&self, args: &[&Term]) -> Term {
         self.body.open(args)
     }
 
     /// The arm body's free-variable reach, past its payload binders.
-    pub(crate) fn reach(&self) -> usize {
+    pub fn reach(&self) -> usize {
         self.body.reach()
     }
 
     /// The arm's payload binder hints, in order.
-    pub(crate) fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
+    pub fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
         self.body.hint_iter()
     }
 
     /// The arm's payload binders, in order.
-    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
+    pub fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
         self.body.binder_iter()
     }
 
     /// Rebuild the arm with its whole body scope replaced, preserving the
     /// plicity vector (the traversal-side reconstruction helper).
-    pub(crate) fn with_body(&self, body: Scope<Many>) -> Self {
+    pub fn with_body(&self, body: Scope<Many>) -> Self {
         InductArm {
             body,
             plicities: self.plicities.clone(),
@@ -2384,7 +2382,7 @@ pub struct LetBinding {
 }
 
 impl LetBinding {
-    pub(crate) fn new(type_: Term, value: Term) -> Self {
+    pub fn new(type_: Term, value: Term) -> Self {
         Self { type_, value }
     }
 
@@ -2396,7 +2394,7 @@ impl LetBinding {
         &self.value
     }
 
-    pub(crate) fn into_parts(self) -> (Term, Term) {
+    pub fn into_parts(self) -> (Term, Term) {
         (self.type_, self.value)
     }
 }
@@ -2409,8 +2407,8 @@ impl LetBinding {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct RecMemberScopes {
-    pub(crate) type_: Scope<Many>,
-    pub(crate) body: Scope<Many>,
+    pub type_: Scope<Many>,
+    pub body: Scope<Many>,
 }
 
 /// The shared knot of a mutually-recursive group. Every member type and body
@@ -2426,7 +2424,7 @@ pub struct RecGroup {
 }
 
 impl RecGroup {
-    pub(crate) fn new(items: Vec<RecMemberScopes>) -> Self {
+    pub fn new(items: Vec<RecMemberScopes>) -> Self {
         Self {
             scheme: UniverseScheme::monomorphic(Rc::new(items)),
         }
@@ -2438,7 +2436,7 @@ impl RecGroup {
     /// Bruijn indices, and two structurally identical such terms — indices
     /// included — denote the same thing at the same depth, so canonicalizing
     /// them together is sound without opening.
-    pub(crate) fn map_members(&self, mut map: impl FnMut(&Term) -> Term) -> Self {
+    pub fn map_members(&self, mut map: impl FnMut(&Term) -> Term) -> Self {
         Self {
             scheme: UniverseScheme {
                 context: self.scheme.context.clone(),
@@ -2454,7 +2452,7 @@ impl RecGroup {
         }
     }
 
-    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
         self.scheme.value.iter()
     }
 
@@ -2469,34 +2467,34 @@ impl RecGroup {
         &self.scheme.context
     }
 
-    pub(crate) fn with_universe_context(mut self, universe_context: UniverseContext) -> Self {
+    pub fn with_universe_context(mut self, universe_context: UniverseContext) -> Self {
         self.scheme.context = universe_context;
         self
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn length(&self) -> usize {
         self.iter().len()
     }
 
-    pub(crate) fn members(&self) -> Vec<Term> {
-        (0..self.len())
+    pub fn members(&self) -> Vec<Term> {
+        (0..self.length())
             .map(|index| Term::rec_member(self.clone(), index))
             .collect()
     }
 
-    pub(crate) fn member_type(&self, index: usize) -> Term {
+    pub fn member_type(&self, index: usize) -> Term {
         let members = self.members();
         let refs = members.iter().collect::<Vec<_>>();
         self.item(index).type_.open(&refs)
     }
 
-    pub(crate) fn member_body(&self, index: usize) -> Term {
+    pub fn member_body(&self, index: usize) -> Term {
         let members = self.members();
         let refs = members.iter().collect::<Vec<_>>();
         self.item(index).body.open(&refs)
     }
 
-    pub(crate) fn instantiate_universes(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
+    pub fn instantiate_universes(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
         if arguments.len() != self.scheme.context.parameter_count {
             return Err(UniverseError::InstanceArity {
                 expected: self.scheme.context.parameter_count,
@@ -2775,28 +2773,28 @@ impl Subterm {
         }
     }
 
-    pub(crate) fn as_nat(&self) -> Option<Nat> {
+    pub fn as_nat(&self) -> Option<Nat> {
         match self {
             Subterm::Prim(Prim::Nat(nat)) => Some(nat.clone()),
             _ => None,
         }
     }
 
-    pub(crate) fn as_int(&self) -> Option<Int> {
+    pub fn as_int(&self) -> Option<Int> {
         match self {
             Subterm::Prim(Prim::Int(value)) => Some(value.clone()),
             _ => None,
         }
     }
 
-    pub(crate) fn as_flt(&self) -> Option<Flt> {
+    pub fn as_flt(&self) -> Option<Flt> {
         match self {
             Subterm::Prim(Prim::Flt(value)) => Some(*value),
             _ => None,
         }
     }
 
-    pub(crate) fn as_bool(&self) -> Option<bool> {
+    pub fn as_bool(&self) -> Option<bool> {
         match self {
             Subterm::Prim(Prim::Bool(value)) => Some(*value),
             _ => None,
@@ -2821,7 +2819,7 @@ impl Subterm {
         names
     }
 
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
+    pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => {}
             Subterm::UniverseInst(UniverseInst { head, .. }) => {
@@ -2990,7 +2988,7 @@ impl Subterm {
     /// (which is this with a collector that never stops): the reducer's memo
     /// gate uses it to reject caching a WHNF that still names an unsolved
     /// metavariable, without allocating the full id set.
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
@@ -3099,7 +3097,7 @@ impl Subterm {
     /// rather than short-circuiting. That reuse is deliberate: it is what keeps
     /// the positivity check from silently missing a recursive occurrence when a
     /// new term former is added.
-    pub(crate) fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
@@ -3187,7 +3185,7 @@ impl Subterm {
     /// A local is a [`Free::Local`], so this is a discriminant test. It used to
     /// be a search for a marker character in the spelling, which a compiler-made
     /// *global* could set by accident — and once did.
-    pub(crate) fn has_local_free(&self) -> bool {
+    pub fn has_local_free(&self) -> bool {
         match self {
             Subterm::Var(var) => var.as_free().is_some_and(Free::is_local),
             _ => self.any_child_term(&mut |t| t.has_local_free()),
@@ -3197,14 +3195,14 @@ impl Subterm {
     /// Whether any `Metavar` node occurs in this subterm — the uncached
     /// spelling of [`Term::has_metavar`], which supplies the per-node
     /// memoization.
-    pub(crate) fn has_metavar(&self) -> bool {
+    pub fn has_metavar(&self) -> bool {
         match self {
             Subterm::Metavar(_) => true,
             _ => self.any_child_term(&mut |t| t.has_metavar()),
         }
     }
 
-    pub(crate) fn has_universe_meta(&self) -> bool {
+    pub fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
             Subterm::Type(level) => level_has_meta(level),
@@ -3222,7 +3220,7 @@ impl Subterm {
         }
     }
 
-    pub(crate) fn has_universe_data(&self) -> bool {
+    pub fn has_universe_data(&self) -> bool {
         match self {
             Subterm::Type(level) => level != &Level::zero(),
             Subterm::UniverseInst(_) => true,

@@ -97,13 +97,13 @@ impl InductDecl {
     /// sound default. `Unused` would be the *unsound* one: it claims a
     /// parameter is harmless without evidence, which is exactly what lets a
     /// negative occurrence through.
-    pub(crate) fn polarity(&self, i: usize) -> Polarity {
+    pub fn polarity(&self, i: usize) -> Polarity {
         self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
     }
 
     /// This declaration with every term hash-consed against `sharing`. See
     /// [`Module::shared`](crate::Module::shared).
-    pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
+    pub fn shared(&self, sharing: &crate::Sharing) -> Self {
         Self {
             universe_context: self.universe_context.clone(),
             params: sharing.share(&self.params),
@@ -132,14 +132,14 @@ impl InductDecl {
     /// Instantiate `tag`'s signature at the given type parameters, yielding the
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
     /// `(_0 : Nat) -> InductType { Result, [Nat, Bin] }`.
-    pub(crate) fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
+    pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
         Some(self.constructor(tag)?.telescope.clone().open_params(params))
     }
 
     /// `tag`'s signature entry, or `None` if it is not a case of this
     /// inductive. Constructor counts are small, so the scan is cheaper than the
     /// tree the collation-ordered map needed.
-    pub(crate) fn constructor(&self, tag: &Atom) -> Option<&InductParam> {
+    pub fn constructor(&self, tag: &Atom) -> Option<&InductParam> {
         self.constructors
             .iter()
             .find(|(candidate, _)| candidate == tag)
@@ -147,12 +147,12 @@ impl InductDecl {
     }
 
     /// Every constructor signature, in declaration order.
-    pub(crate) fn signatures(&self) -> impl Iterator<Item = &InductParam> {
+    pub fn signatures(&self) -> impl Iterator<Item = &InductParam> {
         self.constructors.iter().map(|(_, param)| param)
     }
 
     /// Every constructor signature mutably, in declaration order.
-    pub(crate) fn signatures_mut(&mut self) -> impl Iterator<Item = &mut InductParam> {
+    pub fn signatures_mut(&mut self) -> impl Iterator<Item = &mut InductParam> {
         self.constructors.iter_mut().map(|(_, param)| param)
     }
 
@@ -160,7 +160,7 @@ impl InductDecl {
     /// signature plicities past the leading `params.len()` declaration
     /// parameters, paralleling the telescope [`Self::instantiate`] peels. `None`
     /// if `tag` is not a constructor of this inductive.
-    pub(crate) fn payload_plicities(&self, tag: &Atom) -> Option<&[Plicity]> {
+    pub fn payload_plicities(&self, tag: &Atom) -> Option<&[Plicity]> {
         let param_count = self.params.len();
         self.constructor(tag)
             .map(|param| &param.plicities[param_count..])
@@ -172,18 +172,18 @@ impl InductDecl {
     /// (`erase_induct_match`). Both sites must derive that correspondence from
     /// this one method, not from their own walk over `constructors`, so the
     /// two can never disagree about what "index `i`" means.
-    pub(crate) fn constructor_order(&self) -> impl Iterator<Item = &Atom> {
+    pub fn constructor_order(&self) -> impl Iterator<Item = &Atom> {
         self.constructors.iter().map(|(tag, _)| tag)
     }
 
     /// Whether `tag` is one of this inductive's declared cases.
-    pub(crate) fn declares(&self, tag: &Atom) -> bool {
+    pub fn declares(&self, tag: &Atom) -> bool {
         self.constructor(tag).is_some()
     }
 
     /// `tag`'s position in [`Self::constructor_order`] — the runtime tag
     /// `erase_variant` gives a value constructed with it.
-    pub(crate) fn constructor_index(&self, tag: &Atom) -> Option<usize> {
+    pub fn constructor_index(&self, tag: &Atom) -> Option<usize> {
         self.constructor_order()
             .position(|candidate| candidate == tag)
     }

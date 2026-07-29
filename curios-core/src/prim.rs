@@ -8,7 +8,7 @@ use {
 /// The core type a host-boundary [`WireType`] denotes — the one reading of the
 /// signature shared by elaboration (operand checks, result records) and
 /// erasure, so the two cannot disagree about what crosses the wire.
-pub(crate) fn wire_term(wire_type: &WireType) -> Term {
+pub fn wire_term(wire_type: &WireType) -> Term {
     let prim = match wire_type {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
@@ -928,13 +928,13 @@ impl Prim {
         }
     }
 
-    pub(crate) fn reach(&self) -> usize {
+    pub fn reach(&self) -> usize {
         let mut reach = 0;
         self.for_each_operand(&mut |term| reach = reach.max(term.reach()));
         reach
     }
 
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || term.any_metavar(pred));
         found
@@ -943,7 +943,7 @@ impl Prim {
     /// Whether any operand `Term` satisfies `pred` — the `Prim` leg of
     /// `Subterm::any_child_term`, layered on the private operand walker like
     /// `any_metavar` above.
-    pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || pred(term));
         found
@@ -952,11 +952,11 @@ impl Prim {
     // Recurse into every operand `Term` so a construction nested inside a primitive
     // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
+    pub fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 
-    pub(crate) fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
+    pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -1133,22 +1133,10 @@ impl Prim {
 /// type-former `Prim`s those helpers accept, as a closed set so an out-of-range
 /// selector is unrepresentable rather than an `unreachable!` panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PrimHead {
+pub enum PrimHead {
     Nat,
     Bool,
     Bin(Grain),
-}
-
-#[cfg(test)]
-impl Prim {
-    /// Test-only shorthand: a `Lst` literal from anything term-shaped.
-    pub(crate) fn lst<I, A>(items: I) -> Self
-    where
-        I: IntoIterator<Item = A>,
-        A: Into<Term>,
-    {
-        Self::Lst(items.into_iter().map(Into::into).collect())
-    }
 }
 
 /// Visit both operands of a binary primitive and rebuild it through `build`. The

@@ -320,19 +320,19 @@ pub(super) fn elaborate_num_lit(
     Ok((Term::prim(prim), type_))
 }
 
-impl Infix {
-    /// The shape default for an infix operator whose operand type nothing
-    /// pinned: any signed/negative literal operand forces `Int`, otherwise
-    /// `Nat`.
-    pub(super) fn default_type(&self) -> Prim {
-        let signed =
-            |operand: &Term| matches!(&**operand, Subterm::NumLit(num_lit) if num_lit.signed);
+/// The shape default for an infix operator whose operand type nothing pinned:
+/// any signed/negative literal operand forces `Int`, otherwise `Nat`.
+///
+/// A free function rather than an inherent method on [`Infix`]: the node is
+/// representation and lives in `curios-core`, while literal defaulting is an
+/// elaboration decision.
+pub(super) fn infix_default_type(infix: &Infix) -> Prim {
+    let signed = |operand: &Term| matches!(&**operand, Subterm::NumLit(num_lit) if num_lit.signed);
 
-        if signed(&self.left) || signed(&self.right) {
-            Prim::IntType
-        } else {
-            Prim::NatType
-        }
+    if signed(&infix.left) || signed(&infix.right) {
+        Prim::IntType
+    } else {
+        Prim::NatType
     }
 }
 
@@ -393,7 +393,7 @@ pub(super) fn elaborate_infix(
     // Nothing pinned `?T` — every non-literal operand left it open. Default from
     // the operand shapes so the literal operands have a concrete type to take.
     if context.metavar_solution(operand_id).is_none() {
-        let default = infix.default_type();
+        let default = infix_default_type(infix);
         context.solve_metavar(operand_id, Subterm::Prim(default).into());
     }
 

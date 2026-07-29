@@ -53,13 +53,13 @@ impl StructDecl {
     /// This declaration's polarity in its `i`th parameter, defaulting to
     /// [`Polarity::Mixed`] before the declaration is analyzed. See
     /// [`InductDecl::polarity`](super::InductDecl).
-    pub(crate) fn polarity(&self, i: usize) -> Polarity {
+    pub fn polarity(&self, i: usize) -> Polarity {
         self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
     }
 
     /// This declaration with every term hash-consed against `sharing`. See
     /// [`Module::shared`](crate::Module::shared).
-    pub(crate) fn shared(&self, sharing: &crate::Sharing) -> Self {
+    pub fn shared(&self, sharing: &crate::Sharing) -> Self {
         Self {
             universe_context: self.universe_context.clone(),
             params: sharing.share(&self.params),
@@ -77,7 +77,7 @@ impl StructDecl {
     /// `(fst : Nat, snd : Bin)`. Peels the leading `params.len()` binders by
     /// opening each with the corresponding parameter — exactly as
     /// `Inductive::instantiate` does for a constructor signature.
-    pub(crate) fn fields_at(&self, params: &[Term]) -> Telescope<()> {
+    pub fn fields_at(&self, params: &[Term]) -> Telescope<()> {
         self.fields.clone().open_params(params)
     }
 }

@@ -19,7 +19,7 @@ use {
 /// One step of peeling two free-monoid values. Each caller maps it into its own
 /// vocabulary: `invert` to `Step::{Ok, Clash, Refuse}`, `convert` to a `bool`
 /// with the residual enqueued.
-pub(crate) enum Peel {
+pub enum Peel {
     /// Both sides consumed to the identity — definitionally equal.
     Equal,
     /// A common head peeled off; compare these residual tails next.
@@ -34,7 +34,7 @@ pub(crate) enum Peel {
 /// Classify a reduced primitive pair. `None` means the pair is not a matched
 /// spine-primitive, so the caller keeps its own handling; `Some` is the peel
 /// outcome.
-pub(crate) fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
+pub fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
     match (left, right) {
         (Prim::Nat(actual), Prim::Nat(target)) => Some(peel_nat(actual, target)),
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
@@ -58,7 +58,7 @@ fn decide(equal: bool) -> Peel {
 /// becomes `1 ~ ?n`. A leftover positive spine against zero is a definite clash.
 /// The `is_zero` guards mirror the inverter's defence against a non-canonical
 /// `Succ(0, _)` (which `Nat::new` normalisation never actually produces).
-pub(crate) fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
+pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
     let zero = || Term::prim(Prim::Nat(Nat::Zero));
     let succ = |spine, rest: &Term| Term::prim(Prim::Nat(Nat::Succ(spine, rest.clone())));
 
@@ -227,7 +227,7 @@ fn against_identity<E>(atom: &Atom<E>) -> Peel {
 /// (`append(\\, h1)` vs `append(\\, h2)`) — or two windows whose bounds differ
 /// only up to arithmetic — are left to the caller's structural comparison rather
 /// than decided here.
-pub(crate) fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
+pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
     let grain = bin_grain(left)?;
     if bin_grain(right) != Some(grain) {
         return None;
@@ -260,7 +260,7 @@ pub(crate) fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
 /// comparison settles it. And its concatenation carries an element type, recovered
 /// here to rebuild a residual `LstConcat`. A leftover literal run against the empty
 /// identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
-pub(crate) fn peel_lst(left: &Prim, right: &Prim) -> Option<Peel> {
+pub fn peel_lst(left: &Prim, right: &Prim) -> Option<Peel> {
     if !lst_valued(left) || !lst_valued(right) {
         return None;
     }

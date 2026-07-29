@@ -1,7 +1,8 @@
 use {
     super::{
         Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
-        StructDecl, Term, Totality, UniverseContext, UniverseSeed, build_shorten, with_short_names,
+        StructDecl, Term, Totality, UniverseContext, UniverseSeed, build_shorten,
+        universe_context_validate, with_short_names,
     },
     curios_base::{Qualifier, RootId},
     std::{
@@ -140,7 +141,7 @@ impl RecItem {
             .first()
             .map(|definition| definition.universe_context.clone())
             .unwrap_or_default();
-        universe_context.validate()?;
+        universe_context_validate(&universe_context)?;
         if !definitions
             .iter()
             .all(|definition| definition.universe_context == universe_context)

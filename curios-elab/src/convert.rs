@@ -1278,11 +1278,11 @@ impl Convert {
         this: Rec,
         that: Rec,
     ) -> Result<bool, ReduceError> {
-        if this.group.len() != that.group.len() {
+        if this.group.length() != that.group.length() {
             return Ok(false);
         }
 
-        let labels = (0..this.group.len())
+        let labels = (0..this.group.length())
             .map(|_| Term::free_var(&self.opening(context, None)))
             .collect::<Vec<_>>();
 
@@ -2270,14 +2270,14 @@ impl Convert {
                             context,
                             Rec {
                                 tail: Scope::constant(
-                                    super::Many(this.group.len()),
+                                    super::Many(this.group.length()),
                                     Term::var(super::Var::bound(this.index)),
                                 ),
                                 group: this.group,
                             },
                             Rec {
                                 tail: Scope::constant(
-                                    super::Many(that.group.len()),
+                                    super::Many(that.group.length()),
                                     Term::var(super::Var::bound(that.index)),
                                 ),
                                 group: that.group,

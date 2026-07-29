@@ -525,11 +525,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-core"
+version = "0.5.0"
+dependencies = [
+ "curios-abi",
+ "curios-base",
+ "num-bigint",
+ "num-traits",
+ "rkyv",
+ "tracing",
+]
+
+[[package]]
 name = "curios-elab"
 version = "0.5.0"
 dependencies = [
  "curios-abi",
  "curios-base",
+ "curios-core",
  "curios-ersd",
  "num-bigint",
  "num-traits",

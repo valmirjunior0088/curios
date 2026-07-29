@@ -61,7 +61,7 @@ pub struct Mint {
 }
 
 impl Mint {
-    pub(crate) fn new(index: u32, hint: Option<&str>) -> Self {
+    pub fn new(index: u32, hint: Option<&str>) -> Self {
         Self {
             index,
             hint: hint.map(str::to_string),
@@ -75,13 +75,13 @@ impl Mint {
     /// stage that renders it. The variant itself stays public — downstream code
     /// holds and compares binders — but it cannot look inside one. The index has
     /// no accessor at all: nothing ever needed to read it, only to compare it.
-    pub(crate) fn hint(&self) -> Option<&str> {
+    pub fn hint(&self) -> Option<&str> {
         self.hint.as_deref()
     }
 
     /// The same identity under a different display hint. Used where a rebuild
     /// has to restore the source spelling of binders it re-minted.
-    pub(crate) fn with_hint(&self, hint: Option<&str>) -> Self {
+    pub fn with_hint(&self, hint: Option<&str>) -> Self {
         Self::new(self.index, hint)
     }
 }
@@ -203,7 +203,7 @@ impl Free {
     }
 
     /// The binder this names, if it names one.
-    pub(crate) fn as_local(&self) -> Option<&Mint> {
+    pub fn as_local(&self) -> Option<&Mint> {
         match self {
             Free::Local(mint) => Some(mint),
             Free::Global(_) => None,
@@ -220,13 +220,13 @@ impl Free {
     /// What a diagnostic should call this, if there is anything better than its
     /// rendered form: a local's minting hint, or nothing for a global, whose
     /// rendering the printer shortens against the module it appears in.
-    pub(crate) fn hint(&self) -> Option<&str> {
+    pub fn hint(&self) -> Option<&str> {
         self.as_local().and_then(Mint::hint)
     }
 
     /// The same identity rendering as `hint`. A global has no hint to replace —
     /// its rendering is its path — so it is returned unchanged.
-    pub(crate) fn relabelled(&self, hint: &str) -> Self {
+    pub fn relabelled(&self, hint: &str) -> Self {
         match self {
             Free::Local(mint) => Free::Local(mint.with_hint(Some(hint))),
             Free::Global(_) => self.clone(),

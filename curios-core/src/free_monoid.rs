@@ -27,7 +27,7 @@ use {
 /// unary successor carries no payload — over the symbolic tail the induction
 /// hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable,
 /// a non-cons symbolic concatenation), where the eliminator rebuilds.
-pub(crate) enum Layer {
+pub enum Layer {
     Empty,
     Cons { head: Option<Term>, tail: Term },
     Stuck(Subterm),
@@ -39,7 +39,7 @@ pub(crate) enum Layer {
 /// eliminator already carries (`reduce` maps one to the other). `uncons` is the only
 /// seam the structural eliminator needs; the recursion scheme around it is
 /// carrier-generic and lives in `reduce`.
-pub(crate) enum FreeMonoid {
+pub enum FreeMonoid {
     /// The free monoid on one payload-less generator: the unary naturals. `succ`
     /// peels to its predecessor with no head.
     Unary,
@@ -53,7 +53,7 @@ pub(crate) enum FreeMonoid {
 impl FreeMonoid {
     /// Decode one constructor layer off an already-reduced scrutinee — the values
     /// live as `Subterm`s, so the carrier is the only thing dispatched on.
-    pub(crate) fn uncons(self, scrutinee: Subterm) -> Layer {
+    pub fn uncons(self, scrutinee: Subterm) -> Layer {
         match self {
             FreeMonoid::Unary => Self::uncons_unary(scrutinee),
             FreeMonoid::Bin(grain) => Self::uncons_bin(grain, scrutinee),
@@ -244,7 +244,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
 /// `Utf8` relation builds (`concat(append(\\, h), t)`) along with literal runs and
 /// concatenations. `None` for the empty bytestring or an opaque symbolic value,
 /// where no first byte is statically exposed.
-pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
+pub fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
     match peel_front(grain, bin) {
         Front::Cons { head, tail } => Some((head.into_chunk(grain), tail)),
         Front::Empty | Front::Opaque => None,
@@ -315,7 +315,7 @@ fn peel_front_lst(lst: &Term) -> LstFront {
 /// and `Lst/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/
 /// `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque
 /// symbolic value, where no first element is statically exposed.
-pub(crate) fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
+pub fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
     match peel_front_lst(lst) {
         LstFront::Cons { head, tail } => Some((head, tail)),
         LstFront::Empty | LstFront::Opaque => None,
@@ -346,7 +346,7 @@ fn is_nonempty_lst_literal(term: &Term) -> bool {
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here:
 /// that is the spine peel's job when *deciding equality* (`spine::push`); reduction
 /// only needs a normal form, and conversion closes any residual gap.
-pub(crate) fn normalize_concat<E: Clone>(
+pub fn normalize_concat<E: Clone>(
     operands: Vec<Term>,
     literal: fn(&Term) -> Option<&[E]>,
     into_literal: impl FnOnce(Vec<E>) -> Subterm,

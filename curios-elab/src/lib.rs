@@ -8,38 +8,16 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Term`, not paths into the modules.
 
-mod scope;
-pub use scope::*;
+/// The core language this stage elaborates into: terms, binders, primitives,
+/// universes, and the nominal registry. Re-exported flat so the elaborator's
+/// modules keep naming them unqualified, as they did when they lived here.
+pub use curios_core::*;
 
-mod nat;
-pub use nat::*;
-
-mod universe;
-pub use universe::*;
-
-mod prim;
-pub use prim::*;
-
-mod spine;
-pub(crate) use spine::*;
-
-mod free_monoid;
-use free_monoid::*;
-
-mod names;
-pub use names::*;
-
-mod term;
-pub use term::*;
+mod universe_solver;
+pub use universe_solver::*;
 
 mod module;
 pub use module::*;
-
-mod inductive;
-pub use inductive::*;
-
-mod structure;
-pub use structure::*;
 
 mod concept;
 pub use concept::*;
@@ -49,9 +27,6 @@ pub use positivity::*;
 
 mod totality;
 pub use totality::*;
-
-mod print;
-use print::*;
 
 mod reduce;
 pub(crate) use reduce::*;

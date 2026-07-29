@@ -4,9 +4,11 @@ mod tests;
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Definition, DefinitionKind, Error, Free, Func,
-        FuncType, Global, InductDecl, InductParam, InductType, Item, Let, Level, Match, MetaId,
-        Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl,
-        StructType, Subterm, Term, Tuple, TupleType, UniverseContext, UniverseInst, Variant, Visit,
+        FuncType, Global, InductDecl, InductParam, InductType, Item, Let, Level, LevelHead, Match,
+        MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext, UniverseError,
+        UniverseInst, UniverseMetaId, UniverseSolver, Variant, Visit,
+        rewrite_universe_levels_scoped, shift_universe_params, universe_context_validate,
     },
     curios_base::Grain,
     std::{
@@ -147,8 +149,8 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 name.clone(),
                 InductDecl {
                     universe_context: induct_decl.universe_context.clone(),
-                    params: induct_decl.params.zonk(context)?,
-                    indices: induct_decl.indices.zonk(context)?,
+                    params: zonk_field_telescope(context, &induct_decl.params)?,
+                    indices: zonk_field_telescope(context, &induct_decl.indices)?,
                     constructors: induct_decl
                         .constructors
                         .iter()
@@ -156,7 +158,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                             Ok((
                                 tag.clone(),
                                 InductParam {
-                                    telescope: param.telescope.zonk(context)?,
+                                    telescope: zonk_telescope(context, &param.telescope)?,
                                     plicities: param.plicities.clone(),
                                 },
                             ))
@@ -181,8 +183,8 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 name.clone(),
                 StructDecl {
                     universe_context: struct_decl.universe_context.clone(),
-                    params: struct_decl.params.zonk(context)?,
-                    fields: struct_decl.fields.zonk(context)?,
+                    params: zonk_field_telescope(context, &struct_decl.params)?,
+                    fields: zonk_field_telescope(context, &struct_decl.fields)?,
                     result_sort: zonk_term(context, &struct_decl.result_sort)?,
                     module: struct_decl.module.clone(),
                     root: struct_decl.root,
@@ -208,7 +210,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     name.clone(),
                     super::Concept {
                         universe_context: concept.universe_context.clone(),
-                        params: concept.params.zonk(context)?,
+                        params: zonk_field_telescope(context, &concept.params)?,
                         fields: concept.fields.clone(),
                         supers: concept.supers.clone(),
                         root: concept.root,
@@ -242,7 +244,7 @@ pub(crate) fn validate_bound_universes<B: Bound>(
             };
             for context in contexts {
                 if error.borrow().is_none()
-                    && let Err(found) = context.validate()
+                    && let Err(found) = universe_context_validate(context)
                 {
                     *error.borrow_mut() = Some(found);
                 }
@@ -551,7 +553,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             Item::Let(definition) => vec![definition.clone()],
             Item::Rec(rec) => rec.definitions(),
         } {
-            definition.universe_context.validate().map_err(|error| {
+            universe_context_validate(&definition.universe_context).map_err(|error| {
                 Error::UniverseInvariant(format!(
                     "definition {} has an invalid universe context: {error}",
                     definition.name
@@ -571,7 +573,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
         }
     }
     for (name, induct_decl) in &module.induct_decls {
-        induct_decl.universe_context.validate().map_err(|error| {
+        universe_context_validate(&induct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "inductive {name} has an invalid universe context: {error}"
             ))
@@ -601,7 +603,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
         }
     }
     for (name, struct_decl) in &module.struct_decls {
-        struct_decl.universe_context.validate().map_err(|error| {
+        universe_context_validate(&struct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "structure {name} has an invalid universe context: {error}"
             ))
@@ -631,7 +633,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
         }
     }
     for (name, concept) in &module.concepts {
-        concept.universe_context.validate().map_err(|error| {
+        universe_context_validate(&concept.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "concept {name} has an invalid universe context: {error}"
             ))
@@ -899,7 +901,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             telescope,
             plicities,
         }) => Subterm::Func(Func {
-            telescope: telescope.zonk(context)?,
+            telescope: zonk_telescope(context, telescope)?,
             plicities: plicities.clone(),
         }),
 
@@ -907,7 +909,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             telescope,
             plicities,
         }) => Subterm::FuncType(FuncType {
-            telescope: telescope.zonk(context)?,
+            telescope: zonk_telescope(context, telescope)?,
             plicities: plicities.clone(),
         }),
 
@@ -922,7 +924,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         }),
 
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
-            telescope: telescope.zonk(context)?,
+            telescope: zonk_field_telescope(context, telescope)?,
         }),
 
         Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
@@ -1298,5 +1300,87 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, c)?,
         ),
         Prim::CellGet(a, b) => Prim::CellGet(zonk_term(context, a)?, zonk_term(context, b)?),
+    })
+}
+
+/// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and its
+/// trailing body/return type, which is a real term to recurse into.
+///
+/// A free function rather than an inherent method on [`Telescope`]: the
+/// telescope is representation, this is the elaborator's metavariable
+/// machinery, and only the latter may name [`Context`].
+pub(crate) fn zonk_telescope(
+    context: &Context,
+    telescope: &Telescope<Term>,
+) -> Result<Telescope<Term>, Error> {
+    match telescope {
+        Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
+        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+            zonk_term(context, ty)?,
+            rest.try_map_body(|inner| zonk_telescope(context, inner))?,
+        )),
+    }
+}
+
+/// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is
+/// `()`, which carries no metavariables and is rebuilt as-is. The companion of
+/// [`zonk_telescope`], and a free function for the same reason.
+pub(crate) fn zonk_field_telescope(
+    context: &Context,
+    telescope: &Telescope<()>,
+) -> Result<Telescope<()>, Error> {
+    match telescope {
+        Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
+        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+            zonk_term(context, ty)?,
+            rest.try_map_body(|inner| zonk_field_telescope(context, inner))?,
+        )),
+    }
+}
+
+/// Replace every solved universe metavariable under `value`'s binders by its
+/// recursively zonked solution, shifting each solution past the binders it
+/// crosses.
+///
+/// Lives here rather than beside the scoped-rewrite traversals it calls: those
+/// are representation, while [`UniverseSolver`] is elaboration state.
+pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
+    value: &B,
+    solver: &UniverseSolver,
+) -> Result<B, UniverseError> {
+    fn zonk_solution(
+        solver: &UniverseSolver,
+        level: &Level,
+        visiting: &mut BTreeSet<UniverseMetaId>,
+    ) -> Result<Level, UniverseError> {
+        let mut replacements = BTreeMap::new();
+        for meta in level.metas() {
+            if let Some(solution) = solver.solution(meta)
+                && visiting.insert(meta)
+            {
+                let zonked = zonk_solution(solver, solution, visiting)?;
+                visiting.remove(&meta);
+                replacements.insert(meta, zonked);
+            }
+        }
+        level.substitute(|head| match head {
+            LevelHead::Param(_) => None,
+            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
+        })
+    }
+
+    let solver = solver.clone();
+    rewrite_universe_levels_scoped(value, move |depth, level| {
+        let mut replacements = BTreeMap::new();
+        for meta in level.metas() {
+            if let Some(solution) = solver.solution(meta) {
+                let zonked = zonk_solution(&solver, solution, &mut BTreeSet::from([meta]))?;
+                replacements.insert(meta, shift_universe_params(&zonked, depth)?);
+            }
+        }
+        level.substitute(|head| match head {
+            LevelHead::Param(_) => None,
+            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
+        })
     })
 }

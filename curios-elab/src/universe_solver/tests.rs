@@ -1,8 +1,8 @@
-use super::*;
 use std::{
     collections::{BTreeSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
 };
+use {super::*, curios_base::Span};
 
 fn origin(label: &str) -> UniverseConstraintOrigin {
     UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
@@ -393,7 +393,7 @@ fn contexts_are_alpha_stable_and_instances_are_fresh() {
             origin: origin("residual"),
         }],
     };
-    context.validate().unwrap();
+    universe_context_validate(&context).unwrap();
     let mut solver = UniverseSolver::new(7);
     let first = solver
         .instantiate(&context, UniverseRole::Generalizable)
@@ -437,7 +437,7 @@ fn generalization_is_deterministic_and_closed() {
     assert_eq!(replacement[&u], Level::param(UniverseParam(0)));
     assert_eq!(replacement[&v], Level::param(UniverseParam(1)));
     assert_eq!(context.parameter_count, 2);
-    context.validate().unwrap();
+    universe_context_validate(&context).unwrap();
 }
 
 #[test]
@@ -470,7 +470,7 @@ fn non_principal_flexible_levels_are_promoted_to_residual_parameters() {
     let context = solver.finalize([left, right], []).unwrap();
     assert_eq!(context.parameter_count, 2);
     assert_eq!(context.constraints.len(), 1);
-    context.validate().unwrap();
+    universe_context_validate(&context).unwrap();
 }
 
 /// A declaration context is closed: universe polymorphism belongs to

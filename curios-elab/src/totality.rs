@@ -439,7 +439,7 @@ impl Guard {
 /// eliminator's, already structural by construction.
 pub(crate) fn group_totality(context: &mut Context, group: &RecGroup) -> Totality {
     let mut members = Vec::new();
-    for index in 0..group.len() {
+    for index in 0..group.length() {
         members.push(Member::of(context, group, index));
     }
     let arities = members.iter().map(|member| member.params.len()).collect();
@@ -1000,7 +1000,7 @@ impl Walk<'_> {
             // call *this* group, and such a call is a real edge of this group's
             // call graph.
             Subterm::Rec(Rec { group, tail }) => {
-                for index in 0..group.len() {
+                for index in 0..group.length() {
                     let body = group.member_body(index);
                     self.walk(&body);
                 }
