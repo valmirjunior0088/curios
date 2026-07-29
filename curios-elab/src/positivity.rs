@@ -73,6 +73,7 @@ use {
 /// That split is sound because prelude items are program-independent: they
 /// cannot mention user code, so no cycle crosses the boundary and every
 /// prelude declaration is a sink of the occurrence relation.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<(), Error> {
     if module.induct_decls.is_empty() && module.struct_decls.is_empty() {
         return Ok(());

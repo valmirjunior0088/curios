@@ -1021,6 +1021,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
 ///
 /// The prefix diverges at exactly one point: after [`check_concept_registry`],
 /// its items are *replayed* into the context rather than elaborated.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn elaborate_module_suffix(
     context: &mut Context,
     prefix: Option<&Module>,
@@ -1248,6 +1249,7 @@ fn suffix_keys<T>(
 /// the zonk. `inherited` carries the classifications of a replayed prefix, whose
 /// own verdicts were settled when its archive was built; it is empty for a
 /// from-scratch elaboration, where the module defines every name it mentions.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn finalize_and_check(
     context: &mut Context,
     mut module: Module,

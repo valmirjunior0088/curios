@@ -1215,7 +1215,7 @@ fn flatten(term: &Term) -> (Term, Vec<Term>) {
 /// for the group as a whole.
 pub fn record_definition_totality(context: &mut Context, definition: &Definition, group: Totality) {
     let partial = !group.is_total()
-        || definition_is_locally_partial(context, definition)
+        || definition_is_locally_partial(context, definition, &mut LocalMemo::new())
         || mentioned(definition).iter().any(|name| {
             context
                 .definition_totality(name)
@@ -1268,6 +1268,11 @@ pub fn check_written_type_totality(
     }
 }
 
+// Safety: the memo is keyed on `Term`, whose `OnceCell` scalar caches trip
+// Clippy's interior-mutability warning. The logical value is immutable, and
+// hashing and equality stay stable across those caches filling — the same
+// caveat `checked_proof_positions` carries.
+#[allow(clippy::mutable_key_type)]
 pub fn classify_module(
     context: &mut Context,
     module: &Module,
@@ -1275,18 +1280,22 @@ pub fn classify_module(
 ) -> BTreeMap<Global, Totality> {
     let mut local: BTreeMap<Global, bool> = BTreeMap::new();
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
+    // One cache for the whole module: definitions share subterms heavily, and a
+    // node classified for one is classified for all.
+    let mut memo = LocalMemo::new();
 
     for item in &module.items {
         match item {
             Item::Let(definition) => {
-                let partial = definition_is_locally_partial(context, definition);
+                let partial = definition_is_locally_partial(context, definition, &mut memo);
                 local.insert(definition.name.clone(), partial);
                 mentions.insert(definition.name.clone(), mentioned(definition));
             }
             Item::Rec(rec) => {
                 let rejected = group_totality(context, &rec.group) == Totality::Partial;
                 for definition in rec.definitions() {
-                    let partial = rejected || definition_is_locally_partial(context, &definition);
+                    let partial =
+                        rejected || definition_is_locally_partial(context, &definition, &mut memo);
                     local.insert(definition.name.clone(), partial);
                     mentions.insert(definition.name.clone(), mentioned(&definition));
                 }
@@ -1351,6 +1360,7 @@ pub fn classify_module(
 /// wrote rather than re-deriving it — classification reduces, so doing it once
 /// per module is the difference between one pass over the group corpus and
 /// three.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn record_totality(
     context: &mut Context,
     module: &mut Module,
@@ -1405,19 +1415,28 @@ fn settled(module: &Module, inherited: &BTreeMap<Global, Totality>) -> BTreeMap<
 /// Two ways, and a position can fail either: it reaches a definition already
 /// classified `Partial`, or it *is* partial with no name to blame — an inline
 /// `rec` that does not descend, or a `Prim::Exit`.
+// Safety: the memo is keyed on `Term`, whose `OnceCell` scalar caches trip
+// Clippy's interior-mutability warning. The logical value is immutable, and
+// hashing and equality stay stable across those caches filling — the same
+// caveat `checked_proof_positions` carries.
+#[allow(clippy::mutable_key_type)]
 fn faults(
     context: &mut Context,
     module: &Module,
     positions: &[Position],
     inherited: &BTreeMap<Global, Totality>,
 ) -> Vec<(String, Fault)> {
-    let reached = reachable(module, seeds(positions));
+    let seeded = seeds(positions);
+    let reached = reachable(module, seeded);
     let settled = settled(module, inherited);
     let named = offenders(&reached, &settled);
 
     let mut faults = Vec::new();
+    // One cache across every position: (V) seeds a literal's derivation once
+    // per link, and those links share their tails.
+    let mut memo = LocalMemo::new();
     for position in positions {
-        if term_is_locally_partial(context, &position.term) {
+        if term_is_locally_partial(context, &position.term, &mut memo) {
             faults.push((position.site.clone(), Fault::Inline));
         }
     }
@@ -1448,6 +1467,7 @@ fn faults(
 /// `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity
 /// exists to forbid without ever writing an `induct`. Runs post-zonk, after
 /// [`record_totality`], whose flags it reads.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
@@ -1507,6 +1527,7 @@ fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error>
 /// behind a proposition never fires and the program continues with a forged
 /// invariant. Independent of [`check_type_totality`]: neither obligation
 /// subsumes the other.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn check_proof_totality(
     context: &mut Context,
     module: &Module,
@@ -1676,44 +1697,92 @@ fn yields_a_sort(type_: &Term) -> bool {
 
 /// Whether this term is partial on its own account, with no name to blame: it
 /// contains a `rec` group that does not descend, or an exit.
-fn term_is_locally_partial(context: &mut Context, term: &Term) -> bool {
-    let mut groups = Vec::new();
-    let mut exits = false;
-    collect_local(term, &mut groups, &mut exits);
-    exits
-        || groups
-            .iter()
-            .any(|group| group_totality(context, group) == Totality::Partial)
+#[allow(clippy::mutable_key_type)]
+fn term_is_locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> bool {
+    locally_partial(context, term, memo)
+}
+
+/// Per-node verdicts for [`locally_partial`], carried across the terms one pass
+/// classifies.
+///
+/// Keyed on the term, whose hash is cached on the node and whose equality is
+/// already a worklist walk, so a lookup does not re-traverse what it is looking
+/// up. See [`checked_proof_positions`] for the same key and the same caveat.
+#[allow(clippy::mutable_key_type)]
+type LocalMemo = HashMap<Term, bool>;
+
+/// Whether `term` contains a `Prim::Exit` or a `rec` group that does not
+/// descend — the "is this term partial on its own account" test both
+/// obligations apply one level below a definition.
+///
+/// **Iterative and memoized, and both are load-bearing.** (V) seeds one
+/// position per link of a `Str` literal's UTF-8 derivation, and those links
+/// share their tails, so the native per-node recursion this replaces cost one
+/// stack frame per byte *and* re-walked the shared tail once per position —
+/// quadratic in the literal's length. Measured on a 640-byte literal, that was
+/// 2.0s of a 2.1s compile, and a 10KiB literal overflowed the stack outright.
+/// Depth is not steps, so the reduction budget cannot bound either one.
+///
+/// The memo is what makes the sharing pay: hash-consing gives the tails one
+/// node, so each distinct node is classified once however many positions reach
+/// it. Per-position answers are unchanged — the cache records each node's own
+/// verdict, not whether some earlier position already reported it.
+#[allow(clippy::mutable_key_type)]
+fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> bool {
+    // Post-order over the term's DAG: a node is pushed once to expand its
+    // children and once to combine their verdicts, and the stack ordering is
+    // what guarantees every child is settled before the combine runs.
+    let mut pending = vec![(term.clone(), false)];
+
+    while let Some((node, combining)) = pending.pop() {
+        if memo.contains_key(&node) {
+            continue;
+        }
+
+        if !combining {
+            pending.push((node.clone(), true));
+
+            let subterm: &Subterm = &node;
+            subterm.any_child_term(&mut |child| {
+                if !memo.contains_key(child) {
+                    pending.push((child.clone(), false));
+                }
+                false
+            });
+
+            continue;
+        }
+
+        let mut partial = matches!(&*node, Subterm::Prim(Prim::Exit(..)));
+        if let Subterm::Rec(Rec { group, .. }) = &*node {
+            let group = group.clone();
+            partial = partial || group_totality(context, &group) == Totality::Partial;
+        }
+        if !partial {
+            let subterm: &Subterm = &node;
+            subterm.any_child_term(&mut |child| {
+                let child_partial = memo.get(child).copied().unwrap_or(false);
+                partial = partial || child_partial;
+                child_partial
+            });
+        }
+
+        memo.insert(node, partial);
+    }
+
+    memo.get(term).copied().unwrap_or(false)
 }
 
 /// Whether this definition is partial on its own account: it mentions an exit,
 /// or it contains a local `rec` group that does not descend.
-fn definition_is_locally_partial(context: &mut Context, definition: &Definition) -> bool {
-    let mut groups = Vec::new();
-    let mut exits = false;
-    collect_local(&definition.body, &mut groups, &mut exits);
-    collect_local(&definition.type_, &mut groups, &mut exits);
-    if exits {
-        return true;
-    }
-    groups
-        .iter()
-        .any(|group| group_totality(context, group) == Totality::Partial)
-}
-
-/// The local `rec` groups and `Prim::Exit` occurrences inside a term.
-fn collect_local(term: &Term, groups: &mut Vec<RecGroup>, exits: &mut bool) {
-    if let Subterm::Rec(Rec { group, .. }) = &**term {
-        groups.push(group.clone());
-    }
-    if let Subterm::Prim(Prim::Exit(..)) = &**term {
-        *exits = true;
-    }
-    let subterm: &Subterm = term;
-    subterm.any_child_term(&mut |child| {
-        collect_local(child, groups, exits);
-        false
-    });
+#[allow(clippy::mutable_key_type)]
+fn definition_is_locally_partial(
+    context: &mut Context,
+    definition: &Definition,
+    memo: &mut LocalMemo,
+) -> bool {
+    locally_partial(context, &definition.body, memo)
+        || locally_partial(context, &definition.type_, memo)
 }
 
 /// Every top-level name this definition mentions, by free variable.
