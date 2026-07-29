@@ -46,9 +46,6 @@ pub(crate) use typing::*;
 mod resolve;
 pub(crate) use resolve::*;
 
-mod invert;
-pub(crate) use invert::*;
-
 mod elaborate;
 pub use elaborate::*;
 

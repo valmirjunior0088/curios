@@ -53,6 +53,12 @@ pub use free_monoid::*;
 mod reduce;
 pub use reduce::*;
 
+mod judge;
+pub use judge::*;
+
+mod invert;
+pub use invert::*;
+
 /// The kernel is the one module that is *not* flattened. It names its
 /// judgments `convert`, `infer`, and `Sort` — the same things `curios-elab`
 /// names its own — and flattening both into one namespace would leave every

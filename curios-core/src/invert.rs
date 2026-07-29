@@ -5,19 +5,25 @@
 //! `m := n`) or proves the case unreachable outright (`0` against `n + 1`) —
 //! which is what lets the arm be omitted, checker-verified, with no
 //! `impossible` keyword.
+//!
+//! # Shared, not duplicated
+//!
+//! Both checkers run *this* unifier. It is a total function of finished terms,
+//! and it runs post-zonk on both sides, so a second implementation would be a
+//! second run of the same function on the same input rather than a second
+//! opinion. What each side supplies for itself is reduction and conversion,
+//! through [`Judge`] — see that module for the line, and for the concession
+//! borrowing conversion represents.
 
 use {
-    super::{
-        Context, Error, Free, InductType, Peel, Subterm, Telescope, Term, convert_at, peel_prim,
-        reduce_with,
-    },
+    super::{Free, InductType, Judge, Peel, Subterm, Telescope, Term, peel_prim},
     std::collections::BTreeSet,
 };
 
 /// The outcome of inversion: either every index position decomposed (or
 /// refused) cleanly, yielding the forced arm-binder solutions, or some
 /// position clashed definitely and the arm is unreachable.
-pub(crate) enum Invert {
+pub enum Invert {
     Solved(Vec<(Free, Term)>),
     Impossible,
 }
@@ -31,7 +37,7 @@ enum Step {
 
 /// Open a constructor's instantiated telescope with `vars` and read the
 /// terminal's index expressions.
-pub(crate) fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
+pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
     match telescope.open_params(vars) {
         Telescope::Done(terminal) => match &**terminal {
             Subterm::InductType(InductType { indices, .. }) => indices.clone(),
@@ -51,18 +57,18 @@ pub(crate) fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> 
 /// else — metavariables, opaque applications, key-shaped actuals at the top of
 /// a position (Rung B's territory) — it *refuses*: the arm stays mandatory and
 /// the binder unsolved.
-pub(crate) fn invert_indices(
-    context: &mut Context,
+pub fn invert_indices<J: Judge>(
+    judge: &mut J,
     actuals: &[Term],
     targets: &[Term],
     flex: &[Free],
-) -> Result<Invert, Error> {
+) -> Result<Invert, J::Error> {
     let mut solutions = Vec::new();
 
     for (actual, target) in actuals.iter().zip(targets) {
         let mut position = Vec::new();
 
-        match unify_index(context, actual, target, flex, true, &mut position)? {
+        match unify_index(judge, actual, target, flex, true, &mut position)? {
             Step::Clash => return Ok(Invert::Impossible),
             // A refused position contributes nothing — solutions found on
             // the way in are discarded with it, conservatively.
@@ -74,7 +80,7 @@ pub(crate) fn invert_indices(
         }
     }
 
-    consolidate(context, solutions).map(Invert::Solved)
+    consolidate(judge, solutions).map(Invert::Solved)
 }
 
 /// The deletion rule (Goguen–McBride–McKinna), the last of the first-order
@@ -87,10 +93,10 @@ pub(crate) fn invert_indices(
 /// a `Blocked`, or a binder whose type is out of scope (the prune site, which
 /// only reads `Impossible` vs `Solved`) — drops that binder's solutions,
 /// conservatively. Never a `Clash`, so `Impossible`/prune semantics hold.
-fn consolidate(
-    context: &mut Context,
+fn consolidate<J: Judge>(
+    judge: &mut J,
     solutions: Vec<(Free, Term)>,
-) -> Result<Vec<(Free, Term)>, Error> {
+) -> Result<Vec<(Free, Term)>, J::Error> {
     let mut kept: Vec<(Free, Term)> = Vec::new();
     let mut refused = BTreeSet::new();
 
@@ -105,10 +111,10 @@ fn consolidate(
         };
 
         // A re-forcing: keep the prior solution iff the two are convertible at
-        // the binder's declared type (cloned to release the context borrow).
+        // the binder's declared type (cloned to release the borrow).
         let prior = kept[index].1.clone();
-        let deletes = match context.assumption(&binder).cloned() {
-            Some(type_) => convert_at(context, &type_, &prior, &value)?,
+        let deletes = match judge.assumption(&binder).cloned() {
+            Some(type_) => judge.convert_at(&type_, &prior, &value)?,
             None => false,
         };
 
@@ -121,16 +127,16 @@ fn consolidate(
     Ok(kept)
 }
 
-fn unify_index(
-    context: &mut Context,
+fn unify_index<J: Judge>(
+    judge: &mut J,
     actual: &Term,
     target: &Term,
     flex: &[Free],
     top: bool,
     solutions: &mut Vec<(Free, Term)>,
-) -> Result<Step, Error> {
-    let actual = reduce_with(context, actual)?;
-    let target = reduce_with(context, target)?;
+) -> Result<Step, J::Error> {
+    let actual = judge.force(actual)?;
+    let target = judge.force(target)?;
 
     // Solve a flex arm binder against the rigid term it is forced to equal —
     // forced because every decomposition step above it was injective. A binder
@@ -176,7 +182,7 @@ fn unify_index(
             Some(Peel::Clash) => Ok(Step::Clash),
             Some(Peel::Stuck) => Ok(Step::Refuse),
             Some(Peel::Continue(left, right)) => {
-                unify_index(context, &left, &right, flex, false, solutions)
+                unify_index(judge, &left, &right, flex, false, solutions)
             }
             None => Ok(Step::Refuse),
         },
@@ -202,14 +208,14 @@ fn unify_index(
             if a.payload.len() != t.payload.len() {
                 return Ok(Step::Refuse);
             }
-            unify_all(context, &a.payload, &t.payload, flex, solutions)
+            unify_all(judge, &a.payload, &t.payload, flex, solutions)
         }
 
         (Subterm::Tuple(a), Subterm::Tuple(t)) => {
             if a.fields.len() != t.fields.len() {
                 return Ok(Step::Refuse);
             }
-            unify_all(context, &a.fields, &t.fields, flex, solutions)
+            unify_all(judge, &a.fields, &t.fields, flex, solutions)
         }
 
         _ => Ok(Step::Refuse),
@@ -218,15 +224,15 @@ fn unify_index(
 
 /// Unify a sequence of sub-positions pairwise, short-circuiting on the first
 /// that does not cleanly decompose. Each sub-position is non-`top`.
-fn unify_all(
-    context: &mut Context,
+fn unify_all<J: Judge>(
+    judge: &mut J,
     actuals: &[Term],
     targets: &[Term],
     flex: &[Free],
     solutions: &mut Vec<(Free, Term)>,
-) -> Result<Step, Error> {
+) -> Result<Step, J::Error> {
     for (actual, target) in actuals.iter().zip(targets) {
-        match unify_index(context, actual, target, flex, false, solutions)? {
+        match unify_index(judge, actual, target, flex, false, solutions)? {
             Step::Ok => {}
             other => return Ok(other),
         }

@@ -25,6 +25,30 @@ impl Reducer for Context {
     }
 }
 
+/// The elaborator's side of the shared-analysis seam.
+///
+/// Both methods are the wrappers `typing` already had: they exist so a failure
+/// reaches the user as a spanned diagnostic naming the offending term rather
+/// than as a bare `ReduceError`, which is precisely the split
+/// [`Env::Error`](curios_core::Env::Error) formalizes.
+impl curios_core::Env for Context {
+    type Error = crate::Error;
+
+    fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
+        crate::reduce_with(self, term)
+    }
+
+    fn assumption(&self, name: &curios_core::Free) -> Option<&Term> {
+        Context::assumption(self, name)
+    }
+}
+
+impl curios_core::Judge for Context {
+    fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
+        crate::convert_at(self, type_, this, that)
+    }
+}
+
 enum Reduce {
     Continue(Term),
     Break(Term),
