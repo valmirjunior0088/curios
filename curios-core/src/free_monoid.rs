@@ -244,7 +244,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
 /// `Utf8` relation builds (`concat(append(\\, h), t)`) along with literal runs and
 /// concatenations. `None` for the empty bytestring or an opaque symbolic value,
 /// where no first byte is statically exposed.
-pub fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
+pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
     match peel_front(grain, bin) {
         Front::Cons { head, tail } => Some((head.into_chunk(grain), tail)),
         Front::Empty | Front::Opaque => None,
@@ -315,7 +315,7 @@ fn peel_front_lst(lst: &Term) -> LstFront {
 /// and `Lst/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/
 /// `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque
 /// symbolic value, where no first element is statically exposed.
-pub fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
+pub(crate) fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
     match peel_front_lst(lst) {
         LstFront::Cons { head, tail } => Some((head, tail)),
         LstFront::Empty | LstFront::Opaque => None,
@@ -346,7 +346,7 @@ fn is_nonempty_lst_literal(term: &Term) -> bool {
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here:
 /// that is the spine peel's job when *deciding equality* (`spine::push`); reduction
 /// only needs a normal form, and conversion closes any residual gap.
-pub fn normalize_concat<E: Clone>(
+pub(crate) fn normalize_concat<E: Clone>(
     operands: Vec<Term>,
     literal: fn(&Term) -> Option<&[E]>,
     into_literal: impl FnOnce(Vec<E>) -> Subterm,

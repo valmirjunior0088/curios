@@ -928,13 +928,13 @@ impl Prim {
         }
     }
 
-    pub fn reach(&self) -> usize {
+    pub(crate) fn reach(&self) -> usize {
         let mut reach = 0;
         self.for_each_operand(&mut |term| reach = reach.max(term.reach()));
         reach
     }
 
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || term.any_metavar(pred));
         found
@@ -952,11 +952,11 @@ impl Prim {
     // Recurse into every operand `Term` so a construction nested inside a primitive
     // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.
-    pub fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 
-    pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
+    pub(crate) fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {

@@ -61,7 +61,7 @@ pub struct Mint {
 }
 
 impl Mint {
-    pub fn new(index: u32, hint: Option<&str>) -> Self {
+    pub(crate) fn new(index: u32, hint: Option<&str>) -> Self {
         Self {
             index,
             hint: hint.map(str::to_string),
@@ -75,7 +75,7 @@ impl Mint {
     /// stage that renders it. The variant itself stays public — downstream code
     /// holds and compares binders — but it cannot look inside one. The index has
     /// no accessor at all: nothing ever needed to read it, only to compare it.
-    pub fn hint(&self) -> Option<&str> {
+    pub(crate) fn hint(&self) -> Option<&str> {
         self.hint.as_deref()
     }
 
@@ -203,7 +203,7 @@ impl Free {
     }
 
     /// The binder this names, if it names one.
-    pub fn as_local(&self) -> Option<&Mint> {
+    pub(crate) fn as_local(&self) -> Option<&Mint> {
         match self {
             Free::Local(mint) => Some(mint),
             Free::Global(_) => None,
@@ -213,20 +213,20 @@ impl Free {
     /// Whether this is a binder some scope opened, as opposed to a top-level
     /// definition. The typed replacement for testing a spelling for a marker
     /// character — see [`Subterm::has_local_free`](crate::Subterm).
-    pub fn is_local(&self) -> bool {
+    pub(crate) fn is_local(&self) -> bool {
         matches!(self, Free::Local(_))
     }
 
     /// What a diagnostic should call this, if there is anything better than its
     /// rendered form: a local's minting hint, or nothing for a global, whose
     /// rendering the printer shortens against the module it appears in.
-    pub fn hint(&self) -> Option<&str> {
+    pub(crate) fn hint(&self) -> Option<&str> {
         self.as_local().and_then(Mint::hint)
     }
 
     /// The same identity rendering as `hint`. A global has no hint to replace —
     /// its rendering is its path — so it is returned unchanged.
-    pub fn relabelled(&self, hint: &str) -> Self {
+    pub(crate) fn relabelled(&self, hint: &str) -> Self {
         match self {
             Free::Local(mint) => Free::Local(mint.with_hint(Some(hint))),
             Free::Global(_) => self.clone(),

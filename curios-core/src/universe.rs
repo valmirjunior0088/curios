@@ -145,7 +145,7 @@ impl Level {
         Self::atom(LevelHead::Meta(meta), 0)
     }
 
-    pub fn atom(head: LevelHead, offset: u32) -> Self {
+    pub(crate) fn atom(head: LevelHead, offset: u32) -> Self {
         Self {
             constant: 0,
             atoms: BTreeMap::from([(head, offset)]),
@@ -445,7 +445,7 @@ impl UniverseContext {
     /// A declaration denotes this instance at every occurrence inside its own
     /// signature, body, and registry entries, because a group is monomorphic
     /// in its own universes. External uses instead take a fresh instance from
-    /// [`UniverseSolver::instantiate`].
+    /// `curios-elab`'s `UniverseSolver::instantiate`.
     pub fn identity_instance(&self) -> Vec<Level> {
         (0..self.parameter_count)
             .map(UniverseParam)
@@ -453,7 +453,7 @@ impl UniverseContext {
             .collect()
     }
 
-    pub fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
+    pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
         Self::from_constraints(
             self.parameter_count,
             self.constraints
@@ -481,13 +481,13 @@ impl UniverseContext {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct UniverseScheme<T> {
-    pub context: UniverseContext,
-    pub value: T,
+pub(crate) struct UniverseScheme<T> {
+    pub(crate) context: UniverseContext,
+    pub(crate) value: T,
 }
 
 impl<T> UniverseScheme<T> {
-    pub fn monomorphic(value: T) -> Self {
+    pub(crate) fn monomorphic(value: T) -> Self {
         Self {
             context: UniverseContext::empty(),
             value,

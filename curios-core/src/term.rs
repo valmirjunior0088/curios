@@ -191,7 +191,7 @@ impl Term {
     /// Whether any `Metavar` node occurs in this term. Cached per node like
     /// [`has_local_free`](Self::has_local_free) and for the same reason: the
     /// elaboration cache's O(1)-per-call gate.
-    pub fn has_metavar(&self) -> bool {
+    pub(crate) fn has_metavar(&self) -> bool {
         if self.inner.has_metavar.get().is_none() {
             self.warm_scalars();
         }
@@ -313,7 +313,7 @@ impl Term {
     /// Nominal children are stamped explicitly because a rewrite hook replaces
     /// its node wholesale: an occurrence nested in a parameter or index must
     /// receive the same instance as the occurrence containing it.
-    pub fn stamp_declaration_node(
+    pub(crate) fn stamp_declaration_node(
         &self,
         names: &BTreeSet<Global>,
         self_reference: SelfReference,
@@ -991,7 +991,7 @@ impl Term {
     }
 
     /// [`Term::induct_match`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub fn induct_match_marked<H, M, I, A, B>(
+    pub(crate) fn induct_match_marked<H, M, I, A, B>(
         head: H,
         motive_binder: Option<&Free>,
         motive: M,
@@ -1069,7 +1069,7 @@ impl Term {
     }
 
     /// [`Term::induct_match_default`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub fn induct_match_default_marked<H, M, I, A, B, D>(
+    pub(crate) fn induct_match_default_marked<H, M, I, A, B, D>(
         head: H,
         motive_binder: Option<&Free>,
         motive: M,
@@ -1094,7 +1094,7 @@ impl Term {
 
     /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
     /// one plicity mark per payload binder (the [`InductArm`] invariant).
-    pub fn induct_cases_marked<I, A, B>(cases: I) -> Vec<(Atom, InductArm)>
+    pub(crate) fn induct_cases_marked<I, A, B>(cases: I) -> Vec<(Atom, InductArm)>
     where
         I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
@@ -2249,7 +2249,7 @@ impl InductArm {
     }
 
     /// The arm body's free-variable reach, past its payload binders.
-    pub fn reach(&self) -> usize {
+    pub(crate) fn reach(&self) -> usize {
         self.body.reach()
     }
 
@@ -2259,7 +2259,7 @@ impl InductArm {
     }
 
     /// The arm's payload binders, in order.
-    pub fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
+    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
         self.body.binder_iter()
     }
 
@@ -2780,21 +2780,21 @@ impl Subterm {
         }
     }
 
-    pub fn as_int(&self) -> Option<Int> {
+    pub(crate) fn as_int(&self) -> Option<Int> {
         match self {
             Subterm::Prim(Prim::Int(value)) => Some(value.clone()),
             _ => None,
         }
     }
 
-    pub fn as_flt(&self) -> Option<Flt> {
+    pub(crate) fn as_flt(&self) -> Option<Flt> {
         match self {
             Subterm::Prim(Prim::Flt(value)) => Some(*value),
             _ => None,
         }
     }
 
-    pub fn as_bool(&self) -> Option<bool> {
+    pub(crate) fn as_bool(&self) -> Option<bool> {
         match self {
             Subterm::Prim(Prim::Bool(value)) => Some(*value),
             _ => None,
@@ -2819,7 +2819,7 @@ impl Subterm {
         names
     }
 
-    pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => {}
             Subterm::UniverseInst(UniverseInst { head, .. }) => {
@@ -2988,7 +2988,7 @@ impl Subterm {
     /// (which is this with a collector that never stops): the reducer's memo
     /// gate uses it to reject caching a WHNF that still names an unsolved
     /// metavariable, without allocating the full id set.
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
@@ -3185,7 +3185,7 @@ impl Subterm {
     /// A local is a [`Free::Local`], so this is a discriminant test. It used to
     /// be a search for a marker character in the spelling, which a compiler-made
     /// *global* could set by accident — and once did.
-    pub fn has_local_free(&self) -> bool {
+    pub(crate) fn has_local_free(&self) -> bool {
         match self {
             Subterm::Var(var) => var.as_free().is_some_and(Free::is_local),
             _ => self.any_child_term(&mut |t| t.has_local_free()),
@@ -3195,14 +3195,14 @@ impl Subterm {
     /// Whether any `Metavar` node occurs in this subterm — the uncached
     /// spelling of [`Term::has_metavar`], which supplies the per-node
     /// memoization.
-    pub fn has_metavar(&self) -> bool {
+    pub(crate) fn has_metavar(&self) -> bool {
         match self {
             Subterm::Metavar(_) => true,
             _ => self.any_child_term(&mut |t| t.has_metavar()),
         }
     }
 
-    pub fn has_universe_meta(&self) -> bool {
+    pub(crate) fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
             Subterm::Type(level) => level_has_meta(level),
@@ -3220,7 +3220,7 @@ impl Subterm {
         }
     }
 
-    pub fn has_universe_data(&self) -> bool {
+    pub(crate) fn has_universe_data(&self) -> bool {
         match self {
             Subterm::Type(level) => level != &Level::zero(),
             Subterm::UniverseInst(_) => true,

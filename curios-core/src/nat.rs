@@ -46,7 +46,7 @@ impl Nat {
 
     /// `None` on a symbolic operand *or* a zero divisor — never a panic; the
     /// reducer reports the zero-divisor case before folding.
-    pub fn checked_div(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_div(self, other: Self) -> Option<Self> {
         let left = self.to_big_uint()?;
         let right = other.to_big_uint()?;
 
@@ -55,7 +55,7 @@ impl Nat {
 
     /// `None` on a symbolic operand or a zero divisor, like
     /// [`Nat::checked_div`].
-    pub fn checked_rem(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
         let left = self.to_big_uint()?;
         let right = other.to_big_uint()?;
 
@@ -66,28 +66,28 @@ impl Nat {
     /// type level pretends ℕ, so these impose no 31-bit limit; the runtime's
     /// i31 carrier is enforced only in the backend. `None` on a symbolic
     /// operand, like [`Nat::checked_div`].
-    pub fn checked_bitand(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_bitand(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? & other.to_big_uint()?))
     }
 
-    pub fn checked_bitor(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_bitor(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? | other.to_big_uint()?))
     }
 
-    pub fn checked_bitxor(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_bitxor(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? ^ other.to_big_uint()?))
     }
 
     /// `self << amount` as `self * 2^amount`, and `self >> amount` as
     /// `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an
     /// `amount` too large to be a shift count.
-    pub fn checked_shl(self, amount: Self) -> Option<Self> {
+    pub(crate) fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self::new(
             self.to_big_uint()? << amount.to_big_uint()?.to_usize()?,
         ))
     }
 
-    pub fn checked_shr(self, amount: Self) -> Option<Self> {
+    pub(crate) fn checked_shr(self, amount: Self) -> Option<Self> {
         Some(Self::new(
             self.to_big_uint()? >> amount.to_big_uint()?.to_usize()?,
         ))
@@ -110,7 +110,7 @@ impl Nat {
     /// The inverse of [`Nat::decompose`]: `inner + floor`, collapsing a zero floor
     /// back to the bare `inner` so the rebuilt term lands in the same normal form
     /// `decompose` expects.
-    pub fn rebuild(floor: BigUint, inner: Term) -> Term {
+    pub(crate) fn rebuild(floor: BigUint, inner: Term) -> Term {
         match floor.is_zero() {
             true => inner,
             false => Term::prim(Prim::Nat(Nat::Succ(floor, inner))),

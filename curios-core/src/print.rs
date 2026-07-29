@@ -759,7 +759,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     }
 }
 
-pub fn print_term(term: Term, depth: usize) -> Printer<'static> {
+pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match Term::unwrap_or_clone(term) {
         Subterm::Type(level) => {
             if level.is_zero() {
