@@ -1,4 +1,7 @@
-use std::fmt::{self, Write};
+use std::{
+    fmt::{self, Write},
+    mem,
+};
 
 struct PrinterState<'a, 'b> {
     formatter: &'a mut fmt::Formatter<'b>,
@@ -54,7 +57,8 @@ impl<'a, 'b> PrinterState<'a, 'b> {
 /// nests without bound. Every IR crate's `Display` gets that at once. The
 /// combinators below keep the signatures they had, so the printers built on
 /// them are unchanged.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// No derives: `Debug`, `Clone`, and `PartialEq` would each walk the tree
+/// recursively and overflow on the documents this type exists to print.
 pub enum Printer {
     /// Literal text. Newlines inside it arm the pending-indent logic, so a
     /// multi-line literal indents correctly under [`indent`].
@@ -63,6 +67,56 @@ pub enum Printer {
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
     Indent(Box<Printer>),
+}
+
+impl Printer {
+    /// This document's children, taken out and left childless.
+    ///
+    /// Shared by [`run_printer`] and [`Drop`], which both need to descend
+    /// without moving a field out of a type that has a destructor.
+    fn take(&mut self) -> Printer {
+        mem::replace(self, Printer::Text(String::new()))
+    }
+
+    /// Whether this node's children are already gone, so dropping it cannot
+    /// reach another node.
+    fn is_dismantled(&self) -> bool {
+        match self {
+            Printer::Text(_) => true,
+            Printer::Concat(parts) => parts.is_empty(),
+            Printer::Indent(inner) => matches!(**inner, Printer::Text(_)),
+        }
+    }
+}
+
+/// Dismantled with an explicit stack, for the reason the type exists.
+///
+/// A document nests as deep as the term it prints, and the *derived* drop
+/// recurses one native frame per level — so a document deep enough to need an
+/// iterative [`run_printer`] would abort while being freed instead. Measured:
+/// a 100k-deep document overflows a default stack on drop alone.
+impl Drop for Printer {
+    fn drop(&mut self) {
+        // The base case is "already dismantled", not "is a leaf", and the
+        // difference is not cosmetic: taking a node's children leaves a husk
+        // that is still a `Concat` or an `Indent`, so a check for `Text` alone
+        // sends every husk back through here to make another husk, forever.
+        // The regression below catches that at depth ten.
+        if self.is_dismantled() {
+            return;
+        }
+
+        let mut pending = Vec::from([self.take()]);
+
+        while let Some(mut printer) = pending.pop() {
+            match &mut printer {
+                Printer::Text(_) => {}
+                Printer::Concat(parts) => pending.extend(mem::take(parts)),
+                Printer::Indent(inner) => pending.push(inner.take()),
+            }
+            // `printer` is dismantled now, so its own drop returns at once.
+        }
+    }
 }
 
 /// One entry of [`run_printer`]'s work stack.
@@ -90,17 +144,22 @@ pub fn run_printer<'b, 'c>(
     let mut stack = Vec::from([Step::Print(printer)]);
 
     while let Some(step) = stack.pop() {
+        // Children are taken out rather than moved out: `Printer` has a `Drop`
+        // impl, so its fields cannot be moved away. What is left behind is
+        // childless and costs nothing to drop at the end of the arm.
         match step {
-            Step::Print(Printer::Text(text)) => state.write(&text)?,
-            // Reversed, because the stack pops last-in first.
-            Step::Print(Printer::Concat(parts)) => {
-                stack.extend(parts.into_iter().rev().map(Step::Print));
-            }
-            Step::Print(Printer::Indent(inner)) => {
-                state.indent_by += state.indent_step;
-                stack.push(Step::Dedent);
-                stack.push(Step::Print(*inner));
-            }
+            Step::Print(mut printer) => match &mut printer {
+                Printer::Text(text) => state.write(text)?,
+                // Reversed, because the stack pops last-in first.
+                Printer::Concat(parts) => {
+                    stack.extend(mem::take(parts).into_iter().rev().map(Step::Print));
+                }
+                Printer::Indent(inner) => {
+                    state.indent_by += state.indent_step;
+                    stack.push(Step::Dedent);
+                    stack.push(Step::Print(inner.take()));
+                }
+            },
             Step::Dedent => state.indent_by -= state.indent_step,
         }
     }
@@ -162,4 +221,40 @@ where
 /// restored when the printer finishes.
 pub fn indent(printer: Printer) -> Printer {
     Printer::Indent(Box::new(printer))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A document nests as deep as the term it prints, and both walks over it
+    /// — printing and freeing — must survive that. Depth is not steps, so no
+    /// reduction budget bounds either one; only an explicit stack does.
+    fn nested(depth: usize) -> Printer {
+        let mut document = pure("x");
+        for _ in 0..depth {
+            document = indent(flat([pure("("), document, pure(")")]));
+        }
+        document
+    }
+
+    #[test]
+    fn a_deep_document_is_freed_without_recursing() {
+        drop(nested(100_000));
+    }
+
+    #[test]
+    fn a_deep_document_is_printed_without_recursing() {
+        struct Deep;
+        impl fmt::Display for Deep {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                run_printer(nested(100_000), formatter, 2)
+            }
+        }
+
+        let printed = Deep.to_string();
+
+        assert_eq!(printed.matches('(').count(), 100_000);
+        assert_eq!(printed.matches(')').count(), 100_000);
+    }
 }
