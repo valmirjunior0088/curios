@@ -38,6 +38,9 @@
 mod convert;
 pub use convert::*;
 
+mod infer;
+pub use infer::*;
+
 mod sort;
 pub use sort::*;
 
@@ -73,6 +76,22 @@ pub enum KernelError {
     Unclassified(Term),
     /// A term used as a universe that is neither `Type` nor `Prop`.
     NotASort(Term),
+    /// A term arrived with a type other than the one required of it.
+    Mismatch {
+        inferred: Box<Term>,
+        expected: Box<Term>,
+    },
+    /// A head applied to arguments that is not a function.
+    NotAFunction(Term),
+    /// A term projected from that has no components.
+    NotATuple(Term),
+    /// A count that did not match: arguments against a telescope, a payload
+    /// against a constructor's signature, a motive against a family's indices.
+    Arity { expected: usize, actual: usize },
+    /// Elaboration-only syntax — a metavariable, an unresolved infix operator,
+    /// or a polymorphic numeric literal — reached the kernel. The term was
+    /// handed over before elaboration finished with it.
+    NotCore(Term),
 }
 
 impl From<ReduceError> for KernelError {
@@ -102,6 +121,19 @@ impl fmt::Display for KernelError {
                 write!(formatter, "cannot determine the sort of `{type_}`")
             }
             KernelError::NotASort(term) => write!(formatter, "`{term}` is not a universe"),
+            KernelError::Mismatch { inferred, expected } => {
+                write!(formatter, "expected `{expected}`, found `{inferred}`")
+            }
+            KernelError::NotAFunction(type_) => {
+                write!(formatter, "`{type_}` is not a function type")
+            }
+            KernelError::NotATuple(type_) => write!(formatter, "`{type_}` has no components"),
+            KernelError::Arity { expected, actual } => {
+                write!(formatter, "expected {expected} of them, found {actual}")
+            }
+            KernelError::NotCore(term) => {
+                write!(formatter, "`{term}` is elaboration-only syntax")
+            }
         }
     }
 }

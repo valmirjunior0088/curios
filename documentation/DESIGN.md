@@ -149,7 +149,17 @@ Also rejected: **a fresh, fully explicit, metavariable-free IR for the kernel to
 
 Also rejected: **sharing the reduction driver**, parameterized over a trait supplying variable lookup and metavariable resolution. It would remove a few hundred lines of near-duplicate code. It would also mean that a mistake in the scrutinee stack, in `rec` forcing, or in the eta side condition is a mistake in both checkers simultaneously — which is the one outcome this whole split exists to prevent.
 
-**What exists today, precisely.** The kernel's reduction: beta, delta, zeta, iota, projection, universe instantiation, eta, and `rec` forcing, with agreement against the elaborator's reducer asserted as tests. Conversion and inference are not written yet, so **nothing is re-checked today** and the trusted base is unchanged. This entry records a decision and a direction, not a capability; ROADMAP.md is where its status is tracked.
+**What exists today, precisely.** Reduction (beta, delta, zeta, iota, projection, universe instantiation, eta, `rec` forcing), with agreement against the elaborator's reducer asserted as tests. A sort query. Conversion, with proof irrelevance, eta at Π and Σ, cumulative-free structural comparison, and a coinductive recurrence rule. And the typing judgment: one rule per term form, plus the primitive table.
+
+**What is not checked, and what that costs.** Three things, in descending order of importance.
+
+*Match arms are typed but not verified.* An elimination's type is its motive at the scrutinee, which the kernel computes; whether each arm actually inhabits the motive at that constructor's index targets is not checked at all. That verification needs the per-constructor index refinement the elaborator performs, and until the kernel does it, an elimination is the one term form the kernel takes on trust. Every entry in the perimeter that concerns elimination — coverage, the large-elimination guard, index inversion — is therefore untouched by the second opinion.
+
+*Totality is not decided by the kernel*, and deliberately so: `rec` is general recursion, and the obligation that keeps it sound is positional and whole-module. (T) and (V) stay where they are.
+
+*There is no module-level entry point.* Nothing wires a checked module through the kernel, so **nothing is re-checked in production today** and the trusted base is unchanged. Until that exists, the judgments above are exercised only by their own tests.
+
+The conversion checker is also incomplete in several positions — an elimination's motive and arms, `rec` groups, and spine arguments compared at `Type` — each of which refuses programs rather than admitting them. That direction is the point: a refusal is a visible disagreement between two checkers, an over-eager acceptance is silent. ROADMAP.md tracks the status.
 
 ### Concepts resolve with global coherence
 
