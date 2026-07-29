@@ -21,49 +21,130 @@
 //! term's type while agreeing on what a term *is* still catch each other's
 //! mistakes; two that share the rule that admits a bad program catch nothing.
 //! That line is why [`Reducer`](super::Reducer) exists, and it is why the match
-//! dispatch below is written out again here rather than lifted from the
+//! dispatch in `whnf` is written out again here rather than lifted from the
 //! elaborator's reducer, which it closely resembles.
+//!
+//! # Refusing beats guessing
+//!
+//! Where the elaborator cannot classify something it falls back conservatively
+//! and carries on, because a diagnostic is worth more to a programmer than a
+//! refusal. The kernel does the opposite: a shape it cannot classify is a
+//! [`KernelError`], not a default. A guessed universe level is the unsound
+//! direction — it claims a type is smaller than it is — and a checker that
+//! guesses is not a second opinion. The cost is that the kernel may reject a
+//! term the elaborator accepted; that is a disagreement to investigate, which
+//! is exactly what a second opinion is for.
+
+mod convert;
+pub use convert::*;
+
+mod sort;
+pub use sort::*;
 
 mod whnf;
 pub use whnf::*;
 
 use {
-    super::{Free, ReduceError, Term, UniverseContext},
+    super::{
+        Free, Global, InductDecl, ReduceError, StructDecl, Term, UniverseContext, UniverseError,
+    },
     curios_base::Entropy,
-    std::collections::HashMap,
+    std::{collections::HashMap, fmt},
 };
 
-/// A definition the kernel may unfold, with the universe context it was
-/// generalized under.
+/// Why the kernel refused a term.
 ///
-/// The context is not decoration: a definition with universe parameters is
-/// *not* unfoldable through a bare occurrence, because such an occurrence
-/// denotes no particular instance. It reduces only through a
+/// Every variant is a refusal, never a warning: reaching one means the kernel
+/// declined to certify the term, and a caller must treat that as rejection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KernelError {
+    /// Reduction failed — the budget ran out, or a partial primitive was folded
+    /// outside its domain.
+    Reduce(ReduceError),
+    /// A variable with no binder and no definition. In a well-formed module
+    /// this cannot happen, which is why it is an error rather than a stuck
+    /// neutral: the kernel is checking a *finished* term.
+    Unbound(Free),
+    /// A nominal type with no registry entry, so its fields, constructors, and
+    /// result sort are all unknown.
+    Undeclared(Global),
+    /// A type whose sort the kernel could not determine. Guessing here is the
+    /// unsound direction, so it refuses. See the module documentation.
+    Unclassified(Term),
+    /// A term used as a universe that is neither `Type` nor `Prop`.
+    NotASort(Term),
+}
+
+impl From<ReduceError> for KernelError {
+    fn from(error: ReduceError) -> Self {
+        KernelError::Reduce(error)
+    }
+}
+
+impl From<UniverseError> for KernelError {
+    fn from(error: UniverseError) -> Self {
+        KernelError::Reduce(ReduceError::Universe(error))
+    }
+}
+
+impl fmt::Display for KernelError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            KernelError::Reduce(ReduceError::Exhausted) => {
+                formatter.write_str("the kernel's reduction budget ran out")
+            }
+            KernelError::Reduce(_) => formatter.write_str("reduction failed in the kernel"),
+            KernelError::Unbound(name) => write!(formatter, "unbound name `{name}`"),
+            KernelError::Undeclared(name) => {
+                write!(formatter, "no declaration registered for `{name}`")
+            }
+            KernelError::Unclassified(type_) => {
+                write!(formatter, "cannot determine the sort of `{type_}`")
+            }
+            KernelError::NotASort(term) => write!(formatter, "`{term}` is not a universe"),
+        }
+    }
+}
+
+/// A top-level name's entry: what it is, and what it unfolds to if anything.
+///
+/// The universe context is not decoration. A definition with universe
+/// parameters is *not* unfoldable through a bare occurrence, because such an
+/// occurrence denotes no particular instance; it reduces only through a
 /// [`UniverseInst`](super::UniverseInst) that says which one.
 struct Definition {
-    value: Term,
+    type_: Term,
+    /// `None` for something with a type and no body — a `foreign` declaration,
+    /// or a name deliberately kept opaque.
+    value: Option<Term>,
     universes: UniverseContext,
 }
 
-/// The kernel's context: what it may unfold, and how much work it may spend
-/// doing so.
+/// The kernel's context: what is in scope, what may unfold, and how much work
+/// a judgment may spend.
 ///
 /// Deliberately small. The elaborator's `Context` carries fifteen-odd stores —
 /// caches, parked goals, refinement layers, a metavariable heap — and each is a
 /// place where an answer can come from something other than the term in hand.
-/// The kernel holds definitions and a budget, and that is the whole of its
-/// state. Growing this struct is how independence gets lost, so a new field
-/// should have to argue for itself.
+/// The kernel holds a local telescope, top-level definitions, the nominal
+/// registry, and a budget. Growing this struct is how independence gets lost,
+/// so a new field should have to argue for itself.
 pub struct Kernel {
     /// Reduction steps a single judgment may spend. Restored at each
     /// declaration boundary by [`Kernel::restore_budget`].
     budget: u64,
     remaining: u64,
-    /// Identities for binders the kernel opens itself, during eta-contraction
-    /// and under a telescope. Seeded above every index the earlier stages
-    /// minted, so a kernel-minted binder can never alias one already in a term.
+    /// Identities for binders the kernel opens itself, when comparing under a
+    /// telescope and when eta-contracting. Seeded above every index the earlier
+    /// stages minted, so a kernel-minted binder can never alias one in a term.
     fresh_names: Entropy,
+    /// Binders opened by the walk in progress, with their types, outermost
+    /// first. A local has a type and never a value: `let` substitutes rather
+    /// than binding, so nothing in scope here can be unfolded.
+    locals: Vec<(Free, Term)>,
     definitions: HashMap<Free, Definition>,
+    inducts: HashMap<Global, InductDecl>,
+    structs: HashMap<Global, StructDecl>,
 }
 
 impl Kernel {
@@ -73,7 +154,10 @@ impl Kernel {
             budget,
             remaining: budget,
             fresh_names: Entropy::new(),
+            locals: Vec::new(),
             definitions: HashMap::new(),
+            inducts: HashMap::new(),
+            structs: HashMap::new(),
         }
     }
 
@@ -86,15 +170,110 @@ impl Kernel {
         self.fresh_names.seed(floor);
     }
 
-    /// Record that `name` denotes `value`, generalized over `universes`.
-    pub fn define(&mut self, name: &Free, value: &Term, universes: &UniverseContext) {
+    /// Record a top-level definition: `name : type_ = value`, generalized over
+    /// `universes`.
+    pub fn define(&mut self, name: &Free, type_: &Term, value: &Term, universes: &UniverseContext) {
         self.definitions.insert(
             name.clone(),
             Definition {
-                value: value.clone(),
+                type_: type_.clone(),
+                value: Some(value.clone()),
                 universes: universes.clone(),
             },
         );
+    }
+
+    /// Record a top-level name with a type and no body — a `foreign`
+    /// declaration, or one kept opaque. It never unfolds, so it is a permanent
+    /// neutral.
+    pub fn declare(&mut self, name: &Free, type_: &Term, universes: &UniverseContext) {
+        self.definitions.insert(
+            name.clone(),
+            Definition {
+                type_: type_.clone(),
+                value: None,
+                universes: universes.clone(),
+            },
+        );
+    }
+
+    /// Register an `induct` declaration's registry entry.
+    pub fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) {
+        self.inducts.insert(name.clone(), declaration.clone());
+    }
+
+    /// Register a `struct` declaration's registry entry.
+    pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) {
+        self.structs.insert(name.clone(), declaration.clone());
+    }
+
+    pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        self.inducts.get(name)
+    }
+
+    pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        self.structs.get(name)
+    }
+
+    /// Open a binder: bring `name : type_` into scope for the walk in progress.
+    ///
+    /// Locals are a stack, and every judgment that opens one is responsible for
+    /// closing it — take a [`Kernel::mark`] first and [`Kernel::retract`] to it
+    /// afterwards, on every path including the failing one.
+    pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
+        self.locals.push((name.clone(), type_.clone()));
+    }
+
+    /// The current local depth, to be handed back to [`Kernel::retract`].
+    pub(crate) fn mark(&self) -> usize {
+        self.locals.len()
+    }
+
+    /// Close every binder opened since `mark`.
+    pub(crate) fn retract(&mut self, mark: usize) {
+        self.locals.truncate(mark);
+    }
+
+    /// The types of the binders currently in scope, outermost first. The
+    /// conversion history keys on this: the same goal under a different context
+    /// is a different goal.
+    pub(crate) fn local_types(&self) -> Vec<Term> {
+        self.locals.iter().map(|(_, type_)| type_.clone()).collect()
+    }
+
+    /// The identities of the binders currently in scope, outermost first —
+    /// parallel to [`Kernel::local_types`]. What the conversion history renames
+    /// away, so that a goal reached again on a later round of an unfolding
+    /// cycle is recognized as the goal it already is.
+    pub(crate) fn local_names(&self) -> Vec<Free> {
+        self.locals.iter().map(|(name, _)| name.clone()).collect()
+    }
+
+    /// The type `name` was opened at, if it is a binder currently in scope.
+    ///
+    /// Innermost first — which cannot actually matter, since binder identities
+    /// are minted unique, but scanning in that order means the rule does not
+    /// depend on that being true.
+    pub(crate) fn local_type(&self, name: &Free) -> Option<&Term> {
+        self.locals
+            .iter()
+            .rev()
+            .find(|(bound, _)| bound == name)
+            .map(|(_, type_)| type_)
+    }
+
+    /// The type `name` was bound or declared at. Locals shadow definitions.
+    pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
+        self.local_type(name)
+            .or_else(|| self.definitions.get(name).map(|entry| &entry.type_))
+    }
+
+    /// The universe scheme `name` was generalized under, for a use that states
+    /// its own instance.
+    pub(crate) fn scheme_of(&self, name: &Free) -> Option<(&Term, &UniverseContext)> {
+        self.definitions
+            .get(name)
+            .map(|entry| (&entry.type_, &entry.universes))
     }
 
     /// Charge one reduction step, failing when the budget is spent.
@@ -104,7 +283,7 @@ impl Kernel {
     /// judgment terminate, and it is deterministic — the same program spends
     /// the same steps on every machine — so exhausting it is a fact about the
     /// program, not about the host that checked it.
-    fn spend(&mut self) -> Result<(), ReduceError> {
+    pub(crate) fn spend(&mut self) -> Result<(), ReduceError> {
         match self.remaining {
             0 => Err(ReduceError::Exhausted),
             remaining => {
@@ -115,7 +294,7 @@ impl Kernel {
     }
 
     /// A fresh binder identity, rendering as `hint`.
-    fn fresh(&self, hint: Option<&str>) -> Free {
+    pub(crate) fn fresh(&self, hint: Option<&str>) -> Free {
         let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
 
         Free::local(index, hint)
@@ -124,19 +303,19 @@ impl Kernel {
     /// What `name` unfolds to through a bare occurrence.
     ///
     /// A definition with universe parameters is withheld: see [`Definition`].
-    fn value(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn value(&self, name: &Free) -> Option<&Term> {
         self.definitions
             .get(name)
             .filter(|definition| definition.universes.parameter_count == 0)
-            .map(|definition| &definition.value)
+            .and_then(|definition| definition.value.as_ref())
     }
 
     /// What `name` unfolds to at a *stated* universe instance, which is the one
     /// position a polymorphic definition may be unfolded from.
-    fn value_at(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn value_at(&self, name: &Free) -> Option<&Term> {
         self.definitions
             .get(name)
-            .map(|definition| &definition.value)
+            .and_then(|definition| definition.value.as_ref())
     }
 
     /// Restore the full budget for a new judgment.

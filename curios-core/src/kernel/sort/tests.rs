@@ -1,0 +1,202 @@
+use crate::{
+    Global, InductDecl, Kernel, Level, Prim, Telescope, Term, UniverseContext,
+    kernel::sort::{Sort, sort_of},
+};
+use curios_base::{Plicity, Qualifier, RootId};
+
+fn kernel() -> Kernel {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+    kernel
+}
+
+fn nominal(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
+}
+
+/// A nominal family with no constructors, declared at `result_sort`. Enough to
+/// give the tests below a base type at a known sort — the registry is what says
+/// whether a nominal type is a proposition, so there is no way to build one
+/// without it.
+fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
+    let name = nominal(path);
+
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            params: Telescope::done(()),
+            indices: Telescope::done(()),
+            constructors: Vec::new(),
+            result_sort,
+            module: Qualifier::from([path]),
+            root: RootId::Entry,
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
+}
+
+#[test]
+fn a_primitive_type_sits_at_level_zero() {
+    let mut kernel = kernel();
+
+    assert_eq!(
+        sort_of(&mut kernel, &Term::prim(Prim::NatType)),
+        Ok(Sort::Type(Level::zero())),
+    );
+}
+
+/// `Type u : Type (u + 1)`, and `Prop : Type 0`. Both are the sort of a
+/// universe, not the universe itself.
+#[test]
+fn a_universe_is_one_level_above_itself() {
+    let mut kernel = kernel();
+
+    assert_eq!(
+        sort_of(&mut kernel, &Term::type_ground()),
+        Ok(Sort::Type(
+            Level::zero().succ().expect("level zero succeeds")
+        )),
+    );
+    assert_eq!(
+        sort_of(&mut kernel, &Term::prop()),
+        Ok(Sort::Type(Level::zero())),
+    );
+}
+
+#[test]
+fn a_nominal_types_sort_is_the_one_its_declaration_states() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let data = declare(&mut kernel, "D", Term::type_ground());
+
+    assert_eq!(sort_of(&mut kernel, &proposition), Ok(Sort::Prop));
+    assert_eq!(sort_of(&mut kernel, &data), Ok(Sort::Type(Level::zero())),);
+}
+
+/// Π into a proposition is a proposition however large its domain, which is
+/// what makes `(n : Nat) -> P(n)` erasable.
+#[test]
+fn a_function_into_a_proposition_is_a_proposition() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let binder = crate::Free::local(0, Some("n"));
+
+    let pi = Term::func_type([(binder, Term::prim(Prim::NatType))], proposition);
+
+    assert_eq!(sort_of(&mut kernel, &pi), Ok(Sort::Prop));
+}
+
+#[test]
+fn a_function_into_data_takes_the_join_of_its_parts() {
+    let mut kernel = kernel();
+    let binder = crate::Free::local(0, Some("n"));
+
+    let pi = Term::func_type(
+        [(binder, Term::prim(Prim::NatType))],
+        Term::prim(Prim::NatType),
+    );
+
+    assert_eq!(sort_of(&mut kernel, &pi), Ok(Sort::Type(Level::zero())));
+}
+
+/// A record of nothing but propositions is a proposition — but the *empty*
+/// record is unit, not a proposition. It is what an effect returns, so calling
+/// it a proposition would erase a value the program still needs.
+#[test]
+fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+
+    let all_props = Term::tuple_type([
+        (binder(0, "a"), proposition.clone()),
+        (binder(1, "b"), proposition),
+    ]);
+    assert_eq!(sort_of(&mut kernel, &all_props), Ok(Sort::Prop));
+
+    let unit = Term::tuple_type(Vec::<(crate::Free, Term)>::new());
+    assert_eq!(sort_of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
+}
+
+/// One relevant field is enough to make the whole record relevant: its
+/// inhabitants are distinguishable, so irrelevance must not apply.
+#[test]
+fn one_relevant_field_makes_a_record_relevant() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+
+    let mixed = Term::tuple_type([
+        (binder(0, "a"), proposition),
+        (binder(1, "b"), Term::prim(Prim::NatType)),
+    ]);
+
+    assert_eq!(sort_of(&mut kernel, &mixed), Ok(Sort::Type(Level::zero())));
+}
+
+/// A list *of* proofs is not a proposition: it has a length, so two lists are
+/// distinguishable even when their elements are not.
+#[test]
+fn a_list_of_proofs_is_not_a_proposition() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+
+    let list = Term::prim(Prim::LstType(proposition));
+
+    assert_eq!(sort_of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
+}
+
+/// The type of a hypothesis is read off the binder it was opened at, which is
+/// how a `Prop`-typed variable is recognized as a proof.
+#[test]
+fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let hypothesis = crate::Free::local(0, Some("h"));
+
+    // `h : P`, so `sort_of(P)` is `Prop` and the *type of h* is `P`.
+    kernel.assume(&hypothesis, &Term::prop());
+    let sort = sort_of(&mut kernel, &Term::free_var(&hypothesis));
+
+    assert_eq!(sort, Ok(Sort::Prop));
+    let _ = proposition;
+}
+
+/// Refusing beats guessing: an unregistered nominal type has no sort the kernel
+/// can determine, and inventing one is the unsound direction.
+#[test]
+fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
+    let mut kernel = kernel();
+    let name = nominal("Missing");
+    let type_ = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    assert_eq!(
+        sort_of(&mut kernel, &type_),
+        Err(crate::KernelError::Undeclared(name)),
+    );
+}
+
+/// A primitive *value* is not a type, so nothing classifies it — again a
+/// refusal rather than a default.
+#[test]
+fn a_value_in_type_position_is_refused() {
+    let mut kernel = kernel();
+
+    assert!(matches!(
+        sort_of(&mut kernel, &Term::prim(Prim::Bool(true))),
+        Err(crate::KernelError::Unclassified(_)),
+    ));
+}
+
+/// Unused today, kept because a plicity mark is part of a function type's
+/// identity and the constructor above takes one.
+#[allow(dead_code)]
+fn explicit() -> Plicity {
+    Plicity::Explicit
+}
+
+fn binder(index: u32, hint: &str) -> crate::Free {
+    crate::Free::local(index, Some(hint))
+}

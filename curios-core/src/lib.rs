@@ -53,8 +53,14 @@ pub use free_monoid::*;
 mod reduce;
 pub use reduce::*;
 
-mod kernel;
-pub use kernel::*;
+/// The kernel is the one module that is *not* flattened. It names its
+/// judgments `convert`, `infer`, and `Sort` — the same things `curios-elab`
+/// names its own — and flattening both into one namespace would leave every
+/// use site ambiguous. Keeping it a namespace is what lets the two checkers
+/// coexist and be told apart at a glance: `curios_core::kernel::convert` is
+/// the second opinion, and the bare `convert` is the elaborator's.
+pub mod kernel;
+pub use kernel::{Kernel, KernelError};
 
 mod names;
 pub use names::*;

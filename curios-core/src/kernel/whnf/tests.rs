@@ -54,7 +54,7 @@ fn beta_opens_a_function_over_its_arguments() {
 fn delta_unfolds_a_monomorphic_definition() {
     let mut kernel = kernel();
     let f = binder(0, "f");
-    kernel.define(&f, &nat(3), &monomorphic());
+    kernel.define(&f, &nat_type(), &nat(3), &monomorphic());
 
     assert_eq!(whnf(&mut kernel, Term::free_var(&f)), Ok(nat(3)));
 }
@@ -66,7 +66,7 @@ fn delta_unfolds_a_monomorphic_definition() {
 fn delta_withholds_a_universe_polymorphic_definition() {
     let mut kernel = kernel();
     let f = binder(0, "f");
-    kernel.define(&f, &nat(3), &polymorphic());
+    kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
 
     let occurrence = Term::free_var(&f);
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
@@ -78,7 +78,7 @@ fn delta_withholds_a_universe_polymorphic_definition() {
 fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let mut kernel = kernel();
     let f = binder(0, "f");
-    kernel.define(&f, &nat(3), &polymorphic());
+    kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
 
     let instance = Term::universe_inst(Term::free_var(&f), vec![crate::Level::zero()]);
     assert_eq!(whnf(&mut kernel, instance), Ok(nat(3)));
@@ -122,7 +122,7 @@ fn zeta_substitutes_let_bindings_left_to_right() {
 fn primitives_fold_through_the_reducer_seam() {
     let mut kernel = kernel();
     let x = binder(0, "x");
-    kernel.define(&x, &nat(2), &monomorphic());
+    kernel.define(&x, &nat_type(), &nat(2), &monomorphic());
 
     let term = Term::prim(Prim::nat_add(Term::free_var(&x), nat(2)));
 
