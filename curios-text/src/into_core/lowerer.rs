@@ -231,34 +231,51 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, \\)`
     // matches because `step` of the last byte reduces back to `lead` for valid UTF-8
     // (a string literal is valid UTF-8 by construction).
+    /// Built in two passes rather than by recursing on the tail, because both
+    /// halves of the obvious shape are unbounded in the literal's length: one
+    /// native frame per byte overflows the stack outright above about 16KiB,
+    /// and packing `tail` at every link copies the remaining bytes once per
+    /// byte. The states thread forwards and the derivation nests backwards, so
+    /// the forward pass records each link's state and the backward pass folds
+    /// the chain up from `stop`. The suffixes are windows onto one shared
+    /// buffer, which `PackedBin` gives for the cost of an `Arc` clone.
     pub(super) fn utf8_derivation(
         &self,
         bytes: &[u8],
         state: curios_elab::Term,
     ) -> curios_elab::Term {
-        match bytes.split_first() {
-            None => Self::syn_call(self.context.syntax().string().utf8_stop(), []),
-            Some((&head, tail)) => {
-                let byte: curios_elab::Term =
-                    curios_elab::Term::prim(curios_elab::Prim::Byte(head));
-                let next = Self::syn_call(
-                    self.context.syntax().string().step(),
-                    [byte.clone(), state.clone()],
-                );
-                Self::syn_call(
-                    self.context.syntax().string().utf8_more(),
-                    [
-                        byte,
-                        state,
-                        curios_elab::Term::prim(curios_elab::Prim::Bin(
-                            Grain::X,
-                            PackedBin::from_bytes(tail.to_vec()),
-                        )),
-                        self.utf8_derivation(tail, next),
-                    ],
-                )
-            }
+        let packed = PackedBin::from_bytes(bytes.to_vec());
+
+        let mut states = Vec::with_capacity(bytes.len());
+        let mut carried = state;
+        for &head in bytes {
+            let byte: curios_elab::Term = curios_elab::Term::prim(curios_elab::Prim::Byte(head));
+            let next = Self::syn_call(
+                self.context.syntax().string().step(),
+                [byte, carried.clone()],
+            );
+            states.push(carried);
+            carried = next;
         }
+
+        let mut derivation = Self::syn_call(self.context.syntax().string().utf8_stop(), []);
+        for (index, (&head, state)) in bytes.iter().zip(states).enumerate().rev() {
+            let tail = packed
+                .slice(Grain::X, index + 1, bytes.len())
+                .expect("a suffix of the literal's own bytes is in range");
+
+            derivation = Self::syn_call(
+                self.context.syntax().string().utf8_more(),
+                [
+                    curios_elab::Term::prim(curios_elab::Prim::Byte(head)),
+                    state,
+                    curios_elab::Term::prim(curios_elab::Prim::Bin(Grain::X, tail)),
+                    derivation,
+                ],
+            );
+        }
+
+        derivation
     }
 
     // A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter
