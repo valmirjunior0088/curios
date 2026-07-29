@@ -110,24 +110,29 @@ fn class(error: &KernelError) -> String {
 /// `recheck_module_verdicts`), which is what makes the classes countable rather
 /// than discovered one build at a time.
 ///
-/// # This aborts in a debug build, and that is a defect
+/// # It used to abort in a debug build, and that was the defect
 ///
-/// The kernel's judgment depth scales with a `Str` literal's *length* — 103
-/// nested judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is
-/// one certified-UTF-8 link per scalar and the `compare`/`sort_of`/`whnf`/
-/// `reduce_prim` cycle walks the chain natively. Bounded by data length rather
-/// than by written nesting is exactly the shape `AGENTS.md` forbids, and a
-/// checker that aborts cannot be made load-bearing whatever else it decides.
+/// Judgment depth once scaled with a `Str` literal's *length* — 103 nested
+/// judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is one
+/// certified-UTF-8 link per scalar and `infer`/`check` descended two frames per
+/// link. At roughly 21.5KiB of stack per level in a debug build that exhausted
+/// a 2MiB thread partway through `/std/Toml`, and no reduction budget could
+/// prevent it: a budget bounds steps, and depth is not steps.
 ///
-/// Release completes the standard library only because its frames are smaller;
-/// the depth is identical in both profiles, measured at the same watermark. So
-/// running this in release is a way to take the measurement *until the defect
-/// is fixed*, not a property of the test and not a reason the defect is
-/// tolerable. Stack size is not something to hide behind — see the same rule
-/// about `RUST_MIN_STACK` in `AGENTS.md`.
+/// `infer` now defers the child obligations of an application, a constructor,
+/// and a record onto a stack rather than descending into them, so depth is
+/// bounded by written nesting. Both profiles complete, and both report the same
+/// verdicts — which is the check that this was a restructuring rather than a
+/// change of rule.
 ///
-/// An abort rather than a tally is likewise a finding, not noise: nothing here
-/// is wrapped in a catch, because a kernel that aborts is a kernel to fix.
+/// The measurement that found it is worth keeping: a backtrace at depth 300
+/// showed the stack was 300 `infer` and 298 `check` frames and *nothing else*,
+/// which retired an earlier diagnosis naming four functions that were never on
+/// it. Stack size is not something to hide behind either — see the rule about
+/// `RUST_MIN_STACK` in `AGENTS.md`.
+///
+/// An abort rather than a tally is a finding, not noise: nothing here is
+/// wrapped in a catch, because a kernel that aborts is a kernel to fix.
 #[test]
 #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
 fn kernel_disagreements() {
