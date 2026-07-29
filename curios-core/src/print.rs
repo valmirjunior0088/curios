@@ -6,7 +6,7 @@ use {
     },
     curios_base::{
         Flt, Grain, Plicity, Qualifier,
-        printer::{Printer, flat, indent, pure, sep_flat},
+        printer::{Printer, deferred, flat, indent, pure, sep_flat},
     },
     std::{
         cell::RefCell,
@@ -437,17 +437,12 @@ fn print_flt(flt: Flt) -> Printer {
 /// scalar arithmetic/comparison/bitwise prim shares. `name` carries its own
 /// trailing space (`"Nat.add "`).
 fn print_binary(name: &'static str, left: Term, right: Term, depth: usize) -> Printer {
-    flat([
-        pure(name),
-        print_term(left, depth),
-        pure(" "),
-        print_term(right, depth),
-    ])
+    flat([pure(name), sub(left, depth), pure(" "), sub(right, depth)])
 }
 
 /// The unary counterpart of [`print_binary`]: `name inner`.
 fn print_unary(name: &'static str, inner: Term, depth: usize) -> Printer {
-    flat([pure(name), print_term(inner, depth)])
+    flat([pure(name), sub(inner, depth)])
 }
 
 /// The surface infix symbol an operator primitive prints as, or `None` for a
@@ -502,9 +497,9 @@ fn print_operand(term: Term, depth: usize) -> Printer {
     };
 
     if parenthesize {
-        flat([pure("("), print_term(term, depth), pure(")")])
+        flat([pure("("), sub(term, depth), pure(")")])
     } else {
-        print_term(term, depth)
+        sub(term, depth)
     }
 }
 
@@ -631,19 +626,18 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
         Prim::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, depth),
         Prim::BinSlice(Grain::X, bin, start, end) => flat([
             pure("Bytes.slice "),
-            print_term(bin, depth),
+            sub(bin, depth),
             pure(" "),
-            print_term(start, depth),
+            sub(start, depth),
             pure(" "),
-            print_term(end, depth),
+            sub(end, depth),
         ]),
         Prim::BinAppend(Grain::X, b, byte) => print_binary("Bytes.append ", b, byte, depth),
         Prim::BinConcat(Grain::X, operands) => flat([
             pure("Bytes.concat "),
-            sep_flat(
-                operands.into_iter().map(move |e| print_term(e, depth)),
-                || pure(", "),
-            ),
+            sep_flat(operands.into_iter().map(move |e| sub(e, depth)), || {
+                pure(", ")
+            }),
         ]),
         Prim::BinType(Grain::B) => pure("Bits"),
         Prim::Bin(Grain::B, bits) => pure(
@@ -665,73 +659,69 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
         Prim::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, depth),
         Prim::BinSlice(Grain::B, bin, start, end) => flat([
             pure("Bits.slice "),
-            print_term(bin, depth),
+            sub(bin, depth),
             pure(" "),
-            print_term(start, depth),
+            sub(start, depth),
             pure(" "),
-            print_term(end, depth),
+            sub(end, depth),
         ]),
         Prim::BinAppend(Grain::B, b, bit) => print_binary("Bits.append ", b, bit, depth),
         Prim::BinConcat(Grain::B, operands) => flat([
             pure("Bits.concat "),
-            sep_flat(
-                operands.into_iter().map(move |e| print_term(e, depth)),
-                || pure(", "),
-            ),
+            sep_flat(operands.into_iter().map(move |e| sub(e, depth)), || {
+                pure(", ")
+            }),
         ]),
         Prim::LstType(elem) => print_unary("Lst ", elem, depth),
         Prim::Lst(elems) => flat([
             pure("["),
-            sep_flat(elems.into_iter().map(move |e| print_term(e, depth)), || {
-                pure(", ")
-            }),
+            sep_flat(elems.into_iter().map(move |e| sub(e, depth)), || pure(", ")),
             pure("]"),
         ]),
         Prim::LstLen(ty, list) => print_binary("Lst.len ", ty, list, depth),
         Prim::LstGet(ty, list, index) => flat([
             pure("Lst.get "),
-            print_term(ty, depth),
+            sub(ty, depth),
             pure(" "),
-            print_term(list, depth),
+            sub(list, depth),
             pure(" "),
-            print_term(index, depth),
+            sub(index, depth),
         ]),
         Prim::LstSlice(ty, list, start, end) => flat([
             pure("Lst.slice "),
-            print_term(ty, depth),
+            sub(ty, depth),
             pure(" "),
-            print_term(list, depth),
+            sub(list, depth),
             pure(" "),
-            print_term(start, depth),
+            sub(start, depth),
             pure(" "),
-            print_term(end, depth),
+            sub(end, depth),
         ]),
         Prim::LstAppend(ty, list, elem) => flat([
             pure("Lst.append "),
-            print_term(ty, depth),
+            sub(ty, depth),
             pure(" "),
-            print_term(list, depth),
+            sub(list, depth),
             pure(" "),
-            print_term(elem, depth),
+            sub(elem, depth),
         ]),
         Prim::LstConcat(ty, operands) => flat([
             pure("Lst.concat "),
-            print_term(ty, depth),
+            sub(ty, depth),
             pure(" "),
-            sep_flat(
-                operands.into_iter().map(move |e| print_term(e, depth)),
-                || pure(", "),
-            ),
+            sep_flat(operands.into_iter().map(move |e| sub(e, depth)), || {
+                pure(", ")
+            }),
         ]),
         Prim::LstMap(a, b, lst, f) => flat([
             pure("Lst.map "),
-            print_term(a, depth),
+            sub(a, depth),
             pure(" "),
-            print_term(b, depth),
+            sub(b, depth),
             pure(" "),
-            print_term(lst, depth),
+            sub(lst, depth),
             pure(" "),
-            print_term(f, depth),
+            sub(f, depth),
         ]),
         Prim::HandleType => pure("Handle"),
         Prim::Handle(token) => pure(format!("Handle({token})")),
@@ -740,7 +730,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
                 .into_iter()
                 .chain(
                     args.into_iter()
-                        .flat_map(|arg| [pure(" "), print_term(arg, depth)]),
+                        .flat_map(|arg| [pure(" "), sub(arg, depth)]),
                 )
                 .collect::<Vec<_>>(),
         ),
@@ -749,14 +739,31 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
         Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),
         Prim::CellSet(type_, cell, value) => flat([
             pure("Cell.set "),
-            print_term(type_, depth),
+            sub(type_, depth),
             pure(" "),
-            print_term(cell, depth),
+            sub(cell, depth),
             pure(" "),
-            print_term(value, depth),
+            sub(value, depth),
         ]),
         Prim::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, depth),
     }
+}
+
+/// A child document, deferred.
+///
+/// Every recursive call in this module goes through here. Printing a term is a
+/// recursive function over a recursive structure, so building the document
+/// descended as deep as the term — one native frame per link of a string
+/// literal's UTF-8 derivation, which aborted the compiler while it was trying
+/// to *report* that the same literal had exhausted the reduction budget. The
+/// thunk moves that descent onto `run_printer`'s stack.
+fn sub(term: Term, depth: usize) -> Printer {
+    deferred(move || print_term(term, depth))
+}
+
+/// [`sub`] for a primitive's operands.
+fn sub_prim(prim: Prim, depth: usize) -> Printer {
+    deferred(move || print_prim(prim, depth))
 }
 
 pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
@@ -770,7 +777,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
         }
         Subterm::Prop => pure("Prop"),
         Subterm::UniverseInst(instance) => flat([
-            print_term(instance.head, depth),
+            sub(instance.head, depth),
             pure(format!(
                 ".{{{}}}",
                 instance
@@ -781,7 +788,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     .join(",")
             )),
         ]),
-        Subterm::Prim(prim) => print_prim(prim, depth),
+        Subterm::Prim(prim) => sub_prim(prim, depth),
         Subterm::FuncType(FuncType {
             telescope,
             plicities,
@@ -805,7 +812,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                             Some(Plicity::Witness) => "use ",
                             _ => "",
                         };
-                        let typed = print_term(ty, depth + total);
+                        let typed = sub(ty, depth + total);
                         let printer = match raw {
                             Some(_) => {
                                 flat([pure(mark), pure(display_label(&label)), pure(" : "), typed])
@@ -826,7 +833,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 pure("("),
                 sep_flat(printers, || pure(", ")),
                 pure(") -> "),
-                print_term(output, depth + n),
+                sub(output, depth + n),
             ])
         }
         Subterm::Func(Func {
@@ -854,27 +861,23 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             } else {
                 format!("({})", marked.join(", "))
             };
-            flat([
-                pure(param_str),
-                pure(" =>\n"),
-                indent(print_term(body, depth + n)),
-            ])
+            flat([pure(param_str), pure(" =>\n"), indent(sub(body, depth + n))])
         }
         Subterm::Apply(Apply {
             head,
             params,
             plicities,
         }) => flat([
-            print_term(head, depth),
+            sub(head, depth),
             pure("("),
             sep_flat(
                 params
                     .into_iter()
                     .zip(plicities)
                     .map(|(p, plicity)| match plicity {
-                        Plicity::Implicit => flat([pure("@"), print_term(p, depth)]),
-                        Plicity::Witness => flat([pure("use "), print_term(p, depth)]),
-                        Plicity::Explicit => print_term(p, depth),
+                        Plicity::Implicit => flat([pure("@"), sub(p, depth)]),
+                        Plicity::Witness => flat([pure("use "), sub(p, depth)]),
+                        Plicity::Explicit => sub(p, depth),
                     })
                     .collect::<Vec<_>>(),
                 || pure(", "),
@@ -896,7 +899,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         items.push(indent(flat([
                             pure(display_label(&label)),
                             pure(" : "),
-                            print_term(ty, depth + total),
+                            sub(ty, depth + total),
                         ])));
                         let next = rest.open(&[&Term::free_var(&label)]);
                         walk(next, depth, total, idx + 1, items);
@@ -918,8 +921,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     fields
                         .into_iter()
                         .map(move |f| match names.next().flatten() {
-                            Some(name) => flat([pure(name), pure(" = "), print_term(f, depth)]),
-                            None => print_term(f, depth),
+                            Some(name) => flat([pure(name), pure(" = "), sub(f, depth)]),
+                            None => sub(f, depth),
                         }),
                     || pure(", "),
                 ),
@@ -931,7 +934,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 Field::Index(index) => format!(").{index}"),
                 Field::Label(label) => format!(").{label}"),
             };
-            flat([pure("("), print_term(head, depth), pure(field)])
+            flat([pure("("), sub(head, depth), pure(field)])
         }
         // Params then indices, one flat argument list — exactly how the
         // type-constructor function is applied at use sites.
@@ -952,7 +955,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         params
                             .into_iter()
                             .chain(indices)
-                            .map(|p| print_term(p, depth))
+                            .map(|p| sub(p, depth))
                             .collect::<Vec<_>>(),
                         || pure(", "),
                     ),
@@ -979,7 +982,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     sep_flat(
                         payload
                             .into_iter()
-                            .map(|p| print_term(p, depth))
+                            .map(|p| sub(p, depth))
                             .collect::<Vec<_>>(),
                         || pure(", "),
                     ),
@@ -1003,7 +1006,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     sep_flat(
                         params
                             .into_iter()
-                            .map(|p| print_term(p, depth))
+                            .map(|p| sub(p, depth))
                             .collect::<Vec<_>>(),
                         || pure(", "),
                     ),
@@ -1027,7 +1030,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             sep_flat(
                 fields
                     .into_iter()
-                    .map(|f| print_term(f, depth))
+                    .map(|f| sub(f, depth))
                     .collect::<Vec<_>>(),
                 || pure(", "),
             ),
@@ -1066,11 +1069,11 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
 
             let prefix = flat([
                 pure(keyword),
-                print_term(head, depth),
+                sub(head, depth),
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
-                print_term(motive, depth + motive_arity),
+                sub(motive, depth + motive_arity),
                 pure(";"),
             ]);
 
@@ -1080,9 +1083,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     true_case,
                 } => flat([
                     pure("\n| false =>\n"),
-                    indent(flat([print_term(false_case, depth), pure(";")])),
+                    indent(flat([sub(false_case, depth), pure(";")])),
                     pure("\n| true =>\n"),
-                    indent(flat([print_term(true_case, depth), pure(";")])),
+                    indent(flat([sub(true_case, depth), pure(";")])),
                 ]),
                 Cases::Switch { cases, default } => {
                     let case_printers = flat(
@@ -1091,7 +1094,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                             .map(|(n, body)| {
                                 flat([
                                     pure(format!("\n| {n}n =>\n")),
-                                    indent(flat([print_term(body, depth), pure(";")])),
+                                    indent(flat([sub(body, depth), pure(";")])),
                                 ])
                             })
                             .collect::<Vec<_>>(),
@@ -1099,7 +1102,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     flat([
                         case_printers,
                         pure("\n| _ =>\n"),
-                        indent(flat([print_term(default, depth), pure(";")])),
+                        indent(flat([sub(default, depth), pure(";")])),
                     ])
                 }
                 Cases::Induct { cases, default, .. } => {
@@ -1138,10 +1141,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                                     print_atom(atom),
                                     binders,
                                     pure(" =>\n"),
-                                    indent(flat([
-                                        print_term(body, depth + labels.len()),
-                                        pure(";"),
-                                    ])),
+                                    indent(flat([sub(body, depth + labels.len()), pure(";")])),
                                 ])
                             })
                             .collect::<Vec<_>>(),
@@ -1150,7 +1150,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         Some(default) => flat([
                             case_printers,
                             pure("\n| _ =>\n"),
-                            indent(flat([print_term(default, depth), pure(";")])),
+                            indent(flat([sub(default, depth), pure(";")])),
                         ]),
                         None => case_printers,
                     }
@@ -1172,7 +1172,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                             pure("; "),
                             pure(display_label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([print_term(cons_case, depth), pure(";")])),
+                            indent(flat([sub(cons_case, depth), pure(";")])),
                         ])
                     };
                     let cons_lst = |cons_case: Scope<Three>| {
@@ -1186,7 +1186,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                             pure("]; "),
                             pure(display_label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([print_term(cons_case, depth), pure(";")])),
+                            indent(flat([sub(cons_case, depth), pure(";")])),
                         ])
                     };
 
@@ -1206,7 +1206,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                                 pure(" "),
                                 pure(display_label(&ih_label)),
                                 pure(" =>\n"),
-                                indent(flat([print_term(cons_case, depth), pure(";")])),
+                                indent(flat([sub(cons_case, depth), pure(";")])),
                             ]);
                             ("\n| 0n =>\n", empty_case, cons_arm)
                         }
@@ -1230,7 +1230,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     };
                     flat([
                         pure(empty_lit),
-                        indent(flat([print_term(empty_case, depth), pure(";")])),
+                        indent(flat([sub(empty_case, depth), pure(";")])),
                         cons_arm,
                     ])
                 }
@@ -1254,9 +1254,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         pure("let "),
                         pure(display_label(&labels[index])),
                         pure(" : "),
-                        print_term(type_, depth + index),
+                        sub(type_, depth + index),
                         pure(" =\n"),
-                        indent(flat([print_term(value, depth + index), pure(";")])),
+                        indent(flat([sub(value, depth + index), pure(";")])),
                         pure("\n"),
                     ])
                 })
@@ -1264,7 +1264,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
 
             flat([
                 flat(lines),
-                print_term(tail.open(&label_terms), depth + labels.len()),
+                sub(tail.open(&label_terms), depth + labels.len()),
             ])
         }
         Subterm::Rec(Rec { group, tail }) => {
@@ -1284,9 +1284,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     flat([
                         pure(display_label(&labels[index])),
                         pure(" : "),
-                        print_term(type_, inner_depth),
+                        sub(type_, inner_depth),
                         pure(" =\n"),
-                        indent(print_term(body, inner_depth)),
+                        indent(sub(body, inner_depth)),
                     ])
                 })
                 .collect::<Vec<_>>();
@@ -1297,12 +1297,12 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 pure("rec "),
                 sep_flat(bindings, || pure("\nand ")),
                 pure(";\n"),
-                print_term(tail, inner_depth),
+                sub(tail, inner_depth),
             ])
         }
         Subterm::RecMember(RecMember { group, index }) => {
             let tail = Scope::constant(Many(group.length()), Term::var(Var::bound(index)));
-            print_term(Subterm::Rec(Rec { group, tail }).into(), depth)
+            sub(Subterm::Rec(Rec { group, tail }).into(), depth)
         }
         Subterm::Var(var) => print_var(var),
         Subterm::NumLit(num_lit) => {
@@ -1316,9 +1316,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             pure(format!("{sign}{}", num_lit.magnitude))
         }
         Subterm::Infix(Infix { op, left, right }) => flat([
-            print_term(left, depth),
+            sub(left, depth),
             pure(format!(" {} ", op.symbol())),
-            print_term(right, depth),
+            sub(right, depth),
         ]),
         // Identity and renaming spines (every entry a variable) are the
         // uninteresting common case and print as the bare id; a spine carrying
@@ -1337,7 +1337,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         metavar
                             .spine
                             .iter()
-                            .map(|entry| print_term(entry.clone(), depth))
+                            .map(|entry| sub(entry.clone(), depth))
                             .collect::<Vec<_>>(),
                         || pure(", "),
                     ),

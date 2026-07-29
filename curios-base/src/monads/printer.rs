@@ -67,6 +67,18 @@ pub enum Printer {
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
     Indent(Box<Printer>),
+    /// A document not built yet.
+    ///
+    /// The one closure variant, and it earns its place: a printer for a
+    /// recursive IR is written as a recursive function, so *building* a
+    /// document descends as deep as the term even though [`run_printer`] no
+    /// longer does. Deferring a child turns that descent into work on the
+    /// interpreter's stack — the builder is called when the interpreter reaches
+    /// it, from a frame one deep rather than `n`.
+    ///
+    /// `Option` so the interpreter can take the thunk out: a type with a `Drop`
+    /// impl cannot have a field moved away.
+    Deferred(Option<Box<dyn FnOnce() -> Printer>>),
 }
 
 impl Printer {
@@ -85,6 +97,8 @@ impl Printer {
             Printer::Text(_) => true,
             Printer::Concat(parts) => parts.is_empty(),
             Printer::Indent(inner) => matches!(**inner, Printer::Text(_)),
+            // Holds a thunk, never a child document.
+            Printer::Deferred(_) => true,
         }
     }
 }
@@ -113,6 +127,7 @@ impl Drop for Printer {
                 Printer::Text(_) => {}
                 Printer::Concat(parts) => pending.extend(mem::take(parts)),
                 Printer::Indent(inner) => pending.push(inner.take()),
+                Printer::Deferred(_) => {}
             }
             // `printer` is dismantled now, so its own drop returns at once.
         }
@@ -158,6 +173,11 @@ pub fn run_printer<'b, 'c>(
                     state.indent_by += state.indent_step;
                     stack.push(Step::Dedent);
                     stack.push(Step::Print(inner.take()));
+                }
+                Printer::Deferred(thunk) => {
+                    if let Some(thunk) = thunk.take() {
+                        stack.push(Step::Print(thunk()));
+                    }
                 }
             },
             Step::Dedent => state.indent_by -= state.indent_step,
@@ -213,6 +233,19 @@ where
     }
 
     Printer::Concat(parts)
+}
+
+/// Defers building a document until the interpreter reaches it.
+///
+/// Wrap a printer's *recursive* calls in this and building stops descending:
+/// each child is built from the interpreter's frame rather than from inside its
+/// parent's, so a document nests as deep as the term without the builder doing
+/// the same. See [`Printer::Deferred`].
+pub fn deferred<F>(f: F) -> Printer
+where
+    F: FnOnce() -> Printer + 'static,
+{
+    Printer::Deferred(Some(Box::new(f)))
 }
 
 /// Runs the printer one indentation level deeper: every line *begun* inside it
