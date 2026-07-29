@@ -35,10 +35,13 @@
 //! These stay ignored as the record of where the walk stops. Running them is
 //! how the next gap gets found.
 
-use curios_elab::{KernelError, recheck_module};
+use {
+    curios_elab::{KernelError, Module, Term, recheck_module, recheck_module_verdicts},
+    std::collections::BTreeMap,
+};
 
-/// Compile `source` and hand the elaborated module to the kernel.
-fn recheck(source: &str) -> Result<(), KernelError> {
+/// Compile `source` and return the elaborated module the kernel checks.
+fn elaborated(source: &str) -> Module {
     let entrypoint = source
         .parse::<curios_text::Entrypoint>()
         .expect("the fixture parses");
@@ -56,9 +59,116 @@ fn recheck(source: &str) -> Result<(), KernelError> {
     )
     .expect("the fixture compiles");
 
-    let core = core.expect("Stage::CoreElab observed");
+    core.expect("Stage::CoreElab observed")
+}
 
-    recheck_module(&core, crate::DEFAULT_STEP_BUDGET)
+/// Compile `source` and hand the elaborated module to the kernel.
+fn recheck(source: &str) -> Result<(), KernelError> {
+    recheck_module(&elaborated(source), crate::DEFAULT_STEP_BUDGET)
+}
+
+/// A term's printed head, clipped — enough to tell one refusal's shape from
+/// another's without pasting a standard-library type into a tally.
+fn head(term: &Term) -> String {
+    let rendered = format!("{term}");
+    let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    match rendered.char_indices().nth(44) {
+        Some((cut, _)) => format!("{}…", &rendered[..cut]),
+        None => rendered,
+    }
+}
+
+/// The class a refusal is tallied under.
+///
+/// Deliberately mechanical: the variant, plus for a mismatch the two sides'
+/// printed heads. Naming classes like "index inversion" here would be inventing
+/// categories from a heuristic, which is how this project's wrong answers get
+/// made — the point of the tally is to let the categories fall out of it.
+fn class(error: &KernelError) -> String {
+    match error {
+        KernelError::Mismatch { inferred, expected } => {
+            format!("Mismatch  {}  vs  {}", head(inferred), head(expected))
+        }
+        other => {
+            let rendered = format!("{other:?}");
+
+            rendered
+                .split(['(', ' ', '{'])
+                .next()
+                .unwrap_or("?")
+                .to_string()
+        }
+    }
+}
+
+/// Every item the kernel refuses across a few whole programs, tallied by class.
+///
+/// Not an assertion — a measurement, run on demand. `recheck_module` stops at
+/// the first refusal and so says nothing about what lies past it; this walks to
+/// the end with each verdict independent of the others (see
+/// `recheck_module_verdicts`), which is what makes the classes countable rather
+/// than discovered one build at a time.
+///
+/// # Run this in release
+///
+/// A debug build overflows partway through `/std/Toml`. That is not a property
+/// of the walk: the depth is identical in both profiles (measured — the same
+/// watermark), and only the frame size differs, so a 2MiB thread runs out at
+/// around 120 nested judgments. Release completes the whole standard library.
+///
+/// The depth itself is a real defect, and it is the one to fix rather than to
+/// budget around: it scales with a `Str` literal's *length* — 103 nested
+/// judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is one
+/// certified-UTF-8 link per scalar and the `compare`/`sort_of`/`whnf`/
+/// `reduce_prim` cycle walks the chain natively. Bounded by data length rather
+/// than by written nesting is exactly what ROADMAP.md forbids.
+///
+/// An abort rather than a tally is likewise a finding, not noise: nothing here
+/// is wrapped in a catch, because a kernel that aborts is a kernel to fix.
+#[test]
+#[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
+fn kernel_disagreements() {
+    let fixtures = [
+        ("trivial", "()"),
+        (
+            "arithmetic",
+            r#"
+            use /std/{Nat};
+            let double(n : Nat) -> Nat = Nat/add(n, n);
+            /std/print(Nat/to_str(double(21)))
+            "#,
+        ),
+        // A string literal is one `Utf8` derivation link per byte, which is the
+        // shape that forced the totality walk to go iterative.
+        ("literal", r#"/std/print("the quick brown fox\n")"#),
+    ];
+
+    for (label, source) in fixtures {
+        let module = elaborated(source);
+        let verdicts = recheck_module_verdicts(&module, crate::DEFAULT_STEP_BUDGET);
+
+        let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+        for verdict in &verdicts {
+            *tally.entry(class(&verdict.error)).or_default() += 1;
+        }
+
+        println!(
+            "\n=== {label}: {} of {} items refused ===",
+            verdicts.len(),
+            module.items.len()
+        );
+        for (class, count) in &tally {
+            println!("  {count:>4}  {class}");
+        }
+        for verdict in &verdicts {
+            let name = match &verdict.name {
+                Some(name) => format!("{name}"),
+                None => "<entrypoint>".to_string(),
+            };
+            println!("        {name}  —  {}", class(&verdict.error));
+        }
+    }
 }
 
 /// The smallest thing that is still a whole program: the kernel walks every

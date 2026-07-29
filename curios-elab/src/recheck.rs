@@ -30,7 +30,7 @@
 use {
     super::{Item, Module, totality::mentioned},
     curios_core::{
-        Free, Global, Kernel, KernelError,
+        Free, Global, Kernel, KernelError, Term,
         kernel::{check_definition, check_entrypoint, check_rec_group},
     },
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -100,12 +100,61 @@ fn dependency_order(module: &Module) -> Vec<usize> {
     order
 }
 
+/// One item the kernel refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Verdict {
+    /// The item that failed — a recursive group is named by its first member,
+    /// since a group is checked and refused as a unit. `None` is the entrypoint
+    /// expression, which has no name to export.
+    pub name: Option<Global>,
+    pub error: KernelError,
+}
+
 /// Re-check `module` with the independent kernel.
 ///
 /// `budget` is the reduction allowance each item gets, the same figure the
 /// elaborator's own `Context` is built with.
 pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
+    match recheck_module_verdicts(module, budget).into_iter().next() {
+        Some(verdict) => Err(verdict.error),
+        None => Ok(()),
+    }
+}
+
+/// Every item the kernel refuses, rather than only the first.
+///
+/// # Why this is the primitive
+///
+/// The kernel is incomplete in known places, so a walk over a real module stops
+/// at the first of them and says nothing about what lies past it. Discovering
+/// those one build at a time is how a checker gets patched in the order its
+/// gaps happen to be encountered, rather than in the order they matter. This
+/// exists so the gaps can be *counted* before any of them is designed for —
+/// the same move that settled every earlier question in this effort.
+///
+/// # Why the verdicts are independent
+///
+/// [`check_definition`] and [`check_rec_group`] both return before their
+/// `Kernel::define` step, so a refused item has defined nothing. Running that
+/// same define anyway is what keeps this from degenerating into a cascade:
+/// every item enters the environment at its declared type with its real body
+/// whether or not it checked, so each later item is judged against exactly what
+/// it would have been judged against in a fully passing walk.
+///
+/// Nothing else survives an item. [`Kernel`] holds no caches, its conversion
+/// history is built fresh per comparison, and every binder it opens is retracted
+/// on the failing path as well as the succeeding one. So recovery here is exact
+/// rather than approximate, and a verdict late in the list is worth as much as
+/// the first.
+///
+/// # What it does not tell you
+///
+/// The count is per *item*, not per disagreement: an item stops at its own
+/// first refusal, so one item with three problems reports one. Good for
+/// classifying what is missing, wrong for estimating how much is left.
+pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
     let mut kernel = Kernel::new(budget);
+    let mut verdicts = Vec::new();
 
     // Binder identities are one space shared across the lowerer, the
     // elaborator, and the archived prelude. Seeding above the module's
@@ -127,13 +176,28 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
         let item = &module.items[index];
 
         match item {
-            Item::Let(definition) => check_definition(
-                &mut kernel,
-                &Free::from(&definition.name),
-                &definition.type_,
-                &definition.body,
-                &definition.universe_context,
-            )?,
+            Item::Let(definition) => {
+                let outcome = check_definition(
+                    &mut kernel,
+                    &Free::from(&definition.name),
+                    &definition.type_,
+                    &definition.body,
+                    &definition.universe_context,
+                );
+
+                if let Err(error) = outcome {
+                    verdicts.push(Verdict {
+                        name: Some(definition.name.clone()),
+                        error,
+                    });
+                    kernel.define(
+                        &Free::from(&definition.name),
+                        &definition.type_,
+                        &definition.body,
+                        &definition.universe_context,
+                    );
+                }
+            }
             Item::Rec(rec) => {
                 let names = item
                     .declared_names()
@@ -142,10 +206,31 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
                     .collect::<Vec<_>>();
                 let universes = rec.group.universe_context().clone();
 
-                check_rec_group(&mut kernel, &names, &rec.group, &universes)?;
+                let outcome = check_rec_group(&mut kernel, &names, &rec.group, &universes);
+
+                if let Err(error) = outcome {
+                    verdicts.push(Verdict {
+                        name: item.declared_names().first().map(|&name| name.clone()),
+                        error,
+                    });
+                    // The define `check_rec_group` performs on success: each
+                    // export is the folded selection of the member it names.
+                    for (member, name) in names.iter().enumerate() {
+                        kernel.define(
+                            name,
+                            &rec.group.member_type(member),
+                            &Term::rec_member(rec.group.clone(), member),
+                            &universes,
+                        );
+                    }
+                }
             }
         }
     }
 
-    check_entrypoint(&mut kernel, &module.body, module.type_.as_ref())
+    if let Err(error) = check_entrypoint(&mut kernel, &module.body, module.type_.as_ref()) {
+        verdicts.push(Verdict { name: None, error });
+    }
+
+    verdicts
 }
