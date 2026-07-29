@@ -159,3 +159,79 @@ fn a_foreign_declaration_is_confined_to_wire_types() {
         "#;
     rejected_by(source, "expected a wire type");
 }
+
+// The large-elimination guard again, at its *singleton* rung. A one-constructor
+// proposition may eliminate into data only when every payload binder is
+// non-informative — a proposition itself, or recovered from the scrutinee's
+// indices, as `Eq`'s `refl(@z) : (z, z)` recovers `z`. `singleton_eliminable`
+// decides "recovered" by `terminal.free_vars()`: a *syntactic* occurrence test.
+//
+// Occurring in an index target is not the same as being determined by one.
+// `blur` is constant, so `Loose(0)` is inhabited by `mk(0)` and by `mk(7)`
+// alike, and no index tells them apart — yet `a` occurs in `blur(a)`, so the
+// guard reads it as forced and admits the elimination. Proof irrelevance then
+// identifies the two inhabitants while `extract` observes them apart, and the
+// gap is a closed inhabitant of `False`. The program below prints "FORGED"
+// today; it must be refused.
+//
+// The two ends of the discrimination are already covered by fixtures here: the
+// same declaration with target `(0)` is rejected, and `(a)` is a genuinely
+// forced binder that must stay accepted. Only the middle — an occurrence that
+// does not determine — escapes.
+//
+// The diagnostic asserted is the guard's, because the guard is the perimeter
+// entry that let this through. A fix that instead refuses the *declaration* —
+// requiring a constructor's index targets to be patterns rather than arbitrary
+// terms — is equally legitimate and would need this expectation updated.
+#[test]
+#[ignore = "open: the elaborator still admits this; the kernel refuses it, but nothing runs the kernel yet"]
+fn a_non_injective_index_target_does_not_force_its_binder() {
+    let source = r#"
+        use /std/{Nat, Eq, False};
+
+        let blur(a : Nat) -> Nat = 0;
+
+        induct Loose : (n : Nat) -> pub Prop
+        | mk(a : Nat) : (blur(a))
+        end
+
+        let extract(p : Loose(0)) -> Nat =
+            match p : (m, q) => Nat
+            | mk(a) => a
+            end;
+
+        let same : Eq(Loose/mk(0), Loose/mk(7)) = Eq/refl();
+
+        let boom : False =
+            Eq/subst((n : Nat) => match n : (_) => Type | 0 => {} | _ => False end,
+                     Eq/cong(extract, same),
+                     ());
+
+        /std/print("FORGED")
+        "#;
+    rejected_by(source, "cannot eliminate the proposition");
+}
+
+// The lower end of that discrimination, and the reason the hole is in the
+// occurrence test rather than in the guard as a whole: drop `a` from the index
+// target and the guard fires. Without this, a fix could "close" the hole by
+// rejecting every indexed proposition and nothing here would notice.
+#[test]
+#[ignore = "control for the fixture above; ignored with it so the pair stays read as a pair"]
+fn an_unmentioned_payload_binder_is_not_forced() {
+    let source = r#"
+        use /std/{Nat};
+
+        induct Tight : (n : Nat) -> pub Prop
+        | mk(a : Nat) : (0)
+        end
+
+        let extract(p : Tight(0)) -> Nat =
+            match p : (m, q) => Nat
+            | mk(a) => a
+            end;
+
+        /std/print(Nat/to_str(extract(Tight/mk(7))))
+        "#;
+    rejected_by(source, "cannot eliminate the proposition");
+}

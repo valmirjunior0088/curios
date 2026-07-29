@@ -41,6 +41,9 @@ pub use convert::*;
 mod infer;
 pub use infer::*;
 
+mod module;
+pub use module::*;
+
 mod sort;
 pub use sort::*;
 
