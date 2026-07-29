@@ -128,9 +128,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.
-fn print_func_param(
-    (plicity, name, annotation): (Plicity, String, Option<Term>),
-) -> Printer {
+fn print_func_param((plicity, name, annotation): (Plicity, String, Option<Term>)) -> Printer {
     let bound = match annotation {
         Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
         None => pure(name),
