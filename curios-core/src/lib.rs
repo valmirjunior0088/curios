@@ -2,18 +2,21 @@
 //!
 //! This crate is **representation and primitive computation only**. It defines
 //! [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`],
-//! [`Telescope`], [`Bound`]), the primitive roster ([`Prim`]) and its
-//! free-monoid spine algebra, algebraic universe [`Level`]s and the
-//! [`UniverseContext`] declarations generalize into, the nominal registry
-//! entries ([`InductDecl`], [`StructDecl`]) and the [`Polarity`] lattice they
-//! carry, compiler names, and the printer.
+//! [`Telescope`], [`Bound`]), the primitive roster ([`Prim`]) with its
+//! free-monoid spine algebra and its folds ([`reduce_prim`]), algebraic
+//! universe [`Level`]s and the [`UniverseContext`] declarations generalize
+//! into, the nominal registry entries ([`InductDecl`], [`StructDecl`]) and the
+//! [`Polarity`] lattice they carry, compiler names, and the printer.
 //!
 //! What it deliberately does *not* contain is every judgment: elaboration,
 //! unification, zonking, conversion, reduction strategy, witness resolution,
 //! and erasure all live in `curios-elab`, which depends on this crate. The
 //! universe *solver* stays there too — a [`UniverseContext`] is data, and
 //! deciding whether its constraints are satisfiable is a judgment over that
-//! data.
+//! data. The primitive folds are the boundary case, and [`Reducer`] is where it
+//! is drawn: what `2 + 2` folds to is arithmetic on the representation and
+//! belongs here, while how far an operand reduces before the fold sees it is a
+//! strategy the caller supplies.
 //!
 //! That split is the point: this crate is intended to become the trusted base,
 //! so a rule that can admit a program belongs on the far side of it.
@@ -43,6 +46,9 @@ pub use spine::*;
 
 mod free_monoid;
 pub use free_monoid::*;
+
+mod reduce;
+pub use reduce::*;
 
 mod names;
 pub use names::*;

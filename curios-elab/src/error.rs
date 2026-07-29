@@ -1,85 +1,12 @@
 use {
-    super::{Atom, Erased, Level, Module, Polarity, Term, UniverseConstraintOrigin, UniverseError},
+    super::{
+        Atom, Erased, Level, Module, Polarity, ReduceError, Term, UniverseConstraintOrigin,
+        UniverseError,
+    },
     curios_base::{Int, Plicity, Qualifier, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
-
-/// The failure mode of type-level evaluation (`reduce`/`convert`): either the declaration's step budget ran out (`Exhausted`) or a partial primitive was folded outside its domain, carrying the offending redex's span. Converted into the user-facing [`Error`] at the driver boundary by `into_error`, whose callback lets each caller decide what an exhausted budget reports — the term being reduced, or the pair being compared.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ReduceError {
-    /// The declaration's step budget ran out. Deterministic: the same program
-    /// spends the same steps on every machine, so this is a fact about the
-    /// program rather than about the host that compiled it.
-    Exhausted,
-    BinGetOutOfBounds {
-        len: usize,
-        index: usize,
-        span: Option<Span>,
-    },
-    BinSliceOutOfRange {
-        len: usize,
-        start: usize,
-        end: usize,
-        span: Option<Span>,
-    },
-    LstGetOutOfBounds {
-        len: usize,
-        index: usize,
-        span: Option<Span>,
-    },
-    LstSliceOutOfRange {
-        len: usize,
-        start: usize,
-        end: usize,
-        span: Option<Span>,
-    },
-    EffectAtTypeLevel {
-        kind: String,
-        span: Option<Span>,
-    },
-    /// A `Nat`/`Int` division whose divisor reduced to literal zero —
-    /// mathematically undefined, so reported like
-    /// [`ReduceError::BinGetOutOfBounds`] rather than panicking the fold.
-    /// (Runtime *range* limits, by contrast, never error at the type level:
-    /// `Nat`/`Int` folds are unbounded there.)
-    DivisionByZero {
-        kind: &'static str,
-        span: Option<Span>,
-    },
-    Universe(UniverseError),
-}
-
-impl ReduceError {
-    pub(crate) fn into_error(self, exhausted: impl FnOnce() -> Error) -> Error {
-        match self {
-            Self::Exhausted => exhausted(),
-            Self::BinGetOutOfBounds { len, index, span } => {
-                Error::BinGetOutOfBounds { len, index }.at_opt(span)
-            }
-            Self::BinSliceOutOfRange {
-                len,
-                start,
-                end,
-                span,
-            } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
-            Self::LstGetOutOfBounds { len, index, span } => {
-                Error::LstGetOutOfBounds { len, index }.at_opt(span)
-            }
-            Self::LstSliceOutOfRange {
-                len,
-                start,
-                end,
-                span,
-            } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
-            Self::EffectAtTypeLevel { kind, span } => {
-                Error::EffectAtTypeLevel { kind }.at_opt(span)
-            }
-            Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
-            Self::Universe(error) => Error::from(error),
-        }
-    }
-}
 
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the
 /// elaborate/erase/zonk drivers attach the offending term's span as the error
@@ -511,6 +438,42 @@ pub enum Error {
 }
 
 impl Error {
+    /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports
+    /// what the term did; naming it is this crate's job, which is why the
+    /// conversion lives on [`Error`] rather than on the core failure. The
+    /// `exhausted` callback lets each caller decide what a spent budget reports
+    /// — the term being reduced, or the pair being compared.
+    pub(crate) fn from_reduce(error: ReduceError, exhausted: impl FnOnce() -> Error) -> Error {
+        match error {
+            ReduceError::Exhausted => exhausted(),
+            ReduceError::BinGetOutOfBounds { len, index, span } => {
+                Error::BinGetOutOfBounds { len, index }.at_opt(span)
+            }
+            ReduceError::BinSliceOutOfRange {
+                len,
+                start,
+                end,
+                span,
+            } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
+            ReduceError::LstGetOutOfBounds { len, index, span } => {
+                Error::LstGetOutOfBounds { len, index }.at_opt(span)
+            }
+            ReduceError::LstSliceOutOfRange {
+                len,
+                start,
+                end,
+                span,
+            } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
+            ReduceError::EffectAtTypeLevel { kind, span } => {
+                Error::EffectAtTypeLevel { kind }.at_opt(span)
+            }
+            ReduceError::DivisionByZero { kind, span } => {
+                Error::DivisionByZero { kind }.at_opt(span)
+            }
+            ReduceError::Universe(error) => Error::from(error),
+        }
+    }
+
     pub(crate) fn reduce_exhausted<T: Into<Term>>(term: T) -> Self {
         Self::ReduceExhausted {
             term: Box::new(term.into()),

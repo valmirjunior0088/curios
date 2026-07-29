@@ -25,7 +25,7 @@ pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term
 
 pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     super::reduce_forced(context, term.clone())
-        .map_err(|error| error.into_error(|| Error::reduce_exhausted(term.clone())))
+        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(term.clone())))
 }
 
 /// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit
@@ -37,8 +37,11 @@ pub(crate) fn convert_at(
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
-    super::convert(context, type_, this, that)
-        .map_err(|error| error.into_error(|| Error::convert_exhausted(this.clone(), that.clone())))
+    super::convert(context, type_, this, that).map_err(|error| {
+        Error::from_reduce(error, || {
+            Error::convert_exhausted(this.clone(), that.clone())
+        })
+    })
 }
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
@@ -47,7 +50,7 @@ pub(crate) fn convert_at(
 pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
     Sort::of(context, type_)
         .map(Sort::term)
-        .map_err(|error| error.into_error(|| Error::reduce_exhausted(type_.clone())))
+        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))
 }
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps
@@ -69,7 +72,7 @@ pub(crate) fn is_prop_in(
 ) -> Result<bool, Error> {
     Sort::of_in(context, opened, type_)
         .map(|sort| matches!(sort, Sort::Prop))
-        .map_err(|error| error.into_error(|| Error::reduce_exhausted(type_.clone())))
+        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))
 }
 
 /// Elaborate `term` as a type/proposition without inventing an arbitrary
@@ -147,7 +150,9 @@ pub(crate) fn expect(
 
     let outcome = super::convert_outcome(context, &Term::type_ground(), inferred, expected)
         .map_err(|error| {
-            error.into_error(|| Error::convert_exhausted(inferred.clone(), expected.clone()))
+            Error::from_reduce(error, || {
+                Error::convert_exhausted(inferred.clone(), expected.clone())
+            })
         })?;
 
     match outcome {
@@ -323,7 +328,9 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     });
 
     let outcome = outcome.map_err(|error: super::ReduceError| {
-        error.into_error(|| Error::convert_exhausted(goal.this.clone(), goal.that.clone()))
+        Error::from_reduce(error, || {
+            Error::convert_exhausted(goal.this.clone(), goal.that.clone())
+        })
     })?;
 
     match outcome {
@@ -418,8 +425,9 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {
-            let canonical = super::canonical_scrutinee(context, head)
-                .map_err(|error| error.into_error(|| Error::reduce_exhausted(head.clone())))?;
+            let canonical = super::canonical_scrutinee(context, head).map_err(|error| {
+                Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
+            })?;
 
             // A concept-dispatched scrutinee (`a <= hi`) elaborates to the
             // method projected out of the witness — `(?w).1(a, hi)` — which is
@@ -434,8 +442,9 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 // Propagated, not swallowed: `canonical_scrutinee` is best-effort
                 // about arguments and returns only `Exhausted`, so discarding its
                 // error would discard a genuine exhaustion.
-                let resolved = super::canonical_scrutinee(context, &spined)
-                    .map_err(|error| error.into_error(|| Error::reduce_exhausted(head.clone())))?;
+                let resolved = super::canonical_scrutinee(context, &spined).map_err(|error| {
+                    Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
+                })?;
 
                 if resolved.head_key().is_some() && resolved != canonical {
                     context.refine_scrutinee(resolved, value.clone());

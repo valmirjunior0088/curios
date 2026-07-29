@@ -1,18 +1,29 @@
-mod prim;
-use prim::*;
-
 #[cfg(test)]
 mod tests;
 
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductType,
-        Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
-        instantiate_universe_levels_scoped,
+        Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Reducer, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
+        instantiate_universe_levels_scoped, reduce_prim,
     },
     num_traits::ToPrimitive,
 };
+
+/// The elaborator's reduction strategy, supplied to `curios-core`'s primitive
+/// folds. It is the full-strength one: definitions unfold, metavariables
+/// resolve, scrutinee refinements fire, and every step is charged against the
+/// declaration's budget.
+impl Reducer for Context {
+    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+        reduce(self, term)
+    }
+
+    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+        reduce_forced(self, term)
+    }
+}
 
 enum Reduce {
     Continue(Term),
