@@ -153,9 +153,15 @@ pub enum Prim {
     // value, or named record). Effectful, so reducing one at the type level
     // is an error; it becomes a host call only at erasure.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
-    // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
-    // kernel from naming `/std/False`; it is dropped at erasure.
-    Exit(Term, Term),
+    // `(Nat) -> {}`: end the process. Effectful, so reducing one at the type
+    // level is an error; it becomes a host call only at erasure.
+    //
+    // The result is the unit type, not the caller's choice. `exit` never
+    // returns, and a non-returning term is unsound exactly when it inhabits a
+    // type nothing total inhabits — it is the forgery that is the problem, not
+    // the non-return. At `{}` there is nothing to forge, which is the same
+    // property `Foreign` has for free by reading its result off an ABI row.
+    Exit(Term),
     CellType(Term),
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value
@@ -814,7 +820,8 @@ impl Prim {
             | Prim::IntPopcnt(t)
             | Prim::BinLen(Grain::X, t)
             | Prim::BinLen(Grain::B, t)
-            | Prim::LstType(t) => visit(t),
+            | Prim::LstType(t)
+            | Prim::Exit(t) => visit(t),
 
             Prim::HandleEql(a, b)
             | Prim::ByteEql(a, b)
@@ -883,8 +890,7 @@ impl Prim {
             | Prim::BinEql(Grain::B, a, b)
             | Prim::BinGet(Grain::B, a, b)
             | Prim::BinAppend(Grain::B, a, b)
-            | Prim::LstLen(a, b)
-            | Prim::Exit(a, b) => {
+            | Prim::LstLen(a, b) => {
                 visit(a);
                 visit(b);
             }
@@ -1115,7 +1121,7 @@ impl Prim {
                 Arc::clone(function),
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
-            Prim::Exit(type_, code) => traverse_binary(type_, code, visit, Prim::Exit),
+            Prim::Exit(code) => Prim::Exit(visit.visit_subterm(code)),
             Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
             Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),
             Prim::CellGet(a, b) => traverse_binary(a, b, visit, Prim::CellGet),

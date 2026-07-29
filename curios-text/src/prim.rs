@@ -146,7 +146,7 @@ pub enum Prim {
     // A store-described host call; the prelude bakes it into the `/sys/Handle`
     // declaration whose parameters the argument terms name.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
-    Exit(Term, Term),
+    Exit(Term),
     CellType(Term),
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value

@@ -1291,7 +1291,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::Foreign(function, args) => {
             Prim::Foreign(Arc::clone(function), zonk_terms(context, args)?)
         }
-        Prim::Exit(a, b) => Prim::Exit(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::Exit(code) => Prim::Exit(zonk_term(context, code)?),
         Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
         Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::CellSet(a, b, c) => Prim::CellSet(

@@ -341,13 +341,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::HandleType => (prim.clone(), Term::type_ground()),
         Prim::Handle(_) => (prim.clone(), io_type),
-        // `(@A : Type) -> Nat -> A`: exit never returns, so the result type is
-        // whatever the caller demands (`/std/proc/exit` instantiates it at
-        // `False`). The type argument keeps the kernel from naming `/std/False`.
-        Prim::Exit(type_, code) => {
-            let type_ = crate::check_is_sort(context, type_)?.0;
+        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather
+        // than the caller's choice — see `Prim::Exit` in `curios-core` for why
+        // fixing it at an inhabited type is what makes the primitive sound.
+        Prim::Exit(code) => {
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
-            (Prim::Exit(type_.clone(), code), type_)
+            (Prim::Exit(code), Term::tuple_type_unit())
         }
         // A store-described host call: each operand checks against its wire
         // type, and the result shape (unit, bare value, named record) is read

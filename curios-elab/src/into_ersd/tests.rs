@@ -176,8 +176,8 @@ fn an_exit_seals_the_block_and_drops_dead_code() {
     // let _ = /std/proc/exit(3); 7 — the trailing computation is dead.
     let body = Term::let_(
         &dead,
-        Term::prim(Prim::NatType),
-        Term::prim(Prim::Exit(Term::prim(Prim::NatType), nat_lit(3))),
+        Term::tuple_type_unit(),
+        Term::prim(Prim::Exit(nat_lit(3))),
         nat_lit(7),
     );
     let erased = erase(

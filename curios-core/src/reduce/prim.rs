@@ -1712,7 +1712,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
         Prim::HandleType => Ok(Subterm::Prim(Prim::HandleType)),
         Prim::Handle(token) => Ok(Subterm::Prim(Prim::Handle(*token))),
-        Prim::Exit(_, code) => Err(ReduceError::EffectAtTypeLevel {
+        Prim::Exit(code) => Err(ReduceError::EffectAtTypeLevel {
             kind: "Exit".to_string(),
             span: code.span(),
         }),

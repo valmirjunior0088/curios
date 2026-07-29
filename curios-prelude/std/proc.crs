@@ -1,5 +1,5 @@
 pub use /sys/{args};
-use /std/{Bytes, Nat, Str, Option, Never};
+use /std/{Bytes, Nat, Str, Option};
 
 pub let env(name : Str) -> Option(Bytes) =
     let r = /sys/env(Str/to_bytes(name));
@@ -8,9 +8,10 @@ pub let env(name : Str) -> Option(Bytes) =
     | false => Option/none()
     end;
 
--- `Never`, not `False`: the result is `Type`-sorted, so erasure keeps the call
--- and the process actually exits wherever this is written. Typed at `False` the
--- result was a proof, erasure dropped it, and the exit silently did not fire —
--- which also made this a closed inhabitant of `False`.
-pub let exit(code : Nat) -> Never =
+-- Unit, not a caller-chosen type: `exit` never returns, and a non-returning
+-- term is unsound exactly when it inhabits a type nothing total inhabits. At
+-- `{}` there is nothing to forge. A branch that exits must still produce a
+-- value, so write `let _ = proc/exit(1); …` rather than passing the exit off as
+-- the value itself.
+pub let exit(code : Nat) -> {} =
     /sys/exit(code);

@@ -596,7 +596,7 @@ fn print_prim(prim: Prim) -> Printer {
         Prim::Handle(token) => pure(format!("Handle({token})")),
         Prim::HandleEql(left, right) => print_prim_call("Handle.eql", vec![left, right]),
         Prim::Foreign(function, args) => print_prim_call(function.label.clone(), args),
-        Prim::Exit(type_, code) => print_prim_call("exit", vec![type_, code]),
+        Prim::Exit(code) => print_prim_call("exit", vec![code]),
         Prim::CellType(elem) => print_prim_call("Cell", vec![elem]),
         Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),
         Prim::CellSet(type_, cell, value) => print_prim_call("Cell.set", vec![type_, cell, value]),

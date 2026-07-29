@@ -591,16 +591,15 @@ fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
         .collect::<Vec<_>>();
 
     ops.extend([
-        // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
-        // whatever the caller wants. `/std/proc/exit` pins `A := False`.
+        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather
+        // than the caller's choice, because a non-returning term is unsound
+        // exactly when it inhabits a type nothing total inhabits — and `{}` is
+        // inhabited by `()`, so there is nothing to forge.
         pub_fn_marked(
             "exit",
-            vec![
-                (Plicity::Implicit, "A", type_()),
-                (Plicity::Explicit, "n", nat()),
-            ],
-            name("A"),
-            prim(Prim::Exit(name("A"), name("n"))),
+            vec![(Plicity::Explicit, "n", nat())],
+            unit(),
+            prim(Prim::Exit(name("n"))),
         ),
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the
         // standard library compares against named constants the host derives

@@ -279,13 +279,10 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending
             }
         }
 
-        // `Prim::Exit`'s first operand is the type it inhabits; the type
-        // formers name their element types.
-        Subterm::Prim(
-            super::super::Prim::Exit(type_, _)
-            | super::super::Prim::LstType(type_)
-            | super::super::Prim::CellType(type_),
-        ) => push(positions, site, type_),
+        // The type formers name their element types.
+        Subterm::Prim(super::super::Prim::LstType(type_) | super::super::Prim::CellType(type_)) => {
+            push(positions, site, type_)
+        }
 
         _ => {}
     }

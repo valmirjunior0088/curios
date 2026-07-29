@@ -215,7 +215,7 @@ fn proc_env_absent_is_none() {
 fn proc_exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
-        let _ : std/Never = /std/proc/exit(7);
+        let _ : {} = /std/proc/exit(7);
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))
         "#
     .parse::<Entrypoint>()
@@ -239,10 +239,9 @@ fn proc_exit_halts_with_code() {
 
 #[test]
 fn proc_exit_in_local_binding_halts() {
-    // A local binding evaluates under call-by-value even when its result type
-    // is a proposition: the never-returning body runs. Regression test:
-    // erasure used to collapse proof-typed local bindings to the unit constant
-    // wholesale, silently dropping the exit.
+    // A local binding evaluates under call-by-value even when nothing reads it:
+    // the never-returning body runs. Regression test: erasure used to collapse
+    // such bindings to the unit constant wholesale, silently dropping the exit.
     let entrypoint = r#"
         use /std/{Nat, Handle, Str};
         let go(n : std/Nat) -> std/Nat =

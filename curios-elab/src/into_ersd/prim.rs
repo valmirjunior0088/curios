@@ -390,7 +390,7 @@ pub(super) fn erase_prim(
         // A process exit never yields a value: erase the code, then report the
         // terminator that seals this block. Code after it is dead and is never
         // erased.
-        Prim::Exit(_, code) => {
+        Prim::Exit(code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
             Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
         }

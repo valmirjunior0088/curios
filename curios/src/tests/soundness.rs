@@ -207,29 +207,6 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
     );
 }
 
-// The first route (T) cannot see. `Never` is `Type`-sorted precisely so that
-// `proc/exit` is retained where it is written — but eliminating it into a
-// *proposition* puts the never-returning call back in a position erasure
-// deletes, so the exit does not fire and `boom` is a closed inhabitant of
-// `False`. No type here reaches anything partial: the offender is reached only
-// through a term whose declared type is `Prop`-sorted.
-#[test]
-fn an_exit_eliminated_into_a_proposition_is_rejected() {
-    rejected_as_a_proof(
-        r#"
-        use /std/{proc};
-
-        let forge() -> /std/False =
-            match proc/exit(1) : (_) => /std/False
-            end;
-
-        let boom : /std/False = forge();
-
-        /std/print("unreachable")
-        "#,
-    );
-}
-
 // The second route (T) cannot see, and the one that needs no `exit` at all.
 // `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing
 // about `Box` or its type mentions a partial definition — and the certificate

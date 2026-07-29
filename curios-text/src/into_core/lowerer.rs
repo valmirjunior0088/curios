@@ -1335,7 +1335,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .map(|arg| self.term(arg))
                     .collect::<Result<_, _>>()?,
             ),
-            Prim::Exit(type_, code) => curios_elab::Prim::Exit(self.term(type_)?, self.term(code)?),
+            Prim::Exit(code) => curios_elab::Prim::Exit(self.term(code)?),
             Prim::NatToFlt(inner) => curios_elab::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => curios_elab::Prim::int_to_nat(self.term(inner)?),
             Prim::IntToFlt(inner) => curios_elab::Prim::int_to_flt(self.term(inner)?),
