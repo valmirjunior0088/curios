@@ -137,29 +137,41 @@ mod tests {
         validate_archive().unwrap();
     }
 
-    /// The declarations a string or character literal expands into are
-    /// monomorphic, so no occurrence mints universe metavariables.
+    /// The declarations a literal expands into *per byte* are monomorphic, so
+    /// no occurrence mints universe metavariables in the data's length.
     ///
-    /// A literal's type is `Str` at a single level, but it expands into one
-    /// constructor application per byte. When these carried universe
-    /// parameters, every one of those applications instantiated fresh levels,
-    /// so a declaration's level count grew with literal *length* and
-    /// elaboration went quartic in it: a 500-byte literal took 50s in release
-    /// and put `long_str_literal_compiles_on_the_default_test_stack` beyond any
-    /// test budget. Pinning these at zero is what keeps that linear.
+    /// A literal's type is `Str` at a single level. It used to expand into one
+    /// constructor application per byte, and when those carried universe
+    /// parameters every application instantiated fresh levels — a declaration's
+    /// level count grew with literal *length* and elaboration went quartic in
+    /// it: a 500-byte literal took 50s in release and put
+    /// `long_str_literal_compiles_on_the_default_test_stack` beyond any test
+    /// budget. Pinning the per-byte targets at zero is what keeps that linear.
+    ///
+    /// **The bridge changed what is pinned, and why.** A literal now emits
+    /// `of_scan_eq(b, refl_scan(b))` — once, whatever the length — so those two
+    /// are free to be universe-polymorphic: they cost one level per *literal*,
+    /// not one per byte, and the quartic behaviour this guards against cannot
+    /// arise from an `O(1)` emission. They route through `/std/Eq`, which is
+    /// `Eq(@A : Type)`, so they do carry a parameter.
+    ///
+    /// A monomorphic equality at `Scan` would have kept them pinned, and was
+    /// tried and rejected: it works only while nothing consumes the proof, and
+    /// the moment a third-party proof does, it needs transport, congruence,
+    /// symmetry and transitivity restated at `Scan` — a second equality to
+    /// maintain. It also broke erasure outright, at 333 tests.
+    ///
+    /// So what stays pinned is what a literal still emits per byte: nothing.
+    /// The type itself is checked because a polymorphic `Str` would put a level
+    /// on every literal value.
     #[test]
     fn string_literal_machinery_is_monomorphic() {
         // Selected by name because these are exactly the hidden lowering
-        // targets `curios-prelude/src/syntax.rs` registers; nothing infers
-        // behavior from the spelling.
-        let lowering_targets = [
-            "/syn/Str",
-            "/syn/Str/step",
-            "/syn/Str/Utf8",
-            "/syn/Str/Utf8/stop",
-            "/syn/Str/Utf8/more",
-            "/syn/Char",
-        ];
+        // targets `curios-prelude/src/syntax.rs` registers that are emitted
+        // more than once per literal; nothing infers behavior from the
+        // spelling. `of_scan_eq` and `refl_scan` are deliberately absent — see
+        // above.
+        let lowering_targets = ["/syn/Str", "/syn/Str/scan_from", "/syn/Char"];
 
         with_prelude(|prelude| {
             let mut parameters = std::collections::BTreeMap::new();

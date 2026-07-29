@@ -87,10 +87,8 @@ impl SyntaxRegistry {
             self.character.scalar_below,
             self.character.scalar_above,
             self.string.string,
-            self.string.scan_lead,
-            self.string.utf8_stop,
-            self.string.utf8_more,
-            self.string.step,
+            self.string.of_scan_eq,
+            self.string.refl_scan,
             self.proof.true_qed,
             self.proof.false_absurd,
         ]
@@ -149,47 +147,29 @@ impl CharacterSyntax {
 #[derive(Debug, Clone, Copy)]
 pub struct StringSyntax {
     string: SyntaxName,
-    scan_lead: SyntaxName,
-    utf8_stop: SyntaxName,
-    utf8_more: SyntaxName,
-    step: SyntaxName,
+    of_scan_eq: SyntaxName,
+    refl_scan: SyntaxName,
 }
 
 impl StringSyntax {
-    pub const fn new(
-        string: SyntaxName,
-        scan_lead: SyntaxName,
-        utf8_stop: SyntaxName,
-        utf8_more: SyntaxName,
-        step: SyntaxName,
-    ) -> Self {
+    pub const fn new(string: SyntaxName, of_scan_eq: SyntaxName, refl_scan: SyntaxName) -> Self {
         Self {
             string,
-            scan_lead,
-            utf8_stop,
-            utf8_more,
-            step,
+            of_scan_eq,
+            refl_scan,
         }
+    }
+
+    pub const fn of_scan_eq(self) -> SyntaxName {
+        self.of_scan_eq
+    }
+
+    pub const fn refl_scan(self) -> SyntaxName {
+        self.refl_scan
     }
 
     pub const fn string(self) -> SyntaxName {
         self.string
-    }
-
-    pub const fn scan_lead(self) -> SyntaxName {
-        self.scan_lead
-    }
-
-    pub const fn utf8_stop(self) -> SyntaxName {
-        self.utf8_stop
-    }
-
-    pub const fn utf8_more(self) -> SyntaxName {
-        self.utf8_more
-    }
-
-    pub const fn step(self) -> SyntaxName {
-        self.step
     }
 }
 

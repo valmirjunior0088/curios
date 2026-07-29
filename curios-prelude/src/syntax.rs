@@ -19,10 +19,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
     ),
     StringSyntax::new(
         name(&["syn", "Str", "Str"]),
-        name(&["syn", "Str", "Scan", "lead"]),
-        name(&["syn", "Str", "Utf8", "stop"]),
-        name(&["syn", "Str", "Utf8", "more"]),
-        name(&["syn", "Str", "step"]),
+        name(&["syn", "Str", "of_scan_eq"]),
+        name(&["syn", "Str", "refl_scan"]),
     ),
     ProofSyntax::new(
         name(&["syn", "True", "True", "qed"]),

@@ -156,22 +156,60 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     // The meta-emitter: a string literal becomes a proof-carrying `/syn/Str/Str`
-    // value `Str { bytes = <Bytes>, valid = <Utf8 derivation> }`. The derivation is the
-    // canonical `more`-spine (one `more` per byte, ending in `stop`), starting from
-    // the `lead` state — `valid`'s type is `Valid(b) = Utf8(lead, b)`. `valid` is
-    // erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs
-    // exactly what a `Bytes` literal does.
+    // value `Str { bytes = <Bytes>, valid = <proof> }`. `valid` is erased, so at
+    // runtime `Str` collapses to its `Bytes` field — a literal costs exactly what
+    // a `Bytes` literal does.
+    //
+    // # Why the proof is a computation and not a derivation
+    //
+    // `Valid(b)` is `Utf8(lead, b)`, an inductive family whose canonical
+    // inhabitant is one `more` link per byte. Writing that out made the *term*
+    // linear in the data, and everything that walks a term inherited it:
+    // elaboration, zonking, both erasure obligations, the printer, and the
+    // kernel's typing judgment. Five separate stack-overflow or quadratic
+    // defects traced to that one shape, and the reduction budget capped a
+    // literal near 23KiB regardless.
+    //
+    // So the proof emitted here is `of_scan_eq(b, refl_scan(b))`: constant size,
+    // discharged by *running* the `scan_from` fold rather than by traversing a
+    // derivation. `/syn/Str/of_scan_eq` rebuilds the derivation by reduction for
+    // the lemmas in `/std/Str/utf8` that genuinely eliminate it, so none of them
+    // changed.
+    //
+    // # What this does not fix, and what would
+    //
+    // Reduction is still linear — measured at about 16 steps per byte against
+    // the derivation's 42, so a literal's ceiling against the default budget
+    // moves from roughly 23KiB to roughly 61KiB rather than away. Removing it needs one of two things, and both are deferred
+    // deliberately until the trusted-base work settles:
+    //
+    // - Full reflection: restate `Valid` as `Eq(scan_from(lead, b), lead)` and
+    //   rewrite `/std/Str/utf8`'s lemmas — every one of which recurses on the
+    //   derivation — as lemmas about the fold's algebra. That deletes the family
+    //   this bridge preserves, and it is a rewrite of that module rather than an
+    //   edit to it.
+    // - A native scan primitive folded over packed `Bytes`, which would make the
+    //   check O(1) steps. That moves a UTF-8 validator into the trusted base,
+    //   which is the wrong direction while the kernel is being made load-bearing.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_elab::Term {
-        curios_elab::Term::struct_(
-            curios_elab::Global::Authored(self.context.syntax().string().string().qualifier()),
-            Vec::<curios_elab::Term>::new(),
+        let packed = curios_elab::Term::prim(curios_elab::Prim::Bin(
+            Grain::X,
+            PackedBin::from_bytes(bytes.to_vec()),
+        ));
+
+        let syntax = self.context.syntax().string();
+        let valid = Self::syn_call(
+            syntax.of_scan_eq(),
             [
-                curios_elab::Term::prim(curios_elab::Prim::Bin(
-                    Grain::X,
-                    PackedBin::from_bytes(bytes.to_vec()),
-                )),
-                self.utf8_derivation(bytes, self.scan_lead()),
+                packed.clone(),
+                Self::syn_call(syntax.refl_scan(), [packed.clone()]),
             ],
+        );
+
+        curios_elab::Term::struct_(
+            curios_elab::Global::Authored(syntax.string().qualifier()),
+            Vec::<curios_elab::Term>::new(),
+            [packed, valid],
         )
     }
 
@@ -221,63 +259,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    pub(super) fn scan_lead(&self) -> curios_elab::Term {
-        Self::syn_call(self.context.syntax().string().scan_lead(), [])
-    }
-
     // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term —
     // `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s
     // expected index (`Utf8(step(c, state), tail)`) is definitionally the state we
     // thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, \\)`
     // matches because `step` of the last byte reduces back to `lead` for valid UTF-8
     // (a string literal is valid UTF-8 by construction).
-    /// Built in two passes rather than by recursing on the tail, because both
-    /// halves of the obvious shape are unbounded in the literal's length: one
-    /// native frame per byte overflows the stack outright above about 16KiB,
-    /// and packing `tail` at every link copies the remaining bytes once per
-    /// byte. The states thread forwards and the derivation nests backwards, so
-    /// the forward pass records each link's state and the backward pass folds
-    /// the chain up from `stop`. The suffixes are windows onto one shared
-    /// buffer, which `PackedBin` gives for the cost of an `Arc` clone.
-    pub(super) fn utf8_derivation(
-        &self,
-        bytes: &[u8],
-        state: curios_elab::Term,
-    ) -> curios_elab::Term {
-        let packed = PackedBin::from_bytes(bytes.to_vec());
-
-        let mut states = Vec::with_capacity(bytes.len());
-        let mut carried = state;
-        for &head in bytes {
-            let byte: curios_elab::Term = curios_elab::Term::prim(curios_elab::Prim::Byte(head));
-            let next = Self::syn_call(
-                self.context.syntax().string().step(),
-                [byte, carried.clone()],
-            );
-            states.push(carried);
-            carried = next;
-        }
-
-        let mut derivation = Self::syn_call(self.context.syntax().string().utf8_stop(), []);
-        for (index, (&head, state)) in bytes.iter().zip(states).enumerate().rev() {
-            let tail = packed
-                .slice(Grain::X, index + 1, bytes.len())
-                .expect("a suffix of the literal's own bytes is in range");
-
-            derivation = Self::syn_call(
-                self.context.syntax().string().utf8_more(),
-                [
-                    curios_elab::Term::prim(curios_elab::Prim::Byte(head)),
-                    state,
-                    curios_elab::Term::prim(curios_elab::Prim::Bin(Grain::X, tail)),
-                    derivation,
-                ],
-            );
-        }
-
-        derivation
-    }
-
     // A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter
     // rather than lowered to a core primitive.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_elab::Term, Error> {

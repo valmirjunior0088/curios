@@ -1,3 +1,7 @@
+use super::super::{
+    CharacterSyntax, Entrypoint, Error, MonadSyntax, PreludeModules, ProofSyntax, RootSource,
+    StringSyntax, SyntaxName, SyntaxRegistry,
+};
 use curios_abi::{WireType, host_ops};
 use curios_base::RootId;
 use std::{
@@ -6,31 +10,29 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const fn syn_name(segments: &'static [&'static str]) -> crate::SyntaxName {
-    crate::SyntaxName::new(segments)
+const fn syn_name(segments: &'static [&'static str]) -> SyntaxName {
+    SyntaxName::new(segments)
 }
 
-const SYNTAX: crate::SyntaxRegistry = crate::SyntaxRegistry::new(
-    crate::MonadSyntax::new(syn_name(&["syn", "Monad", "bind"])),
-    crate::CharacterSyntax::new(
+const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
+    MonadSyntax::new(syn_name(&["syn", "Monad", "bind"])),
+    CharacterSyntax::new(
         syn_name(&["syn", "Char", "Char"]),
         syn_name(&["syn", "Char", "Scalar", "below"]),
         syn_name(&["syn", "Char", "Scalar", "above"]),
     ),
-    crate::StringSyntax::new(
+    StringSyntax::new(
         syn_name(&["syn", "Str", "Str"]),
-        syn_name(&["syn", "Str", "Scan", "lead"]),
-        syn_name(&["syn", "Str", "Utf8", "stop"]),
-        syn_name(&["syn", "Str", "Utf8", "more"]),
-        syn_name(&["syn", "Str", "step"]),
+        syn_name(&["syn", "Str", "of_scan_eq"]),
+        syn_name(&["syn", "Str", "refl_scan"]),
     ),
-    crate::ProofSyntax::new(
+    ProofSyntax::new(
         syn_name(&["syn", "True", "True", "qed"]),
         syn_name(&["syn", "False", "absurd"]),
     ),
 );
 
-fn syntax() -> &'static crate::SyntaxRegistry {
+fn syntax() -> &'static SyntaxRegistry {
     &SYNTAX
 }
 
@@ -51,8 +53,8 @@ fn global_name(path: &str) -> curios_elab::Global {
 
 fn run(src: &str) -> curios_elab::Term {
     let (module, _, _, _) = super::into_core(
-        &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::none(),
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
@@ -66,8 +68,8 @@ fn written_type(id: usize) -> curios_elab::Term {
 
 fn elaborate_source(src: &str) -> curios_elab::Module {
     let (module, metavar_floor, universe_floor, _) = super::into_core(
-        &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::none(),
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
@@ -85,8 +87,8 @@ fn elaborate_source(src: &str) -> curios_elab::Module {
 
 fn elaboration_paths(src: &str) -> (curios_elab::Module, curios_elab::Module) {
     let (lowered, metavar_floor, universe_floor, _) = super::into_core(
-        &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::none(),
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
@@ -134,8 +136,8 @@ fn elaboration_paths(src: &str) -> (curios_elab::Module, curios_elab::Module) {
 
 fn run_err(src: &str) -> String {
     super::into_core(
-        &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::none(),
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap_err()
@@ -145,7 +147,7 @@ fn run_err(src: &str) -> String {
 // Lower against the real prelude (so `sys` and `std` are served and rooted),
 // returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
-    let mut modules = crate::PreludeModules::new();
+    let mut modules = PreludeModules::new();
     modules.insert_root("sys", RootId::Sys, crate::sys_module(&host_ops()));
     modules.insert_root(
         "std",
@@ -164,8 +166,8 @@ fn lower_with_prelude(src: &str) -> Result<(), String> {
     );
     let prepared = super::prepare_prelude(&modules, syntax()).map_err(|error| error.to_string())?;
     super::into_core_with_prelude(
-        &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::none(),
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
         &prepared,
         syntax(),
     )
@@ -196,9 +198,9 @@ fn no_items_simple_tail() {
 fn written_types_get_distinct_levels_and_lexical_roles() {
     let (module, _, universe_floor, _) = super::into_core(
         &"let id(@A : Type, x : A) -> A = x; Type"
-            .parse::<crate::Entrypoint>()
+            .parse::<Entrypoint>()
             .unwrap(),
-        &crate::RootSource::none(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
@@ -1962,9 +1964,9 @@ fn file_loader_prepares_sibling_modules_before_to_core() {
             pub mod B;
             A/y
         "#
-    .parse::<crate::Entrypoint>()
+    .parse::<Entrypoint>()
     .unwrap();
-    let loader = crate::RootSource::file_system(base.clone());
+    let loader = RootSource::file_system(base.clone());
 
     super::into_core(&entrypoint, &loader, syntax()).unwrap();
 
@@ -1977,13 +1979,13 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
             pub mod A;
             Type
         "#
-    .parse::<crate::Entrypoint>()
+    .parse::<Entrypoint>()
     .unwrap();
 
     assert!(matches!(
-        super::into_core(&entrypoint, &crate::RootSource::none(), syntax()).unwrap_err(),
-        crate::Error::Located { error, .. }
-            if matches!(error.as_ref(), crate::Error::ModuleNotFound { path } if path == "/A")
+        super::into_core(&entrypoint, &RootSource::none(), syntax()).unwrap_err(),
+        Error::Located { error, .. }
+            if matches!(error.as_ref(), Error::ModuleNotFound { path } if path == "/A")
     ));
 }
 
@@ -2131,9 +2133,9 @@ fn foreign_declaration_populates_the_store() {
     // directly into `WireType`s, not resolved as ordinary names.
     let (_, _, _, foreigns) = super::into_core(
         &"foreign frobnicate : (Nat, Bin) -> Nat; 0"
-            .parse::<crate::Entrypoint>()
+            .parse::<Entrypoint>()
             .unwrap(),
-        &crate::RootSource::none(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
@@ -2155,10 +2157,8 @@ fn foreign_declaration_populates_the_store() {
 #[test]
 fn foreign_declaration_zero_arg_populates_the_store() {
     let (_, _, _, foreigns) = super::into_core(
-        &"foreign clock : Nat; 0"
-            .parse::<crate::Entrypoint>()
-            .unwrap(),
-        &crate::RootSource::none(),
+        &"foreign clock : Nat; 0".parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
@@ -2206,9 +2206,9 @@ fn foreign_declarations_across_modules_get_distinct_import_names() {
         end
         0
     "#
-        .parse::<crate::Entrypoint>()
+        .parse::<Entrypoint>()
         .unwrap(),
-        &crate::RootSource::none(),
+        &RootSource::none(),
         syntax(),
     )
     .unwrap();
