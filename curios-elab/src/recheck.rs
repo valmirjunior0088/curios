@@ -28,12 +28,77 @@
 //! API and a test surface until the gaps named above are closed.
 
 use {
-    super::{Item, Module},
+    super::{Item, Module, totality::mentioned},
     curios_core::{
-        Free, Kernel, KernelError,
+        Free, Global, Kernel, KernelError,
         kernel::{check_definition, check_entrypoint, check_rec_group},
     },
+    std::collections::{BTreeSet, HashMap, HashSet},
 };
+
+/// `module`'s items in dependency order: every item after the ones it mentions.
+///
+/// The kernel checks items in sequence, defining each as it goes, so an item
+/// that mentions a name defined later is `Unbound`. `Module::items` is *not* in
+/// that order. `into_core` does sort topologically, but it sorts the surface
+/// program — and a concept-dispatched call names a *method*, not the witness
+/// that satisfies it. `/syn/Char/Below` uses `<` at `Nat`, and the edge to the
+/// witness carrying that `Cmp` instance is created by witness resolution during
+/// elaboration, long after the lowering sort could have seen it. So the sort has
+/// to be redone here, over the elaborated module, where the edge exists.
+///
+/// Deterministic: the lowest-index ready item goes first. On a cycle the lowest
+/// remaining item breaks the deadlock, matching `into_core`'s sort — the kernel
+/// then refuses it as `Unbound`, which is the correct outcome for a genuinely
+/// circular non-recursive item and needs no separate error.
+fn dependency_order(module: &Module) -> Vec<usize> {
+    let mut owner: HashMap<&Global, usize> = HashMap::new();
+    for (index, item) in module.items.iter().enumerate() {
+        for name in item.declared_names() {
+            owner.insert(name, index);
+        }
+    }
+
+    // A recursive group mentions its own members; that is what makes it a
+    // group, not a dependency on something earlier.
+    let dependencies = module
+        .items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let names: BTreeSet<Global> = match item {
+                Item::Let(definition) => mentioned(definition),
+                Item::Rec(rec) => rec.definitions().iter().flat_map(mentioned).collect(),
+            };
+
+            names
+                .iter()
+                .filter_map(|name| owner.get(name).copied())
+                .filter(|&target| target != index)
+                .collect::<HashSet<usize>>()
+        })
+        .collect::<Vec<_>>();
+
+    let mut emitted: HashSet<usize> = HashSet::with_capacity(module.items.len());
+    let mut order = Vec::with_capacity(module.items.len());
+
+    while order.len() < module.items.len() {
+        let ready = (0..module.items.len())
+            .find(|index| {
+                !emitted.contains(index)
+                    && dependencies[*index]
+                        .iter()
+                        .all(|target| emitted.contains(target))
+            })
+            .or_else(|| (0..module.items.len()).find(|index| !emitted.contains(index)))
+            .expect("an item remains while the order is incomplete");
+
+        emitted.insert(ready);
+        order.push(ready);
+    }
+
+    order
+}
 
 /// Re-check `module` with the independent kernel.
 ///
@@ -58,7 +123,9 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
         kernel.declare_struct(name, declaration);
     }
 
-    for item in &module.items {
+    for index in dependency_order(module) {
+        let item = &module.items[index];
+
         match item {
             Item::Let(definition) => check_definition(
                 &mut kernel,

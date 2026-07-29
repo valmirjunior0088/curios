@@ -1717,7 +1717,7 @@ fn collect_local(term: &Term, groups: &mut Vec<RecGroup>, exits: &mut bool) {
 }
 
 /// Every top-level name this definition mentions, by free variable.
-fn mentioned(definition: &Definition) -> BTreeSet<Global> {
+pub(crate) fn mentioned(definition: &Definition) -> BTreeSet<Global> {
     definition
         .body
         .free_vars()
