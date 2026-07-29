@@ -8,28 +8,32 @@
 //! positions compare syntactically), and each of those refuses valid programs.
 //! See `curios-elab/src/recheck.rs`.
 //!
-//! # Why these are ignored, and what they found
+//! # What these found, and what the previous note got wrong
 //!
-//! Both currently fail, and on something more basic than any gap listed above:
-//! **the module the kernel is handed still carries unsolved universe
-//! metavariables in its levels.** Two occurrences of the same scheme arrive as
-//! `(T : Type ?10) -> Type ?10` and `(T : Type ?8) -> Type ?9`, and the kernel
-//! compares levels structurally, so the meta identities have to match exactly
-//! and never do.
+//! This note used to record that the kernel was blocked on unsolved universe
+//! metavariables surviving into zonked Core, and that grounding them was the
+//! next thing standing between this and a working second opinion. Both were
+//! wrong, and how they were wrong is the part worth keeping: these tests read
+//! `Stage::Core`, which the pipeline emits *before* elaboration. The
+//! metavariables were the lowering's own universe seeds, and the module the
+//! kernel kept refusing had never been type-checked at all. A zonked module's
+//! levels are ground — `validate_universes` rejects a term-level metavariable,
+//! and always did.
 //!
-//! That is not a bug in either checker. Deciding whether two levels *can* be
-//! equal is what the elaborator's universe solver does, by recording a
-//! constraint and discharging it later; the kernel has no solver, deliberately
-//! — a `UniverseContext` is data, and satisfiability is inference over it. So
-//! either the module reaches the kernel with its levels ground, or the kernel
-//! cannot check universes at all. Guessing is not available: reading two
-//! distinct metas as equal would admit `Type 0` where `Type 5` was meant, which
-//! is the unsound direction.
+//! The lesson is the one this effort keeps relearning: the diagnosis was
+//! derived by reading the refusal and reasoning about which pass must have let
+//! it through, and it named a mechanism that was working correctly. Printing
+//! the module settled it in one command.
 //!
-//! Grounding the levels is a change to declaration finalization, not to the
-//! kernel, and it is the next thing standing between this and a working second
-//! opinion. These tests stay here, ignored, as the record of exactly what is
-//! blocking — running them is how the block gets confirmed gone.
+//! Reading `Stage::CoreElab`, the kernel now walks the prelude and stops at
+//! index inversion. `/std/Nat/Lte/trans` scrutinizes two `Lte` proofs: one arm
+//! refines `b` to `b2 + 1`, the other to `b3 + 1`, and the recursive call needs
+//! `b2 ≡ b3`, which follows only by inverting successor. That is what
+//! `curios-elab/src/invert.rs` does and the kernel has no equivalent of, so the
+//! refusal is a gap in the kernel rather than a defect in what it was handed.
+//!
+//! These stay ignored as the record of where the walk stops. Running them is
+//! how the next gap gets found.
 
 use curios_elab::{KernelError, recheck_module};
 
@@ -45,14 +49,14 @@ fn recheck(source: &str) -> Result<(), KernelError> {
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {
-            if let curios_pipeline::Stage::Core(module) = stage {
+            if let curios_pipeline::Stage::CoreElab(module) = stage {
                 core = Some(module.clone());
             }
         },
     )
     .expect("the fixture compiles");
 
-    let core = core.expect("Stage::Core observed");
+    let core = core.expect("Stage::CoreElab observed");
 
     recheck_module(&core, crate::DEFAULT_STEP_BUDGET)
 }
@@ -61,7 +65,7 @@ fn recheck(source: &str) -> Result<(), KernelError> {
 /// prelude item ahead of the entrypoint, so even this exercises the module
 /// driver over the real standard library.
 #[test]
-#[ignore = "blocked: zonked Core carries unsolved universe metavariables (see the module note)"]
+#[ignore = "blocked: the kernel has no index inversion (see the module note)"]
 fn a_trivial_program_rechecks() {
     let outcome = recheck("()");
 
@@ -69,7 +73,7 @@ fn a_trivial_program_rechecks() {
 }
 
 #[test]
-#[ignore = "blocked: zonked Core carries unsolved universe metavariables (see the module note)"]
+#[ignore = "blocked: the kernel has no index inversion (see the module note)"]
 fn arithmetic_rechecks() {
     let outcome = recheck(
         r#"

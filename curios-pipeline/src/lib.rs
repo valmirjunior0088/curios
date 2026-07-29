@@ -14,7 +14,22 @@ pub use curios_elab::DEFAULT_STEP_BUDGET;
 
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
+    /// Core as `curios_text::into_core` produced it: syntax that nothing has
+    /// checked. It carries term metavariables, lowering-time universe seeds,
+    /// and unresolved `Infix` and `NumLit` nodes, and its registries are
+    /// unelaborated. Useful for debugging the lowering; not a typed program.
     Core(&'a curios_elab::Module),
+    /// Core after elaboration and zonking, which is the module every later
+    /// stage consumes. Metavariable-free by construction — `zonk_module` errors
+    /// on an unsolved hole — with universes validated, positivity checked,
+    /// totality recorded, and both erasure obligations gated. The prelude
+    /// prefix is spliced back in from the archive.
+    ///
+    /// The difference from [`Stage::Core`] is the absence of `Metavar`,
+    /// `Infix`, and `NumLit`, which is exactly what the independent kernel
+    /// requires of an input: this is the stage `curios_elab::recheck_module`
+    /// takes, and [`Stage::Core`] is not.
+    CoreElab(&'a curios_elab::Module),
     Ersd(&'a curios_ersd::Module),
     ErsdOptm(&'a curios_ersd::Module),
     Cont(&'a curios_cont::CpsModule),
@@ -26,9 +41,10 @@ impl<'a> Stage<'a> {
     /// Every stage name, in pipeline order — the single source the CLI's
     /// `--print` default/help text is derived from, so it cannot drift from
     /// [`Stage::name`].
-    pub const NAMES: [&'static str; 7] = [
+    pub const NAMES: [&'static str; 8] = [
         "text",
         "core",
+        "core-elab",
         "ersd",
         "ersd-optm",
         "cont",
@@ -41,6 +57,7 @@ impl<'a> Stage<'a> {
         match self {
             Stage::Text(_) => "text",
             Stage::Core(_) => "core",
+            Stage::CoreElab(_) => "core-elab",
             Stage::Ersd(_) => "ersd",
             Stage::ErsdOptm(_) => "ersd-optm",
             Stage::Cont(_) => "cont",
@@ -55,6 +72,7 @@ impl fmt::Display for Stage<'_> {
         match self {
             Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
             Stage::Core(module) => write!(f, "{module}"),
+            Stage::CoreElab(module) => write!(f, "{module}"),
             Stage::Ersd(module) => write!(f, "{module}"),
             Stage::ErsdOptm(module) => write!(f, "{module}"),
             Stage::Cont(module) => write!(f, "{module}"),
@@ -122,6 +140,8 @@ where
         )
     })
     .map_err(|error| error.format_with(&lowered))?;
+
+    observe(Stage::CoreElab(&module));
 
     Ok((module, core_type, user_foreigns))
 }
