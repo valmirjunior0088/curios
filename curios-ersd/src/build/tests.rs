@@ -1,4 +1,4 @@
-use super::*;
+use crate::*;
 
 /// let one = 1 (item); entry { let doubled = NatAdd(one, one); return doubled }
 fn doubling_module() -> Result<Module, VerifyError> {

@@ -1,5 +1,5 @@
 use {
-    super::{
+    crate::cps::{
         analysis::{analyze_sccs, function_nodes, known_values},
         contify::contify_calls,
         evaluate::evaluate,

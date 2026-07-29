@@ -2,7 +2,10 @@ use std::{
     collections::{BTreeSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
 };
-use {super::*, curios_base::Span};
+use {
+    super::*,
+    curios_base::{Source, Span},
+};
 
 fn origin(label: &str) -> UniverseConstraintOrigin {
     UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
@@ -352,7 +355,7 @@ fn constraint_identity_ignores_diagnostic_provenance() {
     let mut right = semantic();
     right.origin = origin("second");
     right.origin.span = Some(Span {
-        source: std::rc::Rc::new(curios_base::Source {
+        source: std::rc::Rc::new(Source {
             path: None,
             text: "Type".into(),
         }),

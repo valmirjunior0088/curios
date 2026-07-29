@@ -1,5 +1,5 @@
 use {
-    crate::{
+    super::{
         BlockData, CodeEmitter, Context, EmissionBlockName, EmissionBody, EmissionClosureName,
         EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
         Table, region_layout,

@@ -2,6 +2,8 @@
 
 use {
     crate::{ArchivedPreludeArchive, PreludeArchive, SCHEMA},
+    curios_elab::{ErasedPrelude, Module, Term},
+    curios_text::PreparedPrelude,
     std::{cell::LazyCell, sync::OnceLock},
 };
 
@@ -13,22 +15,22 @@ static ARCHIVE: OnceLock<Result<&'static ArchivedPreludeArchive, String>> = Once
 /// The reusable, restored fixed prelude. Fields stay private so callers
 /// cannot mutate compiler-global state between invocations.
 pub struct Prelude {
-    prepared: curios_text::PreparedPrelude,
-    core: curios_elab::Module,
-    body_type: curios_elab::Term,
-    ersd: curios_elab::ErasedPrelude,
+    prepared: PreparedPrelude,
+    core: Module,
+    body_type: Term,
+    ersd: ErasedPrelude,
 }
 
 impl Prelude {
-    pub fn prepared(&self) -> &curios_text::PreparedPrelude {
+    pub fn prepared(&self) -> &PreparedPrelude {
         &self.prepared
     }
 
-    pub fn core(&self) -> &curios_elab::Module {
+    pub fn core(&self) -> &Module {
         &self.core
     }
 
-    pub fn body_type(&self) -> &curios_elab::Term {
+    pub fn body_type(&self) -> &Term {
         &self.body_type
     }
 
@@ -36,7 +38,7 @@ impl Prelude {
     /// production replay resumes over. Returned as an owned clone because
     /// replay consumes it by value, so a compile's mutation of its copy can
     /// never poison a later one.
-    pub fn ersd(&self) -> curios_elab::ErasedPrelude {
+    pub fn ersd(&self) -> ErasedPrelude {
         self.ersd.clone()
     }
 }
@@ -130,7 +132,12 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::SYNTAX, std::collections::BTreeSet};
+    use {
+        super::*,
+        crate::SYNTAX,
+        curios_elab::{Global, Item},
+        std::collections::BTreeSet,
+    };
 
     #[test]
     fn embedded_archive_validates() {
@@ -177,13 +184,13 @@ mod tests {
             let mut parameters = std::collections::BTreeMap::new();
             for item in &prelude.core().items {
                 match item {
-                    curios_elab::Item::Let(definition) => {
+                    Item::Let(definition) => {
                         parameters.insert(
                             definition.name.symbol(),
                             definition.universe_context.parameter_count,
                         );
                     }
-                    curios_elab::Item::Rec(rec) => {
+                    Item::Rec(rec) => {
                         for definition in rec.definitions() {
                             parameters.insert(
                                 definition.name.symbol(),
@@ -243,12 +250,12 @@ mod tests {
                 .core()
                 .items
                 .iter()
-                .flat_map(curios_elab::Item::declared_names)
+                .flat_map(Item::declared_names)
                 .cloned()
                 .collect::<BTreeSet<_>>();
             for target in SYNTAX.targets() {
                 assert!(
-                    names.contains(&curios_elab::Global::Authored(target.qualifier())),
+                    names.contains(&Global::Authored(target.qualifier())),
                     "missing syntax target {}",
                     target.symbol()
                 );

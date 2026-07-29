@@ -10,7 +10,7 @@
 use curios_wasm::{
     ArrayType, BlockType, CompType, Export, Expr, FieldType, Func, FuncName, FuncType, HeapType,
     Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RefType, ResultType,
-    StorageType, SubType, TypeName, ValType,
+    StorageType, SubType, TypeName, ValType, to_bytes,
 };
 
 /// One accessor's name, parameters, outputs, and array op.
@@ -281,5 +281,5 @@ pub(crate) fn bridge_module() -> Module {
 
 /// The encoded bridge, ready for `WebAssembly.instantiate`.
 pub(crate) fn bridge_bytes() -> Vec<u8> {
-    curios_wasm::to_bytes(&bridge_module())
+    to_bytes(&bridge_module())
 }

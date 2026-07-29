@@ -49,24 +49,3 @@ pub use summary::*;
 
 mod optimize;
 pub use optimize::optimize_ir;
-
-#[cfg(test)]
-mod module_tests;
-
-#[cfg(test)]
-mod build_tests;
-
-#[cfg(test)]
-mod verify_tests;
-
-#[cfg(test)]
-mod print_tests;
-
-#[cfg(test)]
-mod analysis_tests;
-
-#[cfg(test)]
-mod into_cont_tests;
-
-#[cfg(test)]
-mod semantics_tests;

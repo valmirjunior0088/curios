@@ -13,7 +13,10 @@
 //! exactly. These gate (and then guard) the infix rewrite that routes every operator
 //! through the concepts.
 
-use curios_pipeline::{Stage, compile_entrypoint};
+use {
+    curios_pipeline::{Stage, compile_entrypoint},
+    curios_text::{Entrypoint, RootSource},
+};
 
 /// The optimized cont-stage dump for `source`, with every digit run replaced
 /// by `#`: entropy-derived name counters (`~v37`, `~f26`) are the
@@ -21,15 +24,13 @@ use curios_pipeline::{Stage, compile_entrypoint};
 /// use identical numeric literals, so digit-blind comparison is exact for
 /// everything that matters.
 fn normalized_cont_optm(source: &str) -> String {
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .expect("parity source parses");
+    let entrypoint = source.parse::<Entrypoint>().expect("parity source parses");
 
     let mut dump = String::new();
     compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 dump = module.to_string();

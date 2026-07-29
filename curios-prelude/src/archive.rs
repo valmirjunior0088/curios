@@ -4,7 +4,10 @@
 //! distinguishes incompatible compiler builds; Cargo regenerates the image in
 //! this crate's `OUT_DIR` whenever its inputs change.
 
-use curios_text::PreparedPrelude;
+use {
+    curios_elab::{ErasedPrelude, Module, Term},
+    curios_text::PreparedPrelude,
+};
 
 pub(crate) const SCHEMA: u32 = 18;
 
@@ -27,7 +30,7 @@ pub(crate) struct PreludeArchive {
     pub(crate) schema: u32,
     pub(crate) fingerprint: [u8; 32],
     pub(crate) prepared: PreparedPrelude,
-    pub(crate) core: curios_elab::Module,
-    pub(crate) body_type: curios_elab::Term,
-    pub(crate) ersd: curios_elab::ErasedPrelude,
+    pub(crate) core: Module,
+    pub(crate) body_type: Term,
+    pub(crate) ersd: ErasedPrelude,
 }

@@ -1,5 +1,5 @@
 use {
-    crate::{
+    super::{
         EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
         EmissionValueName,
@@ -884,7 +884,7 @@ impl<'a> Table<'a> {
 
 #[cfg(test)]
 mod tests {
-    use {super::Table, crate::EmissionModule};
+    use {super::super::EmissionModule, super::Table};
 
     #[test]
     fn rope_names_match_the_wasm_vocabulary() {

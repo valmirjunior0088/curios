@@ -1,12 +1,12 @@
 use {
     crate::*,
-    curios_base::Plicity,
+    curios_base::{Plicity, Qualifier},
     std::{collections::BTreeSet, rc::Rc},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
 fn nominal(path: &str) -> crate::Global {
-    crate::Global::Authored(curios_base::Qualifier::from([path]))
+    crate::Global::Authored(Qualifier::from([path]))
 }
 
 #[cfg(feature = "archive")]
@@ -163,7 +163,7 @@ fn has_local_free_flags_locals_not_globals() {
     let binder_1 = Free::local(1, Some("c#1"));
     let binder_2 = Free::local(2, Some("x#9"));
     fn global(path: [&str; 2]) -> Term {
-        Term::free_var(&Free::global(curios_base::Qualifier::from(path)))
+        Term::free_var(&Free::global(Qualifier::from(path)))
     }
 
     // A local is a discriminant, not a spelling: what makes a free variable

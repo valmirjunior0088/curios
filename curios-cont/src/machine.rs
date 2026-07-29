@@ -1201,11 +1201,14 @@ fn verify_block_resume(
 #[cfg(test)]
 mod tests {
     use {
-        super::value_id,
+        super::{
+            MachineFunction, MachineInstruction, MachineModule, MachineOperand, MachineTerminator,
+            lower, value_id,
+        },
         crate::{
             CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
-            CpsModule, CpsNode, EmissionHostTarget, EmissionTail, MachineFunction,
-            MachineInstruction, MachineModule, MachineOperand, MachineTerminator, into_wasm, lower,
+            CpsModule, CpsNode, into_wasm,
+            into_wasm::{EmissionHostTarget, EmissionTail},
         },
     };
 

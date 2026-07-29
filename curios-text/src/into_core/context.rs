@@ -2,10 +2,6 @@ use {
     super::PublicInterface,
     crate::{Error, Name, SyntaxRegistry},
     curios_base::{Entropy, Qualifier, RootId, Span},
-    curios_elab::{
-        DefinitionKind, Level, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseMetaId, UniverseRole, UniverseSeed,
-    },
     std::{
         cell::{Cell, RefCell},
         collections::{HashMap, HashSet},
@@ -15,7 +11,7 @@ use {
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: curios_elab::Global,
-    pub kind: DefinitionKind,
+    pub kind: curios_elab::DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
     pub type_: curios_elab::Term,
@@ -29,7 +25,7 @@ impl FlatLet {
             island: self.island,
             name: self.name,
             kind: self.kind,
-            universe_context: UniverseContext::empty(),
+            universe_context: curios_elab::UniverseContext::empty(),
             // Lowering cannot know this. `curios_elab::record_totality`
             // computes the definition's totality after elaboration and zonking
             // and writes it back here.
@@ -262,9 +258,9 @@ pub(super) struct Context<'a> {
     // `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     universes: &'a Entropy,
-    universe_role: &'a Cell<UniverseRole>,
-    universe_seeds: &'a RefCell<Vec<UniverseSeed>>,
-    universe_allocations: &'a RefCell<HashMap<Span, UniverseMetaId>>,
+    universe_role: &'a Cell<curios_elab::UniverseRole>,
+    universe_seeds: &'a RefCell<Vec<curios_elab::UniverseSeed>>,
+    universe_allocations: &'a RefCell<HashMap<Span, curios_elab::UniverseMetaId>>,
     // Shared counter for every binder identity a lowered term closes over.
     // Threaded (not a process-global atomic) for determinism: two runs over the
     // same source must mint the same identities, or terms that should be equal
@@ -286,9 +282,9 @@ impl<'a> Context<'a> {
         root: RootId,
         metavars: &'a Entropy,
         universes: &'a Entropy,
-        universe_role: &'a Cell<UniverseRole>,
-        universe_seeds: &'a RefCell<Vec<UniverseSeed>>,
-        universe_allocations: &'a RefCell<HashMap<Span, UniverseMetaId>>,
+        universe_role: &'a Cell<curios_elab::UniverseRole>,
+        universe_seeds: &'a RefCell<Vec<curios_elab::UniverseSeed>>,
+        universe_allocations: &'a RefCell<HashMap<Span, curios_elab::UniverseMetaId>>,
         binders: &'a Entropy,
         witnesses: &'a Entropy,
         syntax: &'a SyntaxRegistry,
@@ -354,7 +350,7 @@ impl<'a> Context<'a> {
         self.metavars.fresh()
     }
 
-    pub(super) fn fresh_universe(&self, span: Option<&Span>) -> Level {
+    pub(super) fn fresh_universe(&self, span: Option<&Span>) -> curios_elab::Level {
         if let Some(span) = span
             && let Some(id) = self.universe_allocations.borrow().get(span)
         {
@@ -363,37 +359,39 @@ impl<'a> Context<'a> {
                 self.universe_role(),
                 "one written Type was lowered under conflicting universe roles"
             );
-            return Level::meta(*id);
+            return curios_elab::Level::meta(*id);
         }
 
         let id = self.universes.fresh();
         let mut seeds = self.universe_seeds.borrow_mut();
         assert_eq!(id, seeds.len(), "universe seeds parallel their dense ids");
-        seeds.push(UniverseSeed {
+        seeds.push(curios_elab::UniverseSeed {
             role: self.universe_role(),
-            origin: span.cloned().map(|span| UniverseConstraintOrigin {
-                span: Some(span),
-                kind: UniverseConstraintKind::WrittenType,
-                declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
-                binder: None,
-            }),
+            origin: span
+                .cloned()
+                .map(|span| curios_elab::UniverseConstraintOrigin {
+                    span: Some(span),
+                    kind: curios_elab::UniverseConstraintKind::WrittenType,
+                    declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
+                    binder: None,
+                }),
         });
-        let id = UniverseMetaId(id);
+        let id = curios_elab::UniverseMetaId(id);
         if let Some(span) = span {
             self.universe_allocations
                 .borrow_mut()
                 .insert(span.clone(), id);
         }
-        Level::meta(id)
+        curios_elab::Level::meta(id)
     }
 
-    pub(super) fn universe_role(&self) -> UniverseRole {
+    pub(super) fn universe_role(&self) -> curios_elab::UniverseRole {
         self.universe_role.get()
     }
 
     pub(super) fn with_universe_role<T>(
         &self,
-        role: UniverseRole,
+        role: curios_elab::UniverseRole,
         f: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
         let old = self.universe_role.replace(role);

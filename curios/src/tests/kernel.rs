@@ -37,22 +37,22 @@
 
 use {
     curios_elab::{KernelError, Module, Term, recheck_module, recheck_module_verdicts},
+    curios_pipeline::{Stage, compile_entrypoint},
+    curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };
 
 /// Compile `source` and return the elaborated module the kernel checks.
 fn elaborated(source: &str) -> Module {
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .expect("the fixture parses");
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
 
     let mut core = None;
-    curios_pipeline::compile_entrypoint(
+    compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |stage| {
-            if let curios_pipeline::Stage::CoreElab(module) = stage {
+            if let Stage::CoreElab(module) = stage {
                 core = Some(module.clone());
             }
         },

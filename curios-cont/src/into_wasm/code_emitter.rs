@@ -1,5 +1,5 @@
 use {
-    crate::{Context, EmissionCode, EmissionValueName, LoadAs, RopeData, Table},
+    super::{Context, EmissionCode, EmissionValueName, LoadAs, RopeData, Table},
     curios_base::Grain,
 };
 

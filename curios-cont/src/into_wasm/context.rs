@@ -1,5 +1,5 @@
 use {
-    crate::{
+    super::{
         BlockData, ClsrData, EmissionBlockName, EmissionCallTarget, EmissionCellTarget,
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
         EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,

@@ -13,6 +13,9 @@
 //! Precondition: the module verifies. Analysis of an unverified module may
 //! produce arbitrary (but still terminating) results.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{Atom, BlockId, FunctionId, Module, Statement, StatementId, ValueId},
     std::collections::{BTreeMap, BTreeSet},

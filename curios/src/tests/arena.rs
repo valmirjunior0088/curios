@@ -3,20 +3,23 @@
 //! folding around ordered host effects, and the worker/wrapper rebase at
 //! stack-breaking depth. Properties, never bytes.
 
-use super::run;
+use {
+    super::run,
+    crate::DEFAULT_STEP_BUDGET,
+    curios_pipeline::{Stage, compile_entrypoint},
+    curios_text::{Entrypoint, RootSource},
+};
 
 /// Compile through production and capture the optimized Cont printout.
 fn cont_optm(source: &str) -> String {
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .expect("fixture parses");
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
     let mut printed = String::new();
-    let (_module, _foreigns) = curios_pipeline::compile_entrypoint(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+    let (_module, _foreigns) = compile_entrypoint(
+        DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |stage| {
-            if let curios_pipeline::Stage::ContOptm(module) = stage {
+            if let Stage::ContOptm(module) = stage {
                 printed = module.to_string();
             }
         },

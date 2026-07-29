@@ -18,6 +18,9 @@
 //! [`seal_block`](ErsdBuilder::seal_block) pops and freezes the block with its
 //! terminator.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, ForeignId, Function,

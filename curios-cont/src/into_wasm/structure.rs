@@ -14,7 +14,7 @@
 //! layout is deterministic and stack-safe regardless of block count.
 
 use {
-    crate::{
+    super::{
         EmissionBlockName, EmissionBody, EmissionCallTarget, EmissionHostTarget, EmissionTail,
     },
     std::collections::{HashMap, HashSet},
@@ -353,11 +353,11 @@ fn structure_set(
 #[cfg(test)]
 mod tests {
     use {
-        super::{LayoutItem, RegionCfg, region_layout},
-        crate::{
+        super::super::{
             EmissionBlock, EmissionBlockName, EmissionBody, EmissionJumpTarget,
             EmissionMatchTarget, EmissionTail, EmissionValueName,
         },
+        super::{LayoutItem, RegionCfg, region_layout},
     };
 
     fn body(tail: EmissionTail) -> EmissionBody {

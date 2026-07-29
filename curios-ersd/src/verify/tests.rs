@@ -1,4 +1,4 @@
-use super::*;
+use crate::*;
 
 fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
     let constant = builder.constant(Constant::Nat(value));

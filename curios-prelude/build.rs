@@ -10,7 +10,11 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
-    curios_text::{Module, PreludeModules},
+    curios_elab::{
+        Context, Global, Item, Mode, Sharing, elaborate_and_zonk_module, erase_prelude_prefix,
+        validate_lowered_universe_seeds, validate_universes,
+    },
+    curios_text::{Module, PreludeModules, prepare_prelude, sys_module},
     sha2::{Digest, Sha256},
     std::{
         collections::BTreeSet,
@@ -39,7 +43,7 @@ fn main() {
     );
 
     let mut modules = PreludeModules::new();
-    modules.insert_root("sys", RootId::Sys, curios_text::sys_module(&host_ops()));
+    modules.insert_root("sys", RootId::Sys, sys_module(&host_ops()));
     modules.insert_root("syn", RootId::Syn, parse_module(manifest.join("syn.crs")));
     modules.insert_root("std", RootId::Std, parse_module(manifest.join("std.crs")));
 
@@ -49,7 +53,7 @@ fn main() {
         modules.insert_module(source_qualifier(&manifest, source), parse_module(source));
     }
 
-    let prepared = curios_text::prepare_prelude(&modules, &SYNTAX)
+    let prepared = prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));
     validate_syntax_targets(prepared.core());
     assert_eq!(
@@ -57,17 +61,17 @@ fn main() {
         prepared.universe_floor(),
         "lowered Text universe floor does not match its seed table"
     );
-    curios_elab::validate_lowered_universe_seeds(prepared.core(), prepared.universe_floor())
+    validate_lowered_universe_seeds(prepared.core(), prepared.universe_floor())
         .unwrap_or_else(|error| panic!("lowered Text universe seeds are invalid: {error}"));
 
     let lowered = prepared.core().clone();
-    let mut context = curios_elab::Context::with_default_budget();
-    let (core, body_type) = curios_elab::elaborate_and_zonk_module(
+    let mut context = Context::with_default_budget();
+    let (core, body_type) = elaborate_and_zonk_module(
         &mut context,
         &lowered,
         prepared.metavariable_floor(),
         prepared.universe_floor(),
-        curios_elab::Mode::Infer,
+        Mode::Infer,
     )
     .unwrap_or_else(|error| {
         panic!(
@@ -84,17 +88,16 @@ fn main() {
     // already settled. `erase_prelude_prefix` below happens to project
     // through the same check, but inheriting the guarantee from an unrelated
     // call is not the same as stating it.
-    curios_elab::validate_universes(&core)
+    validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
     let ersd =
-        curios_elab::erase_prelude_prefix(&mut curios_elab::Context::with_default_budget(), &core)
-            .unwrap_or_else(|error| {
-                panic!(
-                    "fixed prelude failed to erase into the arena prefix: {}",
-                    error.format_with(&core)
-                )
-            });
+        erase_prelude_prefix(&mut Context::with_default_budget(), &core).unwrap_or_else(|error| {
+            panic!(
+                "fixed prelude failed to erase into the arena prefix: {}",
+                error.format_with(&core)
+            )
+        });
 
     // Hash-cons every archived Core snapshot against one table, so structurally
     // equal subterms collapse onto a single allocation across the lowered and
@@ -108,7 +111,7 @@ fn main() {
     // `ersd` is deliberately not included: it is a flat, index-addressed arena
     // with no shared pointers to collapse, and it already interns its constants
     // by value.
-    let sharing = curios_elab::Sharing::new();
+    let sharing = Sharing::new();
     let prepared = prepared.shared(&sharing);
     let core = core.shared(&sharing);
     let body_type = sharing.share(&body_type);
@@ -256,17 +259,17 @@ fn validate_syntax_targets(module: &curios_elab::Module) {
     let names = module
         .items
         .iter()
-        .flat_map(curios_elab::Item::declared_names)
+        .flat_map(Item::declared_names)
         .cloned()
         .collect::<BTreeSet<_>>();
     for target in SYNTAX.targets() {
         let symbol = target.symbol();
         assert!(
-            names.contains(&curios_elab::Global::Authored(target.qualifier())),
+            names.contains(&Global::Authored(target.qualifier())),
             "registered syntax target '{symbol}' is absent from the lowered prelude; nearby names: {:?}",
             names
                 .iter()
-                .map(curios_elab::Global::symbol)
+                .map(Global::symbol)
                 .filter(|name| name.contains(target.last()))
                 .collect::<Vec<_>>()
         );

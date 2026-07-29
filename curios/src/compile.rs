@@ -4,7 +4,10 @@
 //! stays slim.
 
 use {
+    curios_binaryen::optimize,
     curios_runtime::{ForeignBindings, HostOps, run_bytes, shared_engine},
+    curios_text::{Entrypoint, RootSource},
+    curios_wasm::{Module, to_bytes},
     std::path::Path,
 };
 
@@ -15,8 +18,8 @@ use curios_pipeline::compile_entrypoint;
 /// payload the runtime deserializes — the same payload a bundled executable
 /// carries. Uses `curios-runtime`'s shared engine so the precompiled artifact
 /// matches the configuration `run_bytes` deserializes against.
-pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
-    let bytes = curios_binaryen::optimize(curios_wasm::to_bytes(module));
+pub fn to_cwasm(module: &Module) -> Result<Vec<u8>, String> {
+    let bytes = optimize(to_bytes(module));
 
     shared_engine()
         .precompile_module(&bytes)
@@ -29,7 +32,7 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
 /// `foreign` declarations (pass [`ForeignBindings::empty`] for a program that
 /// declares none). Returns the process exit code.
 pub fn run_wasm<H: HostOps + Send + Sync + 'static>(
-    module: &curios_wasm::Module,
+    module: &Module,
     host: H,
     bindings: ForeignBindings,
 ) -> Result<i32, String> {
@@ -45,8 +48,8 @@ pub fn run_wasm<H: HostOps + Send + Sync + 'static>(
 /// from the returned store and calling [`run_wasm`] itself.
 #[cfg(test)]
 pub(crate) fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
+    entrypoint: &Entrypoint,
+    loader: RootSource,
     host: H,
 ) -> Result<(), String> {
     let (module, _foreigns) = compile_entrypoint(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
@@ -65,20 +68,19 @@ pub(crate) fn run_text<H: HostOps + Send + Sync + 'static>(
     host: H,
 ) -> Result<(), String> {
     let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
+        .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    run_entrypoint(&entrypoint, curios_text::RootSource::none(), host)
+    run_entrypoint(&entrypoint, RootSource::none(), host)
 }
 
 /// Open a `.crs` entrypoint at `path`, paired with a
 /// [`curios_text::RootSource::file_system`] rooted at its parent directory —
 /// the standard way to resolve a program's imports relative to the file it
 /// lives in.
-pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
-    let entrypoint = curios_text::Entrypoint::from_path(path).map_err(|error| error.format())?;
-    let loader =
-        curios_text::RootSource::file_system(path.parent().unwrap_or(Path::new(".")).to_path_buf());
+pub fn load(path: &Path) -> Result<(Entrypoint, RootSource), String> {
+    let entrypoint = Entrypoint::from_path(path).map_err(|error| error.format())?;
+    let loader = RootSource::file_system(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
     Ok((entrypoint, loader))
 }

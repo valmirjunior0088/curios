@@ -27,6 +27,9 @@
 //! their Cont counterparts suffice; source hints are carried onto the Cont
 //! values and functions they lower to.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId, FoldNatStep,
@@ -35,11 +38,6 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_base::{Grain, PackedBin},
-    curios_cont::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr,
-        CpsValueId,
-    },
     num_bigint::BigUint,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -48,15 +46,15 @@ use {
 };
 
 /// Lower a verified arena [`Module`] into the landed Cont
-/// [`CpsModule`]. The module's top level — its item chain followed by its
+/// [`curios_cont::CpsModule`]. The module's top level — its item chain followed by its
 /// entry block — becomes the parameterless Cps entry `main`, delivering its
 /// result to a bodyless `return_cont`. The produced module is verified; a
 /// failure is a lowering bug, not a user error, so it panics.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn lower_to_cont(source: &Module) -> CpsModule {
+pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
     let mut lowerer = Lowerer {
         source,
-        module: CpsModule::new(),
+        module: curios_cont::CpsModule::new(),
         values: BTreeMap::new(),
         functions: BTreeMap::new(),
         knot_cells: BTreeMap::new(),
@@ -71,7 +69,7 @@ pub fn lower_to_cont(source: &Module) -> CpsModule {
     let body = lowerer.lower_statements(&statements, &entry.terminator, return_cont);
     lowerer.module.define_function(
         main,
-        CpsFunction {
+        curios_cont::CpsFunction {
             debug_name: Some("main".into()),
             params: Vec::new(),
             return_cont,
@@ -89,19 +87,23 @@ pub fn lower_to_cont(source: &Module) -> CpsModule {
 
 struct Lowerer<'a> {
     source: &'a Module,
-    module: CpsModule,
-    values: BTreeMap<ValueId, CpsAtom>,
-    functions: BTreeMap<FunctionId, CpsFunId>,
+    module: curios_cont::CpsModule,
+    values: BTreeMap<ValueId, curios_cont::CpsAtom>,
+    functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
     /// Members of value-only recursive knots, mapped to the mutable cell that
     /// ties each knot. A reference to such a member lowers to a read of the
     /// filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced
     /// once and is invisible to everything but this lowering.
-    knot_cells: BTreeMap<ValueId, CpsValueId>,
+    knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
 }
 
 impl Lowerer<'_> {
     /// Lower a block so its result is delivered to `target`.
-    fn lower_block(&mut self, block: BlockId, target: CpsContId) -> CpsNodeId {
+    fn lower_block(
+        &mut self,
+        block: BlockId,
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let block: Block = self.source.block(block).expect("live block").clone();
         self.lower_statements(&block.statements, &block.terminator, target)
     }
@@ -111,8 +113,8 @@ impl Lowerer<'_> {
         &mut self,
         statements: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let Some((&first, rest)) = statements.split_first() else {
             return self.lower_terminator(terminator, target);
         };
@@ -128,13 +130,18 @@ impl Lowerer<'_> {
             Statement::Functions { functions } => {
                 let functions = self.lower_function_group(&functions);
                 let body = self.lower_statements(rest, terminator, target);
-                self.module.add_node(CpsNode::LetFun { functions, body })
+                self.module
+                    .add_node(curios_cont::CpsNode::LetFun { functions, body })
             }
             Statement::Rec { group } => self.lower_rec_group(group, rest, terminator, target),
         }
     }
 
-    fn lower_terminator(&mut self, terminator: &Terminator, target: CpsContId) -> CpsNodeId {
+    fn lower_terminator(
+        &mut self,
+        terminator: &Terminator,
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         match terminator {
             Terminator::Return(atom) => {
                 let atom = self.lower_atom(*atom);
@@ -142,15 +149,23 @@ impl Lowerer<'_> {
             }
             Terminator::Exit(atom) => {
                 let atom = self.lower_atom(*atom);
-                self.module.add_node(CpsNode::Exit { value: Some(atom) })
+                self.module
+                    .add_node(curios_cont::CpsNode::Exit { value: Some(atom) })
             }
-            Terminator::Unreachable => self.module.add_node(CpsNode::Unreachable),
+            Terminator::Unreachable => self.module.add_node(curios_cont::CpsNode::Unreachable),
         }
     }
 
-    fn jump(&mut self, target: CpsContId, args: Vec<CpsAtom>) -> CpsNodeId {
+    fn jump(
+        &mut self,
+        target: curios_cont::CpsContId,
+        args: Vec<curios_cont::CpsAtom>,
+    ) -> curios_cont::CpsNodeId {
         self.module
-            .add_node(CpsNode::ApplyCont(CpsEdge { target, args }))
+            .add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+                target,
+                args,
+            }))
     }
 
     // === Functions and recursion =========================================
@@ -158,8 +173,8 @@ impl Lowerer<'_> {
     /// Reserve every function of a group before defining any, so a member
     /// body can reference itself and its siblings; return the Cont ids in
     /// group order.
-    fn lower_function_group(&mut self, functions: &[FunctionId]) -> Vec<CpsFunId> {
-        let ids: Vec<CpsFunId> = functions
+    fn lower_function_group(&mut self, functions: &[FunctionId]) -> Vec<curios_cont::CpsFunId> {
+        let ids: Vec<curios_cont::CpsFunId> = functions
             .iter()
             .map(|&arena| {
                 let id = self.module.reserve_function();
@@ -177,7 +192,7 @@ impl Lowerer<'_> {
     /// references a value-only knot member reads it from the knot's cell at
     /// its own entry — at call time, once the knot is tied — rather than
     /// capturing the value directly.
-    fn define_function(&mut self, arena: FunctionId, id: CpsFunId) {
+    fn define_function(&mut self, arena: FunctionId, id: curios_cont::CpsFunId) {
         let function: Function = self.source.function(arena).expect("live function").clone();
         let return_cont = self.module.reserve_continuation();
         let params = function
@@ -195,7 +210,7 @@ impl Lowerer<'_> {
         });
         self.module.define_function(
             id,
-            CpsFunction {
+            curios_cont::CpsFunction {
                 debug_name: function.debug_name.clone(),
                 params,
                 return_cont,
@@ -213,8 +228,8 @@ impl Lowerer<'_> {
         group: RecGroupId,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let mut group: RecGroup = self.source.rec_group(group).expect("live group").clone();
 
         // Drop computed members never referenced outside their own
@@ -240,7 +255,7 @@ impl Lowerer<'_> {
             return self.lower_value_knot(&group, rest, terminator, target);
         }
 
-        let functions: Vec<CpsFunId> = group
+        let functions: Vec<curios_cont::CpsFunId> = group
             .functions
             .iter()
             .map(|&arena| {
@@ -249,7 +264,7 @@ impl Lowerer<'_> {
                 id
             })
             .collect();
-        let values: Vec<CpsValueId> = group
+        let values: Vec<curios_cont::CpsValueId> = group
             .values
             .iter()
             .map(|member| self.bind_value(member.value))
@@ -261,7 +276,9 @@ impl Lowerer<'_> {
 
         if group.values.is_empty() {
             let body = self.lower_statements(rest, terminator, target);
-            return self.module.add_node(CpsNode::LetFun { functions, body });
+            return self
+                .module
+                .add_node(curios_cont::CpsNode::LetFun { functions, body });
         }
 
         // Mixed knot: the reserved value slots are visible to the member
@@ -276,20 +293,20 @@ impl Lowerer<'_> {
             let continuation = self.module.reserve_continuation();
             self.module.define_continuation(
                 continuation,
-                CpsContinuation {
+                curios_cont::CpsContinuation {
                     debug_name: None,
                     params: vec![bound],
                     body,
                 },
             );
             let entry = self.lower_block(init, continuation);
-            body = self.module.add_node(CpsNode::LetCont {
+            body = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![continuation],
                 body: entry,
             });
         }
 
-        self.module.add_node(CpsNode::RecInit {
+        self.module.add_node(curios_cont::CpsNode::RecInit {
             functions,
             values,
             ready,
@@ -309,9 +326,9 @@ impl Lowerer<'_> {
         group: &RecGroup,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
-        let cells: Vec<CpsValueId> = group
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
+        let cells: Vec<curios_cont::CpsValueId> = group
             .values
             .iter()
             .map(|member| {
@@ -336,26 +353,29 @@ impl Lowerer<'_> {
             let after_store = self.module.reserve_continuation();
             self.module.define_continuation(
                 after_store,
-                CpsContinuation {
+                curios_cont::CpsContinuation {
                     debug_name: None,
                     params: Vec::new(),
                     body,
                 },
             );
             let value = self.module.add_value(None);
-            let store = self.module.add_node(CpsNode::Cell {
-                op: CpsCellOp::Set,
-                args: vec![CpsAtom::Value(cell), CpsAtom::Value(value)],
+            let store = self.module.add_node(curios_cont::CpsNode::Cell {
+                op: curios_cont::CpsCellOp::Set,
+                args: vec![
+                    curios_cont::CpsAtom::Value(cell),
+                    curios_cont::CpsAtom::Value(value),
+                ],
                 return_to: after_store,
             });
-            let store = self.module.add_node(CpsNode::LetCont {
+            let store = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![after_store],
                 body: store,
             });
             let receive = self.module.reserve_continuation();
             self.module.define_continuation(
                 receive,
-                CpsContinuation {
+                curios_cont::CpsContinuation {
                     debug_name: None,
                     params: vec![value],
                     body: store,
@@ -364,7 +384,7 @@ impl Lowerer<'_> {
             let init_members = self.block_member_refs(init);
             let entry =
                 self.with_cell_reads(init_members, |lowerer| lowerer.lower_block(init, receive));
-            body = self.module.add_node(CpsNode::LetCont {
+            body = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![receive],
                 body: entry,
             });
@@ -377,18 +397,20 @@ impl Lowerer<'_> {
             let bound = self.module.reserve_continuation();
             self.module.define_continuation(
                 bound,
-                CpsContinuation {
+                curios_cont::CpsContinuation {
                     debug_name: None,
                     params: vec![cell],
                     body,
                 },
             );
-            let new = self.module.add_node(CpsNode::Cell {
-                op: CpsCellOp::New,
-                args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            let new = self.module.add_node(curios_cont::CpsNode::Cell {
+                op: curios_cont::CpsCellOp::New,
+                args: vec![curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                    0,
+                ))],
                 return_to: bound,
             });
-            body = self.module.add_node(CpsNode::LetCont {
+            body = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![bound],
                 body: new,
             });
@@ -403,17 +425,24 @@ impl Lowerer<'_> {
     fn with_cell_reads(
         &mut self,
         members: Vec<ValueId>,
-        build: impl FnOnce(&mut Self) -> CpsNodeId,
-    ) -> CpsNodeId {
+        build: impl FnOnce(&mut Self) -> curios_cont::CpsNodeId,
+    ) -> curios_cont::CpsNodeId {
         if members.is_empty() {
             return build(self);
         }
-        let reads: Vec<(ValueId, CpsValueId, CpsValueId, Option<CpsAtom>)> = members
+        let reads: Vec<(
+            ValueId,
+            curios_cont::CpsValueId,
+            curios_cont::CpsValueId,
+            Option<curios_cont::CpsAtom>,
+        )> = members
             .into_iter()
             .map(|member| {
                 let cell = self.knot_cells[&member];
                 let local = self.module.add_value(self.arena_value_name(member));
-                let previous = self.values.insert(member, CpsAtom::Value(local));
+                let previous = self
+                    .values
+                    .insert(member, curios_cont::CpsAtom::Value(local));
                 (member, local, cell, previous)
             })
             .collect();
@@ -432,18 +461,18 @@ impl Lowerer<'_> {
             let resume = self.module.reserve_continuation();
             self.module.define_continuation(
                 resume,
-                CpsContinuation {
+                curios_cont::CpsContinuation {
                     debug_name: None,
                     params: vec![local],
                     body,
                 },
             );
-            let get = self.module.add_node(CpsNode::Cell {
-                op: CpsCellOp::Get,
-                args: vec![CpsAtom::Value(cell)],
+            let get = self.module.add_node(curios_cont::CpsNode::Cell {
+                op: curios_cont::CpsCellOp::Get,
+                args: vec![curios_cont::CpsAtom::Value(cell)],
                 return_to: resume,
             });
-            body = self.module.add_node(CpsNode::LetCont {
+            body = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![resume],
                 body: get,
             });
@@ -644,8 +673,8 @@ impl Lowerer<'_> {
         rhs: &Rhs,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         match rhs {
             // Aliasing binds an already-computed atom: record the mapping and
             // continue; no Cont node is needed.
@@ -662,20 +691,20 @@ impl Lowerer<'_> {
                 operation,
                 operands,
             } => {
-                let args: Vec<CpsAtom> =
+                let args: Vec<curios_cont::CpsAtom> =
                     operands.iter().map(|&atom| self.lower_atom(atom)).collect();
                 if let SequenceOp::LstBuild = operation {
                     return self.straight(result, rest, terminator, target, move |bound, next| {
-                        CpsNode::LetValue {
+                        curios_cont::CpsNode::LetValue {
                             result: bound,
-                            value: CpsValueExpr::List(args),
+                            value: curios_cont::CpsValueExpr::List(args),
                             next,
                         }
                     });
                 }
                 let op = sequence_prim(*operation, args.len());
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetPrim {
                         result: bound,
                         op,
                         args,
@@ -690,7 +719,7 @@ impl Lowerer<'_> {
                     .map(|&atom| self.lower_atom(atom))
                     .collect();
                 self.split(result, 1, rest, terminator, target, |return_to| {
-                    CpsNode::ApplyFun {
+                    curios_cont::CpsNode::ApplyFun {
                         callee,
                         args,
                         return_to,
@@ -700,9 +729,9 @@ impl Lowerer<'_> {
             Rhs::Product { schema: _, fields } => {
                 let fields = fields.iter().map(|&atom| self.lower_atom(atom)).collect();
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    CpsNode::LetValue {
+                    curios_cont::CpsNode::LetValue {
                         result: bound,
-                        value: CpsValueExpr::Tuple(fields),
+                        value: curios_cont::CpsValueExpr::Tuple(fields),
                         next,
                     }
                 })
@@ -713,12 +742,14 @@ impl Lowerer<'_> {
             } => {
                 let tag = self.constructor_tag(*constructor);
                 let mut atoms = Vec::with_capacity(fields.len() + 1);
-                atoms.push(CpsAtom::Literal(CpsLiteral::Nat(tag)));
+                atoms.push(curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                    tag,
+                )));
                 atoms.extend(fields.iter().map(|&atom| self.lower_atom(atom)));
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    CpsNode::LetValue {
+                    curios_cont::CpsNode::LetValue {
                         result: bound,
-                        value: CpsValueExpr::Tuple(atoms),
+                        value: curios_cont::CpsValueExpr::Tuple(atoms),
                         next,
                     }
                 })
@@ -731,9 +762,9 @@ impl Lowerer<'_> {
                 let product = self.lower_atom(*product);
                 let index = *field as usize;
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetPrim {
                         result: bound,
-                        op: CpsPrimOp::TplGet(index),
+                        op: curios_cont::CpsPrimOp::TplGet(index),
                         args: vec![product],
                         next,
                     }
@@ -804,7 +835,7 @@ impl Lowerer<'_> {
                     rest,
                     terminator,
                     target,
-                    |return_to| CpsNode::Cell {
+                    |return_to| curios_cont::CpsNode::Cell {
                         op,
                         args,
                         return_to,
@@ -825,7 +856,7 @@ impl Lowerer<'_> {
                 operands,
             } => {
                 let op = match intrinsic {
-                    Intrinsic::LstMap => CpsIntrinsicOp::LstMap,
+                    Intrinsic::LstMap => curios_cont::CpsIntrinsicOp::LstMap,
                 };
                 // Both representations bind the mapper first; the operands
                 // transcribe in order.
@@ -834,7 +865,7 @@ impl Lowerer<'_> {
                     .map(|&operand| self.lower_atom(operand))
                     .collect();
                 self.split(result, 1, rest, terminator, target, |return_to| {
-                    CpsNode::Intrinsic {
+                    curios_cont::CpsNode::Intrinsic {
                         op,
                         args,
                         return_to,
@@ -854,8 +885,8 @@ impl Lowerer<'_> {
         operands: &[Atom],
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         match operation {
             Operation::ByteToNat => {
                 let atom = self.lower_atom(operands[0]);
@@ -865,10 +896,13 @@ impl Lowerer<'_> {
             Operation::NatToByte => {
                 let value = self.lower_atom(operands[0]);
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetPrim {
                         result: bound,
-                        op: CpsPrimOp::NatAnd,
-                        args: vec![value, CpsAtom::Literal(CpsLiteral::Nat(0xFF))],
+                        op: curios_cont::CpsPrimOp::NatAnd,
+                        args: vec![
+                            value,
+                            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0xFF)),
+                        ],
                         next,
                     }
                 })
@@ -877,7 +911,7 @@ impl Lowerer<'_> {
                 let op = operation_prim(operation);
                 let args = operands.iter().map(|&atom| self.lower_atom(atom)).collect();
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetPrim {
                         result: bound,
                         op,
                         args,
@@ -904,8 +938,8 @@ impl Lowerer<'_> {
         result: ValueId,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> (CpsContId, bool) {
+        target: curios_cont::CpsContId,
+    ) -> (curios_cont::CpsContId, bool) {
         if rest.is_empty()
             && matches!(terminator, Terminator::Return(Atom::Value(returned)) if *returned == result)
         {
@@ -923,14 +957,14 @@ impl Lowerer<'_> {
         result: ValueId,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsContId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsContId {
         let join = self.module.reserve_continuation();
         let parameter = self.bind_value(result);
         let body = self.lower_statements(rest, terminator, target);
         self.module.define_continuation(
             join,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![parameter],
                 body,
@@ -940,12 +974,16 @@ impl Lowerer<'_> {
     }
 
     /// Build a parameterless continuation lowering `block` into `join`.
-    fn plain_arm(&mut self, block: BlockId, join: CpsContId) -> CpsContId {
+    fn plain_arm(
+        &mut self,
+        block: BlockId,
+        join: curios_cont::CpsContId,
+    ) -> curios_cont::CpsContId {
         let continuation = self.module.reserve_continuation();
         let body = self.lower_block(block, join);
         self.module.define_continuation(
             continuation,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: Vec::new(),
                 body,
@@ -961,13 +999,13 @@ impl Lowerer<'_> {
     fn lower_switch(
         &mut self,
         result: ValueId,
-        scrutinee: CpsAtom,
+        scrutinee: curios_cont::CpsAtom,
         arms: Vec<(u32, BlockId)>,
         default: Option<BlockId>,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let (join, fresh) = self.open_join(result, rest, terminator, target);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
@@ -976,7 +1014,7 @@ impl Lowerer<'_> {
             continuations.push(continuation);
             cases.insert(
                 key,
-                CpsEdge {
+                curios_cont::CpsEdge {
                     target: continuation,
                     args: Vec::new(),
                 },
@@ -985,17 +1023,17 @@ impl Lowerer<'_> {
         let default = default.map(|block| {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            CpsEdge {
+            curios_cont::CpsEdge {
                 target: continuation,
                 args: Vec::new(),
             }
         });
-        let switch = self.module.add_node(CpsNode::Switch {
+        let switch = self.module.add_node(curios_cont::CpsNode::Switch {
             scrutinee,
             cases,
             default,
         });
-        self.module.add_node(CpsNode::LetCont {
+        self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations,
             body: switch,
         })
@@ -1013,8 +1051,8 @@ impl Lowerer<'_> {
         default: Option<BlockId>,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let scrutinee = self.lower_atom(scrutinee);
         let (join, fresh) = self.open_join(result, rest, terminator, target);
 
@@ -1025,7 +1063,7 @@ impl Lowerer<'_> {
             continuations.push(continuation);
             cases.insert(
                 self.constructor_tag(arm.constructor),
-                CpsEdge {
+                curios_cont::CpsEdge {
                     target: continuation,
                     args: Vec::new(),
                 },
@@ -1034,25 +1072,25 @@ impl Lowerer<'_> {
         let default = default.map(|block| {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            CpsEdge {
+            curios_cont::CpsEdge {
                 target: continuation,
                 args: Vec::new(),
             }
         });
 
         let tag = self.module.add_value(None);
-        let switch = self.module.add_node(CpsNode::Switch {
-            scrutinee: CpsAtom::Value(tag),
+        let switch = self.module.add_node(curios_cont::CpsNode::Switch {
+            scrutinee: curios_cont::CpsAtom::Value(tag),
             cases,
             default,
         });
-        let dispatch = self.module.add_node(CpsNode::LetPrim {
+        let dispatch = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: tag,
-            op: CpsPrimOp::TplGet(0),
+            op: curios_cont::CpsPrimOp::TplGet(0),
             args: vec![scrutinee],
             next: switch,
         });
-        self.module.add_node(CpsNode::LetCont {
+        self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations,
             body: dispatch,
         })
@@ -1061,19 +1099,19 @@ impl Lowerer<'_> {
     fn lower_variant_arm(
         &mut self,
         arm: &VariantArm,
-        scrutinee: CpsAtom,
-        join: CpsContId,
-    ) -> CpsContId {
-        let bindings: Vec<CpsValueId> = arm
+        scrutinee: curios_cont::CpsAtom,
+        join: curios_cont::CpsContId,
+    ) -> curios_cont::CpsContId {
+        let bindings: Vec<curios_cont::CpsValueId> = arm
             .bindings
             .iter()
             .map(|&binder| self.bind_value(binder))
             .collect();
         let mut body = self.lower_block(arm.block, join);
         for index in (0..bindings.len()).rev() {
-            body = self.module.add_node(CpsNode::LetPrim {
+            body = self.module.add_node(curios_cont::CpsNode::LetPrim {
                 result: bindings[index],
-                op: CpsPrimOp::TplGet(index + 1),
+                op: curios_cont::CpsPrimOp::TplGet(index + 1),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1081,7 +1119,7 @@ impl Lowerer<'_> {
         let continuation = self.module.reserve_continuation();
         self.module.define_continuation(
             continuation,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: Vec::new(),
                 body,
@@ -1104,8 +1142,8 @@ impl Lowerer<'_> {
         step: &FoldNatStep,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let head = self.lower_atom(scrutinee);
         let join = self.open_join_fresh(result, rest, terminator, target);
 
@@ -1126,20 +1164,23 @@ impl Lowerer<'_> {
         // step_resume(next_acc): increment the index and loop.
         let loop_back = self.jump(
             loop_cont,
-            vec![CpsAtom::Value(next_index), CpsAtom::Value(next_acc)],
+            vec![
+                curios_cont::CpsAtom::Value(next_index),
+                curios_cont::CpsAtom::Value(next_acc),
+            ],
         );
-        let increment = self.module.add_node(CpsNode::LetPrim {
+        let increment = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: next_index,
-            op: CpsPrimOp::NatAdd,
+            op: curios_cont::CpsPrimOp::NatAdd,
             args: vec![
-                CpsAtom::Value(step_index),
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
+                curios_cont::CpsAtom::Value(step_index),
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
             ],
             next: loop_back,
         });
         self.module.define_continuation(
             step_resume,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![next_acc],
                 body: increment,
@@ -1148,13 +1189,13 @@ impl Lowerer<'_> {
 
         // step_cont(step_index, step_acc): run the step block, then resume.
         let step_body = self.lower_block(step.block, step_resume);
-        let step_body = self.module.add_node(CpsNode::LetCont {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations: vec![step_resume],
             body: step_body,
         });
         self.module.define_continuation(
             step_cont,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![step_index, step_acc],
                 body: step_body,
@@ -1162,29 +1203,32 @@ impl Lowerer<'_> {
         );
 
         // loop_cont(loop_index, loop_acc): step until the index reaches n.
-        let switch = self.module.add_node(CpsNode::Switch {
-            scrutinee: CpsAtom::Value(comparison),
+        let switch = self.module.add_node(curios_cont::CpsNode::Switch {
+            scrutinee: curios_cont::CpsAtom::Value(comparison),
             cases: BTreeMap::from([(
                 0,
-                CpsEdge {
+                curios_cont::CpsEdge {
                     target: step_cont,
-                    args: vec![CpsAtom::Value(loop_index), CpsAtom::Value(loop_acc)],
+                    args: vec![
+                        curios_cont::CpsAtom::Value(loop_index),
+                        curios_cont::CpsAtom::Value(loop_acc),
+                    ],
                 },
             )]),
-            default: Some(CpsEdge {
+            default: Some(curios_cont::CpsEdge {
                 target: join,
-                args: vec![CpsAtom::Value(loop_acc)],
+                args: vec![curios_cont::CpsAtom::Value(loop_acc)],
             }),
         });
-        let loop_body = self.module.add_node(CpsNode::LetPrim {
+        let loop_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: comparison,
-            op: CpsPrimOp::NatEql,
-            args: vec![CpsAtom::Value(loop_index), head],
+            op: curios_cont::CpsPrimOp::NatEql,
+            args: vec![curios_cont::CpsAtom::Value(loop_index), head],
             next: switch,
         });
         self.module.define_continuation(
             loop_cont,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![loop_index, loop_acc],
                 body: loop_body,
@@ -1195,13 +1239,13 @@ impl Lowerer<'_> {
         let zero_jump = self.jump(
             loop_cont,
             vec![
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
-                CpsAtom::Value(zero_acc),
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                curios_cont::CpsAtom::Value(zero_acc),
             ],
         );
         self.module.define_continuation(
             zero_resume,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![zero_acc],
                 body: zero_jump,
@@ -1209,7 +1253,7 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(zero, zero_resume);
-        self.module.add_node(CpsNode::LetCont {
+        self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations: vec![join, loop_cont, step_cont, zero_resume],
             body: entry,
         })
@@ -1228,8 +1272,8 @@ impl Lowerer<'_> {
         step: &FoldSequenceStep,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let sequence = self.lower_atom(scrutinee);
         let join = self.open_join_fresh(result, rest, terminator, target);
 
@@ -1253,11 +1297,14 @@ impl Lowerer<'_> {
         // step_resume(next_acc): continue the loop at the element's index.
         let loop_back = self.jump(
             loop_cont,
-            vec![CpsAtom::Value(element_index), CpsAtom::Value(next_acc)],
+            vec![
+                curios_cont::CpsAtom::Value(element_index),
+                curios_cont::CpsAtom::Value(next_acc),
+            ],
         );
         self.module.define_continuation(
             step_resume,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![next_acc],
                 body: loop_back,
@@ -1266,38 +1313,38 @@ impl Lowerer<'_> {
 
         // step_cont(step_index, step_acc): extract seq[i-1], seq[i..], fold.
         let step_body = self.lower_block(step.block, step_resume);
-        let step_body = self.module.add_node(CpsNode::LetCont {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations: vec![step_resume],
             body: step_body,
         });
-        let step_body = self.module.add_node(CpsNode::LetPrim {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: suffix,
             op: sequence_slice_op(grain),
             args: vec![
                 sequence.clone(),
-                CpsAtom::Value(step_index),
-                CpsAtom::Value(length),
+                curios_cont::CpsAtom::Value(step_index),
+                curios_cont::CpsAtom::Value(length),
             ],
             next: step_body,
         });
-        let step_body = self.module.add_node(CpsNode::LetPrim {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: element,
             op: sequence_get_op(grain),
-            args: vec![sequence.clone(), CpsAtom::Value(element_index)],
+            args: vec![sequence.clone(), curios_cont::CpsAtom::Value(element_index)],
             next: step_body,
         });
-        let step_body = self.module.add_node(CpsNode::LetPrim {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: element_index,
-            op: CpsPrimOp::NatSub,
+            op: curios_cont::CpsPrimOp::NatSub,
             args: vec![
-                CpsAtom::Value(step_index),
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
+                curios_cont::CpsAtom::Value(step_index),
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
             ],
             next: step_body,
         });
         self.module.define_continuation(
             step_cont,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![step_index, step_acc],
                 body: step_body,
@@ -1305,32 +1352,35 @@ impl Lowerer<'_> {
         );
 
         // loop_cont(loop_index, loop_acc): fold until the index reaches 0.
-        let switch = self.module.add_node(CpsNode::Switch {
-            scrutinee: CpsAtom::Value(comparison),
+        let switch = self.module.add_node(curios_cont::CpsNode::Switch {
+            scrutinee: curios_cont::CpsAtom::Value(comparison),
             cases: BTreeMap::from([(
                 0,
-                CpsEdge {
+                curios_cont::CpsEdge {
                     target: step_cont,
-                    args: vec![CpsAtom::Value(loop_index), CpsAtom::Value(loop_acc)],
+                    args: vec![
+                        curios_cont::CpsAtom::Value(loop_index),
+                        curios_cont::CpsAtom::Value(loop_acc),
+                    ],
                 },
             )]),
-            default: Some(CpsEdge {
+            default: Some(curios_cont::CpsEdge {
                 target: join,
-                args: vec![CpsAtom::Value(loop_acc)],
+                args: vec![curios_cont::CpsAtom::Value(loop_acc)],
             }),
         });
-        let loop_body = self.module.add_node(CpsNode::LetPrim {
+        let loop_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: comparison,
-            op: CpsPrimOp::NatEql,
+            op: curios_cont::CpsPrimOp::NatEql,
             args: vec![
-                CpsAtom::Value(loop_index),
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
+                curios_cont::CpsAtom::Value(loop_index),
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
             ],
             next: switch,
         });
         self.module.define_continuation(
             loop_cont,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![loop_index, loop_acc],
                 body: loop_body,
@@ -1340,11 +1390,14 @@ impl Lowerer<'_> {
         // empty_resume(base_acc): enter the loop at the end with the base.
         let empty_jump = self.jump(
             loop_cont,
-            vec![CpsAtom::Value(length), CpsAtom::Value(base_acc)],
+            vec![
+                curios_cont::CpsAtom::Value(length),
+                curios_cont::CpsAtom::Value(base_acc),
+            ],
         );
         self.module.define_continuation(
             empty_resume,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: vec![base_acc],
                 body: empty_jump,
@@ -1352,12 +1405,12 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(empty, empty_resume);
-        let entry = self.module.add_node(CpsNode::LetCont {
+        let entry = self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations: vec![join, loop_cont, step_cont, empty_resume],
             body: entry,
         });
         // Compute the length up front so every continuation sees it.
-        self.module.add_node(CpsNode::LetPrim {
+        self.module.add_node(curios_cont::CpsNode::LetPrim {
             result: length,
             op: sequence_len_op(grain),
             args: vec![sequence],
@@ -1377,9 +1430,9 @@ impl Lowerer<'_> {
         result_arity: usize,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-        make: impl FnOnce(CpsContId) -> CpsNode,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+        make: impl FnOnce(curios_cont::CpsContId) -> curios_cont::CpsNode,
+    ) -> curios_cont::CpsNodeId {
         // The same tail bypass as `open_join`: a single-result split whose
         // value the block immediately returns delivers to the block's target.
         if result_arity == 1
@@ -1390,8 +1443,10 @@ impl Lowerer<'_> {
         }
         let join = self.module.reserve_continuation();
         let params = if result_arity == 0 {
-            self.values
-                .insert(result, CpsAtom::Literal(CpsLiteral::Nat(0)));
+            self.values.insert(
+                result,
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+            );
             Vec::new()
         } else {
             vec![self.bind_value(result)]
@@ -1399,14 +1454,14 @@ impl Lowerer<'_> {
         let body = self.lower_statements(rest, terminator, target);
         self.module.define_continuation(
             join,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params,
                 body,
             },
         );
         let node = self.module.add_node(make(join));
-        self.module.add_node(CpsNode::LetCont {
+        self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations: vec![join],
             body: node,
         })
@@ -1420,15 +1475,15 @@ impl Lowerer<'_> {
         &mut self,
         result: ValueId,
         function: Arc<ForeignFunction>,
-        args: Vec<CpsAtom>,
+        args: Vec<curios_cont::CpsAtom>,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let arity = function.signature.results.len();
         if arity == 1 {
             return self.split(result, 1, rest, terminator, target, |return_to| {
-                CpsNode::Foreign {
+                curios_cont::CpsNode::Foreign {
                     function,
                     args,
                     return_to,
@@ -1436,30 +1491,38 @@ impl Lowerer<'_> {
             });
         }
 
-        let results: Vec<CpsValueId> = (0..arity).map(|_| self.module.add_value(None)).collect();
+        let results: Vec<curios_cont::CpsValueId> =
+            (0..arity).map(|_| self.module.add_value(None)).collect();
         let record = self.module.add_value(None);
-        self.values.insert(result, CpsAtom::Value(record));
+        self.values
+            .insert(result, curios_cont::CpsAtom::Value(record));
         let next = self.lower_statements(rest, terminator, target);
-        let pack = self.module.add_node(CpsNode::LetValue {
+        let pack = self.module.add_node(curios_cont::CpsNode::LetValue {
             result: record,
-            value: CpsValueExpr::Tuple(results.iter().copied().map(CpsAtom::Value).collect()),
+            value: curios_cont::CpsValueExpr::Tuple(
+                results
+                    .iter()
+                    .copied()
+                    .map(curios_cont::CpsAtom::Value)
+                    .collect(),
+            ),
             next,
         });
         let resume = self.module.reserve_continuation();
         self.module.define_continuation(
             resume,
-            CpsContinuation {
+            curios_cont::CpsContinuation {
                 debug_name: None,
                 params: results,
                 body: pack,
             },
         );
-        let call = self.module.add_node(CpsNode::Foreign {
+        let call = self.module.add_node(curios_cont::CpsNode::Foreign {
             function,
             args,
             return_to: resume,
         });
-        self.module.add_node(CpsNode::LetCont {
+        self.module.add_node(curios_cont::CpsNode::LetCont {
             continuations: vec![resume],
             body: call,
         })
@@ -1474,9 +1537,9 @@ impl Lowerer<'_> {
         result: ValueId,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: CpsContId,
-        make: impl FnOnce(CpsValueId, CpsNodeId) -> CpsNode,
-    ) -> CpsNodeId {
+        target: curios_cont::CpsContId,
+        make: impl FnOnce(curios_cont::CpsValueId, curios_cont::CpsNodeId) -> curios_cont::CpsNode,
+    ) -> curios_cont::CpsNodeId {
         let bound = self.bind_value(result);
         let next = self.lower_statements(rest, terminator, target);
         self.module.add_node(make(bound, next))
@@ -1485,10 +1548,10 @@ impl Lowerer<'_> {
     /// Allocate the Cont value representing an arena value, carrying its
     /// source hint, and record the mapping — the single choke point for every
     /// binder that names a source value.
-    fn bind_value(&mut self, arena: ValueId) -> CpsValueId {
+    fn bind_value(&mut self, arena: ValueId) -> curios_cont::CpsValueId {
         let name = self.arena_value_name(arena);
         let cont = self.module.add_value(name);
-        self.values.insert(arena, CpsAtom::Value(cont));
+        self.values.insert(arena, curios_cont::CpsAtom::Value(cont));
         cont
     }
 
@@ -1514,45 +1577,49 @@ impl Lowerer<'_> {
             .expect("a constructor belongs to its family") as u32
     }
 
-    fn lower_callee(&self, atom: Atom) -> CpsCallee {
+    fn lower_callee(&self, atom: Atom) -> curios_cont::CpsCallee {
         match self.lower_atom(atom) {
-            CpsAtom::Fun(function) => CpsCallee::Known(function),
-            CpsAtom::Value(value) => CpsCallee::Closure(value),
-            CpsAtom::Literal(_) => panic!("arena application head lowered to a literal"),
+            curios_cont::CpsAtom::Fun(function) => curios_cont::CpsCallee::Known(function),
+            curios_cont::CpsAtom::Value(value) => curios_cont::CpsCallee::Closure(value),
+            curios_cont::CpsAtom::Literal(_) => {
+                panic!("arena application head lowered to a literal")
+            }
         }
     }
 
-    fn lower_atom(&self, atom: Atom) -> CpsAtom {
+    fn lower_atom(&self, atom: Atom) -> curios_cont::CpsAtom {
         match atom {
             Atom::Value(value) => self
                 .values
                 .get(&value)
                 .unwrap_or_else(|| panic!("arena lowering lacks value {value}"))
                 .clone(),
-            Atom::Function(function) => CpsAtom::Fun(
+            Atom::Function(function) => curios_cont::CpsAtom::Fun(
                 *self
                     .functions
                     .get(&function)
                     .unwrap_or_else(|| panic!("arena lowering lacks function {function}")),
             ),
-            Atom::Constant(constant) => CpsAtom::Literal(self.lower_constant(constant)),
+            Atom::Constant(constant) => {
+                curios_cont::CpsAtom::Literal(self.lower_constant(constant))
+            }
         }
     }
 
-    fn lower_constant(&self, constant: ConstantId) -> CpsLiteral {
+    fn lower_constant(&self, constant: ConstantId) -> curios_cont::CpsLiteral {
         match self.source.constant(constant).expect("live constant") {
             // Unit, Bool, and Byte collapse onto the Nat runtime carrier here,
             // at the one-way door — never earlier.
-            Constant::Unit => CpsLiteral::Nat(0),
-            Constant::Bool(value) => CpsLiteral::Nat(u32::from(*value)),
-            Constant::Nat(value) => CpsLiteral::Nat(*value),
-            Constant::Byte(value) => CpsLiteral::Nat(u32::from(*value)),
-            Constant::Int(value) => CpsLiteral::Int(*value),
-            Constant::Flt(value) => CpsLiteral::Flt(value.to_f32()),
-            Constant::Bin(grain, value) => CpsLiteral::Bin(*grain, value.clone()),
+            Constant::Unit => curios_cont::CpsLiteral::Nat(0),
+            Constant::Bool(value) => curios_cont::CpsLiteral::Nat(u32::from(*value)),
+            Constant::Nat(value) => curios_cont::CpsLiteral::Nat(*value),
+            Constant::Byte(value) => curios_cont::CpsLiteral::Nat(u32::from(*value)),
+            Constant::Int(value) => curios_cont::CpsLiteral::Int(*value),
+            Constant::Flt(value) => curios_cont::CpsLiteral::Flt(value.to_f32()),
+            Constant::Bin(grain, value) => curios_cont::CpsLiteral::Bin(*grain, value.clone()),
             // A Handle descriptor token rides the packed-binary carrier: its
             // little-endian bytes at byte grain.
-            Constant::Handle(token) => CpsLiteral::Bin(
+            Constant::Handle(token) => curios_cont::CpsLiteral::Bin(
                 Grain::X,
                 PackedBin::from_bytes(BigUint::from(*token).to_bytes_le()),
             ),
@@ -1564,91 +1631,91 @@ impl Lowerer<'_> {
 /// `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte`
 /// comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at
 /// byte grain. The `Byte` conversions are handled before this table.
-fn operation_prim(operation: Operation) -> CpsPrimOp {
-    use {CpsPrimOp as C, Operation as O};
+fn operation_prim(operation: Operation) -> curios_cont::CpsPrimOp {
+    use Operation as O;
     match operation {
-        O::BoolAnd => C::NatAnd,
-        O::BoolOr => C::NatOr,
-        O::BoolXor => C::NatXor,
-        O::BoolEql => C::NatEql,
-        O::BoolNeq => C::NatXor,
-        O::NatEql => C::NatEql,
-        O::NatNeq => C::NatNeq,
-        O::NatAdd => C::NatAdd,
-        O::NatSub => C::NatSub,
-        O::NatMul => C::NatMul,
-        O::NatLt => C::NatLt,
-        O::NatDiv => C::NatDiv,
-        O::NatRem => C::NatRem,
-        O::NatGt => C::NatGt,
-        O::NatLte => C::NatLte,
-        O::NatGte => C::NatGte,
-        O::NatAnd => C::NatAnd,
-        O::NatOr => C::NatOr,
-        O::NatXor => C::NatXor,
-        O::NatShl => C::NatShl,
-        O::NatShr => C::NatShr,
-        O::NatRotl => C::NatRotl,
-        O::NatRotr => C::NatRotr,
-        O::NatClz => C::NatClz,
-        O::NatCtz => C::NatCtz,
-        O::NatPopcnt => C::NatPopcnt,
-        O::ByteEql => C::NatEql,
-        O::ByteLt => C::NatLt,
-        O::ByteLte => C::NatLte,
-        O::ByteGt => C::NatGt,
-        O::ByteGte => C::NatGte,
-        O::IntEql => C::IntEql,
-        O::IntNeq => C::IntNeq,
-        O::IntAdd => C::IntAdd,
-        O::IntSub => C::IntSub,
-        O::IntMul => C::IntMul,
-        O::IntDiv => C::IntDiv,
-        O::IntRem => C::IntRem,
-        O::IntLt => C::IntLt,
-        O::IntGt => C::IntGt,
-        O::IntLte => C::IntLte,
-        O::IntGte => C::IntGte,
-        O::IntAnd => C::IntAnd,
-        O::IntOr => C::IntOr,
-        O::IntXor => C::IntXor,
-        O::IntShl => C::IntShl,
-        O::IntShr => C::IntShr,
-        O::IntRotl => C::IntRotl,
-        O::IntRotr => C::IntRotr,
-        O::IntClz => C::IntClz,
-        O::IntCtz => C::IntCtz,
-        O::IntPopcnt => C::IntPopcnt,
-        O::FltAdd => C::FltAdd,
-        O::FltSub => C::FltSub,
-        O::FltMul => C::FltMul,
-        O::FltDiv => C::FltDiv,
-        O::FltRem => C::FltRem,
-        O::FltEql => C::FltEql,
-        O::FltNeq => C::FltNeq,
-        O::FltLt => C::FltLt,
-        O::FltGt => C::FltGt,
-        O::FltLte => C::FltLte,
-        O::FltGte => C::FltGte,
-        O::FltMin => C::FltMin,
-        O::FltMax => C::FltMax,
-        O::FltCopysign => C::FltCopysign,
-        O::FltNeg => C::FltNeg,
-        O::FltAbs => C::FltAbs,
-        O::FltSqrt => C::FltSqrt,
-        O::FltFloor => C::FltFloor,
-        O::FltCeil => C::FltCeil,
-        O::FltTrunc => C::FltTrunc,
-        O::FltNearest => C::FltNearest,
-        O::NatToInt => C::NatToInt,
-        O::NatToFlt => C::NatToFlt,
-        O::IntToNat => C::IntToNat,
-        O::IntToFlt => C::IntToFlt,
-        O::FltToNat => C::FltToNat,
-        O::FltToInt => C::FltToInt,
-        O::FltToLeBytes => C::FltToLeBytes,
-        O::FltOfLeBytes => C::FltOfLeBytes,
-        O::HandleEql => C::BinEql(Grain::X),
+        O::BoolAnd => curios_cont::CpsPrimOp::NatAnd,
+        O::BoolOr => curios_cont::CpsPrimOp::NatOr,
+        O::BoolXor => curios_cont::CpsPrimOp::NatXor,
+        O::BoolEql => curios_cont::CpsPrimOp::NatEql,
+        O::BoolNeq => curios_cont::CpsPrimOp::NatXor,
+        O::NatEql => curios_cont::CpsPrimOp::NatEql,
+        O::NatNeq => curios_cont::CpsPrimOp::NatNeq,
+        O::NatAdd => curios_cont::CpsPrimOp::NatAdd,
+        O::NatSub => curios_cont::CpsPrimOp::NatSub,
+        O::NatMul => curios_cont::CpsPrimOp::NatMul,
+        O::NatLt => curios_cont::CpsPrimOp::NatLt,
+        O::NatDiv => curios_cont::CpsPrimOp::NatDiv,
+        O::NatRem => curios_cont::CpsPrimOp::NatRem,
+        O::NatGt => curios_cont::CpsPrimOp::NatGt,
+        O::NatLte => curios_cont::CpsPrimOp::NatLte,
+        O::NatGte => curios_cont::CpsPrimOp::NatGte,
+        O::NatAnd => curios_cont::CpsPrimOp::NatAnd,
+        O::NatOr => curios_cont::CpsPrimOp::NatOr,
+        O::NatXor => curios_cont::CpsPrimOp::NatXor,
+        O::NatShl => curios_cont::CpsPrimOp::NatShl,
+        O::NatShr => curios_cont::CpsPrimOp::NatShr,
+        O::NatRotl => curios_cont::CpsPrimOp::NatRotl,
+        O::NatRotr => curios_cont::CpsPrimOp::NatRotr,
+        O::NatClz => curios_cont::CpsPrimOp::NatClz,
+        O::NatCtz => curios_cont::CpsPrimOp::NatCtz,
+        O::NatPopcnt => curios_cont::CpsPrimOp::NatPopcnt,
+        O::ByteEql => curios_cont::CpsPrimOp::NatEql,
+        O::ByteLt => curios_cont::CpsPrimOp::NatLt,
+        O::ByteLte => curios_cont::CpsPrimOp::NatLte,
+        O::ByteGt => curios_cont::CpsPrimOp::NatGt,
+        O::ByteGte => curios_cont::CpsPrimOp::NatGte,
+        O::IntEql => curios_cont::CpsPrimOp::IntEql,
+        O::IntNeq => curios_cont::CpsPrimOp::IntNeq,
+        O::IntAdd => curios_cont::CpsPrimOp::IntAdd,
+        O::IntSub => curios_cont::CpsPrimOp::IntSub,
+        O::IntMul => curios_cont::CpsPrimOp::IntMul,
+        O::IntDiv => curios_cont::CpsPrimOp::IntDiv,
+        O::IntRem => curios_cont::CpsPrimOp::IntRem,
+        O::IntLt => curios_cont::CpsPrimOp::IntLt,
+        O::IntGt => curios_cont::CpsPrimOp::IntGt,
+        O::IntLte => curios_cont::CpsPrimOp::IntLte,
+        O::IntGte => curios_cont::CpsPrimOp::IntGte,
+        O::IntAnd => curios_cont::CpsPrimOp::IntAnd,
+        O::IntOr => curios_cont::CpsPrimOp::IntOr,
+        O::IntXor => curios_cont::CpsPrimOp::IntXor,
+        O::IntShl => curios_cont::CpsPrimOp::IntShl,
+        O::IntShr => curios_cont::CpsPrimOp::IntShr,
+        O::IntRotl => curios_cont::CpsPrimOp::IntRotl,
+        O::IntRotr => curios_cont::CpsPrimOp::IntRotr,
+        O::IntClz => curios_cont::CpsPrimOp::IntClz,
+        O::IntCtz => curios_cont::CpsPrimOp::IntCtz,
+        O::IntPopcnt => curios_cont::CpsPrimOp::IntPopcnt,
+        O::FltAdd => curios_cont::CpsPrimOp::FltAdd,
+        O::FltSub => curios_cont::CpsPrimOp::FltSub,
+        O::FltMul => curios_cont::CpsPrimOp::FltMul,
+        O::FltDiv => curios_cont::CpsPrimOp::FltDiv,
+        O::FltRem => curios_cont::CpsPrimOp::FltRem,
+        O::FltEql => curios_cont::CpsPrimOp::FltEql,
+        O::FltNeq => curios_cont::CpsPrimOp::FltNeq,
+        O::FltLt => curios_cont::CpsPrimOp::FltLt,
+        O::FltGt => curios_cont::CpsPrimOp::FltGt,
+        O::FltLte => curios_cont::CpsPrimOp::FltLte,
+        O::FltGte => curios_cont::CpsPrimOp::FltGte,
+        O::FltMin => curios_cont::CpsPrimOp::FltMin,
+        O::FltMax => curios_cont::CpsPrimOp::FltMax,
+        O::FltCopysign => curios_cont::CpsPrimOp::FltCopysign,
+        O::FltNeg => curios_cont::CpsPrimOp::FltNeg,
+        O::FltAbs => curios_cont::CpsPrimOp::FltAbs,
+        O::FltSqrt => curios_cont::CpsPrimOp::FltSqrt,
+        O::FltFloor => curios_cont::CpsPrimOp::FltFloor,
+        O::FltCeil => curios_cont::CpsPrimOp::FltCeil,
+        O::FltTrunc => curios_cont::CpsPrimOp::FltTrunc,
+        O::FltNearest => curios_cont::CpsPrimOp::FltNearest,
+        O::NatToInt => curios_cont::CpsPrimOp::NatToInt,
+        O::NatToFlt => curios_cont::CpsPrimOp::NatToFlt,
+        O::IntToNat => curios_cont::CpsPrimOp::IntToNat,
+        O::IntToFlt => curios_cont::CpsPrimOp::IntToFlt,
+        O::FltToNat => curios_cont::CpsPrimOp::FltToNat,
+        O::FltToInt => curios_cont::CpsPrimOp::FltToInt,
+        O::FltToLeBytes => curios_cont::CpsPrimOp::FltToLeBytes,
+        O::FltOfLeBytes => curios_cont::CpsPrimOp::FltOfLeBytes,
+        O::HandleEql => curios_cont::CpsPrimOp::BinEql(Grain::X),
         O::ByteToNat | O::NatToByte => {
             unreachable!("Byte conversions are lowered before the primitive table")
         }
@@ -1657,49 +1724,49 @@ fn operation_prim(operation: Operation) -> CpsPrimOp {
 
 /// The Cont primitive of a [`SequenceOp`], threading the operand count into
 /// the variadic concatenations. `LstBuild` is a list value, never a prim.
-fn sequence_prim(operation: SequenceOp, arity: usize) -> CpsPrimOp {
-    use {CpsPrimOp as C, SequenceOp as S};
+fn sequence_prim(operation: SequenceOp, arity: usize) -> curios_cont::CpsPrimOp {
+    use SequenceOp as S;
     match operation {
-        S::BinLen(grain) => C::BinLen(grain),
-        S::BinEql(grain) => C::BinEql(grain),
-        S::BinGet(grain) => C::BinGet(grain),
-        S::BinSlice(grain) => C::BinSlice(grain),
-        S::BinAppend(grain) => C::BinAppend(grain),
-        S::BinConcat(grain) => C::BinConcat(grain, arity),
-        S::LstLen => C::LstLen,
-        S::LstGet => C::LstGet,
-        S::LstSlice => C::LstSlice,
-        S::LstAppend => C::LstAppend,
-        S::LstConcat => C::LstConcat(arity),
+        S::BinLen(grain) => curios_cont::CpsPrimOp::BinLen(grain),
+        S::BinEql(grain) => curios_cont::CpsPrimOp::BinEql(grain),
+        S::BinGet(grain) => curios_cont::CpsPrimOp::BinGet(grain),
+        S::BinSlice(grain) => curios_cont::CpsPrimOp::BinSlice(grain),
+        S::BinAppend(grain) => curios_cont::CpsPrimOp::BinAppend(grain),
+        S::BinConcat(grain) => curios_cont::CpsPrimOp::BinConcat(grain, arity),
+        S::LstLen => curios_cont::CpsPrimOp::LstLen,
+        S::LstGet => curios_cont::CpsPrimOp::LstGet,
+        S::LstSlice => curios_cont::CpsPrimOp::LstSlice,
+        S::LstAppend => curios_cont::CpsPrimOp::LstAppend,
+        S::LstConcat => curios_cont::CpsPrimOp::LstConcat(arity),
         S::LstBuild => unreachable!("LstBuild is lowered as a list value"),
     }
 }
 
-fn cell_op(operation: CellOperation) -> CpsCellOp {
+fn cell_op(operation: CellOperation) -> curios_cont::CpsCellOp {
     match operation {
-        CellOperation::New => CpsCellOp::New,
-        CellOperation::Get => CpsCellOp::Get,
-        CellOperation::Set => CpsCellOp::Set,
+        CellOperation::New => curios_cont::CpsCellOp::New,
+        CellOperation::Get => curios_cont::CpsCellOp::Get,
+        CellOperation::Set => curios_cont::CpsCellOp::Set,
     }
 }
 
-fn sequence_len_op(grain: SequenceGrain) -> CpsPrimOp {
+fn sequence_len_op(grain: SequenceGrain) -> curios_cont::CpsPrimOp {
     match grain {
-        SequenceGrain::List => CpsPrimOp::LstLen,
-        SequenceGrain::Bin(grain) => CpsPrimOp::BinLen(grain),
+        SequenceGrain::List => curios_cont::CpsPrimOp::LstLen,
+        SequenceGrain::Bin(grain) => curios_cont::CpsPrimOp::BinLen(grain),
     }
 }
 
-fn sequence_get_op(grain: SequenceGrain) -> CpsPrimOp {
+fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsPrimOp {
     match grain {
-        SequenceGrain::List => CpsPrimOp::LstGet,
-        SequenceGrain::Bin(grain) => CpsPrimOp::BinGet(grain),
+        SequenceGrain::List => curios_cont::CpsPrimOp::LstGet,
+        SequenceGrain::Bin(grain) => curios_cont::CpsPrimOp::BinGet(grain),
     }
 }
 
-fn sequence_slice_op(grain: SequenceGrain) -> CpsPrimOp {
+fn sequence_slice_op(grain: SequenceGrain) -> curios_cont::CpsPrimOp {
     match grain {
-        SequenceGrain::List => CpsPrimOp::LstSlice,
-        SequenceGrain::Bin(grain) => CpsPrimOp::BinSlice(grain),
+        SequenceGrain::List => curios_cont::CpsPrimOp::LstSlice,
+        SequenceGrain::Bin(grain) => curios_cont::CpsPrimOp::BinSlice(grain),
     }
 }

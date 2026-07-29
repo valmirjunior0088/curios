@@ -34,7 +34,7 @@
 //! and lowers as raw `$bytes` — so params force each element too, and results
 //! embed each element back.
 
-use crate::{RopeData, Table};
+use super::{RopeData, Table};
 
 fn concrete_ref(type_name: curios_wasm::TypeName, is_nullable: bool) -> curios_wasm::RefType {
     curios_wasm::RefType {

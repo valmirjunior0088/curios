@@ -1,4 +1,4 @@
-use super::*;
+use crate::*;
 
 fn doubling_module() -> Module {
     let mut builder = ErsdBuilder::new();

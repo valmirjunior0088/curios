@@ -18,6 +18,9 @@
 //! tombstoned, and the pruned module re-verifies. Deterministic: identity
 //! order everywhere.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::super::{
         Atom, BlockId, FunctionId, Module, RecGroupId, Statement, StatementId, Terminator, ValueId,

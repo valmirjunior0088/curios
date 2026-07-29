@@ -1,5 +1,5 @@
 use {
-    crate::{
+    super::{
         Context, EmissionClosure, EmissionClosureName, EmissionData, EmissionFunction,
         EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, RopeEmitter, Table,
         bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type, rope_base_sub_type,

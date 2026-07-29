@@ -6,7 +6,7 @@
 
 use {
     clap::Parser,
-    curios::{ProfileReport, capture},
+    curios::{DEFAULT_STEP_BUDGET, ProfileReport, capture},
     curios_pipeline::compile_entrypoint,
     std::{path::PathBuf, process::ExitCode},
 };
@@ -18,7 +18,7 @@ struct Args {
     input_path: PathBuf,
 
     /// Reduction steps each declaration may spend while type checking.
-    #[arg(long, default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET)]
+    #[arg(long, default_value_t = DEFAULT_STEP_BUDGET)]
     budget: u64,
 }
 

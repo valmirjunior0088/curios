@@ -1,14 +1,19 @@
 //! Deterministic structurization from closed machine CFG into the private Wasm emission tree.
 
 use {
+    super::{
+        MachineBlock, MachineBlockId, MachineConstruct, MachineEdge, MachineFunction,
+        MachineInstruction, MachineModule, MachineOperand, MachineTerminator, MachineValueId,
+        MachineWrapper,
+    },
     crate::{
-        CpsCellOp, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsPrimOp, EmissionArgument,
-        EmissionBlock, EmissionBlockName, EmissionBody, EmissionCallTarget, EmissionCellTarget,
-        EmissionClosure, EmissionClosureName, EmissionCode, EmissionData, EmissionFunction,
-        EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
-        EmissionModule, EmissionTail, EmissionValue, EmissionValueName, MachineBlock,
-        MachineBlockId, MachineConstruct, MachineEdge, MachineFunction, MachineInstruction,
-        MachineModule, MachineOperand, MachineTerminator, MachineValueId, MachineWrapper,
+        CpsCellOp, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsPrimOp,
+        into_wasm::{
+            EmissionArgument, EmissionBlock, EmissionBlockName, EmissionBody, EmissionCallTarget,
+            EmissionCellTarget, EmissionClosure, EmissionClosureName, EmissionCode, EmissionData,
+            EmissionFunction, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
+            EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
+        },
     },
     curios_base::Entropy,
     std::collections::{BTreeMap, BTreeSet},

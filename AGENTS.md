@@ -76,7 +76,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
-| Pipeline orchestration | `curios-pipeline/src/lib.rs` | Native and browser callers |
+| Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs` | Native and browser callers |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
 | Standard or syntax library | `curios-prelude/std/`, `curios-prelude/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
@@ -104,7 +104,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 - Re-read the pipeline and ownership map above, then open the `//!` documentation for every stage being changed.
 - Follow the established module layout: `foo.rs` declares and usually re-exports focused submodules from a sibling `foo/` directory.
-- Place unit tests beside their implementation in a `*_tests.rs` module gated by `#[cfg(test)]`. Put programs that cross compiler stages in `curios/src/tests/`; codegen tests live in `curios/src/tests/codegen/`.
+- Place unit tests beside their implementation: `foo.rs` declares `#[cfg(test)] mod tests;` and the tests live in `foo/tests.rs`. A small test module may stay inline as `#[cfg(test)] mod tests { … }` in the file it covers. Put programs that cross compiler stages in `curios/src/tests/`; codegen tests live in `curios/src/tests/codegen/`.
 - When changing one stage, check the next representation or consumer explicitly. Parsing changes usually affect printing and lowering; core changes usually affect erasure; IR changes usually affect the next lowering and its tests.
 - Use `//!` for module purpose and invariants, and `///` for public API contracts. Do not duplicate detailed subsystem documentation in this file.
 - Use stock rustfmt and Clippy settings. There is no repository-specific `rustfmt.toml` or `clippy.toml`.

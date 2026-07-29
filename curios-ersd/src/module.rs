@@ -13,6 +13,9 @@
 //! record pruning's granularity and the effect contract depend on), and the
 //! entry block computes the program's result after them.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, ForeignId,

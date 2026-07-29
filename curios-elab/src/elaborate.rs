@@ -17,7 +17,7 @@ mod prim;
 use prim::*;
 
 mod match_;
-pub(crate) use match_::*;
+use match_::*;
 
 mod module;
 pub use module::*;

@@ -14,6 +14,9 @@
 //! constant operands → value / would-trap / unknown) lands with its consumer,
 //! partial evaluation.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_base::{

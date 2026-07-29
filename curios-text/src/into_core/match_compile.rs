@@ -14,7 +14,7 @@ use {
 /// checks them against the constructor's canonical payload plicities.
 type InductCase = (
     curios_elab::Atom,
-    Vec<(curios_base::Plicity, curios_elab::Free)>,
+    Vec<(Plicity, curios_elab::Free)>,
     curios_elab::Term,
 );
 
@@ -32,7 +32,7 @@ type InductCase = (
 /// recursion for it.
 struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
-    binds: Vec<(super::lowerer::Bound, curios_elab::Term)>,
+    binds: Vec<(super::lowerer::Binder, curios_elab::Term)>,
     body: &'t Term,
 }
 

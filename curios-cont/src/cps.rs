@@ -1294,9 +1294,6 @@ mod simplify;
 mod specialize;
 pub use optimize::optimize;
 
-#[cfg(test)]
-mod optimize_tests;
-
 impl fmt::Display for CpsModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(

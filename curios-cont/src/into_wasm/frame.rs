@@ -1,5 +1,5 @@
 use {
-    crate::{EmissionBlockName, EmissionValueName},
+    super::{EmissionBlockName, EmissionValueName},
     std::collections::{HashMap, HashSet},
 };
 

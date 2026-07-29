@@ -15,12 +15,6 @@ mod evaluate;
 
 mod rebase;
 
-#[cfg(test)]
-mod prune_tests;
-
-#[cfg(test)]
-mod rebase_tests;
-
 use super::{Analysis, Module};
 
 /// Run the arena transformations in place: prune, evaluate, specialize, and

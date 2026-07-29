@@ -5,6 +5,9 @@
 //! optimizes identically. Performance is investigated with revision worktrees and
 //! temporary instrumentation, never a permanent metrics API.
 
+#[cfg(test)]
+mod tests;
+
 use super::{
     CpsModule,
     analysis::known_values,

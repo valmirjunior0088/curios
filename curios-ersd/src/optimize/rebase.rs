@@ -25,6 +25,9 @@
 //! exactly what the reassociation consumes — the only algebraic fact the
 //! oracle carries, because this is its only consumer.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::super::{
         Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Statement,

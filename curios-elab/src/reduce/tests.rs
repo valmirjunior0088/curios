@@ -1,12 +1,12 @@
 use {
     crate::*,
-    curios_base::{Flt, Grain, Int, PackedBin},
+    curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
     std::time::Instant,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
 fn nominal(path: &str) -> crate::Global {
-    crate::Global::Authored(curios_base::Qualifier::from([path]))
+    crate::Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {

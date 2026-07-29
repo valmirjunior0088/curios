@@ -5,6 +5,7 @@
 use {
     curios::load,
     curios_pipeline::{Stage, compile_entrypoint},
+    curios_wasm::Module,
     std::path::Path,
 };
 
@@ -23,11 +24,7 @@ fn stage_printer(print: &str) -> impl Fn(Stage<'_>) + '_ {
 
 /// Compile `input_path` through the full pipeline to a wasm module, printing any
 /// requested IR stages along the way.
-pub(crate) fn compile_file(
-    budget: u64,
-    print: &str,
-    input_path: &Path,
-) -> Result<curios_wasm::Module, String> {
+pub(crate) fn compile_file(budget: u64, print: &str, input_path: &Path) -> Result<Module, String> {
     let (entrypoint, loader) = load(input_path)?;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations,

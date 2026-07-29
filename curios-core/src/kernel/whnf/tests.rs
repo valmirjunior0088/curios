@@ -1,6 +1,9 @@
-use crate::{
-    Apply, Free, Kernel, Nat, Prim, Reducer, Subterm, Term, UniverseContext,
-    kernel::whnf::{unfold_rec, whnf},
+use {
+    crate::{
+        Apply, Free, Kernel, Nat, Prim, Reducer, Subterm, Term, UniverseContext,
+        kernel::whnf::{unfold_rec, whnf},
+    },
+    curios_base::Qualifier,
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted
@@ -137,7 +140,7 @@ fn iota_selects_an_inductive_arm_and_binds_its_payload() {
 
     let term = Term::induct_match(
         Term::variant(
-            crate::Global::Authored(curios_base::Qualifier::from(["E"])),
+            crate::Global::Authored(Qualifier::from(["E"])),
             Vec::<Term>::new(),
             "some",
             [nat(42)],
@@ -257,7 +260,7 @@ fn projection_selects_a_tuple_field() {
 #[test]
 fn projection_skips_a_variants_tag_but_not_a_structs() {
     let mut kernel = kernel();
-    let name = crate::Global::Authored(curios_base::Qualifier::from(["E"]));
+    let name = crate::Global::Authored(Qualifier::from(["E"]));
 
     let variant = Term::proj(
         Term::variant(name.clone(), Vec::<Term>::new(), "some", [nat(42)]),

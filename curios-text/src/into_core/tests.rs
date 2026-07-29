@@ -3,7 +3,7 @@ use super::super::{
     StringSyntax, SyntaxName, SyntaxRegistry,
 };
 use curios_abi::{WireType, host_ops};
-use curios_base::RootId;
+use curios_base::{Qualifier, RootId};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -40,15 +40,11 @@ fn syntax() -> &'static SyntaxRegistry {
 /// — production code carries the `Qualifier` from resolution instead of
 /// recovering it from a spelling.
 fn global(path: &str) -> curios_elab::Free {
-    curios_elab::Free::global(curios_base::Qualifier::from(
-        path.trim_start_matches('/').split('/'),
-    ))
+    curios_elab::Free::global(Qualifier::from(path.trim_start_matches('/').split('/')))
 }
 
 fn global_name(path: &str) -> curios_elab::Global {
-    curios_elab::Global::Authored(curios_base::Qualifier::from(
-        path.trim_start_matches('/').split('/'),
-    ))
+    curios_elab::Global::Authored(Qualifier::from(path.trim_start_matches('/').split('/')))
 }
 
 fn run(src: &str) -> curios_elab::Term {
@@ -314,7 +310,7 @@ fn inductive_constructor_ownership_is_explicit() {
             (
                 global_name("/Result/success"),
                 curios_elab::DefinitionKind::InductiveConstructor {
-                    owner: curios_base::Qualifier::from(["Result"]),
+                    owner: Qualifier::from(["Result"]),
                     tag: curios_elab::Atom::from("success"),
                 },
                 2,
@@ -322,7 +318,7 @@ fn inductive_constructor_ownership_is_explicit() {
             (
                 global_name("/Result/failure"),
                 curios_elab::DefinitionKind::InductiveConstructor {
-                    owner: curios_base::Qualifier::from(["Result"]),
+                    owner: Qualifier::from(["Result"]),
                     tag: curios_elab::Atom::from("failure"),
                 },
                 2,

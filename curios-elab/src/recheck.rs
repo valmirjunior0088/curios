@@ -28,10 +28,10 @@
 //! API and a test surface until the gaps named above are closed.
 
 use {
-    super::{Item, Module, totality::mentioned},
-    curios_core::{
-        Free, Global, Kernel, KernelError, Term,
+    super::{
+        Free, Global, Item, Kernel, KernelError, Module, Term,
         kernel::{check_definition, check_entrypoint, check_rec_group},
+        totality::mentioned,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
 };

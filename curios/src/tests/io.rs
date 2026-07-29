@@ -1,4 +1,8 @@
-use curios_runtime::{ForeignBindings, MockHost};
+use {
+    curios_pipeline::compile_entrypoint,
+    curios_runtime::{ForeignBindings, MockHost},
+    curios_text::{Entrypoint, RootSource},
+};
 
 #[test]
 fn io_write() {
@@ -214,13 +218,13 @@ fn proc_exit_halts_with_code() {
         let _ : std/Never = /std/proc/exit(7);
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))
         "#
-    .parse::<curios_text::Entrypoint>()
+    .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = curios_pipeline::compile_entrypoint(
+    let (module, _foreigns) = compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");
@@ -246,13 +250,13 @@ fn proc_exit_in_local_binding_halts() {
             n;
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(go(1))))
         "#
-    .parse::<curios_text::Entrypoint>()
+    .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = curios_pipeline::compile_entrypoint(
+    let (module, _foreigns) = compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");

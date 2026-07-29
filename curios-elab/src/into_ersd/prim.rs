@@ -128,8 +128,6 @@ pub(super) fn erase_prim(
     expected: &Term,
     hint: Option<&str>,
 ) -> Result<Outcome, Error> {
-    use curios_ersd::{Operation as Op, SequenceOp as Seq};
-
     /// One scalar-operation arm: each operand erased against one shared
     /// operand type.
     macro_rules! op {
@@ -151,20 +149,20 @@ pub(super) fn erase_prim(
         | Prim::CellType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
         &Prim::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
-        Prim::BoolAnd(l, r) => op!(Op::BoolAnd, bool_type, l, r),
-        Prim::BoolOr(l, r) => op!(Op::BoolOr, bool_type, l, r),
-        Prim::BoolXor(l, r) => op!(Op::BoolXor, bool_type, l, r),
-        Prim::BoolEql(l, r) => op!(Op::BoolEql, bool_type, l, r),
-        Prim::BoolNeq(l, r) => op!(Op::BoolNeq, bool_type, l, r),
+        Prim::BoolAnd(l, r) => op!(curios_ersd::Operation::BoolAnd, bool_type, l, r),
+        Prim::BoolOr(l, r) => op!(curios_ersd::Operation::BoolOr, bool_type, l, r),
+        Prim::BoolXor(l, r) => op!(curios_ersd::Operation::BoolXor, bool_type, l, r),
+        Prim::BoolEql(l, r) => op!(curios_ersd::Operation::BoolEql, bool_type, l, r),
+        Prim::BoolNeq(l, r) => op!(curios_ersd::Operation::BoolNeq, bool_type, l, r),
 
         &Prim::Byte(value) => Ok(lowering.constant(curios_ersd::Constant::Byte(value))),
-        Prim::ByteToNat(inner) => op!(Op::ByteToNat, byte_type, inner),
-        Prim::NatToByte(inner) => op!(Op::NatToByte, nat_type, inner),
-        Prim::ByteEql(l, r) => op!(Op::ByteEql, byte_type, l, r),
-        Prim::ByteLt(l, r) => op!(Op::ByteLt, byte_type, l, r),
-        Prim::ByteLte(l, r) => op!(Op::ByteLte, byte_type, l, r),
-        Prim::ByteGt(l, r) => op!(Op::ByteGt, byte_type, l, r),
-        Prim::ByteGte(l, r) => op!(Op::ByteGte, byte_type, l, r),
+        Prim::ByteToNat(inner) => op!(curios_ersd::Operation::ByteToNat, byte_type, inner),
+        Prim::NatToByte(inner) => op!(curios_ersd::Operation::NatToByte, nat_type, inner),
+        Prim::ByteEql(l, r) => op!(curios_ersd::Operation::ByteEql, byte_type, l, r),
+        Prim::ByteLt(l, r) => op!(curios_ersd::Operation::ByteLt, byte_type, l, r),
+        Prim::ByteLte(l, r) => op!(curios_ersd::Operation::ByteLte, byte_type, l, r),
+        Prim::ByteGt(l, r) => op!(curios_ersd::Operation::ByteGt, byte_type, l, r),
+        Prim::ByteGte(l, r) => op!(curios_ersd::Operation::ByteGte, byte_type, l, r),
 
         Prim::Nat(Nat::Zero) => Ok(lowering.constant(curios_ersd::Constant::Nat(0))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
@@ -179,89 +177,89 @@ pub(super) fn erase_prim(
             Ok(lowering.bind(
                 hint,
                 curios_ersd::Rhs::Operation {
-                    operation: Op::NatAdd,
+                    operation: curios_ersd::Operation::NatAdd,
                     operands: vec![spine_atom, inner_atom],
                 },
             ))
         }
-        Prim::NatEql(l, r) => op!(Op::NatEql, nat_type, l, r),
-        Prim::NatNeq(l, r) => op!(Op::NatNeq, nat_type, l, r),
-        Prim::NatAdd(l, r) => op!(Op::NatAdd, nat_type, l, r),
-        Prim::NatSub(l, r) => op!(Op::NatSub, nat_type, l, r),
-        Prim::NatMul(l, r) => op!(Op::NatMul, nat_type, l, r),
-        Prim::NatLt(l, r) => op!(Op::NatLt, nat_type, l, r),
-        Prim::NatDiv(l, r) => op!(Op::NatDiv, nat_type, l, r),
-        Prim::NatRem(l, r) => op!(Op::NatRem, nat_type, l, r),
-        Prim::NatGt(l, r) => op!(Op::NatGt, nat_type, l, r),
-        Prim::NatLte(l, r) => op!(Op::NatLte, nat_type, l, r),
-        Prim::NatGte(l, r) => op!(Op::NatGte, nat_type, l, r),
-        Prim::NatAnd(l, r) => op!(Op::NatAnd, nat_type, l, r),
-        Prim::NatOr(l, r) => op!(Op::NatOr, nat_type, l, r),
-        Prim::NatXor(l, r) => op!(Op::NatXor, nat_type, l, r),
-        Prim::NatShl(l, r) => op!(Op::NatShl, nat_type, l, r),
-        Prim::NatShr(l, r) => op!(Op::NatShr, nat_type, l, r),
-        Prim::NatRotl(l, r) => op!(Op::NatRotl, nat_type, l, r),
-        Prim::NatRotr(l, r) => op!(Op::NatRotr, nat_type, l, r),
-        Prim::NatClz(i) => op!(Op::NatClz, nat_type, i),
-        Prim::NatCtz(i) => op!(Op::NatCtz, nat_type, i),
-        Prim::NatPopcnt(i) => op!(Op::NatPopcnt, nat_type, i),
+        Prim::NatEql(l, r) => op!(curios_ersd::Operation::NatEql, nat_type, l, r),
+        Prim::NatNeq(l, r) => op!(curios_ersd::Operation::NatNeq, nat_type, l, r),
+        Prim::NatAdd(l, r) => op!(curios_ersd::Operation::NatAdd, nat_type, l, r),
+        Prim::NatSub(l, r) => op!(curios_ersd::Operation::NatSub, nat_type, l, r),
+        Prim::NatMul(l, r) => op!(curios_ersd::Operation::NatMul, nat_type, l, r),
+        Prim::NatLt(l, r) => op!(curios_ersd::Operation::NatLt, nat_type, l, r),
+        Prim::NatDiv(l, r) => op!(curios_ersd::Operation::NatDiv, nat_type, l, r),
+        Prim::NatRem(l, r) => op!(curios_ersd::Operation::NatRem, nat_type, l, r),
+        Prim::NatGt(l, r) => op!(curios_ersd::Operation::NatGt, nat_type, l, r),
+        Prim::NatLte(l, r) => op!(curios_ersd::Operation::NatLte, nat_type, l, r),
+        Prim::NatGte(l, r) => op!(curios_ersd::Operation::NatGte, nat_type, l, r),
+        Prim::NatAnd(l, r) => op!(curios_ersd::Operation::NatAnd, nat_type, l, r),
+        Prim::NatOr(l, r) => op!(curios_ersd::Operation::NatOr, nat_type, l, r),
+        Prim::NatXor(l, r) => op!(curios_ersd::Operation::NatXor, nat_type, l, r),
+        Prim::NatShl(l, r) => op!(curios_ersd::Operation::NatShl, nat_type, l, r),
+        Prim::NatShr(l, r) => op!(curios_ersd::Operation::NatShr, nat_type, l, r),
+        Prim::NatRotl(l, r) => op!(curios_ersd::Operation::NatRotl, nat_type, l, r),
+        Prim::NatRotr(l, r) => op!(curios_ersd::Operation::NatRotr, nat_type, l, r),
+        Prim::NatClz(i) => op!(curios_ersd::Operation::NatClz, nat_type, i),
+        Prim::NatCtz(i) => op!(curios_ersd::Operation::NatCtz, nat_type, i),
+        Prim::NatPopcnt(i) => op!(curios_ersd::Operation::NatPopcnt, nat_type, i),
 
         Prim::Int(value) => Ok(lowering.constant(curios_ersd::Constant::Int(narrow_int(value)?))),
-        Prim::IntEql(l, r) => op!(Op::IntEql, int_type, l, r),
-        Prim::IntNeq(l, r) => op!(Op::IntNeq, int_type, l, r),
-        Prim::IntAdd(l, r) => op!(Op::IntAdd, int_type, l, r),
-        Prim::IntSub(l, r) => op!(Op::IntSub, int_type, l, r),
-        Prim::IntMul(l, r) => op!(Op::IntMul, int_type, l, r),
-        Prim::IntDiv(l, r) => op!(Op::IntDiv, int_type, l, r),
-        Prim::IntRem(l, r) => op!(Op::IntRem, int_type, l, r),
-        Prim::IntLt(l, r) => op!(Op::IntLt, int_type, l, r),
-        Prim::IntGt(l, r) => op!(Op::IntGt, int_type, l, r),
-        Prim::IntLte(l, r) => op!(Op::IntLte, int_type, l, r),
-        Prim::IntGte(l, r) => op!(Op::IntGte, int_type, l, r),
-        Prim::IntAnd(l, r) => op!(Op::IntAnd, int_type, l, r),
-        Prim::IntOr(l, r) => op!(Op::IntOr, int_type, l, r),
-        Prim::IntXor(l, r) => op!(Op::IntXor, int_type, l, r),
-        Prim::IntShl(l, r) => op!(Op::IntShl, int_type, l, r),
-        Prim::IntShr(l, r) => op!(Op::IntShr, int_type, l, r),
-        Prim::IntRotl(l, r) => op!(Op::IntRotl, int_type, l, r),
-        Prim::IntRotr(l, r) => op!(Op::IntRotr, int_type, l, r),
-        Prim::IntClz(i) => op!(Op::IntClz, int_type, i),
-        Prim::IntCtz(i) => op!(Op::IntCtz, int_type, i),
-        Prim::IntPopcnt(i) => op!(Op::IntPopcnt, int_type, i),
+        Prim::IntEql(l, r) => op!(curios_ersd::Operation::IntEql, int_type, l, r),
+        Prim::IntNeq(l, r) => op!(curios_ersd::Operation::IntNeq, int_type, l, r),
+        Prim::IntAdd(l, r) => op!(curios_ersd::Operation::IntAdd, int_type, l, r),
+        Prim::IntSub(l, r) => op!(curios_ersd::Operation::IntSub, int_type, l, r),
+        Prim::IntMul(l, r) => op!(curios_ersd::Operation::IntMul, int_type, l, r),
+        Prim::IntDiv(l, r) => op!(curios_ersd::Operation::IntDiv, int_type, l, r),
+        Prim::IntRem(l, r) => op!(curios_ersd::Operation::IntRem, int_type, l, r),
+        Prim::IntLt(l, r) => op!(curios_ersd::Operation::IntLt, int_type, l, r),
+        Prim::IntGt(l, r) => op!(curios_ersd::Operation::IntGt, int_type, l, r),
+        Prim::IntLte(l, r) => op!(curios_ersd::Operation::IntLte, int_type, l, r),
+        Prim::IntGte(l, r) => op!(curios_ersd::Operation::IntGte, int_type, l, r),
+        Prim::IntAnd(l, r) => op!(curios_ersd::Operation::IntAnd, int_type, l, r),
+        Prim::IntOr(l, r) => op!(curios_ersd::Operation::IntOr, int_type, l, r),
+        Prim::IntXor(l, r) => op!(curios_ersd::Operation::IntXor, int_type, l, r),
+        Prim::IntShl(l, r) => op!(curios_ersd::Operation::IntShl, int_type, l, r),
+        Prim::IntShr(l, r) => op!(curios_ersd::Operation::IntShr, int_type, l, r),
+        Prim::IntRotl(l, r) => op!(curios_ersd::Operation::IntRotl, int_type, l, r),
+        Prim::IntRotr(l, r) => op!(curios_ersd::Operation::IntRotr, int_type, l, r),
+        Prim::IntClz(i) => op!(curios_ersd::Operation::IntClz, int_type, i),
+        Prim::IntCtz(i) => op!(curios_ersd::Operation::IntCtz, int_type, i),
+        Prim::IntPopcnt(i) => op!(curios_ersd::Operation::IntPopcnt, int_type, i),
 
         &Prim::Flt(value) => Ok(lowering.constant(curios_ersd::Constant::Flt(value))),
-        Prim::FltAdd(l, r) => op!(Op::FltAdd, flt_type, l, r),
-        Prim::FltSub(l, r) => op!(Op::FltSub, flt_type, l, r),
-        Prim::FltMul(l, r) => op!(Op::FltMul, flt_type, l, r),
-        Prim::FltDiv(l, r) => op!(Op::FltDiv, flt_type, l, r),
-        Prim::FltRem(l, r) => op!(Op::FltRem, flt_type, l, r),
-        Prim::FltEql(l, r) => op!(Op::FltEql, flt_type, l, r),
-        Prim::FltNeq(l, r) => op!(Op::FltNeq, flt_type, l, r),
-        Prim::FltLt(l, r) => op!(Op::FltLt, flt_type, l, r),
-        Prim::FltGt(l, r) => op!(Op::FltGt, flt_type, l, r),
-        Prim::FltLte(l, r) => op!(Op::FltLte, flt_type, l, r),
-        Prim::FltGte(l, r) => op!(Op::FltGte, flt_type, l, r),
-        Prim::FltMin(l, r) => op!(Op::FltMin, flt_type, l, r),
-        Prim::FltMax(l, r) => op!(Op::FltMax, flt_type, l, r),
-        Prim::FltCopysign(l, r) => op!(Op::FltCopysign, flt_type, l, r),
-        Prim::FltNeg(inner) => op!(Op::FltNeg, flt_type, inner),
-        Prim::FltAbs(inner) => op!(Op::FltAbs, flt_type, inner),
-        Prim::FltSqrt(inner) => op!(Op::FltSqrt, flt_type, inner),
-        Prim::FltFloor(inner) => op!(Op::FltFloor, flt_type, inner),
-        Prim::FltCeil(inner) => op!(Op::FltCeil, flt_type, inner),
-        Prim::FltTrunc(inner) => op!(Op::FltTrunc, flt_type, inner),
-        Prim::FltNearest(inner) => op!(Op::FltNearest, flt_type, inner),
+        Prim::FltAdd(l, r) => op!(curios_ersd::Operation::FltAdd, flt_type, l, r),
+        Prim::FltSub(l, r) => op!(curios_ersd::Operation::FltSub, flt_type, l, r),
+        Prim::FltMul(l, r) => op!(curios_ersd::Operation::FltMul, flt_type, l, r),
+        Prim::FltDiv(l, r) => op!(curios_ersd::Operation::FltDiv, flt_type, l, r),
+        Prim::FltRem(l, r) => op!(curios_ersd::Operation::FltRem, flt_type, l, r),
+        Prim::FltEql(l, r) => op!(curios_ersd::Operation::FltEql, flt_type, l, r),
+        Prim::FltNeq(l, r) => op!(curios_ersd::Operation::FltNeq, flt_type, l, r),
+        Prim::FltLt(l, r) => op!(curios_ersd::Operation::FltLt, flt_type, l, r),
+        Prim::FltGt(l, r) => op!(curios_ersd::Operation::FltGt, flt_type, l, r),
+        Prim::FltLte(l, r) => op!(curios_ersd::Operation::FltLte, flt_type, l, r),
+        Prim::FltGte(l, r) => op!(curios_ersd::Operation::FltGte, flt_type, l, r),
+        Prim::FltMin(l, r) => op!(curios_ersd::Operation::FltMin, flt_type, l, r),
+        Prim::FltMax(l, r) => op!(curios_ersd::Operation::FltMax, flt_type, l, r),
+        Prim::FltCopysign(l, r) => op!(curios_ersd::Operation::FltCopysign, flt_type, l, r),
+        Prim::FltNeg(inner) => op!(curios_ersd::Operation::FltNeg, flt_type, inner),
+        Prim::FltAbs(inner) => op!(curios_ersd::Operation::FltAbs, flt_type, inner),
+        Prim::FltSqrt(inner) => op!(curios_ersd::Operation::FltSqrt, flt_type, inner),
+        Prim::FltFloor(inner) => op!(curios_ersd::Operation::FltFloor, flt_type, inner),
+        Prim::FltCeil(inner) => op!(curios_ersd::Operation::FltCeil, flt_type, inner),
+        Prim::FltTrunc(inner) => op!(curios_ersd::Operation::FltTrunc, flt_type, inner),
+        Prim::FltNearest(inner) => op!(curios_ersd::Operation::FltNearest, flt_type, inner),
 
-        Prim::NatToInt(inner) => op!(Op::NatToInt, nat_type, inner),
-        Prim::NatToFlt(inner) => op!(Op::NatToFlt, nat_type, inner),
-        Prim::IntToNat(inner) => op!(Op::IntToNat, int_type, inner),
-        Prim::IntToFlt(inner) => op!(Op::IntToFlt, int_type, inner),
-        Prim::FltToNat(inner) => op!(Op::FltToNat, flt_type, inner),
-        Prim::FltToInt(inner) => op!(Op::FltToInt, flt_type, inner),
-        Prim::FltToLeBytes(inner) => op!(Op::FltToLeBytes, flt_type, inner),
+        Prim::NatToInt(inner) => op!(curios_ersd::Operation::NatToInt, nat_type, inner),
+        Prim::NatToFlt(inner) => op!(curios_ersd::Operation::NatToFlt, nat_type, inner),
+        Prim::IntToNat(inner) => op!(curios_ersd::Operation::IntToNat, int_type, inner),
+        Prim::IntToFlt(inner) => op!(curios_ersd::Operation::IntToFlt, int_type, inner),
+        Prim::FltToNat(inner) => op!(curios_ersd::Operation::FltToNat, flt_type, inner),
+        Prim::FltToInt(inner) => op!(curios_ersd::Operation::FltToInt, flt_type, inner),
+        Prim::FltToLeBytes(inner) => op!(curios_ersd::Operation::FltToLeBytes, flt_type, inner),
         Prim::FltOfLeBytes(inner) => lowering.operation(
             context,
-            Op::FltOfLeBytes,
+            curios_ersd::Operation::FltOfLeBytes,
             &[(inner, bin_type(Grain::X))],
             hint,
         ),
@@ -271,25 +269,25 @@ pub(super) fn erase_prim(
         }
         Prim::BinLen(grain, bin) => lowering.sequence(
             context,
-            Seq::BinLen(*grain),
+            curios_ersd::SequenceOp::BinLen(*grain),
             &[(bin, bin_type(*grain))],
             hint,
         ),
         Prim::BinEql(grain, l, r) => lowering.sequence(
             context,
-            Seq::BinEql(*grain),
+            curios_ersd::SequenceOp::BinEql(*grain),
             &[(l, bin_type(*grain)), (r, bin_type(*grain))],
             hint,
         ),
         Prim::BinGet(grain, bin, index) => lowering.sequence(
             context,
-            Seq::BinGet(*grain),
+            curios_ersd::SequenceOp::BinGet(*grain),
             &[(bin, bin_type(*grain)), (index, nat_type())],
             hint,
         ),
         Prim::BinSlice(grain, bin, start, end) => lowering.sequence(
             context,
-            Seq::BinSlice(*grain),
+            curios_ersd::SequenceOp::BinSlice(*grain),
             &[
                 (bin, bin_type(*grain)),
                 (start, nat_type()),
@@ -299,7 +297,7 @@ pub(super) fn erase_prim(
         ),
         Prim::BinAppend(grain, bin, element) => lowering.sequence(
             context,
-            Seq::BinAppend(*grain),
+            curios_ersd::SequenceOp::BinAppend(*grain),
             &[
                 (bin, bin_type(*grain)),
                 (element, grain_element_type(*grain)),
@@ -311,7 +309,12 @@ pub(super) fn erase_prim(
                 .iter()
                 .map(|operand| (operand, bin_type(*grain)))
                 .collect::<Vec<_>>();
-            lowering.sequence(context, Seq::BinConcat(*grain), &pairs, hint)
+            lowering.sequence(
+                context,
+                curios_ersd::SequenceOp::BinConcat(*grain),
+                &pairs,
+                hint,
+            )
         }
 
         Prim::Lst(elements) => {
@@ -325,23 +328,23 @@ pub(super) fn erase_prim(
                 .iter()
                 .map(|element| (element, element_type.clone()))
                 .collect::<Vec<_>>();
-            lowering.sequence(context, Seq::LstBuild, &pairs, hint)
+            lowering.sequence(context, curios_ersd::SequenceOp::LstBuild, &pairs, hint)
         }
         Prim::LstLen(element_type, list) => lowering.sequence(
             context,
-            Seq::LstLen,
+            curios_ersd::SequenceOp::LstLen,
             &[(list, lst_type(element_type.clone()))],
             hint,
         ),
         Prim::LstGet(element_type, list, index) => lowering.sequence(
             context,
-            Seq::LstGet,
+            curios_ersd::SequenceOp::LstGet,
             &[(list, lst_type(element_type.clone())), (index, nat_type())],
             hint,
         ),
         Prim::LstSlice(element_type, list, start, end) => lowering.sequence(
             context,
-            Seq::LstSlice,
+            curios_ersd::SequenceOp::LstSlice,
             &[
                 (list, lst_type(element_type.clone())),
                 (start, nat_type()),
@@ -351,7 +354,7 @@ pub(super) fn erase_prim(
         ),
         Prim::LstAppend(element_type, list, element) => lowering.sequence(
             context,
-            Seq::LstAppend,
+            curios_ersd::SequenceOp::LstAppend,
             &[
                 (list, lst_type(element_type.clone())),
                 (element, element_type.clone()),
@@ -363,7 +366,7 @@ pub(super) fn erase_prim(
                 .iter()
                 .map(|operand| (operand, lst_type(element_type.clone())))
                 .collect::<Vec<_>>();
-            lowering.sequence(context, Seq::LstConcat, &pairs, hint)
+            lowering.sequence(context, curios_ersd::SequenceOp::LstConcat, &pairs, hint)
         }
         Prim::LstMap(domain, codomain, list, mapper) => {
             let list_atom =
@@ -383,7 +386,7 @@ pub(super) fn erase_prim(
         }
 
         &Prim::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
-        Prim::HandleEql(l, r) => op!(Op::HandleEql, io_type, l, r),
+        Prim::HandleEql(l, r) => op!(curios_ersd::Operation::HandleEql, io_type, l, r),
         // A process exit never yields a value: erase the code, then report the
         // terminator that seals this block. Code after it is dead and is never
         // erased.

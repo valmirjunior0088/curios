@@ -20,8 +20,9 @@ pub use harness::run;
 mod tests;
 
 use {
-    curios_pipeline::compile_entrypoint,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_entrypoint},
     curios_text::{Entrypoint, RootSource},
+    curios_wasm::to_bytes,
     js_sys::{Object, Reflect, Uint8Array},
     wasm_bindgen::prelude::*,
 };
@@ -29,7 +30,7 @@ use {
 /// The same budget the native compiler uses, so a program that compiles in the
 /// playground compiles at the command line and the reverse. A wall-clock bound
 /// could not promise that: the tab and the terminal are different machines.
-const BUDGET: u64 = curios_pipeline::DEFAULT_STEP_BUDGET;
+const BUDGET: u64 = DEFAULT_STEP_BUDGET;
 
 pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
@@ -48,5 +49,5 @@ pub fn compile(source: &str) -> Result<Uint8Array, String> {
 
     let (module, _foreigns) = compile_entrypoint(BUDGET, &entrypoint, RootSource::none(), |_| {})?;
 
-    Ok(Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()))
+    Ok(Uint8Array::from(to_bytes(&module).as_slice()))
 }

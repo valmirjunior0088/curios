@@ -4,15 +4,14 @@ use {
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Let, LetBinding, LstEntry, Name,
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
-    curios_base::{Grain, PackedBin, Plicity},
-    curios_elab::{Free, UniverseRole},
+    curios_base::{Grain, PackedBin, Plicity, Qualifier, Span},
     num_bigint::BigUint,
     std::{cell::RefCell, sync::Arc},
 };
 
 /// A lowered function's binders: `(plicity, core binder, domain)` per slot,
 /// paralleling the surface parameter list.
-type LoweredParams = Vec<(Plicity, Free, curios_elab::Term)>;
+type LoweredParams = Vec<(Plicity, curios_elab::Free, curios_elab::Term)>;
 
 /// A source binder brought into lexical scope: what it was written as, and the
 /// identity every reference to it lowers to.
@@ -21,7 +20,7 @@ type LoweredParams = Vec<(Plicity, Free, curios_elab::Term)>;
 /// binder is in scope — a progressively-extended parameter list re-enters the
 /// same identities rather than re-minting them, or an earlier domain and the
 /// body would disagree about which binder a name meant.
-pub(super) type Bound = (String, Free);
+pub(super) type Binder = (String, curios_elab::Free);
 
 pub(super) struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
@@ -30,7 +29,7 @@ pub(super) struct Lowerer<'a, 'b> {
     /// appears here resolves to the innermost such binder rather than a
     /// like-named module binding — see [`Self::resolve_name`]. Compiler-minted
     /// binders are never registered: nothing can write their name.
-    scope: RefCell<Vec<Bound>>,
+    scope: RefCell<Vec<Binder>>,
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
@@ -47,7 +46,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ///
     /// An unwritten (`_` or empty) name still gets an identity — it occupies a
     /// binder position — but no reference can reach it.
-    pub(super) fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Bound> {
+    pub(super) fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Binder> {
         names
             .into_iter()
             .map(|name| {
@@ -61,7 +60,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// previous scope.
     pub(super) fn bound<T>(
         &self,
-        binders: &[Bound],
+        binders: &[Binder],
         body: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
         let mark = self.enter_scope(binders);
@@ -76,7 +75,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// scope per binding of a `let` block and leaves them in reverse. The scope
     /// is a stack, so a shadowing inner binder simply sits above the outer one
     /// and [`Self::resolve_name`]'s innermost-first scan finds it.
-    fn enter_scope(&self, binders: &[Bound]) -> usize {
+    fn enter_scope(&self, binders: &[Binder]) -> usize {
         let mut scope = self.scope.borrow_mut();
         let mark = scope.len();
         scope.extend(binders.iter().filter(|(name, _)| bindable(name)).cloned());
@@ -116,14 +115,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// for declaration generalization.
     pub(super) fn input_type(&self, term: &Term) -> Result<curios_elab::Term, Error> {
         self.context
-            .with_universe_role(UniverseRole::Generalizable, || self.term(term))
+            .with_universe_role(curios_elab::UniverseRole::Generalizable, || self.term(term))
     }
 
     /// Resolve a surface name to its qualified (joined) core name — the same
     /// rule the `Subterm::Name` term-reference arm uses.
-    pub(super) fn resolve_name(&self, name: &Name) -> Result<Free, Error> {
+    pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_elab::Free, Error> {
         if name.is_abs() || !name.is_single() {
-            return Ok(Free::global(self.context.resolve_term_name(name)?));
+            return Ok(curios_elab::Free::global(
+                self.context.resolve_term_name(name)?,
+            ));
         }
         // A local binder shadows any like-named module binding, and the
         // innermost one wins. Resolving here — rather than emitting the
@@ -139,7 +140,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             return Ok(id.clone());
         }
         match self.context.bindings().get(name.head()) {
-            Some(full) => Ok(Free::global(full.clone())),
+            Some(full) => Ok(curios_elab::Free::global(full.clone())),
             // Unresolved, and `curios-elab` is what reports it — so this must
             // lower to something no definition can ever be. A binder identity
             // is unbound by construction (nothing closes over it) and carries
@@ -225,7 +226,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             self.context.syntax().character().scalar_above()
         };
         let scalar = curios_elab::Term::apply_marked(
-            curios_elab::Term::var(curios_elab::Var::free(Free::global(
+            curios_elab::Term::var(curios_elab::Var::free(curios_elab::Free::global(
                 constructor.qualifier(),
             ))),
             [
@@ -254,7 +255,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         args: impl IntoIterator<Item = curios_elab::Term>,
     ) -> curios_elab::Term {
         curios_elab::Term::apply(
-            curios_elab::Term::var(curios_elab::Var::free(Free::global(name.qualifier()))),
+            curios_elab::Term::var(curios_elab::Var::free(curios_elab::Free::global(
+                name.qualifier(),
+            ))),
             args.into_iter().collect::<Vec<_>>(),
         )
     }
@@ -277,7 +280,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn subterm(
         &self,
         term: &Subterm,
-        span: Option<&curios_base::Span>,
+        span: Option<&Span>,
     ) -> Result<curios_elab::Term, Error> {
         Ok(match term {
             Subterm::Type => curios_elab::Term::type_at(self.context.fresh_universe(span)),
@@ -556,8 +559,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ) -> Result<curios_elab::Term, Error> {
         struct PendingLet<'t> {
             mark: usize,
-            binders: Vec<Bound>,
-            binds: Vec<(Free, curios_elab::Term)>,
+            binders: Vec<Binder>,
+            binds: Vec<(curios_elab::Free, curios_elab::Term)>,
             binder: &'t Pattern,
             type_: curios_elab::Term,
             value: curios_elab::Term,
@@ -629,7 +632,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn collect(
         &self,
         term: &Term,
-        binds: &mut Vec<(Free, curios_elab::Term)>,
+        binds: &mut Vec<(curios_elab::Free, curios_elab::Term)>,
     ) -> Result<curios_elab::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
@@ -734,7 +737,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn build_let(
         &self,
         let_: &Let,
-        binds: &mut Vec<(Free, curios_elab::Term)>,
+        binds: &mut Vec<(curios_elab::Free, curios_elab::Term)>,
     ) -> Result<curios_elab::Term, Error> {
         let (first, rest) = let_
             .bindings
@@ -770,7 +773,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn lower_func_params(
         &self,
         params: &[FuncParam],
-        binders: &[Bound],
+        binders: &[Binder],
         body: curios_elab::Term,
     ) -> Result<(LoweredParams, curios_elab::Term), Error> {
         let mut lowered = Vec::with_capacity(params.len());
@@ -778,7 +781,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         // pre-order `param_names` produced them, plus the field-`let` chains
         // that put the compound patterns in scope — both advance with the walk.
         let mut seen = 0;
-        let mut chains: Vec<(&[PatternField], Free, &[Bound])> = Vec::new();
+        let mut chains: Vec<(&[PatternField], curios_elab::Free, &[Binder])> = Vec::new();
 
         for param in params {
             let FuncParam {
@@ -830,7 +833,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// it is the chain's original consumer and its shape is settled.)
     fn wrap_pattern_chains(
         &self,
-        chains: &[(&[PatternField], Free, &[Bound])],
+        chains: &[(&[PatternField], curios_elab::Free, &[Binder])],
         annotation: curios_elab::Term,
     ) -> curios_elab::Term {
         chains
@@ -851,7 +854,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// One pattern-leaf binder: its written spelling and the identity it lowers
     /// to. `_` gets an identity nothing can name, so repeated wildcards never
     /// collide.
-    pub(super) fn pattern_binder(&self, name: &str) -> Bound {
+    pub(super) fn pattern_binder(&self, name: &str) -> Binder {
         (
             name.to_string(),
             self.context.fresh_binder(bindable(name).then_some(name)),
@@ -864,7 +867,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_elab::Global, Error> {
         Ok(match self.resolve_name(name)?.as_global() {
             Some(global) => global.clone(),
-            None => curios_elab::Global::Authored(curios_base::Qualifier::from([name.head()])),
+            None => curios_elab::Global::Authored(Qualifier::from([name.head()])),
         })
     }
 
@@ -887,7 +890,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn bind_pattern(
         &self,
         pattern: &Pattern,
-        binders: &[Bound],
+        binders: &[Binder],
         type_: curios_elab::Term,
         value: curios_elab::Term,
         tail: curios_elab::Term,
@@ -898,7 +901,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     fn bind_pattern_from<'i>(
         &self,
         pattern: &Pattern,
-        binders: &mut impl Iterator<Item = &'i Bound>,
+        binders: &mut impl Iterator<Item = &'i Binder>,
         type_: curios_elab::Term,
         value: curios_elab::Term,
         tail: curios_elab::Term,
@@ -932,8 +935,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn lower_pattern_fields(
         &self,
         fields: &[PatternField],
-        scrutinee: &Free,
-        leaves: &[Bound],
+        scrutinee: &curios_elab::Free,
+        leaves: &[Binder],
         tail: curios_elab::Term,
     ) -> curios_elab::Term {
         self.lower_pattern_fields_from(fields, scrutinee, &mut leaves.iter(), tail)
@@ -942,8 +945,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     fn lower_pattern_fields_from<'i>(
         &self,
         fields: &[PatternField],
-        scrutinee_name: &Free,
-        binders: &mut impl Iterator<Item = &'i Bound>,
+        scrutinee_name: &curios_elab::Free,
+        binders: &mut impl Iterator<Item = &'i Binder>,
         tail: curios_elab::Term,
     ) -> curios_elab::Term {
         // Right-to-left so the first field's `let` ends up outermost, but the
@@ -974,7 +977,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A `Nat` succ or `Lst`/`Bin` cons arm's induction-hypothesis binder: an
     /// omitted `; ih` (`None` — there is no source name at all) mints an
     /// unwritten binder; a written one is minted with its spelling as the hint.
-    pub(super) fn cons_ih_binder(&self, ih_label: &Option<String>) -> Bound {
+    pub(super) fn cons_ih_binder(&self, ih_label: &Option<String>) -> Binder {
         match ih_label {
             Some(name) => (
                 name.clone(),
@@ -996,7 +999,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// regions can use different monads.
     pub(super) fn wrap(
         &self,
-        binds: Vec<(Free, curios_elab::Term)>,
+        binds: Vec<(curios_elab::Free, curios_elab::Term)>,
         body: curios_elab::Term,
     ) -> Result<curios_elab::Term, Error> {
         binds

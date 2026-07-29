@@ -12,6 +12,9 @@
 //! depth so the output stays linear in module size instead of quadratic in
 //! nesting depth.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Atom, BlockId, Constant, FunctionId, Module, Rhs, Statement, StatementId, Terminator,

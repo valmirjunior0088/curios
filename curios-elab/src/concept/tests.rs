@@ -1,6 +1,6 @@
 use {
     super::{HeadKey, WitnessKey},
-    curios_base::Grain,
+    curios_base::{Grain, Qualifier},
 };
 
 // Arity one displays bare, so single-parameter diagnostics keep today's
@@ -15,7 +15,7 @@ fn witness_key_displays_bare_for_arity_one() {
 fn witness_key_displays_as_a_tuple_for_higher_arities() {
     let key = WitnessKey(vec![
         HeadKey::Nat,
-        HeadKey::Nominal(crate::Global::Authored(curios_base::Qualifier::from([
+        HeadKey::Nominal(crate::Global::Authored(Qualifier::from([
             "std", "Str", "Str",
         ]))),
     ]);

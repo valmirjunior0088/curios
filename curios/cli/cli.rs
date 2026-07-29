@@ -3,12 +3,13 @@
 
 use {
     clap::{Parser, Subcommand},
+    curios_pipeline::Stage,
     std::{path::PathBuf, sync::LazyLock},
 };
 
 /// [`curios_pipeline::Stage::NAMES`] joined with `,`, computed once on first
 /// use — the `--print` flag's default and help text.
-static NAMES: LazyLock<String> = LazyLock::new(|| curios_pipeline::Stage::NAMES.join(","));
+static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(","));
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {

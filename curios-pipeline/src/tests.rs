@@ -1,40 +1,36 @@
 //! The pipeline's test suite, kept beside `lib.rs`.
 
-use super::*;
+use {
+    super::*,
+    curios_elab::{Context, erase_module},
+    curios_ersd::Analysis,
+    curios_text::{Entrypoint, RootSource},
+    curios_wasm::to_bytes,
+};
 
 #[test]
 fn entrypoint_type_is_used_as_expected_type() {
     let entrypoint = "0"
-        .parse::<curios_text::Entrypoint>()
+        .parse::<Entrypoint>()
         .unwrap()
         .with_type("/std/Bool".parse().unwrap());
 
-    let error = compile_entrypoint(
-        curios_elab::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        curios_text::RootSource::none(),
-        |_| {},
-    )
-    .unwrap_err();
+    let error = compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+        .unwrap_err();
 
     assert!(error.contains("type mismatch"));
 }
 
 fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
-    let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
 
     let entrypoint = match type_ {
         Some(type_) => entrypoint.with_type(type_.parse().unwrap()),
         None => entrypoint,
     };
 
-    compile_entrypoint(
-        curios_elab::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        curios_text::RootSource::none(),
-        |_| {},
-    )
-    .map(|(module, _foreigns)| module)
+    compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+        .map(|(module, _foreigns)| module)
 }
 
 #[test]
@@ -42,10 +38,7 @@ fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
     let source = "/std/Nat/add(20, 22)";
     let first = compile(source, None).unwrap();
     let second = compile(source, None).unwrap();
-    assert_eq!(
-        curios_wasm::to_bytes(&first),
-        curios_wasm::to_bytes(&second)
-    );
+    assert_eq!(to_bytes(&first), to_bytes(&second));
 }
 
 #[test]
@@ -102,14 +95,14 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
 }
 
 fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
-    let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
     let mut ersd = String::new();
     let mut cont = String::new();
 
     compile_entrypoint(
-        curios_elab::DEFAULT_STEP_BUDGET,
+        DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |stage| match stage {
             Stage::Ersd(stage) => ersd = format!("{stage}"),
             Stage::Cont(stage) => cont = format!("{stage}"),
@@ -932,7 +925,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
         end
         0
     "#;
-    let error = missing.parse::<curios_text::Entrypoint>().unwrap_err();
+    let error = missing.parse::<Entrypoint>().unwrap_err();
     assert!(
         format!("{error:?}").contains("must state its index target"),
         "unexpected error: {error:?}"
@@ -945,7 +938,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
         end
         0
     "#;
-    let error = surplus.parse::<curios_text::Entrypoint>().unwrap_err();
+    let error = surplus.parse::<Entrypoint>().unwrap_err();
     assert!(
         format!("{error:?}").contains("declares no indices"),
         "unexpected error: {error:?}"
@@ -959,7 +952,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
         end
         0
     "#;
-    let error = arity.parse::<curios_text::Entrypoint>().unwrap_err();
+    let error = arity.parse::<Entrypoint>().unwrap_err();
     assert!(
         format!("{error:?}").contains("but the head declares 1"),
         "unexpected error: {error:?}"
@@ -1170,11 +1163,11 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 // --- A: typecheck-only (stop after zonk, no lowering) ---------------------
 
 fn typecheck(source: &str) -> Result<(), String> {
-    let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
     super::elaborate_and_zonk(
-        curios_elab::DEFAULT_STEP_BUDGET,
+        DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         &mut |_| {},
     )
     .map(|_| ())
@@ -1392,20 +1385,16 @@ fn dead_user_definition_is_still_typechecked() {
 /// Elaborate `source` to its meta-free Core module and erase it through the
 /// arena path, prelude erased fresh — the Phase-2 erasure vertical.
 fn erase_to_ir(source: &str) -> curios_ersd::Module {
-    let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
-        curios_elab::DEFAULT_STEP_BUDGET,
+        DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         &mut |_| {},
     )
     .unwrap();
-    curios_elab::erase_module(
-        &mut curios_elab::Context::with_default_budget(),
-        &module,
-        &core_type,
-    )
-    .expect("the elaborated module erases into a verified arena module")
+    erase_module(&mut Context::with_default_budget(), &module, &core_type)
+        .expect("the elaborated module erases into a verified arena module")
 }
 
 #[test]
@@ -1435,7 +1424,7 @@ fn arena_erasure_stores_no_captures_for_the_prelude() {
     // values are derived on demand. The analysis on the full module is the
     // witness that derivation covers every function.
     let module = erase_to_ir("/std/Nat/to_str(7)");
-    let analysis = curios_ersd::Analysis::analyze(&module);
+    let analysis = Analysis::analyze(&module);
     let counted = module.function_ids().count();
     assert!(counted > 0);
     for function in module.function_ids() {

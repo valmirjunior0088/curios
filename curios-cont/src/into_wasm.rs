@@ -12,34 +12,34 @@ mod symbols;
 pub(crate) use symbols::*;
 
 mod table;
-pub(crate) use table::*;
+use table::*;
 
 mod frame;
-pub(crate) use frame::*;
+use frame::*;
 
 mod context;
-pub(crate) use context::*;
+use context::*;
 
 mod code_emitter;
-pub(crate) use code_emitter::*;
+use code_emitter::*;
 
 mod structure;
-pub(crate) use structure::*;
+use structure::*;
 
 mod expr_emitter;
-pub(crate) use expr_emitter::*;
+use expr_emitter::*;
 
 mod module_emitter;
-pub(crate) use module_emitter::*;
+use module_emitter::*;
 
 mod rope_emitter;
-pub(crate) use rope_emitter::*;
+use rope_emitter::*;
 
 mod types;
-pub(crate) use types::*;
+use types::*;
 
 #[cfg(test)]
-mod emit_tests;
+mod tests;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]

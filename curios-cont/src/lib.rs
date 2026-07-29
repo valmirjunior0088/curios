@@ -8,8 +8,6 @@ mod cps;
 pub use cps::*;
 
 mod machine;
-pub(crate) use machine::*;
 
 mod into_wasm;
 pub use into_wasm::into_wasm;
-pub(crate) use into_wasm::*;

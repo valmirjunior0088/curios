@@ -3,6 +3,7 @@
 //! forced flat payload, which is what the bridge accessors read and write.
 
 use {
+    curios_runtime::shared_engine,
     curios_wasm::{CompType, Export, SubType, TypeName},
     wasmtime::{Func, Instance, Linker, Module, Store, Val},
 };
@@ -87,7 +88,7 @@ fn bridge_bytes_encode_a_wasm_module() {
 
 #[test]
 fn bridge_accessors_roundtrip() {
-    let mut store = Store::new(curios_runtime::shared_engine(), ());
+    let mut store = Store::new(shared_engine(), ());
     let bridge = instantiate(&mut store, &crate::bridge_bytes());
 
     let bin_new = export(&mut store, &bridge, "bin_new");
@@ -124,7 +125,7 @@ fn bridge_accessors_roundtrip() {
 /// `bytes` array via `bin_store`, and `bin_load` copies them back out.
 #[test]
 fn bulk_transfers_roundtrip_through_the_memory() {
-    let mut store = Store::new(curios_runtime::shared_engine(), ());
+    let mut store = Store::new(shared_engine(), ());
     let bridge = instantiate(&mut store, &crate::bridge_bytes());
 
     let memory = bridge

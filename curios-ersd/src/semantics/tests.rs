@@ -1,4 +1,4 @@
-use super::*;
+use crate::*;
 
 #[test]
 fn traps_and_effects_classify_by_operation() {

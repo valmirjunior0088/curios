@@ -23,6 +23,9 @@
 //! The walk is iterative over an explicit task stack, so a deep module
 //! diagnoses on the default test-thread stack instead of overflowing it.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Atom, Block, BlockId, Constructor, ConstructorId, FamilyId, Function, FunctionId,

@@ -1,4 +1,8 @@
-use curios_runtime::{ForeignBindings, MockHost};
+use {
+    curios_pipeline::compile_entrypoint,
+    curios_runtime::{ForeignBindings, MockHost},
+    curios_text::{Entrypoint, RootSource},
+};
 
 #[test]
 fn foreign_declaration_runs_through_supplied_bindings() {
@@ -11,13 +15,13 @@ fn foreign_declaration_runs_through_supplied_bindings() {
         let _ : std/Never = /std/proc/exit(double(21));
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))
         "#
-    .parse::<curios_text::Entrypoint>()
+    .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = curios_pipeline::compile_entrypoint(
+    let (module, foreigns) = compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &source,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");

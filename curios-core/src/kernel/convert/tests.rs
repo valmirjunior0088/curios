@@ -2,7 +2,7 @@ use crate::{
     Free, Global, InductDecl, Kernel, Prim, Telescope, Term, UniverseContext,
     kernel::convert::convert,
 };
-use curios_base::{Qualifier, RootId};
+use curios_base::{Plicity, Qualifier, RootId};
 
 fn kernel() -> Kernel {
     let mut kernel = Kernel::new(100_000);
@@ -241,7 +241,7 @@ fn plicity_distinguishes_two_function_types() {
             crate::Subterm::FuncType(func) => func.telescope.clone(),
             _ => unreachable!("built as a function type"),
         },
-        plicities: vec![curios_base::Plicity::Implicit],
+        plicities: vec![Plicity::Implicit],
     }));
 
     assert_eq!(

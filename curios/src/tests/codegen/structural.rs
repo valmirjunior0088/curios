@@ -18,6 +18,8 @@
 use {
     curios_pipeline::{Stage, compile_entrypoint},
     curios_runtime::{ForeignBindings, MockHost, run_bytes, shared_engine},
+    curios_text::{Entrypoint, RootSource},
+    curios_wasm::{Module, to_bytes},
     std::collections::BTreeSet,
 };
 
@@ -115,15 +117,13 @@ const MUTUAL_RECURSION: &str = r#"
 /// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module.
 /// The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces;
 /// Binaryen only runs later, in `crate::to_cwasm`.
-fn compile_raw(source: &str) -> curios_wasm::Module {
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .expect("fixture parses");
+fn compile_raw(source: &str) -> Module {
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let (module, _foreigns) = compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |_| {},
     )
     .expect("fixture compiles");
@@ -139,15 +139,13 @@ fn wat(source: &str) -> String {
 
 /// The optimized high-CPS dump, for the cont-level gates.
 fn cont_optm_text(source: &str) -> String {
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .expect("fixture parses");
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut dump = String::new();
     compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 dump = module.to_string();
@@ -311,7 +309,7 @@ fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
 fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
     let cwasm = shared_engine()
-        .precompile_module(&curios_wasm::to_bytes(&module))
+        .precompile_module(&to_bytes(&module))
         .expect("raw module validates and Cranelift-compiles without Binaryen");
 
     let (system, io) = MockHost::builder().args(args).build();

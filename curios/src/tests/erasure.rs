@@ -1,4 +1,9 @@
-use {super::run, curios_runtime::MockHost};
+use {
+    super::run,
+    curios_pipeline::{Stage, compile_entrypoint},
+    curios_runtime::MockHost,
+    curios_text::{Entrypoint, RootSource},
+};
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {
@@ -116,17 +121,15 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
         use /std/{Char, Str};
         (Char/to_nat('😀'), Str/to_bytes("é😀"))
         "#;
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .expect("source parses");
+    let entrypoint = source.parse::<Entrypoint>().expect("source parses");
     let mut ersd = None;
 
-    curios_pipeline::compile_entrypoint(
+    compile_entrypoint(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        curios_text::RootSource::none(),
+        RootSource::none(),
         |stage| {
-            if let curios_pipeline::Stage::Ersd(module) = stage {
+            if let Stage::Ersd(module) = stage {
                 ersd = Some(format!("{module}"));
             }
         },

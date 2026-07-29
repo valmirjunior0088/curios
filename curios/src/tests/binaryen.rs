@@ -1,4 +1,10 @@
-use curios_pipeline::compile_entrypoint;
+use {
+    crate::DEFAULT_STEP_BUDGET,
+    curios_binaryen::optimize,
+    curios_pipeline::compile_entrypoint,
+    curios_text::{Entrypoint, RootSource},
+    curios_wasm::to_bytes,
+};
 
 #[test]
 fn optimizes_to_a_smaller_valid_module() {
@@ -18,20 +24,16 @@ fn optimizes_to_a_smaller_valid_module() {
     "#;
 
     let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
+        .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_entrypoint(
-        curios_elab::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        curios_text::RootSource::none(),
-        |_| {},
-    )
-    .expect("expected wasm module");
+    let (module, _foreigns) =
+        compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+            .expect("expected wasm module");
 
-    let bytes = curios_wasm::to_bytes(&module);
+    let bytes = to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
-    let optimized = curios_binaryen::optimize(bytes.clone());
+    let optimized = optimize(bytes.clone());
 
     assert!(optimized.starts_with(b"\0asm"));
     assert!(

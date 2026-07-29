@@ -17,7 +17,7 @@ use {
     super::*,
     curios_abi::ForeignStore,
     curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind},
-    curios_elab::{Bound, DefinitionKind, UniverseContext, UniverseRole},
+    curios_elab::Bound as _,
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -566,7 +566,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: DefinitionKind::Authored,
+                    kind: curios_elab::DefinitionKind::Authored,
                     name: curios_elab::Global::Authored(context.prefixed(&let_item.label)),
                     island: context.island(),
                     root: context.root(),
@@ -585,7 +585,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: DefinitionKind::Authored,
+                    kind: curios_elab::DefinitionKind::Authored,
                     name: curios_elab::Global::Authored(path),
                     island: context.island(),
                     root: context.root(),
@@ -600,7 +600,7 @@ fn process_items(
                         let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
-                            kind: DefinitionKind::Authored,
+                            kind: curios_elab::DefinitionKind::Authored,
                             name: curios_elab::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             root: context.root(),
@@ -763,7 +763,7 @@ fn process_items(
                         induct_decls.insert(
                             name.clone(),
                             curios_elab::InductDecl {
-                                universe_context: UniverseContext::empty(),
+                                universe_context: curios_elab::UniverseContext::empty(),
                                 params: curios_elab::Telescope::build(
                                     param_tys_unmarked.clone(),
                                     (),
@@ -816,7 +816,7 @@ fn process_items(
                             )
                         };
                         Ok(FlatLet {
-                            kind: DefinitionKind::InductiveType,
+                            kind: curios_elab::DefinitionKind::InductiveType,
                             name: curios_elab::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
                             root: context.root(),
@@ -937,7 +937,7 @@ fn process_items(
                         let ctor_body = curios_elab::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
-                            kind: DefinitionKind::InductiveConstructor {
+                            kind: curios_elab::DefinitionKind::InductiveConstructor {
                                 owner: context.prefixed(&u.label),
                                 tag: curios_elab::Atom::from(c.label.as_str()),
                             },
@@ -1016,7 +1016,7 @@ fn process_items(
                 struct_decls.insert(
                     name.clone(),
                     curios_elab::StructDecl {
-                        universe_context: UniverseContext::empty(),
+                        universe_context: curios_elab::UniverseContext::empty(),
                         params: curios_elab::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: curios_elab::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
@@ -1047,7 +1047,7 @@ fn process_items(
                 };
 
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: DefinitionKind::StructType,
+                    kind: curios_elab::DefinitionKind::StructType,
                     name: curios_elab::Global::Authored(context.prefixed(&s.label)),
                     island: context.island(),
                     root: context.root(),
@@ -1127,7 +1127,7 @@ fn process_items(
                 struct_decls.insert(
                     name.clone(),
                     curios_elab::StructDecl {
-                        universe_context: UniverseContext::empty(),
+                        universe_context: curios_elab::UniverseContext::empty(),
                         params: curios_elab::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: curios_elab::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
@@ -1163,7 +1163,7 @@ fn process_items(
                 concepts.insert(
                     name.clone(),
                     curios_elab::Concept {
-                        universe_context: UniverseContext::empty(),
+                        universe_context: curios_elab::UniverseContext::empty(),
                         params: curios_elab::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),
                         supers,
@@ -1182,7 +1182,7 @@ fn process_items(
                     )
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: DefinitionKind::ConceptType,
+                    kind: curios_elab::DefinitionKind::ConceptType,
                     name: curios_elab::Global::Authored(context.prefixed(&concept.label)),
                     island: context.island(),
                     root: context.root(),
@@ -1225,7 +1225,7 @@ fn process_items(
 
                     let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
-                        kind: DefinitionKind::ConceptMethod {
+                        kind: curios_elab::DefinitionKind::ConceptMethod {
                             owner: context.prefixed(&concept.label),
                         },
                         name: curios_elab::Global::Authored(
@@ -1281,7 +1281,7 @@ fn process_items(
 
                 let lower = Lowerer::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: DefinitionKind::Witness,
+                    kind: curios_elab::DefinitionKind::Witness,
                     name: name.clone(),
                     island: context.island(),
                     root: context.root(),
@@ -1834,7 +1834,7 @@ pub fn into_core(
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
-    let universe_role = Cell::new(UniverseRole::Flexible);
+    let universe_role = Cell::new(curios_elab::UniverseRole::Flexible);
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
@@ -1928,7 +1928,7 @@ pub fn prepare_prelude(
     let public = interface::resolve_prelude(&roots, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
-    let universe_role = Cell::new(UniverseRole::Flexible);
+    let universe_role = Cell::new(curios_elab::UniverseRole::Flexible);
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
@@ -2029,7 +2029,7 @@ pub fn into_core_with_prelude(
     metavars.seed(prepared.metavariable_floor);
     let universes = Entropy::<usize>::new();
     universes.seed(prepared.universe_floor);
-    let universe_role = Cell::new(UniverseRole::Flexible);
+    let universe_role = Cell::new(curios_elab::UniverseRole::Flexible);
     let universe_seeds = RefCell::new(prepared.core.universe_seeds.clone());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
