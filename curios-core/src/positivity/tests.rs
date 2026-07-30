@@ -1,13 +1,98 @@
 use {
-    super::{
-        Occurrences,
+    super::{Occurrences, close, positivity_vectors},
+    crate::{
+        Atom, Free, Global, InductDecl, InductParam, Kernel,
         Polarity::{self, *},
-        close,
+        Telescope, Term, UniverseContext,
     },
-    crate::Global,
-    curios_base::Qualifier,
+    curios_base::{Plicity, Qualifier, RootId},
     std::collections::BTreeMap,
 };
+
+/// A single-constructor family whose one payload is `payload_type`.
+fn single_payload(name: &Global, payload_type: Term, result_sort: Term) -> InductDecl {
+    let binder = Free::local(0, Some("f"));
+    let constructed = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    InductDecl {
+        universe_context: UniverseContext::default(),
+        params: Telescope::done(()),
+        indices: Telescope::done(()),
+        constructors: vec![(
+            Atom::from("c"),
+            InductParam {
+                telescope: Telescope::build([(binder, payload_type)], constructed),
+                plicities: vec![Plicity::Explicit],
+            },
+        )],
+        result_sort,
+        module: Qualifier::from(["T"]),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    }
+}
+
+/// The four-line route to `False`, refused by the kernel running the shared
+/// analysis: `Bad`'s constructor takes `(Bad) -> False`, a negative
+/// self-occurrence.
+#[test]
+fn a_negative_self_occurrence_is_refused() {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        false_name.clone(),
+        InductDecl {
+            constructors: Vec::new(),
+            ..single_payload(&false_name, Term::type_ground(), Term::prop())
+        },
+    );
+    inducts.insert(
+        bad_name.clone(),
+        single_payload(
+            &bad_name,
+            Term::func_type([(Free::local(1, Some("x")), bad_type)], false_type),
+            Term::type_ground(),
+        ),
+    );
+    for (name, entry) in &inducts {
+        kernel.declare_induct(name, entry);
+    }
+
+    let refusal = positivity_vectors(&mut kernel, &inducts, &BTreeMap::new())
+        .expect_err("a negative self-occurrence must be refused");
+    assert_eq!(refusal.name, bad_name);
+}
+
+/// A strictly positive self-occurrence — the payload *is* the family — is the
+/// ordinary recursive datatype and is admitted.
+#[test]
+fn a_strict_self_occurrence_is_admitted() {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+
+    let name = Global::Authored(Qualifier::from(["Chain"]));
+    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        name.clone(),
+        single_payload(&name, self_type, Term::type_ground()),
+    );
+    for (entry_name, entry) in &inducts {
+        kernel.declare_induct(entry_name, entry);
+    }
+
+    let vectors = positivity_vectors(&mut kernel, &inducts, &BTreeMap::new())
+        .expect("a strictly positive declaration is admitted");
+    assert_eq!(vectors.get(&name), Some(&Vec::new()));
+}
 
 const EVERY: [Polarity; 5] = [Unused, Strict, Pos, Neg, Mixed];
 

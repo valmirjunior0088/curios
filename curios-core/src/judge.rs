@@ -46,7 +46,7 @@
 //! reports what the *term* did, and the driver that owns the user-facing
 //! diagnostic decides how to phrase it.
 
-use super::{Free, Term};
+use super::{Free, Global, InductDecl, StructDecl, Term};
 
 /// What a shared analysis may ask of the checker running it, beyond the terms it
 /// was handed.
@@ -69,6 +69,27 @@ pub trait Env {
 
     /// The type `name` was assumed at, or `None` for a name not in scope.
     fn assumption(&self, name: &Free) -> Option<&Term>;
+
+    /// A fresh binder identity, rendering as `hint`.
+    ///
+    /// `&mut self` for the *implementors'* sake — both mint from an interior
+    /// counter and could take `&self`, but the elaborator's method is spelled
+    /// `&mut` and a trait should not force a signature change to satisfy it.
+    fn fresh(&mut self, hint: Option<&str>) -> Free;
+
+    /// What `name` unfolds to through its *definition* — never through a
+    /// refinement. The two implementations are semantically identical, which is
+    /// deliberate: a definitions-only reading needs no invariant about when the
+    /// elaborator's refinement store happens to be empty.
+    fn unfold(&self, name: &Free) -> Option<&Term>;
+
+    /// The registry entry for an `induct` declaration, or `None` when the name
+    /// is not one.
+    fn induct_decl(&self, name: &Global) -> Option<&InductDecl>;
+
+    /// The registry entry for a `struct` declaration, or `None` when the name
+    /// is not one.
+    fn struct_decl(&self, name: &Global) -> Option<&StructDecl>;
 }
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.

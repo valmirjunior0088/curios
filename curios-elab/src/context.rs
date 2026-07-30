@@ -1263,6 +1263,19 @@ impl Context {
         self.elaboration_cache.clear();
     }
 
+    /// What `name` unfolds to through its *definition* alone — never through a
+    /// refinement. The shared analyses read through this: a definitions-only
+    /// lookup needs no invariant about when the refinement store happens to be
+    /// empty, where [`Context::var_reduct_at`] would silently mean something
+    /// else inside a match arm.
+    pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
+        self.definitions
+            .iter()
+            .rev()
+            .find_map(|definitions| definitions.get(name))
+            .map(|entry| &entry.term)
+    }
+
     /// The reduct of a variable: its definition, or — unless refinements are
     /// suppressed — its counterfactual refinement. A name never appears in both
     /// stores (definitions name `let`/`rec` binders; refinements name assumed

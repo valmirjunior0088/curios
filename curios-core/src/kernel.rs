@@ -105,6 +105,15 @@ pub enum KernelError {
     /// be legitimately absent only when its index targets cannot equal the
     /// actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
+    /// A declaration that is not strictly positive: `part` of `name` reaches
+    /// back to `name` at a non-accepting polarity. Without this gate,
+    /// `induct Bad | c(f : (Bad) -> False) end` inhabits `False` in four lines
+    /// with no recursion at all.
+    NotPositive {
+        name: Global,
+        part: String,
+        polarity: crate::Polarity,
+    },
     /// A constructor payload, uniform parameter, or field whose level exceeds
     /// the declaring family's result sort — the size condition that keeps an
     /// inductive from containing the universe it lives in.
@@ -165,6 +174,14 @@ impl fmt::Display for KernelError {
                 formatter,
                 "no arm for `{tag}` of `{family}`, and its case is not impossible",
             ),
+            KernelError::NotPositive {
+                name,
+                part,
+                polarity,
+            } => write!(
+                formatter,
+                "`{part}` of `{name}` reaches back to it at {polarity:?}, which is not strictly positive",
+            ),
             KernelError::Oversized { domain, bound } => write!(
                 formatter,
                 "a declaration domain at level `{domain}` exceeds its family's `{bound}`",
@@ -193,6 +210,22 @@ impl Env for Kernel {
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
         self.local_type(name)
+    }
+
+    fn fresh(&mut self, hint: Option<&str>) -> Free {
+        Kernel::fresh(self, hint)
+    }
+
+    fn unfold(&self, name: &Free) -> Option<&Term> {
+        self.value_at(name)
+    }
+
+    fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        Kernel::induct_decl(self, name)
+    }
+
+    fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        Kernel::struct_decl(self, name)
     }
 }
 

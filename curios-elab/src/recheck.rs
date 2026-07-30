@@ -175,27 +175,6 @@ pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
         kernel.declare_struct(name, declaration);
     }
 
-    // Declaration acceptance, after both registries are seeded so a signature
-    // may name any declaration, its own family included. This is the size
-    // condition — the clause the item walk cannot supply, because it computes
-    // each signature's sort and compares it to nothing.
-    for (name, declaration) in &module.induct_decls {
-        if let Err(error) = check_induct_decl(&mut kernel, declaration) {
-            verdicts.push(Verdict {
-                name: Some(name.clone()),
-                error,
-            });
-        }
-    }
-    for (name, declaration) in &module.struct_decls {
-        if let Err(error) = check_struct_decl(&mut kernel, declaration) {
-            verdicts.push(Verdict {
-                name: Some(name.clone()),
-                error,
-            });
-        }
-    }
-
     for index in dependency_order(module) {
         let item = &module.items[index];
 
@@ -254,6 +233,44 @@ pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
 
     if let Err(error) = check_entrypoint(&mut kernel, &module.body, module.type_.as_ref()) {
         verdicts.push(Verdict { name: None, error });
+    }
+
+    // Declaration acceptance, after the item walk rather than before it: a
+    // registry telescope may mention any top-level definition — a type alias,
+    // a type constructor's own `rec` group — and those names are only defined
+    // as the walk proceeds. Every item defines whether or not it checked, so
+    // by this point the environment is complete. Strict positivity runs over
+    // the *full* declaration set — the whole spliced program — so the analysis
+    // recomputes every vector rather than reading any from the archive; then
+    // the size condition, the clause the item walk cannot supply, because it
+    // computes each signature's sort and compares it to nothing.
+    if let Err(refusal) =
+        curios_core::positivity_vectors(&mut kernel, &module.induct_decls, &module.struct_decls)
+    {
+        verdicts.push(Verdict {
+            name: Some(refusal.name.clone()),
+            error: KernelError::NotPositive {
+                name: refusal.name,
+                part: refusal.part,
+                polarity: refusal.polarity,
+            },
+        });
+    }
+    for (name, declaration) in &module.induct_decls {
+        if let Err(error) = check_induct_decl(&mut kernel, declaration) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error,
+            });
+        }
+    }
+    for (name, declaration) in &module.struct_decls {
+        if let Err(error) = check_struct_decl(&mut kernel, declaration) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error,
+            });
+        }
     }
 
     verdicts

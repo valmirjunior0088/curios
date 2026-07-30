@@ -41,6 +41,22 @@ impl curios_core::Env for Context {
     fn assumption(&self, name: &curios_core::Free) -> Option<&Term> {
         Context::assumption(self, name)
     }
+
+    fn fresh(&mut self, hint: Option<&str>) -> curios_core::Free {
+        Context::fresh(self, hint)
+    }
+
+    fn unfold(&self, name: &curios_core::Free) -> Option<&Term> {
+        self.definition_body(name)
+    }
+
+    fn induct_decl(&self, name: &curios_core::Global) -> Option<&curios_core::InductDecl> {
+        Context::induct_decl(self, name)
+    }
+
+    fn struct_decl(&self, name: &curios_core::Global) -> Option<&curios_core::StructDecl> {
+        Context::struct_decl(self, name)
+    }
 }
 
 impl curios_core::Judge for Context {
