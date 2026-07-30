@@ -17,6 +17,8 @@ use {
     },
 };
 
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm`
+// — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
 id!(CpsNodeId, "~n");
 id!(CpsValueId, "~v");
 id!(CpsFunId, "~f");

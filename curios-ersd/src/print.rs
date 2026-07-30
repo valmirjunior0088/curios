@@ -1,12 +1,14 @@
 //! Deterministic printing — the `Stage::Ersd`/`Stage::ErsdOptm` observer and
 //! the diffing surface.
 //!
-//! Identities are spelled by the unified naming scheme — `~{kind}{index}`,
-//! with the stored debug name appended as `$hint` when present — and constants
-//! print inline as literals, so equal modules print byte-identically and a
-//! diff reads without cross-referencing arenas. Function bodies print in one
-//! flat section in identity order (a function's binding statement names it,
-//! its body does not nest), so nesting depth comes only from control blocks;
+//! Identities are spelled by the naming scheme shared with `curios-cont` and
+//! `curios-wasm` — see "One naming scheme for compiler identities" in
+//! `documentation/DESIGN.md` — `~{kind}{index}`, with the stored debug name
+//! appended as `$hint` when present — and constants print inline as literals,
+//! so equal modules print byte-identically and a diff reads without
+//! cross-referencing arenas. Function bodies print in one flat section in
+//! identity order (a function's binding statement names it, its body does
+//! not nest), so nesting depth comes only from control blocks;
 //! the renderer walks those with an explicit job stack and prints a deep
 //! module on the default test-thread stack. Indentation saturates at a fixed
 //! depth so the output stays linear in module size instead of quadratic in

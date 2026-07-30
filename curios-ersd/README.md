@@ -24,8 +24,6 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 **Rationale.** One shared semantics table means the stages' constant folders cannot drift from each other or from emitted code, and keeping the envelope out of the IR keeps a representation limit from becoming a silent semantic one.
 
-### One naming scheme for compiler identities
+### Identity naming is cross-cutting
 
-**Decision.** Compiler-minted identities are spelled by one scheme from the erased stages through Wasm emission: `~{kind}{index}`, with the stored debug name appended after `$`; Wasm symbols derive theirs the same way with `$` as the only hint separator. Because surface names are alphanumeric-plus-underscore, the scheme cannot collide with a source spelling, and a hint never affects identity.
-
-**Rationale.** A printed identity must read back unambiguously and must never collide with a user's name; reserving the separator makes clash-freedom structural rather than probabilistic, and hints stay display-only so behavior cannot grow back onto spellings.
+This crate's arena identities (`id.rs`) follow the naming scheme shared with `curios-cont` and `curios-wasm` — see "One naming scheme for compiler identities" in [`documentation/DESIGN.md`](../documentation/DESIGN.md), which states it once for all three.

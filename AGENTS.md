@@ -98,7 +98,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
 - `/std` and `/syn` are owned by `curios-prelude` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
-- Compiler-emitted proof-certified literals are owned by `/syn`: character literals construct transparent `/syn/Char` values and string literals construct `/syn/Str` values. The canonical Rust registry of those hidden lowering targets belongs in `curios-prelude/src/syntax.rs`; the registry contract belongs to `curios-text`, and the erased runtime carriers remain `Nat` and packed `Bytes`.
+- `/syn` ownership — which names it holds, and why — is `curios-prelude/README.md`'s decision to state. The registry contract belongs to `curios-text`, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`.
 - Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
@@ -106,8 +106,10 @@ Data flows downward through the diagram, while Rust dependencies between compile
 ## Writing Rust
 
 - Re-read the pipeline and ownership map above, then open the `//!` documentation for every stage being changed.
-- Follow the established module layout: `foo.rs` declares and usually re-exports focused submodules from a sibling `foo/` directory.
+- Follow the established module layout: no `mod.rs` anywhere; `foo.rs` declares its `foo/` submodules and re-exports them with `mod x; pub use x::*;` (the default — a narrower re-export visibility is a deliberate deviation, not a default), and crate roots do the same, so every crate stays a flat namespace. Two modules keep a documented, deliberate namespace instead: `curios-core`'s `pub mod kernel` (shadows the elaborator's names on purpose) and `curios-base`'s `pub mod monads` (its `parser`/`printer` submodules both name their unit `pure`, so flattening would make it ambiguous).
+- Import names everywhere except at the four lowering seams (`curios-text`→`curios-elab`, `curios-elab`→`curios-ersd`, `curios-ersd`→`curios-cont`, `curios-cont`→`curios-wasm`), where the downstream crate's names stay qualified by exactly one level — the crate name only, e.g. `curios_ersd::Foo`, never a module path. `curios_base` and `curios_abi` are never qualified anywhere, even in seam files. A name arriving from two or more crates in the same file stays qualified rather than aliased; a trait needed only for method resolution is imported anonymously (`use curios_elab::Bound as _;`).
 - Place unit tests beside their implementation: `foo.rs` declares `#[cfg(test)] mod tests;` and the tests live in `foo/tests.rs`. A small test module may stay inline as `#[cfg(test)] mod tests { … }` in the file it covers. Put programs that cross compiler stages in `curios/src/tests/`; codegen tests live in `curios/src/tests/codegen/`.
+- Name per-carrier helpers, fields, and emitted functions type-first, operation-last (`bin_force`, `lst_slice`), never operation-first (`force_bin`).
 - When changing one stage, check the next representation or consumer explicitly. Parsing changes usually affect printing and lowering; core changes usually affect erasure; IR changes usually affect the next lowering and its tests.
 - Use `//!` for module purpose and invariants, and `///` for public API contracts. Do not duplicate detailed subsystem documentation in this file.
 - Use stock rustfmt and Clippy settings. There is no repository-specific `rustfmt.toml` or `clippy.toml`.
@@ -115,6 +117,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 ## Writing Curios
 
 - Read [SYNTAX.md](documentation/SYNTAX.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
+- The surface grammar's syntax forms are closed: a new type never gets its own operator or keyword. It opts into an existing form (`+`, `==`, postfix `!`, …) by writing a `satisfy` witness against the form's `/syn` concept. See "Syntax forms are closed, semantics extend by witness" in `documentation/DESIGN.md` before proposing hardcoded syntax for a type.
 - Use `curios-prelude/std/` as the reference for idiomatic code.
 - Register a new `curios-prelude/std/Foo.crs` module in `curios-prelude/std.crs`. Apply the corresponding rule to `curios-prelude/syn/` and `curios-prelude/syn.crs`; update `curios-prelude/src/syntax.rs` only when Rust lowering directly emits the new `/syn` name.
 - Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `SYNTAX.md` for the full rules rather than extending this reminder list.

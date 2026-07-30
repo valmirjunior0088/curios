@@ -21,6 +21,8 @@ use {
 mod structurize;
 pub(crate) use structurize::structurize;
 
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm`
+// — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
 id!(MachineBlockId, "~b", mint);
 id!(MachineValueId, "~v", mint);
 

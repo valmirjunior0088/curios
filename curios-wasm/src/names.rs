@@ -1,3 +1,7 @@
+//! Wasm symbol names. Spelled `kind/uniquifier[$hint]`, part of the naming
+//! scheme shared with `curios-ersd` and `curios-cont` — see "One naming
+//! scheme for compiler identities" in `documentation/DESIGN.md`.
+
 use curios_base::name;
 
 name!(TypeName);

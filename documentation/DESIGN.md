@@ -203,6 +203,14 @@ The conversion checker is also incomplete in several positions — an eliminatio
 
 **Rationale.** Coherence makes the chosen witness a fact about the program rather than about the scope of the call site, so moving code or reorganizing imports cannot silently change which witness runs.
 
+### Syntax forms are closed, semantics extend by witness
+
+**Decision.** The surface grammar's syntax forms — the infix operators (`+ - * / % == < <= > >=`) and postfix `!` — are a closed, parser-level set; `curios-text/src/parse.rs` builds them into generic AST nodes (`Subterm::Infix`, `Subterm::Bang`) regardless of the operand's type. What is extensible is each form's *meaning*: it resolves generically through witness search against a `/syn` concept (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Eql`, `Cmp`, `Monad`). A type opts into `+` by declaring `satisfy Add(MyType) { ... }` — no grammar change. `&&`/`||` are the sole hardcoded exception, always resolving to `Bln`.
+
+**Rationale.** Keeping the grammar small and routing every type's participation through the same witness-resolution machinery keeps the ad-hoc-polymorphism surface uniform: a new numeric-like or monad-like type gets the existing operators for the cost of one witness declaration, and the parser and lowering need no per-type knowledge.
+
+**Rejected.** Hardcoding new syntax for a specific type's operations. The precedent when no suitable concept exists yet is to add a *generic* concept and grammar form any type could satisfy, with the motivating type as its first witness — not syntax special-cased to call that type's functions directly.
+
 ### Concept representations may be sealed
 
 **Decision.** Concepts carry the same declaration-local representation visibility as structs and inductives: `: pub Type` is transparent, `: Type` is sealed. A sealed concept's representation is private to its declaring module's subtree — witness declarations, dictionary literals, structure updates, and raw field projections are permitted only there — while resolution, `use` parameters, and the generated method wrappers work identically for both. A sealed `pub` concept's fields are not interface, so they may reference private names: a private superclass is a hidden obligation resolution discharges without the consumer naming it.
@@ -276,6 +284,12 @@ Dropping the constant rung is what buys the absence of a disambiguation rule: a 
 **Rationale.** A functional dependently typed language needs a garbage collector, and targeting Wasm-GC inherits a production collector instead of hand-rolling a runtime system. One backend yields both products, and portability comes with the ecosystem. The mechanism — the symbolic module builder and the GC-only, memory-less instruction roster — belongs to `curios-wasm`'s rustdoc.
 
 **Rejected.** Native code generation, and Wasm over linear memory with a shipped garbage collector.
+
+### One naming scheme for compiler identities
+
+**Decision.** Compiler-minted identities are spelled by one scheme from the erased stage through Wasm emission — `curios-ersd`, `curios-cont`, and `curios-wasm` alike: `~{kind}{index}`, with the stored debug name appended after `$` at definition sites; Wasm symbols derive theirs the same way, with `$` as the only hint separator. Because surface names are alphanumeric-plus-underscore, the scheme cannot collide with a source spelling, and a hint never affects identity.
+
+**Rationale.** A printed identity must read back unambiguously and must never collide with a user's name; reserving the separator makes clash-freedom structural rather than probabilistic, and hints stay display-only so behavior cannot grow back onto spellings. The scheme spans three crates, so it is stated once here rather than independently in each.
 
 ### Curios owns the language, Rust owns the host
 
