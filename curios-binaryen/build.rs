@@ -1,11 +1,6 @@
 //! Downloads, verifies, and builds the pinned Binaryen source release.
 //!
-//! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that
-//! directory cannot cache an expensive C++ build shared by ordinary builds,
-//! tests, and Clippy. This script instead keeps one locked cache per compilation
-//! target beneath Cargo's target tree. A cache entry is complete only after CMake
-//! installs the static library and the script writes its versioned completion
-//! marker.
+//! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script instead keeps one locked cache per compilation target beneath Cargo's target tree. A cache entry is complete only after CMake installs the static library and the script writes its versioned completion marker.
 
 use {
     flate2::read::GzDecoder,
@@ -44,8 +39,7 @@ fn build_marker() -> String {
     )
 }
 
-/// Find Cargo's target directory from its
-/// `<target-dir>[/<target>]/<profile>/build/<package-hash>/out` layout.
+/// Find Cargo's target directory from its `<target-dir>[/<target>]/<profile>/build/<package-hash>/out` layout.
 fn cargo_target_dir(out_dir: &Path, target_triple: &str) -> PathBuf {
     let package_dir = out_dir
         .parent()
@@ -128,9 +122,7 @@ fn archive(archive_path: &Path) -> Vec<u8> {
             if sha256_hex(&bytes) == BINARYEN_SOURCE_SHA256 {
                 return bytes;
             }
-            // A corrupted cache entry (e.g. a truncated download persisted by
-            // an earlier failure) must not wedge every subsequent build: drop
-            // it and fall through to a fresh download.
+            // A corrupted cache entry (e.g. a truncated download persisted by an earlier failure) must not wedge every subsequent build: drop it and fall through to a fresh download.
             fs::remove_file(archive_path).unwrap_or_else(|error| {
                 panic!(
                     "remove corrupted Binaryen archive {}: {error}",

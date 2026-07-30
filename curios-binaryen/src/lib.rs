@@ -1,8 +1,6 @@
 //! Wasm-level optimization via the statically linked Binaryen library.
 //!
-//! This is deliberately the last stage of the pipeline: it consumes and
-//! produces serialized module bytes, after `wasm::to_bytes`, and knows
-//! nothing about any Curios IR. Semantic optimization belongs in `optimize`.
+//! This is deliberately the last stage of the pipeline: it consumes and produces serialized module bytes, after `wasm::to_bytes`, and knows nothing about any Curios IR. Semantic optimization belongs in `optimize`.
 
 mod sys;
 
@@ -10,20 +8,11 @@ use std::{ptr, slice, sync::Mutex};
 
 /// Run Binaryen's whole-module optimizer over serialized module bytes (optimize level 2, shrink level 1, closed world) and return the re-encoded binary. The feature set is pinned to exactly what the emitter produces and Wasmtime's engine enables, so the optimizer can never introduce a post-GC proposal the runtime rejects. Safe to call concurrently — Binaryen's settings are process-global and its optimizer is not thread-safe, so calls serialize behind an internal lock — but `bytes` must be a well-formed module: Binaryen aborts the process on malformed input instead of returning an error, which is acceptable only because the input always comes from `wasm::to_bytes`.
 pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
-    // Binaryen's optimize/shrink/closed-world settings are process-global
-    // and its optimizer is not thread-safe across modules, so the whole
-    // sequence is serialized.
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    // Binaryen aborts the process on a malformed binary instead of
-    // returning an error; the input always comes from `wasm::to_bytes`,
-    // so a crash here means an emitter bug that should be loud anyway.
     unsafe {
-        // Exactly the features the pipeline targets and Wasmtime's engine
-        // enables — not `BinaryenFeatureAll`, which lets the optimizer emit
-        // post-GC proposals (e.g. exact reference types) that the runtime
-        // does not accept.
+        // Exactly the features the pipeline targets and Wasmtime's engine enables — not `BinaryenFeatureAll`, which lets the optimizer emit post-GC proposals (e.g. exact reference types) that the runtime does not accept.
         let features = sys::BinaryenFeatureMutableGlobals()
             | sys::BinaryenFeatureNontrappingFPToInt()
             | sys::BinaryenFeatureBulkMemory()
@@ -36,8 +25,7 @@ pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
         let module =
             sys::BinaryenModuleReadWithFeatures(bytes.as_mut_ptr().cast(), bytes.len(), features);
 
-        // The module neither escapes references nor is dynamically linked,
-        // which closed-world GC optimizations require to be effective.
+        // The module neither escapes references nor is dynamically linked, which closed-world GC optimizations require to be effective.
         sys::BinaryenSetClosedWorld(true);
         sys::BinaryenSetOptimizeLevel(2);
         sys::BinaryenSetShrinkLevel(1);
