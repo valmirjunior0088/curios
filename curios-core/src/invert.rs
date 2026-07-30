@@ -109,12 +109,39 @@ pub fn invert_indices<J: Judge>(
     targets: &[Term],
     flex: &[Free],
 ) -> Result<Invert, J::Error> {
+    invert_with(judge, actuals, targets, flex, false)
+}
+
+/// [`invert_indices`] for the outer direction: the flex variables are the
+/// *context's*, not an arm's, so a key-shaped actual at the top of a position
+/// is not something the flex side was refined to — there is nothing for a
+/// solution to cycle through — and a variable actual may therefore solve the
+/// flex target it meets. This is the kernel's spelling of the elaborator's
+/// `refine_head` orientation: the outer variable stands refined to the arm's
+/// term. The first direction keeps the guard, because there the flex side is
+/// the arm's own binders and rung B has already refined keys to them.
+pub fn invert_indices_outer<J: Judge>(
+    judge: &mut J,
+    actuals: &[Term],
+    targets: &[Term],
+    flex: &[Free],
+) -> Result<Invert, J::Error> {
+    invert_with(judge, actuals, targets, flex, true)
+}
+
+fn invert_with<J: Judge>(
+    judge: &mut J,
+    actuals: &[Term],
+    targets: &[Term],
+    flex: &[Free],
+    solve_keys: bool,
+) -> Result<Invert, J::Error> {
     let mut solutions = Vec::new();
 
     for (actual, target) in actuals.iter().zip(targets) {
         let mut position = Vec::new();
 
-        match unify_index(judge, actual, target, flex, true, &mut position)? {
+        match unify_index(judge, actual, target, flex, true, solve_keys, &mut position)? {
             Step::Clash => return Ok(Invert::Impossible),
             // A refused position contributes nothing — solutions found on
             // the way in are discarded with it, conservatively.
@@ -179,6 +206,7 @@ fn unify_index<J: Judge>(
     target: &Term,
     flex: &[Free],
     top: bool,
+    solve_keys: bool,
     solutions: &mut Vec<(Free, Term)>,
 ) -> Result<Step, J::Error> {
     let actual = judge.force(actual)?;
@@ -198,7 +226,7 @@ fn unify_index<J: Judge>(
         // refined *to* this binder, and solving the binder back to it would
         // tie a reduction cycle. A flex actual (metavariable) is refused
         // outright.
-        if top && matches!(&*actual, Subterm::Var(_) | Subterm::Proj(_))
+        if (top && !solve_keys) && matches!(&*actual, Subterm::Var(_) | Subterm::Proj(_))
             || matches!(&*actual, Subterm::Metavar(_))
         {
             return Ok(Step::Refuse);
@@ -228,7 +256,7 @@ fn unify_index<J: Judge>(
             Some(Peel::Clash) => Ok(Step::Clash),
             Some(Peel::Stuck) => Ok(Step::Refuse),
             Some(Peel::Continue(left, right)) => {
-                unify_index(judge, &left, &right, flex, false, solutions)
+                unify_index(judge, &left, &right, flex, false, solve_keys, solutions)
             }
             None => Ok(Step::Refuse),
         },
@@ -254,14 +282,14 @@ fn unify_index<J: Judge>(
             if a.payload.len() != t.payload.len() {
                 return Ok(Step::Refuse);
             }
-            unify_all(judge, &a.payload, &t.payload, flex, solutions)
+            unify_all(judge, &a.payload, &t.payload, flex, solve_keys, solutions)
         }
 
         (Subterm::Tuple(a), Subterm::Tuple(t)) => {
             if a.fields.len() != t.fields.len() {
                 return Ok(Step::Refuse);
             }
-            unify_all(judge, &a.fields, &t.fields, flex, solutions)
+            unify_all(judge, &a.fields, &t.fields, flex, solve_keys, solutions)
         }
 
         _ => Ok(Step::Refuse),
@@ -275,10 +303,11 @@ fn unify_all<J: Judge>(
     actuals: &[Term],
     targets: &[Term],
     flex: &[Free],
+    solve_keys: bool,
     solutions: &mut Vec<(Free, Term)>,
 ) -> Result<Step, J::Error> {
     for (actual, target) in actuals.iter().zip(targets) {
-        match unify_index(judge, actual, target, flex, false, solutions)? {
+        match unify_index(judge, actual, target, flex, false, solve_keys, solutions)? {
             Step::Ok => {}
             other => return Ok(other),
         }

@@ -62,8 +62,8 @@ use {
     super::{check, infer},
     crate::{
         Atom, Bound, Free, InductArm, InductDecl, InductType, Invert, Kernel, KernelError, Many,
-        Reducer, Scope, Subterm, Telescope, Term, Variant, Visit, invert_indices, kernel::Sort,
-        pinned_by_targets,
+        Reducer, Scope, Subterm, Telescope, Term, Variant, Visit, invert_indices,
+        invert_indices_outer, kernel::Sort, pinned_by_targets,
     },
 };
 
@@ -193,13 +193,19 @@ fn check_arm(
             .into();
 
             // A variable scrutinee is this case's value within the arm — the
-            // zero-index instance of the same equations.
+            // zero-index instance of the same equations. Any other scrutinee
+            // stands as a case equation the reducer consults.
             if let Subterm::Var(var) = &**scrutinee
                 && var.as_bound().is_none()
                 && kernel.local_type(var.unwrap()).is_some()
             {
                 let solved = substitute(&value, &solutions);
                 solutions.push((var.unwrap().clone(), solved));
+            } else {
+                let stuck = kernel
+                    .reduce(scrutinee.clone())
+                    .unwrap_or_else(|_| scrutinee.clone());
+                kernel.refine(stuck, substitute(&value, &solutions));
             }
 
             let refs = payload.iter().collect::<Vec<_>>();
@@ -261,7 +267,7 @@ fn specialize(
         }
     }
 
-    let refined = match invert_indices(kernel, &residual, &family.indices, &outer)? {
+    let refined = match invert_indices_outer(kernel, &residual, &family.indices, &outer)? {
         Invert::Impossible => return Ok(Vec::new()),
         Invert::Solved(solutions) => solutions,
     };

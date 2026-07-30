@@ -279,6 +279,15 @@ struct Definition {
 /// The kernel holds a local telescope, top-level definitions, the nominal
 /// registry, and a budget. Growing this struct is how independence gets lost,
 /// so a new field should have to argue for itself.
+/// A scope checkpoint: the depths of the binder stack and the case-equation
+/// stack at [`Kernel::mark`] time, restored together by [`Kernel::retract`] so
+/// neither can outlive the arm that opened it.
+#[derive(Clone, Copy)]
+pub(crate) struct Mark {
+    locals: usize,
+    refinements: usize,
+}
+
 pub struct Kernel {
     /// Reduction steps a single judgment may spend. Restored at each
     /// declaration boundary by [`Kernel::restore_budget`].
@@ -327,6 +336,13 @@ pub struct Kernel {
     /// the definition store alone, and no key can dangle a retracted binder.
     whnf_memo: HashMap<Term, Replay>,
     forced_memo: HashMap<Term, Replay>,
+    /// The case equations of the arms currently being checked, innermost last:
+    /// within an arm, the scrutinee expression *is* the case's value,
+    /// definitionally — the built-in face of the convoy pattern, which is how
+    /// the elaborator's refinement store reads inside an arm. Scoped exactly
+    /// like the binders the arm opens, through the same [`Kernel::mark`] /
+    /// [`Kernel::retract`] bracket. The reducer consults these at stuck heads.
+    refinements: Vec<(Term, Term)>,
     /// The constraint set of the item being checked — its own declared
     /// hypotheses, assumed while its parameters are held abstract. A generic
     /// definition is valid exactly when it checks *under* its constraints, so
@@ -350,6 +366,7 @@ impl Kernel {
             unfold_memo: HashMap::new(),
             whnf_memo: HashMap::new(),
             forced_memo: HashMap::new(),
+            refinements: Vec::new(),
             assumed: Vec::new(),
             definitions: HashMap::new(),
             inducts: HashMap::new(),
@@ -595,14 +612,45 @@ impl Kernel {
         self.locals.push((name.clone(), type_.clone()));
     }
 
-    /// The current local depth, to be handed back to [`Kernel::retract`].
-    pub(crate) fn mark(&self) -> usize {
-        self.locals.len()
+    /// The current scope depth, to be handed back to [`Kernel::retract`].
+    pub(crate) fn mark(&self) -> Mark {
+        Mark {
+            locals: self.locals.len(),
+            refinements: self.refinements.len(),
+        }
     }
 
-    /// Close every binder opened since `mark`.
-    pub(crate) fn retract(&mut self, mark: usize) {
-        self.locals.truncate(mark);
+    /// Close every binder opened — and drop every case equation assumed —
+    /// since `mark`.
+    pub(crate) fn retract(&mut self, mark: Mark) {
+        self.locals.truncate(mark.locals);
+        self.refinements.truncate(mark.refinements);
+    }
+
+    /// Assume an arm's case equation: within the arm, `scrutinee` — already in
+    /// weak-head normal form — is `value`, definitionally. Push inside the
+    /// arm's `mark`/`retract` bracket, which is what scopes it.
+    ///
+    /// A local-free scrutinee is skipped rather than recorded: local-free
+    /// terms reduce to their case values instead of sticking, and the skip is
+    /// also what keeps the evaluation memos sound — they store local-free
+    /// terms only, and reduction of a local-free term never encounters a
+    /// local-bearing stuck form, so no memoized reduct can depend on an
+    /// equation that was later retracted.
+    pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) {
+        if scrutinee.has_local_free() {
+            self.refinements.push((scrutinee, value));
+        }
+    }
+
+    /// The case value the stuck form `term` is refined to, innermost arm
+    /// first.
+    pub(crate) fn refinement_of(&self, term: &Term) -> Option<Term> {
+        self.refinements
+            .iter()
+            .rev()
+            .find(|(key, _)| key == term)
+            .map(|(_, value)| value.clone())
     }
 
     /// The types of the binders currently in scope, outermost first. The

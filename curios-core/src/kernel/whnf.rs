@@ -125,13 +125,22 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                     term = next;
                     break;
                 }
-                Step::Stop(value) => match pending.pop() {
-                    None => return Ok(value),
-                    Some(frame) => {
-                        let forced = force(kernel, value)?;
-                        step = step_match(forced, frame.motive, frame.cases);
+                Step::Stop(value) => {
+                    // A stuck form standing under an arm's case equation *is*
+                    // that case's value, definitionally; continue from it.
+                    if let Some(refined) = kernel.refinement_of(&value) {
+                        step = Step::Continue(refined);
+                        continue;
                     }
-                },
+
+                    match pending.pop() {
+                        None => return Ok(value),
+                        Some(frame) => {
+                            let forced = force(kernel, value)?;
+                            step = step_match(forced, frame.motive, frame.cases);
+                        }
+                    }
+                }
             }
         }
     }

@@ -484,17 +484,28 @@ fn check_cases(
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
         let expected = motive.open(&[&value]);
 
-        // A variable scrutinee stands refined to this case's value in the arm.
-        let solutions = match &**scrutinee {
+        // A variable scrutinee stands refined to this case's value in the arm;
+        // any other scrutinee stands as a case equation the reducer consults.
+        let (solutions, equation) = match &**scrutinee {
             Subterm::Var(var)
                 if var.as_bound().is_none() && kernel.local_type(var.unwrap()).is_some() =>
             {
-                vec![(var.unwrap().clone(), value)]
+                (vec![(var.unwrap().clone(), value)], None)
             }
-            _ => Vec::new(),
+            _ => (Vec::new(), Some(value)),
         };
 
         let mark = kernel.mark();
+        if let Some(value) = equation {
+            // An effectful scrutinee refuses type-level reduction; its
+            // equation is recorded at the spelling it has. Nothing is admitted
+            // by this fallback — a missed key only checks the arm under fewer
+            // assumptions.
+            let stuck = kernel
+                .reduce(scrutinee.clone())
+                .unwrap_or_else(|_| scrutinee.clone());
+            kernel.refine(stuck, value);
+        }
         eliminate::shadow(kernel, &solutions);
         let outcome = check(
             kernel,
@@ -593,15 +604,21 @@ fn check_free_monoid(
         }
 
         let expected = motive.open(&[&cons_value]);
-        let solutions = match &**scrutinee {
+        let (solutions, equation) = match &**scrutinee {
             Subterm::Var(var)
                 if var.as_bound().is_none() && kernel.local_type(var.unwrap()).is_some() =>
             {
-                vec![(var.unwrap().clone(), cons_value.clone())]
+                (vec![(var.unwrap().clone(), cons_value.clone())], None)
             }
-            _ => Vec::new(),
+            _ => (Vec::new(), Some(cons_value.clone())),
         };
 
+        if let Some(value) = equation {
+            let stuck = kernel
+                .reduce(scrutinee.clone())
+                .unwrap_or_else(|_| scrutinee.clone());
+            kernel.refine(stuck, value);
+        }
         eliminate::shadow(kernel, &solutions);
         let outcome = check(
             kernel,
