@@ -551,9 +551,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// Resume after a host op that returns `results` stack values into a
-    /// record-defining block. Such a resume always defines a value, so it can
-    /// never be the bare-forwarder sentinel.
+    /// Resume after a host op that returns `results` stack values into a record-defining block. Such a resume always defines a value, so it can never be the bare-forwarder sentinel.
     fn host_multi_resume(
         &self,
         output: &mut Vec<curios_wasm::Instr>,
@@ -567,9 +565,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output.extend(self.find_block(resume).enter(results));
     }
 
-    /// Resume after a host op whose single result already matches the
-    /// function's anyref return shape: return it directly on the sentinel, else
-    /// enter the resume block with one value.
+    /// Resume after a host op whose single result already matches the function's anyref return shape: return it directly on the sentinel, else enter the resume block with one value.
     fn host_single_resume(&self, output: &mut Vec<curios_wasm::Instr>, resume: &EmissionBlockName) {
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::Return);
@@ -578,9 +574,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// Resume after a host op with no payload: materialise a unit for the
-    /// single-value return sentinel, else enter the resume block with no
-    /// values.
+    /// Resume after a host op with no payload: materialise a unit for the single-value return sentinel, else enter the resume block with no values.
     fn host_unit_resume(&self, output: &mut Vec<curios_wasm::Instr>, resume: &EmissionBlockName) {
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::StructNew {
@@ -592,9 +586,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// The rope→wire step for one host argument: a reference param crosses as
-    /// its flat payload, so the loaded rope is forced first — deeply for
-    /// `Lst(Bin)`/`Lst(Handle)`, whose *elements* the host lifts as raw `$bytes`.
+    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `Lst(Bin)`/`Lst(Handle)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
@@ -608,9 +600,7 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for one host result: a reference re-enters as a
-    /// host-built flat payload and is embedded into a fresh leaf — deeply for
-    /// `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
+    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
     fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
@@ -624,11 +614,7 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: embed }]
     }
 
-    /// Emit a host primitive call in tail position, then branch to its resume.
-    /// Models `call_direct_instrs`: load operands, call the host import, then
-    /// either fall through to the function's return (when the resume happens
-    /// to be the sentinel) or set up the dispatcher and branch into the resume
-    /// block.
+    /// Emit a host primitive call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
     pub(crate) fn host_instrs(&self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
@@ -656,10 +642,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().host_func(function),
                 });
 
-                // Embed a reference result back into a rope. Only the *final*
-                // result may be a reference: an earlier one would sit under
-                // later stack values, and embedding it would need juggling
-                // through locals. Every host signature keeps references last.
+                // Embed a reference result back into a rope. Only the *final* result may be a reference: an earlier one would sit under later stack values, and embedding it would need juggling through locals. Every host signature keeps references last.
                 for (_, wire_type) in signature.results.iter().rev().skip(1) {
                     debug_assert!(
                         matches!(wire_type, WireType::Nat | WireType::Bool | WireType::Int),
@@ -745,11 +728,7 @@ pub(crate) enum LoadAs {
     Lst,
 }
 
-/// How a host-import operand of the given wire type is loaded at the call
-/// site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int`
-/// unboxes signed (the `poll(2)` timeout convention), and the reference
-/// shapes cast to their rope base type (a handle is its `Bin` token) — the
-/// force step to the flat wire payload follows in `wire_force_instrs`.
+/// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), and the reference shapes cast to their rope base type (a handle is its `Bin` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {

@@ -24,10 +24,7 @@ impl Knowledge {
         }
     }
 
-    /// Lattice join for the SCC-invariant fixpoint, ordered
-    /// `Unknown < Known(_) < Conflict`. Unlike `merge`, `Unknown` is the
-    /// identity (not-yet-resolved), so a forwarded parameter still resolving to
-    /// `Unknown` contributes nothing rather than forcing a conflict.
+    /// Lattice join for the SCC-invariant fixpoint, ordered `Unknown < Known(_) < Conflict`. Unlike `merge`, `Unknown` is the identity (not-yet-resolved), so a forwarded parameter still resolving to `Unknown` contributes nothing rather than forcing a conflict.
     fn join(&mut self, incoming: Knowledge) {
         *self = match (std::mem::replace(self, Knowledge::Unknown), incoming) {
             (Knowledge::Conflict, _) | (_, Knowledge::Conflict) => Knowledge::Conflict,
@@ -42,17 +39,9 @@ impl Knowledge {
         }
     }
 }
-/// Compute the parameters of recursive SCC members that are provably a single
-/// literal or function reference at every entry, so they can be substituted in
-/// place and dropped as dead. This is a monotone constant-propagation fixpoint
-/// over the whole known-callee call graph, restricted to literal/function atoms
-/// with parameter forwarding, ordered `Unknown < Known < Conflict`.
+/// Compute the parameters of recursive SCC members that are provably a single literal or function reference at every entry, so they can be substituted in place and dropped as dead. This is a monotone constant-propagation fixpoint over the whole known-callee call graph, restricted to literal/function atoms with parameter forwarding, ordered `Unknown < Known < Conflict`.
 ///
-/// Only members of an eligible SCC participate: the SCC must be recursive and
-/// must contain no escaping member and not the program entry, because an
-/// escaping or host-called function receives arguments this analysis cannot
-/// observe. `known_literals` seeds resolution of caller values already known to
-/// be constant.
+/// Only members of an eligible SCC participate: the SCC must be recursive and must contain no escaping member and not the program entry, because an escaping or host-called function receives arguments this analysis cannot observe. `known_literals` seeds resolution of caller values already known to be constant.
 pub(super) fn scc_invariant_knowns(
     module: &CpsModule,
     analysis: &CallAnalysis,
@@ -84,9 +73,7 @@ pub(super) fn scc_invariant_knowns(
     let class = invariant_fixpoint(&params_of, &constraints, known_literals);
     useful_knowns(class)
 }
-/// The members of every SCC eligible for known-argument analysis: recursive, and
-/// containing neither an escaping member nor the program entry, because those
-/// receive arguments the analysis cannot observe.
+/// The members of every SCC eligible for known-argument analysis: recursive, and containing neither an escaping member nor the program entry, because those receive arguments the analysis cannot observe.
 pub(super) fn eligible_sccs(module: &CpsModule, analysis: &CallAnalysis) -> Vec<Vec<CpsFunId>> {
     analysis
         .sccs
@@ -108,8 +95,7 @@ pub(super) fn eligible_sccs(module: &CpsModule, analysis: &CallAnalysis) -> Vec<
         .cloned()
         .collect()
 }
-/// Run the monotone `Unknown < Known < Conflict` join to a fixpoint over the
-/// given parameter positions and call constraints.
+/// Run the monotone `Unknown < Known < Conflict` join to a fixpoint over the given parameter positions and call constraints.
 pub(super) fn invariant_fixpoint(
     params_of: &BTreeMap<CpsFunId, Vec<CpsValueId>>,
     constraints: &[(CpsFunId, Vec<CpsAtom>)],
@@ -157,17 +143,9 @@ pub(super) fn useful_knowns(
     }
     result
 }
-/// Specialize a recursive SCC for one external call context whose known
-/// arguments the module-wide analysis cannot use because other callers disagree.
+/// Specialize a recursive SCC for one external call context whose known arguments the module-wide analysis cannot use because other callers disagree.
 ///
-/// The SCC is cloned verbatim and the disagreeing call site (with any siblings
-/// passing the same arguments) is repointed to the private copy. The clone then
-/// has a single agreeing external caller, so the ordinary invariant-known
-/// propagation folds those arguments in place on a later iteration while the
-/// original stays polymorphic for its other callers. At most `SCC_CLONE_LIMIT`
-/// clones are made per module and only SCCs within `SCC_CLONE_NODE_LIMIT` live
-/// nodes are cloned. One clone is performed per call so the outer fixpoint stays
-/// deterministic.
+/// The SCC is cloned verbatim and the disagreeing call site (with any siblings passing the same arguments) is repointed to the private copy. The clone then has a single agreeing external caller, so the ordinary invariant-known propagation folds those arguments in place on a later iteration while the original stays polymorphic for its other callers. At most `SCC_CLONE_LIMIT` clones are made per module and only SCCs within `SCC_CLONE_NODE_LIMIT` live nodes are cloned. One clone is performed per call so the outer fixpoint stays deterministic.
 pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
@@ -214,8 +192,7 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
             }
         }
 
-        // Find the first external context that unlocks a known the module-wide
-        // analysis could not, in deterministic call-site order.
+        // Find the first external context that unlocks a known the module-wide analysis could not, in deterministic call-site order.
         let mut chosen: Option<(CpsFunId, Vec<CpsAtom>)> = None;
         for (_, callee, args) in &external {
             let mut constraints = internal.clone();
@@ -254,18 +231,7 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
     }
     false
 }
-/// SpecConstr-style call-pattern specialization. When a known-callee call passes
-/// a statically-known tagged tuple into a parameter the callee deconstructs,
-/// clone the callee with that constructor rebuilt at its entry so the existing
-/// aggregate-projection and known-switch simplifications collapse the
-/// deconstruction on a later iteration. The constructor's dynamic fields are
-/// threaded as fresh parameters (a worker/wrapper rebuild) and the clone's
-/// recursive self-calls fall back to the general function, so it peels the one
-/// matched level rather than assuming the recursion stays in pattern. Every call
-/// sharing the `(callee, index, tag, arity)` pattern repoints to the single
-/// clone, so equivalent sites specialize once. Bounded by
-/// `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide
-/// clone-count `budget`.
+/// SpecConstr-style call-pattern specialization. When a known-callee call passes a statically-known tagged tuple into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity)` pattern repoints to the single clone, so equivalent sites specialize once. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
@@ -275,10 +241,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         return false;
     }
 
-    // The first specializable pattern in deterministic (node, then argument)
-    // order: a known-callee call whose argument is a known tagged tuple that the
-    // callee deconstructs, whose callee has a lexical `LetFun` owner and a
-    // clonable body within the growth budget.
+    // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a known tagged tuple that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
     let mut chosen: Option<(CpsFunId, usize, u32, usize)> = None;
     'search: for node in module.nodes.iter().flatten() {
         let CpsNode::ApplyFun {
@@ -333,8 +296,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     };
     let clone = clones[&callee];
 
-    // Peel: the clone recurses into the general function, not itself, so a
-    // recursive call that does not carry the matched constructor stays valid.
+    // Peel: the clone recurses into the general function, not itself, so a recursive call that does not carry the matched constructor stays valid.
     for node_id in function_nodes(module, clone) {
         let node = module.nodes[node_id.index()].as_mut().unwrap();
         if let CpsNode::ApplyFun {
@@ -354,8 +316,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         });
     }
 
-    // Rebuild the constructor at the clone entry, threading its dynamic fields as
-    // fresh parameters in place of the specialized parameter.
+    // Rebuild the constructor at the clone entry, threading its dynamic fields as fresh parameters in place of the specialized parameter.
     let clone_function = module.function(clone).unwrap();
     let mut params = clone_function.params.clone();
     let clone_body = clone_function.body;
@@ -381,8 +342,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         functions.push(clone);
     }
 
-    // Repoint every call sharing the pattern to the single clone, splicing each
-    // site's own constructor fields in place of the tuple argument.
+    // Repoint every call sharing the pattern to the single clone, splicing each site's own constructor fields in place of the tuple argument.
     for node_id in 0..module.nodes.len() {
         let Some(CpsNode::ApplyFun {
             callee: CpsCallee::Known(target),
@@ -420,9 +380,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     *budget -= 1;
     true
 }
-/// The `LetValue`-bound tagged tuples: values whose defining expression is a
-/// tuple whose first field is a `Nat` literal tag. These are the constructor
-/// call patterns branch specialization can bake into a callee.
+/// The `LetValue`-bound tagged tuples: values whose defining expression is a tuple whose first field is a `Nat` literal tag. These are the constructor call patterns branch specialization can bake into a callee.
 pub(super) fn tagged_tuple_values(module: &CpsModule) -> BTreeMap<CpsValueId, (u32, Vec<CpsAtom>)> {
     let mut result = BTreeMap::new();
     for node in module.nodes.iter().flatten() {
@@ -438,9 +396,7 @@ pub(super) fn tagged_tuple_values(module: &CpsModule) -> BTreeMap<CpsValueId, (u
     }
     result
 }
-/// Whether `function` projects a field out of `param`, i.e. contains a `TplGet`
-/// on it. This is the profitability gate: baking a known tuple into a parameter
-/// only pays off when the body actually deconstructs it.
+/// Whether `function` projects a field out of `param`, i.e. contains a `TplGet` on it. This is the profitability gate: baking a known tuple into a parameter only pays off when the body actually deconstructs it.
 pub(super) fn deconstructs_param(
     module: &CpsModule,
     function: CpsFunId,
@@ -457,8 +413,7 @@ pub(super) fn deconstructs_param(
         )
     })
 }
-/// The literal results of `LetValue` bindings, used to resolve caller values
-/// already known to be constant.
+/// The literal results of `LetValue` bindings, used to resolve caller values already known to be constant.
 pub(super) fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
     let mut literals = BTreeMap::new();
     for node in module.nodes.iter().flatten() {
@@ -473,9 +428,7 @@ pub(super) fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsA
     }
     literals
 }
-/// The single `LetFun` node introducing every member, or `None` if the members
-/// are split across nodes or introduced by a `RecInit` knot. The clones are
-/// added to this node so they share the members' lexical scope.
+/// The single `LetFun` node introducing every member, or `None` if the members are split across nodes or introduced by a `RecInit` knot. The clones are added to this node so they share the members' lexical scope.
 pub(super) fn introducing_letfun(
     module: &CpsModule,
     members: &BTreeSet<CpsFunId>,
@@ -490,12 +443,7 @@ pub(super) fn introducing_letfun(
     }
     None
 }
-/// Verbatim-clone every member of an SCC into fresh functions with fresh return
-/// continuations, local continuations, owned values, and nodes. Internal
-/// known-callee edges and return continuations are rewired to the clones while
-/// free values, external callees, and external continuations are shared. Returns
-/// the old-to-new function map, or `None` if a member body nests a function
-/// definition, which this verbatim clone does not reproduce.
+/// Verbatim-clone every member of an SCC into fresh functions with fresh return continuations, local continuations, owned values, and nodes. Internal known-callee edges and return continuations are rewired to the clones while free values, external callees, and external continuations are shared. Returns the old-to-new function map, or `None` if a member body nests a function definition, which this verbatim clone does not reproduce.
 pub(super) fn clone_scc(
     module: &mut CpsModule,
     members: &BTreeSet<CpsFunId>,
@@ -533,8 +481,7 @@ pub(super) fn clone_scc(
         .map(|&id| (id, module.continuation(id).unwrap().clone()))
         .collect();
 
-    // Mint fresh owned values: member params, let-bound results, local
-    // continuation parameters. Values defined outside the SCC are shared.
+    // Mint fresh owned values: member params, let-bound results, local continuation parameters. Values defined outside the SCC are shared.
     let mut values: BTreeMap<CpsValueId, CpsValueId> = BTreeMap::new();
     let mut owned: Vec<CpsValueId> = Vec::new();
     for def in member_defs.values() {

@@ -60,9 +60,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     pub(crate) fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
             &EmissionData::Nat(value) => {
-                // A folded u32 value the i31 carrier cannot box traps at its
-                // materialization point — the same backend boundary where the
-                // checked runtime computation of the value would have trapped.
+                // A folded u32 value the i31 carrier cannot box traps at its materialization point — the same backend boundary where the checked runtime computation of the value would have trapped.
                 if value >> 31 != 0 {
                     self.emit_instrs([curios_wasm::Instr::Unreachable]);
                     return;
@@ -76,10 +74,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 ])
             }
             &EmissionData::Int(value) => {
-                // In-range iff bit 30 agrees with the sign bit — the signed
-                // analogue of the `Nat` check above; out of range traps at the
-                // materialization point instead of silently wrapping to 31
-                // bits.
+                // In-range iff bit 30 agrees with the sign bit — the signed analogue of the `Nat` check above; out of range traps at the materialization point instead of silently wrapping to 31 bits.
                 if value >> 30 != value >> 31 {
                     self.emit_instrs([curios_wasm::Instr::Unreachable]);
                     return;
@@ -246,9 +241,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Allocate a fresh wasm local for `value_name` and record it in the current frame, so
-    /// subsequent `find_local` lookups resolve to it. Called at the point a name is introduced
-    /// — a shell or a fresh value — never for a fill, whose local its shell already owns.
+    /// Allocate a fresh wasm local for `value_name` and record it in the current frame, so subsequent `find_local` lookups resolve to it. Called at the point a name is introduced — a shell or a fresh value — never for a fill, whose local its shell already owns.
     fn declare_local(&mut self, value_name: &'a EmissionValueName) {
         let local_name = self
             .context
@@ -270,11 +263,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_let_values(&mut self, values: &'a [(EmissionValueName, EmissionValue)]) {
         for (value_name, value) in values {
-            // An acyclic aggregate has no back-edge, so every field is already bound: build it
-            // directly with a single `struct.new` / `array.new_fixed` (via `emit_data`). Only a
-            // shell'd closure shell — a recursive capture reusing its own local — takes the
-            // `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never
-            // shell'd (cyclic ones are rejected in `into_cont`), so they always build directly.
+            // An acyclic aggregate has no back-edge, so every field is already bound: build it directly with a single `struct.new` / `array.new_fixed` (via `emit_data`). Only a shell'd closure shell — a recursive capture reusing its own local — takes the `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never shell'd (cyclic ones are rejected in `into_cont`), so they always build directly.
             match value {
                 EmissionValue::Pure(value @ (EmissionData::Lst(_) | EmissionData::Tpl(_))) => {
                     self.declare_local(value_name);
@@ -300,10 +289,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Emit one region: its bindings, then its blocks laid out as a structured
-    /// nesting of `loop`, forward `block`, and localized-dispatcher scopes
-    /// derived from the region's control-flow analysis ([`region_layout`]).
-    /// Enters a frame the caller is responsible for leaving.
+    /// Emit one region: its bindings, then its blocks laid out as a structured nesting of `loop`, forward `block`, and localized-dispatcher scopes derived from the region's control-flow analysis ([`region_layout`]). Enters a frame the caller is responsible for leaving.
     fn emit_region(
         &mut self,
         params: HashMap<&'a EmissionValueName, LocalData>,
@@ -311,8 +297,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     ) {
         let shells = region.shells.iter().map(|(name, _)| name).collect();
 
-        // A region with no join blocks is straight-line code ending in its tail;
-        // there is nothing to structure.
+        // A region with no join blocks is straight-line code ending in its tail; there is nothing to structure.
         if region.blocks.is_empty() {
             self.context.enter_frame(Frame::new(params, shells, vec![]));
             self.emit_shells(&region.shells);
@@ -327,24 +312,20 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         let mut dispatch = BTreeMap::new();
         self.collect_dispatch(&layout, region, &mut dispatch);
 
-        // The region frame registers the forward-entry block of every top-level
-        // item, so the tail and earlier items resolve their forward branches.
+        // The region frame registers the forward-entry block of every top-level item, so the tail and earlier items resolve their forward branches.
         let registrations = scope_registrations(&layout, region, &block_params, &dispatch);
         self.context
             .enter_frame(Frame::new(params, shells, registrations));
         self.emit_shells(&region.shells);
         self.emit_let_values(&region.values);
 
-        // The tail is the innermost code: every block wraps it, so the tail can
-        // branch forward to any of them.
+        // The tail is the innermost code: every block wraps it, so the tail can branch forward to any of them.
         let entry = self.context.tail_instrs(&region.tail);
         let body = self.fold_items(entry, &layout, region, &block_params, &dispatch);
         self.emit_instrs(body);
     }
 
-    /// Reserve one wasm local per block parameter, keyed by block index. A
-    /// branch binds these before jumping and the block body reads them, so a
-    /// block referenced from more than one scope shares the same locals.
+    /// Reserve one wasm local per block parameter, keyed by block index. A branch binds these before jumping and the block body reads them, so a block referenced from more than one scope shares the same locals.
     fn block_param_locals(
         &mut self,
         region: &'a EmissionBody,
@@ -367,10 +348,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .collect()
     }
 
-    /// Allocate a dispatcher plan — its index local, enter and loop labels, and
-    /// per-member indices — for every irreducible component in the layout,
-    /// keyed by its least member. Recurses through loops so nested dispatchers
-    /// are covered too.
+    /// Allocate a dispatcher plan — its index local, enter and loop labels, and per-member indices — for every irreducible component in the layout, keyed by its least member. Recurses through loops so nested dispatchers are covered too.
     fn collect_dispatch(
         &mut self,
         items: &[LayoutItem],
@@ -409,10 +387,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Fold each item's body around `entry`, wrapping every item in a forward
-    /// `block` labeled by its entry point. Because the items are in a
-    /// topological order, item `i` is nested inside every later item, so a
-    /// forward branch to a later item exits outward as a plain `br`.
+    /// Fold each item's body around `entry`, wrapping every item in a forward `block` labeled by its entry point. Because the items are in a topological order, item `i` is nested inside every later item, so a forward branch to a later item exits outward as a plain `br`.
     fn fold_items(
         &mut self,
         entry: Vec<curios_wasm::Instr>,
@@ -436,8 +411,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         result
     }
 
-    /// Emit one layout item's body: a plain block's code, a `loop` around a
-    /// reducible component's interior, or a localized dispatcher.
+    /// Emit one layout item's body: a plain block's code, a `loop` around a reducible component's interior, or a localized dispatcher.
     fn emit_item(
         &mut self,
         item: &LayoutItem,
@@ -462,9 +436,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     "a loop layout leads with its header block",
                 );
 
-                // The loop frame shadows the header's forward-entry registration
-                // with the loop label, so back edges resolve to `br $loop`, and
-                // registers the interior's own forward-entry blocks.
+                // The loop frame shadows the header's forward-entry registration with the loop label, so back edges resolve to `br $loop`, and registers the interior's own forward-entry blocks.
                 let mut registrations = vec![(
                     &region.blocks[*header].0,
                     BlockData::new_loop(loop_label.clone(), block_params[*header].clone()),
@@ -494,10 +466,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Emit a localized dispatcher for an irreducible component: a `loop` whose
-    /// `br_table` selects a member by index, each member wrapped in its own
-    /// block. Entries from outside set the index and fall into the loop; cross
-    /// edges inside set the index and branch back to the loop.
+    /// Emit a localized dispatcher for an irreducible component: a `loop` whose `br_table` selects a member by index, each member wrapped in its own block. Entries from outside set the index and fall into the loop; cross edges inside set the index and branch back to the loop.
     fn emit_dispatch(
         &mut self,
         members: &[usize],
@@ -507,8 +476,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     ) -> Vec<curios_wasm::Instr> {
         let plan = &dispatch[&members[0]];
 
-        // Inside the dispatcher a member is reached by branching to the loop
-        // with its index set.
+        // Inside the dispatcher a member is reached by branching to the loop with its index set.
         let registrations = members
             .iter()
             .map(|member| {
@@ -543,8 +511,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .iter()
             .map(|(label, _)| label.clone())
             .collect::<Vec<_>>();
-        // The indices are always in range, so the default is never taken; the
-        // first member's label is a valid, enclosing target for it.
+        // The indices are always in range, so the default is never taken; the first member's label is a valid, enclosing target for it.
         let default = member_labels[0].clone();
         let inner = vec![
             curios_wasm::Instr::LocalGet {
@@ -584,9 +551,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 }
 
-/// A localized dispatcher's shared state: the index local read by its
-/// `br_table`, the label a cross edge branches to and the label an outside
-/// entry falls in through, and each member's dispatch index.
+/// A localized dispatcher's shared state: the index local read by its `br_table`, the label a cross edge branches to and the label an outside entry falls in through, and each member's dispatch index.
 struct DispatchPlan {
     enter_label: curios_wasm::LabelName,
     dispatch_label: curios_wasm::LabelName,
@@ -594,9 +559,7 @@ struct DispatchPlan {
     index_of: BTreeMap<usize, usize>,
 }
 
-/// The forward-entry registrations for a scope's items: a plain block or a
-/// loop's header enter as a forward `block`, and every member of an irreducible
-/// component enters through its dispatcher.
+/// The forward-entry registrations for a scope's items: a plain block or a loop's header enter as a forward `block`, and every member of an irreducible component enters through its dispatcher.
 fn scope_registrations<'a>(
     items: &[LayoutItem],
     region: &'a EmissionBody,
@@ -634,9 +597,7 @@ fn scope_registrations<'a>(
     registrations
 }
 
-/// The label a forward branch to an item enters through: a block or loop enters
-/// at its header's own label; an irreducible component through its dispatcher's
-/// enter block.
+/// The label a forward branch to an item enters through: a block or loop enters at its header's own label; an irreducible component through its dispatcher's enter block.
 fn item_enter_label(
     item: &LayoutItem,
     region: &EmissionBody,

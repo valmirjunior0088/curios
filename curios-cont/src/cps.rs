@@ -1,11 +1,6 @@
 //! Arena-backed high CPS.
 //!
-//! The surface of this module is intentionally small: Ersd lowering constructs a
-//! [`CpsModule`], the optimizer mutates that graph through its checked mutation API,
-//! and backend lowering consumes it. Stable integer identities, tombstoned arena
-//! entries, and deterministic traversal are representation invariants rather than
-//! optimizer conventions. Use information is derived on demand (see
-//! [`CpsModule::value_use_counts`]) rather than maintained as a shadow arena.
+//! The surface of this module is intentionally small: Ersd lowering constructs a [`CpsModule`], the optimizer mutates that graph through its checked mutation API, and backend lowering consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`CpsModule::value_use_counts`]) rather than maintained as a shadow arena.
 
 use {
     curios_abi::ForeignFunction,
@@ -17,8 +12,7 @@ use {
     },
 };
 
-// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm`
-// — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
 id!(CpsNodeId, "~n");
 id!(CpsValueId, "~v");
 id!(CpsFunId, "~f");
@@ -52,8 +46,7 @@ pub enum CpsValueExpr {
     Tuple(Vec<CpsAtom>),
 }
 
-/// Primitive identity without operands. Operand order and arity live on the
-/// surrounding `LetPrim`, so every analysis sees one uniform operand vector.
+/// Primitive identity without operands. Operand order and arity live on the surrounding `LetPrim`, so every analysis sees one uniform operand vector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CpsPrimOp {
     NatEql,
@@ -290,10 +283,7 @@ impl CpsCellOp {
     }
 }
 
-/// A call-like intrinsic. `LstMap` takes the list then the mapper — the
-/// carrier-first order of the whole sequence family, matched by the erased
-/// representation so the lowering transcribes without reordering — and runs
-/// the mapper once per element, in order.
+/// A call-like intrinsic. `LstMap` takes the list then the mapper — the carrier-first order of the whole sequence family, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpsIntrinsicOp {
     LstMap,
@@ -396,8 +386,7 @@ impl fmt::Display for CpsVerifyError {
 
 impl std::error::Error for CpsVerifyError {}
 
-/// The production Cont representation. Arena slots never move or get reused;
-/// deletion writes `None` and deterministic compaction is explicit.
+/// The production Cont representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
 #[derive(Debug, Clone, Default)]
 pub struct CpsModule {
     nodes: Vec<Option<CpsNode>>,
@@ -448,11 +437,7 @@ impl CpsModule {
         self.continuations.get(id.index()).and_then(Option::as_ref)
     }
 
-    /// Count, per value, how many times it is referenced across the module.
-    /// A value's use sites are its operand occurrences plus its use as an
-    /// indirect callee; definitions (`LetValue`/`LetPrim` results, parameters)
-    /// are not uses, so an unreferenced value is absent from the map. Derived on
-    /// demand rather than maintained incrementally.
+    /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetPrim` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
     pub(crate) fn value_use_counts(&self) -> BTreeMap<CpsValueId, usize> {
         let mut counts = BTreeMap::new();
         for node in self.nodes.iter().flatten() {
@@ -1332,9 +1317,7 @@ impl fmt::Display for CpsModule {
     }
 }
 
-/// Render a parameter list, spelling each binder's source hint as `$name` — the
-/// definition-site form that matches function names and the wasm scheme, so a
-/// value's origin is legible where it is bound. A binder with no hint prints bare.
+/// Render a parameter list, spelling each binder's source hint as `$name` — the definition-site form that matches function names and the wasm scheme, so a value's origin is legible where it is bound. A binder with no hint prints bare.
 fn params(module: &CpsModule, f: &mut fmt::Formatter<'_>, params: &[CpsValueId]) -> fmt::Result {
     for (index, &param) in params.iter().enumerate() {
         if index != 0 {

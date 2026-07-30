@@ -1,17 +1,8 @@
 //! Explicit control-flow structuring over a region's sibling blocks.
 //!
-//! An [`EmissionBody`] region is a straight-line prologue ending in a single
-//! [`EmissionTail`] transfer, plus a flat set of labeled join blocks its
-//! branches enter. The emitter must recover structured Wasm control flow —
-//! `block`/`loop`/`br`/`br_table` nesting — from that flat set. This module
-//! computes the analysis that recovery rests on: the region's control-flow
-//! graph over a virtual entry node and its blocks, its strongly connected
-//! components (the loop forest), and the reducibility of each component. From
-//! those it derives a [`region_layout`] — the loop, forward-block, and
-//! localized-dispatcher nesting the emitter walks.
+//! An [`EmissionBody`] region is a straight-line prologue ending in a single [`EmissionTail`] transfer, plus a flat set of labeled join blocks its branches enter. The emitter must recover structured Wasm control flow — `block`/`loop`/`br`/`br_table` nesting — from that flat set. This module computes the analysis that recovery rests on: the region's control-flow graph over a virtual entry node and its blocks, its strongly connected components (the loop forest), and the reducibility of each component. From those it derives a [`region_layout`] — the loop, forward-block, and localized-dispatcher nesting the emitter walks.
 //!
-//! Every routine is iterative and orders its output by node index, so the
-//! layout is deterministic and stack-safe regardless of block count.
+//! Every routine is iterative and orders its output by node index, so the layout is deterministic and stack-safe regardless of block count.
 
 use {
     super::{
@@ -20,11 +11,7 @@ use {
     std::collections::{HashMap, HashSet},
 };
 
-/// The control-flow graph of one region over its sibling blocks plus a virtual
-/// entry node. Blocks are numbered by their position in `region.blocks`; the
-/// entry node — the region's prologue and tail transfer — is numbered one past
-/// the last block. The entry has no predecessors and is the root every block is
-/// reached from.
+/// The control-flow graph of one region over its sibling blocks plus a virtual entry node. Blocks are numbered by their position in `region.blocks`; the entry node — the region's prologue and tail transfer — is numbered one past the last block. The entry has no predecessors and is the root every block is reached from.
 #[derive(Debug)]
 pub(crate) struct RegionCfg {
     blocks: usize,
@@ -41,15 +28,12 @@ impl RegionCfg {
             .iter()
             .enumerate()
             .map(|(i, (name, _))| (name, i))
-            // Keyed on a block name purely to look its position up; nothing
-            // iterates it, so no name ordering reaches the emitted module.
+            // Keyed on a block name purely to look its position up; nothing iterates it, so no name ordering reaches the emitted module.
             .collect::<HashMap<_, _>>();
 
         let mut succ = vec![Vec::new(); blocks + 1];
 
-        // The entry node branches wherever the region's own tail transfers —
-        // never recursing into the blocks, which are separate nodes. A match
-        // may name one block from several arms; keep one edge, ordered.
+        // The entry node branches wherever the region's own tail transfers — never recursing into the blocks, which are separate nodes. A match may name one block from several arms; keep one edge, ordered.
         let mut entry_targets = tail_targets(&region.tail)
             .into_iter()
             .filter_map(|name| index.get(name).copied())
@@ -58,11 +42,7 @@ impl RegionCfg {
         entry_targets.dedup();
         succ[entry] = entry_targets;
 
-        // A block branches to a sibling whenever the block's region — through
-        // any of its own nested blocks — transfers there. One walk per block
-        // collects every transferred-to name; mapping through the sibling
-        // index and sorting keeps each successor list sorted and
-        // duplicate-free (the set already deduplicates).
+        // A block branches to a sibling whenever the block's region — through any of its own nested blocks — transfers there. One walk per block collects every transferred-to name; mapping through the sibling index and sorting keeps each successor list sorted and duplicate-free (the set already deduplicates).
         for (source, (_, block)) in region.blocks.iter().enumerate() {
             let mut names = HashSet::new();
             collect_region_targets(&block.region, &mut names);
@@ -98,10 +78,7 @@ impl RegionCfg {
         &self.succ[node]
     }
 
-    /// The entry nodes of a cyclic component: members reached by an edge from
-    /// outside the component. A single-node component with a self-loop has one
-    /// entry (itself); a component with two or more entries is irreducible and
-    /// only a localized dispatcher can structure it.
+    /// The entry nodes of a cyclic component: members reached by an edge from outside the component. A single-node component with a self-loop has one entry (itself); a component with two or more entries is irreducible and only a localized dispatcher can structure it.
     fn component_entries(&self, component: &[usize]) -> Vec<usize> {
         let member = |node: usize| component.binary_search(&node).is_ok();
         component
@@ -112,12 +89,10 @@ impl RegionCfg {
     }
 }
 
-/// Undefined-node sentinel for Tarjan state. `node_count()` never approaches
-/// `usize::MAX`, so it can never collide with a real node.
+/// Undefined-node sentinel for Tarjan state. `node_count()` never approaches `usize::MAX`, so it can never collide with a real node.
 const NONE: usize = usize::MAX;
 
-/// The blocks a single tail transfers to directly, in source order — not
-/// recursing into any nested region.
+/// The blocks a single tail transfers to directly, in source order — not recursing into any nested region.
 fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
     match tail {
         EmissionTail::Jump(target) => vec![&target.target],
@@ -137,10 +112,7 @@ fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
     }
 }
 
-/// Every block name `region`, or any region nested inside its blocks,
-/// branches into — the sibling-level edge oracle, collected in one traversal:
-/// a branch from deep inside a block to a sibling is an edge between those
-/// two blocks.
+/// Every block name `region`, or any region nested inside its blocks, branches into — the sibling-level edge oracle, collected in one traversal: a branch from deep inside a block to a sibling is an edge between those two blocks.
 fn collect_region_targets<'a>(region: &'a EmissionBody, out: &mut HashSet<&'a EmissionBlockName>) {
     out.extend(tail_targets(&region.tail));
     for (_, block) in &region.blocks {
@@ -148,43 +120,28 @@ fn collect_region_targets<'a>(region: &'a EmissionBody, out: &mut HashSet<&'a Em
     }
 }
 
-/// The structured layout of a region's blocks: an ordered nesting of `loop`,
-/// forward `block`, and localized-dispatcher scopes the emitter walks to place
-/// each block. Items at one level are already in a topological order of the
-/// condensation, so a forward branch to a later item's entry is a forward `br`
-/// out of the enclosing scopes.
+/// The structured layout of a region's blocks: an ordered nesting of `loop`, forward `block`, and localized-dispatcher scopes the emitter walks to place each block. Items at one level are already in a topological order of the condensation, so a forward branch to a later item's entry is a forward `br` out of the enclosing scopes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum LayoutItem {
-    /// A block reached only by forward edges at this level: emit its body, enter
-    /// it by a forward branch to its own label.
+    /// A block reached only by forward edges at this level: emit its body, enter it by a forward branch to its own label.
     Block(usize),
-    /// A reducible loop with a single entry `header`. `body` structures the
-    /// component's interior with the back edges to `header` removed, so the
-    /// header leads and any nested loop nests inside. Back edges become a branch
-    /// to the loop label; forward entry falls into the loop.
+    /// A reducible loop with a single entry `header`. `body` structures the component's interior with the back edges to `header` removed, so the header leads and any nested loop nests inside. Back edges become a branch to the loop label; forward entry falls into the loop.
     Loop {
         header: usize,
         body: Vec<LayoutItem>,
     },
-    /// An irreducible or multi-entry component structured by a localized
-    /// `br_table` dispatcher over its `members`, each a possible entry.
+    /// An irreducible or multi-entry component structured by a localized `br_table` dispatcher over its `members`, each a possible entry.
     Dispatch { members: Vec<usize> },
 }
 
-/// Structure a region's blocks into a [`LayoutItem`] nesting driven entirely by
-/// the control-flow analysis: strongly connected components give the loop
-/// hierarchy, single-entry components become `loop`s, and only genuinely
-/// irreducible components fall back to a localized dispatcher.
+/// Structure a region's blocks into a [`LayoutItem`] nesting driven entirely by the control-flow analysis: strongly connected components give the loop hierarchy, single-entry components become `loop`s, and only genuinely irreducible components fall back to a localized dispatcher.
 pub(crate) fn region_layout(region: &EmissionBody) -> Vec<LayoutItem> {
     let cfg = RegionCfg::new(region);
     let all = (0..cfg.block_count()).collect();
     structure_set(&cfg, &all, &std::collections::BTreeSet::new())
 }
 
-/// A view of the region CFG restricted to `nodes`, with every edge *into* a
-/// `suppressed` node removed. Suppressing a loop header's incoming edges turns
-/// its back edges into non-edges, exposing the interior — nested loops and the
-/// header itself — as a smaller acyclic-or-cyclic graph to structure.
+/// A view of the region CFG restricted to `nodes`, with every edge *into* a `suppressed` node removed. Suppressing a loop header's incoming edges turns its back edges into non-edges, exposing the interior — nested loops and the header itself — as a smaller acyclic-or-cyclic graph to structure.
 struct Subgraph<'a> {
     cfg: &'a RegionCfg,
     nodes: &'a std::collections::BTreeSet<usize>,
@@ -200,9 +157,7 @@ impl Subgraph<'_> {
             .filter(|target| self.nodes.contains(target) && !self.suppressed.contains(target))
     }
 
-    /// Strongly connected components within the subgraph, by iterative Tarjan.
-    /// Roots are taken in ascending order and members sorted, so both the
-    /// components and their order are deterministic.
+    /// Strongly connected components within the subgraph, by iterative Tarjan. Roots are taken in ascending order and members sorted, so both the components and their order are deterministic.
     fn components(&self) -> Vec<Vec<usize>> {
         let bound = self.cfg.node_count();
         let mut index = vec![NONE; bound];
@@ -266,9 +221,7 @@ impl Subgraph<'_> {
         components
     }
 
-    /// The components in a deterministic topological order of the condensation
-    /// (Kahn, smallest-least-member first), so every cross-component edge points
-    /// from an earlier item to a later one.
+    /// The components in a deterministic topological order of the condensation (Kahn, smallest-least-member first), so every cross-component edge points from an earlier item to a later one.
     fn condensation_order(&self, components: &[Vec<usize>]) -> Vec<usize> {
         let mut of = vec![NONE; self.cfg.node_count()];
         for (position, members) in components.iter().enumerate() {
@@ -331,8 +284,7 @@ fn structure_set(
 
         let entries = cfg.component_entries(component);
         if let [header] = entries.as_slice() {
-            // A reducible loop: structure its interior with the header's back
-            // edges removed, so the header leads and nested loops nest inside.
+            // A reducible loop: structure its interior with the header's back edges removed, so the header leads and nested loops nest inside.
             let interior = component.iter().copied().collect();
             let mut inner_suppressed = suppressed.clone();
             inner_suppressed.insert(*header);
@@ -439,8 +391,7 @@ mod tests {
 
     #[test]
     fn component_entries_distinguish_reducible_from_irreducible() {
-        // A single-entry cycle (reducible) versus a two-entry cross-jump
-        // (irreducible), read off `component_entries` directly.
+        // A single-entry cycle (reducible) versus a two-entry cross-jump (irreducible), read off `component_entries` directly.
         let header = EmissionBlockName::from("header");
         let repeat = EmissionBlockName::from("repeat");
         let reducible = region(
@@ -480,8 +431,7 @@ mod tests {
         );
 
         let layout = region_layout(&region);
-        // Every block is a plain forward block; no loop, no dispatcher. The order
-        // is topological: branch, its two arms, then the join.
+        // Every block is a plain forward block; no loop, no dispatcher. The order is topological: branch, its two arms, then the join.
         assert_eq!(
             layout,
             vec![

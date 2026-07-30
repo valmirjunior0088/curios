@@ -13,20 +13,14 @@ pub(super) struct CallAnalysis {
     pub(super) recursive: BTreeSet<CpsFunId>,
     pub(super) sccs: SccAnalysis,
 }
-/// Function strongly-connected components of the known-callee call graph,
-/// computed at an explicit phase boundary. `SccId` is a dense index into
-/// `members`; each component lists its functions in `CpsFunId` order.
+/// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `CpsFunId` order.
 pub(super) type SccId = usize;
 #[derive(Default)]
 pub(super) struct SccAnalysis {
     pub(super) component_of: BTreeMap<CpsFunId, SccId>,
     pub(super) members: Vec<Vec<CpsFunId>>,
 }
-/// Deterministic iterative Tarjan over the known-callee call graph. Uses an
-/// explicit frame stack rather than recursion so it stays within the default
-/// test-thread stack on deep call graphs. Components are numbered in the order
-/// their roots pop, and members are sorted, so the output is a pure function of
-/// the graph.
+/// Deterministic iterative Tarjan over the known-callee call graph. Uses an explicit frame stack rather than recursion so it stays within the default test-thread stack on deep call graphs. Components are numbered in the order their roots pop, and members are sorted, so the output is a pure function of the graph.
 pub(super) fn analyze_sccs(call_graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) -> SccAnalysis {
     let mut analysis = SccAnalysis::default();
     let mut index_of: BTreeMap<CpsFunId, u32> = BTreeMap::new();
@@ -141,9 +135,7 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         }
     }
 
-    // A function is recursive exactly when it lies on a call cycle: it is in a
-    // multi-member SCC, or it is a singleton SCC with a self-edge. Deriving the
-    // set from the SCC phase keeps one source of truth for cyclicity.
+    // A function is recursive exactly when it lies on a call cycle: it is in a multi-member SCC, or it is a singleton SCC with a self-edge. Deriving the set from the SCC phase keeps one source of truth for cyclicity.
     let sccs = analyze_sccs(&analysis.call_graph);
     for (&function, &component) in &sccs.component_of {
         let multi_member = sccs.members[component].len() > 1;
@@ -177,10 +169,7 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
             } => {
                 work.push(*body);
                 for continuation in continuations.iter().rev() {
-                    // Tolerate a tombstoned continuation: an inline sweep can leave a
-                    // `LetCont` transiently referencing an inlined-away continuation
-                    // until its sweep-ending prune. That continuation's body is dead,
-                    // so skipping it is correct.
+                    // Tolerate a tombstoned continuation: an inline sweep can leave a `LetCont` transiently referencing an inlined-away continuation until its sweep-ending prune. That continuation's body is dead, so skipping it is correct.
                     if let Some(continuation) = module.continuation(*continuation) {
                         work.push(continuation.body);
                     }
@@ -308,9 +297,7 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
         record_known_literals(params, &inputs, &mut known);
     }
 
-    // Recursive members are skipped above because a self-forwarded argument
-    // pollutes the flat per-call join. Recover their provably-invariant known
-    // parameters with a dedicated SCC fixpoint and fold them in.
+    // Recursive members are skipped above because a self-forwarded argument pollutes the flat per-call join. Recover their provably-invariant known parameters with a dedicated SCC fixpoint and fold them in.
     let invariant = scc_invariant_knowns(module, &analysis, &known);
     known.extend(invariant);
 
@@ -332,10 +319,7 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
     }
     known
 }
-/// Resolve an argument atom to its lattice value: literals and function
-/// references are known; a value is a forwarded SCC parameter (its current
-/// class), a caller constant (`known_literals`), or otherwise an unobservable
-/// runtime value that forces `Conflict`.
+/// Resolve an argument atom to its lattice value: literals and function references are known; a value is a forwarded SCC parameter (its current class), a caller constant (`known_literals`), or otherwise an unobservable runtime value that forces `Conflict`.
 pub(super) fn resolve_atom(
     atom: &CpsAtom,
     class: &BTreeMap<CpsValueId, Knowledge>,

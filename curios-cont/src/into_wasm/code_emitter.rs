@@ -3,8 +3,7 @@ use {
     curios_base::Grain,
 };
 
-/// How a freshly-computed numeric value is boxed: an `i31ref` for `Nat`/`Int`/`Bool`
-/// results, or the `Flt` struct for `f32` results.
+/// How a freshly-computed numeric value is boxed: an `i31ref` for `Nat`/`Int`/`Bool` results, or the `Flt` struct for `f32` results.
 enum WrapAs {
     I31,
     Flt,
@@ -87,9 +86,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower an unsigned-`Nat` binary op that may overflow the i31 carrier:
-    /// apply `op`, trap (via the special label) if bit 31 of the result is set,
-    /// else box with `ref.i31` and store.
+    /// Lower an unsigned-`Nat` binary op that may overflow the i31 carrier: apply `op`, trap (via the special label) if bit 31 of the result is set, else box with `ref.i31` and store.
     fn emit_checked_nat_op(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -122,9 +119,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a signed-`Int` binary op that may overflow the i31 carrier: apply
-    /// `op`, trap (via the special label) if the result leaves the signed
-    /// 31-bit range, else box with `ref.i31` and store.
+    /// Lower a signed-`Int` binary op that may overflow the i31 carrier: apply `op`, trap (via the special label) if the result leaves the signed 31-bit range, else box with `ref.i31` and store.
     fn emit_checked_int_op(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -171,9 +166,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         }
     }
 
-    /// Concatenate two loaded ropes into `dest`: answer the other side when
-    /// one is empty (the runtime identity shortcuts keep chains of empty
-    /// seeds from deepening), else one O(1) node.
+    /// Concatenate two loaded ropes into `dest`: answer the other side when one is empty (the runtime identity shortcuts keep chains of empty seeds from deepening), else one O(1) node.
     fn concat_pair_instrs(
         &self,
         lhs: Vec<curios_wasm::Instr>,
@@ -232,9 +225,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         instrs
     }
 
-    /// Lower an n-ary rope concat: the empty case is an empty leaf, a single
-    /// operand is an alias, and longer runs fold pairs left-leaning through
-    /// `result_local` — n−1 nodes, no copying.
+    /// Lower an n-ary rope concat: the empty case is an empty leaf, a single operand is an alias, and longer runs fold pairs left-leaning through `result_local` — n−1 nodes, no copying.
     fn emit_rope_concat(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -270,8 +261,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     let rhs = self.context.load_value_instrs(operand, load.clone());
                     let pair = self.concat_pair_instrs(lhs, rhs, result_local, rope);
                     self.emit_instrs(pair);
-                    // Later pairs read the settled accumulator back out of
-                    // the result local.
+                    // Later pairs read the settled accumulator back out of the result local.
                     lhs = vec![
                         curios_wasm::Instr::LocalGet {
                             local_name: result_local.clone(),
@@ -288,8 +278,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         }
     }
 
-    /// Lower a rope append: a fresh one-element leaf on the right of one node.
-    /// The per-element builders (`Json` escaping, UTF-8 emit) are O(1)/step.
+    /// Lower a rope append: a fresh one-element leaf on the right of one node. The per-element builders (`Json` escaping, UTF-8 emit) are O(1)/step.
     fn emit_rope_append(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -325,9 +314,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a rope slice: one call to the shared `slice` helper — an O(1)
-    /// window (`view`) over the source, with the bounds trap and the
-    /// read-through invariant maintained inside the helper.
+    /// Lower a rope slice: one call to the shared `slice` helper — an O(1) window (`view`) over the source, with the bounds trap and the read-through invariant maintained inside the helper.
     fn emit_rope_slice(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -348,8 +335,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower one `EmissionCode` op into the current frame, writing its result into
-    /// `value_name`'s local.
+    /// Lower one `EmissionCode` op into the current frame, writing its result into `value_name`'s local.
     pub(crate) fn emit(&mut self, value_name: &'a EmissionValueName, op: &'a EmissionCode) {
         let result_local = self
             .context
@@ -382,8 +368,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32Add,
             ),
             EmissionCode::NatSub(left, right) => {
-                // Monus: 0 if left < right, else left - right.
-                // select [val1=0, val2=left-right, cond=left<right] returns val1 when cond != 0.
+                // Monus: 0 if left < right, else left - right. select [val1=0, val2=left-right, cond=left<right] returns val1 when cond != 0.
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
@@ -779,8 +764,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::F32Div,
                 WrapAs::Flt,
             ),
-            // WebAssembly has no `f32.rem`, so expand the C `fmod` definition
-            // `x - trunc(x / y) * y` inline (`x`/`y` are locals, loaded twice).
+            // WebAssembly has no `f32.rem`, so expand the C `fmod` definition `x - trunc(x / y) * y` inline (`x`/`y` are locals, loaded twice).
             EmissionCode::FltRem(left, right) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
@@ -917,9 +901,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::Flt,
             ),
             EmissionCode::NatToInt(operand) => {
-                // The conversion is a carrier-bit reinterpretation; a `Nat` at
-                // or above 2^30 has no signed-i31 representation, so it traps
-                // at the boundary rather than silently reloading negative.
+                // The conversion is a carrier-bit reinterpretation; a `Nat` at or above 2^30 has no signed-i31 representation, so it traps at the boundary rather than silently reloading negative.
                 let local_name = self.context.push_local(
                     "nat_to_int",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -950,10 +932,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::Flt,
             ),
             EmissionCode::IntToNat(operand) => {
-                // The conversion is a carrier-bit reinterpretation; a negative
-                // `Int` maps to a `Nat` at or above 2^31, which has no i31
-                // representation, so it traps at the boundary rather than
-                // silently dropping the sign bit.
+                // The conversion is a carrier-bit reinterpretation; a negative `Int` maps to a `Nat` at or above 2^31, which has no i31 representation, so it traps at the boundary rather than silently dropping the sign bit.
                 let local_name = self.context.push_local(
                     "int_to_nat",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -984,10 +963,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::Flt,
             ),
             EmissionCode::FltToLeBytes(operand) => {
-                // Reinterpret the f32 as its IEEE-754 bit pattern and split it into
-                // the four little-endian bytes. The `$bytes` payload is `i8`-packed, so
-                // `array.new_fixed` truncates each shifted i32 to its low byte --
-                // byte-for-byte `f32::to_le_bytes`, with no host round-trip.
+                // Reinterpret the f32 as its IEEE-754 bit pattern and split it into the four little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each shifted i32 to its low byte -- byte-for-byte `f32::to_le_bytes`, with no host round-trip.
                 let bits_local = self.context.push_local(
                     "flt_bits",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -1019,11 +995,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             EmissionCode::FltOfLeBytes(operand) => {
-                // The inverse of `FltToLeBytes`: trap (via the special label) unless
-                // the `Bin` is exactly 4 bytes, then OR the bytes back into an i32
-                // -- each `$bytes/read` zero-extends its packed byte -- and
-                // reinterpret. Byte-for-byte `f32::from_le_bytes`, no host
-                // round-trip.
+                // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 4 bytes, then OR the bytes back into an i32 -- each `$bytes/read` zero-extends its packed byte -- and reinterpret. Byte-for-byte `f32::from_le_bytes`, no host round-trip.
                 let rope = self.context.table().bin_rope();
                 let read = self.context.table().bytes_read_func();
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));

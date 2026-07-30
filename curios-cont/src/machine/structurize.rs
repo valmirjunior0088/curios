@@ -872,9 +872,7 @@ fn primitive(op: CpsPrimOp, args: Vec<EmissionValueName>) -> EmissionCode {
     }
 }
 
-/// Spell an emission entity as `{index}$hint`, or bare `{index}` when it carries
-/// no source hint. The `$` marks a user-origin name (the wasm scheme's convention),
-/// while the leading index is the uniquifier that actually carries identity.
+/// Spell an emission entity as `{index}$hint`, or bare `{index}` when it carries no source hint. The `$` marks a user-origin name (the wasm scheme's convention), while the leading index is the uniquifier that actually carries identity.
 fn hinted(index: usize, hint: Option<&str>) -> String {
     match hint {
         Some(hint) => format!("{index}${hint}"),

@@ -1,9 +1,6 @@
 //! Deterministic high-CPS canonicalization and propagation.
 //!
-//! The pipeline never keys on input names: every rewrite depends only on graph
-//! structure and the enforced budget constants below, so the same module always
-//! optimizes identically. Performance is investigated with revision worktrees and
-//! temporary instrumentation, never a permanent metrics API.
+//! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Performance is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
 #[cfg(test)]
 mod tests;
@@ -27,8 +24,7 @@ pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(super) const BRANCH_CLONE_LIMIT: usize = 64;
 
-/// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are
-/// rebuilt at deterministic boundaries instead of being kept as shadow state.
+/// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
 pub fn optimize(module: &mut CpsModule) {
     module
         .verify()

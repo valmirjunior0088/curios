@@ -1,11 +1,4 @@
-//! Backend lowering coverage: build a [`CpsModule`](crate::CpsModule) directly,
-//! lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the
-//! emitted wasm (its WAT text). These are the structural replacement for the
-//! deleted `curios/src/tests/codegen` fixtures — which built the old region API
-//! and *executed* the module — split per Cont v2 §3 into shape inspection here
-//! and end-to-end semantics in the native `.crs` corpus. `into_wasm` performs no
-//! optimization, so a `LetPrim` over literal operands lowers one-for-one without
-//! constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`CpsModule`](crate::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the structural replacement for the deleted `curios/src/tests/codegen` fixtures — which built the old region API and *executed* the module — split per Cont v2 §3 into shape inspection here and end-to-end semantics in the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetPrim` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use {
     crate::{
@@ -16,8 +9,7 @@ use {
     curios_base::{Grain, PackedBin},
 };
 
-/// The emitted module rendered as WAT text — the public inspection surface
-/// (`Module`'s items are private; `Display` is how consumers read it back).
+/// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
 fn wat(module: &CpsModule) -> String {
     into_wasm(module).to_string()
 }
@@ -36,10 +28,7 @@ fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
-/// Every `main` ends by diverging into `exit`, which the emitter follows
-/// with one `unreachable`. A trapping primitive adds another `unreachable` in
-/// its overflow/range guard, so the count distinguishes guarded ops from total
-/// ones without matching exact bytes.
+/// Every `main` ends by diverging into `exit`, which the emitter follows with one `unreachable`. A trapping primitive adds another `unreachable` in its overflow/range guard, so the count distinguishes guarded ops from total ones without matching exact bytes.
 #[track_caller]
 fn assert_traps(wat: &str) {
     assert!(
@@ -69,9 +58,7 @@ const fn flt(value: f32) -> CpsAtom {
     CpsAtom::Literal(CpsLiteral::Flt(value))
 }
 
-/// A nullary `main` that binds one primitive over `args` and exits with the
-/// result — the CPS analogue of the deleted fixtures' "compute one thing, exit
-/// with it". `into_wasm` does not fold, so the op lowers verbatim.
+/// A nullary `main` that binds one primitive over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.
 fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();
@@ -404,8 +391,7 @@ fn cell_new_and_get_use_the_cell_struct() {
 
 // --- Foreign ABI ----------------------------------------------------------
 
-/// A host call whose signature has `results` results, resuming into a
-/// continuation that binds them all and exits with the first.
+/// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
 fn foreign_call(name: &str) -> CpsModule {
     let function = host_ops()
         .get(name)
@@ -459,8 +445,7 @@ fn foreign_call_imports_and_invokes_the_host() {
 
 #[test]
 fn foreign_result_arity_shapes_the_resume() {
-    // A single scalar result forwards straight through; a multi-result row with
-    // a reference field embeds that field back into a rope before binding it.
+    // A single scalar result forwards straight through; a multi-result row with a reference field embeds that field back into a rope before binding it.
     let one = wat(&foreign_call("bind"));
     assert_contains(&one, "call $host/sys/bind");
     assert_absent(&one, "$bytes/embed");
@@ -472,8 +457,7 @@ fn foreign_result_arity_shapes_the_resume() {
 
 // --- Higher-order / closure ABI + module wiring ---------------------------
 
-/// `main` builds a closure of `target` and passes it to `apply`, which invokes
-/// it indirectly — an unknown callee that must go through the closure ABI.
+/// `main` builds a closure of `target` and passes it to `apply`, which invokes it indirectly — an unknown callee that must go through the closure ABI.
 fn indirect_apply() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();
@@ -638,9 +622,7 @@ fn list_read_calls_the_list_read_helper() {
     assert_contains(&wat(&list_read()), "call $lst/read");
 }
 
-/// Map a closure over a list literal — the `lst/map` intrinsic, which threads
-/// the mapping function through as a closure and services the fill via the
-/// shared helper.
+/// Map a closure over a list literal — the `lst/map` intrinsic, which threads the mapping function through as a closure and services the fill via the shared helper.
 fn list_map() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();
@@ -709,10 +691,7 @@ fn list_map_calls_the_map_helper() {
     assert_contains(&wat(&list_map()), "call $lst/map");
 }
 
-/// A long left-leaning chain of appends, each over the previous result — the
-/// compile-time analogue of the deleted deep-rope fixtures. Lowering must stay
-/// on the default test-thread stack (iterative, per `AGENTS.md`), so the only
-/// assertion that matters is that `into_wasm` returns at all.
+/// A long left-leaning chain of appends, each over the previous result — the compile-time analogue of the deleted deep-rope fixtures. Lowering must stay on the default test-thread stack (iterative, per `AGENTS.md`), so the only assertion that matters is that `into_wasm` returns at all.
 fn deep_bin_chain(depth: usize) -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();
@@ -797,9 +776,7 @@ fn reducible_loop() -> CpsModule {
     module
 }
 
-/// Two continuations that jump to each other, entered from *both* arms of a
-/// switch — a two-entry (irreducible) component that only a localized
-/// dispatcher can structure.
+/// Two continuations that jump to each other, entered from *both* arms of a switch — a two-entry (irreducible) component that only a localized dispatcher can structure.
 fn irreducible_pair() -> CpsModule {
     use std::collections::BTreeMap;
 

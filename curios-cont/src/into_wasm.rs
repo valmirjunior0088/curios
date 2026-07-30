@@ -156,9 +156,7 @@ pub(crate) enum EmissionCode {
     LstSlice(EmissionValueName, EmissionValueName, EmissionValueName),
     LstAppend(EmissionValueName, EmissionValueName),
     LstConcat(Vec<EmissionValueName>),
-    // `LstMap(src, f)`: map closure `f` over list `src` into a fresh list of
-    // the same length. Codegen lowers it to the shared `$lst/map` rope helper:
-    // one allocation, one fill loop applying `f` per slot via `call_ref`.
+    // `LstMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$lst/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_ref`.
     /// The list-map runtime helper call: list first, mapper second.
     LstMap(EmissionValueName, EmissionValueName),
     TplGet(EmissionValueName, usize),
@@ -208,16 +206,10 @@ pub(crate) enum EmissionCallTarget {
     },
 }
 
-/// A host-provided primitive in tail position. Returning foreign calls carry
-/// the block that receives their results; direct process termination does not.
-/// Purity analysis treats any `EmissionTail::Host` as the impure boundary of
-/// its enclosing region tree.
+/// A host-provided primitive in tail position. Returning foreign calls carry the block that receives their results; direct process termination does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionHostTarget {
-    /// A store-described host call: `function`'s `WireSignature` fixes the
-    /// operand order/types and the resume shape — `resume` takes one block
-    /// parameter per signature result (the multi-result records arrive as
-    /// parallel block parameters, exactly like the per-op variants did).
+    /// A store-described host call: `function`'s `WireSignature` fixes the operand order/types and the resume shape — `resume` takes one block parameter per signature result (the multi-result records arrive as parallel block parameters, exactly like the per-op variants did).
     ///
     Foreign {
         function: Arc<ForeignFunction>,
@@ -228,9 +220,7 @@ pub(crate) enum EmissionHostTarget {
     Exit { code: EmissionValueName },
 }
 
-/// A guest mutable-cell op in tail position. Same `resume` discipline as
-/// `EmissionHostTarget`, but serviced inline in codegen (no host import). Purity
-/// analysis treats any `EmissionTail::Cell` as an impure boundary, like `Host`.
+/// A guest mutable-cell op in tail position. Same `resume` discipline as `EmissionHostTarget`, but serviced inline in codegen (no host import). Purity analysis treats any `EmissionTail::Cell` as an impure boundary, like `Host`.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCellTarget {
     New {
@@ -272,9 +262,7 @@ pub(crate) enum EmissionTail {
 /// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — a [`EmissionValue`] binding never branches, which is what the optimizer's freedom to fold, dedupe, and reorder bindings rests on.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionBody {
-    /// Closure shells reserved before their captures are filled, so a self- or
-    /// mutually-recursive capture can name the shell. Only closures need this; cyclic
-    /// tuples/lists are rejected upstream (`into_cont`), which keeps `tpl`/`lst` immutable.
+    /// Closure shells reserved before their captures are filled, so a self- or mutually-recursive capture can name the shell. Only closures need this; cyclic tuples/lists are rejected upstream (`into_cont`), which keeps `tpl`/`lst` immutable.
     pub(crate) shells: Vec<(EmissionValueName, EmissionClosureName)>,
     pub(crate) values: Vec<(EmissionValueName, EmissionValue)>,
     pub(crate) blocks: Vec<(EmissionBlockName, EmissionBlock)>,
@@ -282,11 +270,7 @@ pub(crate) struct EmissionBody {
 }
 
 impl EmissionBody {
-    /// Collect the arity of every *indirect* call site in this region (and its nested blocks).
-    /// A closure of that arity is invoked here even when the optimizer has specialized its
-    /// definition away (a higher-order function's argument inlined, dropping the only closure
-    /// of that arity while a `call_ref` in its body survives), so a closure type for the arity
-    /// is needed even though no closure of it is defined.
+    /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_ref` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
     fn collect_indirect_arities(&self, out: &mut BTreeSet<usize>) {
         if let EmissionTail::Call(EmissionCallTarget::Indirect { params, .. }) = &self.tail {
             out.insert(params.len());
@@ -366,10 +350,7 @@ impl EmissionModule {
         self.funcs.push((func_name, func));
     }
 
-    /// Every closure arity the module needs closure types for: the arities of the surviving
-    /// closure definitions, unioned with the arities of indirect call sites (whose target
-    /// definition may have been inlined away). Sizing closure types from definitions alone
-    /// misses the latter, leaving a surviving `call_ref` with no declared type for its arity.
+    /// Every closure arity the module needs closure types for: the arities of the surviving closure definitions, unioned with the arities of indirect call sites (whose target definition may have been inlined away). Sizing closure types from definitions alone misses the latter, leaving a surviving `call_ref` with no declared type for its arity.
     pub(crate) fn clsr_arities(&self) -> BTreeSet<usize> {
         let mut arities = BTreeSet::new();
 
@@ -385,9 +366,7 @@ impl EmissionModule {
         arities
     }
 
-    /// The entrypoint function — the program's sole root: the value the host
-    /// invokes, the only export, and the seed of dead-code reachability. Recorded
-    /// here so passes consult the module instead of re-deriving a blessed name.
+    /// The entrypoint function — the program's sole root: the value the host invokes, the only export, and the seed of dead-code reachability. Recorded here so passes consult the module instead of re-deriving a blessed name.
     pub(crate) fn entry(&self) -> Option<&EmissionFunctionName> {
         self.entry.as_ref()
     }

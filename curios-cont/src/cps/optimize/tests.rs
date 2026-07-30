@@ -35,8 +35,7 @@ fn call_graph(edges: &[(u32, &[u32])]) -> BTreeMap<CpsFunId, BTreeSet<CpsFunId>>
 
 #[test]
 fn sccs_group_cycles_and_stay_deterministic() {
-    // 0 <-> 1 form a cycle; 1 -> 2 and 2 -> 2 leaves 2 a self-looping
-    // singleton; 3 is isolated.
+    // 0 <-> 1 form a cycle; 1 -> 2 and 2 -> 2 leaves 2 a self-looping singleton; 3 is isolated.
     let graph = call_graph(&[(0, &[1]), (1, &[0, 2]), (2, &[2]), (3, &[])]);
     let sccs = analyze_sccs(&graph);
 
@@ -69,8 +68,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
         ),
         Some(CpsLiteral::Nat(42))
     );
-    // The numeric law: the folder computes in exact u32; the i31 envelope is
-    // the backend's problem (an out-of-range literal traps at materialization).
+    // The numeric law: the folder computes in exact u32; the i31 envelope is the backend's problem (an out-of-range literal traps at materialization).
     assert_eq!(
         evaluate(
             CpsPrimOp::NatAdd,
@@ -639,9 +637,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
         },
     );
 
-    // loop(invariant, counter): the recursive call forwards `invariant`
-    // unchanged and replaces `counter`, so `invariant` is loop-invariant and
-    // `counter` is not.
+    // loop(invariant, counter): the recursive call forwards `invariant` unchanged and replaces `counter`, so `invariant` is loop-invariant and `counter` is not.
     let loop_function = module.reserve_function();
     let loop_return = module.reserve_continuation();
     let invariant = module.add_value(Some("invariant".into()));
@@ -729,10 +725,7 @@ struct PolymorphicLoop {
     loop_fn: CpsFunId,
 }
 
-/// Build `loop(op, n)` which indirectly calls `op(n)` and recurses forwarding
-/// `op`, called from `entry` as `loop(add, 3)` then `loop(second, 4)`. When
-/// `second` differs from `add` the two contexts disagree. `padding` prepends
-/// dead `LetPrim` nodes to `loop`'s body to inflate its node count.
+/// Build `loop(op, n)` which indirectly calls `op(n)` and recurses forwarding `op`, called from `entry` as `loop(add, 3)` then `loop(second, 4)`. When `second` differs from `add` the two contexts disagree. `padding` prepends dead `LetPrim` nodes to `loop`'s body to inflate its node count.
 fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
@@ -928,8 +921,7 @@ fn specializes_a_polymorphic_recursive_scc_per_call_context() {
 
 #[test]
 fn agreeing_call_contexts_are_not_specialized() {
-    // Both sites pass `add`, so the module-wide analysis already knows the
-    // argument and cloning would add nothing.
+    // Both sites pass `add`, so the module-wide analysis already knows the argument and cloning would add nothing.
     let PolymorphicLoop {
         mut module,
         call1,
@@ -1006,8 +998,7 @@ fn specialization_is_deterministic() {
 
 #[test]
 fn optimization_specializes_away_the_polymorphic_indirect_call() {
-    // With each caller peeled into its own clone, invariant-known propagation
-    // resolves every `op` to a direct callee, leaving no closure calls.
+    // With each caller peeled into its own clone, invariant-known propagation resolves every `op` to a direct callee, leaving no closure calls.
     let PolymorphicLoop { mut module, .. } = polymorphic_loop(true, 0);
     optimize(&mut module);
     module.verify().unwrap();
@@ -1023,8 +1014,7 @@ fn optimization_specializes_away_the_polymorphic_indirect_call() {
     );
 }
 
-// Build `helper(x) = x`, non-escaping, called from `entry` at one or two
-// external sites. Returns the module and the helper function.
+// Build `helper(x) = x`, non-escaping, called from `entry` at one or two external sites. Returns the module and the helper function.
 fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
@@ -1112,8 +1102,7 @@ fn contifies_a_nonrecursive_single_call_function() {
 
 #[test]
 fn does_not_contify_a_multi_site_function() {
-    // Two return contexts: single-site placement cannot cover both, so this
-    // is left for common-dominator contification in the machine CFG.
+    // Two return contexts: single-site placement cannot cover both, so this is left for common-dominator contification in the machine CFG.
     let (mut module, helper) = helper_called(true);
     assert!(
         !contify_calls(&mut module),
@@ -1122,10 +1111,7 @@ fn does_not_contify_a_multi_site_function() {
     assert!(module.function(helper).is_some());
 }
 
-// Build `main` whose body is a `RecInit` over `f` and computed value `v`.
-// `v` is produced by a `rec/v` continuation and returned at the ready point.
-// When `captures` is set, `f` forward-references `v` (a live mixed knot);
-// otherwise `f` is independent and the knot is already broken.
+// Build `main` whose body is a `RecInit` over `f` and computed value `v`. `v` is produced by a `rec/v` continuation and returned at the ready point. When `captures` is set, `f` forward-references `v` (a live mixed knot); otherwise `f` is independent and the knot is already broken.
 fn rec_init_module(captures: bool) -> (CpsModule, CpsNodeId) {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
@@ -1222,12 +1208,7 @@ fn retains_a_live_recursive_initializer() {
     ));
 }
 
-// Build `main` calling a non-recursive `consume(t)` once per entry in
-// `sites`. `consume` projects the tag and a field out of its tuple parameter
-// and switches on the tag, so a known tagged tuple at a call site unlocks the
-// fold. Each site `i` passes the tuple `(sites[i], i)`. `padding` pads
-// `consume` with dead bindings to grow its live-node count. Returns the
-// module, the call node per site (in `sites` order), and `consume`.
+// Build `main` calling a non-recursive `consume(t)` once per entry in `sites`. `consume` projects the tag and a field out of its tuple parameter and switches on the tag, so a known tagged tuple at a call site unlocks the fold. Each site `i` passes the tuple `(sites[i], i)`. `padding` pads `consume` with dead bindings to grow its live-node count. Returns the module, the call node per site (in `sites` order), and `consume`.
 fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>, CpsFunId) {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
@@ -1295,9 +1276,7 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
         },
     );
 
-    // Build the call chain forward so the search visits `sites[0]` first.
-    // Each site's return continuation is introduced by its own `LetCont`, and
-    // returning from site `i` runs site `i + 1`.
+    // Build the call chain forward so the search visits `sites[0]` first. Each site's return continuation is introduced by its own `LetCont`, and returning from site `i` runs site `i + 1`.
     let count = sites.len();
     let results: Vec<CpsValueId> = (0..count)
         .map(|i| module.add_value(Some(format!("r{i}"))))
@@ -1372,9 +1351,7 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
 
 #[test]
 fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
-    // The closure callee holds its target in a value that `visit_atoms_mut`
-    // never reaches. A forwarded value must follow (else the callee dangles
-    // when the original value is deleted), and a known function devirtualizes.
+    // The closure callee holds its target in a value that `visit_atoms_mut` never reaches. A forwarded value must follow (else the callee dangles when the original value is deleted), and a known function devirtualizes.
     let mut module = CpsModule::new();
     let ret = module.reserve_continuation();
     let old = module.add_value(Some("old".into()));
@@ -1513,8 +1490,7 @@ fn call_pattern_specialization_is_deterministic() {
 
 #[test]
 fn optimization_eliminates_a_constructor_dispatch() {
-    // A multi-site, oversized-for-inlining consumer: only specialization can
-    // resolve the tagged dispatch, and folding then removes every switch.
+    // A multi-site, oversized-for-inlining consumer: only specialization can resolve the tagged dispatch, and folding then removes every switch.
     let (mut module, _, _) = tagged_consumer(8, &[0, 0]);
     optimize(&mut module);
     module.verify().unwrap();

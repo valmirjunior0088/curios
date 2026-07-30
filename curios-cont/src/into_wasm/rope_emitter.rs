@@ -1,38 +1,14 @@
-//! The shared rope helper functions — the only module-level functions the
-//! emitter mints beyond the program's own (everything else is inlined at its
-//! use site — straight-line sequences only; anything the emitter lowers to a
-//! *loop* lives here, so its mutable scratch locals are zeroed by the fresh
-//! activation instead of leaking across executions of one call site). Seven
-//! families:
+//! The shared rope helper functions — the only module-level functions the emitter mints beyond the program's own (everything else is inlined at its use site — straight-line sequences only; anything the emitter lowers to a *loop* lives here, so its mutable scratch locals are zeroed by the fresh activation instead of leaking across executions of one call site). Seven families:
 //!
-//! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers
-//!   its payload, a cached node answers its cache, and everything else fills
-//!   a fresh payload by an *iterative* tree walk (an explicit `$elems`
-//!   worklist, grown by doubling), so a 100k-deep concat chain never touches
-//!   the wasm call stack. Only an entry *node* memoizes — intermediates are
-//!   usually garbage the moment the walk passes them, and a view's fill is a
-//!   single window copy of exactly its own size.
-//! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on
-//!   re-entry.
-//! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial
-//!   windows answer an empty leaf or the rope itself, a view collapses (so
-//!   windows never stack), and an uncached node base is forced first — which
-//!   memoizes — so every `view` in existence has a *flat-available* base (a
-//!   leaf or a cached node).
-//! - `$<carrier>/read` answers one element: off a leaf payload, *through* a
-//!   view's window without forcing (the invariant above makes that O(1)), or
-//!   via `force` on a node.
-//! - `$bits/force` performs the same iterative walk in logical bit units,
-//!   filling a zeroed packed payload and memoizing it on an entry node.
-//! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without
-//!   forcing, equal lengths force both payloads once and walk them.
-//! - `$lst/map` applies a unary closure to every element of the forced
-//!   payload, filling a fresh leaf.
+//! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else fills a fresh payload by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
+//! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
+//! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
+//! - `$<carrier>/read` answers one element: off a leaf payload, *through* a view's window without forcing (the invariant above makes that O(1)), or via `force` on a node.
+//! - `$bits/force` performs the same iterative walk in logical bit units, filling a zeroed packed payload and memoizing it on an entry node.
+//! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
+//! - `$lst/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
 //!
-//! The `lst/bin` variants are the host boundary's deep forms: an `Lst(Bin)` /
-//! `Lst(Handle)` wire value carries `Bin`-shaped *elements*, which the host lifts
-//! and lowers as raw `$bytes` — so params force each element too, and results
-//! embed each element back.
+//! The `lst/bin` variants are the host boundary's deep forms: an `Lst(Bin)` / `Lst(Handle)` wire value carries `Bin`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
 
 use super::{RopeData, Table};
 
@@ -102,9 +78,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         Self { table, module }
     }
 
-    /// Declare one helper: a final func type named after the function, plus
-    /// the function itself. Helpers are called by name, never `ref.func`'d or
-    /// exported, so no declaration beyond the pair is needed.
+    /// Declare one helper: a final func type named after the function, plus the function itself. Helpers are called by name, never `ref.func`'d or exported, so no declaration beyond the pair is needed.
     fn add_helper(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -158,9 +132,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///   r.cache := out; r.left := null; r.right := null
     /// ```
     ///
-    /// An entry *view* is not memoized (its fields are immutable): its fill is
-    /// one window copy of exactly its own size, so there is nothing quadratic
-    /// to fence off.
+    /// An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
     pub(crate) fn emit_force_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
 
@@ -262,9 +234,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             set(&cur),
         ]);
 
-        // The descent body: classify `cur`, either resolving a leaf-like
-        // chunk — payload + source window — (exit to `$emit`) or pushing
-        // right and descending left.
+        // The descent body: classify `cur`, either resolving a leaf-like chunk — payload + source window — (exit to `$emit`) or pushing right and descending left.
         let descend_label = curios_wasm::LabelName::from("descend");
         let mut descend = vec![
             // Leaf: the whole payload.
@@ -290,9 +260,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 ],
                 else_instructions: vec![],
             },
-            // View: its window over the base's flat payload — a leaf's payload
-            // or a cached node's cache (non-null by the slice invariant; the
-            // null trap in `array.copy` is its enforcement).
+            // View: its window over the base's flat payload — a leaf's payload or a cached node's cache (non-null by the slice invariant; the null trap in `array.copy` is its enforcement).
             get(&cur),
             field_get(&rope.base, &rope.tag_field),
             curios_wasm::Instr::I32Const { value: 2 },
@@ -471,8 +439,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             ],
         });
 
-        // Memoize a node entry and release its tree (`node` was set at entry
-        // exactly when the tag is 1); a view entry has nowhere to memoize.
+        // Memoize a node entry and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize.
         instrs.extend([
             get(&r),
             field_get(&rope.base, &rope.tag_field),
@@ -507,11 +474,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope into
-    /// a packed LSB-first payload. The tree walk is iterative, like
-    /// [`Self::emit_force_func`], but chunk windows and offsets are measured in
-    /// bits and the destination has `ceil(len / 8)` zeroed bytes. Copying only
-    /// logical bits keeps the unused high padding of the final byte zero.
+    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope into a packed LSB-first payload. The tree walk is iterative, like [`Self::emit_force_func`], but chunk windows and offsets are measured in bits and the destination has `ceil(len / 8)` zeroed bytes. Copying only logical bits keeps the unused high padding of the final byte zero.
     pub(crate) fn emit_bits_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let rope = self.table.bin_rope();
         let elems = self.table.elems_type();
@@ -804,8 +767,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                             get(&copy_i),
                             curios_wasm::Instr::I32Add,
                             set(&dst_bit),
-                            // out[dst/8] |= ((payload[src/8] >> src%8) & 1)
-                            //               << dst%8
+                            // out[dst/8] |= ((payload[src/8] >> src%8) & 1) << dst%8
                             get(&out),
                             get(&dst_bit),
                             curios_wasm::Instr::I32Const { value: 3 },
@@ -923,9 +885,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// view{2, n, r, s}
     /// ```
     ///
-    /// The node arm's force is what maintains the read-through invariant:
-    /// every `view` base is flat-available from birth, and stays so (a cache is
-    /// written once, never cleared).
+    /// The node arm's force is what maintains the read-through invariant: every `view` base is flat-available from birth, and stays so (a cache is written once, never cleared).
     pub(crate) fn emit_slice_func(
         &mut self,
         rope: &RopeData,
@@ -942,8 +902,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         let mut instrs = Vec::new();
 
-        // Bounds: the pre-window trap `slice` always had (an out-of-range
-        // window must not become a deferred — or never-taken — trap).
+        // Bounds: the pre-window trap `slice` always had (an out-of-range window must not become a deferred — or never-taken — trap).
         instrs.extend([
             get(&s),
             get(&e),
@@ -1034,8 +993,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             },
         ]);
 
-        // An uncached node is forced first — memoized in place — so the view
-        // below reads through its cache.
+        // An uncached node is forced first — memoized in place — so the view below reads through its cache.
         instrs.extend([
             get(&r),
             field_get(&rope.base, &rope.tag_field),
@@ -1098,8 +1056,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// force(r)[i]                                     ;; node (memoized)
     /// ```
     ///
-    /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result);
-    /// `Lst` elements are the top type (`array.get`).
+    /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `Lst` elements are the top type (`array.get`).
     pub(crate) fn emit_read_func(
         &mut self,
         rope: &RopeData,
@@ -1215,9 +1172,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// Read one logical bit from a packed rope. Leaves and settled windows read
-    /// their packed payload directly. An uncached node is forced once; later
-    /// reads take its packed cache without walking the tree.
+    /// Read one logical bit from a packed rope. Leaves and settled windows read their packed payload directly. An uncached node is forced once; later reads take its packed cache without walking the tree.
     pub(crate) fn emit_bits_read_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -1346,10 +1301,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/bin/force (ref $rope/lst) -> (ref $elems)`: force the outer rope,
-    /// then force every element through `$bytes/force` into a *fresh* payload (the
-    /// shallow force of a leaf answers its live payload, which must not be
-    /// element-rewritten in place).
+    /// `$lst/bin/force (ref $rope/lst) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
     pub(crate) fn emit_lst_bin_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
@@ -1554,9 +1506,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// Logical equality for packed bits. The loop is bounded by the rope's
-    /// bit length, so unused high padding in the final payload byte is never
-    /// observed.
+    /// Logical equality for packed bits. The loop is bounded by the rope's bit length, so unused high padding in the final payload byte is never observed.
     pub(crate) fn emit_bits_eql_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -1653,9 +1603,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// leaf { tag 0, count, out }
     /// ```
     ///
-    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention:
-    /// the environment as the self argument, the funcref from its special
-    /// field.
+    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention: the environment as the self argument, the funcref from its special field.
     pub(crate) fn emit_map_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -1787,9 +1735,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/bin/embed (ref $elems) -> (ref $rope/lst)`: embed each raw `$bytes`
-    /// element into a `$rope/bin/leaf` in place — the host-built array is fresh,
-    /// nothing else aliases it — then embed the outer array into a `$rope/lst/leaf`.
+    /// `$lst/bin/embed (ref $elems) -> (ref $rope/lst)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/lst/leaf`.
     pub(crate) fn emit_lst_bin_embed_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();

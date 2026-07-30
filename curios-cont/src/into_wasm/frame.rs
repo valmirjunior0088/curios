@@ -18,11 +18,7 @@ impl LocalData {
     }
 }
 
-/// How entering a block branches to its body. A region with multiple blocks (or a
-/// single block with a back-edge) trampolines through a `loop`: `enter` sets the
-/// dispatcher index and branches to the loop, whose `br_table` then selects the
-/// block. A single block with no back-edge instead branches straight out of its own
-/// label — a plain forward `br` — so it needs neither index nor loop.
+/// How entering a block branches to its body. A region with multiple blocks (or a single block with a back-edge) trampolines through a `loop`: `enter` sets the dispatcher index and branches to the loop, whose `br_table` then selects the block. A single block with no back-edge instead branches straight out of its own label — a plain forward `br` — so it needs neither index nor loop.
 #[derive(Debug, Clone)]
 enum Dispatch {
     Loop {
@@ -33,10 +29,7 @@ enum Dispatch {
     NaturalLoop {
         loop_label: curios_wasm::LabelName,
     },
-    /// Entering a localized dispatcher from *outside* the irreducible component:
-    /// set the target member's index, then branch to the enter block that falls
-    /// into the dispatch loop. Cross-edges *inside* the component use the
-    /// [`Dispatch::Loop`] registration instead, branching to the loop directly.
+    /// Entering a localized dispatcher from *outside* the irreducible component: set the target member's index, then branch to the enter block that falls into the dispatch loop. Cross-edges *inside* the component use the [`Dispatch::Loop`] registration instead, branching to the loop directly.
     Enter {
         enter_label: curios_wasm::LabelName,
         bloink_local: curios_wasm::LocalName,
@@ -71,8 +64,7 @@ impl<'a> BlockData<'a> {
         }
     }
 
-    /// A single-target block reached only by forward branches — no dispatcher,
-    /// no loop. `enter` branches straight out of `label_name` into the body.
+    /// A single-target block reached only by forward branches — no dispatcher, no loop. `enter` branches straight out of `label_name` into the body.
     pub(crate) fn new_direct(
         block_name: &'a EmissionBlockName,
         params: Vec<(&'a EmissionValueName, LocalData)>,
@@ -84,10 +76,7 @@ impl<'a> BlockData<'a> {
         }
     }
 
-    /// A loop header referenced from *inside* its own loop: back edges branch to
-    /// `loop_label`, which is distinct from the header's forward-entry block
-    /// label so the two never collide. The enclosing scope registers the same
-    /// block under [`BlockData::new_direct`] for forward entry.
+    /// A loop header referenced from *inside* its own loop: back edges branch to `loop_label`, which is distinct from the header's forward-entry block label so the two never collide. The enclosing scope registers the same block under [`BlockData::new_direct`] for forward entry.
     pub(crate) fn new_loop(
         loop_label: curios_wasm::LabelName,
         params: Vec<(&'a EmissionValueName, LocalData)>,
@@ -101,8 +90,7 @@ impl<'a> BlockData<'a> {
         }
     }
 
-    /// A member of an irreducible component referenced from *outside* it: branch
-    /// in through the dispatcher's enter block, having set this member's index.
+    /// A member of an irreducible component referenced from *outside* it: branch in through the dispatcher's enter block, having set this member's index.
     pub(crate) fn new_dispatch_enter(
         enter_label: curios_wasm::LabelName,
         bloink_local: curios_wasm::LocalName,

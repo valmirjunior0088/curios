@@ -4,16 +4,9 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Contify a non-escaping function whose calls resolve to a single return
-/// context into a local continuation, covering both the single-entry recursive
-/// loop and the non-recursive join-point cases.
+/// Contify a non-escaping function whose calls resolve to a single return context into a local continuation, covering both the single-entry recursive loop and the non-recursive join-point cases.
 ///
-/// A function qualifies when it has exactly one external call site: any call
-/// from a third function would make `external` longer than one, so the only
-/// admissible calls are that single entry plus the function's own tail-recursive
-/// self-calls. This excludes mutual recursion and multi-return-context callers
-/// without a separate check. Common-dominator placement for genuinely
-/// multi-site contification is deferred to the machine-CFG analysis.
+/// A function qualifies when it has exactly one external call site: any call from a third function would make `external` longer than one, so the only admissible calls are that single entry plus the function's own tail-recursive self-calls. This excludes mutual recursion and multi-return-context callers without a separate check. Common-dominator placement for genuinely multi-site contification is deferred to the machine-CFG analysis.
 pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
     let analysis = analyze_calls(module);
     let mut selected = None;

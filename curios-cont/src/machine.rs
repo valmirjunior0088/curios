@@ -1,8 +1,6 @@
 //! Private closed control-flow graph produced after high-CPS optimization.
 //!
-//! Functions have explicit blocks and block parameters. The CPS return
-//! continuation never becomes a block: a jump to the current function's
-//! bodyless sentinel is translated directly to [`MachineTerminator::Return`].
+//! Functions have explicit blocks and block parameters. The CPS return continuation never becomes a block: a jump to the current function's bodyless sentinel is translated directly to [`MachineTerminator::Return`].
 
 use {
     crate::{
@@ -21,8 +19,7 @@ use {
 mod structurize;
 pub(crate) use structurize::structurize;
 
-// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm`
-// — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
 id!(MachineBlockId, "~b", mint);
 id!(MachineValueId, "~v", mint);
 
@@ -50,15 +47,13 @@ pub(crate) enum MachineInstruction {
         op: CpsPrimOp,
         args: Vec<MachineOperand>,
     },
-    /// Retained-ABI closure wrapper around direct code. The wrapper unpacks
-    /// these captures and tail-calls `function`.
+    /// Retained-ABI closure wrapper around direct code. The wrapper unpacks these captures and tail-calls `function`.
     MakeClosure {
         result: MachineValueId,
         function: CpsFunId,
         captures: Vec<MachineOperand>,
     },
-    /// Explicit mixed-initialization fallback; ordinary recursive functions
-    /// never use either instruction.
+    /// Explicit mixed-initialization fallback; ordinary recursive functions never use either instruction.
     FallbackShell {
         result: MachineValueId,
         function: CpsFunId,
@@ -162,9 +157,7 @@ pub(crate) struct MachineModule {
     functions: BTreeMap<CpsFunId, MachineFunction>,
     wrappers: BTreeMap<CpsFunId, MachineWrapper>,
     entry: CpsFunId,
-    /// Each function's source hint, carried from the Cont module so emission names
-    /// can spell a function's origin (`func/{index}$hint`). A hint never affects
-    /// identity — the `CpsFunId` index does — so a missing entry only omits the hint.
+    /// Each function's source hint, carried from the Cont module so emission names can spell a function's origin (`func/{index}$hint`). A hint never affects identity — the `CpsFunId` index does — so a missing entry only omits the hint.
     function_hints: BTreeMap<CpsFunId, String>,
 }
 
@@ -477,9 +470,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         mut node_id: CpsNodeId,
         params: Vec<MachineValueId>,
     ) -> MachineBlock {
-        // Closure materializations are reused only within the block that defines
-        // them: cross-block values flow through explicit block parameters, so a
-        // materialized closure is in scope only for the rest of its own block.
+        // Closure materializations are reused only within the block that defines them: cross-block values flow through explicit block parameters, so a materialized closure is in scope only for the rest of its own block.
         self.materialized_closures.clear();
         let mut instructions = Vec::new();
         loop {
@@ -1702,8 +1693,7 @@ mod tests {
         assert_eq!(machine_shell_count(&machine), 0);
     }
 
-    /// A nullary `main` that immediately exits — the smallest valid machine
-    /// module, used to seed the verifier-rejection tests.
+    /// A nullary `main` that immediately exits — the smallest valid machine module, used to seed the verifier-rejection tests.
     fn exiting_main() -> (CpsModule, CpsFunId) {
         let mut source = CpsModule::new();
         let main = source.reserve_function();
@@ -1743,8 +1733,7 @@ mod tests {
 
     #[test]
     fn verify_rejects_a_nested_block_with_no_lexical_owner() {
-        // A `LetCont` continuation becomes a block nested under the entry; drop
-        // the scope table and it is left without a lexical owner.
+        // A `LetCont` continuation becomes a block nested under the entry; drop the scope table and it is left without a lexical owner.
         let mut source = CpsModule::new();
         let main = source.reserve_function();
         let return_cont = source.reserve_continuation();
@@ -1794,9 +1783,7 @@ mod tests {
 
     #[test]
     fn verify_rejects_a_fallback_shell_for_a_non_escaping_function() {
-        // The residual mixed-init fallback is reserved for escaping closures; a
-        // shell over a function with no wrapper is a function-only knot leaking
-        // into fallback lowering, which the verifier must reject.
+        // The residual mixed-init fallback is reserved for escaping closures; a shell over a function with no wrapper is a function-only knot leaking into fallback lowering, which the verifier must reject.
         let (mut source, _) = exiting_main();
         let mut machine = lower(&source);
 

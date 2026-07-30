@@ -4,14 +4,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has
-/// severed the function-to-value dependency. `RecInit` additionally binds its
-/// computed values so escaping closures may forward-reference them and emits a
-/// fallback shell for each escaping member that captures one; when no member
-/// still captures a computed value, that binding and those shells are
-/// unnecessary and the node is an ordinary recursive function group. The
-/// stronger "captures nothing computed" test (rather than merely "escapes
-/// nothing") also keeps every computed value in lexical scope after the rewrite.
+/// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has severed the function-to-value dependency. `RecInit` additionally binds its computed values so escaping closures may forward-reference them and emits a fallback shell for each escaping member that captures one; when no member still captures a computed value, that binding and those shells are unnecessary and the node is an ordinary recursive function group. The stronger "captures nothing computed" test (rather than merely "escapes nothing") also keeps every computed value in lexical scope after the rewrite.
 pub(super) fn dissolve_rec_init(module: &mut CpsModule) -> bool {
     let mut selected = None;
     for (index, node) in module.nodes.iter().enumerate() {
@@ -52,10 +45,7 @@ pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId,
             }
         });
 
-        // A closure callee holds its callee in a value, which `visit_atoms_mut`
-        // does not reach. Remap it here: a known function devirtualizes the call,
-        // and a forwarded value (e.g. a projected constructor field) keeps the
-        // callee pointing at a live value rather than a deleted one.
+        // A closure callee holds its callee in a value, which `visit_atoms_mut` does not reach. Remap it here: a known function devirtualizes the call, and a forwarded value (e.g. a projected constructor field) keeps the callee pointing at a live value rather than a deleted one.
         if let CpsNode::ApplyFun { callee, .. } = node
             && let CpsCallee::Closure(value) = *callee
         {
@@ -278,12 +268,7 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
 }
 pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
     let mut changed = false;
-    // Remove dead bindings in sweeps: count value uses once, collect every binding
-    // the snapshot proves dead, and splice them all out in a single chain-resolving
-    // pass rather than recomputing the counts and rewiring the whole module for one
-    // removal at a time. Removing a binding only ever lowers another value's use
-    // count, so a value dead in the snapshot stays dead; a binding that a removal
-    // newly exposes is collected by the next sweep.
+    // Remove dead bindings in sweeps: count value uses once, collect every binding the snapshot proves dead, and splice them all out in a single chain-resolving pass rather than recomputing the counts and rewiring the whole module for one removal at a time. Removing a binding only ever lowers another value's use count, so a value dead in the snapshot stays dead; a binding that a removal newly exposes is collected by the next sweep.
     loop {
         let counts = module.value_use_counts();
         let mut redirect = BTreeMap::<CpsNodeId, CpsNodeId>::new();
@@ -332,10 +317,7 @@ pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
     changed
 }
 
-/// Redirect every control edge that targets a spliced-out node to the first
-/// surviving node in its chain. `redirect` maps each removed node to its immediate
-/// successor; following the chain skips runs of consecutive removed nodes, so the
-/// result is the same as rewiring one node at a time.
+/// Redirect every control edge that targets a spliced-out node to the first surviving node in its chain. `redirect` maps each removed node to its immediate successor; following the chain skips runs of consecutive removed nodes, so the result is the same as rewiring one node at a time.
 fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsNodeId>) {
     for function in module.functions.iter_mut().flatten() {
         function.body = resolve_redirect(redirect, function.body);
@@ -417,8 +399,7 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
 }
 pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
     let counts = module.value_use_counts();
-    // Precompute the continuations used as a return target in one pass, rather than
-    // rescanning every node for each continuation.
+    // Precompute the continuations used as a return target in one pass, rather than rescanning every node for each continuation.
     let return_targets = module
         .nodes
         .iter()

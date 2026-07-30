@@ -10,22 +10,13 @@ use {
 
 pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the whole-module call analysis once, then inline
-    // every candidate it exposes before rebuilding. Rebuilding per inline is what
-    // made this quadratic on a large unoptimized module. Per-callee facts
-    // (`free_values`, body shape) are stable across a sweep because inlining a call
-    // copies the callee rather than mutating it, and a surviving call node keeps
-    // its owner; only the site counts go stale within a sweep, and a stale count
-    // only tightens the size budget, so the calls it defers are picked up by the
-    // next sweep's fresh analysis. Inlining that exposes a call inside a copied body
-    // is likewise handled by the following sweep.
+    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline is what made this quadratic on a large unoptimized module. Per-callee facts (`free_values`, body shape) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
         let mut inlined_any = false;
         for index in 0..module.nodes.len() {
             let node_id = CpsNodeId(index as u32);
-            // Re-read: an earlier inline in this sweep may have removed or rewritten
-            // this node.
+            // Re-read: an earlier inline in this sweep may have removed or rewritten this node.
             let Some(CpsNode::ApplyFun {
                 callee: CpsCallee::Known(callee),
                 args,
@@ -77,12 +68,7 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
 }
 pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the recursive-value set and the transfer index once
-    // per sweep rather than once per inline. Inlining a single-use continuation
-    // moves its one transfer without duplicating it, so it never changes another
-    // continuation's transfer count — the snapshot stays valid for the rest of the
-    // sweep. Each candidate is re-read against the live module, and the module is
-    // pruned once at the end of each sweep rather than after every inline.
+    // Inline in sweeps: build the recursive-value set and the transfer index once per sweep rather than once per inline. Inlining a single-use continuation moves its one transfer without duplicating it, so it never changes another continuation's transfer count — the snapshot stays valid for the rest of the sweep. Each candidate is re-read against the live module, and the module is pruned once at the end of each sweep rather than after every inline.
     for _ in 0..10_000 {
         let recursive_values = module
             .nodes
@@ -99,8 +85,7 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
         let mut inlined_any = false;
         for index in 0..module.continuations.len() {
             let target = CpsContId(index as u32);
-            // Re-read: an earlier inline (and its prune) in this sweep may have
-            // removed or rewritten this continuation.
+            // Re-read: an earlier inline (and its prune) in this sweep may have removed or rewritten this continuation.
             let Some(continuation) = module.continuation(target) else {
                 continue;
             };
@@ -134,18 +119,12 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
         if !inlined_any {
             break;
         }
-        // Prune once per sweep rather than once per inline: `nodes_from` tolerates
-        // the transient dangling `LetCont` references left within the sweep, so the
-        // repair only has to happen before the next sweep rebuilds its transfer
-        // index.
+        // Prune once per sweep rather than once per inline: `nodes_from` tolerates the transient dangling `LetCont` references left within the sweep, so the repair only has to happen before the next sweep rebuilds its transfer index.
         prune_unreachable(module);
     }
     changed
 }
-/// Index every continuation to the nodes that transfer control to it, one entry
-/// per referencing node in ascending node order. Building this once per rewrite
-/// pass keeps single-use detection linear instead of rescanning every node for
-/// each continuation.
+/// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps single-use detection linear instead of rescanning every node for each continuation.
 fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, Vec<CpsNodeId>> {
     let mut transfers: BTreeMap<CpsContId, Vec<CpsNodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
@@ -300,10 +279,7 @@ pub(super) fn inline_call(
         .zip(args.iter().cloned())
         .collect::<BTreeMap<_, _>>();
 
-    // Bail before minting anything: only a parameter can map a closure callee
-    // to a literal (locals map to fresh values below), so this check is
-    // complete against the parameter substitutions alone, and an aborted
-    // attempt must leave no orphaned arena entries behind.
+    // Bail before minting anything: only a parameter can map a closure callee to a literal (locals map to fresh values below), so this check is complete against the parameter substitutions alone, and an aborted attempt must leave no orphaned arena entries behind.
     if nodes.values().any(|node| {
         matches!(node, CpsNode::ApplyFun { callee: CpsCallee::Closure(value), .. }
             if matches!(values.get(value), Some(CpsAtom::Literal(_))))

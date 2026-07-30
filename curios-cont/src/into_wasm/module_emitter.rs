@@ -26,11 +26,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The binary rope family: the flat `$bytes` payload (the host-boundary
-    /// shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its
-    /// own singleton recursion group — `$bytes` must canonicalize equal to
-    /// the type curios-web's bridge declares standalone, and a subtype may
-    /// reference any *earlier* group.
+    /// The binary rope family: the flat `$bytes` payload (the host-boundary shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-web's bridge declares standalone, and a subtype may reference any *earlier* group.
     fn emit_bin_rope_types(&mut self) {
         let rope = self.table.bin_rope();
 
@@ -73,10 +69,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The wasm-level type of a host-import *parameter* of the given wire
-    /// type: scalars cross as raw `i32` (the call site unboxes the i31 carrier
-    /// via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete
-    /// non-nullable heap type (a handle is its `Bin` token).
+    /// The wasm-level type of a host-import *parameter* of the given wire type: scalars cross as raw `i32` (the call site unboxes the i31 carrier via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete non-nullable heap type (a handle is its `Bin` token).
     fn wire_param_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => {
@@ -93,10 +86,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The wasm-level type of a host-import *result*: scalars re-enter
-    /// pre-boxed as i31 refs so they land directly in anyref block params
-    /// (no host op returns an `Int` today; mapping it like `Nat` keeps the
-    /// function total), references exactly as in parameter position.
+    /// The wasm-level type of a host-import *result*: scalars re-enter pre-boxed as i31 refs so they land directly in anyref block params (no host op returns an `Int` today; mapping it like `Nat` keeps the function total), references exactly as in parameter position.
     fn wire_result_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => {
@@ -106,8 +96,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// Declare a host import: a final func type plus a `(namespace, name)`
-    /// import bound to `func_name`.
+    /// Declare a host import: a final func type plus a `(namespace, name)` import bound to `func_name`.
     fn add_host_import(
         &mut self,
         namespace: &str,
@@ -138,12 +127,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_sys_imports(&mut self) {
         let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
 
-        // The store-described imports — exactly the functions whose call sites
-        // recorded themselves in the table, in minted-name order. Each
-        // function's own `namespace` (stamped at declaration time — see
-        // `ForeignFunction`) is the wasm namespace it imports
-        // under, so codegen neither rebuilds `host_ops()` to re-derive
-        // membership nor chooses a namespace itself.
+        // The store-described imports — exactly the functions whose call sites recorded themselves in the table, in minted-name order. Each function's own `namespace` (stamped at declaration time — see `ForeignFunction`) is the wasm namespace it imports under, so codegen neither rebuilds `host_ops()` to re-derive membership nor chooses a namespace itself.
         for function in self.table.host_funcs() {
             let signature = &function.signature;
             let func_name = self.table.host_func(&function);
@@ -324,8 +308,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                     storage_type: curios_wasm::StorageType::Val(Table::top_type(
                                         true,
                                     )),
-                                    // Payload captures are back-patched only when this closure
-                                    // is itself a recursive shell; otherwise they're immutable.
+                                    // Payload captures are back-patched only when this closure is itself a recursive shell; otherwise they're immutable.
                                     mutability: self.table.envr_payload_mutability(data.name()),
                                 },
                             )
@@ -407,9 +390,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.module
             .add_data(data_name.clone(), curios_wasm::DataSegment { bytes });
 
-        // The placeholder init is an empty leaf — a wasm constant expression
-        // cannot read a data segment (or call), so the real payload is built
-        // in the start function below.
+        // The placeholder init is an empty leaf — a wasm constant expression cannot read a data segment (or call), so the real payload is built in the start function below.
         let mut init_expr: curios_wasm::Expr = Default::default();
         init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
         init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
@@ -455,14 +436,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .push(curios_wasm::Instr::GlobalSet { global_name });
     }
 
-    /// Emit a module-level const. Every global is declared mutable so that
-    /// aggregate (`Tpl`/`Lst`/`EmissionClosure`) consts can `global.get` their dependencies
-    /// inside the start function — wasm constant expressions can only read
-    /// immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained
-    /// const initializer (mutability is harmless when the init is constant);
-    /// `Bin` and aggregates declare a placeholder init and build the real value
-    /// in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`]
-    /// because its payload comes from a data segment.
+    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tpl`/`Lst`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained const initializer (mutability is harmless when the init is constant); `Bin` and aggregates declare a placeholder init and build the real value in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`] because its payload comes from a data segment.
     fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
             EmissionData::Bin(grain, value) => {
@@ -541,8 +515,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             },
         );
 
-        // Closures are referenced by `ref.func` when their values are built, so
-        // they must be declared even though they are not exported.
+        // Closures are referenced by `ref.func` when their values are built, so they must be declared even though they are not exported.
         self.module
             .declare_func(self.table.find_clsr(name).func_name());
     }
@@ -578,11 +551,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// Add the rope helpers the emitted code referenced. Helpers whose bodies
-    /// call other helpers go first: *building* a body references its callees
-    /// through the table, so the callee used-flags must settle before they
-    /// are read — deep host-boundary forms, then everything else whose body
-    /// calls `force` (`eql`, `map`, `slice`, `read`), then `force`/`embed`.
+    /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `force` (`eql`, `map`, `slice`, `read`), then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
@@ -699,8 +668,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.emit_let_func(name, func);
         }
 
-        // The entrypoint is the module's sole export — the value the host invokes.
-        // Every other function, closure, and const is reached only internally.
+        // The entrypoint is the module's sole export — the value the host invokes. Every other function, closure, and const is reached only internally.
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
             self.module
