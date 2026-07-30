@@ -1,6 +1,4 @@
-//! Scoped collection of profiling spans: [`capture`] owns one subscriber on
-//! the current thread and returns aggregate timings for every span the
-//! operation emitted, without changing the process-global subscriber.
+//! Scoped collection of profiling spans: [`capture`] owns one subscriber on the current thread and returns aggregate timings for every span the operation emitted, without changing the process-global subscriber.
 
 use {
     std::{
@@ -92,8 +90,7 @@ impl ProfileSummary {
     }
 }
 
-/// Run `operation` with a profiling subscriber on the current thread and return
-/// aggregate timings for every span it emits.
+/// Run `operation` with a profiling subscriber on the current thread and return aggregate timings for every span it emits.
 pub fn capture<T>(operation: impl FnOnce() -> T) -> (T, ProfileReport) {
     let aggregates = Arc::new(Mutex::new(BTreeMap::new()));
     let layer = ProfileLayer::new(Arc::clone(&aggregates));
