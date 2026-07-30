@@ -1,15 +1,8 @@
 //! Typing rules for primitive operations.
 //!
-//! One rule per operation: what its operands must be, and what it produces.
-//! Nothing here is inferred or negotiated — a primitive's signature is fixed by
-//! the language, so this module is a table, and the table is the specification.
+//! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — a primitive's signature is fixed by the language, so this module is a table, and the table is the specification.
 //!
-//! The scalar families are monomorphic and read directly. The container
-//! operations carry their element type as an operand, which is what lets them
-//! be typed without inventing anything: `Lst/get` is `(T : Type, Lst(T), Nat)
-//! -> T`, with `T` present in the term. The one operation that does *not* carry
-//! its type is a bare list literal, and the rule for it is the only place here
-//! that has to look at an operand to decide a type.
+//! The scalar families are monomorphic and read directly. The container operations carry their element type as an operand, which is what lets them be typed without inventing anything: `Lst/get` is `(T : Type, Lst(T), Nat) -> T`, with `T` present in the term. The one operation that does *not* carry its type is a bare list literal, and the rule for it is the only place here that has to look at an operand to decide a type.
 
 use {
     super::{check, infer},
@@ -54,11 +47,9 @@ fn cell_type(element: Term) -> Term {
     Term::prim(Prim::CellType(element))
 }
 
-/// The type of `prim`, having checked every operand against the type this
-/// operation demands of it.
+/// The type of `prim`, having checked every operand against the type this operation demands of it.
 pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, KernelError> {
-    // A grain says what a `Bin` is a sequence *of*: bytes at `X`, bits at `B`.
-    // Every `Bin` operation is the same rule at two different element types.
+    // A grain says what a `Bin` is a sequence *of*: bytes at `X`, bits at `B`. Every `Bin` operation is the same rule at two different element types.
     let grain_element = |grain: Grain| match grain {
         Grain::X => byte_type(),
         Grain::B => bool_type(),
@@ -74,8 +65,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         | Prim::BinType(_)
         | Prim::HandleType => Ok(Term::type_ground()),
 
-        // A parameterized former is a type at whatever level its element sits
-        // at, which is what `Sort::of` reports for it.
+        // A parameterized former is a type at whatever level its element sits at, which is what `Sort::of` reports for it.
         Prim::LstType(element) | Prim::CellType(element) => {
             let element = element.clone();
             let sort = Sort::of(kernel, &element)?;
@@ -214,9 +204,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
             Ok(bin_type(*grain))
         }
 
-        // A list literal carries its element type like every other `Lst`
-        // operation — `[]` included, which is the case that used to be refused
-        // for having no element to read a type from.
+        // A list literal carries its element type like every other `Lst` operation — `[]` included, which is the case that used to be refused for having no element to read a type from.
         Prim::Lst(element, elements) => {
             let element = check_is_type(kernel, element)?;
             for entry in elements {
@@ -276,8 +264,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
             Ok(lst_type(to))
         }
 
-        // A mutable cell. Its identity is what makes a `Cell` of proofs
-        // relevant — see `Sort::of`.
+        // A mutable cell. Its identity is what makes a `Cell` of proofs relevant — see `Sort::of`.
         Prim::Cell(element, initial) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, initial, &element)?;
@@ -298,25 +285,16 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
             Ok(Term::tuple_type_unit())
         }
 
-        // `exit` ends the process, and its result is the unit type rather than
-        // whatever the caller demanded.
+        // `exit` ends the process, and its result is the unit type rather than whatever the caller demanded.
         //
-        // That is the whole of the rule, and it is why there is no side
-        // condition here. A term that never returns is unsound exactly when it
-        // inhabits a type nothing total inhabits — the forgery is the problem,
-        // not the non-return — and restricting *which* type it may be given
-        // cannot fix that, because any `Type`-sorted empty inductive eliminates
-        // into `Prop` unguarded. Fixing the result at `{}`, which `()` already
-        // inhabits, leaves nothing to forge.
+        // That is the whole of the rule, and it is why there is no side condition here. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits — the forgery is the problem, not the non-return — and restricting *which* type it may be given cannot fix that, because any `Type`-sorted empty inductive eliminates into `Prop` unguarded. Fixing the result at `{}`, which `()` already inhabits, leaves nothing to forge.
         Prim::Exit(code) => {
             check(kernel, code, &nat_type())?;
 
             Ok(Term::tuple_type_unit())
         }
 
-        // A host call described by its ABI row: each operand checks against its
-        // wire type, and the result shape — unit, a bare value, or a named
-        // record — is read off the same signature.
+        // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature.
         Prim::Foreign(function, args) => {
             let signature = &function.signature;
 
@@ -355,9 +333,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
     }
 }
 
-/// Check that `term` is a type, and hand it back. A primitive that carries its
-/// element type carries a *type*, and taking that on trust is how a container
-/// of nonsense would be admitted.
+/// Check that `term` is a type, and hand it back. A primitive that carries its element type carries a *type*, and taking that on trust is how a container of nonsense would be admitted.
 fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     let inferred = infer(kernel, term)?;
 

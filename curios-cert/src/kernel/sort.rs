@@ -1,20 +1,10 @@
 //! Which universe a type inhabits, and the type of a neutral spine.
 //!
-//! Conversion is type-directed in Curios: a goal at a `Prop`-sorted type is
-//! discharged without comparing the sides at all, because any two inhabitants
-//! of a proposition are definitionally equal. So before conversion can compare
-//! anything it has to know a type's *sort*, and that is a typing question.
+//! Conversion is type-directed in Curios: a goal at a `Prop`-sorted type is discharged without comparing the sides at all, because any two inhabitants of a proposition are definitionally equal. So before conversion can compare anything it has to know a type's *sort*, and that is a typing question.
 //!
-//! Answering it in full would need [`infer`](super::infer), which needs
-//! conversion, which is a cycle. The way out is the same one the elaborator
-//! takes: a *synthesis-only* type computation for neutral spines
-//! ([`synth_neutral`]) that reads types off binders and declarations without
-//! ever checking anything, and therefore never reaches conversion. It answers
-//! "what type does this spine have, if it has one" and nothing else.
+//! Answering it in full would need [`infer`](super::infer), which needs conversion, which is a cycle. The way out is the same one the elaborator takes: a *synthesis-only* type computation for neutral spines ([`synth_neutral`]) that reads types off binders and declarations without ever checking anything, and therefore never reaches conversion. It answers "what type does this spine have, if it has one" and nothing else.
 //!
-//! Unlike the elaborator's, neither function here guesses. Where a shape cannot
-//! be classified the kernel refuses; see the module documentation on
-//! [`kernel`](super) for why a guessed level is the unsound direction.
+//! Unlike the elaborator's, neither function here guesses. Where a shape cannot be classified the kernel refuses; see the module documentation on [`kernel`](super) for why a guessed level is the unsound direction.
 
 #[cfg(test)]
 mod tests;
@@ -35,8 +25,7 @@ pub enum Sort {
 }
 
 impl Sort {
-    /// The universe term this sort denotes, which is what a type former reports
-    /// as its own type.
+    /// The universe term this sort denotes, which is what a type former reports as its own type.
     pub fn term(self) -> Term {
         match self {
             Sort::Type(level) => Term::type_at(level),
@@ -44,19 +33,15 @@ impl Sort {
         }
     }
 
-    /// Whether this is a strict proposition — the question proof irrelevance
-    /// turns on.
+    /// Whether this is a strict proposition — the question proof irrelevance turns on.
     pub fn is_prop(&self) -> bool {
         matches!(self, Sort::Prop)
     }
 }
 
-/// Decode a term that is *already* a universe — a kind's codomain, a match
-/// motive, a synthesized neutral's type — into the sort it names.
+/// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
 ///
-/// Distinct from [`Sort::of`], which classifies an arbitrary type:
-/// `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the
-/// universe `Prop` is itself `Type`-sorted.
+/// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
 pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, KernelError> {
     let reduced = whnf(kernel, universe.clone())?;
 
@@ -73,9 +58,7 @@ impl Sort {
         let reduced = kernel.reduce_forced(type_.clone())?;
 
         match &*reduced {
-            // A nominal type's sort is declared, not derived: the declaration says
-            // whether the family lands in `Type` or in `Prop`, at the universes
-            // this occurrence instantiated it at.
+            // A nominal type's sort is declared, not derived: the declaration says whether the family lands in `Type` or in `Prop`, at the universes this occurrence instantiated it at.
             Subterm::InductType(InductType {
                 name, universes, ..
             }) => {
@@ -101,19 +84,14 @@ impl Sort {
                 as_sort(kernel, &result_sort)
             }
 
-            // A *non-empty* record of propositions is a proposition. The empty
-            // tuple is unit rather than a proposition: it is what an effect returns
-            // (`/std/print : .. -> {}`), so it must be kept at runtime, and calling
-            // it a proposition would erase it.
+            // A *non-empty* record of propositions is a proposition. The empty tuple is unit rather than a proposition: it is what an effect returns (`/std/print : .. -> {}`), so it must be kept at runtime, and calling it a proposition would erase it.
             Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
                 let telescope = telescope.clone();
                 scoped(kernel, |kernel| sort_of_sigma(kernel, telescope))
             }
             Subterm::TupleType(_) => Ok(Sort::Type(Level::zero())),
 
-            // Π into a proposition is a proposition, regardless of what it
-            // quantifies over — that is what makes `(n : Nat) -> P(n)` erasable.
-            // Otherwise the level is the join of the domains and the codomain.
+            // Π into a proposition is a proposition, regardless of what it quantifies over — that is what makes `(n : Nat) -> P(n)` erasable. Otherwise the level is the join of the domains and the codomain.
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let telescope = telescope.clone();
                 scoped(kernel, |kernel| sort_of_pi(kernel, telescope))
@@ -121,8 +99,7 @@ impl Sort {
 
             Subterm::Prim(prim) => sort_of_prim(kernel, prim),
 
-            // A type-valued `match` (`rec Lt = match n : Prop | ..`): its motive is
-            // the sort, which every arm shares.
+            // A type-valued `match` (`rec Lt = match n : Prop | ..`): its motive is the sort, which every arm shares.
             Subterm::Match(m) => {
                 let binders = (0..m.motive.arity())
                     .map(|_| Term::free_var(&kernel.fresh(None)))
@@ -133,8 +110,7 @@ impl Sort {
                 as_sort(kernel, &motive)
             }
 
-            // A neutral type — a `Prop` hypothesis, or a family application stuck
-            // on a variable. Its synthesized type *is* its sort.
+            // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable. Its synthesized type *is* its sort.
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) | Subterm::RecMember(_) => {
                 let synthesized = synth_neutral(kernel, &reduced)?
                     .ok_or_else(|| KernelError::Unclassified(reduced.clone()))?;
@@ -153,8 +129,7 @@ impl Sort {
     }
 }
 
-/// Run `walk` with every binder it opens closed again afterwards, on the
-/// failing path as well as the succeeding one.
+/// Run `walk` with every binder it opens closed again afterwards, on the failing path as well as the succeeding one.
 fn scoped(
     kernel: &mut Kernel,
     walk: impl FnOnce(&mut Kernel) -> Result<Sort, KernelError>,
@@ -166,14 +141,9 @@ fn scoped(
     outcome
 }
 
-/// Σ: a record of nothing but propositions is a proposition; otherwise its
-/// level is the join of its fields'.
+/// Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
 ///
-/// Each binder joins the local scope carrying its own type before the walk
-/// descends, because a later field may mention an earlier one. Opening with a
-/// variable nothing can type would leave [`synth_neutral`] unable to classify
-/// every occurrence of it further in — which here is not imprecision but a
-/// refusal.
+/// Each binder joins the local scope carrying its own type before the walk descends, because a later field may mention an earlier one. Opening with a variable nothing can type would leave [`synth_neutral`] unable to classify every occurrence of it further in — which here is not imprecision but a refusal.
 fn sort_of_sigma(kernel: &mut Kernel, telescope: Telescope<()>) -> Result<Sort, KernelError> {
     let mut telescope = telescope;
     let mut levels = Vec::new();
@@ -181,8 +151,7 @@ fn sort_of_sigma(kernel: &mut Kernel, telescope: Telescope<()>) -> Result<Sort, 
     loop {
         match telescope {
             Telescope::Cons(field, rest) => {
-                // A field that is itself a proposition contributes no level:
-                // `Prop` sits below the hierarchy rather than in it.
+                // A field that is itself a proposition contributes no level: `Prop` sits below the hierarchy rather than in it.
                 if let Sort::Type(level) = Sort::of(kernel, &field)? {
                     levels.push(level);
                 }
@@ -201,8 +170,7 @@ fn sort_of_sigma(kernel: &mut Kernel, telescope: Telescope<()>) -> Result<Sort, 
     }
 }
 
-/// Π: a function into a proposition is a proposition, whatever it quantifies
-/// over; otherwise its level is the join of its domains' and its codomain's.
+/// Π: a function into a proposition is a proposition, whatever it quantifies over; otherwise its level is the join of its domains' and its codomain's.
 fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, KernelError> {
     let mut telescope = telescope;
     let mut levels = Vec::new();
@@ -233,11 +201,7 @@ fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, K
 
 /// The sort of a primitive type former.
 ///
-/// A closed primitive quantifies over nothing and sits at level 0. A
-/// parameterized one carries its parameter's level: `Lst : Type u -> Type u`,
-/// and pinning that at 0 would claim the type is smaller than it is — the
-/// unsound direction, and what would let a large type be stored in a small
-/// universe.
+/// A closed primitive quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `Lst : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
     match prim {
         Prim::BoolType
@@ -248,9 +212,7 @@ fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
         | Prim::BinType(_)
         | Prim::HandleType => Ok(Sort::Type(Level::zero())),
 
-        // A list or cell *of* proofs is not itself a proposition: it has a
-        // length, or an identity, so its inhabitants are distinguishable and
-        // irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
+        // A list or cell *of* proofs is not itself a proposition: it has a length, or an identity, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
         Prim::LstType(element) | Prim::CellType(element) => {
             let element = element.clone();
 
@@ -265,34 +227,24 @@ fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
     }
 }
 
-/// The type of a neutral spine, read off binders and declarations without
-/// checking anything.
+/// The type of a neutral spine, read off binders and declarations without checking anything.
 ///
-/// `None` where the spine is not one this can type — a shape whose type would
-/// need a judgment rather than a lookup. Callers turn that into a refusal;
-/// nothing here guesses.
+/// `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
 ///
-/// This must never reach [`convert`](super::convert): it is what breaks the
-/// cycle between conversion and inference, and it stays broken only because
-/// every arm below is a lookup, a substitution, or a reduction.
+/// This must never reach [`convert`](super::convert): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
 pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, KernelError> {
     match &**term {
         Subterm::Var(var) => Ok(kernel.type_of(var.unwrap()).cloned()),
 
-        // A recursive member's type is carried by its own group, so this is a
-        // read rather than a lookup and cannot re-enter the group it names.
+        // A recursive member's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
         Subterm::RecMember(RecMember { group, index }) => Ok(Some(group.member_type(*index))),
 
-        // A polymorphic head at the levels this occurrence chose. The scheme is
-        // read *uninstantiated* and substituted at those levels; going through
-        // the `Var` arm would read an already-instantiated type and have
-        // nothing left to substitute.
+        // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
         Subterm::UniverseInst(UniverseInst { head, levels }) => match &**head {
             Subterm::Var(var) => {
                 let name = var.unwrap();
 
-                // A local binder is monomorphic: it was opened at one type, so
-                // there is no scheme to instantiate and the levels say nothing.
+                // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
                 if let Some(type_) = kernel.local_type(name) {
                     return Ok(Some(type_.clone()));
                 }
@@ -326,9 +278,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     let refs = params.iter().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
                 }
-                // A partially applied spine still has a type: the residual
-                // function type, with the supplied arguments substituted into
-                // the entries that remain.
+                // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain.
                 Subterm::FuncType(FuncType {
                     telescope,
                     plicities,
@@ -352,15 +302,11 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
             };
 
             match Term::unwrap_or_clone(whnf(kernel, head_type)?) {
-                // A Σ field's type may mention the earlier fields, which are
-                // named here by projections of the same head.
+                // A Σ field's type may mention the earlier fields, which are named here by projections of the same head.
                 Subterm::TupleType(TupleType { telescope }) => {
                     Ok(telescope.nth(*index, |j| Term::proj(head.clone(), j)))
                 }
-                // A nominal record's field types live on its declaration,
-                // instantiated first at the head's universes and then at its
-                // parameters. Concept dispatch is a projection out of a witness
-                // record, so this arm is what types a method call.
+                // A nominal record's field types live on its declaration, instantiated first at the head's universes and then at its parameters. Concept dispatch is a projection out of a witness record, so this arm is what types a method call.
                 Subterm::StructType(StructType {
                     name,
                     universes,

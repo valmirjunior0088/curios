@@ -5,17 +5,14 @@ use {
     curios_core::{Apply, Free, Nat, Prim, Reducer, Subterm, Term, UniverseContext},
 };
 
-/// The kernel every test starts from. The floor keeps the identities minted
-/// below out of the range the kernel mints from for eta-contraction, exactly as
-/// a real caller must seed it above the lowerer's and the elaborator's binders.
+/// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
 fn kernel() -> Kernel {
     let mut kernel = Kernel::new(100_000);
     kernel.set_local_floor(1_000);
     kernel
 }
 
-/// A test binder. Indices below the kernel's floor, so they cannot alias one it
-/// mints itself.
+/// A test binder. Indices below the kernel's floor, so they cannot alias one it mints itself.
 fn binder(index: u32, hint: &str) -> Free {
     Free::local(index, Some(hint))
 }
@@ -61,9 +58,7 @@ fn delta_unfolds_a_monomorphic_definition() {
     assert_eq!(whnf(&mut kernel, Term::free_var(&f)), Ok(nat(3)));
 }
 
-/// A definition generalized over universe parameters denotes no particular
-/// instance, so a bare occurrence of it is a normal form. Unfolding it here
-/// would silently pick an instance nobody stated.
+/// A definition generalized over universe parameters denotes no particular instance, so a bare occurrence of it is a normal form. Unfolding it here would silently pick an instance nobody stated.
 #[test]
 fn delta_withholds_a_universe_polymorphic_definition() {
     let mut kernel = kernel();
@@ -74,8 +69,7 @@ fn delta_withholds_a_universe_polymorphic_definition() {
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
 }
 
-/// The same definition *does* unfold through a stated instance, which is the
-/// one position that names which one it is.
+/// The same definition *does* unfold through a stated instance, which is the one position that names which one it is.
 #[test]
 fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let mut kernel = kernel();
@@ -95,8 +89,7 @@ fn an_undefined_variable_is_its_own_normal_form() {
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
 }
 
-/// Zeta. The second binding refers to the first, so this also pins the
-/// left-to-right order: `y` must see `x`'s value, not `x` itself.
+/// Zeta. The second binding refers to the first, so this also pins the left-to-right order: `y` must see `x`'s value, not `x` itself.
 #[test]
 fn zeta_substitutes_let_bindings_left_to_right() {
     let mut kernel = kernel();
@@ -118,8 +111,7 @@ fn zeta_substitutes_let_bindings_left_to_right() {
     assert_eq!(whnf(&mut kernel, term), Ok(nat(5)));
 }
 
-/// The primitive folds are shared with the elaborator through `Reducer`; this
-/// is the kernel reaching them with its own strategy underneath.
+/// The primitive folds are shared with the elaborator through `Reducer`; this is the kernel reaching them with its own strategy underneath.
 #[test]
 fn primitives_fold_through_the_reducer_seam() {
     let mut kernel = kernel();
@@ -208,8 +200,7 @@ fn a_switch_falls_through_to_its_default() {
     assert_eq!(whnf(&mut kernel, term), Ok(nat(99)));
 }
 
-/// A symbolic scrutinee decides nothing, so the switch rebuilds as the neutral
-/// term it is rather than guessing an arm.
+/// A symbolic scrutinee decides nothing, so the switch rebuilds as the neutral term it is rather than guessing an arm.
 #[test]
 fn a_switch_on_a_symbolic_scrutinee_stays_stuck() {
     let mut kernel = kernel();
@@ -253,9 +244,7 @@ fn projection_selects_a_tuple_field() {
     assert_eq!(whnf(&mut kernel, term), Ok(nat(20)));
 }
 
-/// A constructor is projected through the flat runtime view `(tag, payload...)`,
-/// so field 1 is payload component 0 — unlike a struct, which has no tag to
-/// skip.
+/// A constructor is projected through the flat runtime view `(tag, payload...)`, so field 1 is payload component 0 — unlike a struct, which has no tag to skip.
 #[test]
 fn projection_skips_a_variants_tag_but_not_a_structs() {
     let mut kernel = kernel();
@@ -285,8 +274,7 @@ fn eta_contracts_a_function_that_only_forwards() {
     assert_eq!(whnf(&mut kernel, term), Ok(Term::free_var(&f)));
 }
 
-/// The side condition is load-bearing: contracting `(x) => x(x)` would move an
-/// occurrence of `x` out from under the binder that gives it meaning.
+/// The side condition is load-bearing: contracting `(x) => x(x)` would move an occurrence of `x` out from under the binder that gives it meaning.
 #[test]
 fn eta_declines_when_the_head_mentions_the_binder() {
     let mut kernel = kernel();
@@ -300,8 +288,7 @@ fn eta_declines_when_the_head_mentions_the_binder() {
     assert_eq!(whnf(&mut kernel, term.clone()), Ok(term));
 }
 
-/// A recursive call keeps its folded spelling until an eliminator demands the
-/// value, which is what stops an occurrence from unfolding forever.
+/// A recursive call keeps its folded spelling until an eliminator demands the value, which is what stops an occurrence from unfolding forever.
 #[test]
 fn a_recursive_application_stays_folded_until_forced() {
     let mut kernel = kernel();
@@ -350,9 +337,7 @@ fn a_recursive_application_stays_folded_until_forced() {
     assert_eq!(kernel.reduce_forced(concrete), Ok(nat(0)));
 }
 
-/// The kernel is not strongly normalizing, and the budget is what makes every
-/// judgment terminate anyway. A group that consumes nothing spins until it runs
-/// out, which is an answer rather than a hang.
+/// The kernel is not strongly normalizing, and the budget is what makes every judgment terminate anyway. A group that consumes nothing spins until it runs out, which is an answer rather than a hang.
 #[test]
 fn a_non_productive_recursion_exhausts_the_budget() {
     let mut kernel = Kernel::new(1_000);
@@ -380,12 +365,9 @@ fn a_non_productive_recursion_exhausts_the_budget() {
     );
 }
 
-/// Each judgment gets the full budget back, so one expensive declaration cannot
-/// starve the next.
+/// Each judgment gets the full budget back, so one expensive declaration cannot starve the next.
 ///
-/// An undefined variable costs exactly one step — it is looked at once and is
-/// already normal — so a budget of one affords exactly one reduction, and what
-/// the second and third calls do is entirely about the refill.
+/// An undefined variable costs exactly one step — it is looked at once and is already normal — so a budget of one affords exactly one reduction, and what the second and third calls do is entirely about the refill.
 #[test]
 fn restoring_the_budget_refills_it() {
     let mut kernel = Kernel::new(1);
@@ -406,8 +388,7 @@ fn restoring_the_budget_refills_it() {
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
 }
 
-/// A remembered reduct is the same answer the term would compute — including
-/// across a scope boundary, which a local-free key cannot observe.
+/// A remembered reduct is the same answer the term would compute — including across a scope boundary, which a local-free key cannot observe.
 #[test]
 fn a_memoized_unfold_answers_the_same_across_scopes() {
     let mut kernel = kernel();
@@ -434,8 +415,7 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
     assert_eq!(outside, nat(2));
 }
 
-/// Redefining a name clears every memo, so validity is by construction rather
-/// than by an append-only assumption.
+/// Redefining a name clears every memo, so validity is by construction rather than by an append-only assumption.
 #[test]
 fn a_redefinition_clears_the_memos() {
     let mut kernel = kernel();

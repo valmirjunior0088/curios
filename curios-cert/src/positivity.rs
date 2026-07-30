@@ -1,54 +1,18 @@
-//! Strict positivity modulo polarity: the declaration-time gate that makes
-//! `induct` and `struct` sound.
+//! Strict positivity modulo polarity: the declaration-time gate that makes `induct` and `struct` sound.
 //!
-//! An `induct` declaration is a claim that a functor has an initial algebra,
-//! and the eliminator it hands back is the statement that the algebra is
-//! initial. Strict positivity is a syntactic sufficient condition for that
-//! functor being polynomial, hence accessible, hence for the initial algebra
-//! existing. Without it, `induct Bad | c(f : (Bad) -> False) end` yields a
-//! closed inhabitant of `False` in four lines with no recursion at all.
+//! An `induct` declaration is a claim that a functor has an initial algebra, and the eliminator it hands back is the statement that the algebra is initial. Strict positivity is a syntactic sufficient condition for that functor being polynomial, hence accessible, hence for the initial algebra existing. Without it, `induct Bad | c(f : (Bad) -> False) end` yields a closed inhabitant of `False` in four lines with no recursion at all.
 //!
-//! "Modulo polarity" is load-bearing on day one, not a later refinement. A
-//! check that only recognizes recursive occurrences in immediate payload
-//! positions rejects `/std/Toml`, whose recursion travels
-//! `Toml → Map(Toml) → struct field → Option → Node → leaf`. Polarity does not
-//! weaken the rule — every functor it admits was polynomial already; it only
-//! lets the checker recognize that fact through abstraction.
+//! "Modulo polarity" is load-bearing on day one, not a later refinement. A check that only recognizes recursive occurrences in immediate payload positions rejects `/std/Toml`, whose recursion travels `Toml → Map(Toml) → struct field → Option → Node → leaf`. Polarity does not weaken the rule — every functor it admits was polynomial already; it only lets the checker recognize that fact through abstraction.
 //!
-//! The pass computes two facts over the same walk (`occurrences`). The
-//! **parameter polarities** — how each type former uses its *i*th parameter —
-//! are what composition consumes, and they persist on [`curios_core::InductDecl`] and
-//! [`curios_core::StructDecl`] so the prelude's are computed once at archive-build
-//! time rather than re-derived per compilation. The **occurrence relation** —
-//! at what polarity declaration `D` appears inside declaration `E`,
-//! transitively closed — is transient; it exists to answer the acceptance test
-//! and is discarded.
+//! The pass computes two facts over the same walk (`occurrences`). The **parameter polarities** — how each type former uses its *i*th parameter — are what composition consumes, and they persist on [`curios_core::InductDecl`] and [`curios_core::StructDecl`] so the prelude's are computed once at archive-build time rather than re-derived per compilation. The **occurrence relation** — at what polarity declaration `D` appears inside declaration `E`, transitively closed — is transient; it exists to answer the acceptance test and is discarded.
 //!
-//! Acceptance is one predicate: the diagonal of the closed occurrence relation
-//! must be [`Polarity::Strict`] or [`Polarity::Unused`] for every declaration
-//! — no declaration reaches itself through a non-strict path. That predicate
-//! does not change. Every future improvement to the analysis changes how
-//! precisely `occurrences` computes, never what the test admits.
+//! Acceptance is one predicate: the diagonal of the closed occurrence relation must be [`Polarity::Strict`] or [`Polarity::Unused`] for every declaration — no declaration reaches itself through a non-strict path. That predicate does not change. Every future improvement to the analysis changes how precisely `occurrences` computes, never what the test admits.
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* analysis, through [`Env`]. It is a total function
-//! of post-zonk declarations, so a second implementation would be a second run
-//! of the same function on the same input rather than a second opinion; what
-//! each side supplies for itself is reduction, unfolding, and the registry
-//! fallback for declarations outside the analyzed set. The analysis is
-//! infallible by construction — a reduction the driver refuses leaves the term
-//! opaque, which is the conservative direction — so its only failure is the
-//! refusal it exists to produce.
+//! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. The analysis is infallible by construction — a reduction the driver refuses leaves the term opaque, which is the conservative direction — so its only failure is the refusal it exists to produce.
 //!
-//! Two obligations are deliberately out of scope. A declaration that takes a
-//! *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F)))
-//! end` — cannot be checked from its own body, because `F` is a binder with no
-//! known polarity; discharging that needs an inferred per-binder obligation in
-//! a side store, never a field on `FuncType`. And termination and productivity
-//! for `rec` remain unchecked at both the type and value layers. Nothing in
-//! the corpus takes a type-former parameter, so the first is co-scheduled with
-//! `Mu`; the second is a separate mechanism, not a refinement of this one.
+//! Two obligations are deliberately out of scope. A declaration that takes a *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` — cannot be checked from its own body, because `F` is a binder with no known polarity; discharging that needs an inferred per-binder obligation in a side store, never a field on `FuncType`. And termination and productivity for `rec` remain unchecked at both the type and value layers. Nothing in the corpus takes a type-former parameter, so the first is co-scheduled with `Mu`; the second is a separate mechanism, not a refinement of this one.
 
 #[cfg(test)]
 mod tests;
@@ -62,9 +26,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Why a declaration set was refused: `name`'s `part` reaches back to `name`
-/// at a non-accepting `polarity`. The driver owns the rendering; `type_` is the
-/// offending part's type, for a diagnostic that points at real source.
+/// Why a declaration set was refused: `name`'s `part` reaches back to `name` at a non-accepting `polarity`. The driver owns the rendering; `type_` is the offending part's type, for a diagnostic that points at real source.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NotPositive {
     pub name: Global,
@@ -73,17 +35,9 @@ pub struct NotPositive {
     pub polarity: Polarity,
 }
 
-/// Analyze every declaration in `inducts` and `structs` for strict positivity
-/// modulo polarity, returning each declaration's parameter-polarity vector, or
-/// the first refusal in name order.
+/// Analyze every declaration in `inducts` and `structs` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order.
 ///
-/// The maps are exactly the declaration set to analyze: the whole program when
-/// the kernel re-checks or the prelude is being built, and the user suffix
-/// alone when the elaborator replays a prelude. Anything the walk reaches
-/// outside them answers from the driver's registry ([`Env::induct_decl`] /
-/// [`Env::struct_decl`]), whose vector was computed when that declaration was —
-/// sound at the replay boundary because prelude items cannot mention user code,
-/// so every out-of-set declaration is a sink of the occurrence relation.
+/// The maps are exactly the declaration set to analyze: the whole program when the kernel re-checks or the prelude is being built, and the user suffix alone when the elaborator replays a prelude. Anything the walk reaches outside them answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the replay boundary because prelude items cannot mention user code, so every out-of-set declaration is a sink of the occurrence relation.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     inducts: &BTreeMap<Global, InductDecl>,
@@ -94,9 +48,7 @@ pub fn positivity_vectors<E: Env>(
         return Ok(BTreeMap::new());
     }
 
-    // Opening a telescope mints binders and is the expensive half of the pass,
-    // while the fixpoint below re-walks the same pieces several times — so
-    // split every declaration exactly once, up front.
+    // Opening a telescope mints binders and is the expensive half of the pass, while the fixpoint below re-walks the same pieces several times — so split every declaration exactly once, up front.
     let names = inducts
         .keys()
         .chain(structs.keys())
@@ -123,16 +75,14 @@ pub fn positivity_vectors<E: Env>(
     Ok(vectors.0)
 }
 
-/// One walkable piece of a declaration: a constructor payload binder, a struct
-/// field, or an index binder's type — named so a rejection can point at it.
+/// One walkable piece of a declaration: a constructor payload binder, a struct field, or an index binder's type — named so a rejection can point at it.
 #[derive(Debug)]
 struct Split {
     params: Vec<Free>,
     parts: Vec<Part>,
 }
 
-/// A declaration opened for analysis: its parameter binders, and every piece
-/// of it the walk consumes.
+/// A declaration opened for analysis: its parameter binders, and every piece of it the walk consumes.
 #[derive(Debug)]
 struct Part {
     label: String,
@@ -151,28 +101,13 @@ impl Split {
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
 
-            // The index *binder types* are deliberately not walked. They
-            // describe the family's arity, not its carrier: they exist to
-            // typecheck the index arguments a constructor targets and store
-            // nothing, so what a declaration contains is witnessed entirely by
-            // its constructor payloads. `Eq(@A : Type) : (x : A, y : A)` is
-            // `Strict` in `A` because `refl(@z : A)` has an `A` payload, and
-            // walking `x : A` on top of that would only cost the vector its
-            // precision — enough to reject the sound
-            // `induct Wit | tied(a : Wit, b : Wit, p : Eq(a, b)) end`.
+            // The index *binder types* are deliberately not walked. They describe the family's arity, not its carrier: they exist to typecheck the index arguments a constructor targets and store nothing, so what a declaration contains is witnessed entirely by its constructor payloads. `Eq(@A : Type) : (x : A, y : A)` is `Strict` in `A` because `refl(@z : A)` has an `A` payload, and walking `x : A` on top of that would only cost the vector its precision — enough to reject the sound `induct Wit | tied(a : Wit, b : Wit, p : Eq(a, b)) end`.
             //
-            // Nor do they need to guard a self-reference. `induct Foo : (x :
-            // Foo) -> Type` does not elaborate: `x : Foo` requires `Foo` to
-            // already be a type, and it is a family until applied to the very
-            // index being declared. The elaborator rejects it on kinding
-            // before positivity ever runs.
+            // Nor do they need to guard a self-reference. `induct Foo : (x : Foo) -> Type` does not elaborate: `x : Foo` requires `Foo` to already be a type, and it is a family until applied to the very index being declared. The elaborator rejects it on kinding before positivity ever runs.
             //
-            // Index *arguments* at an occurrence site are a different position
-            // that shares the word, and stay `Mixed` — see `walk`.
+            // Index *arguments* at an occurrence site are a different position that shares the word, and stay `Mixed` — see `walk`.
             for (tag, constructor) in &declaration.constructors {
-                // The terminal is the constructed type, not a payload: it is
-                // *always* a recursive occurrence and is skipped, which
-                // `labelled` does by ignoring the telescope's `Done`.
+                // The terminal is the constructed type, not a payload: it is *always* a recursive occurrence and is skipped, which `labelled` does by ignoring the telescope's `Done`.
                 let payload = constructor.telescope.clone().open_params(&arguments);
                 for (label, type_) in labelled(env, payload) {
                     parts.push(Part {
@@ -199,8 +134,7 @@ impl Split {
     }
 }
 
-/// One fresh binder per entry of a parameter telescope, carrying the declared
-/// hints so a diagnostic reads in the user's own names.
+/// One fresh binder per entry of a parameter telescope, carrying the declared hints so a diagnostic reads in the user's own names.
 fn binders<E: Env>(env: &mut E, params: &Telescope<()>) -> Vec<Free> {
     params
         .labels()
@@ -212,9 +146,7 @@ fn binders<E: Env>(env: &mut E, params: &Telescope<()>) -> Vec<Free> {
         .collect::<Vec<_>>()
 }
 
-/// Split an opened telescope into `(label, type)` entries, minting a fresh
-/// binder per entry so each later type holds free occurrences rather than
-/// dangling de Bruijn indices — the precondition for reducing it at all.
+/// Split an opened telescope into `(label, type)` entries, minting a fresh binder per entry so each later type holds free occurrences rather than dangling de Bruijn indices — the precondition for reducing it at all.
 fn labelled<E: Env, B: Bound>(env: &mut E, telescope: Telescope<B>) -> Vec<(String, Term)> {
     let mut entries = Vec::new();
     let mut telescope = telescope;
@@ -252,16 +184,9 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Targ
     found
 }
 
-/// The two fixpoints, run together over the whole declaration set to
-/// stability, then the occurrence relation closed transitively.
+/// The two fixpoints, run together over the whole declaration set to stability, then the occurrence relation closed transitively.
 ///
-/// Whole-set rather than declaration-by-declaration because a single ordered
-/// pass gets the wrong answer twice over. `Node(V)` mentions itself, so its
-/// own vector is an input to computing it; and in the mutual pair
-/// `A(X) | a(B(X))` / `B(X) | b(f : (X) -> Nat)`, `A` only learns that it is
-/// negative in `X` on the round after `B` does. Seeding at `Unused` and
-/// joining upward computes the least fixpoint, which is the right one: an
-/// inductive declaration *is* the least fixpoint of its own unfolding.
+/// Whole-set rather than declaration-by-declaration because a single ordered pass gets the wrong answer twice over. `Node(V)` mentions itself, so its own vector is an input to computing it; and in the mutual pair `A(X) | a(B(X))` / `B(X) | b(f : (X) -> Nat)`, `A` only learns that it is negative in `X` on the round after `B` does. Seeding at `Unused` and joining upward computes the least fixpoint, which is the right one: an inductive declaration *is* the least fixpoint of its own unfolding.
 fn fixpoint<E: Env>(env: &mut E, split: &BTreeMap<Global, Split>) -> (Vectors, Occurrences) {
     let mut vectors = Vectors(
         split
@@ -307,15 +232,9 @@ fn fixpoint<E: Env>(env: &mut E, split: &BTreeMap<Global, Split>) -> (Vectors, O
     (vectors, close(&direct))
 }
 
-/// Transitively close the occurrence relation under composition: if `middle`
-/// occurs in `owner` at `first` and `target` occurs in `middle` at `second`,
-/// then `target` occurs in `owner` at `first ∘ second`.
+/// Transitively close the occurrence relation under composition: if `middle` occurs in `owner` at `first` and `target` occurs in `middle` at `second`, then `target` occurs in `owner` at `first ∘ second`.
 ///
-/// This is what removes any need for the check to know which declarations were
-/// declared as one mutually recursive group. That grouping lives on
-/// `Item::Rec` and not on the registry entry, so asking "who else is in my
-/// group" would mean reaching outside the registry; closing the relation
-/// instead reaches every member of every cycle by construction.
+/// This is what removes any need for the check to know which declarations were declared as one mutually recursive group. That grouping lives on `Item::Rec` and not on the registry entry, so asking "who else is in my group" would mean reaching outside the registry; closing the relation instead reaches every member of every cycle by construction.
 fn close(direct: &Occurrences) -> Occurrences {
     let mut closed = direct.clone();
     loop {
@@ -349,11 +268,7 @@ fn close(direct: &Occurrences) -> Occurrences {
 
 /// Name the piece of `name` that a non-strict path back to `name` starts from.
 ///
-/// Runs only on the error path, which is why the fixpoint above can stay a
-/// plain polarity join with no provenance threaded through it. Re-walking one
-/// declaration part by part is cheap here and gives a message that points at
-/// real source: `Toml`, rejected through `Toml → Map → Node → Toml`, still
-/// names the `table` payload the path leaves from.
+/// Runs only on the error path, which is why the fixpoint above can stay a plain polarity join with no provenance threaded through it. Re-walking one declaration part by part is cheap here and gives a message that points at real source: `Toml`, rejected through `Toml → Map → Node → Toml`, still names the `table` payload the path leaves from.
 fn refusal<E: Env>(
     env: &mut E,
     split: &BTreeMap<Global, Split>,
@@ -377,8 +292,7 @@ fn refusal<E: Env>(
             let Target::Decl(other) = target else {
                 continue;
             };
-            // A direct self-occurrence stands on its own; anything else has to
-            // find its way back, and `closed` already knows how.
+            // A direct self-occurrence stands on its own; anything else has to find its way back, and `closed` already knows how.
             let back = match other == *name {
                 true => Polarity::Strict,
                 false => match closed.get(&other).and_then(|reached| reached.get(name)) {
@@ -398,9 +312,7 @@ fn refusal<E: Env>(
         }
     }
 
-    // The parts were re-walked under the final vectors, so one of them always
-    // reproduces the offending path. Fall back to the declaration alone rather
-    // than panicking on a diagnostic.
+    // The parts were re-walked under the final vectors, so one of them always reproduces the offending path. Fall back to the declaration alone rather than panicking on a diagnostic.
     NotPositive {
         name: name.clone(),
         part: "this declaration".to_string(),
@@ -411,32 +323,21 @@ fn refusal<E: Env>(
 
 /// What an occurrence the walk found refers to.
 ///
-/// The two live in one relation because they come from one traversal: the
-/// parameter fixpoint consumes the `Param` entries and the occurrence relation
-/// consumes the `Decl` entries, so there is exactly one place in the compiler
-/// that knows the per-`Subterm` polarity rules.
+/// The two live in one relation because they come from one traversal: the parameter fixpoint consumes the `Param` entries and the occurrence relation consumes the `Decl` entries, so there is exactly one place in the compiler that knows the per-`Subterm` polarity rules.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Target {
     /// The `index`th parameter binder of the declaration being walked.
     Param(usize),
-    /// Another declaration, by qualified name — including the walked
-    /// declaration itself, which is how a recursive occurrence is recorded.
+    /// Another declaration, by qualified name — including the walked declaration itself, which is how a recursive occurrence is recorded.
     Decl(Global),
 }
 
-/// At what polarity each declaration occurs inside each other declaration —
-/// `relation[owner][mentioned]`. Transient: it exists to answer the acceptance
-/// test and is discarded, which is why nothing persists it the way parameter
-/// polarities are persisted.
+/// At what polarity each declaration occurs inside each other declaration — `relation[owner][mentioned]`. Transient: it exists to answer the acceptance test and is discarded, which is why nothing persists it the way parameter polarities are persisted.
 type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
-/// Each analyzed declaration's parameter polarities as the fixpoint currently
-/// estimates them.
+/// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
 ///
-/// A name absent from the map is outside the set under analysis — a replayed
-/// prelude declaration, when the elaborator drives — and answers from the
-/// driver's registry, whose vector was computed when that declaration was.
-/// Either way an unknown lookup is [`Polarity::Mixed`], never `Unused`.
+/// A name absent from the map is outside the set under analysis — a replayed prelude declaration, when the elaborator drives — and answers from the driver's registry, whose vector was computed when that declaration was. Either way an unknown lookup is [`Polarity::Mixed`], never `Unused`.
 #[derive(Debug, Default)]
 struct Vectors(BTreeMap<Global, Vec<Polarity>>);
 
@@ -455,18 +356,13 @@ impl Vectors {
     }
 }
 
-/// One declaration's traversal: where it mentions its own parameters, and
-/// where it mentions other declarations.
+/// One declaration's traversal: where it mentions its own parameters, and where it mentions other declarations.
 struct Walk<'a, E: Env> {
     env: &'a mut E,
-    /// The declaration's parameter binders as this traversal opened them, in
-    /// declaration order. `Target::Param(i)` is a free occurrence of
-    /// `params[i]`.
+    /// The declaration's parameter binders as this traversal opened them, in declaration order. `Target::Param(i)` is a free occurrence of `params[i]`.
     params: Vec<Free>,
     vectors: &'a Vectors,
-    /// Definitions already unfolded on this traversal. A type-level `let` can
-    /// be mentioned from many positions, and a recursive group can mention
-    /// itself; without this the sweep in `blocked` would not terminate.
+    /// Definitions already unfolded on this traversal. A type-level `let` can be mentioned from many positions, and a recursive group can mention itself; without this the sweep in `blocked` would not terminate.
     unfolded: BTreeSet<Free>,
     found: BTreeMap<Target, Polarity>,
 }
@@ -479,23 +375,11 @@ impl<E: Env> Walk<'_, E> {
             .or_insert(polarity);
     }
 
-    /// Weak-head-reduce `term` when its head could reduce, which is what
-    /// unfolds a type-level `let` — `pub let Fiber : Type = () -> Async({})`
-    /// mentioned as `struct Job { resume : Fiber, … }`, or `Valid(bytes)`
-    /// inside `struct Str` — into the type former it actually names.
+    /// Weak-head-reduce `term` when its head could reduce, which is what unfolds a type-level `let` — `pub let Fiber : Type = () -> Async({})` mentioned as `struct Job { resume : Fiber, … }`, or `Valid(bytes)` inside `struct Str` — into the type former it actually names.
     ///
-    /// Forces a `rec` head rather than leaving it stuck, because a mutually
-    /// recursive `induct` group lowers its *type constructors* into a
-    /// top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to
-    /// a universe instance of a `RecMember`, and without forcing it the whole
-    /// `Pause`/`Async` group reads as `Mixed` and is rejected.
+    /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a `RecMember`, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
     ///
-    /// Declines in two cases, both of which leave the term to be treated as
-    /// opaque, which is conservative. A term whose `reach` is non-zero still
-    /// sits under enclosing binders, and reduction assumes free occurrences —
-    /// it would panic on a dangling de Bruijn index. And a reduction the
-    /// driver refuses (an exhausted budget on a type-level `rec` that will not
-    /// converge) reports nothing rather than failing the analysis.
+    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. A term whose `reach` is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling de Bruijn index. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis.
     fn forced(&mut self, term: &Term) -> Term {
         let reducible = matches!(
             &**term,
@@ -515,10 +399,7 @@ impl<E: Env> Walk<'_, E> {
         self.env.force(term).unwrap_or_else(|_| term.clone())
     }
 
-    /// Open one telescope binder against a fresh assumption, so the rest of the
-    /// telescope holds free occurrences rather than dangling indices and can be
-    /// reduced. The binder is never assumed a type: the walk reads structure,
-    /// not sorts.
+    /// Open one telescope binder against a fresh assumption, so the rest of the telescope holds free occurrences rather than dangling indices and can be reduced. The binder is never assumed a type: the walk reads structure, not sorts.
     fn open<B: Bound>(&mut self, rest: Scope<One, Telescope<B>>) -> Telescope<B> {
         let binder = self.env.fresh(rest.first_hint());
         rest.open(&[&Term::free_var(&binder)])
@@ -526,12 +407,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// A function type: each domain flips, the terminal keeps its polarity.
     ///
-    /// A nullary `() -> X` is `Done(X)` — an *empty* domain telescope — so this
-    /// loop never runs and `X` keeps the polarity it arrived with. That is not
-    /// an edge case to tolerate but the rule that admits
-    /// `step(pause : Pause, next : () -> Async(A))`: a zero-argument function
-    /// is a thunk of its result, so `Async(A) = done(A) | step(Pause × X)` is
-    /// the polynomial functor it looks like.
+    /// A nullary `() -> X` is `Done(X)` — an *empty* domain telescope — so this loop never runs and `X` keeps the polarity it arrived with. That is not an edge case to tolerate but the rule that admits `step(pause : Pause, next : () -> Async(A))`: a zero-argument function is a thunk of its result, so `Async(A) = done(A) | step(Pause × X)` is the polynomial functor it looks like.
     fn arrow(&mut self, telescope: &Telescope<Term>, polarity: Polarity) {
         let flipped = polarity.flip();
         let mut telescope = telescope.clone();
@@ -546,9 +422,7 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// A field telescope — a tuple type, a struct's fields, a constructor's
-    /// payload. Every component keeps the polarity it arrived with: a product
-    /// is as positive as its factors.
+    /// A field telescope — a tuple type, a struct's fields, a constructor's payload. Every component keeps the polarity it arrived with: a product is as positive as its factors.
     fn fields(&mut self, telescope: &Telescope<()>, polarity: Polarity) {
         let mut telescope = telescope.clone();
         while let Telescope::Cons(field, rest) = telescope {
@@ -557,9 +431,7 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// A nominal type former's arguments, composed against how that former uses
-    /// each one. `Toml/table(Map(Toml))` is admitted here and nowhere else:
-    /// `Map` is `Strict` in its parameter, so the `Toml` inside stays strict.
+    /// A nominal type former's arguments, composed against how that former uses each one. `Toml/table(Map(Toml))` is admitted here and nowhere else: `Map` is `Strict` in its parameter, so the `Toml` inside stays strict.
     fn arguments(&mut self, name: &Global, arguments: &[Term], polarity: Polarity) {
         for (index, argument) in arguments.iter().enumerate() {
             let used = self.vectors.at(self.env, name, index);
@@ -567,14 +439,9 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// A form the walk cannot see through: descend into every direct child at
-    /// `Mixed`.
+    /// A form the walk cannot see through: descend into every direct child at `Mixed`.
     ///
-    /// `Mixed` is a *result*, never a stop. Halting here would let a recursive
-    /// occurrence hidden inside a stuck `match` arm or a lambda body pass
-    /// unseen, which is a soundness hole rather than a missed refinement. The
-    /// descent reuses `Subterm::any_child_term` so a new term former cannot be
-    /// added without this walk following it.
+    /// `Mixed` is a *result*, never a stop. Halting here would let a recursive occurrence hidden inside a stuck `match` arm or a lambda body pass unseen, which is a soundness hole rather than a missed refinement. The descent reuses `Subterm::any_child_term` so a new term former cannot be added without this walk following it.
     fn opaque(&mut self, term: &Term) {
         let subterm: &Subterm = term;
         subterm.any_child_term(&mut |child| {
@@ -586,13 +453,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Follow the definitions of an unreducible term's free variables.
     ///
-    /// `any_child_term` visits scope bodies closed, so a child that still sits
-    /// under a binder is one `forced` refused to reduce — and a definition
-    /// mentioned there would otherwise hide whatever its body names. Walking
-    /// each such definition's body (which is closed, hence safe to reduce)
-    /// at `Mixed` closes that gap. `unfolded` keeps a definition that is
-    /// mentioned many times, or that mentions itself, from being followed
-    /// twice.
+    /// `any_child_term` visits scope bodies closed, so a child that still sits under a binder is one `forced` refused to reduce — and a definition mentioned there would otherwise hide whatever its body names. Walking each such definition's body (which is closed, hence safe to reduce) at `Mixed` closes that gap. `unfolded` keeps a definition that is mentioned many times, or that mentions itself, from being followed twice.
     fn blocked(&mut self, term: &Term) {
         if term.reach() == 0 {
             return;
@@ -608,12 +469,9 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// Where `term` mentions this walk's targets, given that `term` itself sits
-    /// at `polarity`.
+    /// Where `term` mentions this walk's targets, given that `term` itself sits at `polarity`.
     fn walk(&mut self, term: &Term, polarity: Polarity) {
-        // Nothing inside a position the enclosing former never inspects can
-        // occur at all — `Unused` composes to `Unused` however deep the walk
-        // would go.
+        // Nothing inside a position the enclosing former never inspects can occur at all — `Unused` composes to `Unused` however deep the walk would go.
         if polarity == Polarity::Unused {
             return;
         }
@@ -634,11 +492,7 @@ impl<E: Env> Walk<'_, E> {
             Subterm::FuncType(FuncType { telescope, .. }) => self.arrow(telescope, polarity),
             Subterm::TupleType(TupleType { telescope }) => self.fields(telescope, polarity),
 
-            // A nominal occurrence is recorded at the polarity it stands at —
-            // `Strict` at the top of a payload, but `Neg` for the `Waker` in
-            // `park((Waker) -> {})`. Its arguments are walked *as well*, not
-            // instead: `Vec(T, n)` inside `Vec`'s own payload is both a
-            // recursive occurrence and a use of `T`.
+            // A nominal occurrence is recorded at the polarity it stands at — `Strict` at the top of a payload, but `Neg` for the `Waker` in `park((Waker) -> {})`. Its arguments are walked *as well*, not instead: `Vec(T, n)` inside `Vec`'s own payload is both a recursive occurrence and a use of `T`.
             Subterm::InductType(InductType {
                 name,
                 params,
@@ -647,9 +501,7 @@ impl<E: Env> Walk<'_, E> {
             }) => {
                 self.record(Target::Decl(name.clone()), polarity);
                 self.arguments(name, params, polarity);
-                // Indices are not parameters: an inductive is not uniform in
-                // them, so nothing can be composed and they stay opaque. The
-                // corpus never recurses through one.
+                // Indices are not parameters: an inductive is not uniform in them, so nothing can be composed and they stay opaque. The corpus never recurses through one.
                 for index in indices {
                     self.walk(index, Polarity::Mixed);
                 }
@@ -678,9 +530,7 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// Primitive type formers, matched exhaustively rather than consulted
-    /// through a side table — so adding a primitive forces a polarity decision
-    /// at compile time instead of inheriting a default.
+    /// Primitive type formers, matched exhaustively rather than consulted through a side table — so adding a primitive forces a polarity decision at compile time instead of inheriting a default.
     fn prim(&mut self, prim: &Prim, polarity: Polarity, term: &Term) {
         match prim {
             // The nullary type formers name nothing.
@@ -692,17 +542,13 @@ impl<E: Env> Walk<'_, E> {
             | Prim::BinType(_)
             | Prim::HandleType => {}
 
-            // `Lst` is covariant: a list of `T`s is a finite product of `T`s,
-            // so a strict occurrence in the element stays strict. This is the
-            // rule that admits `Json/arr(Lst(Json))` and `Toml/arr(Lst(Toml))`.
+            // `Lst` is covariant: a list of `T`s is a finite product of `T`s, so a strict occurrence in the element stays strict. This is the rule that admits `Json/arr(Lst(Json))` and `Toml/arr(Lst(Toml))`.
             Prim::LstType(element) => self.walk(element, polarity),
 
             // A cell is read *and* written, so it is invariant in its element.
             Prim::CellType(element) => self.walk(element, Polarity::Mixed),
 
-            // Everything remaining is a value or an operation over values, not
-            // a type former. Its operands are terms; whatever they mention,
-            // they mention at `Mixed`.
+            // Everything remaining is a value or an operation over values, not a type former. Its operands are terms; whatever they mention, they mention at `Mixed`.
             Prim::Bool(_)
             | Prim::BoolAnd(..)
             | Prim::BoolOr(..)

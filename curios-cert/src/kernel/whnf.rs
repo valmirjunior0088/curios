@@ -1,24 +1,10 @@
 //! Weak-head normalization: the kernel's reduction strategy.
 //!
-//! This is the kernel's answer to "what does this term compute to, as far as
-//! its head". It is deliberately the *whole* strategy — beta, delta, iota,
-//! projection, universe instantiation, primitive folding, and `rec` unfolding —
-//! and deliberately nothing else. In particular there is no reduction cache, no
-//! scrutinee refinement, and no metavariable resolution. Those are what make
-//! the elaborator's reducer fast and forgiving; here they would be three more
-//! ways for the answer to come from somewhere other than the term.
+//! This is the kernel's answer to "what does this term compute to, as far as its head". It is deliberately the *whole* strategy — beta, delta, iota, projection, universe instantiation, primitive folding, and `rec` unfolding — and deliberately nothing else. In particular there is no reduction cache, no scrutinee refinement, and no metavariable resolution. Those are what make the elaborator's reducer fast and forgiving; here they would be three more ways for the answer to come from somewhere other than the term.
 //!
-//! It resembles the elaborator's reducer closely, and that resemblance is the
-//! point of writing it out rather than sharing it. Reduction decides which
-//! programs convert, and conversion decides which programs typecheck; a bug
-//! shared by both checkers is a bug neither can catch. The crate boundary
-//! enforces this — `curios-elab`'s reducer is not visible from here — so the
-//! duplication cannot quietly collapse back into a call.
+//! It resembles the elaborator's reducer closely, and that resemblance is the point of writing it out rather than sharing it. Reduction decides which programs convert, and conversion decides which programs typecheck; a bug shared by both checkers is a bug neither can catch. The crate boundary enforces this — `curios-elab`'s reducer is not visible from here — so the duplication cannot quietly collapse back into a call.
 //!
-//! Two things *are* shared, and both are representation rather than judgment:
-//! the binder discipline that `open`/`release` implement, and
-//! [`reduce_prim`](curios_core::reduce_prim), which decides what `2 + 2` folds to.
-//! Neither can admit an ill-typed program on its own.
+//! Two things *are* shared, and both are representation rather than judgment: the binder discipline that `open`/`release` implement, and [`reduce_prim`](curios_core::reduce_prim), which decides what `2 + 2` folds to. Neither can admit an ill-typed program on its own.
 
 #[cfg(test)]
 mod tests;
@@ -33,9 +19,7 @@ use {
     num_traits::ToPrimitive,
 };
 
-/// The kernel's reduction strategy: everything unfolds, and what a local-free
-/// term unfolds to is remembered — see the memo fields on [`Kernel`] for what
-/// that does and does not concede.
+/// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the memo fields on [`Kernel`] for what that does and does not concede.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         if let Some(replayed) = self.whnf_hit(&term, false) {
@@ -73,15 +57,9 @@ enum Step {
 
 /// A `match` whose scrutinee is still being reduced.
 ///
-/// Scrutinee reduction runs on this explicit stack rather than by recursion.
-/// A tower of matches over a deep closed spine — the scan-state chain a string
-/// literal lowers to — would otherwise consume native stack once per link, and
-/// the kernel has to check exactly the terms the elaborator produced, on the
-/// same default thread stack.
+/// Scrutinee reduction runs on this explicit stack rather than by recursion. A tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — would otherwise consume native stack once per link, and the kernel has to check exactly the terms the elaborator produced, on the same default thread stack.
 ///
-/// The scrutinee as *written* is not kept: an arm binds the payload of the
-/// value the scrutinee reduced to, so nothing downstream refers back to the
-/// original spelling.
+/// The scrutinee as *written* is not kept: an arm binds the payload of the value the scrutinee reduced to, so nothing downstream refers back to the original spelling.
 struct Pending {
     motive: Scope<Many>,
     cases: Cases,
@@ -111,10 +89,7 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 pending.push(Pending { motive, cases });
                 Step::Continue(head)
             }
-            // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`,
-            // `FuncType`, `Type`/`Prop`, `Rec`/`RecMember`, and a `Metavar` no
-            // kernel input should contain are all weak-head normal already:
-            // their sub-terms are not reduced in this position.
+            // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`, `FuncType`, `Type`/`Prop`, `Rec`/`RecMember`, and a `Metavar` no kernel input should contain are all weak-head normal already: their sub-terms are not reduced in this position.
             other => Step::Stop(other.into()),
         };
 
@@ -126,8 +101,7 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                     break;
                 }
                 Step::Stop(value) => {
-                    // A stuck form standing under an arm's case equation *is*
-                    // that case's value, definitionally; continue from it.
+                    // A stuck form standing under an arm's case equation *is* that case's value, definitionally; continue from it.
                     if let Some(refined) = kernel.refinement_of(&value) {
                         step = Step::Continue(refined);
                         continue;
@@ -148,12 +122,7 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 
 /// Delta: unfold a definition, or leave the variable as the normal form it is.
 ///
-/// The body is reduced once and its reduct remembered, so the next occurrence
-/// of the name — in this spine or any later one — continues from the reduct
-/// instead of re-deriving it. A definition body is closed, so the memo entry
-/// depends on nothing but the definition store. The nested `whnf` recurses one
-/// native frame per link of a definition-reference chain, which is authored
-/// depth, not data depth.
+/// The body is reduced once and its reduct remembered, so the next occurrence of the name — in this spine or any later one — continues from the reduct instead of re-deriving it. A definition body is closed, so the memo entry depends on nothing but the definition store. The nested `whnf` recurses one native frame per link of a definition-reference chain, which is authored depth, not data depth.
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
     let Some(body) = kernel.value(var.unwrap()).cloned() else {
         return Ok(Step::Stop(Term::var(var)));
@@ -173,8 +142,7 @@ fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
 
 /// Beta: open a function's telescope over the arguments applied to it.
 ///
-/// A `rec` head is exposed but not unfolded — the folded spelling stays the
-/// normal form of a recursive call, and [`force`] is what demands otherwise.
+/// A `rec` head is exposed but not unfolded — the folded spelling stays the normal form of a recursive call, and [`force`] is what demands otherwise.
 fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
     let Apply {
         head,
@@ -203,13 +171,9 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
     })
 }
 
-/// Projection: select a component out of a tuple, a struct, or a constructor's
-/// payload.
+/// Projection: select a component out of a tuple, a struct, or a constructor's payload.
 ///
-/// A `Variant` is projected through the flat runtime view `(tag, payload...)`,
-/// so field `i + 1` is payload component `i`; a `Struct` has no tag and is
-/// projected positionally. A label that survived to here has no positional
-/// meaning yet and stays stuck.
+/// A `Variant` is projected through the flat runtime view `(tag, payload...)`, so field `i + 1` is payload component `i`; a `Struct` has no tag and is projected positionally. A label that survived to here has no positional meaning yet and stays stuck.
 fn step_proj(kernel: &mut Kernel, proj: Proj) -> Result<Step, ReduceError> {
     let Proj { head, field } = proj;
 
@@ -237,12 +201,9 @@ fn step_proj(kernel: &mut Kernel, proj: Proj) -> Result<Step, ReduceError> {
     })
 }
 
-/// Eta for functions: `(x) => f(x)` is `f`, provided `f` does not itself
-/// mention `x`.
+/// Eta for functions: `(x) => f(x)` is `f`, provided `f` does not itself mention `x`.
 ///
-/// Contracting here rather than only at conversion means the two spellings have
-/// one normal form, so every consumer of a weak-head normal form sees them as
-/// the same term without having to know the rule.
+/// Contracting here rather than only at conversion means the two spellings have one normal form, so every consumer of a weak-head normal form sees them as the same term without having to know the rule.
 fn step_func(kernel: &mut Kernel, func: Func) -> Step {
     let arity = func.telescope.len();
 
@@ -266,12 +227,7 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Step {
 
 /// Zeta: substitute a `let`'s bindings into its tail.
 ///
-/// The elaborator instead binds each value as a fresh definition and opens the
-/// tail over *those*, which avoids copying a value into every use. The kernel
-/// substitutes, because a substitution is visibly the rule and an environment
-/// is a second place a variable's meaning can come from. Bindings are
-/// non-recursive and bind left to right, so binding `i` sees exactly the values
-/// before it.
+/// The elaborator instead binds each value as a fresh definition and opens the tail over *those*, which avoids copying a value into every use. The kernel substitutes, because a substitution is visibly the rule and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn step_let(let_: Let) -> Term {
     let mut values: Vec<Term> = Vec::with_capacity(let_.bindings.len());
 
@@ -286,9 +242,7 @@ fn step_let(let_: Let) -> Term {
 
 /// Instantiate a universe-polymorphic definition at a stated instance.
 ///
-/// This is the only position from which a polymorphic definition unfolds — a
-/// bare occurrence of one denotes no particular instance, so
-/// [`Kernel::value`](super::Kernel) withholds it there.
+/// This is the only position from which a polymorphic definition unfolds — a bare occurrence of one denotes no particular instance, so [`Kernel::value`](super::Kernel) withholds it there.
 fn step_universe_inst(kernel: &mut Kernel, instance: UniverseInst) -> Result<Step, ReduceError> {
     let UniverseInst { head, levels } = instance;
 
@@ -315,14 +269,9 @@ fn step_universe_inst(kernel: &mut Kernel, instance: UniverseInst) -> Result<Ste
 
 /// Iota: dispatch a `match` on the value `forced` its scrutinee reduced to.
 ///
-/// An arm binds that value's payload components directly. They are themselves
-/// unreduced — a `Variant` is a weak-head normal form whose sub-terms this
-/// strategy never entered — so binding them is call-by-name, not call-by-value.
+/// An arm binds that value's payload components directly. They are themselves unreduced — a `Variant` is a weak-head normal form whose sub-terms this strategy never entered — so binding them is call-by-name, not call-by-value.
 ///
-/// The elaborator instead binds each arm to a *projection of the scrutinee as
-/// written*, because a reduced payload can carry annotation holes its zonker
-/// would then have to solve. The kernel has no zonker and no holes, so it takes
-/// the direct route.
+/// The elaborator instead binds each arm to a *projection of the scrutinee as written*, because a reduced payload can carry annotation holes its zonker would then have to solve. The kernel has no zonker and no holes, so it takes the direct route.
 fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
     match cases {
         Cases::Bool {
@@ -341,10 +290,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
             }))),
         },
 
-        // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is
-        // exactly "this is a concrete `k`". A literal takes its case, or the
-        // default when no case names it (including a value past the `u32` keys);
-        // anything symbolic rebuilds the neutral switch.
+        // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is exactly "this is a concrete `k`". A literal takes its case, or the default when no case names it (including a value past the `u32` keys); anything symbolic rebuilds the neutral switch.
         Cases::Switch { cases, default } => {
             let (value, inner) = Nat::decompose(&forced);
 
@@ -371,8 +317,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
                     return Step::Continue(arm.open(&refs));
                 }
 
-                // A constructor with no arm of its own takes the catch-all,
-                // which binds nothing.
+                // A constructor with no arm of its own takes the catch-all, which binds nothing.
                 if let Some(default) = &default {
                     return Step::Continue(default.clone());
                 }
@@ -385,11 +330,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
             })))
         }
 
-        // Structural induction over a native free-monoid carrier
-        // (`Nat`/`Bin`/`Lst`). `FreeMonoid::uncons` owns the carrier-specific
-        // one-step decode; this is the catamorphism over it. The cons arm binds
-        // the peeled generator (absent for the unary `Nat`), the tail, and an
-        // induction hypothesis that recurses symbolically on that tail.
+        // Structural induction over a native free-monoid carrier (`Nat`/`Bin`/`Lst`). `FreeMonoid::uncons` owns the carrier-specific one-step decode; this is the catamorphism over it. The cons arm binds the peeled generator (absent for the unary `Nat`), the tail, and an induction hypothesis that recurses symbolically on that tail.
         Cases::FreeMonoid { carrier } => {
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
@@ -435,8 +376,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
     }
 }
 
-/// Strip `rec` binding syntax without unfolding a member's fixed point, turning
-/// `rec f = ...; f` into the structural `RecMember` it denotes.
+/// Strip `rec` binding syntax without unfolding a member's fixed point, turning `rec f = ...; f` into the structural `RecMember` it denotes.
 fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
 
@@ -448,8 +388,7 @@ fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
     }
 }
 
-/// Open a `rec` group's tail over its members. A pure binder operation: it
-/// mints nothing and unfolds no fixed point.
+/// Open a `rec` group's tail over its members. A pure binder operation: it mints nothing and unfolds no fixed point.
 pub(crate) fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();
@@ -459,17 +398,9 @@ pub(crate) fn unfold_rec(rec: Rec) -> Term {
 
 /// Unfold a `rec` head that some eliminator demands the value of.
 ///
-/// The main loop treats a `rec` as a normal form, which is what keeps a
-/// recursive definition from unfolding forever at every occurrence. An
-/// eliminator that actually needs the value calls this, which unfolds and
-/// re-reduces until it reaches one.
+/// The main loop treats a `rec` as a normal form, which is what keeps a recursive definition from unfolding forever at every occurrence. An eliminator that actually needs the value calls this, which unfolds and re-reduces until it reaches one.
 ///
-/// An unfolding that lands on a stuck neutral is *discarded* and the folded
-/// spelling returned. That is what stops the unfold-and-restuck cycle: without
-/// it, a recursive function applied to a symbolic argument would grow one more
-/// copy of its own body at every demand and never reach a normal form. A
-/// non-productive group still spins until the budget runs out, exactly as a
-/// top-level `rec` does.
+/// An unfolding that lands on a stuck neutral is *discarded* and the folded spelling returned. That is what stops the unfold-and-restuck cycle: without it, a recursive function applied to a symbolic argument would grow one more copy of its own body at every demand and never reach a normal form. A non-productive group still spins until the budget runs out, exactly as a top-level `rec` does.
 fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let folded = term.clone();
     let mut term = term;
@@ -499,13 +430,9 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     }
 }
 
-/// The one definitional unfolding [`force`] withholds: a folded recursive
-/// spelling — a `rec` value, a member selection, or a member application —
-/// stepped to the weak-head form of its body. `None` for every other shape.
+/// The one definitional unfolding [`force`] withholds: a folded recursive spelling — a `rec` value, a member selection, or a member application — stepped to the weak-head form of its body. `None` for every other shape.
 ///
-/// `force` keeps the folded spelling as a recursive call's normal form, while
-/// an arm's induction hypothesis is the raw stuck fold-match on the same
-/// argument; conversion consults this to see the two spellings as one.
+/// `force` keeps the folded spelling as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument; conversion consults this to see the two spellings as one.
 pub(crate) fn unfold_spelling(
     kernel: &mut Kernel,
     term: &Term,

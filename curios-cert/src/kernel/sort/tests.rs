@@ -14,10 +14,7 @@ fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
-/// A nominal family with no constructors, declared at `result_sort`. Enough to
-/// give the tests below a base type at a known sort — the registry is what says
-/// whether a nominal type is a proposition, so there is no way to build one
-/// without it.
+/// A nominal family with no constructors, declared at `result_sort`. Enough to give the tests below a base type at a known sort — the registry is what says whether a nominal type is a proposition, so there is no way to build one without it.
 fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
     let name = nominal(path);
 
@@ -49,8 +46,7 @@ fn a_primitive_type_sits_at_level_zero() {
     );
 }
 
-/// `Type u : Type (u + 1)`, and `Prop : Type 0`. Both are the sort of a
-/// universe, not the universe itself.
+/// `Type u : Type (u + 1)`, and `Prop : Type 0`. Both are the sort of a universe, not the universe itself.
 #[test]
 fn a_universe_is_one_level_above_itself() {
     let mut kernel = kernel();
@@ -77,8 +73,7 @@ fn a_nominal_types_sort_is_the_one_its_declaration_states() {
     assert_eq!(Sort::of(&mut kernel, &data), Ok(Sort::Type(Level::zero())),);
 }
 
-/// Π into a proposition is a proposition however large its domain, which is
-/// what makes `(n : Nat) -> P(n)` erasable.
+/// Π into a proposition is a proposition however large its domain, which is what makes `(n : Nat) -> P(n)` erasable.
 #[test]
 fn a_function_into_a_proposition_is_a_proposition() {
     let mut kernel = kernel();
@@ -103,9 +98,7 @@ fn a_function_into_data_takes_the_join_of_its_parts() {
     assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Type(Level::zero())));
 }
 
-/// A record of nothing but propositions is a proposition — but the *empty*
-/// record is unit, not a proposition. It is what an effect returns, so calling
-/// it a proposition would erase a value the program still needs.
+/// A record of nothing but propositions is a proposition — but the *empty* record is unit, not a proposition. It is what an effect returns, so calling it a proposition would erase a value the program still needs.
 #[test]
 fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
     let mut kernel = kernel();
@@ -121,8 +114,7 @@ fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
     assert_eq!(Sort::of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
 }
 
-/// One relevant field is enough to make the whole record relevant: its
-/// inhabitants are distinguishable, so irrelevance must not apply.
+/// One relevant field is enough to make the whole record relevant: its inhabitants are distinguishable, so irrelevance must not apply.
 #[test]
 fn one_relevant_field_makes_a_record_relevant() {
     let mut kernel = kernel();
@@ -136,8 +128,7 @@ fn one_relevant_field_makes_a_record_relevant() {
     assert_eq!(Sort::of(&mut kernel, &mixed), Ok(Sort::Type(Level::zero())));
 }
 
-/// A list *of* proofs is not a proposition: it has a length, so two lists are
-/// distinguishable even when their elements are not.
+/// A list *of* proofs is not a proposition: it has a length, so two lists are distinguishable even when their elements are not.
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
     let mut kernel = kernel();
@@ -148,8 +139,7 @@ fn a_list_of_proofs_is_not_a_proposition() {
     assert_eq!(Sort::of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
 }
 
-/// The type of a hypothesis is read off the binder it was opened at, which is
-/// how a `Prop`-typed variable is recognized as a proof.
+/// The type of a hypothesis is read off the binder it was opened at, which is how a `Prop`-typed variable is recognized as a proof.
 #[test]
 fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let mut kernel = kernel();
@@ -164,8 +154,7 @@ fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let _ = proposition;
 }
 
-/// Refusing beats guessing: an unregistered nominal type has no sort the kernel
-/// can determine, and inventing one is the unsound direction.
+/// Refusing beats guessing: an unregistered nominal type has no sort the kernel can determine, and inventing one is the unsound direction.
 #[test]
 fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     let mut kernel = kernel();
@@ -178,8 +167,7 @@ fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     );
 }
 
-/// A primitive *value* is not a type, so nothing classifies it — again a
-/// refusal rather than a default.
+/// A primitive *value* is not a type, so nothing classifies it — again a refusal rather than a default.
 #[test]
 fn a_value_in_type_position_is_refused() {
     let mut kernel = kernel();
@@ -190,8 +178,7 @@ fn a_value_in_type_position_is_refused() {
     ));
 }
 
-/// Unused today, kept because a plicity mark is part of a function type's
-/// identity and the constructor above takes one.
+/// Unused today, kept because a plicity mark is part of a function type's identity and the constructor above takes one.
 #[allow(dead_code)]
 fn explicit() -> Plicity {
     Plicity::Explicit

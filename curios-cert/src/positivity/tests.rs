@@ -34,9 +34,7 @@ fn single_payload(name: &Global, payload_type: Term, result_sort: Term) -> Induc
     }
 }
 
-/// The four-line route to `False`, refused by the kernel running the shared
-/// analysis: `Bad`'s constructor takes `(Bad) -> False`, a negative
-/// self-occurrence.
+/// The four-line route to `False`, refused by the kernel running the shared analysis: `Bad`'s constructor takes `(Bad) -> False`, a negative self-occurrence.
 #[test]
 fn a_negative_self_occurrence_is_refused() {
     let mut kernel = Kernel::new(100_000);
@@ -72,8 +70,7 @@ fn a_negative_self_occurrence_is_refused() {
     assert_eq!(refusal.name, bad_name);
 }
 
-/// A strictly positive self-occurrence — the payload *is* the family — is the
-/// ordinary recursive datatype and is admitted.
+/// A strictly positive self-occurrence — the payload *is* the family — is the ordinary recursive datatype and is admitted.
 #[test]
 fn a_strict_self_occurrence_is_admitted() {
     let mut kernel = Kernel::new(100_000);
@@ -120,9 +117,7 @@ fn diagonal(closed: &BTreeMap<Global, BTreeMap<Global, Polarity>>, name: &str) -
         .copied()
 }
 
-// `/std/Toml`, whose recursion travels `Toml → Map → Node → Toml` with every
-// step strict. Three hops means the direct relation says nothing about the
-// diagonal at all — the acceptance test reads a fact only the closure knows.
+// `/std/Toml`, whose recursion travels `Toml → Map → Node → Toml` with every step strict. Three hops means the direct relation says nothing about the diagonal at all — the acceptance test reads a fact only the closure knows.
 #[test]
 fn a_strict_cycle_closes_to_a_strict_diagonal() {
     let closed = close(&relation(&[
@@ -136,15 +131,9 @@ fn a_strict_cycle_closes_to_a_strict_diagonal() {
     assert_eq!(diagonal(&closed, "Node"), Some(Strict));
 }
 
-// One negative step anywhere in a cycle condemns every member of it, which is
-// what makes the check independent of which declaration the user happened to
-// write first.
+// One negative step anywhere in a cycle condemns every member of it, which is what makes the check independent of which declaration the user happened to write first.
 //
-// The diagonal lands at `Mixed` rather than `Neg` because the closure joins
-// over paths of *every* length: once a cycle exists it can be traversed any
-// number of times, and a lap that is negative once is positive twice. That is
-// the honest answer, and acceptance does not care — neither grade is
-// accepting.
+// The diagonal lands at `Mixed` rather than `Neg` because the closure joins over paths of *every* length: once a cycle exists it can be traversed any number of times, and a lap that is negative once is positive twice. That is the honest answer, and acceptance does not care — neither grade is accepting.
 #[test]
 fn one_negative_step_condemns_the_whole_cycle() {
     let closed = close(&relation(&[
@@ -157,9 +146,7 @@ fn one_negative_step_condemns_the_whole_cycle() {
     assert!(!diagonal(&closed, "Left").unwrap().accepting());
 }
 
-// A strict cycle, by contrast, is stable under any number of laps: `Strict` is
-// idempotent under composition, so traversing it repeatedly cannot manufacture
-// the ambiguity above and a sound declaration is never rejected for looping.
+// A strict cycle, by contrast, is stable under any number of laps: `Strict` is idempotent under composition, so traversing it repeatedly cannot manufacture the ambiguity above and a sound declaration is never rejected for looping.
 #[test]
 fn a_strict_cycle_does_not_drift_under_repeated_laps() {
     let closed = close(&relation(&[
@@ -171,9 +158,7 @@ fn a_strict_cycle_does_not_drift_under_repeated_laps() {
     assert!(diagonal(&closed, "Ping").unwrap().accepting());
 }
 
-// Two negative steps compose back to positive — and positive is still not
-// accepting. This is `Bad2` spread across two declarations: the sign is right
-// but the occurrence crossed arrows, so it is not strictly positive.
+// Two negative steps compose back to positive — and positive is still not accepting. This is `Bad2` spread across two declarations: the sign is right but the occurrence crossed arrows, so it is not strictly positive.
 #[test]
 fn two_negative_steps_compose_to_a_positive_but_unaccepting_diagonal() {
     let closed = close(&relation(&[("Up", "Down", Neg), ("Down", "Up", Neg)]));
@@ -182,9 +167,7 @@ fn two_negative_steps_compose_to_a_positive_but_unaccepting_diagonal() {
     assert!(!diagonal(&closed, "Up").unwrap().accepting());
 }
 
-// A declaration that reaches a cycle without being part of it is not itself
-// rejected. Positivity is a property of the path *back*, not of having
-// mentioned something suspicious.
+// A declaration that reaches a cycle without being part of it is not itself rejected. Positivity is a property of the path *back*, not of having mentioned something suspicious.
 #[test]
 fn reaching_a_bad_cycle_without_joining_it_is_not_a_rejection() {
     let closed = close(&relation(&[
@@ -197,9 +180,7 @@ fn reaching_a_bad_cycle_without_joining_it_is_not_a_rejection() {
     assert!(!diagonal(&closed, "Left").unwrap().accepting());
 }
 
-// Prelude declarations are sinks of the relation: they cannot mention user
-// code, so a user declaration that travels through one has no way back and the
-// closure terminates without inventing an edge.
+// Prelude declarations are sinks of the relation: they cannot mention user code, so a user declaration that travels through one has no way back and the closure terminates without inventing an edge.
 #[test]
 fn a_sink_contributes_no_path_back() {
     let closed = close(&relation(&[("User", "PreludeLst", Strict)]));
@@ -231,9 +212,7 @@ fn join_is_a_semilattice() {
     }
 }
 
-// The two incomparable branches. A parameter used both strictly and negatively
-// is not "negative" — it is beyond the analysis's ability to describe, and must
-// land at the top so composition through it stays conservative.
+// The two incomparable branches. A parameter used both strictly and negatively is not "negative" — it is beyond the analysis's ability to describe, and must land at the top so composition through it stays conservative.
 #[test]
 fn join_sends_incomparable_pairs_to_the_top() {
     assert_eq!(Strict.join(Pos), Pos);
@@ -259,9 +238,7 @@ fn compose_annihilates_at_unused_and_is_identity_at_strict() {
     }
 }
 
-// `Mixed` absorbs every argument it is actually applied to, but must not
-// resurrect an `Unused` one: a former that ignores its parameter ignores it
-// however confused the analysis is about the rest of the type.
+// `Mixed` absorbs every argument it is actually applied to, but must not resurrect an `Unused` one: a former that ignores its parameter ignores it however confused the analysis is about the rest of the type.
 #[test]
 fn compose_absorbs_into_mixed_except_at_unused() {
     for p in EVERY {
@@ -294,10 +271,7 @@ fn compose_is_commutative_and_associative() {
     }
 }
 
-// Crossing an arrow is what costs a strict occurrence its strictness, and
-// there is no way back: `flip` is an involution on `Pos`/`Neg`, so a strict
-// occurrence that crosses two arrows is positive, never strict again. This is
-// the whole reason `Bad2` — positive but not strictly positive — is rejected.
+// Crossing an arrow is what costs a strict occurrence its strictness, and there is no way back: `flip` is an involution on `Pos`/`Neg`, so a strict occurrence that crosses two arrows is positive, never strict again. This is the whole reason `Bad2` — positive but not strictly positive — is rejected.
 #[test]
 fn flip_loses_strictness_permanently() {
     assert_eq!(Strict.flip(), Neg);
@@ -322,9 +296,7 @@ fn only_unused_and_strict_are_accepting() {
     }
 }
 
-// Acceptance is downward-closed in each branch, which is what makes joining
-// occurrences sound: combining two admissible occurrences can only produce
-// another admissible one when both were strict or unused.
+// Acceptance is downward-closed in each branch, which is what makes joining occurrences sound: combining two admissible occurrences can only produce another admissible one when both were strict or unused.
 #[test]
 fn accepting_polarities_are_closed_under_join() {
     for p in EVERY {

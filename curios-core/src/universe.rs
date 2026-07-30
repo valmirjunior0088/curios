@@ -1,29 +1,10 @@
-//! Algebraic universe levels, declaration-local schemes, and the transactional
-//! constraint solver used by elaboration.
+//! Algebraic universe levels, declaration-local schemes, and the transactional constraint solver used by elaboration.
 //!
-//! Surface Curios has no level syntax. `curios-text` assigns a fresh
-//! [`UniverseMetaId`] and diagnostic [`UniverseSeed`] to every written `Type`;
-//! Core normalizes levels to finite maxima of a constant and checked-offset
-//! parameter/meta atoms. `Prop` remains a separate impredicative sort, while
-//! `Type u : Type (u + 1)` and checking `Type u` against `Type v` records
-//! `u ≤ v`.
+//! Surface Curios has no level syntax. `curios-text` assigns a fresh [`UniverseMetaId`] and diagnostic [`UniverseSeed`] to every written `Type`; Core normalizes levels to finite maxima of a constant and checked-offset parameter/meta atoms. `Prop` remains a separate impredicative sort, while `Type u : Type (u + 1)` and checking `Type u` against `Type v` records `u ≤ v`.
 //!
-//! Reusable declarations bind surviving input levels in a
-//! [`UniverseContext`]. Flexible classifier levels take their principal least
-//! solution when one exists; genuinely non-principal choices remain residual
-//! constrained parameters. Every external occurrence instantiates the stored
-//! context freshly. Local schemes may temporarily refer to ambient metas and
-//! are capture-safely rewritten beneath the enclosing declaration's parameters;
-//! recursive members instead share one context and one internal instance.
+//! Reusable declarations bind surviving input levels in a [`UniverseContext`]. Flexible classifier levels take their principal least solution when one exists; genuinely non-principal choices remain residual constrained parameters. Every external occurrence instantiates the stored context freshly. Local schemes may temporarily refer to ambient metas and are capture-safely rewritten beneath the enclosing declaration's parameters; recursive members instead share one context and one internal instance.
 //!
-//! Constraint provenance is diagnostic-only: semantic equality and hashing
-//! compare normalized inequalities but ignore their spans and explanations.
-//! Consistency reduces ordinary inequalities to one difference graph and
-//! branches only for genuine maxima on the right. Solver marks cover both
-//! assignments and constraints so failed speculative elaboration rolls them
-//! back together. Zonked Core validates that contexts are closed and nominal
-//! instance arities agree, then erasure removes every level, context, and
-//! instance before Ersd.
+//! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their spans and explanations. Consistency reduces ordinary inequalities to one difference graph and branches only for genuine maxima on the right. Solver marks cover both assignments and constraints so failed speculative elaboration rolls them back together. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before Ersd.
 
 use {
     curios_base::{Mint, Span},
@@ -93,10 +74,7 @@ pub enum LevelHead {
 
 /// A canonical algebraic universe level.
 ///
-/// The value denotes `max(constant, head₁ + offset₁, …)`. A `BTreeMap`
-/// provides deterministic atom ordering; construction coalesces duplicate
-/// heads at their greatest offset, making equality, hashing, and archival
-/// independent of the expression's original association and ordering.
+/// The value denotes `max(constant, head₁ + offset₁, …)`. A `BTreeMap` provides deterministic atom ordering; construction coalesces duplicate heads at their greatest offset, making equality, hashing, and archival independent of the expression's original association and ordering.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -115,8 +93,7 @@ impl Default for Level {
 
 impl Level {
     fn normalized(mut self) -> Self {
-        // Every parameter/meta ranges over naturals. Therefore `head + k`
-        // already dominates any constant `n ≤ k`.
+        // Every parameter/meta ranges over naturals. Therefore `head + k` already dominates any constant `n ≤ k`.
         if self.atoms.values().any(|offset| *offset >= self.constant) {
             self.constant = 0;
         }
@@ -164,8 +141,7 @@ impl Level {
         self.constant == 0 && self.atoms.is_empty()
     }
 
-    /// Whether the level algebra alone proves `self ≤ upper`, without using
-    /// any surrounding constraints.
+    /// Whether the level algebra alone proves `self ≤ upper`, without using any surrounding constraints.
     pub fn structurally_leq(&self, upper: &Self) -> bool {
         let constant_is_bounded = self.constant <= upper.constant
             || upper.atoms.values().any(|offset| *offset >= self.constant);
@@ -221,9 +197,7 @@ impl Level {
         self.checked_add(1)
     }
 
-    /// Cancel a common successor offset from a lower bound. Algebraic levels
-    /// have no predecessor former, so an atom below the cancelled offset has
-    /// no principal expression in the level language.
+    /// Cancel a common successor offset from a lower bound. Algebraic levels have no predecessor former, so an atom below the cancelled offset has no principal expression in the level language.
     pub fn cancel_offset(&self, offset: u32) -> Option<Self> {
         let mut atoms = BTreeMap::new();
         for (&head, &old) in &self.atoms {
@@ -290,9 +264,7 @@ impl fmt::Display for Level {
         }
         for (head, offset) in &self.atoms {
             let name = match head {
-                // `u` through `z`, then numbered cycles. Stepping 26 letters
-                // from `u` instead runs off the end of the alphabet at the
-                // seventh parameter and prints `{`, `|`, `}` as level names.
+                // `u` through `z`, then numbered cycles. Stepping 26 letters from `u` instead runs off the end of the alphabet at the seventh parameter and prints `{`, `|`, `}` as level names.
                 LevelHead::Param(param) => {
                     const LETTERS: usize = (b'z' - b'u' + 1) as usize;
                     let letter = char::from(b'u' + u8::try_from(param.0 % LETTERS).unwrap());
@@ -317,8 +289,7 @@ impl fmt::Display for Level {
     }
 }
 
-/// Whether an unsolved level is an input eligible for generalization or an
-/// inferred output/classifier that should be minimized.
+/// Whether an unsolved level is an input eligible for generalization or an inferred output/classifier that should be minimized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -331,9 +302,7 @@ pub enum UniverseRole {
 
 /// Lowering-time metadata for one densely numbered universe metavariable.
 ///
-/// The role controls finalization, while the origin survives the Text/Core
-/// boundary so a later constraint failure can still point at the written
-/// `Type` that introduced the level.
+/// The role controls finalization, while the origin survives the Text/Core boundary so a later constraint failure can still point at the written `Type` that introduced the level.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -399,9 +368,7 @@ pub struct UniverseConstraint {
     pub origin: UniverseConstraintOrigin,
 }
 
-// Provenance explains an inequality but is not part of its semantic identity.
-// In particular, `Span` equality follows source-allocation identity, which
-// must not make replayed or archive-restored schemes compare differently.
+// Provenance explains an inequality but is not part of its semantic identity. In particular, `Span` equality follows source-allocation identity, which must not make replayed or archive-restored schemes compare differently.
 impl PartialEq for UniverseConstraint {
     fn eq(&self, other: &Self) -> bool {
         self.lower == other.lower && self.upper == other.upper
@@ -439,13 +406,9 @@ impl UniverseContext {
         Self::default()
     }
 
-    /// This context's own parameters as an argument vector: the one instance
-    /// that instantiates it to itself.
+    /// This context's own parameters as an argument vector: the one instance that instantiates it to itself.
     ///
-    /// A declaration denotes this instance at every occurrence inside its own
-    /// signature, body, and registry entries, because a group is monomorphic
-    /// in its own universes. External uses instead take a fresh instance from
-    /// `curios-elab`'s `UniverseSolver::instantiate`.
+    /// A declaration denotes this instance at every occurrence inside its own signature, body, and registry entries, because a group is monomorphic in its own universes. External uses instead take a fresh instance from `curios-elab`'s `UniverseSolver::instantiate`.
     pub fn identity_instance(&self) -> Vec<Level> {
         (0..self.parameter_count)
             .map(UniverseParam)
@@ -507,11 +470,7 @@ pub enum UniverseError {
     MismatchedRecursiveContexts,
     /// The disjunctive consistency search exceeded its node budget.
     ///
-    /// Deciding a set of inequalities whose right-hand sides are genuine
-    /// maxima means choosing, for each left atom, which branch dominates it —
-    /// a search exponential in the number of such clauses. The budget makes
-    /// that blowup a reported diagnostic rather than an unbounded spin, and
-    /// names the shape that caused it.
+    /// Deciding a set of inequalities whose right-hand sides are genuine maxima means choosing, for each left atom, which branch dominates it — a search exponential in the number of such clauses. The budget makes that blowup a reported diagnostic rather than an unbounded spin, and names the shape that caused it.
     SearchExhausted {
         constraints: usize,
         branches: usize,

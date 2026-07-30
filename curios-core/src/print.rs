@@ -32,38 +32,22 @@ fn universe_suffix(levels: &[Level]) -> String {
 
 // === Source-style names (diagnostics) ========================================
 //
-// Core spells names for the kernel's convenience, not the reader's: every binder
-// is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and
-// every global is its fully-qualified canonical path (`std/Vec/Vec`, `sys/Nat`).
-// Two thread-local maps, installed only while a diagnostic (or `Module`) renders,
-// rewrite both back toward what the user wrote; the faithful `Display` for a bare
-// term leaves names untouched.
+// Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`std/Vec/Vec`, `sys/Nat`). Two thread-local maps, installed only while a diagnostic (or `Module`) renders, rewrite both back toward what the user wrote; the faithful `Display` for a bare term leaves names untouched.
 //
-//   axis (a) — local binders: a *rename map* (`with_pretty_names`, built by
-//     `build_rename` over `display_names`) alpha-renames the whole fragment —
-//     free vars *and* binder labels. A source hint is used bare when unique;
-//     distinct names sharing a hint, or shadowing a literally-rendered name, take
-//     minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike.
+// axis (a) — local binders: a *rename map* (`with_pretty_names`, built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a literally-rendered name, take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike.
 //
-//   axis (b) — globals: a *shorten map* (`with_short_names`, built by
-//     `build_shorten` over `Module::module_symbols`) replaces each qualified path with
-//     its shortest unambiguous `/`-suffix — the name in scope, since Curios has
-//     no `use … as` aliasing. Installed by error rendering *and* `Module` display.
+// axis (b) — globals: a *shorten map* (`with_short_names`, built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Installed by error rendering *and* `Module` display.
 //
-// `display_label` consults the shorten map first (globals), then the rename map
-// (locals); a name in neither renders verbatim.
+// `display_label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
 thread_local! {
-    /// Local binders → source-name renaming (axis (a)); installed by error
-    /// rendering only.
+    /// Local binders → source-name renaming (axis (a)); installed by error rendering only.
     static PRETTY: RefCell<Option<Rc<HashMap<Free, String>>>> = const { RefCell::new(None) };
-    /// Global qualified names → their shortest in-scope spelling (axis (b));
-    /// installed by both error rendering and `Module` display.
+    /// Global qualified names → their shortest in-scope spelling (axis (b)); installed by both error rendering and `Module` display.
     static SHORTEN: RefCell<Option<Rc<HashMap<Global, String>>>> = const { RefCell::new(None) };
 }
 
-/// Install a pretty-name rename map for the duration of `f`, restoring the
-/// previous state afterwards so the faithful `Display` paths are unaffected.
+/// Install a pretty-name rename map for the duration of `f`, restoring the previous state afterwards so the faithful `Display` paths are unaffected.
 pub fn with_pretty_names<R>(rename: Rc<HashMap<Free, String>>, f: impl FnOnce() -> R) -> R {
     let prev = PRETTY.with(|p| p.borrow_mut().replace(rename));
     let result = f();
@@ -79,19 +63,14 @@ pub fn with_short_names<R>(shorten: Rc<HashMap<Global, String>>, f: impl FnOnce(
     result
 }
 
-/// The display spelling of a global — shortened against the module's other
-/// symbols (axis (b)) when that is unambiguous, and rendered in full otherwise.
-/// Globals never take axis (a)'s rename: their spelling is a path a programmer
-/// wrote, not a minted hint.
+/// The display spelling of a global — shortened against the module's other symbols (axis (b)) when that is unambiguous, and rendered in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
 fn display_symbol(name: &Global) -> String {
     SHORTEN
         .with(|s| s.borrow().as_ref().and_then(|m| m.get(name).cloned()))
         .unwrap_or_else(|| name.to_string())
 }
 
-/// The display spelling of a name. A global with a shorter in-scope spelling
-/// takes it (axis (b)); a local binder gets its pretty rename (axis (a)),
-/// falling back to its minting hint. A name in neither map renders verbatim.
+/// The display spelling of a name. A global with a shorter in-scope spelling takes it (axis (b)); a local binder gets its pretty rename (axis (a)), falling back to its minting hint. A name in neither map renders verbatim.
 fn display_label(name: &Free) -> String {
     if let Some(global) = name.as_global() {
         return display_symbol(global);
@@ -104,19 +83,14 @@ fn display_label(name: &Free) -> String {
         })
 }
 
-/// Every name the printer will emit for `term`: free vars (Γ references) and the
-/// stored labels of every binder it reopens. Free vars come from the robust
-/// `Bound` traversal; binder labels — which that traversal never surfaces — from
-/// [`collect_labels`], which descends scope bodies (where nested binders live).
+/// Every name the printer will emit for `term`: free vars (Γ references) and the stored labels of every binder it reopens. Free vars come from the robust `Bound` traversal; binder labels — which that traversal never surfaces — from [`collect_labels`], which descends scope bodies (where nested binders live).
 pub fn display_names(term: &Term) -> BTreeSet<Free> {
     let mut names = term.free_vars();
     collect_labels(term, &mut names);
     names
 }
 
-/// Collect every binder label in `term`, recursing through scope and telescope
-/// bodies. (`Prim` interiors are skipped: they hold no binders the diagnostics
-/// need to name, and any free vars there are already in `free_vars`.)
+/// Collect every binder label in `term`, recursing through scope and telescope bodies. (`Prim` interiors are skipped: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.)
 fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
     fn push(out: &mut BTreeSet<Free>, binder: Option<&Free>) {
         if let Some(binder) = binder {
@@ -144,8 +118,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
         }
     }
 
-    // A tuple type's telescope has no result term (`Telescope<()>`); only its
-    // field types and labels carry names.
+    // A tuple type's telescope has no result term (`Telescope<()>`); only its field types and labels carry names.
     fn tuple_telescope(out: &mut BTreeSet<Free>, mut cur: &Telescope<()>) {
         while let Telescope::Cons(ty, rest) = cur {
             push(out, rest.binder(0));
@@ -270,11 +243,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
     }
 }
 
-/// Give every hinted binder a clean display spelling: its hint, or `hint2`,
-/// `hint3`, … when several distinct identities — binders *or* free vars — would
-/// otherwise render alike, or would shadow a name that renders literally
-/// (globals, hintless binders). The result is unambiguous by construction, so no
-/// rendered name is ever silently shared between two binders.
+/// Give every hinted binder a clean display spelling: its hint, or `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a name that renders literally (globals, hintless binders). The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
 pub fn build_rename(names: &BTreeSet<Free>) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
     let (prettifiable, literal): (Vec<_>, Vec<_>) =
@@ -301,19 +270,12 @@ pub fn build_rename(names: &BTreeSet<Free>) -> HashMap<Free, String> {
     map
 }
 
-/// Map each global to the shortest `/`-suffix of its path that no other global
-/// shares — the name it has in scope, since Curios has no `use … as` aliasing,
-/// so an in-scope name is always a suffix. Only entries that actually shorten
-/// are recorded; an ambiguous (or single-segment) name keeps its full path.
+/// Map each global to the shortest `/`-suffix of its path that no other global shares — the name it has in scope, since Curios has no `use … as` aliasing, so an in-scope name is always a suffix. Only entries that actually shorten are recorded; an ambiguous (or single-segment) name keeps its full path.
 pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
-    // One global can be listed twice (an inductive is both an `induct_decls` registry
-    // key and an `items` type-constructor definition); count distinct names, or
-    // such a name would look ambiguous with itself and never shorten.
+    // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition); count distinct names, or such a name would look ambiguous with itself and never shorten.
     let symbols = symbols.iter().collect::<BTreeSet<_>>();
 
-    // Suffixes are taken over the *segments* a name is made of, never over its
-    // rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the
-    // structure says so.
+    // Suffixes are taken over the *segments* a name is made of, never over its rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the structure says so.
     let suffixes = |name: &Global| -> Vec<String> {
         let Some(segments) = name.qualifier().map(Qualifier::segments) else {
             return Vec::new();
@@ -345,10 +307,7 @@ pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
     map
 }
 
-/// A scope's stored binder, or a depth-positional stand-in when it has none — a
-/// `constant` scope never had binders written. The stand-in is minted at the de
-/// Bruijn level, so one printed term's placeholders stay distinct from each
-/// other.
+/// A scope's stored binder, or a depth-positional stand-in when it has none — a `constant` scope never had binders written. The stand-in is minted at the de Bruijn level, so one printed term's placeholders stay distinct from each other.
 fn binder_or(binder: Option<&Free>, depth: usize) -> Free {
     match binder {
         Some(binder) => binder.clone(),
@@ -356,8 +315,7 @@ fn binder_or(binder: Option<&Free>, depth: usize) -> Free {
     }
 }
 
-/// Every binder of a scope, unnamed ones filled with stand-ins positioned from
-/// `depth`.
+/// Every binder of a scope, unnamed ones filled with stand-ins positioned from `depth`.
 fn scope_labels<'a>(binders: impl Iterator<Item = Option<&'a Free>>, depth: usize) -> Vec<Free> {
     binders
         .enumerate()
@@ -433,9 +391,7 @@ fn print_flt(flt: Flt) -> Printer {
     pure(string)
 }
 
-/// Render a binary primitive as `name left right`, the shape almost every
-/// scalar arithmetic/comparison/bitwise prim shares. `name` carries its own
-/// trailing space (`"Nat.add "`).
+/// Render a binary primitive as `name left right`, the shape almost every scalar arithmetic/comparison/bitwise prim shares. `name` carries its own trailing space (`"Nat.add "`).
 fn print_binary(name: &'static str, left: Term, right: Term, depth: usize) -> Printer {
     flat([pure(name), sub(left, depth), pure(" "), sub(right, depth)])
 }
@@ -445,12 +401,7 @@ fn print_unary(name: &'static str, inner: Term, depth: usize) -> Printer {
     flat([pure(name), sub(inner, depth)])
 }
 
-/// The surface infix symbol an operator primitive prints as, or `None` for a
-/// primitive with no infix spelling — the bitwise ops, conversions, `min`/`max`,
-/// and the `Bool.xor` that `!=` desugars through. Exactly the operators the
-/// surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the
-/// concept-dispatched arithmetic/comparison operators plus the two hardcoded
-/// `Bool` short-circuits.
+/// The surface infix symbol an operator primitive prints as, or `None` for a primitive with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
 fn infix_symbol(prim: &Prim) -> Option<&'static str> {
     Some(match prim {
         Prim::NatAdd(..) | Prim::IntAdd(..) | Prim::FltAdd(..) => "+",
@@ -475,9 +426,7 @@ fn infix_symbol(prim: &Prim) -> Option<&'static str> {
     })
 }
 
-/// Render an operator primitive as `left <symbol> right`, each operand
-/// parenthesized when it is itself an infix operator so nesting stays
-/// unambiguous — `(a + b) * c`, never `a + b * c`.
+/// Render an operator primitive as `left <symbol> right`, each operand parenthesized when it is itself an infix operator so nesting stays unambiguous — `(a + b) * c`, never `a + b * c`.
 fn print_infix(symbol: &'static str, left: Term, right: Term, depth: usize) -> Printer {
     flat([
         print_operand(left, depth),
@@ -486,9 +435,7 @@ fn print_infix(symbol: &'static str, left: Term, right: Term, depth: usize) -> P
     ])
 }
 
-/// An operand of [`print_infix`], wrapped in parentheses when it too prints as
-/// an infix operator (a nested operator primitive or a residual `Infix` node);
-/// self-delimiting operands (variables, literals, applications) print bare.
+/// An operand of [`print_infix`], wrapped in parentheses when it too prints as an infix operator (a nested operator primitive or a residual `Infix` node); self-delimiting operands (variables, literals, applications) print bare.
 fn print_operand(term: Term, depth: usize) -> Printer {
     let parenthesize = match &*term {
         Subterm::Prim(prim) => infix_symbol(prim).is_some(),
@@ -515,10 +462,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
         Prim::BoolNeq(l, r) => print_infix("!=", l, r, depth),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
-        // A successor over a symbolic tail is that tail plus its literal floor —
-        // spelled infix (`n + 1`, `(n + m) + 3`) to match the operator prims, its
-        // tail parenthesized when it too is an operator. A successor over `0` is a
-        // plain numeral (`{spine}`).
+        // A successor over a symbolic tail is that tail plus its literal floor — spelled infix (`n + 1`, `(n + m) + 3`) to match the operator prims, its tail parenthesized when it too is an operator. A successor over `0` is a plain numeral (`{spine}`).
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
             Subterm::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
             _ => flat([
@@ -751,12 +695,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
 
 /// A child document, deferred.
 ///
-/// Every recursive call in this module goes through here. Printing a term is a
-/// recursive function over a recursive structure, so building the document
-/// descended as deep as the term — one native frame per link of a string
-/// literal's UTF-8 derivation, which aborted the compiler while it was trying
-/// to *report* that the same literal had exhausted the reduction budget. The
-/// thunk moves that descent onto `run_printer`'s stack.
+/// Every recursive call in this module goes through here. Printing a term is a recursive function over a recursive structure, so building the document descended as deep as the term — one native frame per link of a string literal's UTF-8 derivation, which aborted the compiler while it was trying to *report* that the same literal had exhausted the reduction budget. The thunk moves that descent onto `run_printer`'s stack.
 fn sub(term: Term, depth: usize) -> Printer {
     deferred(move || print_term(term, depth))
 }
@@ -842,8 +781,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
         }) => {
             let n = telescope.len();
             let (labels, body) = open_telescope(telescope, depth);
-            // Each binder carries its written/canonical mark (`@x` = implicit,
-            // `use x` = witness), matching the `FuncType` printer above.
+            // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above.
             let marked = labels
                 .iter()
                 .enumerate()
@@ -936,8 +874,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             };
             flat([pure("("), sub(head, depth), pure(field)])
         }
-        // Params then indices, one flat argument list — exactly how the
-        // type-constructor function is applied at use sites.
+        // Params then indices, one flat argument list — exactly how the type-constructor function is applied at use sites.
         Subterm::InductType(InductType {
             name,
             universes,
@@ -963,8 +900,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 ])
             }
         }
-        // Prints as the constructor-function call, instantiated type params
-        // hidden — `Result/success(42)`.
+        // Prints as the constructor-function call, instantiated type params hidden — `Result/success(42)`.
         Subterm::Variant(Variant {
             name,
             universes,
@@ -1014,8 +950,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 ])
             }
         }
-        // Prints as the brace literal, instantiated type params hidden —
-        // `Pair { 0, "" }`.
+        // Prints as the brace literal, instantiated type params hidden — `Pair { 0, "" }`.
         Subterm::Struct(Struct {
             name,
             universes,
@@ -1041,8 +976,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             motive,
             cases,
         }) => {
-            // Arity 1 everywhere except an annotated inductive-match motive,
-            // whose pattern binders precede the scrutinee binder.
+            // Arity 1 everywhere except an annotated inductive-match motive, whose pattern binders precede the scrutinee binder.
             let motive_labels = scope_labels(motive.binder_iter(), depth);
             let motive_terms = label_terms(&motive_labels);
             let motive_refs = motive_terms.iter().collect::<Vec<_>>();
@@ -1054,8 +988,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 .join(", ");
             let motive = motive.open(&motive_refs);
 
-            // Shared `<keyword> head : label => motive;` prefix; the keyword
-            // and arm bodies depend on the case kind.
+            // Shared `<keyword> head : label => motive;` prefix; the keyword and arm bodies depend on the case kind.
             let keyword = match &cases {
                 Cases::Bool { .. } => "Bool.match ",
                 Cases::Switch { .. } => "Nat.match ",
@@ -1156,8 +1089,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     }
                 }
                 Cases::FreeMonoid { carrier } => {
-                    // The cons arm mirrors each carrier's own literal delimiters:
-                    // `\head\..tail; ih` for `Bin`, `[head, ..tail]; ih` for `Lst`.
+                    // The cons arm mirrors each carrier's own literal delimiters: `\head\..tail; ih` for `Bin`, `[head, ..tail]; ih` for `Lst`.
                     let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case) =
                             open_scope_three(cons_case, depth);
@@ -1190,9 +1122,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         ])
                     };
 
-                    // Per carrier: the identity arm's literal, its body, and the cons
-                    // arm — which binds `(predecessor, ih)` for the head-less unary
-                    // `Nat`, and `(head, tail), ih` for `Bin`/`Lst`.
+                    // Per carrier: the identity arm's literal, its body, and the cons arm — which binds `(predecessor, ih)` for the head-less unary `Nat`, and `(head, tail), ih` for `Bin`/`Lst`.
                     let (empty_lit, empty_case, cons_arm) = match carrier {
                         Carrier::Nat {
                             empty_case,
@@ -1320,9 +1250,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             pure(format!(" {} ", op.symbol())),
             sub(right, depth),
         ]),
-        // Identity and renaming spines (every entry a variable) are the
-        // uninteresting common case and print as the bare id; a spine carrying
-        // anything else is exactly the one worth seeing.
+        // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing.
         Subterm::Metavar(metavar) => {
             if metavar
                 .spine

@@ -132,14 +132,12 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
         ],
     );
 
-    // A predicate over the ids agrees with the collecting walk: a present id is
-    // found, an absent one is not.
+    // A predicate over the ids agrees with the collecting walk: a present id is found, an absent one is not.
     assert!(term.any_metavar(&mut |id| id == MetaId(3)));
     assert!(!term.any_metavar(&mut |id| id == MetaId(99)));
     assert_eq!(term.any_metavar(&mut |_| true), !term.metavars().is_empty());
 
-    // Bails on the first metavariable: the head's `?1` is reached first, so an
-    // accept-anything predicate runs exactly once instead of visiting all four.
+    // Bails on the first metavariable: the head's `?1` is reached first, so an accept-anything predicate runs exactly once instead of visiting all four.
     let mut visits = 0;
     assert!(term.any_metavar(&mut |_| {
         visits += 1;
@@ -166,16 +164,11 @@ fn has_local_free_flags_locals_not_globals() {
         Term::free_var(&Free::global(Qualifier::from(path)))
     }
 
-    // A local is a discriminant, not a spelling: what makes a free variable
-    // context-dependent — the only kind that can invalidate an elaboration-cache
-    // entry across frames — is that a scope opened it.
+    // A local is a discriminant, not a spelling: what makes a free variable context-dependent — the only kind that can invalidate an elaboration-cache entry across frames — is that a scope opened it.
     assert!(Term::free_var(&Free::local(3, Some("x"))).has_local_free());
     assert!(!global(["std", "Nat"]).has_local_free());
 
-    // A compiler-generated *global* is not context dependent and must not set
-    // the bit. This used to be a search for a marker character, so a witness
-    // that spelled itself `witness#N` misfired on every term mentioning one,
-    // silently disabling three elaboration caches. No spelling can do that now.
+    // A compiler-generated *global* is not context dependent and must not set the bit. This used to be a search for a marker character, so a witness that spelled itself `witness#N` misfired on every term mentioning one, silently disabling three elaboration caches. No spelling can do that now.
     assert!(!Term::free_var(&Free::Global(Global::Witness(WitnessId(0)))).has_local_free());
     assert!(!global(["std", "Nat"]).has_local_free());
 
@@ -183,8 +176,7 @@ fn has_local_free_flags_locals_not_globals() {
     let inner = Term::apply(Term::free_var(&binder_0), [Term::free_var(&binder_1)]);
     assert!(inner.has_local_free());
 
-    // A binder whose label hint carries `#` stays clean: the hint is not an
-    // occurrence, and the captured variable is bound, not free.
+    // A binder whose label hint carries `#` stays clean: the hint is not an occurrence, and the captured variable is bound, not free.
     let binder = Term::func(
         [(binder_2.clone(), Term::type_ground())],
         Term::free_var(&binder_2),
@@ -296,8 +288,7 @@ fn inductive_match_default_prints_a_catch_all_arm() {
     let r = Free::local(0, Some("r"));
     let a = Free::local(1, Some("a"));
     let b = Free::local(2, Some("b"));
-    // The catch-all renders as a trailing `| _ =>` arm, after the enumerated
-    // constructors — mirroring `Cases::Switch`'s default.
+    // The catch-all renders as a trailing `| _ =>` arm, after the enumerated constructors — mirroring `Cases::Switch`'s default.
     let term = Term::induct_match_default(
         Term::free_var(&r),
         None,
@@ -352,9 +343,7 @@ fn reach_basic_values() {
 
 #[test]
 fn reach_telescope_absorbs_arity() {
-    // body references bound index 2 (reach 3); each telescope binder absorbs one.
-    // `Scope::constant` places the body without capturing, so the bound index is
-    // preserved exactly (unlike `Telescope::cons`, which captures by label).
+    // body references bound index 2 (reach 3); each telescope binder absorbs one. `Scope::constant` places the body without capturing, so the bound index is preserved exactly (unlike `Telescope::cons`, which captures by label).
     let f1 = Term::from(Subterm::Func(Func {
         telescope: Telescope::Cons(
             Term::type_ground(),
@@ -435,9 +424,7 @@ fn tuple_type_field_labels_are_identity() {
     let cp = Free::local(0, Some("cp"));
     let v = Free::local(1, Some("v"));
     let r = Free::local(2, Some("r"));
-    // Field labels are the target of `.label` resolution, so unlike binder
-    // hints they split identity: an α-equal twin with different labels must
-    // not be substituted for this type by any Eq-keyed cache.
+    // Field labels are the target of `.label` resolution, so unlike binder hints they split identity: an α-equal twin with different labels must not be substituted for this type by any Eq-keyed cache.
     let this = Term::tuple_type([
         (cp.clone(), Term::type_ground()),
         (v.clone(), Term::free_var(&cp)),
@@ -457,8 +444,7 @@ fn tuple_type_field_labels_are_identity() {
     );
 }
 
-/// The number of distinct `Node`s reachable from `term`, counting a shared node
-/// once. Inlined here because only these tests ask the question.
+/// The number of distinct `Node`s reachable from `term`, counting a shared node once. Inlined here because only these tests ask the question.
 fn distinct_nodes(term: &Term) -> usize {
     let mut seen = std::collections::HashSet::new();
     let mut stack = Vec::from([term.clone()]);
@@ -495,12 +481,7 @@ fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
     );
 }
 
-/// A rewrite that rebuilds a shared node once per *occurrence* rather than once
-/// per node turns a DAG into its expansion. This is the shape that made it
-/// matter: a string literal lowers to a chain threading a scan state, where
-/// every link mentions the previous state, so the term is linear in distinct
-/// nodes but triangular expanded. Losing the memo here cost O(n^2) nodes for an
-/// n-byte literal, and every later pass over the term inherited it.
+/// A rewrite that rebuilds a shared node once per *occurrence* rather than once per node turns a DAG into its expansion. This is the shape that made it matter: a string literal lowers to a chain threading a scan state, where every link mentions the previous state, so the term is linear in distinct nodes but triangular expanded. Losing the memo here cost O(n^2) nodes for an n-byte literal, and every later pass over the term inherited it.
 #[test]
 fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
     let lead = Free::local(0, Some("lead"));
@@ -531,8 +512,7 @@ fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
     );
 }
 
-/// Deeper than the ~50,000 steps at which a growing conversion used to abort
-/// the process, so a regression is a stack overflow rather than a slow test.
+/// Deeper than the ~50,000 steps at which a growing conversion used to abort the process, so a regression is a stack overflow rather than a slow test.
 const DEEP: u32 = 100_000;
 
 /// A left-nested application spine `((x a) a) …`, `DEEP` links tall.
@@ -547,18 +527,14 @@ fn deep_spine(seed: u32) -> Term {
 
 #[test]
 fn deep_terms_compare_without_native_recursion() {
-    // Equality used to recurse once per link, so a term this tall answered by
-    // aborting the process. Two independently built spines are structurally
-    // equal but share no node, which is exactly the case that has to walk.
+    // Equality used to recurse once per link, so a term this tall answered by aborting the process. Two independently built spines are structurally equal but share no node, which is exactly the case that has to walk.
     assert_eq!(deep_spine(0), deep_spine(0));
     assert_ne!(deep_spine(0), deep_spine(1));
 }
 
 #[test]
 fn deep_terms_are_released_without_native_recursion() {
-    // The other half: releasing a spine this tall used to recurse once per
-    // link through the derived drop of the `Rc` chain. Every term built here
-    // goes out of scope at the end of the test, which is the whole point.
+    // The other half: releasing a spine this tall used to recurse once per link through the derived drop of the `Rc` chain. Every term built here goes out of scope at the end of the test, which is the whole point.
     let shared = deep_spine(0);
     let sharing = Term::tuple([shared.clone(), shared.clone()]);
 

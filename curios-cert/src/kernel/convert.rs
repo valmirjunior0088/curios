@@ -1,64 +1,24 @@
 //! Definitional equality: whether two terms are interchangeable at a type.
 //!
-//! Conversion is the rule that decides which programs typecheck, so it is the
-//! most consequential thing in this crate. It is *type-directed*: the type
-//! drives eta-expansion and it is what makes proof irrelevance possible, so
-//! every goal carries the type at which the two sides are being compared.
+//! Conversion is the rule that decides which programs typecheck, so it is the most consequential thing in this crate. It is *type-directed*: the type drives eta-expansion and it is what makes proof irrelevance possible, so every goal carries the type at which the two sides are being compared.
 //!
 //! The rules, in the order they are tried:
 //!
-//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged
-//!    without looking at either side. Any two inhabitants of a proposition are
-//!    definitionally equal, which is what lets erasure drop them wholesale.
-//! 2. **Eta.** At a function type both sides are applied to fresh binders and
-//!    compared at the codomain; at a Σ type both are projected and compared
-//!    componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and
-//!    `(p.0, p.1)`, without either side having to be in that shape.
-//! 3. **Structure.** Both sides are reduced to weak-head normal form and their
-//!    heads compared, recursing on the children.
+//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. 3. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
 //!
 //! # Termination, and the recurrence rule
 //!
-//! Two folded recursive calls can unfold forever without ever disagreeing —
-//! that is what an equirecursive type is. Conversion therefore keeps a history
-//! of the goals it is already inside, and a goal that recurs is *assumed to
-//! hold*. This is the coinductive reading: a genuine cycle leaves nothing but
-//! itself to check, and any finite disagreement surfaces on a sibling goal
-//! before the cycle closes.
+//! Two folded recursive calls can unfold forever without ever disagreeing — that is what an equirecursive type is. Conversion therefore keeps a history of the goals it is already inside, and a goal that recurs is *assumed to hold*. This is the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling goal before the cycle closes.
 //!
-//! That rule is where a conversion checker is most likely to be unsound, and
-//! the danger is precise: a history hit on two goals that are *not* the same
-//! goal accepts terms that are not equal. The guard here is that an entry
-//! records the local context alongside the goal, and that every binder in scope
-//! is renamed to its position before the entry is made. Two entries collide
-//! only when the same comparison is being made under binders of the same types
-//! in the same order — which is the same comparison.
+//! That rule is where a conversion checker is most likely to be unsound, and the danger is precise: a history hit on two goals that are *not* the same goal accepts terms that are not equal. The guard here is that an entry records the local context alongside the goal, and that every binder in scope is renamed to its position before the entry is made. Two entries collide only when the same comparison is being made under binders of the same types in the same order — which is the same comparison.
 //!
-//! `curios-elab`'s conversion checker canonicalizes differently: it renames the
-//! binders *it* minted, in mint order, and does not key on the context at all.
-//! For a strictly nested walk like this one the two orderings coincide, since
-//! the binders in scope at a goal are exactly the path to it. The elaborator's
-//! walk is not strictly nested — it has a worklist and it parks goals — so
-//! whether the two schemes agree there is a genuinely open question, recorded
-//! as such in `documentation/DESIGN.md`. This module deliberately does not
-//! inherit the answer.
+//! `curios-elab`'s conversion checker canonicalizes differently: it renames the binders *it* minted, in mint order, and does not key on the context at all. For a strictly nested walk like this one the two orderings coincide, since the binders in scope at a goal are exactly the path to it. The elaborator's walk is not strictly nested — it has a worklist and it parks goals — so whether the two schemes agree there is a genuinely open question, recorded as such in `documentation/DESIGN.md`. This module deliberately does not inherit the answer.
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! Two concessions remain. A `rec` group is compared syntactically. And every
-//! child position without a typed context — a spine's arguments, and a stuck
-//! elimination's motive and arms under their opaque binders — is compared at
-//! `Type` rather than at the types its head assigns, which forfeits eta and
-//! irrelevance there. Each is a place where the kernel may reject a term the
-//! elaborator accepted.
+//! Two concessions remain. A `rec` group is compared syntactically. And every child position without a typed context — a spine's arguments, and a stuck elimination's motive and arms under their opaque binders — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted.
 //!
-//! That direction is deliberate. An incomplete conversion refuses programs; an
-//! unsound one admits them. A refusal is visible — it is a disagreement between
-//! the two checkers, which is precisely the signal this kernel exists to
-//! produce — whereas an over-eager acceptance is silent and is exactly what a
-//! second opinion is supposed to catch. Every one of these can be strengthened
-//! later against a real program that needs it, and none can be strengthened
-//! back from having been wrong.
+//! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
 mod prim;
 use prim::convert_prim;
@@ -89,21 +49,11 @@ pub fn convert(
 
 /// The goals conversion is currently inside.
 ///
-/// A goal is stored with the types of the binders in scope at it, and with
-/// every one of those binders renamed to its position. Without the rename, the
-/// same comparison reached on two rounds of an unfolding cycle differs in
-/// nothing but the identities of the binders opened on the way, and the cycle
-/// is never recognized; without the context, two different comparisons that
-/// happen to be spelled alike would be conflated, which is the unsound
-/// direction.
+/// A goal is stored with the types of the binders in scope at it, and with every one of those binders renamed to its position. Without the rename, the same comparison reached on two rounds of an unfolding cycle differs in nothing but the identities of the binders opened on the way, and the cycle is never recognized; without the context, two different comparisons that happen to be spelled alike would be conflated, which is the unsound direction.
 #[derive(Default)]
 struct History {
     seen: HashSet<Goal>,
-    /// Unfolding retries currently on the path. Each retry opens a recursive
-    /// spelling whose spine may have *grown*, so its goals never recur into
-    /// `seen` and the coinductive rule cannot close the chain; past
-    /// [`RETRY_DEPTH`] the retry refuses instead — an incompleteness, never an
-    /// admission — because the shapes the rule exists for need one or two.
+    /// Unfolding retries currently on the path. Each retry opens a recursive spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; past [`RETRY_DEPTH`] the retry refuses instead — an incompleteness, never an admission — because the shapes the rule exists for need one or two.
     retries: usize,
 }
 
@@ -119,14 +69,9 @@ struct Goal {
 }
 
 impl History {
-    /// Enter a goal: `None` when it is already in progress — the coinductive
-    /// assumption — otherwise the recorded key, to be handed back to
-    /// [`History::leave`] when the goal completes.
+    /// Enter a goal: `None` when it is already in progress — the coinductive assumption — otherwise the recorded key, to be handed back to [`History::leave`] when the goal completes.
     ///
-    /// The rename is by position in the local context, so a goal reached again
-    /// under an identically-typed prefix maps onto the same entry. `capture`
-    /// turns each binder into a bound index; the results are keys and are never
-    /// opened, so the loose indices they leave behind are inert.
+    /// The rename is by position in the local context, so a goal reached again under an identically-typed prefix maps onto the same entry. `capture` turns each binder into a bound index; the results are keys and are never opened, so the loose indices they leave behind are inert.
     fn enter(&mut self, kernel: &Kernel, type_: &Term, this: &Term, that: &Term) -> Option<Goal> {
         let binders = kernel.local_names();
         let refs = binders.iter().collect::<Vec<_>>();
@@ -145,21 +90,13 @@ impl History {
         }
     }
 
-    /// Leave a completed goal, whatever its outcome. The set must hold exactly
-    /// the goals on the current path: a goal *refuted* in one subtree that
-    /// lingered here would be assumed to hold when a later subtree re-derives
-    /// it — the accepting direction — and a goal proven under in-progress
-    /// assumptions is not a fact once they are gone, so neither outcome may
-    /// stay.
+    /// Leave a completed goal, whatever its outcome. The set must hold exactly the goals on the current path: a goal *refuted* in one subtree that lingered here would be assumed to hold when a later subtree re-derives it — the accepting direction — and a goal proven under in-progress assumptions is not a fact once they are gone, so neither outcome may stay.
     fn leave(&mut self, goal: &Goal) {
         self.seen.remove(goal);
     }
 }
 
-/// Run `walk` with every binder it opens closed again afterwards, on the
-/// failing path as well as the succeeding one. A comparison that left binders
-/// behind would leak them into the conversion history, where the context is
-/// part of the key.
+/// Run `walk` with every binder it opens closed again afterwards, on the failing path as well as the succeeding one. A comparison that left binders behind would leak them into the conversion history, where the context is part of the key.
 pub(super) fn scoped<T>(kernel: &mut Kernel, walk: impl FnOnce(&mut Kernel) -> T) -> T {
     let mark = kernel.mark();
     let outcome = walk(kernel);
@@ -178,15 +115,12 @@ fn compare(
 ) -> Result<bool, KernelError> {
     kernel.spend()?;
 
-    // Cheapest first: a term converts with itself at any type, and structural
-    // sharing makes this hit constantly on terms built by substitution.
+    // Cheapest first: a term converts with itself at any type, and structural sharing makes this hit constantly on terms built by substitution.
     if this == that {
         return Ok(true);
     }
 
-    // Proof irrelevance. Deliberately before reduction: the point is that
-    // neither side is examined, and reducing a proof in order to discover it
-    // equals another proof is work whose answer was already known.
+    // Proof irrelevance. Deliberately before reduction: the point is that neither side is examined, and reducing a proof in order to discover it equals another proof is work whose answer was already known.
     if Sort::of(kernel, type_)?.is_prop() {
         return Ok(true);
     }
@@ -214,12 +148,9 @@ fn compare(
     outcome
 }
 
-/// Eta at a function type: apply both sides to the same fresh binders and
-/// compare the results at the codomain.
+/// Eta at a function type: apply both sides to the same fresh binders and compare the results at the codomain.
 ///
-/// This is why `f` converts with `(x) => f(x)` without either being reduced
-/// into the other's shape — the rule is stated once, here, instead of as a
-/// special case in every structural arm.
+/// This is why `f` converts with `(x) => f(x)` without either being reduced into the other's shape — the rule is stated once, here, instead of as a special case in every structural arm.
 fn eta_function(
     kernel: &mut Kernel,
     history: &mut History,
@@ -256,9 +187,7 @@ fn eta_function(
 
 /// Eta at a Σ type: compare the two sides componentwise through projections.
 ///
-/// A later field's type may mention an earlier one, and names it by a
-/// projection of the *left* side — sound because the earlier components have
-/// already been shown equal by the time that type is used.
+/// A later field's type may mention an earlier one, and names it by a projection of the *left* side — sound because the earlier components have already been shown equal by the time that type is used.
 fn eta_tuple(
     kernel: &mut Kernel,
     history: &mut History,
@@ -289,10 +218,7 @@ fn eta_tuple(
 
 /// Compare two weak-head normal forms by their heads.
 ///
-/// Children with no type the head determines are compared at `Type` through
-/// [`ground`]. That is a weaker comparison than a typed one — it declines to
-/// fire eta or irrelevance — so it can only reject where a typed comparison
-/// would have accepted. See the module documentation on incompleteness.
+/// Children with no type the head determines are compared at `Type` through [`ground`]. That is a weaker comparison than a typed one — it declines to fire eta or irrelevance — so it can only reject where a typed comparison would have accepted. See the module documentation on incompleteness.
 fn structural(
     kernel: &mut Kernel,
     history: &mut History,
@@ -300,9 +226,7 @@ fn structural(
     that: &Term,
 ) -> Result<bool, KernelError> {
     match (&**this, &**that) {
-        // Levels compare under the item's assumed constraints: two levels the
-        // hypotheses force equal are equal in every instance that satisfies
-        // them, which is what checking generically means.
+        // Levels compare under the item's assumed constraints: two levels the hypotheses force equal are equal in every instance that satisfies them, which is what checking generically means.
         (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right)),
         (Subterm::Prop, Subterm::Prop) => Ok(true),
 
@@ -310,21 +234,12 @@ fn structural(
 
         (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
 
-        // A metavariable is elaboration-only syntax, and refusing it *here* is
-        // what makes the exclusion the kernel's own rather than an inherited
-        // guarantee of `zonk_module`'s traversal. `whnf` still treats one as a
-        // stuck neutral — a reduction stance, not an admission: the only ways a
-        // term is admitted are `infer` and this comparison, and both refuse.
-        // The syntactic fast path in `compare` does admit a metavariable
-        // against *itself*, and soundly: reflexivity decides nothing about the
-        // unknown, which is exactly what this arm exists to prevent.
+        // A metavariable is elaboration-only syntax, and refusing it *here* is what makes the exclusion the kernel's own rather than an inherited guarantee of `zonk_module`'s traversal. `whnf` still treats one as a stuck neutral — a reduction stance, not an admission: the only ways a term is admitted are `infer` and this comparison, and both refuse. The syntactic fast path in `compare` does admit a metavariable against *itself*, and soundly: reflexivity decides nothing about the unknown, which is exactly what this arm exists to prevent.
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => {
             Err(KernelError::NotCore(this.clone()))
         }
 
-        // Plicity is part of a function type's identity: `(A) -> A` and
-        // `(@A) -> A` have different calling conventions, and conflating them
-        // would let a value be applied through the wrong one.
+        // Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.
         (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok(left.plicities
             == right.plicities
             && compare_telescope(
@@ -334,8 +249,7 @@ fn structural(
                 right.telescope.clone(),
             )?),
 
-        // Two lambdas with no expected type to eta against: compare their
-        // bodies under one shared set of binders.
+        // Two lambdas with no expected type to eta against: compare their bodies under one shared set of binders.
         (Subterm::Func(left), Subterm::Func(right)) => Ok(left.plicities == right.plicities
             && compare_telescope(
                 kernel,
@@ -356,11 +270,7 @@ fn structural(
             Subterm::Tuple(Tuple { fields: right, .. }),
         ) => compare_each(kernel, history, left, right),
 
-        // Spine against spine, and when that fails, one definitional unfolding
-        // each: two applications of the same fold can differ in an argument
-        // position the fold discards — `is_trimmed(h ++ rest)` against
-        // `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when
-        // either head is a folded recursive call.
+        // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call.
         (Subterm::Apply(left), Subterm::Apply(right)) => {
             if left.plicities == right.plicities
                 && ground(kernel, history, &left.head, &right.head)?
@@ -442,8 +352,7 @@ fn structural(
             && compare_each(kernel, history, left_params, right_params)?
             && compare_each(kernel, history, left_fields, right_fields)?),
 
-        // Eta at a nominal struct, against a neutral inhabitant only — see
-        // `struct_eta` for the rule and the restriction.
+        // Eta at a nominal struct, against a neutral inhabitant only — see `struct_eta` for the rule and the restriction.
         (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Var(_) | Subterm::Proj(_)) => {
             struct_eta(kernel, history, literal, that)
         }
@@ -464,25 +373,14 @@ fn structural(
             kernel.levels_eq(left_levels, right_levels) && ground(kernel, history, left, right)?
         ),
 
-        // A stuck elimination. Everything is compared up to conversion: the
-        // scrutinee because that is the position an unfolding cycle travels
-        // through, and the motive and arms because a delta-unfolded caller and
-        // its spelled-out twin differ exactly there — `step(c, st)` against
-        // `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose
-        // arms are convertible but not identical. The shape stays rigid: tags,
-        // plicities, arity, and default presence must agree exactly, because
-        // two eliminations enumerating different constructors compute
-        // differently on some input even where they agree on this one.
+        // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
             Ok(ground(kernel, history, &left.head, &right.head)?
                 && ground_scope(kernel, history, &left.motive, &right.motive)?
                 && ground_cases(kernel, history, &left.cases, &right.cases)?)
         }
 
-        // A folded recursive call, and a `rec` that forcing declined to unfold.
-        // Both are compared syntactically: the interesting case — a cycle that
-        // unfolds without disagreeing — is handled by the recurrence rule
-        // above, not here.
+        // A folded recursive call, and a `rec` that forcing declined to unfold. Both are compared syntactically: the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here.
         (
             Subterm::RecMember(RecMember {
                 group: left,
@@ -494,21 +392,12 @@ fn structural(
             }),
         ) => Ok(left_index == right_index && left == right),
 
-        // Two spellings of one recursive call: `force` keeps the folded
-        // application as a recursive call's normal form, while an arm's
-        // induction hypothesis is the raw stuck fold-match on the same
-        // argument. When the heads disagree, grant each side the one
-        // definitional unfolding `force` withheld and compare what results.
+        // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
         _ => unfolded_retry(kernel, history, this, that),
     }
 }
 
-/// Eta at a nominal struct, untyped: a literal against a *neutral* inhabitant,
-/// projected field-wise. A `Prop`-sorted field converts by irrelevance without
-/// being compared — the declaration's field telescope says which those are —
-/// and the neutral restriction is what keeps an all-`Prop` or empty struct's
-/// vacuous field walk from equating its literal with an arbitrary term that
-/// merely appeared in the same untyped position.
+/// Eta at a nominal struct, untyped: a literal against a *neutral* inhabitant, projected field-wise. A `Prop`-sorted field converts by irrelevance without being compared — the declaration's field telescope says which those are — and the neutral restriction is what keeps an all-`Prop` or empty struct's vacuous field walk from equating its literal with an arbitrary term that merely appeared in the same untyped position.
 fn struct_eta(
     kernel: &mut Kernel,
     history: &mut History,
@@ -542,10 +431,7 @@ fn struct_eta(
     Ok(true)
 }
 
-/// The last chance before a structural refusal: grant each side the one
-/// definitional unfolding `force` withheld and compare what results. `false`
-/// when neither side has a folded recursive spelling to open. The recurrence
-/// rule bounds the cycles this can enter.
+/// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld and compare what results. `false` when neither side has a folded recursive spelling to open. The recurrence rule bounds the cycles this can enter.
 fn unfolded_retry(
     kernel: &mut Kernel,
     history: &mut History,
@@ -574,10 +460,7 @@ fn unfolded_retry(
     }
 }
 
-/// Open both scopes at one shared set of opaque binders and compare the bodies
-/// at `Type`. The binders are assumed at `Type` as a stand-in, sound because
-/// `ground` is already the untyped concession: a binder's recorded type feeds
-/// only the conversion history's context key, identically on both sides.
+/// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`. The binders are assumed at `Type` as a stand-in, sound because `ground` is already the untyped concession: a binder's recorded type feeds only the conversion history's context key, identically on both sides.
 fn ground_scope(
     kernel: &mut Kernel,
     history: &mut History,
@@ -595,8 +478,7 @@ fn ground_scope(
     })
 }
 
-/// [`ground_scope`] at the free-monoid cons arities, whose scopes carry their
-/// binder count in the type.
+/// [`ground_scope`] at the free-monoid cons arities, whose scopes carry their binder count in the type.
 fn ground_scope_two(
     kernel: &mut Kernel,
     history: &mut History,
@@ -641,9 +523,7 @@ fn opaque_binders(kernel: &mut Kernel, arity: usize) -> Vec<Term> {
         .collect()
 }
 
-/// Compare two stuck eliminations' arm sets up to conversion, shape held
-/// rigid: matching variants, tags in the same canonical order, equal
-/// plicities, and agreeing default presence.
+/// Compare two stuck eliminations' arm sets up to conversion, shape held rigid: matching variants, tags in the same canonical order, equal plicities, and agreeing default presence.
 fn ground_cases(
     kernel: &mut Kernel,
     history: &mut History,
@@ -764,9 +644,7 @@ fn ground_cases(
     }
 }
 
-/// Compare two Π/λ telescopes: domains pairwise, then codomains, opening one
-/// shared binder per position so both dependent tails speak of the same
-/// variable.
+/// Compare two Π/λ telescopes: domains pairwise, then codomains, opening one shared binder per position so both dependent tails speak of the same variable.
 fn compare_telescope(
     kernel: &mut Kernel,
     history: &mut History,
@@ -793,9 +671,7 @@ fn compare_telescope(
                 (Telescope::Done(left), Telescope::Done(right)) => {
                     return ground(kernel, history, &left, &right);
                 }
-                // Different arities. A function type is not curried in this
-                // representation, so this is a real mismatch rather than a
-                // shape to normalize.
+                // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
                 _ => return Ok(false),
             }
         }
@@ -853,9 +729,7 @@ fn compare_each(
     Ok(true)
 }
 
-/// [`compare`] at `Type`, for a child position whose type its head does not
-/// hand us. Weaker than a typed comparison, never stronger: see the module
-/// documentation on incompleteness.
+/// [`compare`] at `Type`, for a child position whose type its head does not hand us. Weaker than a typed comparison, never stronger: see the module documentation on incompleteness.
 pub(in crate::kernel::convert) fn ground(
     kernel: &mut Kernel,
     history: &mut History,

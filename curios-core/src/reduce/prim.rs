@@ -9,16 +9,12 @@ use {
     std::cmp::Ordering,
 };
 
-/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when
-/// it is still symbolic or too large to fit. The shared decode behind the
-/// `Bin`/`Lst` `get`/`slice` bounds.
+/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`Lst` `get`/`slice` bounds.
 fn as_index(term: &Term) -> Option<usize> {
     term.as_nat().and_then(|n| n.to_big_uint()?.to_usize())
 }
 
-/// Reduce both operands of a `Bool` binary primitive, then either `fold` the two
-/// literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the
-/// type level, so the fold reads the `true`/`false` constructors directly.
+/// Reduce both operands of a `Bool` binary primitive, then either `fold` the two literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the type level, so the fold reads the `true`/`false` constructors directly.
 fn reduce_bool_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -53,8 +49,7 @@ fn reduce_byte_binary(
     }))
 }
 
-/// Reduce both operands of a `Nat` binary primitive, then either `fold` the two literals or
-/// `rebuild` the neutral term from the reduced operands.
+/// Reduce both operands of a `Nat` binary primitive, then either `fold` the two literals or `rebuild` the neutral term from the reduced operands.
 fn reduce_nat_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -76,10 +71,7 @@ fn reduce_nat_binary(
     }))
 }
 
-/// `Nat/div`/`Nat/rem`: like [`reduce_nat_binary`], but partial — a divisor
-/// that reduces to literal zero is a reported error (the type-level mirror of
-/// the runtime trap, following `BinGet`'s pattern), never a Rust panic. A
-/// symbolic operand still rebuilds the neutral term.
+/// `Nat/div`/`Nat/rem`: like [`reduce_nat_binary`], but partial — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BinGet`'s pattern), never a Rust panic. A symbolic operand still rebuilds the neutral term.
 fn reduce_nat_division(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -111,10 +103,7 @@ fn reduce_nat_division(
     }))
 }
 
-/// `Int` counterpart of [`reduce_nat_binary`]: fold both literal operands or
-/// rebuild the neutral term. The fold is partial for the same reason — the
-/// shifts decline a negative or oversized literal shift count (`None`); the
-/// total ops just wrap their result in `Some`.
+/// `Int` counterpart of [`reduce_nat_binary`]: fold both literal operands or rebuild the neutral term. The fold is partial for the same reason — the shifts decline a negative or oversized literal shift count (`None`); the total ops just wrap their result in `Some`.
 fn reduce_int_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -136,10 +125,7 @@ fn reduce_int_binary(
     }))
 }
 
-/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that
-/// reduces to literal zero is a reported error — mathematically undefined,
-/// following `BinGet`'s pattern. The fold itself is exact and total past
-/// that: the type level pretends ℤ (see [`Int`]).
+/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BinGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see [`Int`]).
 fn reduce_int_division(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -167,16 +153,7 @@ fn reduce_int_division(
     }))
 }
 
-/// `Flt` operations are opaque at the type level: operands reduce, the
-/// operation never folds — `FltAdd(1.0, 1.0)` is its own normal form, so
-/// `Eq(@Flt, 1.0 + 1.0, 2.0)` is deliberately unprovable. IEEE semantics
-/// inside definitional equality is a soundness hazard with no consumer: the
-/// corpus proves nothing about floats, and IEEE equality identifies values
-/// (`0.0`, `-0.0`) that `FltToLeBytes` observes apart — the exact shape the
-/// singleton guard exists to forbid. Runtime-faithful constant folding
-/// belongs downstream in `curios-ersd`'s partial evaluator, which is
-/// untrusted. The rule this instance establishes: a primitive needs a fold
-/// here only if a type or a proof can depend on its value.
+/// `Flt` operations are opaque at the type level: operands reduce, the operation never folds — `FltAdd(1.0, 1.0)` is its own normal form, so `Eq(@Flt, 1.0 + 1.0, 2.0)` is deliberately unprovable. IEEE semantics inside definitional equality is a soundness hazard with no consumer: the corpus proves nothing about floats, and IEEE equality identifies values (`0.0`, `-0.0`) that `FltToLeBytes` observes apart — the exact shape the singleton guard exists to forbid. Runtime-faithful constant folding belongs downstream in `curios-ersd`'s partial evaluator, which is untrusted. The rule this instance establishes: a primitive needs a fold here only if a type or a proof can depend on its value.
 fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -189,8 +166,7 @@ fn reduce_flt_binary(
     Ok(Subterm::Prim(rebuild(left, right)))
 }
 
-/// Reduce the operand of a `Nat` unary primitive, then either `fold` the literal or `rebuild`
-/// the neutral term from the reduced operand.
+/// Reduce the operand of a `Nat` unary primitive, then either `fold` the literal or `rebuild` the neutral term from the reduced operand.
 fn reduce_nat_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
@@ -205,9 +181,7 @@ fn reduce_nat_unary(
     }))
 }
 
-/// `Int` counterpart of [`reduce_nat_unary`]. The fold's `None` rebuilds the
-/// neutral term: with `Int` unbounded at the type level, a conversion of a
-/// value the target cannot represent simply stays stuck.
+/// `Int` counterpart of [`reduce_nat_unary`]. The fold's `None` rebuilds the neutral term: with `Int` unbounded at the type level, a conversion of a value the target cannot represent simply stays stuck.
 fn reduce_int_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
@@ -222,8 +196,7 @@ fn reduce_int_unary(
     }))
 }
 
-/// [`reduce_flt_binary`]'s unary counterpart: opaque at the type level, the
-/// operand reduces and the operation always rebuilds.
+/// [`reduce_flt_binary`]'s unary counterpart: opaque at the type level, the operand reduces and the operation always rebuilds.
 fn reduce_flt_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
@@ -234,12 +207,7 @@ fn reduce_flt_unary(
     Ok(Subterm::Prim(rebuild(inner)))
 }
 
-/// The structural outcome of comparing two `Nat`s. The whole comparison family
-/// (`eql`/`neq`/`lt`/`lte`/`gt`/`gte`) reads this one result; each op differs only
-/// in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound
-/// the operands force without pinning equality (e.g. `succ x ≥ 1`), letting
-/// `lt`/`gte` decide where `eql` still cannot; `Stuck` is undecidable, and the
-/// op's neutral term is rebuilt.
+/// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`lte`/`gt`/`gte`) reads this one result; each op differs only in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`gte` decide where `eql` still cannot; `Stuck` is undecidable, and the op's neutral term is rebuilt.
 #[derive(Debug, PartialEq)]
 enum Comparison {
     Eq,
@@ -258,19 +226,9 @@ fn from_ordering(ordering: Ordering) -> Comparison {
     }
 }
 
-/// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint`
-/// successor spine: the floors stand in for peeling successors, so no recursion is
-/// needed and two literals decide in one `BigUint` compare (the literal fold folds
-/// into the shared-inner shortcut). It decides ONLY where the answer is forced and
-/// is `Stuck` otherwise — a sound partial decision procedure, the shared body of
-/// the whole comparison family. (The `lt` partner of the `Unary` eliminator's
-/// successor peel; for `Bin`/`Lst` the same `Comparison` shape would recurse via
-/// `uncons`.)
+/// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint` successor spine: the floors stand in for peeling successors, so no recursion is needed and two literals decide in one `BigUint` compare (the literal fold folds into the shared-inner shortcut). It decides ONLY where the answer is forced and is `Stuck` otherwise — a sound partial decision procedure, the shared body of the whole comparison family. (The `lt` partner of the `Unary` eliminator's successor peel; for `Bin`/`Lst` the same `Comparison` shape would recurse via `uncons`.)
 ///
-/// Returns the operands with their shared successor floor peeled off, so an
-/// *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)`
-/// and `cmp(x, y)` reduce to the same term, which conversion needs (e.g.
-/// `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
+/// Returns the operands with their shared successor floor peeled off, so an *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)` and `cmp(x, y)` reduce to the same term, which conversion needs (e.g. `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
 fn compare_nat(
     reducer: &mut impl Reducer,
     left: Term,
@@ -279,13 +237,7 @@ fn compare_nat(
     let (sl, il) = Nat::decompose(&reducer.reduce_forced(left)?);
     let (sr, ir) = Nat::decompose(&reducer.reduce_forced(right)?);
 
-    // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)`
-    // (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides —
-    // also land here: this is the O(1) literal fold. Otherwise, whichever side
-    // keeps successors past the shared floor is larger *iff* the other bottomed
-    // out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a
-    // non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`gte`/`lte` reads still use;
-    // anything else is undecidable.
+    // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)` (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides — also land here: this is the O(1) literal fold. Otherwise, whichever side keeps successors past the shared floor is larger *iff* the other bottomed out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`gte`/`lte` reads still use; anything else is undecidable.
     let outcome = if il == ir {
         from_ordering(sl.cmp(&sr))
     } else {
@@ -306,10 +258,7 @@ fn compare_nat(
     ))
 }
 
-/// Reduce a `Nat` comparison through the shared structural body [`compare_nat`].
-/// `read` projects the outcome to this op's boolean (or `None` when the operands
-/// do not decide it), in which case the neutral term is rebuilt from the peeled
-/// operands so undecided comparisons land in a normal form.
+/// Reduce a `Nat` comparison through the shared structural body [`compare_nat`]. `read` projects the outcome to this op's boolean (or `None` when the operands do not decide it), in which case the neutral term is rebuilt from the peeled operands so undecided comparisons land in a normal form.
 fn reduce_nat_compare(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -325,11 +274,7 @@ fn reduce_nat_compare(
     })
 }
 
-/// The free-monoid product structure of a reduced carrier value, the view a monoid
-/// homomorphism (`len`/`map`) distributes over: a literal run of generators `L`
-/// (bytes for `Bin`, elements for `Lst`), an n-ary `Concat` of operands to recurse
-/// on, an `Append` of a base and one appended generator, or an `Opaque` node (a
-/// variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
+/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `Lst`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, or an `Opaque` node (a variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
 enum Shape<L> {
     Literal(Vec<L>),
     Concat(Vec<Term>),
@@ -366,14 +311,7 @@ fn lst_shape(value: Term) -> Shape<Term> {
     }
 }
 
-/// The shared driver for a free-monoid homomorphism `h` — the one place its
-/// distribution law lives, so a carrier physically cannot forget a case. A literal
-/// run maps via `literal`; a
-/// concatenation recurses `h` over its operands and folds the images with `combine`;
-/// an append combines `h(base)` with the appended generator via `append`; an opaque
-/// value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse).
-/// `len` and `map` differ only in those four slots. The built image is
-/// reduced, so the homomorphism is eager.
+/// The shared driver for a free-monoid homomorphism `h` — the one place its distribution law lives, so a carrier physically cannot forget a case. A literal run maps via `literal`; a concatenation recurses `h` over its operands and folds the images with `combine`; an append combines `h(base)` with the appended generator via `append`; an opaque value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse). `len` and `map` differ only in those four slots. The built image is reduced, so the homomorphism is eager.
 fn reduce_homomorphism<L>(
     reducer: &mut impl Reducer,
     shape: Shape<L>,
@@ -392,9 +330,7 @@ fn reduce_homomorphism<L>(
     reducer.reduce(built).map(Term::unwrap_or_clone)
 }
 
-/// `Σ` over a run of `Nat` images — the `combine` of the `len` homomorphism into
-/// `(ℕ, +, 0)`. `NatAdd`'s successor peeling carries the count out of a symbolic
-/// spine.
+/// `Σ` over a run of `Nat` images — the `combine` of the `len` homomorphism into `(ℕ, +, 0)`. `NatAdd`'s successor peeling carries the count out of a symbolic spine.
 fn nat_sum(images: Vec<Term>) -> Term {
     images
         .into_iter()
@@ -476,8 +412,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             },
             Prim::nat_eql,
         ),
-        // Handles are opaque runtime tokens with no compile-time literal form,
-        // so this only ever reduces its operands and rebuilds — it never folds.
+        // Handles are opaque runtime tokens with no compile-time literal form, so this only ever reduces its operands and rebuilds — it never folds.
         Prim::HandleEql(left, right) => {
             reduce_nat_binary(reducer, left, right, |_, _| None, Prim::HandleEql)
         }
@@ -492,14 +427,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             },
             Prim::nat_neq,
         ),
-        // Addition combines the literal successor floors and recurses on the
-        // symbolic tails: `(il + sl) + (ir + sr) = (il + ir) + (sl + sr)`. A zero
-        // tail drops by the unit law; two non-zero tails stay as the neutral `add`.
-        // Lifting the combined floor back out with `rebuild` is what makes the unit
-        // laws and successor peeling *definitional* — `Nat/add(j + 1, m)` normalises
-        // to `(Nat/add(j, m)) + 1` — so an indexed constructor's target meets the
-        // motive's expected index without unification. The floor only ever moves
-        // outward, so the rewrite terminates.
+        // Addition combines the literal successor floors and recurses on the symbolic tails: `(il + sl) + (ir + sr) = (il + ir) + (sl + sr)`. A zero tail drops by the unit law; two non-zero tails stay as the neutral `add`. Lifting the combined floor back out with `rebuild` is what makes the unit laws and successor peeling *definitional* — `Nat/add(j + 1, m)` normalises to `(Nat/add(j, m)) + 1` — so an indexed constructor's target meets the motive's expected index without unification. The floor only ever moves outward, so the rewrite terminates.
         Prim::NatAdd(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
@@ -513,14 +441,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             };
             Ok(Term::unwrap_or_clone(Nat::rebuild(sl + sr, inner)))
         }
-        // `(il + sl) - k` for a literal subtrahend `k`: when the floor covers it
-        // (`sl ≥ k`) the borrow stays within the floor and the tail `il ≥ 0` is
-        // untouched, so the result is `il + (sl - k)`. The subtraction twin of the
-        // addition floor law (and it gives `x - 0 = x` for any `x`, the unit law
-        // `NatAdd` already has): it turns the `succ e - 1` bounds the cons-slice rule
-        // produces back into `e`, so a slice over a symbolic cons keeps reducing
-        // instead of stalling on a stuck `Nat/sub`. Both-literal subtraction with `k`
-        // overshooting the floor truncates to zero; anything else stays neutral.
+        // `(il + sl) - k` for a literal subtrahend `k`: when the floor covers it (`sl ≥ k`) the borrow stays within the floor and the tail `il ≥ 0` is untouched, so the result is `il + (sl - k)`. The subtraction twin of the addition floor law (and it gives `x - 0 = x` for any `x`, the unit law `NatAdd` already has): it turns the `succ e - 1` bounds the cons-slice rule produces back into `e`, so a slice over a symbolic cons keeps reducing instead of stalling on a stuck `Nat/sub`. Both-literal subtraction with `k` overshooting the floor truncates to zero; anything else stays neutral.
         Prim::NatSub(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
@@ -537,13 +458,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             }
             Ok(Subterm::Prim(Prim::nat_sub(left, right)))
         }
-        // Multiplication distributes a literal factor over the other operand's
-        // successor floor: `(it + st) · c = (it · c) + (st · c)`. The literal floors
-        // multiply out; the symbolic tail rides as a neutral `mul` (or drops when it
-        // is zero, which folds two literals). The multiplicative twin of `NatAdd`'s
-        // floor law — it lets `n · k` extract `k` past a symbolic `n` (`(x + 1) · 2 =
-        // x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives;
-        // two symbolic operands have no literal factor, so the product stays neutral.
+        // Multiplication distributes a literal factor over the other operand's successor floor: `(it + st) · c = (it · c) + (st · c)`. The literal floors multiply out; the symbolic tail rides as a neutral `mul` (or drops when it is zero, which folds two literals). The multiplicative twin of `NatAdd`'s floor law — it lets `n · k` extract `k` past a symbolic `n` (`(x + 1) · 2 = x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives; two symbolic operands have no literal factor, so the product stays neutral.
         Prim::NatMul(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
@@ -559,8 +474,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                 return Ok(Term::unwrap_or_clone(Nat::rebuild(sl * sr, inner)));
             }
             if Nat::is_zero(&il) {
-                // left is the literal `sl`, right symbolic: distribute over the right
-                // floor.
+                // left is the literal `sl`, right symbolic: distribute over the right floor.
                 let inner = Term::prim(Prim::nat_mul(left.clone(), ir));
                 return Ok(Term::unwrap_or_clone(Nat::rebuild(sl * sr, inner)));
             }
@@ -626,10 +540,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             },
             Prim::nat_gte,
         ),
-        // Bitwise ops fold on the unbounded ℕ the type level pretends: `and`,
-        // `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and
-        // `shr` as `⌊·/2^n⌋`. The runtime's 31-bit carrier (truncating `shl`,
-        // logical `shr`) is imposed only in the backend, never here.
+        // Bitwise ops fold on the unbounded ℕ the type level pretends: `and`, `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and `shr` as `⌊·/2^n⌋`. The runtime's 31-bit carrier (truncating `shl`, logical `shr`) is imposed only in the backend, never here.
         Prim::NatAnd(left, right) => reduce_nat_binary(
             reducer,
             left,
@@ -665,9 +576,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             |l, r| l.checked_shr(r).map(Prim::Nat),
             Prim::NatShr,
         ),
-        // The rotation and bit-count operations are 32-bit-carrier notions:
-        // they fold only a literal that fits the u32 view (the erased carrier)
-        // and stay neutral otherwise, like every other declined fold.
+        // The rotation and bit-count operations are 32-bit-carrier notions: they fold only a literal that fits the u32 view (the erased carrier) and stay neutral otherwise, like every other declined fold.
         Prim::NatRotl(left, right) => reduce_nat_binary(
             reducer,
             left,
@@ -801,11 +710,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             |left, right| Some(Prim::Bool(left >= right)),
             Prim::IntGte,
         ),
-        // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`,
-        // `or`, `xor` on the infinite two's-complement expansion, `shl` as
-        // `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed
-        // 31-bit carrier (truncating `shl`, `shr_s`) is imposed only in the
-        // backend, never here.
+        // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed 31-bit carrier (truncating `shl`, `shr_s`) is imposed only in the backend, never here.
         Prim::IntAnd(left, right) => reduce_int_binary(
             reducer,
             left,
@@ -841,8 +746,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             |left, right| left.checked_shr(right).map(Prim::Int),
             Prim::IntShr,
         ),
-        // 32-bit-carrier rotations and bit counts over the i32 view; a literal
-        // outside it stays neutral.
+        // 32-bit-carrier rotations and bit counts over the i32 view; a literal outside it stays neutral.
         Prim::IntRotl(left, right) => reduce_int_binary(
             reducer,
             left,
@@ -893,8 +797,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         Prim::FltSub(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltSub),
         Prim::FltMul(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltMul),
         Prim::FltDiv(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltDiv),
-        // `%` on `f32` is C `fmod`: `x - trunc(x / y) * y`, sign of the dividend —
-        // the same value the `cont -> wasm` expansion computes.
+        // `%` on `f32` is C `fmod`: `x - trunc(x / y) * y`, sign of the dividend — the same value the `cont -> wasm` expansion computes.
         Prim::FltRem(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltRem),
         Prim::FltMin(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltMin),
         Prim::FltMax(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltMax),
@@ -933,8 +836,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             },
             Prim::NatToInt,
         ),
-        // Opaque at the type level, like every `Flt` operation: constructing a
-        // float *is* float semantics.
+        // Opaque at the type level, like every `Flt` operation: constructing a float *is* float semantics.
         Prim::NatToFlt(inner) => reduce_nat_unary(reducer, inner, |_| None, Prim::NatToFlt),
         Prim::IntToNat(inner) => reduce_int_unary(
             reducer,
@@ -970,17 +872,12 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
 
-            // Reflexivity: any value equals itself. Catches a shared variable, which
-            // the peel below cannot — a bare variable is not a `Bin`-valued prim.
+            // Reflexivity: any value equals itself. Catches a shared variable, which the peel below cannot — a bare variable is not a `Bin`-valued prim.
             if left == right {
                 return Ok(Subterm::Prim(Prim::Bool(true)));
             }
 
-            // Structural decision via the free-monoid peel (`core::spine`): a
-            // peeled-equal pair is `true`, a definite byte or length clash is `false`
-            // (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the
-            // peel leaves undecided stays neutral — the same conservative seam
-            // conversion reads, so the fold only ever strengthens, never weakens.
+            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite byte or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
             if let (Subterm::Prim(l), Subterm::Prim(r)) = (&*left, &*right) {
                 match peel_bin(l, r) {
                     Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bool(true))),
@@ -1010,8 +907,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                     }),
                 };
             }
-            // The cons head's byte: `get(append(\\, byte), 0) = byte` — the base
-            // case of the cons-peel below, and the partner of `BinSlice`'s rules.
+            // The cons head's byte: `get(append(\\, byte), 0) = byte` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules.
             if let Subterm::Prim(Prim::BinAppend(Grain::X, base, byte)) = &*bin
                 && let Subterm::Prim(Prim::Bin(Grain::X, b)) = &**base
                 && b.is_empty()
@@ -1019,8 +915,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             {
                 return reducer.reduce(byte.clone()).map(Term::unwrap_or_clone);
             }
-            // A get over a cons spine peels one byte per `0`/`succ` index step:
-            //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            // A get over a cons spine peels one byte per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 match &*index_reduced {
                     Subterm::Prim(Prim::Nat(Nat::Zero)) => {
@@ -1045,28 +940,17 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let bin = reducer.reduce_forced(bin.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let end_reduced = reducer.reduce_forced(end.clone())?;
-            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even
-            // for a symbolic `b` — `0..len` is always in range, never trapping —
-            // and the runtime partner of `core::spine`'s window-collapse: it lets a
-            // bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over
-            // the whole value costs no copy and converts against the base directly.
+            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even for a symbolic `b` — `0..len` is always in range, never trapping — and the runtime partner of `core::spine`'s window-collapse: it lets a bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over the whole value costs no copy and converts against the base directly.
             if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
                 && matches!(&*end_reduced, Subterm::Prim(Prim::BinLen(Grain::X, whole)) if *whole == bin)
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
-            // The empty slice is empty: `slice(b, i, i) = \\`. The dual of the
-            // full-window identity and equally sound — an empty range yields no
-            // bytes regardless of `b`, and never equates two distinct literals.
-            // It lets a codepoint take collapse its zero-width base (`take 0`) to
-            // the empty string even over a symbolic cons.
+            // The empty slice is empty: `slice(b, i, i) = \\`. The dual of the full-window identity and equally sound — an empty range yields no bytes regardless of `b`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons.
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::empty())));
             }
-            // A nested slice reassociates: `slice(slice(b, p, q), i, j) =
-            // slice(b, p + i, p + j)`. Sound for the in-range bounds real call
-            // sites produce; reassociating the window lets a codepoint walk
-            // collapse a `slice(drop1(b), ..)` back onto `b`.
+            // A nested slice reassociates: `slice(slice(b, p, q), i, j) = slice(b, p + i, p + j)`. Sound for the in-range bounds real call sites produce; reassociating the window lets a codepoint walk collapse a `slice(drop1(b), ..)` back onto `b`.
             if let Subterm::Prim(Prim::BinSlice(Grain::X, inner, p, _q)) = &*bin {
                 let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
                 let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
@@ -1087,10 +971,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                     }),
                 };
             }
-            // A slice over a cons spine peels one byte per `0`/`succ` boundary
-            // step — the reduction partner of the `Utf8` cons the validity proofs
-            // walk:  `slice(cons(h, t), 0, succ e) = h ++ slice(t, 0, e)`  and
-            // `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
+            // A slice over a cons spine peels one byte per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ e) = h ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
             if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 let dec = |n: &Term| {
                     let one = Term::prim(Prim::Nat(Nat::new(1usize)));
@@ -1129,9 +1010,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         Prim::BinAppend(Grain::X, bin, byte) => {
             let bin = reducer.reduce_forced(bin.clone())?;
             let byte = reducer.reduce_forced(byte.clone())?;
-            // A concrete byte is taken mod 256 — its low 8 bits — matching the
-            // runtime's packed-`i8` store and the optimizer's `as u8`. A symbolic
-            // operand has no `as_nat`, so it stays stuck rather than truncating.
+            // A concrete byte is taken mod 256 — its low 8 bits — matching the runtime's packed-`i8` store and the optimizer's `as u8`. A symbolic operand has no `as_nat`, so it stays stuck rather than truncating.
             let n = match &*byte {
                 Subterm::Prim(Prim::Byte(byte)) => Some(*byte),
                 _ => None,
@@ -1148,11 +1027,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Normalise by the monoid unit/associativity laws — drop the empty
-            // bytestring (so `concat(\\, a)`/`concat(a, \\)` collapse to `a`), merge
-            // adjacent literal runs, collapse a lone operand. The definitional
-            // partner of `peel_bin`'s `\\`-handling (`core::spine`); see
-            // `normalize_concat`.
+            // Normalise by the monoid unit/associativity laws — drop the empty bytestring (so `concat(\\, a)`/`concat(a, \\)` collapse to `a`), merge adjacent literal runs, collapse a lone operand. The definitional partner of `peel_bin`'s `\\`-handling (`core::spine`); see `normalize_concat`.
             fn literal(operand: &Term) -> Option<&[u8]> {
                 match &**operand {
                     Subterm::Prim(Prim::Bin(Grain::X, bytes)) => bytes.as_bytes(),
@@ -1394,9 +1269,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                     }),
                 };
             }
-            // A get over a cons spine peels one element per `0`/`succ` index step,
-            // the `Lst` twin of `BinGet`'s byte peel:
-            //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            // A get over a cons spine peels one element per `0`/`succ` index step, the `Lst` twin of `BinGet`'s byte peel: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 match &*index_reduced {
                     Subterm::Prim(Prim::Nat(Nat::Zero)) => return Ok(Term::unwrap_or_clone(head)),
@@ -1417,26 +1290,17 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let list = reducer.reduce_forced(list.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let end_reduced = reducer.reduce_forced(end.clone())?;
-            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for
-            // a symbolic `a` — `0..len` is always in range — the `Lst` twin of
-            // `BinSlice`'s full-window identity, letting a full-length `Lst/slice`
-            // reduce to its base instead of copying.
+            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — `0..len` is always in range — the `Lst` twin of `BinSlice`'s full-window identity, letting a full-length `Lst/slice` reduce to its base instead of copying.
             if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
                 && matches!(&*end_reduced, Subterm::Prim(Prim::LstLen(_, whole)) if *whole == list)
             {
                 return Ok(Term::unwrap_or_clone(list));
             }
-            // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic
-            // `a` — an empty range yields no elements regardless — and the base case
-            // the cons peel below bottoms out on (the `Lst` twin of `BinSlice`'s
-            // empty-slice identity).
+            // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic `a` — an empty range yields no elements regardless — and the base case the cons peel below bottoms out on (the `Lst` twin of `BinSlice`'s empty-slice identity).
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Lst(type_.clone(), Vec::new())));
             }
-            // A nested slice reassociates: `slice(slice(a, p, q), i, j) =
-            // slice(a, p + i, p + j)`. Sound for the in-range bounds real call sites
-            // produce — the `Lst` twin of `BinSlice`'s window reassociation — so a
-            // slice of a slice over a symbolic base collapses to one slice.
+            // A nested slice reassociates: `slice(slice(a, p, q), i, j) = slice(a, p + i, p + j)`. Sound for the in-range bounds real call sites produce — the `Lst` twin of `BinSlice`'s window reassociation — so a slice of a slice over a symbolic base collapses to one slice.
             if let Subterm::Prim(Prim::LstSlice(_inner_ty, inner, p, _q)) = &*list {
                 let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
                 let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
@@ -1457,10 +1321,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                     }),
                 };
             }
-            // A slice over a cons spine peels one element per `0`/`succ` boundary
-            // step, the `Lst` twin of `BinSlice`'s byte peel:
-            //   `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and
-            //   `slice(cons(h, t), succ s, e) = slice(t, s - 1, e - 1)`.
+            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `Lst` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s - 1, e - 1)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 let dec = |n: &Term| {
                     let one = Term::prim(Prim::Nat(Nat::new(1usize)));
@@ -1520,10 +1381,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so
-            // `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal
-            // runs, collapse a lone operand — the definitional partner of `peel_arr`'s
-            // `[]`-handling (`core::spine`); see `normalize_concat`.
+            // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal runs, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
             fn literal(operand: &Term) -> Option<&[Term]> {
                 match &**operand {
                     Subterm::Prim(Prim::Lst(_, elems)) => Some(elems.as_slice()),
@@ -1537,12 +1395,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                 |kept| Subterm::Prim(Prim::lst_concat(type_.clone(), kept)),
             ))
         }
-        // `map`: the eliminator homomorphism. The literal case applies `f`
-        // elementwise; the spine cases distribute (`map f (concat segs) =
-        // concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the
-        // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so
-        // map-based proofs still reduce. A symbolic list stays neutral (the
-        // `Opaque` case), so there is no unfold of a variable.
+        // `map`: the eliminator homomorphism. The literal case applies `f` elementwise; the spine cases distribute (`map f (concat segs) = concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so map-based proofs still reduce. A symbolic list stays neutral (the `Opaque` case), so there is no unfold of a variable.
         Prim::LstMap(a, b, lst, f) => {
             let a = reducer.reduce(a.clone())?;
             let b = reducer.reduce(b.clone())?;
@@ -1578,9 +1431,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             kind: "Exit".to_string(),
             span: code.span(),
         }),
-        // A store-described host call never reduces at the type level — the
-        // effect cannot happen at compile time; it becomes a host call only
-        // at erasure.
+        // A store-described host call never reduces at the type level — the effect cannot happen at compile time; it becomes a host call only at erasure.
         Prim::Foreign(function, args) => Err(ReduceError::EffectAtTypeLevel {
             kind: function.name.clone(),
             span: args.first().and_then(|arg| arg.span()),
@@ -1611,10 +1462,7 @@ mod tests {
         crate::{Nat, Prim, ReduceError, Term},
     };
 
-    /// A reducer that reduces nothing. Every operand below is already a literal
-    /// — a weak-head normal form — so no strategy is involved, and running the
-    /// comparison body against an inert reducer says exactly that: the outcome
-    /// is decided by the structural compare, not by anything unfolded.
+    /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
     struct Inert;
 
     impl Reducer for Inert {
@@ -1631,9 +1479,7 @@ mod tests {
         Term::prim(Prim::Nat(Nat::new(n as usize)))
     }
 
-    // Soundness gate: the structural body agrees with the host ordering on every
-    // pair of literals — the decidable closed case where the two routes into a
-    // `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
+    // Soundness gate: the structural body agrees with the host ordering on every pair of literals — the decidable closed case where the two routes into a `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
     #[test]
     fn compare_nat_agrees_with_literal_ordering() {
         let mut reducer = Inert;

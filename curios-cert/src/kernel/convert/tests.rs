@@ -22,8 +22,7 @@ fn nat_type() -> Term {
     Term::prim(Prim::NatType)
 }
 
-/// A nominal family at a stated sort — the only way to obtain a base
-/// proposition, since the registry is what says a nominal type is one.
+/// A nominal family at a stated sort — the only way to obtain a base proposition, since the registry is what says a nominal type is one.
 fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
 
@@ -97,9 +96,7 @@ fn a_definition_converts_with_its_value() {
     );
 }
 
-/// Eta at a function type: `f` and `(x) => f(x)` are the same function, and
-/// neither side has to be written in the other's shape for conversion to see
-/// it.
+/// Eta at a function type: `f` and `(x) => f(x)` are the same function, and neither side has to be written in the other's shape for conversion to see it.
 #[test]
 fn eta_makes_a_function_converge_with_its_expansion() {
     let mut kernel = kernel();
@@ -136,9 +133,7 @@ fn eta_makes_a_pair_converge_with_its_projections() {
     );
 }
 
-/// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without*
-/// either being examined. This is what licenses erasure to drop proofs
-/// wholesale.
+/// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without* either being examined. This is what licenses erasure to drop proofs wholesale.
 #[test]
 fn any_two_inhabitants_of_a_proposition_convert() {
     let mut kernel = kernel();
@@ -156,9 +151,7 @@ fn any_two_inhabitants_of_a_proposition_convert() {
     );
 }
 
-/// The same two terms at a *relevant* type are not interchangeable. Irrelevance
-/// is a property of the type, and this is the direction that would be unsound
-/// to get wrong.
+/// The same two terms at a *relevant* type are not interchangeable. Irrelevance is a property of the type, and this is the direction that would be unsound to get wrong.
 #[test]
 fn irrelevance_does_not_leak_into_a_relevant_type() {
     let mut kernel = kernel();
@@ -176,9 +169,7 @@ fn irrelevance_does_not_leak_into_a_relevant_type() {
     );
 }
 
-/// A primitive is congruent when it is the same operation on convertible
-/// operands — decided generically, so no operation can be omitted from the
-/// rule.
+/// A primitive is congruent when it is the same operation on convertible operands — decided generically, so no operation can be omitted from the rule.
 #[test]
 fn a_primitive_is_congruent_in_its_operands() {
     let mut kernel = kernel();
@@ -208,8 +199,7 @@ fn different_operations_do_not_convert() {
     assert_eq!(convert(&mut kernel, &nat_type(), &add, &mul), Ok(false));
 }
 
-/// The free-monoid peel is what decides `n + 2 ≡ m + 2` by comparing `n` with
-/// `m` rather than comparing two opaque symbolic sums.
+/// The free-monoid peel is what decides `n + 2 ≡ m + 2` by comparing `n` with `m` rather than comparing two opaque symbolic sums.
 #[test]
 fn a_shared_successor_floor_is_peeled_before_comparing() {
     let mut kernel = kernel();
@@ -227,9 +217,7 @@ fn a_shared_successor_floor_is_peeled_before_comparing() {
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &same), Ok(true));
 }
 
-/// Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A`
-/// have different calling conventions, and conflating them would let a value be
-/// applied through the wrong one.
+/// Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.
 #[test]
 fn plicity_distinguishes_two_function_types() {
     let mut kernel = kernel();
@@ -250,9 +238,7 @@ fn plicity_distinguishes_two_function_types() {
     );
 }
 
-/// Two universes convert only at the same level. Cumulativity is a *subtyping*
-/// rule and belongs to checking, not here: conversion is symmetric and levels
-/// are not.
+/// Two universes convert only at the same level. Cumulativity is a *subtyping* rule and belongs to checking, not here: conversion is symmetric and levels are not.
 #[test]
 fn universes_convert_only_at_the_same_level() {
     let mut kernel = kernel();
@@ -267,13 +253,9 @@ fn universes_convert_only_at_the_same_level() {
     assert_eq!(convert(&mut kernel, &zero, &zero, &one), Ok(false));
 }
 
-/// Binder *identity* must not leak into conversion. Two `rec` groups written
-/// with different minted names are the same group: binder names are display
-/// hints, and the bodies are de Bruijn-indexed under their scopes.
+/// Binder *identity* must not leak into conversion. Two `rec` groups written with different minted names are the same group: binder names are display hints, and the bodies are de Bruijn-indexed under their scopes.
 ///
-/// This is the property that lets a folded recursive call be compared
-/// structurally at all — see the `RecMember` arm, which requires the groups to
-/// be equal.
+/// This is the property that lets a folded recursive call be compared structurally at all — see the `RecMember` arm, which requires the groups to be equal.
 #[test]
 fn two_alpha_variant_recursive_groups_convert() {
     let mut kernel = kernel();
@@ -326,8 +308,7 @@ fn two_alpha_variant_recursive_groups_convert() {
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(true));
 }
 
-/// A recursive call applied to a symbolic argument stays folded, and comparing
-/// it with itself terminates rather than unfolding in lockstep forever.
+/// A recursive call applied to a symbolic argument stays folded, and comparing it with itself terminates rather than unfolding in lockstep forever.
 #[test]
 fn a_folded_recursive_call_converts_without_unfolding_forever() {
     let mut kernel = Kernel::new(10_000);
@@ -386,11 +367,7 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
     );
 }
 
-/// A metavariable is elaboration-only syntax, and conversion refuses it rather
-/// than comparing ids — the exclusion is the kernel's own, not an inherited
-/// guarantee of the zonk traversal. Reflexivity is the one admitted case (the
-/// syntactic fast path, sound because it decides nothing about the unknown);
-/// any comparison that would have to *look* at a metavariable refuses.
+/// A metavariable is elaboration-only syntax, and conversion refuses it rather than comparing ids — the exclusion is the kernel's own, not an inherited guarantee of the zonk traversal. Reflexivity is the one admitted case (the syntactic fast path, sound because it decides nothing about the unknown); any comparison that would have to *look* at a metavariable refuses.
 #[test]
 fn a_metavariable_does_not_convert_with_anything_else() {
     let mut kernel = kernel();

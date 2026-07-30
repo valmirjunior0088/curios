@@ -23,10 +23,7 @@ use {
 #[cfg(feature = "archive")]
 use curios_base::BigUintBytes;
 
-/// Whether `name` is one of `names` — a declaration group's own member names,
-/// which are still carried as flattened strings. A boundary, not a decode: it
-/// asks whether an authored path renders as one of the given names and reads no
-/// structure out of them. Retired when `Definition::name` becomes a [`Global`].
+/// Whether `name` is one of `names` — a declaration group's own member names, which are still carried as flattened strings. A boundary, not a decode: it asks whether an authored path renders as one of the given names and reads no structure out of them. Retired when `Definition::name` becomes a [`Global`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadTag<'a> {
     Name(&'a Free),
@@ -53,13 +50,7 @@ pub struct Term {
     inner: Rc<Node>,
 }
 
-/// A [`Subterm`] together with its memoized, span-independent derivations. One
-/// per distinct node, behind the shared `Rc` every occurrence bumps, so each
-/// derivation fills at most once across the whole DAG. The cells are filled
-/// lazily by an iterative post-order walk over the node's descendants
-/// (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native
-/// recursion, so a data-shaped spine of any depth memoizes on a bounded stack:
-/// filling one node reads its children's already-filled cells in O(children).
+/// A [`Subterm`] together with its memoized, span-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The cells are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled cells in O(children).
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
@@ -69,9 +60,7 @@ struct Node {
     hash: OnceCell<u64>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     reach: OnceCell<usize>,
-    /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate
-    /// the archive it is stored in, and unlike the scalars it is wanted by a
-    /// minority of nodes on a given compilation.
+    /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     free_vars: OnceCell<Rc<BTreeSet<Free>>>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
@@ -108,15 +97,7 @@ impl fmt::Debug for Node {
 }
 
 impl Term {
-    /// Fill a memoized cell on every node of this term's subtree, bottom-up,
-    /// on an explicit stack instead of the native one — so a data-shaped spine
-    /// of any depth memoizes without recursing per link. `is_filled` reports
-    /// whether a node's target cell is set (a filled node — and its whole
-    /// subtree — is skipped, so shared chains are walked once); `fill` computes
-    /// one node's cell after all its children are filled, reading theirs in
-    /// O(children). The walk rides `any_child_term` over owned clones: cloning a
-    /// `Term` bumps the shared `Rc<Node>`, so filling a clone's cell fills it
-    /// for every occurrence of that node, and `Rc::as_ptr` dedups by node.
+    /// Fill a memoized cell on every node of this term's subtree, bottom-up, on an explicit stack instead of the native one — so a data-shaped spine of any depth memoizes without recursing per link. `is_filled` reports whether a node's target cell is set (a filled node — and its whole subtree — is skipped, so shared chains are walked once); `fill` computes one node's cell after all its children are filled, reading theirs in O(children). The walk rides `any_child_term` over owned clones: cloning a `Term` bumps the shared `Rc<Node>`, so filling a clone's cell fills it for every occurrence of that node, and `Rc::as_ptr` dedups by node.
     fn fill_post_order(&self, is_filled: impl Fn(&Node) -> bool, mut fill: impl FnMut(&Node)) {
         if is_filled(&self.inner) {
             return;
@@ -136,10 +117,7 @@ impl Term {
         }
     }
 
-    /// Fill the cheap scalar cells together in one post-order pass. They
-    /// combine from the children's cells in O(children), and are almost always
-    /// wanted together, so one shared walk beats independent traversals.
-    /// `reach` is the fill marker.
+    /// Fill the cheap scalar cells together in one post-order pass. They combine from the children's cells in O(children), and are almost always wanted together, so one shared walk beats independent traversals. `reach` is the fill marker.
     fn warm_scalars(&self) {
         self.fill_post_order(
             |node| node.reach.get().is_some(),
@@ -168,15 +146,7 @@ impl Term {
         *self.inner.hash.get().expect("warm_scalars fills hash")
     }
 
-    /// Whether any *free* variable in this term carries an elaborator-minted
-    /// label — one containing `#`, which cannot occur in a written identifier
-    /// (`Context::fresh` always embeds it; witness-table names share the
-    /// convention, deliberately counted here so the elaboration memo stays
-    /// conservative). Binder labels inside `Scope`s are closed occurrences,
-    /// not free variables, and never count. Cached per node and computed from
-    /// the children's cached cells, so a shared subterm — a DAG-shaped lowered
-    /// literal — pays O(degree) here, not O(size): the elaboration cache gates
-    /// every `elaborate` call on this bit and must not re-walk shared chains.
+    /// Whether any *free* variable in this term carries an elaborator-minted label — one containing `#`, which cannot occur in a written identifier (`Context::fresh` always embeds it; witness-table names share the convention, deliberately counted here so the elaboration memo stays conservative). Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached cells, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
         if self.inner.has_local_free.get().is_none() {
             self.warm_scalars();
@@ -188,9 +158,7 @@ impl Term {
             .expect("warm_scalars fills has_local_free")
     }
 
-    /// Whether any `Metavar` node occurs in this term. Cached per node like
-    /// [`has_local_free`](Self::has_local_free) and for the same reason: the
-    /// elaboration cache's O(1)-per-call gate.
+    /// Whether any `Metavar` node occurs in this term. Cached per node like [`has_local_free`](Self::has_local_free) and for the same reason: the elaboration cache's O(1)-per-call gate.
     pub(crate) fn has_metavar(&self) -> bool {
         if self.inner.has_metavar.get().is_none() {
             self.warm_scalars();
@@ -202,8 +170,7 @@ impl Term {
             .expect("warm_scalars fills has_metavar")
     }
 
-    /// Whether this term contains an unresolved universe metavariable in a
-    /// `Type` level, universe instantiation, or nominal universe vector.
+    /// Whether this term contains an unresolved universe metavariable in a `Type` level, universe instantiation, or nominal universe vector.
     pub fn has_universe_meta(&self) -> bool {
         if self.inner.has_universe_meta.get().is_none() {
             self.warm_scalars();
@@ -217,10 +184,7 @@ impl Term {
 
     /// Whether universe erasure or validation must inspect this subtree.
     ///
-    /// Cached and filled on the explicit post-order stack like the other
-    /// scalar derivations, so universe-only passes can structurally share a
-    /// deep universe-free data spine without consuming one native frame per
-    /// node.
+    /// Cached and filled on the explicit post-order stack like the other scalar derivations, so universe-only passes can structurally share a deep universe-free data spine without consuming one native frame per node.
     pub fn has_universe_data(&self) -> bool {
         if self.inner.has_universe_data.get().is_none() {
             self.warm_scalars();
@@ -238,9 +202,7 @@ impl Term {
 
     /// Whether any universe metavariable in this subtree satisfies `pred`.
     ///
-    /// The walk is iterative and pointer-deduplicated, matching the scalar
-    /// cache fill: cache eligibility calls this on data-shaped terms and must
-    /// not put their depth back onto the native stack.
+    /// The walk is iterative and pointer-deduplicated, matching the scalar cache fill: cache eligibility calls this on data-shaped terms and must not put their depth back onto the native stack.
     pub fn any_universe_meta(&self, mut pred: impl FnMut(UniverseMetaId) -> bool) -> bool {
         let mut seen: HashSet<*const Node> = HashSet::new();
         let mut pending = vec![self.clone()];
@@ -262,11 +224,7 @@ impl Term {
         false
     }
 
-    /// Extend the two dependency sets in one explicit walk without rebuilding
-    /// the term or warming its unrelated scalar caches. Declaration universe
-    /// closure uses both sets together: direct level metas join the closure,
-    /// while term metas lead to their result, telescope, and solved body in
-    /// the context store.
+    /// Extend the two dependency sets in one explicit walk without rebuilding the term or warming its unrelated scalar caches. Declaration universe closure uses both sets together: direct level metas join the closure, while term metas lead to their result, telescope, and solved body in the context store.
     pub fn collect_universe_dependencies(
         &self,
         universes: &mut BTreeSet<UniverseMetaId>,
@@ -299,20 +257,11 @@ impl Term {
         }
     }
 
-    /// Rewrite this node, if it is an occurrence of one of `names`, to denote
-    /// the declaration instance `levels`. Returns `None` for every other node,
-    /// leaving it to ordinary traversal.
+    /// Rewrite this node, if it is an occurrence of one of `names`, to denote the declaration instance `levels`. Returns `None` for every other node, leaving it to ordinary traversal.
     ///
-    /// Two occurrence shapes carry an instance. A nominal normal form holds it
-    /// in its own universe vector; a not-yet-reduced reference to a type former
-    /// is an ordinary variable, which holds it as a wrapping [`UniverseInst`] —
-    /// the same node an external use site receives from scheme instantiation.
-    /// A variable already under a `UniverseInst` has been instantiated and is
-    /// returned untouched rather than wrapped twice.
+    /// Two occurrence shapes carry an instance. A nominal normal form holds it in its own universe vector; a not-yet-reduced reference to a type former is an ordinary variable, which holds it as a wrapping [`UniverseInst`] — the same node an external use site receives from scheme instantiation. A variable already under a `UniverseInst` has been instantiated and is returned untouched rather than wrapped twice.
     ///
-    /// Nominal children are stamped explicitly because a rewrite hook replaces
-    /// its node wholesale: an occurrence nested in a parameter or index must
-    /// receive the same instance as the occurrence containing it.
+    /// Nominal children are stamped explicitly because a rewrite hook replaces its node wholesale: an occurrence nested in a parameter or index must receive the same instance as the occurrence containing it.
     pub(crate) fn stamp_declaration_node(
         &self,
         names: &BTreeSet<Global>,
@@ -393,20 +342,13 @@ impl Term {
 
     pub fn unwrap_or_clone(this: Self) -> Subterm {
         match Rc::try_unwrap(this.inner) {
-            // Swapped out rather than moved out: [`Node`] dismantles itself on
-            // drop, and a type with a `Drop` impl cannot have a field moved
-            // away. The husk left behind is childless, so dropping it is free.
+            // Swapped out rather than moved out: [`Node`] dismantles itself on drop, and a type with a `Drop` impl cannot have a field moved away. The husk left behind is childless, so dropping it is free.
             Ok(mut node) => mem::replace(&mut node.subterm, Subterm::Prop),
             Err(shared) => shared.subterm.clone(),
         }
     }
 
-    /// The free-variable identity at the head of an application spine, descending
-    /// through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the
-    /// name of `classify` / `f`. A bare free variable reports itself; anything
-    /// else is `None`. Used to cheaply gate scrutinee-refinement
-    /// canonicalization on the applied symbol before paying for argument
-    /// reduction.
+    /// The free-variable identity at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`. A bare free variable reports itself; anything else is `None`. Used to cheaply gate scrutinee-refinement canonicalization on the applied symbol before paying for argument reduction.
     pub fn head_name(&self) -> Option<&Free> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
@@ -416,22 +358,13 @@ impl Term {
         }
     }
 
-    /// What a scrutinee-refinement key is gated on: the identity at an
-    /// application spine's head, or the primitive standing in for one where the
-    /// normal form is a `Prim` node rather than an application. Never a name a
-    /// program could write — the two sides of every comparison come from here,
-    /// so this only ever has to agree with itself.
+    /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the primitive standing in for one where the normal form is a `Prim` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_key(),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
-            // A decidable comparison's normal form is a primitive node, not an
-            // application, so it has no named head. Scrutinee refinement keys on
-            // this tag and the reducer's probe gates on it, so an untagged key
-            // can be registered but never looked up — which is how an
-            // operator-spelled scrutinee loses its arm refinement while the
-            // equivalent `Nat/lte(a, b)` keeps it.
+            // A decidable comparison's normal form is a primitive node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee loses its arm refinement while the equivalent `Nat/lte(a, b)` keeps it.
             Subterm::Prim(prim) => match prim {
                 Prim::BoolEql(..) => Some(HeadTag::Prim("prim:BoolEql")),
                 Prim::BoolNeq(..) => Some(HeadTag::Prim("prim:BoolNeq")),
@@ -466,20 +399,12 @@ impl Term {
         }
     }
 
-    /// Return the canonical target when this term is a straightforward
-    /// transparent alias body: either a single free variable or its
-    /// eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage
-    /// interface audit uses this after name resolution to preserve
-    /// representation provenance; computed bodies are not classified as aliases.
+    /// Return the canonical target when this term is a straightforward transparent alias body: either a single free variable or its eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage interface audit uses this after name resolution to preserve representation provenance; computed bodies are not classified as aliases.
     pub fn transparent_alias_target(&self) -> Option<&Free> {
         match &self.inner.subterm {
             Subterm::Var(var) => var.as_free(),
             Subterm::Func(Func { telescope, .. }) => {
-                // Read the eta-expansion under its binders instead of opening
-                // it: the parameters are exactly the innermost de Bruijn
-                // indices there, counting outwards, so the shape is decided
-                // without minting probe binders that would have to be proven
-                // not to collide with the body's own.
+                // Read the eta-expansion under its binders instead of opening it: the parameters are exactly the innermost de Bruijn indices there, counting outwards, so the shape is decided without minting probe binders that would have to be proven not to collide with the body's own.
                 let arity = telescope.len();
                 let Subterm::Apply(Apply { head, params, .. }) = &**telescope.terminal() else {
                     return None;
@@ -501,12 +426,7 @@ impl Term {
 
     /// Return the absolute free-variable head of a direct type-family alias.
     ///
-    /// The declared type must structurally end in a literal [`Subterm::Type`]
-    /// or [`Subterm::Prop`] after peeling only function-type telescopes. The
-    /// body is then peeled through function literals and application spines,
-    /// again structurally and without reduction or substitution. Computed
-    /// heads, local heads, and aliased universe annotations are deliberately
-    /// excluded.
+    /// The declared type must structurally end in a literal [`Subterm::Type`] or [`Subterm::Prop`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
     pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free> {
         fn ends_in_literal_sort(term: &Term) -> bool {
             match &**term {
@@ -543,9 +463,7 @@ impl Term {
         self.span.clone()
     }
 
-    /// Attaches a span to this term. If the term already carries a span (the innermost
-    /// one), it is preserved — innermost wins, matching how `Error::at` keeps the first
-    /// span it sees as errors propagate up.
+    /// Attaches a span to this term. If the term already carries a span (the innermost one), it is preserved — innermost wins, matching how `Error::at` keeps the first span it sees as errors propagate up.
     pub fn with_span(mut self, span: Span) -> Self {
         if self.span.is_none() {
             self.span = Some(span);
@@ -553,8 +471,7 @@ impl Term {
         self
     }
 
-    /// Ground `Type 0`, used only where the calculus requires that exact
-    /// universe (primitive carriers and the type of `Prop`).
+    /// Ground `Type 0`, used only where the calculus requires that exact universe (primitive carriers and the type of `Prop`).
     pub fn type_ground() -> Self {
         Self::type_at(Level::zero())
     }
@@ -624,10 +541,7 @@ impl Term {
         }))
     }
 
-    /// A metavariable carrying its (optional) provenance mark and birth spine:
-    /// a hole or goal rebuilt at its birth point with the identity spine over
-    /// its frozen telescope, or an elaborator insertion minted with its
-    /// provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
+    /// A metavariable carrying its (optional) provenance mark and birth spine: a hole or goal rebuilt at its birth point with the identity spine over its frozen telescope, or an elaborator insertion minted with its provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
     pub fn metavar_birthed(
         id: impl Into<MetaId>,
         origin: Option<MetavarOrigin>,
@@ -682,11 +596,7 @@ impl Term {
         }))
     }
 
-    /// Build an all-explicit function literal from `(label, annotation)`
-    /// parameters, closing the body over the labels via a [`Telescope`]. Every
-    /// binder is stamped [`Plicity::Explicit`] — use [`Term::func_marked`] for a
-    /// function containing hidden binders. There is deliberately no unmarked
-    /// "trust me" constructor for a hidden-binder function.
+    /// Build an all-explicit function literal from `(label, annotation)` parameters, closing the body over the labels via a [`Telescope`]. Every binder is stamped [`Plicity::Explicit`] — use [`Term::func_marked`] for a function containing hidden binders. There is deliberately no unmarked "trust me" constructor for a hidden-binder function.
     pub fn func<I, T, B>(params: I, body: B) -> Self
     where
         I: IntoIterator<Item = (Free, T)>,
@@ -701,9 +611,7 @@ impl Term {
         )
     }
 
-    /// Build a function literal from `(plicity, label, annotation)` binders,
-    /// keeping one plicity mark per telescope entry (asserted to line up — the
-    /// [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
+    /// Build a function literal from `(plicity, label, annotation)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
     pub fn func_marked<I, T, B>(params: I, body: B) -> Self
     where
         I: IntoIterator<Item = (Plicity, Free, T)>,
@@ -798,9 +706,7 @@ impl Term {
             .map(|(name, term)| (name, term.into()))
             .unzip();
 
-        // A literal with no written names is the same term as a positional
-        // one — keep the all-positional normal form (`names` empty) so
-        // syntactic equality does not split on how the literal was spelled.
+        // A literal with no written names is the same term as a positional one — keep the all-positional normal form (`names` empty) so syntactic equality does not split on how the literal was spelled.
         if names.iter().all(Option::is_none) {
             names = vec![];
         }
@@ -909,8 +815,7 @@ impl Term {
         }))
     }
 
-    /// A struct value with no written field names — the positional normal form
-    /// (post-elaboration and every internal build), mirroring `tuple`.
+    /// A struct value with no written field names — the positional normal form (post-elaboration and every internal build), mirroring `tuple`.
     pub fn struct_<I, P, J, Q>(name: Global, params: I, fields: J) -> Self
     where
         I: IntoIterator<Item = P>,
@@ -938,9 +843,7 @@ impl Term {
         }))
     }
 
-    /// A struct literal carrying the written entry shapes from `into_core`;
-    /// elaboration validates them against the declared fields and rebuilds
-    /// entry-free, exactly like `tuple_named`.
+    /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.
     pub fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self
     where
         I: IntoIterator<Item = P>,
@@ -1012,9 +915,7 @@ impl Term {
         )
     }
 
-    /// [`Term::induct_match_marked`] over an already-built motive scope, with
-    /// the optional `| _ =>` catch-all folded in — `into_core`'s single entry
-    /// point for a nominal-inductive elimination.
+    /// [`Term::induct_match_marked`] over an already-built motive scope, with the optional `| _ =>` catch-all folded in — `into_core`'s single entry point for a nominal-inductive elimination.
     pub fn induct_match_scoped_marked<H, I, A, B>(
         head: H,
         motive: Scope<Many>,
@@ -1037,11 +938,7 @@ impl Term {
         )
     }
 
-    /// The primitive eliminator of a nominal inductive with an explicit `| _ =>`
-    /// catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a
-    /// binding-free default standing in for every other constructor tag. The
-    /// dispatching analogue of [`Term::induct_match`], mirroring how
-    /// [`Term::switch`] relates to [`Term::nat_match`].
+    /// The primitive eliminator of a nominal inductive with an explicit `| _ =>` catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a binding-free default standing in for every other constructor tag. The dispatching analogue of [`Term::induct_match`], mirroring how [`Term::switch`] relates to [`Term::nat_match`].
     pub fn induct_match_default<H, M, I, A, B, D>(
         head: H,
         motive_binder: Option<&Free>,
@@ -1092,8 +989,7 @@ impl Term {
         )
     }
 
-    /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
-    /// one plicity mark per payload binder (the [`InductArm`] invariant).
+    /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping one plicity mark per payload binder (the [`InductArm`] invariant).
     pub(crate) fn induct_cases_marked<I, A, B>(cases: I) -> Vec<(Atom, InductArm)>
     where
         I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
@@ -1116,11 +1012,7 @@ impl Term {
             .collect()
     }
 
-    /// Build a match's arity-1 motive scope from an optional source label: a
-    /// named scope when the label is present, a constant one when not. Shared by
-    /// every match constructor whose motive binds just the scrutinee — the
-    /// canonical elaborated shape for a primitive carrier or an unindexed
-    /// inductive.
+    /// Build a match's arity-1 motive scope from an optional source label: a named scope when the label is present, a constant one when not. Shared by every match constructor whose motive binds just the scrutinee — the canonical elaborated shape for a primitive carrier or an unindexed inductive.
     fn motive_scope(motive_binder: Option<&Free>, motive: Term) -> Scope<Many> {
         match motive_binder {
             Some(binder) => Scope::close(Many(1), &[binder], motive),
@@ -1128,16 +1020,9 @@ impl Term {
         }
     }
 
-    /// Carry a *written* motive — the surface term `into_core` lowered, before
-    /// elaboration has closed it into a scope — as an arity-0 [`Scope`].
+    /// Carry a *written* motive — the surface term `into_core` lowered, before elaboration has closed it into a scope — as an arity-0 [`Scope`].
     ///
-    /// Lowering cannot close the scope itself: the motive's arity is
-    /// `n_indices + 1`, and the eliminated family is only known once the
-    /// scrutinee's type is inferred. Arity 0 is a free tag for "not yet
-    /// scoped" because no elaborated motive can have it — every eliminator
-    /// binds at least the scrutinee, so `check_motive` always re-closes at
-    /// arity 1 or more. `Scope::constant` performs no capture, so the term
-    /// goes in and comes back out of `body()` untouched.
+    /// Lowering cannot close the scope itself: the motive's arity is `n_indices + 1`, and the eliminated family is only known once the scrutinee's type is inferred. Arity 0 is a free tag for "not yet scoped" because no elaborated motive can have it — every eliminator binds at least the scrutinee, so `check_motive` always re-closes at arity 1 or more. `Scope::constant` performs no capture, so the term goes in and comes back out of `body()` untouched.
     pub fn match_motive_written<M>(motive: M) -> Scope<Many>
     where
         M: Into<Term>,
@@ -1145,12 +1030,7 @@ impl Term {
         Scope::constant(Many(0), motive.into())
     }
 
-    /// Build a match node around an already-built motive scope. The `*_scoped`
-    /// constructors are `into_core`'s entry points: lowering carries the
-    /// *written* motive term (see [`Term::match_motive_written`]) rather than a
-    /// label and a body, because it cannot know the arity to close at. Every
-    /// label-taking constructor above delegates here after building the
-    /// canonical arity-1 scope.
+    /// Build a match node around an already-built motive scope. The `*_scoped` constructors are `into_core`'s entry points: lowering carries the *written* motive term (see [`Term::match_motive_written`]) rather than a label and a body, because it cannot know the arity to close at. Every label-taking constructor above delegates here after building the canonical arity-1 scope.
     fn match_scoped(head: Term, motive: Scope<Many>, cases: Cases) -> Self {
         Self::from(Subterm::Match(Match {
             head,
@@ -1428,19 +1308,9 @@ impl Term {
         )
     }
 
-    /// Prepend a single non-recursive binding `binder = body : type_` in front
-    /// of `tail`. `body` is deliberately *not* closed over `binder` — a `let` is
-    /// non-recursive; use [`Term::rec`] for self-reference.
+    /// Prepend a single non-recursive binding `binder = body : type_` in front of `tail`. `body` is deliberately *not* closed over `binder` — a `let` is non-recursive; use [`Term::rec`] for self-reference.
     ///
-    /// When `tail` is itself a [`Let`] block, the binding is *merged* into it so
-    /// a run of `let`s becomes one flat block, not a nest: `binder` becomes the
-    /// block's new outermost binding, every existing binding and the tail step
-    /// over one more binder (`capture`/reclose shift them by one), and free
-    /// occurrences of `binder` in them bind to it. Building a block bottom-up —
-    /// as `into_core` and the elaborator's rebuild both do — therefore yields a
-    /// single `Let`, and the flatness is what bounds every later walk over it.
-    /// A `tail` that is not a `Let` (a `!`-bind's `Apply`, a `rec`, a base term)
-    /// starts a fresh one-binding block, so effect boundaries segment naturally.
+    /// When `tail` is itself a [`Let`] block, the binding is *merged* into it so a run of `let`s becomes one flat block, not a nest: `binder` becomes the block's new outermost binding, every existing binding and the tail step over one more binder (`capture`/reclose shift them by one), and free occurrences of `binder` in them bind to it. Building a block bottom-up — as `into_core` and the elaborator's rebuild both do — therefore yields a single `Let`, and the flatness is what bounds every later walk over it. A `tail` that is not a `Let` (a `!`-bind's `Apply`, a `rec`, a base term) starts a fresh one-binding block, so effect boundaries segment naturally.
     pub fn let_<T, B, U>(binder: &Free, type_: T, body: B, tail: U) -> Self
     where
         T: Into<Term>,
@@ -1516,13 +1386,9 @@ impl Term {
     }
 }
 
-/// Hold each of `subterm`'s children somewhere else, then stand `subterm` down
-/// to a childless node.
+/// Hold each of `subterm`'s children somewhere else, then stand `subterm` down to a childless node.
 ///
-/// Every child is cloned into `work` *before* the old value is released, so
-/// releasing it can only decrement — the reference `work` now holds is what
-/// stops the drop cascading. What is left behind is `Prop`: no children, and
-/// no allocation, because it is a variant with no payload.
+/// Every child is cloned into `work` *before* the old value is released, so releasing it can only decrement — the reference `work` now holds is what stops the drop cascading. What is left behind is `Prop`: no children, and no allocation, because it is a variant with no payload.
 fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
     let detached = mem::replace(subterm, Subterm::Prop);
     detached.any_child_term(&mut |child| {
@@ -1533,20 +1399,11 @@ fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
 
 /// Release the node's descendants iteratively.
 ///
-/// A term is an `Rc` chain, so the derived drop recurses once per link and a
-/// deep term aborts the process on release exactly as deep equality used to on
-/// comparison. Emptying each node *before* it falls out of scope is what keeps
-/// its own drop from cascading: the husk left behind has no children to
-/// descend into, so every level is retired from this one loop.
+/// A term is an `Rc` chain, so the derived drop recurses once per link and a deep term aborts the process on release exactly as deep equality used to on comparison. Emptying each node *before* it falls out of scope is what keeps its own drop from cascading: the husk left behind has no children to descend into, so every level is retired from this one loop.
 ///
-/// Only a node this drop holds the sole reference to is emptied — `get_mut`
-/// answers precisely that question — so a subterm shared with a live term is
-/// left untouched and merely loses a reference.
+/// Only a node this drop holds the sole reference to is emptied — `get_mut` answers precisely that question — so a subterm shared with a live term is left untouched and merely loses a reference.
 ///
-/// Nothing here allocates, which matters because releasing terms is constant
-/// work in the compiler: standing a node down costs a `Prop` and a refcount
-/// bump per child. An earlier version substituted a placeholder `Term` instead,
-/// and building one per drop cost about a fifth of a prelude build.
+/// Nothing here allocates, which matters because releasing terms is constant work in the compiler: standing a node down costs a `Prop` and a refcount bump per child. An earlier version substituted a placeholder `Term` instead, and building one per drop cost about a fifth of a prelude build.
 impl Drop for Node {
     fn drop(&mut self) {
         // Nothing to dismantle, and the case every husk left below lands in.
@@ -1573,23 +1430,14 @@ impl Hash for Term {
 
 /// Structural equality, walked with an explicit worklist.
 ///
-/// The recursion this replaces was native, and a term deep enough overflowed
-/// the stack rather than answering — which a kernel must not do, and which the
-/// step budget cannot prevent, because depth is not steps. Every other
-/// derivation over a term already avoids native depth the same way
-/// ([`Term::fill_post_order`], `traverse_rewrite_spine`); this closes the last
-/// one that decides acceptance.
+/// The recursion this replaces was native, and a term deep enough overflowed the stack rather than answering — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term already avoids native depth the same way ([`Term::fill_post_order`], `traverse_rewrite_spine`); this closes the last one that decides acceptance.
 ///
-/// Two shortcuts carry the common cases before any of that: pointer identity
-/// (hash-consing makes shared structure genuinely common) and the cached
-/// hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
+/// Two shortcuts carry the common cases before any of that: pointer identity (hash-consing makes shared structure genuinely common) and the cached hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
-        // One visit for the whole comparison: the placeholder is allocated
-        // once, and each node's children are taken off it in turn.
+        // One visit for the whole comparison: the placeholder is allocated once, and each node's children are taken off it in turn.
         let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
-        // Entering as a `Subterm` is what keeps the node itself unmasked —
-        // the hook fires per `Term`, and the node being compared is not one.
+        // Entering as a `Subterm` is what keeps the node itself unmasked — the hook fires per `Term`, and the node being compared is not one.
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
             (masked, visit.take_masked_children())
@@ -1608,15 +1456,11 @@ impl PartialEq for Term {
             let (this_masked, this_children) = mask(&this.inner.subterm);
             let (that_masked, that_children) = mask(&that.inner.subterm);
 
-            // Derived equality, over nodes whose children are all placeholders:
-            // it compares this node's own payload — variant, names, plicities,
-            // levels, scope labels and arities — and bottoms out immediately.
+            // Derived equality, over nodes whose children are all placeholders: it compares this node's own payload — variant, names, plicities, levels, scope labels and arities — and bottoms out immediately.
             if this_masked != that_masked {
                 return false;
             }
-            // The masks agree, so the shapes agree and the child counts with
-            // them; the check is kept because equal counts are what makes the
-            // zip below a total comparison rather than a prefix of one.
+            // The masks agree, so the shapes agree and the child counts with them; the check is kept because equal counts are what makes the zip below a total comparison rather than a prefix of one.
             if this_children.len() != that_children.len() {
                 return false;
             }
@@ -1688,26 +1532,16 @@ impl Bound for Term {
         Term::has_metavar(self)
     }
 
-    /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s
-    /// pruning short-circuit (above) hands back via `Rc::clone` keeps this
-    /// same cell across every later traversal, so a term shared across many
-    /// conversion goals — e.g. a `rec` group's own unchanging members,
-    /// re-enqueued each round an unfolding cycle revisits them — pays this
-    /// O(size) walk once rather than once per goal. Uniform in every term,
-    /// not specific to recursive ones; see `Convert::history_key`.
+    /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — pays this O(size) walk once rather than once per goal. Uniform in every term, not specific to recursive ones; see `Convert::history_key`.
     fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()
     }
 }
 
 impl Term {
-    /// This term over the canonical node of its structure, when the traversal is
-    /// hash-consing; itself otherwise.
+    /// This term over the canonical node of its structure, when the traversal is hash-consing; itself otherwise.
     ///
-    /// The span is this occurrence's own. It lives on the `Term` wrapper rather
-    /// than on the shared node, so canonicalizing never moves a span from one
-    /// occurrence to another — which is what makes sharing by structure safe
-    /// here at all.
+    /// The span is this occurrence's own. It lives on the `Term` wrapper rather than on the shared node, so canonicalizing never moves a span from one occurrence to another — which is what makes sharing by structure safe here at all.
     fn canonicalized<F>(self, visit: &Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
@@ -1747,19 +1581,14 @@ impl Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        // Preserve the span across traversal; the rebuilt node is a fresh
-        // structure, so its cache starts empty.
+        // Preserve the span across traversal; the rebuilt node is a fresh structure, so its cache starts empty.
         Self {
             span: self.span.clone(),
             inner: Rc::new(Node::new((**self).traverse(visit))),
         }
     }
 
-    /// Rewrite a potentially deep constructor/application spine without
-    /// putting one native frame per link on the stack. Term hooks and
-    /// universe-level rewrites are structurally local at these nodes: neither
-    /// former changes binder depth, and every nested scope still delegates to
-    /// ordinary traversal.
+    /// Rewrite a potentially deep constructor/application spine without putting one native frame per link on the stack. Term hooks and universe-level rewrites are structurally local at these nodes: neither former changes binder depth, and every nested scope still delegates to ordinary traversal.
     fn traverse_rewrite_spine<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
@@ -1880,11 +1709,7 @@ impl Term {
 }
 
 impl Term {
-    /// The memoized free-variable set, filled bottom-up on an explicit stack:
-    /// each node's set is its children's sets unioned with its own identity
-    /// (if it is a free `Var`), so filling reads the children's cached sets in
-    /// O(children) rather than re-walking the subtree — a deep spine memoizes
-    /// without native recursion. `free_vars` is the fill marker.
+    /// The memoized free-variable set, filled bottom-up on an explicit stack: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion. `free_vars` is the fill marker.
     fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<Free>> {
         if self.inner.free_vars.get().is_none() {
             self.fill_post_order(
@@ -1901,28 +1726,17 @@ impl Term {
             .expect("fill_post_order fills free_vars")
     }
 
-    /// Whether `name` occurs free in this term, through the same memoized
-    /// set [`Bound::free_vars`] fills — but as a lookup instead of a set
-    /// clone: `define`'s selective reduction-cache invalidation probes every
-    /// cached WHNF, and cloning each entry's set there would swamp the walk
-    /// it avoids.
+    /// Whether `name` occurs free in this term, through the same memoized set [`Bound::free_vars`] fills — but as a lookup instead of a set clone: `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
     pub fn mentions_free(&self, name: &Free) -> bool {
         self.get_or_init_free_vars().contains(name)
     }
 
-    /// The free-variable identities of this term. Inherent so a `term.free_vars()`
-    /// call routes through the memoized, iteratively-filled set (this and the
-    /// [`Bound`] impl agree) rather than deref-ing to the uncached, recursive
-    /// [`Subterm::free_vars`] when the `Bound` trait is out of scope.
+    /// The free-variable identities of this term. Inherent so a `term.free_vars()` call routes through the memoized, iteratively-filled set (this and the [`Bound`] impl agree) rather than deref-ing to the uncached, recursive [`Subterm::free_vars`] when the `Bound` trait is out of scope.
     pub fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()
     }
 
-    /// The ids of every metavariable in this term. Inherent, and gated on the
-    /// memoized [`has_metavar`](Self::has_metavar): a ground term (every data
-    /// spine) short-circuits without walking, so the enumeration only ever
-    /// recurses through metavariable-bearing structure, whose depth is bounded
-    /// by the written program.
+    /// The ids of every metavariable in this term. Inherent, and gated on the memoized [`has_metavar`](Self::has_metavar): a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.
     pub fn metavars(&self) -> BTreeSet<MetaId> {
         let mut ids = BTreeSet::new();
         if self.has_metavar() {
@@ -1931,19 +1745,13 @@ impl Term {
         ids
     }
 
-    /// Whether any metavariable in this term satisfies `pred`. Inherent and
-    /// gated on [`has_metavar`](Self::has_metavar) like [`metavars`](Self::metavars),
-    /// and — since `Subterm::any_metavar`'s recursion re-enters through each
-    /// child `Term` — every ground subtree it reaches short-circuits too.
+    /// Whether any metavariable in this term satisfies `pred`. Inherent and gated on [`has_metavar`](Self::has_metavar) like [`metavars`](Self::metavars), and — since `Subterm::any_metavar`'s recursion re-enters through each child `Term` — every ground subtree it reaches short-circuits too.
     pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         self.has_metavar() && self.inner.subterm.any_metavar(pred)
     }
 }
 
-/// An unresolved infix application `left <op> right`. Elaboration infers a
-/// shared operand type for the two sides and rebuilds the node as a concept
-/// method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on
-/// `Bool` — see `elaborate_infix`); the node never survives elaboration.
+/// An unresolved infix application `left <op> right`. Elaboration infers a shared operand type for the two sides and rebuilds the node as a concept method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on `Bool` — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1955,10 +1763,7 @@ pub struct Infix {
     pub right: Term,
 }
 
-/// A polymorphic numeric literal: an integer `magnitude` with an optional
-/// written sign. Resolved to a concrete `Nat`/`Int`/`Flt` primitive by
-/// `elaborate_numlit` once the expected type is known (or defaulted by shape).
-/// Decimal literals are *not* `NumLit` — they parse straight to `Prim::Flt`.
+/// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` primitive by `elaborate_numlit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Prim::Flt`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1967,17 +1772,13 @@ pub struct Infix {
 pub struct NumLit {
     #[cfg_attr(feature = "archive", rkyv(with = BigUintBytes))]
     pub magnitude: BigUint,
-    /// A `+`/`-` was written: drops `Nat` from the candidate set and defaults
-    /// the literal to `Int`.
+    /// A `+`/`-` was written: drops `Nat` from the candidate set and defaults the literal to `Int`.
     pub signed: bool,
     /// The written sign was `-` (a negative literal can never be a `Nat`).
     pub negative: bool,
 }
 
-/// `plicities` parallels the telescope, one mark per binder; the builder
-/// asserts the lengths agree. `Telescope` itself is unchanged. Erasure is
-/// sort-driven (a proof or a type erases), so a function type carries no
-/// runtime-multiplicity marks of its own.
+/// `plicities` parallels the telescope, one mark per binder; the builder asserts the lengths agree. `Telescope` itself is unchanged. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1988,18 +1789,9 @@ pub struct FuncType {
     pub plicities: Vec<Plicity>,
 }
 
-/// A function literal: the parameter annotations and the body as one
-/// [`Telescope`] (each entry a parameter type, the `Done` payload the body),
-/// with `plicities` paralleling the telescope one mark per binder — the builder
-/// asserts the lengths agree. Plicity is part of a function's identity and
-/// calling convention: a lambda carries the marks its binders were written with
-/// (before elaboration) and the complete canonical marks of its checked type
-/// (after elaboration, once omitted hidden binders are inserted). Derived
-/// `Eq`/`Hash` include `plicities` so that two lambdas differing only in a
-/// written mark never share an elaboration-cache entry.
+/// A function literal: the parameter annotations and the body as one [`Telescope`] (each entry a parameter type, the `Done` payload the body), with `plicities` paralleling the telescope one mark per binder — the builder asserts the lengths agree. Plicity is part of a function's identity and calling convention: a lambda carries the marks its binders were written with (before elaboration) and the complete canonical marks of its checked type (after elaboration, once omitted hidden binders are inserted). Derived `Eq`/`Hash` include `plicities` so that two lambdas differing only in a written mark never share an elaboration-cache entry.
 ///
-/// Erasure ignores `plicities`; its keep/drop decisions come from the checked
-/// function type and sort information.
+/// Erasure ignores `plicities`; its keep/drop decisions come from the checked function type and sort information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2010,10 +1802,7 @@ pub struct Func {
     pub plicities: Vec<Plicity>,
 }
 
-/// `plicities` parallels `params`, one mark per argument — the call-site `@`
-/// marks. Core must carry them (rather than `into_core` resolving them) because
-/// `into_core` is type-blind: only the elaborator, holding the head's function
-/// type, can decide which binder an `@`-argument fills.
+/// `plicities` parallels `params`, one mark per argument — the call-site `@` marks. Core must carry them (rather than `into_core` resolving them) because `into_core` is type-blind: only the elaborator, holding the head's function type, can decide which binder an `@`-argument fills.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2025,15 +1814,9 @@ pub struct Apply {
     pub plicities: Vec<Plicity>,
 }
 
-/// A dependent product (Σ-type). Erasure is sort-driven: a proof or type-valued
-/// field is a *subset type* witness — dropped at erasure, leaving the relevant
-/// fields (and collapsing to the bare field when only one remains).
+/// A dependent product (Σ-type). Erasure is sort-driven: a proof or type-valued field is a *subset type* witness — dropped at erasure, leaving the relevant fields (and collapsing to the bare field when only one remains).
 ///
-/// Unlike binder hints elsewhere, field labels are the target of `.label`
-/// resolution during elaboration, so they are part of the type's identity:
-/// `Eq`/`Hash` reassert them on top of the label-blind [`Telescope`] identity.
-/// Otherwise the reduction memo could hand elaboration a twin type whose
-/// labels differ, and a well-typed projection would fail to resolve.
+/// Unlike binder hints elsewhere, field labels are the target of `.label` resolution during elaboration, so they are part of the type's identity: `Eq`/`Hash` reassert them on top of the label-blind [`Telescope`] identity. Otherwise the reduction memo could hand elaboration a twin type whose labels differ, and a well-typed projection would fail to resolve.
 #[derive(Debug, Clone, Eq)]
 #[cfg_attr(
     feature = "archive",
@@ -2056,11 +1839,7 @@ impl Hash for TupleType {
     }
 }
 
-/// `names` carries the literal's written field names (`(status = 0, …)`) from
-/// `into_core` to elaboration, which checks them against the expected tuple
-/// type's labels and rebuilds the literal name-free. Empty means "no names
-/// written" — the invariant for every internally-built and post-elaboration
-/// tuple.
+/// `names` carries the literal's written field names (`(status = 0, …)`) from `into_core` to elaboration, which checks them against the expected tuple type's labels and rebuilds the literal name-free. Empty means "no names written" — the invariant for every internally-built and post-elaboration tuple.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2071,9 +1850,7 @@ pub struct Tuple {
     pub names: Vec<Option<String>>,
 }
 
-/// A projection's field is positional in every post-elaboration term; the
-/// `Label` form exists only between `into_core` and `elaborate`, which resolves
-/// it against the head's tuple type and rebuilds it as `Index`.
+/// A projection's field is positional in every post-elaboration term; the `Label` form exists only between `into_core` and `elaborate`, which resolves it against the head's tuple type and rebuilds it as `Index`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2095,17 +1872,9 @@ pub struct Proj {
     pub field: Field,
 }
 
-/// An inductive type as a primitive normal form. Built inside the
-/// automatically-generated type-constructor function's body. Users never write
-/// one directly — they write `Result(A, E)` and the type-constructor function
-/// reduces to this. Two `InductType`s are convertible iff same `name` and
-/// pointwise-convertible `params` and `indices`.
+/// An inductive type as a primitive normal form. Built inside the automatically-generated type-constructor function's body. Users never write one directly — they write `Result(A, E)` and the type-constructor function reduces to this. Two `InductType`s are convertible iff same `name` and pointwise-convertible `params` and `indices`.
 ///
-/// `params` are uniform across constructors; `indices` are the per-case
-/// constrained binders — each constructor's registry terminal states its own
-/// index expressions. Use sites never distinguish them (`Vec(Bin, 3)` is one
-/// flat application of the type-constructor function); the split lives here
-/// and in the registry.
+/// `params` are uniform across constructors; `indices` are the per-case constrained binders — each constructor's registry terminal states its own index expressions. Use sites never distinguish them (`Vec(Bin, 3)` is one flat application of the type-constructor function); the split lives here and in the registry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2118,14 +1887,9 @@ pub struct InductType {
     pub indices: Vec<Term>,
 }
 
-/// A constructor application as a primitive normal form. Built inside the
-/// automatically-generated value-constructor function's body. Users never
-/// write one directly — they write `Result/success(value)` and the constructor
-/// function reduces to this.
+/// A constructor application as a primitive normal form. Built inside the automatically-generated value-constructor function's body. Users never write one directly — they write `Result/success(value)` and the constructor function reduces to this.
 ///
-/// `name` and `params` are recoverable from the term's inferred type; they are
-/// stored redundantly on purpose, so `convert` stays purely structural (no
-/// context lookups mid-comparison).
+/// `name` and `params` are recoverable from the term's inferred type; they are stored redundantly on purpose, so `convert` stays purely structural (no context lookups mid-comparison).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2139,10 +1903,7 @@ pub struct Variant {
     pub payload: Vec<Term>,
 }
 
-/// A struct type as a primitive normal form (cf. [`InductType`], no indices).
-/// Built inside the generated type-former's body; users write `Pair(A, B)` and
-/// the former reduces to this. Convertible iff same `name` and pointwise-
-/// convertible `params`.
+/// A struct type as a primitive normal form (cf. [`InductType`], no indices). Built inside the generated type-former's body; users write `Pair(A, B)` and the former reduces to this. Convertible iff same `name` and pointwise-convertible `params`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2154,14 +1915,7 @@ pub struct StructType {
     pub params: Vec<Term>,
 }
 
-/// One written struct-literal entry, parallel to [`Struct::fields`]: a plain
-/// positional field carrying its optional written label, an explicit
-/// `use <term>` fill that pairs with the concept's next `use`-marked field
-/// position, or a `..base` spread whose paired term is the base to copy the
-/// unwritten fields from (riding in `fields` keeps it visible to every term
-/// traversal). A `Spread`, if present, is `entries[0]` — enforced at
-/// elaboration, not by construction. Pre-elaboration metadata only, like
-/// written field names on [`Tuple`]; elaboration rebuilds the value entry-free.
+/// One written struct-literal entry, parallel to [`Struct::fields`]: a plain positional field carrying its optional written label, an explicit `use <term>` fill that pairs with the concept's next `use`-marked field position, or a `..base` spread whose paired term is the base to copy the unwritten fields from (riding in `fields` keeps it visible to every term traversal). A `Spread`, if present, is `entries[0]` — enforced at elaboration, not by construction. Pre-elaboration metadata only, like written field names on [`Tuple`]; elaboration rebuilds the value entry-free.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2173,15 +1927,9 @@ pub enum StructEntry {
     Spread,
 }
 
-/// A struct value as a primitive normal form (cf. [`Variant`], no tag).
-/// `name`/`params` are recoverable from the inferred type but stored
-/// redundantly so `convert` stays purely structural.
+/// A struct value as a primitive normal form (cf. [`Variant`], no tag). `name`/`params` are recoverable from the inferred type but stored redundantly so `convert` stays purely structural.
 ///
-/// `entries` carries the literal's written entry shapes from `into_core`:
-/// elaboration checks plain fields positionally against the declared labels,
-/// pairs `use` entries with the concept's `use`-marked positions, and rebuilds
-/// the value entry-free. Empty means "all plain, no names written" — the
-/// invariant for every internally-built and post-elaboration struct.
+/// `entries` carries the literal's written entry shapes from `into_core`: elaboration checks plain fields positionally against the declared labels, pairs `use` entries with the concept's `use`-marked positions, and rebuilds the value entry-free. Empty means "all plain, no names written" — the invariant for every internally-built and post-elaboration struct.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2195,18 +1943,11 @@ pub struct Struct {
     pub entries: Vec<StructEntry>,
 }
 
-/// The unified eliminator: every match form shares a scrutinee and a motive
-/// and differs only in its [`Cases`] payload.
+/// The unified eliminator: every match form shares a scrutinee and a motive and differs only in its [`Cases`] payload.
 ///
-/// An *elaborated* motive is closed at the eliminator's own arity: the
-/// scrutinee's indices in declaration order, then the scrutinee. That is 1 for
-/// every primitive carrier and for an unindexed inductive, and `n_indices + 1`
-/// for an indexed one. Parameters are never abstracted — they are uniform
-/// across constructors and fixed by the scrutinee's type, so the motive body
-/// refers to them through the ambient scope like any other term.
+/// An *elaborated* motive is closed at the eliminator's own arity: the scrutinee's indices in declaration order, then the scrutinee. That is 1 for every primitive carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope like any other term.
 ///
-/// Before elaboration the motive is instead the *written term*, carried in an
-/// arity-0 scope — see [`Term::match_motive_written`].
+/// Before elaboration the motive is instead the *written term*, carried in an arity-0 scope — see [`Term::match_motive_written`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2218,14 +1959,7 @@ pub struct Match {
     pub cases: Cases,
 }
 
-/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its
-/// payload binders, plus a plicity vector paralleling those binders one mark per
-/// slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks
-/// are the written constructor-pattern plicities; after elaboration they are the
-/// constructor's canonical payload plicities. Reduction and erasure open the body
-/// positionally and never read the marks; conversion compares them alongside the
-/// bodies. Kept beside the body (rather than in a second map) so the two can never
-/// drift apart.
+/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction and erasure open the body positionally and never read the marks; conversion compares them alongside the bodies. Kept beside the body (rather than in a second map) so the two can never drift apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2242,8 +1976,7 @@ impl InductArm {
         self.body.arity()
     }
 
-    /// Open the arm body at its payload binders, positionally (plicity is not
-    /// consulted by reduction or erasure).
+    /// Open the arm body at its payload binders, positionally (plicity is not consulted by reduction or erasure).
     pub fn open(&self, args: &[&Term]) -> Term {
         self.body.open(args)
     }
@@ -2263,8 +1996,7 @@ impl InductArm {
         self.body.binder_iter()
     }
 
-    /// Rebuild the arm with its whole body scope replaced, preserving the
-    /// plicity vector (the traversal-side reconstruction helper).
+    /// Rebuild the arm with its whole body scope replaced, preserving the plicity vector (the traversal-side reconstruction helper).
     pub fn with_body(&self, body: Scope<Many>) -> Self {
         InductArm {
             body,
@@ -2287,41 +2019,17 @@ pub enum Cases {
         cases: BTreeMap<u32, Term>,
         default: Term,
     },
-    /// The primitive eliminator of a nominal inductive: one arm per constructor,
-    /// each arm's arity equal to that constructor's payload arity.
-    /// `default` is the optional catch-all arm (`| _ =>`, mirroring
-    /// [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`.
-    /// It binds nothing and stands in for every constructor tag absent from
-    /// `cases`; `None` means the arms structurally cover every constructor
-    /// (a true elimination). The enumerated arms are checked at their own case
-    /// target indices and the default at the scrutinee's actual ones, so a
-    /// catch-all is legal on an indexed family too.
+    /// The primitive eliminator of a nominal inductive: one arm per constructor, each arm's arity equal to that constructor's payload arity. `default` is the optional catch-all arm (`| _ =>`, mirroring [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`. It binds nothing and stands in for every constructor tag absent from `cases`; `None` means the arms structurally cover every constructor (a true elimination). The enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones, so a catch-all is legal on an indexed family too.
     Induct {
-        /// The enumerated arms, in the owning inductive's *declaration order*
-        /// — the same order `InductDecl::constructor_order` reports, which is
-        /// what makes this a canonical form: two matches whose arms are
-        /// written in different source order elaborate to the same sequence,
-        /// so arm order never enters term identity. Elaboration establishes
-        /// that by building the arms from `constructor_order` rather than from
-        /// the written order (`elaborate_induct_match`). A subsequence is
-        /// legal — an arm may be absent under a `default` or a Rung-C prune.
+        /// The enumerated arms, in the owning inductive's *declaration order* — the same order `InductDecl::constructor_order` reports, which is what makes this a canonical form: two matches whose arms are written in different source order elaborate to the same sequence, so arm order never enters term identity. Elaboration establishes that by building the arms from `constructor_order` rather than from the written order (`elaborate_induct_match`). A subsequence is legal — an arm may be absent under a `default` or a Rung-C prune.
         cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
     },
-    /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/
-    /// `Bin`): the `carrier` selects the primitive and carries both its parameters
-    /// (`Lst`'s element type) and its two arms — an identity arm plus a cons arm
-    /// binding the head generator (absent for `Nat`, whose unary generator carries
-    /// no payload), the tail, and the induction hypothesis at the tail.
+    /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/ `Bin`): the `carrier` selects the primitive and carries both its parameters (`Lst`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
     FreeMonoid { carrier: Carrier },
 }
 
-/// The native free-monoid primitive a `Cases::FreeMonoid` eliminates, with its
-/// type parameters and its two eliminator arms. `Nat` is the free monoid on one
-/// (payload-less) generator; `Bin` carries none; `Lst` carries its element
-/// type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose
-/// arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih),
-/// `Scope<Three>` for `Bin`/`Lst` (head, tail, ih).
+/// The native free-monoid primitive a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `Lst` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`Lst` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2344,15 +2052,7 @@ pub enum Carrier {
     },
 }
 
-/// A straight-line block of `let` bindings: `bindings` in written order, then a
-/// `tail` continuation in scope of all of them. Binding `i` is stored under the
-/// `i` binders before it — its `type_` and `value` may reference bindings
-/// `0..i` but never binding `i` itself; a `let` is non-recursive, self- and
-/// mutual reference is [`Rec`]'s job. A whole run of source `let`s is one
-/// `Let`, not a nest, so every walk over it (`traverse`/`reach`/`reduce`/
-/// `erase`/`elaborate`) is a loop over `bindings` rather than one native stack
-/// frame per binding — which is what keeps a long local `let` sequence from
-/// overflowing the stack.
+/// A straight-line block of `let` bindings: `bindings` in written order, then a `tail` continuation in scope of all of them. Binding `i` is stored under the `i` binders before it — its `type_` and `value` may reference bindings `0..i` but never binding `i` itself; a `let` is non-recursive, self- and mutual reference is [`Rec`]'s job. A whole run of source `let`s is one `Let`, not a nest, so every walk over it (`traverse`/`reach`/`reduce`/ `erase`/`elaborate`) is a loop over `bindings` rather than one native stack frame per binding — which is what keeps a long local `let` sequence from overflowing the stack.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2365,12 +2065,7 @@ pub struct Let {
 
 /// One non-recursive local binding: its declared type and its value.
 ///
-/// A local binding is monomorphic. Universe polymorphism is a property of
-/// *declarations*, which are frozen into the prelude archive and re-instantiated
-/// by later programs; a local binding has no such use sites, and cumulativity
-/// already admits the uses a local scheme once served — for `let id : (@A :
-/// Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1`
-/// accepts both, and the level order is linear so a sup always exists.
+/// A local binding is monomorphic. Universe polymorphism is a property of *declarations*, which are frozen into the prelude archive and re-instantiated by later programs; a local binding has no such use sites, and cumulativity already admits the uses a local scheme once served — for `let id : (@A : Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1` accepts both, and the level order is linear so a sup always exists.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2399,8 +2094,7 @@ impl LetBinding {
     }
 }
 
-/// One member of a recursive group as the knot stores it. Both scopes are
-/// closed over the whole group, so any member may reference any other.
+/// One member of a recursive group as the knot stores it. Both scopes are closed over the whole group, so any member may reference any other.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2411,9 +2105,7 @@ pub struct RecMemberScopes {
     pub body: Scope<Many>,
 }
 
-/// The shared knot of a mutually-recursive group. Every member type and body
-/// is scoped over the full group. `Rc` sharing is an implementation detail;
-/// equality and hashing remain structural through the scoped items.
+/// The shared knot of a mutually-recursive group. Every member type and body is scoped over the full group. `Rc` sharing is an implementation detail; equality and hashing remain structural through the scoped items.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2432,10 +2124,7 @@ impl RecGroup {
 
     /// This group with every member's closed scopes rewritten in place.
     ///
-    /// The bodies stay closed throughout. Terms under a scope carry loose de
-    /// Bruijn indices, and two structurally identical such terms — indices
-    /// included — denote the same thing at the same depth, so canonicalizing
-    /// them together is sound without opening.
+    /// The bodies stay closed throughout. Terms under a scope carry loose de Bruijn indices, and two structurally identical such terms — indices included — denote the same thing at the same depth, so canonicalizing them together is sound without opening.
     pub fn map_members(&self, mut map: impl FnMut(&Term) -> Term) -> Self {
         Self {
             scheme: UniverseScheme {
@@ -2494,8 +2183,7 @@ impl RecGroup {
         self.item(index).body.open(&refs)
     }
 
-    /// The universe scheme this group was generalized under — what an instance
-    /// must satisfy.
+    /// The universe scheme this group was generalized under — what an instance must satisfy.
     pub fn universes(&self) -> &UniverseContext {
         &self.scheme.context
     }
@@ -2561,9 +2249,7 @@ impl RecGroup {
     }
 }
 
-/// A block of mutually recursive bindings with an arbitrary tail in scope of
-/// the shared group. It is binding syntax; demanded member occurrences are
-/// represented explicitly by [`RecMember`].
+/// A block of mutually recursive bindings with an arbitrary tail in scope of the shared group. It is binding syntax; demanded member occurrences are represented explicitly by [`RecMember`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2574,9 +2260,7 @@ pub struct Rec {
     pub tail: Scope<Many>,
 }
 
-/// The folded fixed point selecting one member of a [`RecGroup`]. This is a
-/// structural term, not an allocation identity: separately allocated
-/// alpha-equivalent groups compare equal.
+/// The folded fixed point selecting one member of a [`RecGroup`]. This is a structural term, not an allocation identity: separately allocated alpha-equivalent groups compare equal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2587,9 +2271,7 @@ pub struct RecMember {
     pub index: usize,
 }
 
-/// Provenance of an inserted implicit argument: the applied function (`func`)
-/// had no `@`-argument for its implicit binder `binder` at some call site, so
-/// the elaborator filled the slot with a fresh metavariable.
+/// Provenance of an inserted implicit argument: the applied function (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2600,12 +2282,7 @@ pub struct ImplicitOrigin {
     pub binder: String,
 }
 
-/// Provenance of an inserted witness argument: the applied function (`func`)
-/// had no `use`-argument for its witness binder `binder` at some call site, so
-/// the elaborator filled the slot with a fresh metavariable and registered a
-/// resolution goal for it. An occurrence still unsolved at zonk reports as a
-/// missing witness (naming the goal type from the birth record) rather than an
-/// uninferred implicit.
+/// Provenance of an inserted witness argument: the applied function (`func`) had no `use`-argument for its witness binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable and registered a resolution goal for it. An occurrence still unsolved at zonk reports as a missing witness (naming the goal type from the birth record) rather than an uninferred implicit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2616,9 +2293,7 @@ pub struct WitnessOrigin {
     pub binder: String,
 }
 
-/// Provenance of a marked metavariable — which mechanism created it, deciding
-/// how zonk reports it: an unsolved `Implicit`/`Witness` survivor names the
-/// binder it filled, while a `Goal` is reported unconditionally.
+/// Provenance of a marked metavariable — which mechanism created it, deciding how zonk reports it: an unsolved `Implicit`/`Witness` survivor names the binder it filled, while a `Goal` is reported unconditionally.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2627,16 +2302,11 @@ pub struct WitnessOrigin {
 pub enum MetavarOrigin {
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
-    /// A written goal `?` (`into_core` mints it via [`Term::goal`]): the user
-    /// asked what elaboration determines here, so zonk errors with the goal's
-    /// scope, type, and solution — solved or not — instead of splicing.
+    /// A written goal `?` (`into_core` mints it via [`Term::goal`]): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.
     Goal,
 }
 
-/// A metavariable's identity: a dense index into the `Context`'s `MetaStore`,
-/// minted monotonically by an [`Entropy`](Entropy). A newtype so it can
-/// never be confused with the other `usize`-shaped notions the kernel juggles
-/// (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
+/// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an [`Entropy`](Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2666,32 +2336,13 @@ impl fmt::Display for MetaId {
     }
 }
 
-/// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
-/// born from a surface hole `?` and (possibly) solved by unification. The
-/// solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by
-/// `id`, spelled with the *birth telescope's* free names.
+/// A metavariable: a placeholder term standing for an as-yet-unknown subterm, born from a surface hole `?` and (possibly) solved by unification. The solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`, spelled with the *birth telescope's* free names.
 ///
-/// `origin` rides with the node: `Some` iff the metavariable was marked at its
-/// mint — an elaborator-inserted implicit/witness argument (zonk's
-/// unsolved-hole report then names the binder instead of a bare id) or a
-/// written goal `?` (zonk reports it unconditionally). Each id is minted
-/// exactly once (`into_core` desugared holes with `None` and written goals
-/// with `Some(Goal)`, core insertions above the floor `into_core` returns
-/// with `Some`), so every occurrence of an id carries the same origin and the
-/// derived equality never splits an id.
+/// `origin` rides with the node: `Some` iff the metavariable was marked at its mint — an elaborator-inserted implicit/witness argument (zonk's unsolved-hole report then names the binder instead of a bare id) or a written goal `?` (zonk reports it unconditionally). Each id is minted exactly once (`into_core` desugared holes with `None` and written goals with `Some(Goal)`, core insertions above the floor `into_core` returns with `Some`), so every occurrence of an id carries the same origin and the derived equality never splits an id.
 ///
-/// `spine` is the delayed substitution — one term per binder of the birth
-/// telescope (`MetaEntry::telescope` order), recording what that binder
-/// corresponds to at this occurrence. Identity (`Var::free(name)`) at birth.
-/// The entries are ordinary term content: `traverse` walks them, so `close`
-/// captures them and `open` substitutes them, and the mapping survives
-/// re-closing under fresh names — which is what lets a solution mentioning a
-/// sibling binder resolve correctly wherever the occurrence ends up. An empty
-/// spine is a not-yet-birthed `into_core` hole and resolves as the identity.
+/// `spine` is the delayed substitution — one term per binder of the birth telescope (`MetaEntry::telescope` order), recording what that binder corresponds to at this occurrence. Identity (`Var::free(name)`) at birth. The entries are ordinary term content: `traverse` walks them, so `close` captures them and `open` substitutes them, and the mapping survives re-closing under fresh names — which is what lets a solution mentioning a sibling binder resolve correctly wherever the occurrence ends up. An empty spine is a not-yet-birthed `into_core` hole and resolves as the identity.
 ///
-/// The spine is `Rc`-shared: every meta born under the same Γ shares one
-/// identity-spine allocation (see `Context::identity_snapshot`), which is what
-/// keeps minting metavariables O(1) instead of O(|Γ|).
+/// The spine is `Rc`-shared: every meta born under the same Γ shares one identity-spine allocation (see `Context::identity_snapshot`), which is what keeps minting metavariables O(1) instead of O(|Γ|).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2703,8 +2354,7 @@ pub struct Metavar {
     pub origin: Option<MetavarOrigin>,
 }
 
-/// An internal, occurrence-specific instantiation of a universe-polymorphic
-/// binding. The ordinary term binder structure remains entirely in `head`.
+/// An internal, occurrence-specific instantiation of a universe-polymorphic binding. The ordinary term binder structure remains entirely in `head`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2805,13 +2455,7 @@ impl Subterm {
         <Subterm as Bound>::free_vars(self)
     }
 
-    /// Collect the head name of every inductive/struct *construction* and
-    /// *type-former normal form* occurring in this subterm. These names are not
-    /// `Var`s (they live in the registry, not the variable graph), so they do not
-    /// appear in `free_vars`; the reachability prune (`order_flat_items`) needs
-    /// them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the
-    /// string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former
-    /// and field-type definitions alive even when no `Var` mentions them.
+    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; the reachability prune (`order_flat_items`) needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
     pub fn construction_names(&self) -> BTreeSet<Global> {
         let mut names = BTreeSet::new();
         self.collect_construction_names(&mut names);
@@ -2982,11 +2626,7 @@ impl Subterm {
         }
     }
 
-    /// Whether any metavariable occurring in this subterm satisfies `pred`,
-    /// stopping at the first hit. The early-exit dual of `collect_metavars`
-    /// (which is this with a collector that never stops): the reducer's memo
-    /// gate uses it to reject caching a WHNF that still names an unsolved
-    /// metavariable, without allocating the full id set.
+    /// Whether any metavariable occurring in this subterm satisfies `pred`, stopping at the first hit. The early-exit dual of `collect_metavars` (which is this with a collector that never stops): the reducer's memo gate uses it to reject caching a WHNF that still names an unsolved metavariable, without allocating the full id set.
     pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
@@ -3083,19 +2723,9 @@ impl Subterm {
         }
     }
 
-    /// Whether any direct child `Term` of this subterm satisfies `pred`,
-    /// short-circuiting on the first hit — the shared structural walk under the
-    /// cached [`has_local_free`](Self::has_local_free)/[`has_metavar`](Self::has_metavar)
-    /// bits, which pass a child's own memoized accessor as `pred` so shared
-    /// subterms are never re-walked. Scope bodies are visited closed: binder
-    /// occurrences are bound indices there, so binder labels stay invisible to
-    /// any free-variable predicate.
+    /// Whether any direct child `Term` of this subterm satisfies `pred`, short-circuiting on the first hit — the shared structural walk under the cached [`has_local_free`](Self::has_local_free)/[`has_metavar`](Self::has_metavar) bits, which pass a child's own memoized accessor as `pred` so shared subterms are never re-walked. Scope bodies are visited closed: binder occurrences are bound indices there, so binder labels stay invisible to any free-variable predicate.
     ///
-    /// Also the descent `positivity` uses for the forms it cannot see through,
-    /// with a `pred` that always returns `false` so the walk is exhaustive
-    /// rather than short-circuiting. That reuse is deliberate: it is what keeps
-    /// the positivity check from silently missing a recursive occurrence when a
-    /// new term former is added.
+    /// Also the descent `positivity` uses for the forms it cannot see through, with a `pred` that always returns `false` so the walk is exhaustive rather than short-circuiting. That reuse is deliberate: it is what keeps the positivity check from silently missing a recursive occurrence when a new term former is added.
     pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
@@ -3177,13 +2807,9 @@ impl Subterm {
         }
     }
 
-    /// Whether any free variable in this subterm is a binder rather than a
-    /// top-level definition — the uncached spelling of
-    /// [`Term::has_local_free`], which supplies the per-node memoization.
+    /// Whether any free variable in this subterm is a binder rather than a top-level definition — the uncached spelling of [`Term::has_local_free`], which supplies the per-node memoization.
     ///
-    /// A local is a [`Free::Local`], so this is a discriminant test. It used to
-    /// be a search for a marker character in the spelling, which a compiler-made
-    /// *global* could set by accident — and once did.
+    /// A local is a [`Free::Local`], so this is a discriminant test. It used to be a search for a marker character in the spelling, which a compiler-made *global* could set by accident — and once did.
     pub(crate) fn has_local_free(&self) -> bool {
         match self {
             Subterm::Var(var) => var.as_free().is_some_and(Free::is_local),
@@ -3191,9 +2817,7 @@ impl Subterm {
         }
     }
 
-    /// Whether any `Metavar` node occurs in this subterm — the uncached
-    /// spelling of [`Term::has_metavar`], which supplies the per-node
-    /// memoization.
+    /// Whether any `Metavar` node occurs in this subterm — the uncached spelling of [`Term::has_metavar`], which supplies the per-node memoization.
     pub(crate) fn has_metavar(&self) -> bool {
         match self {
             Subterm::Metavar(_) => true,
@@ -3237,12 +2861,7 @@ impl Subterm {
         }
     }
 
-    /// This subterm's free-variable set as its own identity (if it is a free
-    /// `Var`) unioned with its children's already-memoized sets — the child-
-    /// combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep
-    /// spine bottom-up in O(children) per node instead of re-walking the
-    /// subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a
-    /// free name occurs free in exactly the nodes whose subtrees contain it.
+    /// This subterm's free-variable set as its own identity (if it is a free `Var`) unioned with its children's already-memoized sets — the child-combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep spine bottom-up in O(children) per node instead of re-walking the subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a free name occurs free in exactly the nodes whose subtrees contain it.
     fn free_vars_from_children(&self) -> BTreeSet<Free> {
         if let Subterm::Var(var) = self
             && let Some(name) = var.as_free()
@@ -3257,10 +2876,7 @@ impl Subterm {
         vars
     }
 
-    /// Collect the ids of every metavariable occurring in this subterm. `Visit`
-    /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
-    /// cannot piggyback on `free_vars` — this walk (an `any_metavar` whose
-    /// collector never short-circuits) enumerates them directly.
+    /// Collect the ids of every metavariable occurring in this subterm. `Visit` only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses cannot piggyback on `free_vars` — this walk (an `any_metavar` whose collector never short-circuits) enumerates them directly.
     fn collect_metavars(&self, ids: &mut BTreeSet<MetaId>) {
         self.any_metavar(&mut |id| {
             ids.insert(id);
@@ -3427,8 +3043,7 @@ impl Bound for Subterm {
                                 (atom.clone(), arm.with_body(visit.visit_scope(&arm.body)))
                             })
                             .collect(),
-                        // The default binds nothing — it lives in the enclosing
-                        // scope, like `head`.
+                        // The default binds nothing — it lives in the enclosing scope, like `head`.
                         default: default.as_ref().map(|d| visit.visit_subterm(d)),
                     },
                     Cases::FreeMonoid { carrier } => Cases::FreeMonoid {
@@ -3463,11 +3078,7 @@ impl Bound for Subterm {
                 },
             }),
             Subterm::Let(Let { bindings, tail }) => {
-                // Binding `i` sits under the `i` binders written before it, so
-                // bracket the visit at that depth; the enter/leave don't stack
-                // with `visit_scope(tail)`, which owns all the binders on its
-                // own. A forward loop over `bindings` is what a flat block buys
-                // over the old nested chain — no native frame per binding.
+                // Binding `i` sits under the `i` binders written before it, so bracket the visit at that depth; the enter/leave don't stack with `visit_scope(tail)`, which owns all the binders on its own. A forward loop over `bindings` is what a flat block buys over the old nested chain — no native frame per binding.
                 let bindings = bindings
                     .iter()
                     .enumerate()
@@ -3508,14 +3119,7 @@ impl Bound for Subterm {
                 })
             }
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
-            // The spine is ordinary term content: visiting it is what keeps
-            // the delayed substitution aligned through `close`/`open`. Spines
-            // are wide (one entry per birth binder) and overwhelmingly
-            // identity (bare variables a visit does not touch), so entries
-            // are copy-on-write — an untouched `Var` is an `Rc` bump, never a
-            // rebuild — and an entirely untouched spine reuses its shared
-            // allocation. This is what keeps per-traversal cost flat for the
-            // common meta instead of O(|Γ|) allocations.
+            // The spine is ordinary term content: visiting it is what keeps the delayed substitution aligned through `close`/`open`. Spines are wide (one entry per birth binder) and overwhelmingly identity (bare variables a visit does not touch), so entries are copy-on-write — an untouched `Var` is an `Rc` bump, never a rebuild — and an entirely untouched spine reuses its shared allocation. This is what keeps per-traversal cost flat for the common meta instead of O(|Γ|) allocations.
             Subterm::Metavar(Metavar { id, spine, origin }) => {
                 let mut touched = false;
                 let visited = spine
@@ -3609,10 +3213,7 @@ impl Bound for Subterm {
                     } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
                 },
             }),
-            // Binding `i` sits under `i` binders, so its reach past the block
-            // boundary is `reach - i`; `Scope::reach` handles the tail's own
-            // arity. A flat forward max — no inner-to-outer unwind — because
-            // the block is flat, not a nest of arity-subtracting scopes.
+            // Binding `i` sits under `i` binders, so its reach past the block boundary is `reach - i`; `Scope::reach` handles the tail's own arity. A flat forward max — no inner-to-outer unwind — because the block is flat, not a nest of arity-subtracting scopes.
             Subterm::Let(Let { bindings, tail, .. }) => {
                 let mut reach = tail.reach();
 
@@ -3642,9 +3243,7 @@ fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
         .unwrap_or(0)
 }
 
-/// Stamp one arm's payload binders with [`Plicity::Explicit`], the shape the
-/// `_marked` inductive-match builders consume — the all-explicit builders'
-/// per-arm adapter.
+/// Stamp one arm's payload binders with [`Plicity::Explicit`], the shape the `_marked` inductive-match builders consume — the all-explicit builders' per-arm adapter.
 fn explicit_arm<L>(binders: Vec<L>) -> Vec<(Plicity, L)> {
     binders
         .into_iter()

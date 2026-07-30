@@ -16,8 +16,7 @@ const NONE: Size = Size::Unknown;
 
 #[test]
 fn composition_annihilates_on_unknown_and_absorbs_on_less() {
-    // A chain says nothing as soon as one link says nothing, and says
-    // "decreases" as soon as one link decreases.
+    // A chain says nothing as soon as one link says nothing, and says "decreases" as soon as one link decreases.
     for size in [LESS, SAME, NONE] {
         assert_eq!(size.compose(NONE), NONE);
         assert_eq!(NONE.compose(size), NONE);
@@ -52,17 +51,13 @@ fn shapes_are_compared_by_the_proper_subterm_order() {
 
 #[test]
 fn an_unread_term_is_never_equal_to_another_unread_term() {
-    // Two terms the walk could not read are not thereby the same term;
-    // treating them as equal would manufacture a `Same` the analysis has no
-    // evidence for, and a chain of those is what an idempotent matrix needs.
+    // Two terms the walk could not read are not thereby the same term; treating them as equal would manufacture a `Same` the analysis has no evidence for, and a chain of those is what an idempotent matrix needs.
     assert_eq!(Shape::Opaque.against(&Shape::Opaque), NONE);
 }
 
 #[test]
 fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
-    // `raw_trimmed(cons(a2, b2), …)` where `y` refined to `cons(yh, yt)` and
-    // `yt` refined to `cons(a2, b2)`: the argument is reached structurally,
-    // without folding the constructor back to `yt`.
+    // `raw_trimmed(cons(a2, b2), …)` where `y` refined to `cons(yh, yt)` and `yt` refined to `cons(a2, b2)`: the argument is reached structurally, without folding the constructor back to `yt`.
     let (outer, a2, b2) = (
         Free::local(1, None),
         Free::local(2, None),
@@ -82,10 +77,7 @@ fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
 
 #[test]
 fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
-    // `n / 10` is below `n` and says nothing about anything else. In
-    // particular it must not grade against a parameter an enclosing arm has
-    // refined to a constructor, because that parameter no longer stands for
-    // the binder the decrease was measured from.
+    // `n / 10` is below `n` and says nothing about anything else. In particular it must not grade against a parameter an enclosing arm has refined to a constructor, because that parameter no longer stands for the binder the decrease was measured from.
     let (n, other) = (Free::local(1, None), Free::local(2, None));
     let smaller = Shape::Smaller(n.clone());
 
@@ -99,9 +91,7 @@ fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
 
 #[test]
 fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
-    // It is a claim about a binder, not a value, so it can never be found
-    // equal to or inside a tree. Anything else would manufacture a decrease
-    // out of a term the walk never read.
+    // It is a claim about a binder, not a value, so it can never be found equal to or inside a tree. Anything else would manufacture a decrease out of a term the walk never read.
     let n = Free::local(1, None);
     let smaller = Shape::Smaller(n.clone());
     let tree = Shape::Node(
@@ -130,8 +120,7 @@ fn a_guard_excludes_zero_only_when_its_arm_does() {
     assert!(guard(Relation::Eql, 0).establishes_nonzero(false));
     assert!(!guard(Relation::Eql, 0).establishes_nonzero(true));
 
-    // `n >= 0` is no information at all, and `n < 0` is unsatisfiable rather
-    // than informative — neither may be read as excluding zero.
+    // `n >= 0` is no information at all, and `n < 0` is unsatisfiable rather than informative — neither may be read as excluding zero.
     assert!(!guard(Relation::Gte, 0).establishes_nonzero(true));
     assert!(!guard(Relation::Lt, 0).establishes_nonzero(false));
 
@@ -151,9 +140,7 @@ fn a_guard_written_with_its_literal_first_reads_the_same() {
 
 #[test]
 fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
-    // The three call matrices of `/std/BigNat/add/raw`, over `(x, y, carry)`.
-    // In the empty-`x` arm the literal argument `b\` grades `Same` against `x`
-    // *because* the arm refined `x` to `b\`.
+    // The three call matrices of `/std/BigNat/add/raw`, over `(x, y, carry)`. In the empty-`x` arm the literal argument `b\` grades `Same` against `x` *because* the arm refined `x` to `b\`.
     let refined = [
         matrix(&[
             &[SAME, NONE, NONE],
@@ -182,8 +169,7 @@ fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
             .all(|(_, _, matrix)| !matrix.is_idempotent() || matrix.descends())
     );
 
-    // Without refinement the two nil arms grade their own argument `Unknown`,
-    // and the composite is an idempotent matrix with nothing on its diagonal.
+    // Without refinement the two nil arms grade their own argument `Unknown`, and the composite is an idempotent matrix with nothing on its diagonal.
     let unrefined = [
         matrix(&[
             &[NONE, NONE, NONE],
@@ -205,9 +191,7 @@ fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
 
 #[test]
 fn a_nullary_self_call_cannot_descend() {
-    // `rec inf : F = F/more(inf)` and `rec Bad : Type = Sink(Bad)` both have an
-    // empty parameter vector, so their self-call is a 0x0 matrix: idempotent,
-    // with no diagonal to decrease on.
+    // `rec inf : F = F/more(inf)` and `rec Bad : Type = Sink(Bad)` both have an empty parameter vector, so their self-call is a 0x0 matrix: idempotent, with no diagonal to decrease on.
     let empty = Matrix::unknown(0, 0);
     assert!(empty.is_idempotent());
     assert!(!empty.descends());

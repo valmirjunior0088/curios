@@ -5,9 +5,7 @@ use {
     std::{collections::BTreeSet, sync::Arc},
 };
 
-/// The core type a host-boundary [`WireType`] denotes — the one reading of the
-/// signature shared by elaboration (operand checks, result records) and
-/// erasure, so the two cannot disagree about what crosses the wire.
+/// The core type a host-boundary [`WireType`] denotes — the one reading of the signature shared by elaboration (operand checks, result records) and erasure, so the two cannot disagree about what crosses the wire.
 pub fn wire_term(wire_type: &WireType) -> Term {
     let prim = match wire_type {
         WireType::Nat => Prim::NatType,
@@ -132,37 +130,24 @@ pub enum Prim {
     BinAppend(Grain, Term, Term),
     BinConcat(Grain, Vec<Term>),
     LstType(Term),
-    // A list literal, carrying its element type: the one value form whose
-    // elements alone cannot name it — `[]` has nothing to read a type from.
+    // A list literal, carrying its element type: the one value form whose elements alone cannot name it — `[]` has nothing to read a type from.
     Lst(Term, Vec<Term>),
     LstLen(Term, Term),
     LstGet(Term, Term, Term),
     LstSlice(Term, Term, Term, Term),
     LstAppend(Term, Term, Term),
     LstConcat(Term, Vec<Term>),
-    // (@A, @B, lst : Lst(A), f : (A) -> B) -> Lst(B): a structural map. Opaque
-    // under reduction on a symbolic operand, so it never unfolds a variable
-    // during type-checking. Erases to a single O(n) fill loop.
+    // (@A, @B, lst : Lst(A), f : (A) -> B) -> Lst(B): a structural map. Opaque under reduction on a symbolic operand, so it never unfolds a variable during type-checking. Erases to a single O(n) fill loop.
     LstMap(Term, Term, Term, Term),
     HandleType,
     Handle(u32),
-    // (a, b) -> Bool: identity of two handles. The one pure operation on
-    // `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat`
-    // equality op.
+    // (a, b) -> Bool: identity of two handles. The one pure operation on `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat` equality op.
     HandleEql(Term, Term),
-    // A store-described host call: the function's `WireSignature` fixes the
-    // operand types checked at elaboration and the result shape (unit, bare
-    // value, or named record). Effectful, so reducing one at the type level
-    // is an error; it becomes a host call only at erasure.
+    // A store-described host call: the function's `WireSignature` fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
-    // `(Nat) -> {}`: end the process. Effectful, so reducing one at the type
-    // level is an error; it becomes a host call only at erasure.
+    // `(Nat) -> {}`: end the process. Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     //
-    // The result is the unit type, not the caller's choice. `exit` never
-    // returns, and a non-returning term is unsound exactly when it inhabits a
-    // type nothing total inhabits — it is the forgery that is the problem, not
-    // the non-return. At `{}` there is nothing to forge, which is the same
-    // property `Foreign` has for free by reading its result off an ABI row.
+    // The result is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
     Exit(Term),
     CellType(Term),
     Cell(Term, Term),          // type, init
@@ -721,9 +706,7 @@ impl Prim {
         )
     }
 
-    /// A `LstMap` node from term-shaped source element type, target element
-    /// type, list, and function — the collection first, like every other
-    /// sequence operation.
+    /// A `LstMap` node from term-shaped source element type, target element type, list, and function — the collection first, like every other sequence operation.
     pub fn lst_map<A, B, R, F>(a: A, b: B, lst: R, f: F) -> Self
     where
         A: Into<Term>,
@@ -770,12 +753,7 @@ impl Prim {
         Self::CellGet(type_.into(), cell.into())
     }
 
-    /// Visit each `Term` operand of `self`, in field order. The single source of
-    /// truth for which fields of a primitive are its term operands — `reach`,
-    /// `any_metavar`, and `collect_construction_names` all read it.
-    /// (`traverse` keeps its own match: it rebuilds rather than visits.) The
-    /// closure is taken `impl FnMut` so it monomorphises and inlines, leaving the
-    /// de Bruijn / region hot path allocation- and indirection-free.
+    /// Visit each `Term` operand of `self`, in field order. The single source of truth for which fields of a primitive are its term operands — `reach`, `any_metavar`, and `collect_construction_names` all read it. (`traverse` keeps its own match: it rebuilds rather than visits.) The closure is taken `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region hot path allocation- and indirection-free.
     fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
         match self {
             Prim::BoolType
@@ -949,18 +927,14 @@ impl Prim {
         found
     }
 
-    /// Whether any operand `Term` satisfies `pred` — the `Prim` leg of
-    /// `Subterm::any_child_term`, layered on the private operand walker like
-    /// `any_metavar` above.
+    /// Whether any operand `Term` satisfies `pred` — the `Prim` leg of `Subterm::any_child_term`, layered on the private operand walker like `any_metavar` above.
     pub fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || pred(term));
         found
     }
 
-    // Recurse into every operand `Term` so a construction nested inside a primitive
-    // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
-    // head names of their own.
+    // Recurse into every operand `Term` so a construction nested inside a primitive (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no head names of their own.
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
@@ -1140,10 +1114,7 @@ impl Prim {
     }
 }
 
-/// Which primitive type a match scrutinee is required to have. The legal
-/// selectors for `expect_prim_head`/`elaborate_prim_head` — exactly the
-/// type-former `Prim`s those helpers accept, as a closed set so an out-of-range
-/// selector is unrepresentable rather than an `unreachable!` panic.
+/// Which primitive type a match scrutinee is required to have. The legal selectors for `expect_prim_head`/`elaborate_prim_head` — exactly the type-former `Prim`s those helpers accept, as a closed set so an out-of-range selector is unrepresentable rather than an `unreachable!` panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimHead {
     Nat,
@@ -1151,10 +1122,7 @@ pub enum PrimHead {
     Bin(Grain),
 }
 
-/// Visit both operands of a binary primitive and rebuild it through `build`. The
-/// constructor is taken generically (not as a `fn` pointer) so every call site
-/// monomorphises to the same direct construction — this is the de Bruijn
-/// traversal hot path, so the indirection must vanish.
+/// Visit both operands of a binary primitive and rebuild it through `build`. The constructor is taken generically (not as a `fn` pointer) so every call site monomorphises to the same direct construction — this is the de Bruijn traversal hot path, so the indirection must vanish.
 fn traverse_binary<F>(
     left: &Term,
     right: &Term,

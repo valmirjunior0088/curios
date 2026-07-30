@@ -1,9 +1,6 @@
 //! De Bruijn machinery for the `core` stage's terms.
 //!
-//! `Scope`, `Telescope`, `Var`, the `Bound` traversal trait, and the `Visit`
-//! driver operate over `core`'s `Term` and `Subterm`. `core` keeps its own
-//! `Subterm::traverse` (the big structural match, including its primitives) and
-//! plugs it into this machinery by implementing `Bound`.
+//! `Scope`, `Telescope`, `Var`, the `Bound` traversal trait, and the `Visit` driver operate over `core`'s `Term` and `Subterm`. `core` keeps its own `Subterm::traverse` (the big structural match, including its primitives) and plugs it into this machinery by implementing `Bound`.
 
 use {
     super::{
@@ -163,9 +160,7 @@ impl Var {
         }
     }
 
-    /// This occurrence's identity, asserting it is free. Callers hold a term the
-    /// scope machinery has not closed over, where a bound index is an invariant
-    /// violation rather than a case to handle.
+    /// This occurrence's identity, asserting it is free. Callers hold a term the scope machinery has not closed over, where a bound index is an invariant violation rather than a case to handle.
     pub fn unwrap(&self) -> &Free {
         self.as_free().expect("a free occurrence")
     }
@@ -180,17 +175,13 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>;
 
-    /// Number of outer de Bruijn binders this term depends on: `1 + max escaping
-    /// bound index`, or `0` if none. A term with `reach <= depth` contains no
-    /// bound index `>= depth`, so `shift`/`release` at that depth are the
-    /// identity on it.
+    /// Number of outer de Bruijn binders this term depends on: `1 + max escaping bound index`, or `0` if none. A term with `reach <= depth` contains no bound index `>= depth`, so `shift`/`release` at that depth are the identity on it.
     fn reach(&self) -> usize;
 
     /// Whether an elaboration metavariable occurs in this value.
     fn has_metavar(&self) -> bool;
 
-    /// `true` iff the term has no loose de Bruijn indices — i.e. it's not
-    /// floating inside some outer scope.
+    /// `true` iff the term has no loose de Bruijn indices — i.e. it's not floating inside some outer scope.
     fn closed(&self) -> bool {
         self.reach() == 0
     }
@@ -273,10 +264,7 @@ pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
     rewrite_universe_levels_scoped(value, move |_, level| rewrite(level))
 }
 
-/// Structural implementation used only by the validated Core-to-Ersd
-/// projection. Nominal vectors, instances, and contexts are removed by their
-/// owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant
-/// payload is rebuilt with Core's private canonical ground representative.
+/// Structural implementation used only by the validated Core-to-Ersd projection. Nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative.
 pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }
@@ -323,17 +311,9 @@ pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, Univ
 
 /// Substitute a scheme's own universe parameters by `arguments`.
 ///
-/// Universe parameters are innermost-first: beneath the `depth` universe
-/// binders this walk has crossed, the scheme's own parameters occupy
-/// `depth .. depth + arguments.len()`. An index above that range belongs to an
-/// *enclosing* scheme and is shifted down by the parameters this instantiation
-/// discharges, exactly as `curios-elab`'s `UniverseSolver::instantiate_at`
-/// rewrites the outer references in a nested residual context.
+/// Universe parameters are innermost-first: beneath the `depth` universe binders this walk has crossed, the scheme's own parameters occupy `depth .. depth + arguments.len()`. An index above that range belongs to an *enclosing* scheme and is shifted down by the parameters this instantiation discharges, exactly as `curios-elab`'s `UniverseSolver::instantiate_at` rewrites the outer references in a nested residual context.
 ///
-/// Instance arity is the owning [`UniverseContext`]'s contract and is checked
-/// against its declared `parameter_count`. Rejecting an out-of-range index here
-/// instead would misread every legitimate outer-scheme reference as a missing
-/// argument.
+/// Instance arity is the owning [`UniverseContext`]'s contract and is checked against its declared `parameter_count`. Rejecting an out-of-range index here instead would misread every legitimate outer-scheme reference as a missing argument.
 pub fn instantiate_universe_levels_scoped<B: Bound>(
     value: &B,
     arguments: &[Level],
@@ -372,37 +352,19 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
 /// How a declaration's own name reaches the value being stamped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfReference {
-    /// Still a free variable. Nothing else will supply the instance, so the
-    /// occurrence must carry one explicitly: a later use site instantiates the
-    /// stored scheme by substituting the declaration's universe parameters,
-    /// and a bare variable has none to substitute.
+    /// Still a free variable. Nothing else will supply the instance, so the occurrence must carry one explicitly: a later use site instantiates the stored scheme by substituting the declaration's universe parameters, and a bare variable has none to substitute.
     Free,
-    /// Already captured by an enclosing [`RecGroup`]'s binder, which
-    /// instantiates its own members through
-    /// [`RecGroup::instantiate_universes`]. An explicit instance here would be
-    /// applied a second time when the group is opened, against a group whose
-    /// parameters that first instantiation already consumed.
+    /// Already captured by an enclosing [`RecGroup`]'s binder, which instantiates its own members through [`RecGroup::instantiate_universes`]. An explicit instance here would be applied a second time when the group is opened, against a group whose parameters that first instantiation already consumed.
     Bound,
 }
 
-/// Rewrite every occurrence of a declaration group's own members to denote the
-/// universe instance `levels`.
+/// Rewrite every occurrence of a declaration group's own members to denote the universe instance `levels`.
 ///
-/// A declaration's signature, body, and registry telescopes are elaborated
-/// before its universe parameters exist: within its own group it is
-/// monomorphic, so its self-references carry no instance at all. Finalization
-/// mints the parameters, and every internal occurrence must then denote *that*
-/// instance rather than a freshly instantiated one — the concrete form of the
-/// rule that recursion is monomorphic inside a group.
+/// A declaration's signature, body, and registry telescopes are elaborated before its universe parameters exist: within its own group it is monomorphic, so its self-references carry no instance at all. Finalization mints the parameters, and every internal occurrence must then denote *that* instance rather than a freshly instantiated one — the concrete form of the rule that recursion is monomorphic inside a group.
 ///
-/// Nominal normal forms always carry the instance in their own universe
-/// vector. Variable occurrences carry it only when they are still
-/// [`SelfReference::Free`].
+/// Nominal normal forms always carry the instance in their own universe vector. Variable occurrences carry it only when they are still [`SelfReference::Free`].
 ///
-/// The per-node rule is [`Term::stamp_declaration_node`]; this driver only
-/// carries it through the binders and telescopes an arbitrary [`Bound`] holds.
-/// An empty instance is the identity, so a monomorphic declaration pays a
-/// single comparison rather than a traversal.
+/// The per-node rule is [`Term::stamp_declaration_node`]; this driver only carries it through the binders and telescopes an arbitrary [`Bound`] holds. An empty instance is the identity, so a monomorphic declaration pays a single comparison rather than a traversal.
 pub fn stamp_declaration_instance<B: Bound>(
     value: &B,
     names: &BTreeSet<Global>,
@@ -485,16 +447,9 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         }
     }
 
-    /// Rebuild this scope with `f` applied to its body, preserving arity and
-    /// binder names. The body keeps its de Bruijn structure, so `f` must be a
-    /// transformation that does not disturb loose indices — e.g. zonking, which
-    /// only replaces closed metavariable nodes by closed solutions, or a
-    /// canonicalization, which replaces a node by a structurally equal one.
+    /// Rebuild this scope with `f` applied to its body, preserving arity and binder names. The body keeps its de Bruijn structure, so `f` must be a transformation that does not disturb loose indices — e.g. zonking, which only replaces closed metavariable nodes by closed solutions, or a canonicalization, which replaces a node by a structurally equal one.
     ///
-    /// Rewriting here rather than opening and re-closing is what keeps a term's
-    /// memoized derivations: `open` and `close` each rebuild every node they
-    /// touch, so the round trip discards all of them to arrive where this
-    /// arrives without moving.
+    /// Rewriting here rather than opening and re-closing is what keeps a term's memoized derivations: `open` and `close` each rebuild every node they touch, so the round trip discards all of them to arrive where this arrives without moving.
     pub(crate) fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
         Self {
             arity: self.arity,
@@ -512,15 +467,12 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         })
     }
 
-    /// The identity of the binder at position `index` (0 = first/outermost),
-    /// for a rebuild that must re-close over the very same binders.
+    /// The identity of the binder at position `index` (0 = first/outermost), for a rebuild that must re-close over the very same binders.
     pub(crate) fn binder(&self, index: usize) -> Option<&Free> {
         self.names.as_deref()?.get(index)
     }
 
-    /// What the binder at position `index` was called where it was written — a
-    /// rendering aid a rebuild carries onto the binder it re-mints, never a way
-    /// to recognize which binder this is.
+    /// What the binder at position `index` was called where it was written — a rendering aid a rebuild carries onto the binder it re-mints, never a way to recognize which binder this is.
     pub fn hint(&self, index: usize) -> Option<&str> {
         self.binder(index)?.hint()
     }
@@ -541,17 +493,12 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         (0..self.arity()).map(move |index| self.hint(index))
     }
 
-    /// The identity of each binder in order, `None` where the scope was built
-    /// without them (`constant`).
+    /// The identity of each binder in order, `None` where the scope was built without them (`constant`).
     pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
         (0..self.arity()).map(move |index| self.binder(index))
     }
 
-    /// Whether the binder at position `index` (0 = first/outermost label) is
-    /// referenced anywhere in the body. A bound var refers to this binder iff its
-    /// de Bruijn index equals `index` plus the number of binders entered since —
-    /// which `Visit` tracks as `depth`. Used by erasure to spot an eliminator
-    /// whose induction hypothesis is dead: that arm is a case-split, not a fold.
+    /// Whether the binder at position `index` (0 = first/outermost label) is referenced anywhere in the body. A bound var refers to this binder iff its de Bruijn index equals `index` plus the number of binders entered since — which `Visit` tracks as `depth`. Used by erasure to spot an eliminator whose induction hypothesis is dead: that arm is a case-split, not a fold.
     pub fn uses(&self, index: usize) -> bool {
         let mut used = false;
         self.body.traverse(&mut Visit::new(|depth, var: &Var| {
@@ -565,14 +512,9 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 }
 
 impl<B: Bound> Scope<Many, B> {
-    /// Prepend `binder` to the front of this scope: it becomes index 0 and every
-    /// existing binder shifts up by one.
+    /// Prepend `binder` to the front of this scope: it becomes index 0 and every existing binder shifts up by one.
     ///
-    /// Done by a direct `capture` on the body — free occurrences of `binder`
-    /// bind to the new index 0 while every existing bound index shifts by one —
-    /// rather than an open/close round-trip through names, which would have to
-    /// reopen inner binders into free occurrences and could not tell them from
-    /// genuine outer references.
+    /// Done by a direct `capture` on the body — free occurrences of `binder` bind to the new index 0 while every existing bound index shifts by one — rather than an open/close round-trip through names, which would have to reopen inner binders into free occurrences and could not tell them from genuine outer references.
     pub fn prepend(&self, binder: &Free) -> Self {
         let names = self.names.as_ref().map(|names| {
             [binder.clone()]
@@ -689,8 +631,7 @@ impl<B: Bound> Telescope<B> {
         matches!(self, Telescope::Done(_))
     }
 
-    /// The final payload beneath every binder, without opening the telescope or
-    /// substituting for any of its bound variables.
+    /// The final payload beneath every binder, without opening the telescope or substituting for any of its bound variables.
     pub fn terminal(&self) -> &B {
         let mut current = self;
         loop {
@@ -701,8 +642,7 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    /// The binder hint at each position (`""` when unnamed), walking the spine
-    /// without opening — names are structural, no substitution needed.
+    /// The binder hint at each position (`""` when unnamed), walking the spine without opening — names are structural, no substitution needed.
     pub fn labels(&self) -> Vec<&str> {
         let mut out = Vec::new();
         let mut cur = self;
@@ -713,12 +653,7 @@ impl<B: Bound> Telescope<B> {
         out
     }
 
-    /// Replace the display hints along the spine, leaving each binder's identity
-    /// alone. Pure metadata: the de Bruijn structure is untouched and no
-    /// occurrence changes what it refers to — this restores source labels after
-    /// a rebuild that had to re-mint its binders (tuple-type labels are part of
-    /// the type's identity and the target of `.label` resolution, so they must
-    /// survive elaboration verbatim).
+    /// Replace the display hints along the spine, leaving each binder's identity alone. Pure metadata: the de Bruijn structure is untouched and no occurrence changes what it refers to — this restores source labels after a rebuild that had to re-mint its binders (tuple-type labels are part of the type's identity and the target of `.label` resolution, so they must survive elaboration verbatim).
     pub fn relabel(self, labels: &[&str]) -> Self {
         match self {
             Telescope::Done(body) => Telescope::Done(body),
@@ -762,10 +697,7 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    /// Open the leading binders at successive `params` — one binder per param —
-    /// returning the residual telescope. Every caller's telescope leads with the
-    /// type parameters (constructor payloads, struct fields, inductive indices all
-    /// follow them), so a telescope that runs out early is an invariant violation.
+    /// Open the leading binders at successive `params` — one binder per param — returning the residual telescope. Every caller's telescope leads with the type parameters (constructor payloads, struct fields, inductive indices all follow them), so a telescope that runs out early is an invariant violation.
     pub fn open_params(self, params: &[Term]) -> Telescope<B> {
         let mut telescope = self;
         for param in params {
@@ -777,9 +709,7 @@ impl<B: Bound> Telescope<B> {
         telescope
     }
 
-    /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder
-    /// before substituting that arg into the rest, and return the final `Done`
-    /// body. The walk is infallible; the error type `E` belongs to the callback.
+    /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder before substituting that arg into the rest, and return the final `Done` body. The walk is infallible; the error type `E` belongs to the callback.
     pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
     where
         F: FnMut(usize, &Term, &Term) -> Result<(), E>,
@@ -832,9 +762,7 @@ impl<B: Bound> Telescope<B> {
 }
 
 impl Telescope<Term> {
-    /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) —
-    /// the parameter types and the trailing body/return type — satisfies
-    /// `pred`, short-circuiting on the first hit.
+    /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) — the parameter types and the trailing body/return type — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
@@ -842,11 +770,7 @@ impl Telescope<Term> {
         }
     }
 
-    /// Whether any `Term` in a function/Π telescope (`Func`/`FuncType`) — the
-    /// parameter types and the trailing body/return type — satisfies `pred`,
-    /// short-circuiting on the first hit. The telescope leg of
-    /// `Subterm::any_child_term`: `pred` carries the per-node memoized
-    /// recursion, so this visits each `Term` exactly once.
+    /// Whether any `Term` in a function/Π telescope (`Func`/`FuncType`) — the parameter types and the trailing body/return type — satisfies `pred`, short-circuiting on the first hit. The telescope leg of `Subterm::any_child_term`: `pred` carries the per-node memoized recursion, so this visits each `Term` exactly once.
     pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => pred(ty) || rest.body().any_term(pred),
@@ -854,9 +778,7 @@ impl Telescope<Term> {
         }
     }
 
-    /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and
-    /// the trailing body/return type. Concrete in `Term` — no collector trait
-    /// needed. See [`Subterm::collect_construction_names`](super::Subterm::collect_construction_names).
+    /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the trailing body/return type. Concrete in `Term` — no collector trait needed. See [`Subterm::collect_construction_names`](super::Subterm::collect_construction_names).
     pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Telescope::Cons(ty, rest) => {
@@ -869,9 +791,7 @@ impl Telescope<Term> {
 }
 
 impl Telescope<()> {
-    /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field
-    /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
-    /// the first hit.
+    /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field types; its `Done` body is `()` — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
@@ -880,9 +800,7 @@ impl Telescope<()> {
         }
     }
 
-    /// Whether any `Term` in a Σ telescope (`TupleType`) — only the field
-    /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
-    /// the first hit. See the `Telescope<Term>` counterpart above.
+    /// Whether any `Term` in a Σ telescope (`TupleType`) — only the field types; its `Done` body is `()` — satisfies `pred`, short-circuiting on the first hit. See the `Telescope<Term>` counterpart above.
     pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => pred(ty) || rest.body().any_term(pred),
@@ -891,8 +809,7 @@ impl Telescope<()> {
         }
     }
 
-    /// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body
-    /// is `()`, which contributes no names.
+    /// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body is `()`, which contributes no names.
     pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         if let Telescope::Cons(ty, rest) = self {
             ty.collect_construction_names(names);
@@ -977,9 +894,7 @@ impl<B: Bound> Bound for Telescope<B> {
 
 // === Visit ===================================================================
 
-/// A hash-consing table, shared rather than owned so one canonicalization spans
-/// a whole module: two definitions that build the same type collapse onto one
-/// node only if they consult the same table.
+/// A hash-consing table, shared rather than owned so one canonicalization spans a whole module: two definitions that build the same type collapse onto one node only if they consult the same table.
 #[derive(Debug, Clone, Default)]
 pub struct Sharing {
     table: Rc<RefCell<HashMap<Term, Term>>>,
@@ -992,10 +907,7 @@ impl Sharing {
 
     /// `value` with every node replaced by the canonical node of its structure.
     ///
-    /// One `Sharing` must span every snapshot being canonicalized together: the
-    /// duplication worth collapsing is overwhelmingly *between* definitions, and
-    /// between the lowered and elaborated views of the same prelude, so a table
-    /// per term or per module would collapse almost none of it.
+    /// One `Sharing` must span every snapshot being canonicalized together: the duplication worth collapsing is overwhelmingly *between* definitions, and between the lowered and elaborated views of the same prelude, so a table per term or per module would collapse almost none of it.
     pub fn share<B: Bound>(&self, value: &B) -> B {
         value.traverse(&mut Visit::sharing(|_, _| None, self.clone()))
     }
@@ -1020,15 +932,11 @@ impl Sharing {
     }
 }
 
-/// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the
-/// whole node at the current depth.
+/// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the whole node at the current depth.
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
 
-/// The traversal driver threaded through [`Bound::traverse`]: it owns the
-/// current binder depth (bumped and restored by `visit_scope` as scopes are
-/// crossed), the variable callback, and what the traversal does beyond
-/// rewriting variables ([`Mode`]).
+/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, and what the traversal does beyond rewriting variables ([`Mode`]).
 pub struct Visit<F> {
     term_depth: usize,
     universe_depth: usize,
@@ -1038,47 +946,29 @@ pub struct Visit<F> {
 
 /// What a traversal does beyond rewriting variables.
 ///
-/// A closed set, stated as a sum. These were six independent fields — a `prune`
-/// flag, two optional boxed hooks, two more flags, and an optional memo — of
-/// which only the eight combinations below were ever constructed, out of the
-/// sixty-four the fields could express. Every consumer re-derived which
-/// combination it was looking at by testing the fields one at a time.
+/// A closed set, stated as a sum. These were six independent fields — a `prune` flag, two optional boxed hooks, two more flags, and an optional memo — of which only the eight combinations below were ever constructed, out of the sixty-four the fields could express. Every consumer re-derived which combination it was looking at by testing the fields one at a time.
 ///
-/// Naming the combinations makes adding a ninth a change the compiler checks:
-/// every `match` below stops compiling until the new case has been decided.
-/// Closed on purpose — a traversal mode is compiler-internal vocabulary, and
-/// all of its construction sites live in this crate.
+/// Naming the combinations makes adding a ninth a change the compiler checks: every `match` below stops compiling until the new case has been decided. Closed on purpose — a traversal mode is compiler-internal vocabulary, and all of its construction sites live in this crate.
 enum Mode {
     /// Rebuild every node, rewriting variables only.
     Plain,
     /// Skip subtrees whose `reach` proves no loose index can be touched.
     Pruning,
-    /// A term-level pre-hook substitutes whole nodes before descending. A
-    /// substituted node is not descended into.
+    /// A term-level pre-hook substitutes whole nodes before descending. A substituted node is not descended into.
     Rewriting(Rewrite),
-    /// [`Mode::Rewriting`], memoized on *input* node identity so a structurally
-    /// shared input stays shared in the output instead of expanding to a tree.
-    /// Keys are addresses of input nodes, which the caller's value keeps alive
-    /// for the whole traversal, so an address cannot be recycled under the memo.
+    /// [`Mode::Rewriting`], memoized on *input* node identity so a structurally shared input stays shared in the output instead of expanding to a tree. Keys are addresses of input nodes, which the caller's value keeps alive for the whole traversal, so an address cannot be recycled under the memo.
     RewritingShared(Rewrite, HashMap<usize, Term>),
     /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
     RewritingUniverses(Rewrite),
     /// A level-level hook, visiting only nodes that carry universe data.
     RewritingLevels(LevelRewrite),
-    /// Replace every level with the ground representative, visiting only nodes
-    /// that carry universe data.
+    /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
-    /// Hash-consing: memoize on input identity, and replace each rebuilt node
-    /// with the canonical node of its structure.
+    /// Hash-consing: memoize on input identity, and replace each rebuilt node with the canonical node of its structure.
     Sharing(HashMap<usize, Term>, Sharing),
-    /// Stand every child term down to `placeholder`, keeping the ones removed
-    /// in `children`. Because a substituted node is never descended into, the
-    /// rebuilt node carries this level's own payload and nothing below it —
-    /// which is what lets [`Term`]'s equality compare one node at a time
-    /// instead of recursing to the bottom of the term.
+    /// Stand every child term down to `placeholder`, keeping the ones removed in `children`. Because a substituted node is never descended into, the rebuilt node carries this level's own payload and nothing below it — which is what lets [`Term`]'s equality compare one node at a time instead of recursing to the bottom of the term.
     ///
-    /// The removed children and the node they came out of are produced by the
-    /// same pass, so the two can never disagree about what a child is.
+    /// The removed children and the node they came out of are produced by the same pass, so the two can never disagree about what a child is.
     Masking {
         placeholder: Term,
         children: Vec<Term>,
@@ -1098,11 +988,7 @@ where
         }
     }
 
-    /// Like `new`, but lets a `Term::traverse` impl skip (and structurally
-    /// share) subtrees the visit provably leaves unchanged. Only sound for
-    /// index-monotonic visits whose effect depends solely on bound indices
-    /// `>= depth` — i.e. `shift` and `release`. Must NOT be used for `capture`
-    /// (rewrites free names) or `free_vars` (must observe every node).
+    /// Like `new`, but lets a `Term::traverse` impl skip (and structurally share) subtrees the visit provably leaves unchanged. Only sound for index-monotonic visits whose effect depends solely on bound indices `>= depth` — i.e. `shift` and `release`. Must NOT be used for `capture` (rewrites free names) or `free_vars` (must observe every node).
     fn pruning(visit: F) -> Self {
         Self {
             term_depth: 0,
@@ -1112,9 +998,7 @@ where
         }
     }
 
-    /// Like `new`, additionally carrying a term-level rewrite hook fired at
-    /// every [`Term::traverse`] entry, including terms that are the direct
-    /// body of a scope or telescope terminal.
+    /// Like `new`, additionally carrying a term-level rewrite hook fired at every [`Term::traverse`] entry, including terms that are the direct body of a scope or telescope terminal.
     pub fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
@@ -1124,10 +1008,7 @@ where
         }
     }
 
-    /// Stand every child term down to `placeholder`, keeping what was removed
-    /// for [`Visit::take_masked_children`]. One visit masks any number of
-    /// nodes: the placeholder is built once, and the children are taken
-    /// between nodes.
+    /// Stand every child term down to `placeholder`, keeping what was removed for [`Visit::take_masked_children`]. One visit masks any number of nodes: the placeholder is built once, and the children are taken between nodes.
     pub fn masking(visit: F, placeholder: Term) -> Self {
         Self {
             term_depth: 0,
@@ -1140,22 +1021,11 @@ where
         }
     }
 
-    /// Like [`rewriting`](Self::rewriting), but memoized on node identity, so a
-    /// structurally shared input stays shared in the output instead of being
-    /// expanded into a tree.
+    /// Like [`rewriting`](Self::rewriting), but memoized on node identity, so a structurally shared input stays shared in the output instead of being expanded into a tree.
     ///
-    /// A rebuilt node is a fresh allocation, so an unmemoized rewrite of a DAG
-    /// materializes its expansion: a lowered string literal shares one
-    /// scan-state chain across every `more` link, and rebuilding it unshared
-    /// costs O(n^2) nodes for an n-byte literal — which then makes every later
-    /// pass over the term quadratic too.
+    /// A rebuilt node is a fresh allocation, so an unmemoized rewrite of a DAG materializes its expansion: a lowered string literal shares one scan-state chain across every `more` link, and rebuilding it unshared costs O(n^2) nodes for an n-byte literal — which then makes every later pass over the term quadratic too.
     ///
-    /// Only sound when the hook and the variable callback are pure and depend
-    /// on the node alone — not on binder depth, and not on how many times they
-    /// have run. A memoized visit skips both, so a depth-sensitive rewrite
-    /// would silently reuse a result computed at the wrong depth, and a
-    /// stateful hook would see each shared node once rather than once per
-    /// occurrence.
+    /// Only sound when the hook and the variable callback are pure and depend on the node alone — not on binder depth, and not on how many times they have run. A memoized visit skips both, so a depth-sensitive rewrite would silently reuse a result computed at the wrong depth, and a stateful hook would see each shared node once rather than once per occurrence.
     pub fn rewriting_shared(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
@@ -1192,14 +1062,9 @@ where
         }
     }
 
-    /// A hash-consing traversal: structure-preserving, but replacing every
-    /// rebuilt node with the canonical node of its shape.
+    /// A hash-consing traversal: structure-preserving, but replacing every rebuilt node with the canonical node of its shape.
     ///
-    /// The rebuild is already post-order — a node is constructed only after its
-    /// children are traversed — so consulting the table on the rebuilt node
-    /// canonicalizes bottom-up with no extra pass. Spans survive: they sit on
-    /// the `Term` wrapper, outside the shared node, so each occurrence keeps its
-    /// own while the structure underneath is shared.
+    /// The rebuild is already post-order — a node is constructed only after its children are traversed — so consulting the table on the rebuilt node canonicalizes bottom-up with no extra pass. Spans survive: they sit on the `Term` wrapper, outside the shared node, so each occurrence keeps its own while the structure underneath is shared.
     pub(crate) fn sharing(visit: F, table: Sharing) -> Self {
         Self {
             term_depth: 0,
@@ -1222,11 +1087,7 @@ where
         matches!(self.mode, Mode::Pruning)
     }
 
-    /// Enter `amount` binders without visiting a whole scope body in one call
-    /// — the peeled-chain counterpart of `visit_scope`, for a `Bound::traverse`
-    /// impl that walks a `Let`/`Rec` spine one link at a time in a loop instead
-    /// of recursing once per binding. Pair with `leave_scope` in the reverse
-    /// order links were entered.
+    /// Enter `amount` binders without visiting a whole scope body in one call — the peeled-chain counterpart of `visit_scope`, for a `Bound::traverse` impl that walks a `Let`/`Rec` spine one link at a time in a loop instead of recursing once per binding. Pair with `leave_scope` in the reverse order links were entered.
     pub(crate) fn enter_scope(&mut self, amount: usize) {
         self.term_depth += amount;
     }
@@ -1250,9 +1111,7 @@ where
 
     pub(crate) fn visit_level(&mut self, level: &Level) -> Level {
         if self.erases_universes() {
-            // Every other level-bearing container is removed structurally in
-            // `Subterm::traverse`; this is the unavoidable payload of Core's
-            // still-level-indexed `Type` variant, not an erasure sentinel.
+            // Every other level-bearing container is removed structurally in `Subterm::traverse`; this is the unavoidable payload of Core's still-level-indexed `Type` variant, not an erasure sentinel.
             return Level::zero();
         }
         match &mut self.mode {
@@ -1282,8 +1141,7 @@ where
         }
     }
 
-    /// The children [`Mode::Masking`] stood down, in traversal order, leaving
-    /// the visit ready to mask another node.
+    /// The children [`Mode::Masking`] stood down, in traversal order, leaving the visit ready to mask another node.
     pub fn take_masked_children(&mut self) -> Vec<Term> {
         match &mut self.mode {
             Mode::Masking { children, .. } => mem::take(children),

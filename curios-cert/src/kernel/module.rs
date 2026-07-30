@@ -1,23 +1,12 @@
-//! Checking a whole program: definitions in order, each brought into scope for
-//! the ones that follow.
+//! Checking a whole program: definitions in order, each brought into scope for the ones that follow.
 //!
-//! A module is a sequence of top-level items, and a kernel run over one is just
-//! that sequence walked in order. Each item's type is checked to be a type, its
-//! body checked against that type, and only then is the name defined — so an
-//! item can never depend on itself except through `rec`, and a later item sees
-//! exactly the earlier ones.
+//! A module is a sequence of top-level items, and a kernel run over one is just that sequence walked in order. Each item's type is checked to be a type, its body checked against that type, and only then is the name defined — so an item can never depend on itself except through `rec`, and a later item sees exactly the earlier ones.
 //!
-//! The order is load-bearing and it is the module's, not a convenience. A
-//! definition placed after its use would go unnoticed by a checker that seeded
-//! every name up front; here it is an [`Unbound`](crate::KernelError::Unbound).
+//! The order is load-bearing and it is the module's, not a convenience. A definition placed after its use would go unnoticed by a checker that seeded every name up front; here it is an [`Unbound`](crate::KernelError::Unbound).
 //!
 //! # This crate does not know what a module is
 //!
-//! `Module` is `curios-elab`'s type, and `curios-core` does not depend on it.
-//! So what lives here is the *rule* for an item — check, then define — and the
-//! caller walks its own representation. That keeps the kernel free of the
-//! elaborator's export metadata, islands, roots, and totality flags, none of
-//! which bear on whether a term is well-typed.
+//! `Module` is `curios-elab`'s type, and `curios-core` does not depend on it. So what lives here is the *rule* for an item — check, then define — and the caller walks its own representation. That keeps the kernel free of the elaborator's export metadata, islands, roots, and totality flags, none of which bear on whether a term is well-typed.
 
 #[cfg(test)]
 mod tests;
@@ -33,13 +22,9 @@ use {
 
 /// Check `name : type_ = body`, then bring it into scope.
 ///
-/// The budget is restored first: each item gets the whole of it, so one
-/// expensive definition cannot starve the next.
+/// The budget is restored first: each item gets the whole of it, so one expensive definition cannot starve the next.
 ///
-/// A universe-polymorphic definition is checked *generically*, at its own
-/// parameters rather than at any instance. That is the right reading — a scheme
-/// is valid exactly when its body checks with its parameters held abstract —
-/// and it is also the only one available, since the kernel sees no use sites.
+/// A universe-polymorphic definition is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites.
 pub fn check_definition(
     kernel: &mut Kernel,
     name: &Free,
@@ -58,18 +43,11 @@ pub fn check_definition(
     Ok(())
 }
 
-/// Check a top-level recursive group, then bring every member into scope under
-/// the name it is exported as.
+/// Check a top-level recursive group, then bring every member into scope under the name it is exported as.
 ///
-/// Each member is assumed at its declared type while every body is checked, so
-/// a member may call itself and its siblings. `names` parallels the group's
-/// members positionally; an export is defined as the folded selection of the
-/// member it names, which is what a later item's occurrence of it reduces
-/// through.
+/// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `names` parallels the group's members positionally; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through.
 ///
-/// Totality is not decided here. `rec` is general recursion by design, and the
-/// obligation that keeps it sound is positional and whole-module — see
-/// "Totality of the erased program" in `documentation/DESIGN.md`.
+/// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see "Totality of the erased program" in `documentation/DESIGN.md`.
 pub fn check_rec_group(
     kernel: &mut Kernel,
     names: &[Free],
@@ -93,9 +71,7 @@ pub fn check_rec_group(
         let sort = Sort::of(kernel, &type_)?;
         check(kernel, &group.member_body(index), &type_)?;
 
-        // A proof-typed or type-yielding member is deleted by erasure, so its
-        // recursion must descend: assuming it at its declared type otherwise
-        // certifies `rec f : False = f`.
+        // A proof-typed or type-yielding member is deleted by erasure, so its recursion must descend: assuming it at its declared type otherwise certifies `rec f : False = f`.
         if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
             erased_member = Some(type_);
         }
@@ -121,21 +97,11 @@ pub fn check_rec_group(
     Ok(())
 }
 
-/// Check an `induct` declaration's registry entry: the size condition, under
-/// the declaration's own universe hypotheses.
+/// Check an `induct` declaration's registry entry: the size condition, under the declaration's own universe hypotheses.
 ///
-/// Payload well-sortedness and registry-versus-binding agreement fall out of
-/// the ordinary item walk, because a declaration lowers to a `rec` group of
-/// real definitions. What does not fall out is the *constructor size
-/// condition* — each `Type`-sorted domain of a constructor must sit at or
-/// below the family's declared level, with one extra rung of slack for the
-/// uniform parameters — because the item walk computes each signature's sort
-/// and compares it to nothing. This is the clause that keeps an inductive from
-/// containing the universe it lives in, which is the paradox the hierarchy
-/// exists to exclude.
+/// Payload well-sortedness and registry-versus-binding agreement fall out of the ordinary item walk, because a declaration lowers to a `rec` group of real definitions. What does not fall out is the *constructor size condition* — each `Type`-sorted domain of a constructor must sit at or below the family's declared level, with one extra rung of slack for the uniform parameters — because the item walk computes each signature's sort and compares it to nothing. This is the clause that keeps an inductive from containing the universe it lives in, which is the paradox the hierarchy exists to exclude.
 ///
-/// Call after *both* registries are seeded: a signature may name any
-/// declaration, its own family included.
+/// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
@@ -152,8 +118,7 @@ pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Resul
     Ok(())
 }
 
-/// [`check_induct_decl`] for a `struct`: one field telescope instead of one
-/// telescope per constructor, under the same rule.
+/// [`check_induct_decl`] for a `struct`: one field telescope instead of one telescope per constructor, under the same rule.
 pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
@@ -166,13 +131,9 @@ pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
     )
 }
 
-/// Walk one declaration telescope, requiring each `Type`-sorted domain to sit
-/// at or below the declared result level — one rung higher for the leading
-/// `uniform` binders, which are the declaration's parameters.
+/// Walk one declaration telescope, requiring each `Type`-sorted domain to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
 ///
-/// A `Prop`-sorted result imposes no condition: `Prop` is impredicative, and
-/// what keeps *that* sound is the large-elimination guard, not sizing. A
-/// `Prop`-sorted domain imposes none either — `Prop` sits below every level.
+/// A `Prop`-sorted result imposes no condition: `Prop` is impredicative, and what keeps *that* sound is the large-elimination guard, not sizing. A `Prop`-sorted domain imposes none either — `Prop` sits below every level.
 fn check_sizing<B: Bound + Clone>(
     kernel: &mut Kernel,
     telescope: &Telescope<B>,
@@ -214,8 +175,7 @@ fn check_sizing<B: Bound + Clone>(
     outcome
 }
 
-/// Check a term that closes the program — an entrypoint body, with no name to
-/// export. `expected` is its declared type when it has one.
+/// Check a term that closes the program — an entrypoint body, with no name to export. `expected` is its declared type when it has one.
 pub fn check_entrypoint(
     kernel: &mut Kernel,
     body: &Term,

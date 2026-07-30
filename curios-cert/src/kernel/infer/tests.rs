@@ -63,8 +63,7 @@ fn a_variable_has_the_type_it_was_bound_at() {
     assert_eq!(infer(&mut kernel, &Term::free_var(&x)), Ok(nat_type()));
 }
 
-/// A finished term has no free names. Refusing rather than treating one as a
-/// neutral is what makes that a checked statement.
+/// A finished term has no free names. Refusing rather than treating one as a neutral is what makes that a checked statement.
 #[test]
 fn an_unbound_variable_is_refused() {
     let mut kernel = kernel();
@@ -100,8 +99,7 @@ fn an_application_substitutes_its_arguments_into_the_result() {
     );
 }
 
-/// Dependency: applying a family to an argument puts *that argument* into the
-/// result type, which is the whole point of a dependent function.
+/// Dependency: applying a family to an argument puts *that argument* into the result type, which is the whole point of a dependent function.
 #[test]
 fn a_dependent_result_mentions_the_argument_supplied() {
     let mut kernel = kernel();
@@ -189,8 +187,7 @@ fn projecting_from_a_non_tuple_is_refused() {
     ));
 }
 
-/// `let` is checked binding by binding and then substituted, so the tail's type
-/// is computed with the values in place rather than with opaque names.
+/// `let` is checked binding by binding and then substituted, so the tail's type is computed with the values in place rather than with opaque names.
 #[test]
 fn a_let_checks_its_binding_and_substitutes_it() {
     let mut kernel = kernel();
@@ -206,8 +203,7 @@ fn a_let_checks_its_binding_and_substitutes_it() {
     ));
 }
 
-/// A recursive group's members are assumed at their declared types while their
-/// bodies are checked, which is what lets a member call itself.
+/// A recursive group's members are assumed at their declared types while their bodies are checked, which is what lets a member call itself.
 #[test]
 fn a_recursive_group_checks_its_bodies_against_its_declared_types() {
     let mut kernel = kernel();
@@ -239,8 +235,7 @@ fn a_recursive_group_checks_its_bodies_against_its_declared_types() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// A group whose body does not have the type it declares is refused — the
-/// assumption is what the body must live up to, not a licence.
+/// A group whose body does not have the type it declares is refused — the assumption is what the body must live up to, not a licence.
 #[test]
 fn a_recursive_body_that_misses_its_declared_type_is_refused() {
     let mut kernel = kernel();
@@ -261,8 +256,7 @@ fn a_recursive_body_that_misses_its_declared_type_is_refused() {
     ));
 }
 
-/// A constructor's type is its signature's terminal — the family at the
-/// parameters and index targets this case aims at.
+/// A constructor's type is its signature's terminal — the family at the parameters and index targets this case aims at.
 #[test]
 fn a_constructor_has_the_type_its_signature_ends_in() {
     let mut kernel = kernel();
@@ -358,8 +352,7 @@ fn an_elimination_has_the_type_its_motive_states() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// Cumulativity: a small type stands where a larger universe is wanted, and
-/// `Prop` stands wherever a `Type` is. The reverse does not hold.
+/// Cumulativity: a small type stands where a larger universe is wanted, and `Prop` stands wherever a `Type` is. The reverse does not hold.
 #[test]
 fn a_small_universe_is_admitted_where_a_larger_one_is_wanted() {
     let mut kernel = kernel();
@@ -405,9 +398,7 @@ fn a_primitive_operation_has_the_result_type_its_rule_states() {
     );
 }
 
-/// A list literal carries its element type, every element checks against it —
-/// and `[]` types at exactly that carried element, the case that used to be
-/// refused for having no element to read a type from.
+/// A list literal carries its element type, every element checks against it — and `[]` types at exactly that carried element, the case that used to be refused for having no element to read a type from.
 #[test]
 fn a_list_literal_checks_its_elements_against_its_carried_type() {
     let mut kernel = kernel();
@@ -437,10 +428,7 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     );
 }
 
-/// A generic definition is checked *under* its own constraint set. `(x :
-/// Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w`
-/// is among the hypotheses — discarding them was the route by which a correct
-/// polymorphic definition was refused.
+/// A generic definition is checked *under* its own constraint set. `(x : Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w` is among the hypotheses — discarding them was the route by which a correct polymorphic definition was refused.
 #[test]
 fn a_definition_checks_under_its_own_constraints() {
     use {
@@ -488,9 +476,7 @@ fn a_definition_checks_under_its_own_constraints() {
     ));
 }
 
-/// The other direction: an occurrence must *satisfy* the scheme it
-/// instantiates. A scheme declaring `u + 1 ≤ w` refuses the instance `{0, 0}`
-/// and admits `{0, 1}`.
+/// The other direction: an occurrence must *satisfy* the scheme it instantiates. A scheme declaring `u + 1 ≤ w` refuses the instance `{0, 0}` and admits `{0, 1}`.
 #[test]
 fn an_instance_must_satisfy_its_schemes_constraints() {
     use curios_core::{
@@ -527,9 +513,7 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
     ));
 }
 
-/// The two-line route to `False`: a recursive proof assumed at its own type.
-/// Erasure deletes proofs, so a proof-typed `rec` member must descend — and
-/// `f = f` has a self-call that decreases on nothing.
+/// The two-line route to `False`: a recursive proof assumed at its own type. Erasure deletes proofs, so a proof-typed `rec` member must descend — and `f = f` has a self-call that decreases on nothing.
 #[test]
 fn a_recursive_proof_that_does_not_descend_is_refused() {
     use curios_base::{Qualifier, RootId};
@@ -565,8 +549,7 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
     ));
 }
 
-/// The type-level twin — `rec Bad : Type = Bad` — is the equi-recursive route:
-/// a type-yielding member must descend for the same reason.
+/// The type-level twin — `rec Bad : Type = Bad` — is the equi-recursive route: a type-yielding member must descend for the same reason.
 #[test]
 fn a_recursive_type_that_does_not_descend_is_refused() {
     let mut kernel = kernel();
@@ -582,8 +565,7 @@ fn a_recursive_type_that_does_not_descend_is_refused() {
     ));
 }
 
-/// A *value* recursion that does not descend is not an error: `rec` is general
-/// recursion by design, and a program that loops is only a program that loops.
+/// A *value* recursion that does not descend is not an error: `rec` is general recursion by design, and a program that loops is only a program that loops.
 #[test]
 fn a_recursive_value_needs_no_descent() {
     let mut kernel = kernel();
@@ -603,10 +585,7 @@ fn a_recursive_value_needs_no_descent() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// A free-monoid cons arm is checked under its binders — the peeled generator,
-/// the tail, and the induction hypothesis at that tail — against the motive at
-/// one generator over the tail. The hypothesis really is usable at the tail's
-/// instance, and a body of the wrong type at the case's instance is refused.
+/// A free-monoid cons arm is checked under its binders — the peeled generator, the tail, and the induction hypothesis at that tail — against the motive at one generator over the tail. The hypothesis really is usable at the tail's instance, and a body of the wrong type at the case's instance is refused.
 #[test]
 fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
     let mut kernel = kernel();
@@ -616,8 +595,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
     let ih = binder(3, "ih");
     kernel.assume(&n, &nat_type());
 
-    // Motive `(m) => Nat`: the zero arm at `Nat`, the succ arm's ih at `Nat`,
-    // and using the ih is exactly inhabiting the motive at the tail.
+    // Motive `(m) => Nat`: the zero arm at `Nat`, the succ arm's ih at `Nat`, and using the ih is exactly inhabiting the motive at the tail.
     let counts = Term::nat_match(
         Term::free_var(&n),
         Some(&motive),
@@ -644,8 +622,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
         Err(KernelError::Mismatch { .. }),
     ));
 
-    // A zero arm of the wrong type is refused too — the identity case is a
-    // case like any other.
+    // A zero arm of the wrong type is refused too — the identity case is a case like any other.
     let wrong_zero = Term::nat_match(
         Term::free_var(&n),
         Some(&motive),
@@ -661,9 +638,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
     ));
 }
 
-/// The carrier's element type must agree with the scrutinee's: the arms are
-/// typed against the carrier's copy, and the values flowing through the match
-/// carry the scrutinee's.
+/// The carrier's element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and the values flowing through the match carry the scrutinee's.
 #[test]
 fn a_free_monoid_carrier_must_match_its_scrutinee() {
     let mut kernel = kernel();
@@ -692,8 +667,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
     ));
 }
 
-/// Elaboration-only syntax reaching the kernel means a term was handed over
-/// before elaboration finished with it.
+/// Elaboration-only syntax reaching the kernel means a term was handed over before elaboration finished with it.
 #[test]
 fn elaboration_only_syntax_is_refused() {
     let mut kernel = kernel();

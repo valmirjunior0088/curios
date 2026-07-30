@@ -12,8 +12,7 @@ fn kernel() -> Kernel {
     kernel
 }
 
-/// One single-constructor family whose payload is `payload_type`, declared at
-/// `result_sort` with no parameters, registered and returned for checking.
+/// One single-constructor family whose payload is `payload_type`, declared at `result_sort` with no parameters, registered and returned for checking.
 fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductDecl {
     let name = Global::Authored(Qualifier::from(["Fam"]));
     let payload = Free::local(0, Some("x"));
@@ -41,10 +40,7 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
     declaration
 }
 
-/// `induct Bad : Type 0 | mk(x : Type 0)` contains the universe it lives in.
-/// This is the fixture no surface program can spell — levels have no syntax —
-/// and the clause the item walk cannot check, because it computes each
-/// signature's sort and compares it to nothing.
+/// `induct Bad : Type 0 | mk(x : Type 0)` contains the universe it lives in. This is the fixture no surface program can spell — levels have no syntax — and the clause the item walk cannot check, because it computes each signature's sort and compares it to nothing.
 #[test]
 fn a_payload_at_the_familys_own_level_is_refused() {
     let mut kernel = kernel();
@@ -56,8 +52,7 @@ fn a_payload_at_the_familys_own_level_is_refused() {
     ));
 }
 
-/// `Box : Type 1 | mk(x : Type 0)` is the stratification working: the payload
-/// sorts one level below the family.
+/// `Box : Type 1 | mk(x : Type 0)` is the stratification working: the payload sorts one level below the family.
 #[test]
 fn a_payload_below_the_familys_level_is_admitted() {
     let mut kernel = kernel();
@@ -67,8 +62,7 @@ fn a_payload_below_the_familys_level_is_admitted() {
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
-/// A `Prop`-sorted family carries no size condition: `Prop` is impredicative,
-/// and the large-elimination guard is what keeps that sound.
+/// A `Prop`-sorted family carries no size condition: `Prop` is impredicative, and the large-elimination guard is what keeps that sound.
 #[test]
 fn a_proposition_family_has_no_size_condition() {
     let mut kernel = kernel();
@@ -77,9 +71,7 @@ fn a_proposition_family_has_no_size_condition() {
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
-/// A uniform parameter gets one rung of slack: a family at `Type 0` may take a
-/// `T : Type` parameter — the parameter's domain sorts at `1 ≤ 0 + 1` — while
-/// the same domain as a *payload* is refused above.
+/// A uniform parameter gets one rung of slack: a family at `Type 0` may take a `T : Type` parameter — the parameter's domain sorts at `1 ≤ 0 + 1` — while the same domain as a *payload* is refused above.
 #[test]
 fn a_uniform_parameter_has_one_rung_of_slack() {
     let mut kernel = kernel();

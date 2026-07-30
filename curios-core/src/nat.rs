@@ -44,8 +44,7 @@ impl Nat {
         }
     }
 
-    /// `None` on a symbolic operand *or* a zero divisor — never a panic; the
-    /// reducer reports the zero-divisor case before folding.
+    /// `None` on a symbolic operand *or* a zero divisor — never a panic; the reducer reports the zero-divisor case before folding.
     pub(crate) fn checked_div(self, other: Self) -> Option<Self> {
         let left = self.to_big_uint()?;
         let right = other.to_big_uint()?;
@@ -53,8 +52,7 @@ impl Nat {
         (!right.is_zero()).then(|| Self::new(left / right))
     }
 
-    /// `None` on a symbolic operand or a zero divisor, like
-    /// [`Nat::checked_div`].
+    /// `None` on a symbolic operand or a zero divisor, like [`Nat::checked_div`].
     pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
         let left = self.to_big_uint()?;
         let right = other.to_big_uint()?;
@@ -62,10 +60,7 @@ impl Nat {
         (!right.is_zero()).then(|| Self::new(left % right))
     }
 
-    /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. The
-    /// type level pretends ℕ, so these impose no 31-bit limit; the runtime's
-    /// i31 carrier is enforced only in the backend. `None` on a symbolic
-    /// operand, like [`Nat::checked_div`].
+    /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. The type level pretends ℕ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend. `None` on a symbolic operand, like [`Nat::checked_div`].
     pub(crate) fn checked_bitand(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? & other.to_big_uint()?))
     }
@@ -78,9 +73,7 @@ impl Nat {
         Some(Self::new(self.to_big_uint()? ^ other.to_big_uint()?))
     }
 
-    /// `self << amount` as `self * 2^amount`, and `self >> amount` as
-    /// `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an
-    /// `amount` too large to be a shift count.
+    /// `self << amount` as `self * 2^amount`, and `self >> amount` as `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an `amount` too large to be a shift count.
     pub(crate) fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self::new(
             self.to_big_uint()? << amount.to_big_uint()?.to_usize()?,
@@ -93,13 +86,7 @@ impl Nat {
         ))
     }
 
-    /// View a reduced term as a flat successor floor over a symbolic tail:
-    /// `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any
-    /// stuck prim — has floor `0` and is its own `inner`; reduction flattens nested
-    /// `Succ`, so `inner` is never itself successor-headed. The one-value companion
-    /// to `spine::peel_nat` (which peels the floor shared by *two* values): this is
-    /// the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to
-    /// act on the floor symbolically, then rebuild a canonical neutral.
+    /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck prim — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.
     pub fn decompose(term: &Term) -> (BigUint, Term) {
         match &**term {
             Subterm::Prim(Prim::Nat(Nat::Succ(floor, inner))) => (floor.clone(), inner.clone()),
@@ -107,9 +94,7 @@ impl Nat {
         }
     }
 
-    /// The inverse of [`Nat::decompose`]: `inner + floor`, collapsing a zero floor
-    /// back to the bare `inner` so the rebuilt term lands in the same normal form
-    /// `decompose` expects.
+    /// The inverse of [`Nat::decompose`]: `inner + floor`, collapsing a zero floor back to the bare `inner` so the rebuilt term lands in the same normal form `decompose` expects.
     pub(crate) fn rebuild(floor: BigUint, inner: Term) -> Term {
         match floor.is_zero() {
             true => inner,

@@ -25,8 +25,7 @@ fn nat_type() -> Term {
     Term::prim(Prim::NatType)
 }
 
-/// One constructor of a test family: its tag, the payload binder it carries if
-/// any, and the index target this case aims at.
+/// One constructor of a test family: its tag, the payload binder it carries if any, and the index target this case aims at.
 struct Case {
     tag: &'static str,
     payload: Option<(Free, Term)>,
@@ -95,8 +94,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec
     family
 }
 
-/// `match subject : (i, s) => motive | tag(binders) => body ... end`, over a
-/// scrutinee assumed at `family(index)`.
+/// `match subject : (i, s) => motive | tag(binders) => body ... end`, over a scrutinee assumed at `family(index)`.
 fn eliminate(
     kernel: &mut Kernel,
     family: &Global,
@@ -145,12 +143,9 @@ fn opaque_family(kernel: &mut Kernel, name: Free) -> Term {
     Term::free_var(&name)
 }
 
-/// The arm rule specializes the *context*, not just the motive. Matching
-/// `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so
-/// a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
+/// The arm rule specializes the *context*, not just the motive. Matching `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
 ///
-/// This is the shape `/std/Nat/Lte/trans` needs: the equation refines an
-/// *outer* binder, which no motive opening reaches and no arm binder owns.
+/// This is the shape `/std/Nat/Lte/trans` needs: the equation refines an *outer* binder, which no motive opening reaches and no arm binder owns.
 #[test]
 fn a_forced_index_equation_refines_an_outer_hypothesis() {
     let mut kernel = kernel();
@@ -189,11 +184,7 @@ fn a_forced_index_equation_refines_an_outer_hypothesis() {
     );
 }
 
-/// A forced equation whose solution mentions a refinable variable is refused
-/// rather than substituted: `Cyc(b)` matched against a case aimed at `b + 1`
-/// would solve `b := b + 1`, and the occurs check must leave the arm
-/// unspecialized instead. The hypothesis therefore stays at `P(b)` and fails
-/// the expectation `P(b + 1)` — a refusal, never a silent cycle.
+/// A forced equation whose solution mentions a refinable variable is refused rather than substituted: `Cyc(b)` matched against a case aimed at `b + 1` would solve `b := b + 1`, and the occurs check must leave the arm unspecialized instead. The hypothesis therefore stays at `P(b)` and fails the expectation `P(b + 1)` — a refusal, never a silent cycle.
 #[test]
 fn a_cyclic_index_equation_refines_nothing() {
     let mut kernel = kernel();
@@ -225,8 +216,7 @@ fn a_cyclic_index_equation_refines_nothing() {
     ));
 }
 
-/// A variable `Bool` scrutinee stands refined to the literal in each arm — the
-/// zero-index instance of the same specialization.
+/// A variable `Bool` scrutinee stands refined to the literal in each arm — the zero-index instance of the same specialization.
 #[test]
 fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     let mut kernel = kernel();
@@ -262,9 +252,7 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     );
 }
 
-/// An absent arm whose targets clash with the scrutinee's indices is
-/// legitimately absent: no value of that constructor can carry them. `s(p)`
-/// aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm may be omitted.
+/// An absent arm whose targets clash with the scrutinee's indices is legitimately absent: no value of that constructor can carry them. `s(p)` aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm may be omitted.
 #[test]
 fn a_clashing_absent_arm_is_legitimately_absent() {
     let mut kernel = kernel();
@@ -296,9 +284,7 @@ fn a_clashing_absent_arm_is_legitimately_absent() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// An absent arm the unifier cannot rule out is a refusal: at a *variable*
-/// index nothing clashes, so every constructor must have an arm or a catch-all.
-/// Undecided is not absent.
+/// An absent arm the unifier cannot rule out is a refusal: at a *variable* index nothing clashes, so every constructor must have an arm or a catch-all. Undecided is not absent.
 #[test]
 fn an_undecided_absent_arm_is_refused() {
     let mut kernel = kernel();
@@ -337,8 +323,7 @@ fn an_undecided_absent_arm_is_refused() {
     ));
 }
 
-/// A catch-all stands for every constructor not enumerated, so nothing further
-/// is owed for the absent arms.
+/// A catch-all stands for every constructor not enumerated, so nothing further is owed for the absent arms.
 #[test]
 fn a_catch_all_covers_absent_arms() {
     let mut kernel = kernel();
@@ -378,10 +363,7 @@ fn a_catch_all_covers_absent_arms() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// A proposition whose single constructor's payload is *pinned* by its index
-/// target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`,
-/// so eliminating tells a program nothing it did not already know, and the
-/// large elimination is admitted. Without this, `Eq/subst` is unstatable.
+/// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted. Without this, `Eq/subst` is unstatable.
 #[test]
 fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
     let mut kernel = kernel();
@@ -410,15 +392,9 @@ fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// The same shape with a *non-injective* index target. `blur(a)` mentions `a`,
-/// but knowing `blur(a)` recovers nothing — `blur` need not be injective, and
-/// in the program this rule exists for it is the constant zero. So the payload
-/// is not pinned, the proposition carries something a program could read back,
-/// and eliminating it into a relevant type is refused.
+/// The same shape with a *non-injective* index target. `blur(a)` mentions `a`, but knowing `blur(a)` recovers nothing — `blur` need not be injective, and in the program this rule exists for it is the constant zero. So the payload is not pinned, the proposition carries something a program could read back, and eliminating it into a relevant type is refused.
 ///
-/// Reading occurrence as determination is exactly the defect this rule exists
-/// to avoid: it admits this elimination, and a closed inhabitant of `False`
-/// follows from it.
+/// Reading occurrence as determination is exactly the defect this rule exists to avoid: it admits this elimination, and a closed inhabitant of `False` follows from it.
 #[test]
 fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
     let mut kernel = kernel();
@@ -458,8 +434,7 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
     );
 }
 
-/// An empty proposition eliminates into anything: there is nothing to have
-/// received, so nothing to extract.
+/// An empty proposition eliminates into anything: there is nothing to have received, so nothing to extract.
 #[test]
 fn an_empty_proposition_eliminates_into_a_type() {
     let mut kernel = kernel();
@@ -470,8 +445,7 @@ fn an_empty_proposition_eliminates_into_a_type() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
-/// Two constructors mean the value says *which*, which is information a
-/// relevant result could branch on.
+/// Two constructors mean the value says *which*, which is information a relevant result could branch on.
 #[test]
 fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
     let mut kernel = kernel();
@@ -499,9 +473,7 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
     );
 }
 
-/// The guard is about *relevance*, not about propositions as such: eliminating
-/// a proposition into another proposition is always fine, since irrelevance
-/// makes the result indistinguishable either way.
+/// The guard is about *relevance*, not about propositions as such: eliminating a proposition into another proposition is always fine, since irrelevance makes the result indistinguishable either way.
 #[test]
 fn a_proposition_eliminates_into_a_proposition_however_many_constructors() {
     let mut kernel = kernel();
@@ -536,9 +508,7 @@ fn a_proposition_eliminates_into_a_proposition_however_many_constructors() {
     assert_eq!(infer(&mut kernel, &term), Ok(target_type));
 }
 
-/// An arm is checked against the motive at *its own* constructor's index
-/// target, so a body of the wrong type is refused even where the elimination's
-/// overall type is fine.
+/// An arm is checked against the motive at *its own* constructor's index target, so a body of the wrong type is refused even where the elimination's overall type is fine.
 #[test]
 fn an_arm_body_of_the_wrong_type_is_refused() {
     let mut kernel = kernel();
@@ -567,8 +537,7 @@ fn an_arm_body_of_the_wrong_type_is_refused() {
     ));
 }
 
-/// An arm binding the wrong number of payload components is refused: the count
-/// is the constructor's, not the arm's to choose.
+/// An arm binding the wrong number of payload components is refused: the count is the constructor's, not the arm's to choose.
 #[test]
 fn an_arm_of_the_wrong_payload_arity_is_refused() {
     let mut kernel = kernel();
