@@ -52,7 +52,7 @@ pub use whnf::*;
 
 use {
     super::{
-        Env, Free, Global, InductDecl, Judge, ReduceError, Reducer, StructDecl, Term,
+        Atom, Env, Free, Global, InductDecl, Judge, ReduceError, Reducer, StructDecl, Term,
         UniverseContext, UniverseError,
     },
     curios_base::Entropy,
@@ -100,6 +100,11 @@ pub enum KernelError {
     /// or a polymorphic numeric literal — reached the kernel. The term was
     /// handed over before elaboration finished with it.
     NotCore(Term),
+    /// An elimination with no arm for this constructor, no catch-all, and no
+    /// clash making the case impossible at the scrutinee's indices. An arm may
+    /// be legitimately absent only when its index targets cannot equal the
+    /// actuals; anything else is a stuck term inhabiting the motive.
+    MissingArm { family: Global, tag: Atom },
 }
 
 impl From<ReduceError> for KernelError {
@@ -146,6 +151,10 @@ impl fmt::Display for KernelError {
             KernelError::NotCore(term) => {
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }
+            KernelError::MissingArm { family, tag } => write!(
+                formatter,
+                "no arm for `{tag}` of `{family}`, and its case is not impossible",
+            ),
         }
     }
 }

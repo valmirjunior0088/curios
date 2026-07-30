@@ -90,6 +90,44 @@ pub(super) fn check_induct_arms(
         let refs = arguments.iter().collect::<Vec<_>>();
 
         check(kernel, default, &motive.open(&refs))?;
+
+        return Ok(());
+    }
+
+    // Coverage: an absent arm must justify its absence. With no catch-all,
+    // every constructor with no arm must be *impossible* at the scrutinee's
+    // indices — its targets must clash with the actuals, decided by the same
+    // shared unifier that specializes the present arms. A case the unifier
+    // merely cannot decide is a refusal, not a pass: undecided is not absent.
+    for (tag, _) in &declaration.constructors {
+        if cases.iter().any(|(present, _)| present == tag) {
+            continue;
+        }
+
+        let signature = declaration
+            .instantiate(tag, &family.params)
+            .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
+
+        let mark = kernel.mark();
+        let outcome = open_payload(
+            kernel,
+            signature,
+            |kernel, binders, _payload, constructed| {
+                let Subterm::InductType(constructed) = &**constructed else {
+                    return Err(KernelError::Unclassified(constructed.clone()));
+                };
+
+                invert_indices(kernel, &family.indices, &constructed.indices, binders)
+            },
+        );
+        kernel.retract(mark);
+
+        if !matches!(outcome?, Invert::Impossible) {
+            return Err(KernelError::MissingArm {
+                family: family.name.clone(),
+                tag: tag.clone(),
+            });
+        }
     }
 
     Ok(())

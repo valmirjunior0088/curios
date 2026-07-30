@@ -261,6 +261,122 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     );
 }
 
+/// An absent arm whose targets clash with the scrutinee's indices is
+/// legitimately absent: no value of that constructor can carry them. `s(p)`
+/// aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm may be omitted.
+#[test]
+fn a_clashing_absent_arm_is_legitimately_absent() {
+    let mut kernel = kernel();
+    let z_payload = binder(1, "p");
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![
+            nullary("z", nat(0)),
+            carrying(
+                "s",
+                z_payload.clone(),
+                nat_type(),
+                succ(Term::free_var(&z_payload)),
+            ),
+        ],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        nat_type(),
+        vec![("z", Vec::new(), nat(1))],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
+/// An absent arm the unifier cannot rule out is a refusal: at a *variable*
+/// index nothing clashes, so every constructor must have an arm or a catch-all.
+/// Undecided is not absent.
+#[test]
+fn an_undecided_absent_arm_is_refused() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let payload = binder(1, "p");
+    let arm_binder = binder(10, "p");
+
+    kernel.assume(&b, &nat_type());
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![
+            nullary("z", nat(0)),
+            carrying(
+                "s",
+                payload.clone(),
+                nat_type(),
+                succ(Term::free_var(&payload)),
+            ),
+        ],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        Term::free_var(&b),
+        nat_type(),
+        vec![("s", vec![arm_binder], nat(0))],
+    );
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::MissingArm { .. }),
+    ));
+}
+
+/// A catch-all stands for every constructor not enumerated, so nothing further
+/// is owed for the absent arms.
+#[test]
+fn a_catch_all_covers_absent_arms() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let payload = binder(1, "p");
+    let subject = binder(50, "subject");
+
+    kernel.assume(&b, &nat_type());
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![
+            nullary("z", nat(0)),
+            carrying(
+                "s",
+                payload.clone(),
+                nat_type(),
+                succ(Term::free_var(&payload)),
+            ),
+        ],
+    );
+
+    kernel.assume(
+        &subject,
+        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]),
+    );
+    let motive = Scope::close(Many(2), &[&binder(51, "i"), &binder(52, "s")], nat_type());
+    let term = Term::induct_match_scoped_marked(
+        Term::free_var(&subject),
+        motive,
+        Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
+        Some(nat(7)),
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
 /// A proposition whose single constructor's payload is *pinned* by its index
 /// target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`,
 /// so eliminating tells a program nothing it did not already know, and the

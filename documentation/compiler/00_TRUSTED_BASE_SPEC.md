@@ -99,8 +99,7 @@ Ranked by directness. This is the soundness statement, and it is the reason the 
 | 1 | `rec f : False = f` — a member is assumed at its declared type and its body checks against it, with no totality condition anywhere | `infer.rs:418` | two lines of source |
 | 2 | Strict positivity is not checked — no occurrence of the word and zero references to `Polarity` under `kernel/` | `curios-elab/src/positivity.rs:77` runs it; the kernel does not | `induct Bad \| c(f : (Bad) -> False) end` |
 | 3 | The constructor size condition is not checked — `check_definition` calls `sort_of` and **discards the result** | `kernel/module.rs:45` | hand-built `Module` |
-| 4 | Coverage is not verified — the arms present are checked and the absent ones are never asked to justify themselves | `infer/eliminate.rs:47-72` | an elimination with an arm removed |
-| 5 | A `Switch`'s default and the free-monoid carriers' arms are typed by their bodies and never verified against the motive | `infer.rs:492-506` | the one *acceptance*-direction hole |
+| 4 | A `Switch`'s default and the free-monoid carriers' arms are typed by their bodies and never verified against the motive | `infer.rs` `check_cases` | the one *acceptance*-direction hole |
 
 **Route 1 is why totality is not deferrable.** `Subterm::RecMember(RecMember { group, index }) => Ok(group.member_type(*index))` returns the declared type unconditionally, and `check_rec_group` assumes every member at its declared type while checking bodies. So the shortest closed inhabitant of `False` the kernel will certify needs no primitive, no declaration, and no elimination. An earlier revision of this document offered "defer both (T) and (V)" as *"a defensible trade-off — it is what ships soonest"*. It is not a trade-off about coverage; it is the difference between a sound rule set and an unsound one, and that option is withdrawn.
 
@@ -199,7 +198,7 @@ Map `unfold` to `value_at`, **not** `value`: the latter filters `universes.param
 
 **A2 — Relocate `invert.rs`, and make the arm rule apply what it computes. Landed.** The relocation alone did not move the count, and the diagnosis it forced is recorded in `DESIGN.md`'s index-inversion entry: the walk stopped a rung *earlier* than inversion, at the scrutinee refinement the elaborator holds in a store and drops from the emitted term. What landed is the rule stated directly — `check_arm` specializes the context by the most-general solution of `actual indices ~ case targets`, both directions through the shared unifier (the outer-variable direction being the same call with its sides swapped), substituted into body and expectation and shadowed into the affected locals under the existing `mark`/`retract` bracket. Measured: **90 of 1050 refusals became 79**, `/std/Nat/Lte/trans` and `/std/Str/utf8/drop_valid`/`take_valid` among the cleared, no regressions. The convoy-widening alternative was measured first and rejected: it cleared `trans` and broke obligation (V) for `drop_valid`, because a convoy re-binds a hypothesis while size-change measures descent against original parameter identities.
 
-Coverage falls out and is the immediate next item: `Invert::Impossible` is what legitimizes an absent arm, and with the unifier in the kernel, coverage is a per-constructor check that every unarmed, undefaulted case clashes with the scrutinee's indices.
+Coverage landed with it: with no catch-all, every constructor with no arm must be `Invert::Impossible` at the scrutinee's indices, and an undecided case is refused rather than passed. Measured: the whole prelude passes with **zero** new refusals — the count holding is the correct signature for closing an *acceptance* hole, and the unit fixture `an_undecided_absent_arm_is_refused` is the evidence the check does anything. Certifying-table route 4 is closed.
 
 **Sharing inversion is weaker than the alternative, and the alternative is deferred deliberately.** If `invert.rs` pins a binder wrongly, a shared implementation means the kernel checks the arm at a wrong expected type and accepts it — one sample, and soundness-critical. The stronger design is for the elaborator to emit certificates the kernel type-checks: substitute the pinned solutions into the emitted arm rather than applying them as `context.refine` (`match_.rs:879-885`), and emit an absurdity witness per pruned arm rather than `continue` (`:780`). That leaves `invert.rs` fully untrusted at zero trusted lines, because the kernel would validate a *term* with machinery it already has.
 
@@ -227,7 +226,7 @@ The sophistication of these analyses is corpus-forced, not discretionary, and ca
 
 **B1 — Type `exit` at `{}`, and remove `/std/Never`. Done.** `Prim::Exit` carries only its code; the kernel's rule is `check(code, Nat)` with no side condition. Recorded in `DESIGN.md` under "Totality of the erased program", with the argument for why restricting the result type instead cannot work. The `SCHEMA` bumped to 19 and `soundness.rs`'s exit fixture was deleted rather than retargeted, because the program it asserted is now refused during elaboration.
 
-**B2 — Everything else in the certifying table falls out of A**: route 1 from A4, route 2 from A3, route 4 from A2.
+**B2 — Everything else in the certifying table falls out of A**: route 1 from A4, route 2 from A3. Route 4 (coverage) closed at A2, as measured there.
 
 ### C — Write what does not exist
 
