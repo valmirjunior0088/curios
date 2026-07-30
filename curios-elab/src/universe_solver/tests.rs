@@ -419,6 +419,34 @@ fn rollback_restores_constraints_and_solutions() {
 }
 
 #[test]
+fn a_shape_equal_equation_defaults_its_single_differing_metas() {
+    let mut solver = UniverseSolver::new(0);
+    let a = solver.fresh(UniverseRole::Generalizable, None);
+    let b = solver.fresh(UniverseRole::Flexible, None);
+    let left = Level::max([Level::zero().succ().unwrap(), Level::meta(a)]);
+    let right = Level::max([Level::zero().succ().unwrap(), Level::meta(b)]);
+    solver.add_eq(left, right, origin("shape-equal")).unwrap();
+    assert_eq!(solver.solution(b), Some(&Level::meta(a)));
+    assert!(solver.solution(a).is_none());
+}
+
+#[test]
+fn a_multi_difference_equation_is_not_defaulted() {
+    let mut solver = UniverseSolver::new(0);
+    let a = solver.fresh(UniverseRole::Generalizable, None);
+    let b = solver.fresh(UniverseRole::Generalizable, None);
+    let c = solver.fresh(UniverseRole::Generalizable, None);
+    let d = solver.fresh(UniverseRole::Generalizable, None);
+    let left = Level::max([Level::meta(a), Level::meta(c)]);
+    let right = Level::max([Level::meta(b), Level::meta(d)]);
+    solver.add_eq(left, right, origin("multi")).unwrap();
+    assert!(solver.solution(a).is_none());
+    assert!(solver.solution(b).is_none());
+    assert!(solver.solution(c).is_none());
+    assert!(solver.solution(d).is_none());
+}
+
+#[test]
 fn generalization_is_deterministic_and_closed() {
     let mut solver = UniverseSolver::new(0);
     let u = solver.fresh(UniverseRole::Generalizable, None);

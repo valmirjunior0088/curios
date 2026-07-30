@@ -487,6 +487,10 @@ impl UniverseSolver {
         origin: UniverseConstraintOrigin,
     ) -> Result<(), UniverseError> {
         let mark = self.mark();
+        if let Err(error) = self.default_shape_equal(&left, &right) {
+            self.rollback(mark);
+            return Err(error);
+        }
         if let Err(error) = self.add_leq(left.clone(), right.clone(), origin.clone()) {
             self.rollback(mark);
             return Err(error);
@@ -496,6 +500,48 @@ impl UniverseSolver {
             return Err(error);
         }
         Ok(())
+    }
+
+    /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.
+    ///
+    /// The direction solves a flexible meta toward a generalizable one when the roles differ, so an occurrence instance keeps its identity; a same-role pair takes a fixed arbitrary direction. The commitment is deliberately incomplete — `max(1, α) = max(1, β)` also admits solutions with the metas apart below the shared constant — so a program that genuinely needs distinct shape-equal instances refuses where it previously over-generalized.
+    fn default_shape_equal(&mut self, left: &Level, right: &Level) -> Result<(), UniverseError> {
+        let left = self.zonk(left)?;
+        let right = self.zonk(right)?;
+        if left.constant != right.constant {
+            return Ok(());
+        }
+        let only_left: Vec<_> = left
+            .atoms
+            .iter()
+            .filter(|(head, offset)| right.atoms.get(head) != Some(offset))
+            .collect();
+        let only_right: Vec<_> = right
+            .atoms
+            .iter()
+            .filter(|(head, offset)| left.atoms.get(head) != Some(offset))
+            .collect();
+        let ([(left_head, left_offset)], [(right_head, right_offset)]) =
+            (only_left.as_slice(), only_right.as_slice())
+        else {
+            return Ok(());
+        };
+        if left_offset != right_offset {
+            return Ok(());
+        }
+        let (LevelHead::Meta(a), LevelHead::Meta(b)) = (**left_head, **right_head) else {
+            return Ok(());
+        };
+        let role =
+            |solver: &Self, meta: UniverseMetaId| solver.metas.get(meta.0).map(|entry| entry.role);
+        let (Some(role_a), Some(_)) = (role(self, a), role(self, b)) else {
+            return Ok(());
+        };
+        let (from, to) = match role_a {
+            UniverseRole::Flexible => (a, b),
+            UniverseRole::Generalizable => (b, a),
+        };
+        self.assign(from, Level::meta(to))
     }
 
     pub fn add_constraint(
