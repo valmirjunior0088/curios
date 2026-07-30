@@ -1188,7 +1188,7 @@ fn revalidation_rejects_ill_typed_solution() {
 
 #[test]
 fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
-    // The §12 regression. Γ = (t : Type) with a counterfactual match-arm refinement `t := Nat` in force (as inside `bool_match b { true => ... }`, where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen* Γ = (t : Type) — its result type depends on the refined head, mirroring `m : T(b)`.
+    // The regression this guards against: Γ = (t : Type) with a counterfactual match-arm refinement `t := Nat` in force (as inside `bool_match b { true => ... }`, where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen* Γ = (t : Type) — its result type depends on the refined head, mirroring `m : T(b)`.
     let mut context = context();
     let t_binder = context.fresh(Some("t"));
     context.assume(&t_binder, &Term::type_ground());
@@ -1209,7 +1209,7 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
 
 #[test]
 fn revalidation_accepts_a_refinement_independent_solution() {
-    // The §12 twin. The same refinement `t := Nat` is in force, but `?0`'s result type is `Nat` directly — it does not depend on the refined head. Re-validation checks `5 : Nat` with refinements suppressed (none are needed) and commits.
+    // The mirror case of `revalidation_suppresses_refinements_rejecting_a_refined_solution`. The same refinement `t := Nat` is in force, but `?0`'s result type is `Nat` directly — it does not depend on the refined head. Re-validation checks `5 : Nat` with refinements suppressed (none are needed) and commits.
     let mut context = context();
     let t = context.fresh(Some("t"));
     context.assume(&t, &Term::type_ground());

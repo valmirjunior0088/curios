@@ -45,7 +45,7 @@ pub struct Definition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub universe_context: UniverseContext,
-    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks (§7), which test subtree containment against it rather than equality; the same value `Structure::module` carries for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
+    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `Structure::module` carries for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
     /// This definition's declaring root — `island`'s leading segment, precomputed once by `into_core` the same way `Concept`/`StructDecl`/ `InductDecl` are, so `Context::set_island` (and, downstream, the orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,

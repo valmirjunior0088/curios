@@ -60,7 +60,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
 
 #[test]
 fn parked_constraints_let_nested_constructor_metas_resolve() {
-    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh metas as flex–flex pairs embedded under the inductive type. Before the constraint store (§8) the argument's `expect` failed at quiescence, seconds before the result-type unification would have pinned everything. Now the pairs park, the output `expect` solves the domain metas against the annotation, and the wake retries the parked pairs.
+    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh metas as flex–flex pairs embedded under the inductive type. Before the constraint store, the argument's `expect` failed at quiescence, seconds before the result-type unification would have pinned everything. Now the pairs park, the output `expect` solves the domain metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
         use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type

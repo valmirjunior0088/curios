@@ -31,10 +31,10 @@ type SharedTelescope = Rc<Vec<(Free, Term)>>;
 /// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder — shared the same way.
 type SharedSpine = Rc<Vec<Term>>;
 
-/// One metavariable's record in the [`MetaStore`]. Everything here is frozen at birth except `solution`, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`, §7.4).
+/// One metavariable's record in the [`MetaStore`]. Everything here is frozen at birth except `solution`, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`).
 #[derive(Debug)]
 pub(crate) struct MetaEntry {
-    /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation (§7.3–§7.4).
+    /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
     pub telescope: SharedTelescope,
     /// The metavariable's type — the `expected` it was checked against at birth.
     pub result: Term,
@@ -112,7 +112,7 @@ pub(crate) struct FrozenFrame {
     witness_binders: Vec<(Free, Term)>,
 }
 
-/// The work a parked problem will retry (§8).
+/// The work a parked problem will retry.
 #[derive(Debug)]
 pub(crate) enum ParkedWork {
     /// A conversion constraint that quiesced blocked on unsolved metavariables.
@@ -131,7 +131,7 @@ pub(crate) enum ParkedWork {
     },
 }
 
-/// A problem parked by `expect` (or a blocked intro-form check) to outlive its call (§8). Like a [`MetaEntry`], it freezes the local frame it was born under.
+/// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. Like a [`MetaEntry`], it freezes the local frame it was born under.
 #[derive(Debug)]
 pub(crate) struct ParkedGoal {
     pub work: ParkedWork,
@@ -177,7 +177,7 @@ pub struct Context {
     assumptions: Vec<HashMap<Free, Term>>,
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
     definitions: Vec<HashMap<Free, DefEntry>>,
-    // Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution (§7.4) must keep stable definitions yet ignore these.
+    // Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<HashMap<Free, Term>>,
     refinement_projections: Vec<HashMap<(Term, usize), Term>>,
     // Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently (`classify(Bin/at(cons(c,t),0,_))`, `Nat/in_range(c, lo', hi')`) still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
@@ -186,11 +186,11 @@ pub struct Context {
     // The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
     local: Vec<(Free, Term)>,
     local_marks: Vec<usize>,
-    // Parked conversion constraints (§8) — frame-independent, like `metas`.
+    // Parked conversion constraints — frame-independent, like `metas`.
     parked: Vec<ParkedGoal>,
     // Ids solved since the last `wake_parked` sweep: the wake signal.
     newly_solved: Vec<MetaId>,
-    // Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation (§7.4) unwind solutions that landed while validating a candidate it then rejected.
+    // Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
     solved_log: Vec<MetaId>,
     // While set, `expect` may not park: conversion is being used as a yes/no oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
@@ -220,7 +220,7 @@ pub struct Context {
     witness_marks: Vec<usize>,
     // Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated.
     deferred_witnesses: Vec<ParkedGoal>,
-    // The module whose item is currently being elaborated — the qualifier prefix of that item's name (a fresh context starts at the root, the empty qualifier). Set by `elaborate_module_suffix` per item; read by the representation-privacy checks (§7). `None` arises only through `with_suppressed_privacy` and means there is no surface use site to judge from, which suppresses the checks structurally: privacy is a property of *surface elaboration*, and machinery that re-derives types from already-elaborated terms — erasure, the metavariable oracle — walks compiler-built projections (witness splices, eta-expansions) that must not be re-adjudicated. A machinery path that forgets its bracket fails loudly (a spurious privacy error), never silently.
+    // The module whose item is currently being elaborated — the qualifier prefix of that item's name (a fresh context starts at the root, the empty qualifier). Set by `elaborate_module_suffix` per item; read by the representation-privacy checks. `None` arises only through `with_suppressed_privacy` and means there is no surface use site to judge from, which suppresses the checks structurally: privacy is a property of *surface elaboration*, and machinery that re-derives types from already-elaborated terms — erasure, the metavariable oracle — walks compiler-built projections (witness splices, eta-expansions) that must not be re-adjudicated. A machinery path that forgets its bracket fails loudly (a spurious privacy error), never silently.
     island: Option<Qualifier>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
     checked: Vec<(Term, Term, Rc<str>)>,
@@ -1000,7 +1000,7 @@ impl Context {
         self.raw_var_reduct(name)
     }
 
-    /// The reduct of a projection: its counterfactual match-arm refinement, unless refinements are suppressed (re-validation, §7.4).
+    /// The reduct of a projection: its counterfactual match-arm refinement, unless refinements are suppressed (re-validation).
     pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
         if self.suppress_refinements {
             return None;
@@ -1037,7 +1037,7 @@ impl Context {
             .any(|f| f.keys().any(|k| k.head_key() == Some(head)))
     }
 
-    /// The reduct of a canonical stuck scrutinee: its refinement value, unless suppressed (re-validation, §7.4).
+    /// The reduct of a canonical stuck scrutinee: its refinement value, unless suppressed (re-validation).
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
         if self.suppress_refinements {
             return None;
@@ -1078,7 +1078,7 @@ impl Context {
                 .any(|frame| !frame.is_empty())
     }
 
-    /// Run `f` with refinements suppressed (re-validation, §7.4). Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the flag is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
+    /// Run `f` with refinements suppressed (re-validation). Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the flag is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.suppress_refinements;
 
@@ -1291,7 +1291,7 @@ impl Context {
 
     // === Metavariable store =================================================
 
-    /// Materialize a metavariable's birth record (§5). The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once).
+    /// Materialize a metavariable's birth record. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once).
     pub(crate) fn birth_metavar(
         &mut self,
         id: MetaId,
@@ -1474,7 +1474,7 @@ impl Context {
         Some(solution.capture(&binders).release(&spine))
     }
 
-    /// Commit a metavariable's solution. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid (§7.2). (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.) Records the id as newly solved — the wake signal for parked constraints (§8) — and journals it for [`Context::rollback_solutions`].
+    /// Commit a metavariable's solution. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.) Records the id as newly solved — the wake signal for parked constraints — and journals it for [`Context::rollback_solutions`].
     pub(crate) fn solve_metavar(&mut self, id: MetaId, term: Term) {
         self.mutation_stamp.fresh();
         if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
@@ -1492,7 +1492,7 @@ impl Context {
         }
     }
 
-    /// Unwind every solution committed since `mark` — the transactional bracket around re-validation (§7.4). Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals and clears the reduction cache, which may have cached reducts through them.
+    /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals and clears the reduction cache, which may have cached reducts through them.
     pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
         let unwound = self
             .solved_log
@@ -1628,7 +1628,7 @@ impl Context {
         super::zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
     }
 
-    // === Parked constraints (§8) ============================================
+    // === Parked constraints ============================================
 
     /// Freeze the live local frame (the way `fresh_metavar` freezes Γ): the base frame persists for the whole elaboration, so only the local frames — which pop before a retry can happen — are captured.
     pub(crate) fn freeze_frame(&self) -> FrozenFrame {
@@ -1714,7 +1714,7 @@ impl Context {
         });
     }
 
-    /// Mint the placeholder metavariable for a parked checking problem (§8): birthed like any hole — frozen Γ, identity spine — with no insertion provenance. If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
+    /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance. If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
     pub(crate) fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (MetaId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();

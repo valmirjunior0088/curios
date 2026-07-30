@@ -49,7 +49,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    // Both tuples and structs project; the field telescope is the tuple type's own, or the struct's (instantiated at the head type's parameters). A struct additionally enforces representation privacy here (§7).
+    // Both tuples and structs project; the field telescope is the tuple type's own, or the struct's (instantiated at the head type's parameters). A struct additionally enforces representation privacy here.
     let telescope = match &*head_type {
         Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
         Subterm::StructType(StructType {

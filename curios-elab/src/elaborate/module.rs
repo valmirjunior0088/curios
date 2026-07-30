@@ -857,7 +857,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     Ok(elaborated)
 }
 
-/// Elaborate a [`Module`] against an already-elaborated *prefix*, returning the suffix it added (§9). Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
+/// Elaborate a [`Module`] against an already-elaborated *prefix*, returning the suffix it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is what `zonk_module` then makes meta-free for `erase`.
 ///

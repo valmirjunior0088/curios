@@ -225,12 +225,12 @@ pub enum Error {
         label: String,
         order: Vec<String>,
     },
-    /// Projecting a field of a struct whose representation is private, from outside the declaring module's subtree (§7).
+    /// Projecting a field of a struct whose representation is private, from outside the declaring module's subtree.
     PrivateField {
         name: String,
         field: String,
     },
-    /// Constructing or eliminating a nominal type whose representation is private, from outside the declaring module's subtree (§7).
+    /// Constructing or eliminating a nominal type whose representation is private, from outside the declaring module's subtree.
     PrivateRepresentation {
         name: String,
     },

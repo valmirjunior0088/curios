@@ -63,7 +63,7 @@ fn check_lst_elems(
     Ok(elaborated)
 }
 
-/// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors the old `infer_prim`, but every operand obligation goes through `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim` is the authoritative (rebuilt) one that flows on to `zonk`/`erase` (§9).
+/// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors the old `infer_prim`, but every operand obligation goes through `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim` is the authoritative (rebuilt) one that flows on to `zonk`/`erase`.
 fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error> {
     let nat_type: Term = Subterm::Prim(Prim::NatType).into();
     let byte_type: Term = Subterm::Prim(Prim::ByteType).into();

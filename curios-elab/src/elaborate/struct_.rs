@@ -142,7 +142,7 @@ pub(super) fn check_dependent_fields(
     }
 }
 
-/// Type a struct literal against its registry entry (§3.3). The struct's `name` makes it self-describing, so this synthesizes (like `elaborate_variant`, not the purely-checked `elaborate_tuple`): the parameters come from the written head — a bare-name head mints one fresh metavariable per parameter, solved by the field checks (and, in `Check` mode, the `expect` turnaround unifying the result `StructType` against the expected type) — and the fields are checked in declaration order through the (dependent) field telescope.
+/// Type a struct literal against its registry entry. The struct's `name` makes it self-describing, so this synthesizes (like `elaborate_variant`, not the purely-checked `elaborate_tuple`): the parameters come from the written head — a bare-name head mints one fresh metavariable per parameter, solved by the field checks (and, in `Check` mode, the `expect` turnaround unifying the result `StructType` against the expected type) — and the fields are checked in declaration order through the (dependent) field telescope.
 pub(super) fn elaborate_struct(
     context: &mut Context,
     s: &Struct,
@@ -168,7 +168,7 @@ pub(super) fn elaborate_struct(
     let (struct_decl, universes) =
         instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
-    // Construction privacy (§7): a private-representation struct may be built only within its declaring module's subtree. Checked here (alongside projection privacy in `elaborate_proj`) via `island`, set per item by `elaborate_module_suffix`.
+    // Construction privacy: a private-representation struct may be built only within its declaring module's subtree. Checked here (alongside projection privacy in `elaborate_proj`) via `island`, set per item by `elaborate_module_suffix`.
     if !struct_decl.rep_public
         && context
             .island()

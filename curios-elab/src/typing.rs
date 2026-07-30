@@ -7,12 +7,12 @@ use curios_core::{
     Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole,
 };
 
-/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering (§6).
+/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering.
 pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
 }
 
-/// Checking counterpart to `infer`: `elaborate` in `Check` mode, returning the *elaborated* term. Drives `term` against a known `ty` — the rebuilt, de-Bruijn-correct subterm whose lambda domains are solved and whose binders are re-closed (§9). Elaboration is authoritative: this output, not the original lowered term, is what flows on to `zonk`/`erase`.
+/// Checking counterpart to `infer`: `elaborate` in `Check` mode, returning the *elaborated* term. Drives `term` against a known `ty` — the rebuilt, de-Bruijn-correct subterm whose lambda domains are solved and whose binders are re-closed. Elaboration is authoritative: this output, not the original lowered term, is what flows on to `zonk`/`erase`.
 pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
 }
@@ -135,7 +135,7 @@ pub(crate) fn expect(
     match outcome {
         Outcome::Converts => context.retry_parked(),
         Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
-        // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved (§8) and succeed provisionally — unless conversion is currently a yes/no oracle, in which case undecided must stay a mismatch.
+        // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless conversion is currently a yes/no oracle, in which case undecided must stay a mismatch.
         Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
                 return Err(display_mismatch(context, inferred, expected));
@@ -150,7 +150,7 @@ pub(crate) fn expect(
 }
 
 impl Context {
-    /// Retry parked constraints woken by freshly landed solutions, to fixpoint (§8). A woken goal re-runs under its frozen frame: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
+    /// Retry parked constraints woken by freshly landed solutions, to fixpoint. A woken goal re-runs under its frozen frame: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
     pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
         // Never retry inside an oracle: re-validation swallows errors (`Err(_) => false`), so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.
         if self.parking_suppressed() {
@@ -521,7 +521,7 @@ impl MotiveShape<'_> {
 
 /// Check that `motive` is a well-formed type family for an eliminator of the given [`MotiveShape`], returning it closed at that shape's arity.
 ///
-/// Two inputs reach here. A motive already closed at the eliminator's arity — synthesized, or a rebuilt match coming back through re-elaboration — is opened under its assumed binders and its body checked against `Type`, then re-closed so the motive carries its solved form (§9). A *written* motive arrives from `into_core` un-scoped, in an arity-0 scope ([`Term::match_motive_written`]): it is an ordinary term, checked against the shape's motive type and then decomposed into the same canonical scope.
+/// Two inputs reach here. A motive already closed at the eliminator's arity — synthesized, or a rebuilt match coming back through re-elaboration — is opened under its assumed binders and its body checked against `Type`, then re-closed so the motive carries its solved form. A *written* motive arrives from `into_core` un-scoped, in an arity-0 scope ([`Term::match_motive_written`]): it is an ordinary term, checked against the shape's motive type and then decomposed into the same canonical scope.
 ///
 /// The elided hole — the bare metavariable `into_core` mints for an absent motive — is neither: it is wrapped at the eliminator's arity and left for synthesis or for `solve` to fill in.
 pub(crate) fn check_motive(

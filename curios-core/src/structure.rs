@@ -19,7 +19,7 @@ pub struct StructDecl {
     pub fields: Telescope<()>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the type-former's kind. A fully-applied `StructType { name, .. }` has this sort, which `Sort::of` reads to decide propositional irrelevance.
     pub result_sort: Term,
-    /// The declaring module's qualifier (e.g. `Foo/Bar`); the root module is the empty qualifier. Compared against the use-site module for the representation-privacy checks (§7).
+    /// The declaring module's qualifier (e.g. `Foo/Bar`); the root module is the empty qualifier. Compared against the use-site module for the representation-privacy checks.
     pub module: Qualifier,
     /// The compilation root (`sys`/`syn`/`std`/the entry program/…) that declares this struct — orthogonal to `module`, which is fine-grained per-module privacy. Consulted by the orphan-rule ownership check, not by representation privacy.
     pub root: RootId,

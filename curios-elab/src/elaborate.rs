@@ -42,7 +42,7 @@ use {
     std::collections::{BTreeSet, VecDeque},
 };
 
-/// The elaboration mode (§6). `Infer` synthesizes a type; `Check(expected)` drives the term against a known type, hitting `expect` at each synthesizable node's turnaround and consuming `expected` directly at naturally-checked nodes (`Func`, `Tuple`, `Metavar`).
+/// The elaboration mode. `Infer` synthesizes a type; `Check(expected)` drives the term against a known type, hitting `expect` at each synthesizable node's turnaround and consuming `expected` directly at naturally-checked nodes (`Func`, `Tuple`, `Metavar`).
 #[derive(Debug, Clone)]
 pub enum Mode {
     Infer,
@@ -166,7 +166,7 @@ fn elaborate_subterm(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved (§9).
+    // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved.
     let (rebuilt, type_) = match &**term {
         Subterm::Type(level) => (
             term.clone(),

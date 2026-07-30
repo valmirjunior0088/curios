@@ -59,7 +59,7 @@ pub(crate) fn convert_outcome(
     Convert::new(type_.clone(), this.clone(), that.clone()).outcome(context)
 }
 
-/// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable" (§8).
+/// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
 #[derive(Debug)]
 pub(crate) enum Outcome {
     /// Definitionally equal.
@@ -432,7 +432,7 @@ pub(crate) struct Convert {
     // Structural goals already seen, stored as `history_key` fingerprints. A recurring goal is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling goal first.
     history: HashSet<Goal>,
     pending: VecDeque<Goal>,
-    // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands (§8).
+    // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
     blocked: Vec<Goal>,
     // Whether a metavariable was solved since the last `blocked` sweep — the signal that retrying `blocked` could make further progress.
     progress: bool,
@@ -1292,7 +1292,7 @@ impl Convert {
         }
     }
 
-    /// Solve `?id[spine] ≈ t` (the rigid side, already in weak-head normal form). Implements §7.3 in the pattern fragment: embedded-metavariable guard, occurs check, spine-as-renaming inversion (which subsumes the scope check), and re-validation against the frozen birth context, before committing the solution in birth-named form.
+    /// Solve `?id[spine] ≈ t` (the rigid side, already in weak-head normal form). Implements the pattern fragment: embedded-metavariable guard, occurs check, spine-as-renaming inversion (which subsumes the scope check), and re-validation against the frozen birth context, before committing the solution in birth-named form.
     fn solve(
         &mut self,
         context: &mut Context,
@@ -1484,7 +1484,7 @@ impl Convert {
             }
         }
 
-        // Re-validation (§7.4): the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ, as an *oracle* — counterfactual refinements and constraint parking both suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
+        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ, as an *oracle* — counterfactual refinements and constraint parking both suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
         let mark = context.solution_mark();
         let revalidated = context.with_frame(|context| {
             for (name, ty) in telescope.iter() {
@@ -1748,7 +1748,7 @@ impl Convert {
                 continue;
             }
 
-            // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine (§7.1).
+            // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
             match (as_metavar(&this).cloned(), as_metavar(&that).cloned()) {
                 (Some(this_m), Some(that_m)) => {
                     // Same head, different spines (node duplication under different openings): entrywise spine agreement is a *sufficient* congruence condition. Probed only when both spines are meta-free — a probe that could solve metavariables would overcommit, since agreement is not necessary for the goal to hold.

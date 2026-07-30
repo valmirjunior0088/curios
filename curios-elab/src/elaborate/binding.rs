@@ -171,7 +171,7 @@ pub(super) fn elaborate_func(
     }
 }
 
-/// Park a whole *checking problem* (§8): a checked-only introduction form met an expected type whose structure is still an unsolved metavariable — possibly pinned by a constraint parked moments ago. A fresh placeholder metavariable stands in the rebuilt tree; once the expected type's metas solve, the problem re-checks under its frozen frame and the placeholder is solved with the rebuilt term (the spine machinery splices it wherever the occurrence travelled).
+/// Park a whole *checking problem*: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable — possibly pinned by a constraint parked moments ago. A fresh placeholder metavariable stands in the rebuilt tree; once the expected type's metas solve, the problem re-checks under its frozen frame and the placeholder is solved with the rebuilt term (the spine machinery splices it wherever the occurrence travelled).
 pub(super) fn park_checking(
     context: &mut Context,
     term: &Term,
@@ -397,7 +397,7 @@ pub(super) fn elaborate_infix(
 ///
 /// Once the written binders run out, every remaining hidden expected slot is synthesized; a leftover explicit slot is a missing-parameter arity error, and a leftover written binder is a too-many-parameters arity error. Alignment is positional by plicity, not by binder label.
 ///
-/// The rebuilt lambda carries the *complete canonical* telescope — inserted binders included — and the expected type's full plicity vector, so it re-checks against the same type consuming every binder directly and inserting nothing (idempotence, required for caching, parked-work replay, zonk, and archive restoration). Each rebuilt domain is the *expected* domain rather than the written hole, so re-closing it captures any free names it mentions — keeping nested lambda domains de-Bruijn-correct for `zonk`/`erase` (§9).
+/// The rebuilt lambda carries the *complete canonical* telescope — inserted binders included — and the expected type's full plicity vector, so it re-checks against the same type consuming every binder directly and inserting nothing (idempotence, required for caching, parked-work replay, zonk, and archive restoration). Each rebuilt domain is the *expected* domain rather than the written hole, so re-closing it captures any free names it mentions — keeping nested lambda domains de-Bruijn-correct for `zonk`/`erase`.
 pub(super) fn elaborate_func_check(
     context: &mut Context,
     telescope: &Telescope<Term>,

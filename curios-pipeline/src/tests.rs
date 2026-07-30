@@ -136,7 +136,7 @@ fn meta_free_prelude_program_compiles_without_overflow() {
 
 #[test]
 fn solved_goal_reports_its_solution() {
-    // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5` (§14, `id ? x`) — but a written goal never compiles: the module still elaborates fully, then zonk reports what it determined.
+    // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5` (`id ? x`) — but a written goal never compiles: the module still elaborates fully, then zonk reports what it determined.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         id(?, 5)
@@ -154,7 +154,7 @@ fn solved_goal_reports_its_solution() {
 
 #[test]
 fn goal_pinned_through_the_expected_type_reports_the_pin() {
-    // `id ? true` checked against `/std/Bool`: the turnaround pins the type argument `?` to `Bool` through the expected type (§14, a type-level pin), and the goal report names that solution.
+    // `id ? true` checked against `/std/Bool`: the turnaround pins the type argument `?` to `Bool` through the expected type (a type-level pin), and the goal report names that solution.
     let source = r#"
         use /std/{Bool};
         let id(A : Type, a : A) -> A = a;
@@ -172,7 +172,7 @@ fn goal_pinned_through_the_expected_type_reports_the_pin() {
 
 #[test]
 fn unconstrained_goal_reports_undetermined() {
-    // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the goal report shows its type but no solution (§14).
+    // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the goal report shows its type but no solution.
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;

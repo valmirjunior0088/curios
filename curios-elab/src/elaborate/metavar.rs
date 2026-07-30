@@ -70,7 +70,7 @@ pub(super) fn elaborate_metavar(
     let id = metavar.id;
 
     match mode {
-        // Birth (§5): freeze the local context as Γ and record the type the hole is checked against. Births happen once per id, but a re-traversal in the same mode is idempotent — re-check the recorded type against the (identical) `expected`.
+        // Birth: freeze the local context as Γ and record the type the hole is checked against. Births happen once per id, but a re-traversal in the same mode is idempotent — re-check the recorded type against the (identical) `expected`.
         Mode::Check(expected) => {
             if context.metavar_entry(id).is_some() {
                 let result = context.metavar_entry(id).unwrap().result.clone();
