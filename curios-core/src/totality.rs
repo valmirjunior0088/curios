@@ -500,33 +500,49 @@ impl Member {
 /// The closure is what makes mutual recursion work without the analysis
 /// knowing which members were declared together: `raw_comm` calls
 /// `raw_swap_step` which calls back, and only the composite path is a cycle.
+///
+/// By generator extension: every product of call matrices is a shorter product
+/// followed by its last factor, so extending each discovered element by the
+/// *generators* alone reaches the whole closure — `|closure| × |calls|`
+/// compositions, not `|closure|²`, and not `|closure|²` per round as the
+/// original fixpoint paid. The distinction was measured, on the one group that
+/// makes it matter: `/std/BigNat/add/raw_assoc`'s 88 calls close to 1,599
+/// matrices, at fifty seconds per round-based closure, twenty-two semi-naive
+/// over all pairs, and under a second this way. The set is hashed rather than
+/// ordered because its one consumer runs an order-independent `all`.
 fn close(calls: Vec<(usize, usize, Matrix)>) -> Option<Vec<(usize, usize, Matrix)>> {
-    let mut closed: BTreeSet<(usize, usize, Matrix)> = calls.into_iter().collect();
-
-    loop {
-        let mut discovered = Vec::new();
-        for (from, middle, first) in &closed {
-            for (start, to, second) in &closed {
-                if middle != start {
-                    continue;
-                }
-                let Some(composed) = first.compose(second) else {
-                    continue;
-                };
-                let candidate = (*from, *to, composed);
-                if !closed.contains(&candidate) {
-                    discovered.push(candidate);
-                }
-            }
-        }
-        if discovered.is_empty() {
-            return Some(closed.into_iter().collect());
-        }
-        closed.extend(discovered);
-        if closed.len() > CLOSURE_LIMIT {
-            return None;
+    let mut closed: std::collections::HashSet<(usize, usize, Matrix)> =
+        std::collections::HashSet::new();
+    let mut frontier: Vec<(usize, usize, Matrix)> = Vec::new();
+    let mut generators: Vec<(usize, usize, Matrix)> = Vec::new();
+    for call in calls {
+        if closed.insert(call.clone()) {
+            frontier.push(call.clone());
+            generators.push(call);
         }
     }
+
+    while let Some((from, middle, first)) = frontier.pop() {
+        let mut discovered = Vec::new();
+        for (start, to, second) in &generators {
+            if middle == *start
+                && let Some(composed) = first.compose(second)
+            {
+                discovered.push((from, *to, composed));
+            }
+        }
+
+        for candidate in discovered {
+            if closed.insert(candidate.clone()) {
+                if closed.len() > CLOSURE_LIMIT {
+                    return None;
+                }
+                frontier.push(candidate);
+            }
+        }
+    }
+
+    Some(closed.into_iter().collect())
 }
 
 /// One member body's traversal: it finds the recursive calls and grades them.
