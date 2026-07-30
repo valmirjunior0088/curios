@@ -1,6 +1,4 @@
-// binary-trees: build a perfect tree of depth D with unique per-node payloads,
-// then sum them. Distinct payloads keep every node unique so nothing is shared.
-// One source, compiled twice: native (rustc -O) and wasm (wasm32-wasip1).
+// binary-trees: build a perfect tree of depth D with unique per-node payloads, then sum them. Distinct payloads keep every node unique so nothing is shared. One source, compiled twice: native (rustc -O) and wasm (wasm32-wasip1).
 enum Tree {
     Leaf(u64),
     Node(u64, Box<Tree>, Box<Tree>),
