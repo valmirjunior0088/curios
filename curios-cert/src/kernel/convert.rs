@@ -16,7 +16,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! Two concessions remain. A `rec` group is compared syntactically. And every child position without a typed context — a spine's arguments, and a stuck elimination's motive and arms under their opaque binders — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted.
+//! Two concessions remain. A `rec` group is compared syntactically. And every child position without a typed context — an application spine's arguments, a stuck elimination's motive and arms under their opaque binders, and a struct type-former's parameters — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
