@@ -67,7 +67,7 @@ use prim::convert_prim;
 mod tests;
 
 use {
-    super::{Kernel, KernelError, Sort},
+    super::{Kernel, KernelError, Sort, unfold_spelling},
     crate::{
         Bound, Carrier, Cases, FuncType, InductType, Many, Proj, RecMember, Reducer, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UniverseInst,
@@ -444,7 +444,26 @@ fn structural(
             }),
         ) => Ok(left_index == right_index && left == right),
 
-        _ => Ok(false),
+        // Two spellings of one recursive call: `force` keeps the folded
+        // application as a recursive call's normal form, while an arm's
+        // induction hypothesis is the raw stuck fold-match on the same
+        // argument. When the heads disagree, grant each side the one
+        // definitional unfolding `force` withheld and compare what results.
+        // The recurrence rule bounds the cycles this can enter, and a shape
+        // with nothing to unfold falls back to the refusal it was.
+        _ => {
+            let left = unfold_spelling(kernel, this)?;
+            let right = unfold_spelling(kernel, that)?;
+
+            match (left, right) {
+                (None, None) => Ok(false),
+                (left, right) => {
+                    let left = left.unwrap_or_else(|| this.clone());
+                    let right = right.unwrap_or_else(|| that.clone());
+                    ground(kernel, history, &left, &right)
+                }
+            }
+        }
     }
 }
 

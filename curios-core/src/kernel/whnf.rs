@@ -499,6 +499,30 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     }
 }
 
+/// The one definitional unfolding [`force`] withholds: a folded recursive
+/// spelling — a `rec` value, a member selection, or a member application —
+/// stepped to the weak-head form of its body. `None` for every other shape.
+///
+/// `force` keeps the folded spelling as a recursive call's normal form, while
+/// an arm's induction hypothesis is the raw stuck fold-match on the same
+/// argument; conversion consults this to see the two spellings as one.
+pub(crate) fn unfold_spelling(
+    kernel: &mut Kernel,
+    term: &Term,
+) -> Result<Option<Term>, ReduceError> {
+    match &**term {
+        Subterm::Rec(rec) => Ok(Some(whnf(kernel, unfold_rec(rec.clone()))?)),
+        Subterm::RecMember(member) => {
+            Ok(Some(whnf(kernel, member.group.member_body(member.index))?))
+        }
+        Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply.clone())? {
+            Some(unfolded) => Ok(Some(whnf(kernel, unfolded)?)),
+            None => Ok(None),
+        },
+        _ => Ok(None),
+    }
+}
+
 /// Unfold one folded recursive application, when its result shape is demanded.
 fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, ReduceError> {
     let Apply { head, params, .. } = apply;
