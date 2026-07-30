@@ -128,6 +128,139 @@ fn eliminate(
     )
 }
 
+/// A successor over `tail`, in the successor-floor form reduction keeps.
+fn succ(tail: Term) -> Term {
+    Term::prim(Prim::Nat(crate::Nat::Succ(1u32.into(), tail)))
+}
+
+/// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.
+fn opaque_family(kernel: &mut Kernel, name: Free) -> Term {
+    kernel.declare(
+        &name,
+        &Term::func_type([(binder(90, "n"), nat_type())], Term::type_ground()),
+        &UniverseContext::default(),
+    );
+
+    Term::free_var(&name)
+}
+
+/// The arm rule specializes the *context*, not just the motive. Matching
+/// `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so
+/// a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
+///
+/// This is the shape `/std/Nat/Lte/trans` needs: the equation refines an
+/// *outer* binder, which no motive opening reaches and no arm binder owns.
+#[test]
+fn a_forced_index_equation_refines_an_outer_hypothesis() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let payload = binder(1, "p");
+    let w = binder(3, "w");
+    let arm_binder = binder(10, "p");
+
+    let p = opaque_family(&mut kernel, binder(2, "P"));
+    kernel.assume(&b, &nat_type());
+    kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&b)]));
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![carrying(
+            "s",
+            payload.clone(),
+            nat_type(),
+            succ(Term::free_var(&payload)),
+        )],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        Term::free_var(&b),
+        Term::apply(p.clone(), [Term::free_var(&binder(51, "i"))]),
+        vec![("s", vec![arm_binder], Term::free_var(&w))],
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Ok(Term::apply(p, [Term::free_var(&b)])),
+    );
+}
+
+/// A forced equation whose solution mentions a refinable variable is refused
+/// rather than substituted: `Cyc(b)` matched against a case aimed at `b + 1`
+/// would solve `b := b + 1`, and the occurs check must leave the arm
+/// unspecialized instead. The hypothesis therefore stays at `P(b)` and fails
+/// the expectation `P(b + 1)` — a refusal, never a silent cycle.
+#[test]
+fn a_cyclic_index_equation_refines_nothing() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let w = binder(3, "w");
+
+    let p = opaque_family(&mut kernel, binder(2, "P"));
+    kernel.assume(&b, &nat_type());
+    kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&b)]));
+
+    let family = declare(
+        &mut kernel,
+        "Cyc",
+        Term::type_ground(),
+        vec![nullary("mk", succ(Term::free_var(&b)))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        Term::free_var(&b),
+        Term::apply(p, [Term::free_var(&binder(51, "i"))]),
+        vec![("mk", Vec::new(), Term::free_var(&w))],
+    );
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::Mismatch { .. }),
+    ));
+}
+
+/// A variable `Bool` scrutinee stands refined to the literal in each arm — the
+/// zero-index instance of the same specialization.
+#[test]
+fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
+    let mut kernel = kernel();
+    let h = binder(0, "h");
+    let w = binder(3, "w");
+    let motive_binder = binder(51, "x");
+
+    let p = binder(2, "P");
+    kernel.declare(
+        &p,
+        &Term::func_type(
+            [(binder(90, "x"), Term::prim(Prim::BoolType))],
+            Term::type_ground(),
+        ),
+        &UniverseContext::default(),
+    );
+    let p = Term::free_var(&p);
+
+    kernel.assume(&h, &Term::prim(Prim::BoolType));
+    kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&h)]));
+
+    let term = Term::bool_match(
+        Term::free_var(&h),
+        Some(&motive_binder),
+        Term::apply(p.clone(), [Term::free_var(&motive_binder)]),
+        Term::free_var(&w),
+        Term::free_var(&w),
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Ok(Term::apply(p, [Term::free_var(&h)])),
+    );
+}
+
 /// A proposition whose single constructor's payload is *pinned* by its index
 /// target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`,
 /// so eliminating tells a program nothing it did not already know, and the

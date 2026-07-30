@@ -14,6 +14,29 @@
 //! makes a dependent elimination worth having. Checking every arm at the
 //! scrutinee's indices would be both wrong and useless.
 //!
+//! # Context specialization
+//!
+//! Opening the motive at the case's targets teaches the *goal* the case's
+//! equations, and nothing else: the ambient locals, the body's occurrences of
+//! outer variables, and the scrutinee variable itself would all stay at their
+//! unrefined types. The other half of the rule is [`specialize`]: the arm is
+//! checked in a context specialized by the most-general solution of
+//! `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when
+//! the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof
+//! irrelevance, recorded permanent in `DESIGN.md` — is the license for solving
+//! those equations by first-order unification and substituting.
+//!
+//! Both directions run the *shared* unifier from [`crate::invert_indices`].
+//! Pinning an arm binder to the rigid actual it must equal is the call as the
+//! elaborator makes it; refining an outer variable to the target it must equal
+//! is the same call with its sides swapped, and the swap lands the guards
+//! exactly right — the occurs check refuses the parameter cycle (`b := b + 1`
+//! through a family parameter), and the top guard leaves the variable-variable
+//! case to the first direction. The elaborator reaches the same specialization
+//! through its refinement store (`refine_head`); the kernel holds no store, so
+//! it substitutes into the arm and shadows the affected locals instead, which
+//! the existing `mark`/`retract` bracket scopes exactly to the arm.
+//!
 //! # The large-elimination guard
 //!
 //! Proof irrelevance says any two inhabitants of a proposition are
@@ -38,8 +61,8 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        Atom, Free, InductArm, InductDecl, InductType, Kernel, KernelError, Reducer, Scope,
-        Subterm, Telescope, Term, Variant, kernel::sort::sort_of,
+        Atom, Free, InductArm, InductDecl, InductType, Invert, Kernel, KernelError, Many, Reducer,
+        Scope, Subterm, Telescope, Term, Variant, invert_indices, kernel::sort::sort_of,
     },
 };
 
@@ -48,14 +71,15 @@ pub(super) fn check_induct_arms(
     kernel: &mut Kernel,
     declaration: &InductDecl,
     family: &InductType,
-    motive: &Scope<crate::Many>,
+    motive: &Scope<Many>,
     cases: &[(Atom, InductArm)],
     default: Option<&Term>,
+    scrutinee: &Term,
 ) -> Result<(), KernelError> {
     guard_large_elimination(kernel, declaration, family, motive)?;
 
     for (tag, arm) in cases {
-        check_arm(kernel, declaration, family, motive, tag, arm)?;
+        check_arm(kernel, declaration, family, motive, scrutinee, tag, arm)?;
     }
 
     // A catch-all binds nothing and stands for the scrutinee itself, so it is
@@ -72,13 +96,15 @@ pub(super) fn check_induct_arms(
 }
 
 /// One arm: open the constructor's payload under fresh binders at its declared
-/// field types, then require the body to inhabit the motive at this
-/// constructor's index targets and at the value it constructs.
+/// field types, specialize the context by this case's forced equations, then
+/// require the body to inhabit the motive at this constructor's index targets
+/// and at the value it constructs.
 fn check_arm(
     kernel: &mut Kernel,
     declaration: &InductDecl,
     family: &InductType,
-    motive: &Scope<crate::Many>,
+    motive: &Scope<Many>,
+    scrutinee: &Term,
     tag: &Atom,
     arm: &InductArm,
 ) -> Result<(), KernelError> {
@@ -94,45 +120,172 @@ fn check_arm(
     }
 
     let mark = kernel.mark();
-    let outcome = open_payload(kernel, signature, |kernel, payload, constructed| {
-        let refs = payload.iter().collect::<Vec<_>>();
-        let body = arm.open(&refs);
+    let outcome = open_payload(
+        kernel,
+        signature,
+        |kernel, binders, payload, constructed| {
+            // The constructed type's indices are this case's targets, with the
+            // payload binders substituted in — which is what makes `Vec/nil`'s arm
+            // check at length `0` and `Vec/cons`'s at `succ(n)`.
+            let Subterm::InductType(constructed) = &**constructed else {
+                return Err(KernelError::Unclassified(constructed.clone()));
+            };
 
-        // The constructed type's indices are this case's targets, with the
-        // payload binders substituted in — which is what makes `Vec/nil`'s arm
-        // check at length `0` and `Vec/cons`'s at `succ(n)`.
-        let Subterm::InductType(constructed) = &**constructed else {
-            return Err(KernelError::Unclassified(constructed.clone()));
-        };
+            // The forced equations of this case, as one substitution. An
+            // unreachable arm (a definite clash) is checked as written, exactly as
+            // the elaborator checks one.
+            let mut solutions = specialize(kernel, family, &constructed.indices, binders)?;
 
-        let mut arguments = constructed.indices.clone();
-        arguments.push(
-            Subterm::Variant(Variant {
+            // The value this arm's scrutinee is: the constructor at its payload.
+            let value: Term = Subterm::Variant(Variant {
                 name: family.name.clone(),
                 universes: family.universes.clone(),
                 params: family.params.clone(),
                 tag: tag.clone(),
                 payload: payload.to_vec(),
             })
-            .into(),
-        );
-        let refs = arguments.iter().collect::<Vec<_>>();
+            .into();
 
-        check(kernel, &body, &motive.open(&refs))
-    });
+            // A variable scrutinee is this case's value within the arm — the
+            // zero-index instance of the same equations.
+            if let Subterm::Var(var) = &**scrutinee
+                && var.as_bound().is_none()
+                && kernel.local_type(var.unwrap()).is_some()
+            {
+                let solved = substitute(&value, &solutions);
+                solutions.push((var.unwrap().clone(), solved));
+            }
+
+            let refs = payload.iter().collect::<Vec<_>>();
+            let body = substitute(&arm.open(&refs), &solutions);
+
+            let mut arguments = constructed.indices.clone();
+            arguments.push(value);
+            let refs = arguments.iter().collect::<Vec<_>>();
+            let expected = substitute(&motive.open(&refs), &solutions);
+
+            shadow(kernel, &solutions);
+
+            check(kernel, &body, &expected)
+        },
+    );
     kernel.retract(mark);
 
     outcome
 }
 
-/// Open a constructor signature's payload binders into scope, hand the
-/// occurrences and the constructed terminal to `body`.
+/// The most-general solution of `actual indices ~ case targets`, both
+/// directions, as one idempotent substitution. Empty when the equations force
+/// nothing — including when they *clash*, which makes the arm unreachable and
+/// therefore checked as written.
+///
+/// Direction one pins a payload binder to the rigid actual it must equal.
+/// Direction two refines an outer variable to the target it must equal, and is
+/// the same shared unifier with its sides swapped: solving flexible variables
+/// on what is now the target side, with the occurs check refusing a solution
+/// that mentions any other refinable variable — which is exactly the parameter
+/// cycle (`b := b + 1` through a family parameter) that must not substitute.
+/// Running the directions in sequence, with the first solution applied to the
+/// targets before the second runs, keeps one equation from being solved twice
+/// in opposite orientations.
+fn specialize(
+    kernel: &mut Kernel,
+    family: &InductType,
+    targets: &[Term],
+    binders: &[Free],
+) -> Result<Vec<(Free, Term)>, KernelError> {
+    let pinned = match invert_indices(kernel, &family.indices, targets, binders)? {
+        Invert::Impossible => return Ok(Vec::new()),
+        Invert::Solved(solutions) => solutions,
+    };
+
+    let residual = targets
+        .iter()
+        .map(|target| substitute(target, &pinned))
+        .collect::<Vec<_>>();
+
+    // The outer variables the actual indices mention: local assumptions, never
+    // top-level names, which have fixed meanings no case can refine.
+    let mut outer: Vec<Free> = Vec::new();
+    for actual in &family.indices {
+        for name in actual.free_vars() {
+            if kernel.local_type(&name).is_some() && !outer.contains(&name) {
+                outer.push(name);
+            }
+        }
+    }
+
+    let refined = match invert_indices(kernel, &residual, &family.indices, &outer)? {
+        Invert::Impossible => return Ok(Vec::new()),
+        Invert::Solved(solutions) => solutions,
+    };
+
+    // Triangular composition: a pinned binder's value may mention an outer
+    // variable the second direction refined. The reverse cannot happen — the
+    // second direction ran on targets the first was already applied to — so one
+    // pass makes the union idempotent.
+    let mut solutions = pinned
+        .into_iter()
+        .map(|(name, value)| (name, substitute(&value, &refined)))
+        .collect::<Vec<_>>();
+    solutions.extend(refined);
+
+    Ok(solutions)
+}
+
+/// `term` with every solved variable replaced by its solution, simultaneously.
+pub(super) fn substitute(term: &Term, solutions: &[(Free, Term)]) -> Term {
+    if solutions.is_empty() {
+        return term.clone();
+    }
+
+    let names = solutions.iter().map(|(name, _)| name).collect::<Vec<_>>();
+    let values = solutions.iter().map(|(_, value)| value).collect::<Vec<_>>();
+
+    Scope::close(Many(names.len()), &names, term.clone()).open(&values)
+}
+
+/// Re-assume, at its specialized type, every local whose type mentions a solved
+/// variable. The shadow is what a lookup finds — locals resolve innermost-first
+/// — and the enclosing `mark`/`retract` bracket retracts it with the arm.
+///
+/// A solved variable's own entry is left alone: its occurrences in the arm were
+/// substituted away, so nothing looks it up at its stale type.
+pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
+    if solutions.is_empty() {
+        return;
+    }
+
+    let locals = kernel
+        .local_names()
+        .into_iter()
+        .zip(kernel.local_types())
+        .collect::<Vec<_>>();
+
+    for (name, type_) in locals {
+        if solutions.iter().any(|(solved, _)| *solved == name) {
+            continue;
+        }
+
+        let mentioned = type_.free_vars();
+        if solutions
+            .iter()
+            .any(|(solved, _)| mentioned.contains(solved))
+        {
+            kernel.assume(&name, &substitute(&type_, solutions));
+        }
+    }
+}
+
+/// Open a constructor signature's payload binders into scope, hand the binder
+/// names, the occurrences, and the constructed terminal to `body`.
 fn open_payload<T>(
     kernel: &mut Kernel,
     signature: Telescope<Term>,
-    body: impl FnOnce(&mut Kernel, &[Term], &Term) -> Result<T, KernelError>,
+    body: impl FnOnce(&mut Kernel, &[Free], &[Term], &Term) -> Result<T, KernelError>,
 ) -> Result<T, KernelError> {
     let mut signature = signature;
+    let mut binders = Vec::new();
     let mut payload = Vec::new();
 
     let constructed = loop {
@@ -142,13 +295,14 @@ fn open_payload<T>(
                 kernel.assume(&binder, &field);
                 let occurrence = Term::free_var(&binder);
                 signature = rest.open(&[&occurrence]);
+                binders.push(binder);
                 payload.push(occurrence);
             }
             Telescope::Done(constructed) => break *constructed,
         }
     };
 
-    body(kernel, &payload, &constructed)
+    body(kernel, &binders, &payload, &constructed)
 }
 
 /// The scrutinee a catch-all arm stands for: the family applied to its own
@@ -168,7 +322,7 @@ fn guard_large_elimination(
     kernel: &mut Kernel,
     declaration: &InductDecl,
     family: &InductType,
-    motive: &Scope<crate::Many>,
+    motive: &Scope<Many>,
 ) -> Result<(), KernelError> {
     let scrutinee_type: Term = Subterm::InductType(family.clone()).into();
     if !sort_of(kernel, &scrutinee_type)?.is_prop() {
@@ -206,35 +360,39 @@ fn guard_large_elimination(
                 .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
             let mark = kernel.mark();
-            let outcome = open_payload(kernel, signature, |kernel, payload, constructed| {
-                let Subterm::InductType(constructed) = &**constructed else {
-                    return Ok(false);
-                };
-
-                let determined = forced(&constructed.indices);
-
-                for component in payload {
-                    let Subterm::Var(var) = &**component else {
-                        continue;
+            let outcome = open_payload(
+                kernel,
+                signature,
+                |kernel, _binders, payload, constructed| {
+                    let Subterm::InductType(constructed) = &**constructed else {
+                        return Ok(false);
                     };
-                    let name = var.unwrap();
 
-                    if determined.contains(name) {
-                        continue;
+                    let determined = forced(&constructed.indices);
+
+                    for component in payload {
+                        let Subterm::Var(var) = &**component else {
+                            continue;
+                        };
+                        let name = var.unwrap();
+
+                        if determined.contains(name) {
+                            continue;
+                        }
+                        // A component that is itself a proof or a type carries no
+                        // information a relevant result could depend on: erasure
+                        // deletes it either way.
+                        let type_ = infer(kernel, component)?;
+                        if !carries_information(kernel, &type_)? {
+                            continue;
+                        }
+
+                        return Ok(false);
                     }
-                    // A component that is itself a proof or a type carries no
-                    // information a relevant result could depend on: erasure
-                    // deletes it either way.
-                    let type_ = infer(kernel, component)?;
-                    if !carries_information(kernel, &type_)? {
-                        continue;
-                    }
 
-                    return Ok(false);
-                }
-
-                Ok(true)
-            });
+                    Ok(true)
+                },
+            );
             kernel.retract(mark);
 
             match outcome? {

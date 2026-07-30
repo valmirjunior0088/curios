@@ -441,11 +441,14 @@ fn infer_node(
 /// A nominal elimination is the one that can be unsound, and it is verified in
 /// full. The primitive carriers are checked where the arm's case is a value the
 /// motive can be opened at: `Bool` has two such cases, and a `Switch`'s
-/// enumerated cases are literals. What is *not* yet checked is a `Switch`'s
-/// default and the free-monoid carriers' arms, whose binders would have to be
-/// typed against the carrier's own successor structure. Those arms are typed by
-/// their bodies but not verified against the motive — a hole, and a narrower
-/// one than the whole of elimination was.
+/// enumerated cases are literals — and a variable scrutinee *is* that value
+/// within the arm, so the arm is checked with the equation substituted, the
+/// zero-index instance of the specialization `eliminate` gives nominal arms.
+/// What is *not* yet checked is a `Switch`'s default and the free-monoid
+/// carriers' arms, whose binders would have to be typed against the carrier's
+/// own successor structure. Those arms are typed by their bodies but not
+/// verified against the motive — a hole, and a narrower one than the whole of
+/// elimination was.
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
@@ -454,10 +457,28 @@ fn check_cases(
     scrutinee: &Term,
 ) -> Result<(), KernelError> {
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
-        let refs = [&value];
-        let expected = motive.open(&refs);
+        let expected = motive.open(&[&value]);
 
-        check(kernel, body, &expected)
+        // A variable scrutinee stands refined to this case's value in the arm.
+        let solutions = match &**scrutinee {
+            Subterm::Var(var)
+                if var.as_bound().is_none() && kernel.local_type(var.unwrap()).is_some() =>
+            {
+                vec![(var.unwrap().clone(), value)]
+            }
+            _ => Vec::new(),
+        };
+
+        let mark = kernel.mark();
+        eliminate::shadow(kernel, &solutions);
+        let outcome = check(
+            kernel,
+            &eliminate::substitute(body, &solutions),
+            &eliminate::substitute(&expected, &solutions),
+        );
+        kernel.retract(mark);
+
+        outcome
     };
 
     match cases {
@@ -478,6 +499,7 @@ fn check_cases(
                 motive,
                 cases,
                 default.as_ref(),
+                scrutinee,
             )
         }
 
@@ -496,8 +518,10 @@ fn check_cases(
             }
 
             // The default stands for every value not enumerated, so the only
-            // instance of the motive it can be checked at is the scrutinee's.
-            at(kernel, scrutinee.clone(), default)
+            // instance of the motive it can be checked at is the scrutinee's —
+            // which refines nothing.
+            let expected = motive.open(&[scrutinee]);
+            check(kernel, default, &expected)
         }
 
         // The free-monoid carriers bind a peeled generator, a tail, and an
