@@ -171,8 +171,7 @@ where
         Ok(())
     }
 
-    /// Build a section's payload into a forked buffer, then emit it as section
-    /// `id`.
+    /// Build a section's payload into a forked buffer, then emit it as section `id`.
     fn write_section_with<F>(&mut self, id: u8, build: F) -> Result<()>
     where
         F: for<'u> FnOnce(&mut Writer<'t, 'u, Vec<u8>>) -> Result<()>,
@@ -1009,9 +1008,7 @@ where
         })
     }
 
-    /// The single always-emitted memory: empty (`min 0`) and growable (no
-    /// max) — the host-boundary bulk-copy lane. Binaryen strips it from
-    /// modules that never touch it.
+    /// The single always-emitted memory: empty (`min 0`) and growable (no max) — the host-boundary bulk-copy lane. Binaryen strips it from modules that never touch it.
     fn write_memory_section(&mut self) -> Result<()> {
         self.write_section_with(5, |writer| {
             writer.buffer.push_leb128_unsigned(1)?;
@@ -1038,9 +1035,7 @@ where
         self.write_section_with(8, |writer| writer.write_func_name(start))
     }
 
-    /// A single declarative element segment listing the funcs eligible for
-    /// `ref.func`. Flags `0x03` selects "declarative, element kind + func
-    /// indices"; element kind `0x00` is `funcref`.
+    /// A single declarative element segment listing the funcs eligible for `ref.func`. Flags `0x03` selects "declarative, element kind + func indices"; element kind `0x00` is `funcref`.
     fn write_element_section(&mut self, elems: &[FuncName]) -> Result<()> {
         if elems.is_empty() {
             return Ok(());

@@ -81,8 +81,7 @@ pub struct Module {
     datas: Vec<(DataName, DataSegment)>,
     exports: Vec<(String, Export)>,
     start: Option<FuncName>,
-    // Functions made eligible for `ref.func` by a declarative element segment,
-    // without exporting them. `ref.func $f` validates only if `$f` is declared.
+    // Functions made eligible for `ref.func` by a declarative element segment, without exporting them. `ref.func $f` validates only if `$f` is declared.
     elems: Vec<FuncName>,
 }
 

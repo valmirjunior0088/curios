@@ -657,10 +657,7 @@ fn print_import<'a>(module_name: &'a str, name: &'a str, import: &'a Import) -> 
     ])
 }
 
-/// Prints a `(param $name type)`/`(local $name type)` run: the first binding
-/// leads with a newline (so it starts its own line under the enclosing
-/// `indent`), every later one with a plain space (so they share that line) —
-/// the one layout `param`s and `local`s both use in `print_func`.
+/// Prints a `(param $name type)`/`(local $name type)` run: the first binding leads with a newline (so it starts its own line under the enclosing `indent`), every later one with a plain space (so they share that line) — the one layout `param`s and `local`s both use in `print_func`.
 fn print_bindings<'a>(
     keyword: &'static str,
     mut bindings: impl Iterator<Item = (&'a LocalName, &'a ValType)> + 'a,

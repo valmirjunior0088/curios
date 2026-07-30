@@ -33,17 +33,12 @@ fn parse_string<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-// `$` is only a sigil, never a delimiter: emitted names carry interior `$`s
-// (data segments are `{value-name}${index}`, hints are `$`-separated), and
-// printed names are always whitespace- or paren-terminated.
+// `$` is only a sigil, never a delimiter: emitted names carry interior `$`s (data segments are `{value-name}${index}`, hints are `$`-separated), and printed names are always whitespace- or paren-terminated.
 fn is_delimiter(char: char) -> bool {
     char.is_whitespace() || ['(', ')', '"'].contains(&char)
 }
 
-/// Parses any `FromStr` numeric type from a delimiter-bounded token, failing
-/// with the type's own name (via `type_name`, which for a primitive like
-/// `u32`/`f64` is exactly that name) when the token doesn't parse — the one
-/// shape every numeric literal (`u32`, `i32`, `i64`, `f32`, `f64`) parses by.
+/// Parses any `FromStr` numeric type from a delimiter-bounded token, failing with the type's own name (via `type_name`, which for a primitive like `u32`/`f64` is exactly that name) when the token doesn't parse — the one shape every numeric literal (`u32`, `i32`, `i64`, `f32`, `f64`) parses by.
 fn parse_number<'a, T>() -> Parser<'a, T>
 where
     T: FromStr + 'a,

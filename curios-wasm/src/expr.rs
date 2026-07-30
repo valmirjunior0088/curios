@@ -139,8 +139,7 @@ pub enum Instr {
     RefI31,
     I31GetS,
     I31GetU,
-    // The memory lane: byte-granular access (align 0, offset 0) plus
-    // size/grow against the module's single always-emitted memory.
+    // The memory lane: byte-granular access (align 0, offset 0) plus size/grow against the module's single always-emitted memory.
     I32Load8U,
     I32Store8,
     MemorySize,
