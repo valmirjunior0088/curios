@@ -1,11 +1,6 @@
 //! The interpreter's runtime value domain and the reasons an evaluation bails.
 //!
-//! A [`Value`] is the compile-time result of running a closed computation —
-//! internal to the evaluator, never stored in the module — so it carries the
-//! shapes the constant alphabet deliberately omits: `Rc`-shared list,
-//! product, and constructor aggregates, and a closure over a module function
-//! with its resolved local captures. Reification ([`super::reify`]) turns a
-//! value back into arena statements.
+//! A [`Value`] is the compile-time result of running a closed computation — internal to the evaluator, never stored in the module — so it carries the shapes the constant alphabet deliberately omits: `Rc`-shared list, product, and constructor aggregates, and a closure over a module function with its resolved local captures. Reification ([`super::reify`]) turns a value back into arena statements.
 
 use {
     crate::{Constant, ConstructorId, FunctionId, ProductId, ValueId},
@@ -13,9 +8,7 @@ use {
     std::{cell::RefCell, rc::Rc},
 };
 
-/// A compile-time runtime value. Aggregates are `Rc`-shared so an environment
-/// clones freely; a closure names its module function and carries its
-/// resolved local captures.
+/// A compile-time runtime value. Aggregates are `Rc`-shared so an environment clones freely; a closure names its module function and carries its resolved local captures.
 #[derive(Clone)]
 pub(super) enum Value {
     /// The unit value — the carrier of an erased proof or type slot.
@@ -32,9 +25,7 @@ pub(super) enum Value {
     Product(ProductId, Rc<Vec<Value>>),
     /// A variant value: its constructor and payload, in payload order.
     Construct(ConstructorId, Rc<Vec<Value>>),
-    /// A closure over a module function with its resolved local captures. The
-    /// environment is a `RefCell` so a local recursive group can bind its
-    /// members first and backpatch each to see its siblings.
+    /// A closure over a module function with its resolved local captures. The environment is a `RefCell` so a local recursive group can bind its members first and backpatch each to see its siblings.
     Closure(Rc<Closure>),
 }
 
@@ -90,9 +81,7 @@ impl Value {
     }
 }
 
-/// Why one evaluation stopped without producing a value. Only [`Bail::Effect`]
-/// can convert into a residual (a tail-position effect); every other reason
-/// leaves the candidate untouched.
+/// Why one evaluation stopped without producing a value. Only [`Bail::Effect`] can convert into a residual (a tail-position effect); every other reason leaves the candidate untouched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Bail {
     /// An effectful computation reached outside the candidate's tail.
@@ -101,8 +90,7 @@ pub(super) enum Bail {
     Fuel,
     /// The call-nesting cap was reached.
     Depth,
-    /// The computation would trap at runtime on these operands; folding it
-    /// would erase the trap.
+    /// The computation would trap at runtime on these operands; folding it would erase the trap.
     Trap,
     /// A name or identity could not be resolved to a value.
     Unknown,

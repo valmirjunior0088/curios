@@ -1,21 +1,8 @@
-//! Interprocedural effect summaries — the fixed point over the oracle's
-//! leaves.
+//! Interprocedural effect summaries — the fixed point over the oracle's leaves.
 //!
-//! Where [`Semantics`] reports one operation's node-local behavior, a
-//! [`Summary`] composes those leaves over the reference graph and the block
-//! structure, giving the total behavior of *evaluating* a function body, a
-//! right-hand side, or a statement — including every function it calls, the
-//! callback an intrinsic runs, and the sub-blocks its control forms evaluate.
-//! This is the fact pruning consumes to decide whether an eager top-level
-//! item must be kept for effect even when its result is unused.
+//! Where [`Semantics`] reports one operation's node-local behavior, a [`Summary`] composes those leaves over the reference graph and the block structure, giving the total behavior of *evaluating* a function body, a right-hand side, or a statement — including every function it calls, the callback an intrinsic runs, and the sub-blocks its control forms evaluate. This is the fact pruning consumes to decide whether an eager top-level item must be kept for effect even when its result is unused.
 //!
-//! Composition is conservative: an unknown callee or callback contributes the
-//! lattice top, and a function in a recursive component may diverge unless
-//! proven otherwise (which this phase does not attempt). Dormancy is
-//! structural: constructing a function contributes nothing — its summary is
-//! composed only where a call or callback invokes it. Every traversal is
-//! iterative and identity-ordered, so a deep region cannot overflow the
-//! native stack and the result never depends on hash order.
+//! Composition is conservative: an unknown callee or callback contributes the lattice top, and a function in a recursive component may diverge unless proven otherwise (which this phase does not attempt). Dormancy is structural: constructing a function contributes nothing — its summary is composed only where a call or callback invokes it. Every traversal is iterative and identity-ordered, so a deep region cannot overflow the native stack and the result never depends on hash order.
 
 use {
     super::{
@@ -32,12 +19,9 @@ pub struct Summary {
 }
 
 impl Summary {
-    /// Compute the summary to a fixed point over a verified module and its
-    /// analysis.
+    /// Compute the summary to a fixed point over a verified module and its analysis.
     pub fn analyze(module: &Module, analysis: &Analysis) -> Self {
-        // Seed: a recursive component's members may diverge; everything else
-        // starts pure. The seed persists because updates join the previous
-        // summary in (the lattice only grows).
+        // Seed: a recursive component's members may diverge; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
         let mut current = BTreeMap::<FunctionId, LocalBehavior>::new();
         for id in module.function_ids() {
             let recursive = analysis
@@ -81,17 +65,14 @@ impl Summary {
         self.functions.get(&id).copied().unwrap_or_default()
     }
 
-    /// The total behavior of evaluating a right-hand side: its own operation,
-    /// its callee or callback, and every sub-block it evaluates.
+    /// The total behavior of evaluating a right-hand side: its own operation, its callee or callback, and every sub-block it evaluates.
     pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
             .join(call_behavior(rhs, &self.functions))
             .join(region_blocks(module, rhs.sub_blocks(), &self.functions))
     }
 
-    /// The total behavior of executing a statement: a `Let` evaluates its
-    /// right-hand side; binding functions performs nothing (dormancy); a
-    /// recursive group eagerly evaluates its computed initializers.
+    /// The total behavior of executing a statement: a `Let` evaluates its right-hand side; binding functions performs nothing (dormancy); a recursive group eagerly evaluates its computed initializers.
     pub fn statement_behavior(&self, module: &Module, statement: &Statement) -> LocalBehavior {
         match statement {
             Statement::Let { rhs, .. } => self.rhs_behavior(module, rhs),
@@ -115,9 +96,7 @@ fn region_blocks(
     region_behavior(module, seeds, summaries)
 }
 
-/// The joined behavior of every block reachable from `seeds` through control
-/// flow and eager initializers — never through a nested function body, whose
-/// behavior is composed only at its calls.
+/// The joined behavior of every block reachable from `seeds` through control flow and eager initializers — never through a nested function body, whose behavior is composed only at its calls.
 fn region_behavior(
     module: &Module,
     seeds: Vec<BlockId>,
@@ -156,9 +135,7 @@ fn region_behavior(
     behavior
 }
 
-/// What a right-hand side inherits from the function it calls or the callback
-/// it runs: a known function contributes its summary; an unknown callee or
-/// callback the conservative top.
+/// What a right-hand side inherits from the function it calls or the callback it runs: a known function contributes its summary; an unknown callee or callback the conservative top.
 fn call_behavior(rhs: &Rhs, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> LocalBehavior {
     match rhs {
         Rhs::Apply { callee, .. } => callee_behavior(*callee, summaries),

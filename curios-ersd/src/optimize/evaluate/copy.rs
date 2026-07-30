@@ -1,13 +1,6 @@
 //! Deep-copying a function region into fresh arena identities.
 //!
-//! Both partial-evaluation drivers reproduce a function's body under fresh
-//! identities: closure reification copies a lambda with its resolved captures
-//! wired in, and the spine specializer mints a specialized copy with one
-//! parameter bound to a literal. A copy is not a structural clone: it mints a
-//! fresh identity for every block, statement, value, function, and recursive
-//! group the region owns, and rewrites every reference through the old→new
-//! maps. References that leave the region — top-level identities and
-//! constants — are rewritten by the caller's substitution or kept verbatim.
+//! Both partial-evaluation drivers reproduce a function's body under fresh identities: closure reification copies a lambda with its resolved captures wired in, and the spine specializer mints a specialized copy with one parameter bound to a literal. A copy is not a structural clone: it mints a fresh identity for every block, statement, value, function, and recursive group the region owns, and rewrites every reference through the old→new maps. References that leave the region — top-level identities and constants — are rewritten by the caller's substitution or kept verbatim.
 
 use {
     super::super::super::walk::control_blocks,
@@ -19,13 +12,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Deep-copy `source` and everything it lexically owns into fresh identities,
-/// rewriting each free value named in `substitution` to its replacement atom.
-/// With `self_reference` given, a `Function(source)` reference in the copy is
-/// kept pointing there rather than at the copy — the spine specializer passes
-/// the original target so the copy's self-recursion stays generic for its
-/// fold to re-specialize. Returns the fresh identity of the copied `source`,
-/// or `None` if the region references a tombstoned entity.
+/// Deep-copy `source` and everything it lexically owns into fresh identities, rewriting each free value named in `substitution` to its replacement atom. With `self_reference` given, a `Function(source)` reference in the copy is kept pointing there rather than at the copy — the spine specializer passes the original target so the copy's self-recursion stays generic for its fold to re-specialize. Returns the fresh identity of the copied `source`, or `None` if the region references a tombstoned entity.
 pub(super) fn deep_copy_function(
     module: &mut Module,
     source: FunctionId,
@@ -119,9 +106,7 @@ pub(super) fn deep_copy_function(
     Some(lookup(&function_ids, source))
 }
 
-/// The identities a function region owns, in deterministic order: the
-/// function and every function nested in it, and all of their control blocks,
-/// statements, bound values, and recursive groups. Iterative.
+/// The identities a function region owns, in deterministic order: the function and every function nested in it, and all of their control blocks, statements, bound values, and recursive groups. Iterative.
 struct Region {
     functions: Vec<FunctionId>,
     blocks: Vec<BlockId>,
@@ -190,8 +175,7 @@ fn clone_all<I: Copy, T>(ids: &[I], read: impl Fn(I) -> Option<T>) -> Option<Vec
     ids.iter().map(|&id| Some((id, read(id)?))).collect()
 }
 
-/// Look an identity up in a remap expected to contain it, keeping it
-/// unchanged when it does not (an identity outside the copied region).
+/// Look an identity up in a remap expected to contain it, keeping it unchanged when it does not (an identity outside the copied region).
 fn lookup<I: Ord + Copy>(map: &BTreeMap<I, I>, id: I) -> I {
     map.get(&id).copied().unwrap_or(id)
 }
@@ -202,9 +186,7 @@ struct Remap<'a> {
     functions: &'a BTreeMap<FunctionId, FunctionId>,
     rec_groups: &'a BTreeMap<RecGroupId, RecGroupId>,
     substitution: &'a BTreeMap<ValueId, Atom>,
-    /// When set, a `Function` atom that would remap to `from` (the copy of
-    /// the region's root) is kept as `to` (the original) instead. Structural
-    /// bindings are never redirected.
+    /// When set, a `Function` atom that would remap to `from` (the copy of the region's root) is kept as `to` (the original) instead. Structural bindings are never redirected.
     redirect: Option<(FunctionId, FunctionId)>,
 }
 

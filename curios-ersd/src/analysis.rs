@@ -1,17 +1,8 @@
-//! Derived analyses — computed on demand from the current module state as one
-//! immutable snapshot, never maintained as shadow state.
+//! Derived analyses — computed on demand from the current module state as one immutable snapshot, never maintained as shadow state.
 //!
-//! The snapshot holds exactly the facts the specification names consumers
-//! for: per-value use counts, per-function lexical free values (functions
-//! store no capture lists — this is where captures come from), the function
-//! reference graph (an edge for a referenced function atom and for a function
-//! bound within another's body, so recursion through nesting is visible), and
-//! its strongly connected components with a recursion test. All maps are
-//! ordered, every walk is an explicit worklist, and the same module always
-//! produces an equal snapshot.
+//! The snapshot holds exactly the facts the specification names consumers for: per-value use counts, per-function lexical free values (functions store no capture lists — this is where captures come from), the function reference graph (an edge for a referenced function atom and for a function bound within another's body, so recursion through nesting is visible), and its strongly connected components with a recursion test. All maps are ordered, every walk is an explicit worklist, and the same module always produces an equal snapshot.
 //!
-//! Precondition: the module verifies. Analysis of an unverified module may
-//! produce arbitrary (but still terminating) results.
+//! Precondition: the module verifies. Analysis of an unverified module may produce arbitrary (but still terminating) results.
 
 #[cfg(test)]
 mod tests;
@@ -24,10 +15,7 @@ use {
 /// An immutable analysis snapshot of one module state.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Analysis {
-    /// Use counts, indexed by `ValueId`. A dense arena index, so a `Vec` is
-    /// both faster and *more* obviously deterministic than a map: it cannot be
-    /// iterated in any order but id order. Never iterated in practice — read
-    /// only through [`Analysis::value_uses`].
+    /// Use counts, indexed by `ValueId`. A dense arena index, so a `Vec` is both faster and *more* obviously deterministic than a map: it cannot be iterated in any order but id order. Never iterated in practice — read only through [`Analysis::value_uses`].
     value_uses: Vec<usize>,
     free_values: BTreeMap<FunctionId, BTreeSet<ValueId>>,
     references: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
@@ -35,9 +23,7 @@ pub struct Analysis {
     component_of: BTreeMap<FunctionId, usize>,
 }
 
-/// What one region's walk collected. A region is a function's immediate body
-/// subtree — its blocks and their sub-blocks, but not the bodies of functions
-/// bound inside it — or the module's top level (items plus entry).
+/// What one region's walk collected. A region is a function's immediate body subtree — its blocks and their sub-blocks, but not the bodies of functions bound inside it — or the module's top level (items plus entry).
 #[derive(Default)]
 struct Region {
     used: BTreeSet<ValueId>,
@@ -51,8 +37,7 @@ impl Analysis {
     pub fn analyze(module: &Module) -> Self {
         let mut value_uses = vec![0usize; module.values().len()];
 
-        // Walk the top level and every live function as separate regions. The
-        // top level contributes use counts but is not itself a function region.
+        // Walk the top level and every live function as separate regions. The top level contributes use counts but is not itself a function region.
         walk_region(
             module,
             module.items().iter().copied(),
@@ -73,9 +58,7 @@ impl Analysis {
             regions.insert(id, region);
         }
 
-        // Nesting: the region a function is bound in is its parent; functions
-        // bound at the top level are roots. Depths order the free-value
-        // propagation so children resolve before their parents.
+        // Nesting: the region a function is bound in is its parent; functions bound at the top level are roots. Depths order the free-value propagation so children resolve before their parents.
         let mut parents: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
         for (&id, region) in &regions {
             for &child in &region.children {
@@ -98,9 +81,7 @@ impl Analysis {
             );
         }
 
-        // Free values, deepest first: a function frees what its region uses
-        // and what the functions bound inside it free, minus what its region
-        // (and parameter list) binds.
+        // Free values, deepest first: a function frees what its region uses and what the functions bound inside it free, minus what its region (and parameter list) binds.
         let mut order: Vec<FunctionId> = regions.keys().copied().collect();
         order.sort_by_key(|id| std::cmp::Reverse((depths.get(id).copied().unwrap_or(0), *id)));
         let mut free_values: BTreeMap<FunctionId, BTreeSet<ValueId>> = BTreeMap::new();
@@ -135,42 +116,34 @@ impl Analysis {
         }
     }
 
-    /// How many times a value is referenced as an operand or terminator atom
-    /// anywhere in the module. Definitions are not uses; an unreferenced value
-    /// is absent.
+    /// How many times a value is referenced as an operand or terminator atom anywhere in the module. Definitions are not uses; an unreferenced value is absent.
     pub fn value_uses(&self, value: ValueId) -> usize {
         self.value_uses.get(value.index()).copied().unwrap_or(0)
     }
 
-    /// The values a function references but does not bind — its derived
-    /// captures, including values reached only through functions bound inside
-    /// its body.
+    /// The values a function references but does not bind — its derived captures, including values reached only through functions bound inside its body.
     pub fn free_values(&self, function: FunctionId) -> &BTreeSet<ValueId> {
         static EMPTY: BTreeSet<ValueId> = BTreeSet::new();
         self.free_values.get(&function).unwrap_or(&EMPTY)
     }
 
-    /// The functions a function references — by atom, or by binding them
-    /// within its body.
+    /// The functions a function references — by atom, or by binding them within its body.
     pub fn references(&self, function: FunctionId) -> &BTreeSet<FunctionId> {
         static EMPTY: BTreeSet<FunctionId> = BTreeSet::new();
         self.references.get(&function).unwrap_or(&EMPTY)
     }
 
-    /// The strongly connected components of the reference graph, each sorted,
-    /// in deterministic condensation (reverse topological) order.
+    /// The strongly connected components of the reference graph, each sorted, in deterministic condensation (reverse topological) order.
     pub fn components(&self) -> &[Vec<FunctionId>] {
         &self.components
     }
 
-    /// The index into [`components`](Self::components) of the component a
-    /// function belongs to.
+    /// The index into [`components`](Self::components) of the component a function belongs to.
     pub fn component_of(&self, function: FunctionId) -> Option<usize> {
         self.component_of.get(&function).copied()
     }
 
-    /// Whether a component is recursive: more than one member, or a member
-    /// referencing itself.
+    /// Whether a component is recursive: more than one member, or a member referencing itself.
     pub fn is_recursive(&self, component: usize) -> bool {
         let members = &self.components[component];
         members.len() > 1
@@ -180,9 +153,7 @@ impl Analysis {
     }
 }
 
-/// Walk one region iteratively: the given statements (the top level's items),
-/// then every block reachable through statement sub-blocks and recursive-group
-/// initializers — never entering a bound function's body.
+/// Walk one region iteratively: the given statements (the top level's items), then every block reachable through statement sub-blocks and recursive-group initializers — never entering a bound function's body.
 fn walk_region(
     module: &Module,
     items: impl IntoIterator<Item = StatementId>,
@@ -243,10 +214,7 @@ fn walk_region(
     region
 }
 
-/// Iterative Tarjan condensation over the reference graph. Nodes iterate in
-/// identity order and neighbors in sorted order, so component membership and
-/// order are deterministic; each component is emitted sorted, in completion
-/// (reverse topological) order.
+/// Iterative Tarjan condensation over the reference graph. Nodes iterate in identity order and neighbors in sorted order, so component membership and order are deterministic; each component is emitted sorted, in completion (reverse topological) order.
 fn condense(references: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> Vec<Vec<FunctionId>> {
     #[derive(Default, Clone)]
     struct NodeState {

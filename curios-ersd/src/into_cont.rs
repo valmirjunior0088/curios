@@ -1,31 +1,10 @@
-//! The lowering into the landed Cont interface — the one-way door from
-//! meaning to mechanism.
+//! The lowering into the landed Cont interface — the one-way door from meaning to mechanism.
 //!
-//! Every encoding decision the erasure deliberately deferred is made here,
-//! exactly once, per the specification's normative desugar table: `Unit`,
-//! `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat`
-//! bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask,
-//! `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a
-//! byte-grain binary and `HandleEql` that grain's binary equality; products and
-//! variants are generic tuples (a variant is `(tag, payload…)`, the tag the
-//! constructor's position in its family); matches and switches are one
-//! `Nat`-keyed `Switch` behind the tag projection; the fold forms are
-//! synthesized accumulator loops; recursive groups are `LetFun`/`RecInit`,
-//! with value-only knots tied through compiler-internal cells.
+//! Every encoding decision the erasure deliberately deferred is made here, exactly once, per the specification's normative desugar table: `Unit`, `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat` bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask, `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a byte-grain binary and `HandleEql` that grain's binary equality; products and variants are generic tuples (a variant is `(tag, payload…)`, the tag the constructor's position in its family); matches and switches are one `Nat`-keyed `Switch` behind the tag projection; the fold forms are synthesized accumulator loops; recursive groups are `LetFun`/`RecInit`, with value-only knots tied through compiler-internal cells.
 //!
-//! The lowering is target-continuation shaped: each arena block is lowered
-//! against the continuation that receives its result — its terminator
-//! delivers there, and its statements build the node chain in front. Because
-//! the arena is already ANF, every operand is an atom and maps directly to a
-//! [`curios_cont::CpsAtom`]; no administrative continuation is introduced
-//! merely to evaluate an operand. Only a genuine control split — an
-//! application return, a switch or match, a fold loop, a host call — opens a
-//! join continuation whose parameter receives the split's result and whose
-//! body is the rest of the block.
+//! The lowering is target-continuation shaped: each arena block is lowered against the continuation that receives its result — its terminator delivers there, and its statements build the node chain in front. Because the arena is already ANF, every operand is an atom and maps directly to a [`curios_cont::CpsAtom`]; no administrative continuation is introduced merely to evaluate an operand. Only a genuine control split — an application return, a switch or match, a fold loop, a host call — opens a join continuation whose parameter receives the split's result and whose body is the rest of the block.
 //!
-//! Arena identities are globally unique and never shadowed, so flat maps to
-//! their Cont counterparts suffice; source hints are carried onto the Cont
-//! values and functions they lower to.
+//! Arena identities are globally unique and never shadowed, so flat maps to their Cont counterparts suffice; source hints are carried onto the Cont values and functions they lower to.
 
 #[cfg(test)]
 mod tests;
@@ -45,11 +24,7 @@ use {
     },
 };
 
-/// Lower a verified arena [`Module`] into the landed Cont
-/// [`curios_cont::CpsModule`]. The module's top level — its item chain followed by its
-/// entry block — becomes the parameterless Cps entry `main`, delivering its
-/// result to a bodyless `return_cont`. The produced module is verified; a
-/// failure is a lowering bug, not a user error, so it panics.
+/// Lower a verified arena [`Module`] into the landed Cont [`curios_cont::CpsModule`]. The module's top level — its item chain followed by its entry block — becomes the parameterless Cps entry `main`, delivering its result to a bodyless `return_cont`. The produced module is verified; a failure is a lowering bug, not a user error, so it panics.
 pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
     curios_profile::profile!("lower_to_cont");
     let mut lowerer = Lowerer {
@@ -90,10 +65,7 @@ struct Lowerer<'a> {
     module: curios_cont::CpsModule,
     values: BTreeMap<ValueId, curios_cont::CpsAtom>,
     functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
-    /// Members of value-only recursive knots, mapped to the mutable cell that
-    /// ties each knot. A reference to such a member lowers to a read of the
-    /// filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced
-    /// once and is invisible to everything but this lowering.
+    /// Members of value-only recursive knots, mapped to the mutable cell that ties each knot. A reference to such a member lowers to a read of the filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced once and is invisible to everything but this lowering.
     knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
 }
 
@@ -170,9 +142,7 @@ impl Lowerer<'_> {
 
     // === Functions and recursion =========================================
 
-    /// Reserve every function of a group before defining any, so a member
-    /// body can reference itself and its siblings; return the Cont ids in
-    /// group order.
+    /// Reserve every function of a group before defining any, so a member body can reference itself and its siblings; return the Cont ids in group order.
     fn lower_function_group(&mut self, functions: &[FunctionId]) -> Vec<curios_cont::CpsFunId> {
         let ids: Vec<curios_cont::CpsFunId> = functions
             .iter()
@@ -188,10 +158,7 @@ impl Lowerer<'_> {
         ids
     }
 
-    /// Define a reserved Cont function from its arena function. A body that
-    /// references a value-only knot member reads it from the knot's cell at
-    /// its own entry — at call time, once the knot is tied — rather than
-    /// capturing the value directly.
+    /// Define a reserved Cont function from its arena function. A body that references a value-only knot member reads it from the knot's cell at its own entry — at call time, once the knot is tied — rather than capturing the value directly.
     fn define_function(&mut self, arena: FunctionId, id: curios_cont::CpsFunId) {
         let function: Function = self.source.function(arena).expect("live function").clone();
         let return_cont = self.module.reserve_continuation();
@@ -219,10 +186,7 @@ impl Lowerer<'_> {
         );
     }
 
-    /// Lower a recursive group by its shape: a mixed group becomes a
-    /// `RecInit` knot; a function-only group a plain `LetFun` (erasure emits
-    /// `Functions` for those, so this is totality); a value-only group is
-    /// tied through cells (see [`Lowerer::lower_value_knot`]).
+    /// Lower a recursive group by its shape: a mixed group becomes a `RecInit` knot; a function-only group a plain `LetFun` (erasure emits `Functions` for those, so this is totality); a value-only group is tied through cells (see [`Lowerer::lower_value_knot`]).
     fn lower_rec_group(
         &mut self,
         group: RecGroupId,
@@ -232,11 +196,7 @@ impl Lowerer<'_> {
     ) -> curios_cont::CpsNodeId {
         let mut group: RecGroup = self.source.rec_group(group).expect("live group").clone();
 
-        // Drop computed members never referenced outside their own
-        // initializer — their init never runs, mirroring the legacy path's
-        // member pruning (which is what makes an unused self-knot
-        // `rec loop = loop` legal). A member that survives with a direct
-        // eager self-reference has no sound initialization order.
+        // Drop computed members never referenced outside their own initializer — their init never runs, mirroring the legacy path's member pruning (which is what makes an unused self-knot `rec loop = loop` legal). A member that survives with a direct eager self-reference has no sound initialization order.
         group
             .values
             .retain(|member| self.member_used_outside_init(member.value, member.init));
@@ -281,9 +241,7 @@ impl Lowerer<'_> {
                 .add_node(curios_cont::CpsNode::LetFun { functions, body });
         }
 
-        // Mixed knot: the reserved value slots are visible to the member
-        // functions and every initializer through the `RecInit`; the value
-        // initializers chain over the group's ready point in eager order.
+        // Mixed knot: the reserved value slots are visible to the member functions and every initializer through the `RecInit`; the value initializers chain over the group's ready point in eager order.
         let ready = self.lower_statements(rest, terminator, target);
         let order = self.computed_init_order(&group);
         let mut body = ready;
@@ -314,13 +272,7 @@ impl Lowerer<'_> {
         })
     }
 
-    /// Tie a value-only recursive knot with compiler-internal cells: allocate
-    /// every cell, run the initializers in eager-dependency order (their
-    /// closures capture the cells, not the values), store each result, and
-    /// read the filled cells wherever a member is referenced. The verifier
-    /// already rejected eager cycles among the members, so no cell is read
-    /// before its store; each member's value is built exactly once, and every
-    /// reference observes that one value.
+    /// Tie a value-only recursive knot with compiler-internal cells: allocate every cell, run the initializers in eager-dependency order (their closures capture the cells, not the values), store each result, and read the filled cells wherever a member is referenced. The verifier already rejected eager cycles among the members, so no cell is read before its store; each member's value is built exactly once, and every reference observes that one value.
     fn lower_value_knot(
         &mut self,
         group: &RecGroup,
@@ -390,9 +342,7 @@ impl Lowerer<'_> {
             });
         }
 
-        // Allocate every cell first (a placeholder is never read before its
-        // store — the knot is productive), so the initializers' closures can
-        // already capture the cells they tie.
+        // Allocate every cell first (a placeholder is never read before its store — the knot is productive), so the initializers' closures can already capture the cells they tie.
         for &cell in cells.iter().rev() {
             let bound = self.module.reserve_continuation();
             self.module.define_continuation(
@@ -418,10 +368,7 @@ impl Lowerer<'_> {
         body
     }
 
-    /// Run `build` with each member bound to a fresh local holding a read of
-    /// its knot cell, wrapping the result so the reads happen at entry. A
-    /// deferred closure re-reads its cell at its own entry rather than
-    /// capturing a stale placeholder.
+    /// Run `build` with each member bound to a fresh local holding a read of its knot cell, wrapping the result so the reads happen at entry. A deferred closure re-reads its cell at its own entry rather than capturing a stale placeholder.
     fn with_cell_reads(
         &mut self,
         members: Vec<ValueId>,
@@ -480,12 +427,9 @@ impl Lowerer<'_> {
         body
     }
 
-    /// Whether `member` is referenced anywhere in the module outside its own
-    /// initializer's subtree (control blocks and nested function regions
-    /// included on both sides). An unreferenced member's init never runs.
+    /// Whether `member` is referenced anywhere in the module outside its own initializer's subtree (control blocks and nested function regions included on both sides). An unreferenced member's init never runs.
     fn member_used_outside_init(&self, member: ValueId, init: BlockId) -> bool {
-        // The init's own subtree: its blocks, plus the regions of functions
-        // bound inside it.
+        // The init's own subtree: its blocks, plus the regions of functions bound inside it.
         let mut inside_blocks = BTreeSet::new();
         let mut inside_functions = BTreeSet::new();
         let mut function_work: Vec<FunctionId> = Vec::new();
@@ -546,10 +490,7 @@ impl Lowerer<'_> {
         false
     }
 
-    /// The knot members a block's eager region references directly — its
-    /// statements' operands, its terminator, and the control sub-blocks and
-    /// nested-group initializers reachable without entering a function body
-    /// (a nested function takes its own reads).
+    /// The knot members a block's eager region references directly — its statements' operands, its terminator, and the control sub-blocks and nested-group initializers reachable without entering a function body (a nested function takes its own reads).
     fn block_member_refs(&self, block: BlockId) -> Vec<ValueId> {
         match self.source.block(block) {
             Some(block) => self.eager_member_refs(&block.statements, &block.terminator),
@@ -571,9 +512,7 @@ impl Lowerer<'_> {
         refs.into_iter().collect()
     }
 
-    /// Every value referenced across an eager region rooted at `statements`
-    /// and closed by `terminator`, descending through control sub-blocks and
-    /// nested-group initializers but never into a function body.
+    /// Every value referenced across an eager region rooted at `statements` and closed by `terminator`, descending through control sub-blocks and nested-group initializers but never into a function body.
     fn eager_value_refs(
         &self,
         statements: &[StatementId],
@@ -597,8 +536,7 @@ impl Lowerer<'_> {
                         }
                         blocks.extend(rhs.sub_blocks());
                     }
-                    // A nested group's computed initializers are eager; its
-                    // functions take their own reads when defined.
+                    // A nested group's computed initializers are eager; its functions take their own reads when defined.
                     Some(Statement::Rec { group }) => {
                         if let Some(group) = self.source.rec_group(*group) {
                             blocks.extend(group.values.iter().map(|member| member.init));
@@ -622,9 +560,7 @@ impl Lowerer<'_> {
         refs
     }
 
-    /// Order a group's computed members by eager initialization dependency.
-    /// The verifier proves eager acyclicity, so a total order always exists;
-    /// cross-references flowing only through closures carry no eager edge.
+    /// Order a group's computed members by eager initialization dependency. The verifier proves eager acyclicity, so a total order always exists; cross-references flowing only through closures carry no eager edge.
     fn computed_init_order(&self, group: &RecGroup) -> Vec<usize> {
         let position: BTreeMap<ValueId, usize> = group
             .values
@@ -676,8 +612,7 @@ impl Lowerer<'_> {
         target: curios_cont::CpsContId,
     ) -> curios_cont::CpsNodeId {
         match rhs {
-            // Aliasing binds an already-computed atom: record the mapping and
-            // continue; no Cont node is needed.
+            // Aliasing binds an already-computed atom: record the mapping and continue; no Cont node is needed.
             Rhs::Alias(atom) => {
                 let atom = self.lower_atom(*atom);
                 self.values.insert(result, atom);
@@ -858,8 +793,7 @@ impl Lowerer<'_> {
                 let op = match intrinsic {
                     Intrinsic::LstMap => curios_cont::CpsIntrinsicOp::LstMap,
                 };
-                // Both representations bind the mapper first; the operands
-                // transcribe in order.
+                // Both representations bind the mapper first; the operands transcribe in order.
                 let args = operands
                     .iter()
                     .map(|&operand| self.lower_atom(operand))
@@ -875,9 +809,7 @@ impl Lowerer<'_> {
         }
     }
 
-    /// Lower a scalar operation to a straight-line `LetPrim`. `Byte` and
-    /// `Nat` share the runtime carrier, so `ByteToNat` is the identity and
-    /// `NatToByte` masks to a byte.
+    /// Lower a scalar operation to a straight-line `LetPrim`. `Byte` and `Nat` share the runtime carrier, so `ByteToNat` is the identity and `NatToByte` masks to a byte.
     fn lower_operation(
         &mut self,
         result: ValueId,
@@ -924,15 +856,7 @@ impl Lowerer<'_> {
 
     // === Control splits ==================================================
 
-    /// Open a join continuation that receives a control split's single result
-    /// and runs the rest of the block; every arm delivers to it. A split in
-    /// tail position — the block's last statement, whose result the block
-    /// returns — delivers straight to the block's own target instead: no
-    /// administrative join means a self-call in an arm returns to the
-    /// function's return continuation and is genuinely tail, which is what
-    /// lets Cont contify the recursion into a loop (a bodyless return
-    /// continuation is not a forwarding target, so an eta join there would
-    /// never collapse).
+    /// Open a join continuation that receives a control split's single result and runs the rest of the block; every arm delivers to it. A split in tail position — the block's last statement, whose result the block returns — delivers straight to the block's own target instead: no administrative join means a self-call in an arm returns to the function's return continuation and is genuinely tail, which is what lets Cont contify the recursion into a loop (a bodyless return continuation is not a forwarding target, so an eta join there would never collapse).
     fn open_join(
         &mut self,
         result: ValueId,
@@ -949,9 +873,7 @@ impl Lowerer<'_> {
         (join, true)
     }
 
-    /// Open a join unconditionally — the fold loops route their exit through
-    /// a `Switch` *edge*, and a bodyless return continuation cannot be a
-    /// switch target, so they never take the tail bypass.
+    /// Open a join unconditionally — the fold loops route their exit through a `Switch` *edge*, and a bodyless return continuation cannot be a switch target, so they never take the tail bypass.
     fn open_join_fresh(
         &mut self,
         result: ValueId,
@@ -992,9 +914,7 @@ impl Lowerer<'_> {
         continuation
     }
 
-    /// Lower a scalar switch: each `(key, block)` arm and the optional
-    /// default becomes a parameterless continuation into the join, selected
-    /// by one `Switch`.
+    /// Lower a scalar switch: each `(key, block)` arm and the optional default becomes a parameterless continuation into the join, selected by one `Switch`.
     #[allow(clippy::too_many_arguments)]
     fn lower_switch(
         &mut self,
@@ -1039,9 +959,7 @@ impl Lowerer<'_> {
         })
     }
 
-    /// Lower a variant match: the tag (`TplGet(0)`) selects an arm through a
-    /// `Switch`; each arm binds its payload positionally (`TplGet(1 + i)`)
-    /// and delivers to the join.
+    /// Lower a variant match: the tag (`TplGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TplGet(1 + i)`) and delivers to the join.
     #[allow(clippy::too_many_arguments)]
     fn lower_match_variant(
         &mut self,
@@ -1130,9 +1048,7 @@ impl Lowerer<'_> {
 
     // === Folds ===========================================================
 
-    /// Lower a `Nat` induction to an up-counting loop `i = 0 … n` threading
-    /// the accumulator: the zero block seeds it, and at each step the arena
-    /// predecessor/hypothesis binders are the loop index and accumulator.
+    /// Lower a `Nat` induction to an up-counting loop `i = 0 … n` threading the accumulator: the zero block seeds it, and at each step the arena predecessor/hypothesis binders are the loop index and accumulator.
     #[allow(clippy::too_many_arguments)]
     fn lower_fold_nat(
         &mut self,
@@ -1259,9 +1175,7 @@ impl Lowerer<'_> {
         })
     }
 
-    /// Lower a sequence right fold to a backward loop `i = len … 0`: the
-    /// empty block seeds the accumulator; each step reads `seq[i - 1]` and
-    /// the suffix `seq[i ..]` and folds it in.
+    /// Lower a sequence right fold to a backward loop `i = len … 0`: the empty block seeds the accumulator; each step reads `seq[i - 1]` and the suffix `seq[i ..]` and folds it in.
     #[allow(clippy::too_many_arguments)]
     fn lower_fold_sequence(
         &mut self,
@@ -1420,10 +1334,7 @@ impl Lowerer<'_> {
 
     // === Effects =========================================================
 
-    /// Lower a control-splitting statement (an application, cell, or
-    /// intrinsic) returning to a fresh join. The join receives the
-    /// statement's results — one for value-producing forms, zero for a cell
-    /// write, whose bound result is the unit carrier.
+    /// Lower a control-splitting statement (an application, cell, or intrinsic) returning to a fresh join. The join receives the statement's results — one for value-producing forms, zero for a cell write, whose bound result is the unit carrier.
     fn split(
         &mut self,
         result: ValueId,
@@ -1433,8 +1344,7 @@ impl Lowerer<'_> {
         target: curios_cont::CpsContId,
         make: impl FnOnce(curios_cont::CpsContId) -> curios_cont::CpsNode,
     ) -> curios_cont::CpsNodeId {
-        // The same tail bypass as `open_join`: a single-result split whose
-        // value the block immediately returns delivers to the block's target.
+        // The same tail bypass as `open_join`: a single-result split whose value the block immediately returns delivers to the block's target.
         if result_arity == 1
             && rest.is_empty()
             && matches!(terminator, Terminator::Return(Atom::Value(returned)) if *returned == result)
@@ -1467,10 +1377,7 @@ impl Lowerer<'_> {
         })
     }
 
-    /// Lower a host call. A single-result foreign returns straight to the
-    /// block's join; a multi-result foreign returns to a resume continuation
-    /// that packs the results into the record tuple the consuming code
-    /// projects through.
+    /// Lower a host call. A single-result foreign returns straight to the block's join; a multi-result foreign returns to a resume continuation that packs the results into the record tuple the consuming code projects through.
     fn lower_foreign(
         &mut self,
         result: ValueId,
@@ -1530,8 +1437,7 @@ impl Lowerer<'_> {
 
     // === Atoms and identities ============================================
 
-    /// Bind a straight-line result: allocate its Cont value, lower the rest
-    /// of the block, and emit the node `make` builds in front of it.
+    /// Bind a straight-line result: allocate its Cont value, lower the rest of the block, and emit the node `make` builds in front of it.
     fn straight(
         &mut self,
         result: ValueId,
@@ -1545,9 +1451,7 @@ impl Lowerer<'_> {
         self.module.add_node(make(bound, next))
     }
 
-    /// Allocate the Cont value representing an arena value, carrying its
-    /// source hint, and record the mapping — the single choke point for every
-    /// binder that names a source value.
+    /// Allocate the Cont value representing an arena value, carrying its source hint, and record the mapping — the single choke point for every binder that names a source value.
     fn bind_value(&mut self, arena: ValueId) -> curios_cont::CpsValueId {
         let name = self.arena_value_name(arena);
         let cont = self.module.add_value(name);
@@ -1608,8 +1512,7 @@ impl Lowerer<'_> {
 
     fn lower_constant(&self, constant: ConstantId) -> curios_cont::CpsLiteral {
         match self.source.constant(constant).expect("live constant") {
-            // Unit, Bool, and Byte collapse onto the Nat runtime carrier here,
-            // at the one-way door — never earlier.
+            // Unit, Bool, and Byte collapse onto the Nat runtime carrier here, at the one-way door — never earlier.
             Constant::Unit => curios_cont::CpsLiteral::Nat(0),
             Constant::Bool(value) => curios_cont::CpsLiteral::Nat(u32::from(*value)),
             Constant::Nat(value) => curios_cont::CpsLiteral::Nat(*value),
@@ -1617,8 +1520,7 @@ impl Lowerer<'_> {
             Constant::Int(value) => curios_cont::CpsLiteral::Int(*value),
             Constant::Flt(value) => curios_cont::CpsLiteral::Flt(value.to_f32()),
             Constant::Bin(grain, value) => curios_cont::CpsLiteral::Bin(*grain, value.clone()),
-            // A Handle descriptor token rides the packed-binary carrier: its
-            // little-endian bytes at byte grain.
+            // A Handle descriptor token rides the packed-binary carrier: its little-endian bytes at byte grain.
             Constant::Handle(token) => curios_cont::CpsLiteral::Bin(
                 Grain::X,
                 PackedBin::from_bytes(BigUint::from(*token).to_bytes_le()),
@@ -1627,10 +1529,7 @@ impl Lowerer<'_> {
     }
 }
 
-/// The Cont primitive of a scalar [`Operation`]. `Bool` operations run on the
-/// `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte`
-/// comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at
-/// byte grain. The `Byte` conversions are handled before this table.
+/// The Cont primitive of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at byte grain. The `Byte` conversions are handled before this table.
 fn operation_prim(operation: Operation) -> curios_cont::CpsPrimOp {
     use Operation as O;
     match operation {
@@ -1722,8 +1621,7 @@ fn operation_prim(operation: Operation) -> curios_cont::CpsPrimOp {
     }
 }
 
-/// The Cont primitive of a [`SequenceOp`], threading the operand count into
-/// the variadic concatenations. `LstBuild` is a list value, never a prim.
+/// The Cont primitive of a [`SequenceOp`], threading the operand count into the variadic concatenations. `LstBuild` is a list value, never a prim.
 fn sequence_prim(operation: SequenceOp, arity: usize) -> curios_cont::CpsPrimOp {
     use SequenceOp as S;
     match operation {

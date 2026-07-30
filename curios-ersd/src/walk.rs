@@ -1,16 +1,11 @@
-//! Structural traversal primitives shared by the derived analyses (and any
-//! later pass that walks the graph without caring which form it visits).
+//! Structural traversal primitives shared by the derived analyses (and any later pass that walks the graph without caring which form it visits).
 //!
-//! Each accessor enumerates one structural dimension of a right-hand side —
-//! its atom operands, its owned sub-blocks, the values its sub-blocks bind —
-//! in deterministic evaluation order. Consumers drive their own explicit
-//! worklists over these, keeping every whole-module walk iterative.
+//! Each accessor enumerates one structural dimension of a right-hand side — its atom operands, its owned sub-blocks, the values its sub-blocks bind — in deterministic evaluation order. Consumers drive their own explicit worklists over these, keeping every whole-module walk iterative.
 
 use super::{Atom, BlockId, Rhs, Terminator, ValueId};
 
 impl Rhs {
-    /// Every atom operand this right-hand side evaluates or references,
-    /// in evaluation order — including callees and scrutinees.
+    /// Every atom operand this right-hand side evaluates or references, in evaluation order — including callees and scrutinees.
     pub fn operands(&self) -> Vec<Atom> {
         match self {
             Self::Alias(atom) => vec![*atom],
@@ -64,8 +59,7 @@ impl Rhs {
         }
     }
 
-    /// Every value the sub-blocks of this right-hand side bind — arm payload
-    /// binders and fold step binders.
+    /// Every value the sub-blocks of this right-hand side bind — arm payload binders and fold step binders.
     pub fn binders(&self) -> Vec<ValueId> {
         match self {
             Self::MatchVariant { arms, .. } => {
@@ -90,9 +84,7 @@ impl Terminator {
     }
 }
 
-/// Every control block reachable from `root` — the block itself and the
-/// sub-blocks of its statements, transitively — without entering a nested
-/// function's body. Iterative, deterministic order.
+/// Every control block reachable from `root` — the block itself and the sub-blocks of its statements, transitively — without entering a nested function's body. Iterative, deterministic order.
 pub(crate) fn control_blocks(module: &super::Module, root: BlockId) -> Vec<BlockId> {
     let mut blocks = Vec::new();
     let mut seen = std::collections::BTreeSet::new();

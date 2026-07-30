@@ -1,18 +1,8 @@
-//! The behavior half of the semantic oracle: one total function over the
-//! closed operation alphabet.
+//! The behavior half of the semantic oracle: one total function over the closed operation alphabet.
 //!
-//! Every query matches the closed alphabets without a fallback arm, so a
-//! newly added operation cannot be silently misclassified — the compiler
-//! rejects the unhandled variant. Behavior reported here is *node-local*: it
-//! excludes the bodies of functions an `Apply` invokes, the callback an
-//! intrinsic runs, and the sub-blocks a match, switch, or fold evaluates;
-//! composing those to a fixed point is the effect summary's job
-//! ([`super::Summary`]), and this module supplies the leaves it joins.
+//! Every query matches the closed alphabets without a fallback arm, so a newly added operation cannot be silently misclassified — the compiler rejects the unhandled variant. Behavior reported here is *node-local*: it excludes the bodies of functions an `Apply` invokes, the callback an intrinsic runs, and the sub-blocks a match, switch, or fold evaluates; composing those to a fixed point is the effect summary's job ([`super::Summary`]), and this module supplies the leaves it joins.
 //!
-//! Arity is not restated here — it lives on the operation enums where the
-//! verifier already reads it. The fold half of the oracle (operation ×
-//! constant operands → value / would-trap / unknown) lands with its consumer,
-//! partial evaluation.
+//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle (operation × constant operands → value / would-trap / unknown) lands with its consumer, partial evaluation.
 
 #[cfg(test)]
 mod tests;
@@ -26,24 +16,19 @@ use {
     },
 };
 
-/// What allocating a value commits a pass to. Immutable allocation is not
-/// language-observable and may be discarded or duplicated; mutable allocation
-/// (a cell) may not. Ordered by severity so [`join`](Allocation::join) is
-/// `max`.
+/// What allocating a value commits a pass to. Immutable allocation is not language-observable and may be discarded or duplicated; mutable allocation (a cell) may not. Ordered by severity so [`join`](Allocation::join) is `max`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Allocation {
     #[default]
     None,
-    /// A value whose identity is not observable (a tuple, a variant, a slice
-    /// view, a list).
+    /// A value whose identity is not observable (a tuple, a variant, a slice view, a list).
     Immutable,
     /// A mutable allocation whose identity a program observes (a cell).
     Mutable,
 }
 
 impl Allocation {
-    /// Whether the allocating computation cannot be discarded or duplicated
-    /// on the unused-result rule alone.
+    /// Whether the allocating computation cannot be discarded or duplicated on the unused-result rule alone.
     pub fn is_observable(self) -> bool {
         matches!(self, Allocation::Mutable)
     }
@@ -53,16 +38,12 @@ impl Allocation {
     }
 }
 
-/// The language-observable events a computation may cause. Every dimension is
-/// independent — a three-valued purity label would lose distinctions a sound
-/// pass needs.
+/// The language-observable events a computation may cause. Every dimension is independent — a three-valued purity label would lose distinctions a sound pass needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ObservableBehavior {
-    /// May raise a runtime trap (out-of-bounds access, division by zero, an
-    /// `Unreachable` terminator).
+    /// May raise a runtime trap (out-of-bounds access, division by zero, an `Unreachable` terminator).
     pub may_trap: bool,
-    /// May fail to terminate. No primitive diverges; this is acquired through
-    /// the call graph (a recursive component) by the effect summary.
+    /// May fail to terminate. No primitive diverges; this is acquired through the call graph (a recursive component) by the effect summary.
     pub may_diverge: bool,
     /// May terminate the process (an `Exit` terminator).
     pub may_exit: bool,
@@ -86,8 +67,7 @@ impl ObservableBehavior {
         }
     }
 
-    /// Whether any observable event may occur — the signal that a computation
-    /// run for effect must be preserved even when its result is unused.
+    /// Whether any observable event may occur — the signal that a computation run for effect must be preserved even when its result is unused.
     pub fn is_effectful(self) -> bool {
         self.may_trap
             || self.may_diverge
@@ -109,16 +89,14 @@ impl ObservableBehavior {
         }
     }
 
-    /// This behavior with divergence forced on — how the effect summary marks
-    /// a recursive component whose termination it cannot prove.
+    /// This behavior with divergence forced on — how the effect summary marks a recursive component whose termination it cannot prove.
     pub fn with_divergence(mut self) -> ObservableBehavior {
         self.may_diverge = true;
         self
     }
 }
 
-/// The operational actions a computation performs that are not themselves
-/// observable events: what it allocates.
+/// The operational actions a computation performs that are not themselves observable events: what it allocates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct OperationalBehavior {
     pub allocation: Allocation,
@@ -145,8 +123,7 @@ impl LocalBehavior {
         Self::default()
     }
 
-    /// The conservative top of the lattice: a computation that may do
-    /// anything. Used for an unknown callee or callback.
+    /// The conservative top of the lattice: a computation that may do anything. Used for an unknown callee or callback.
     pub fn unknown() -> Self {
         Self {
             observable: ObservableBehavior {
@@ -210,8 +187,7 @@ impl LocalBehavior {
         self
     }
 
-    /// Whether evaluating this computation for effect is observable — an
-    /// unused binding is safe to delete only when this is false.
+    /// Whether evaluating this computation for effect is observable — an unused binding is safe to delete only when this is false.
     pub fn is_observable(self) -> bool {
         self.observable.is_effectful() || self.operational.allocation.is_observable()
     }
@@ -225,18 +201,14 @@ impl LocalBehavior {
     }
 }
 
-/// The behavior contract: a zero-sized namespace of total functions over the
-/// closed alphabets.
+/// The behavior contract: a zero-sized namespace of total functions over the closed alphabets.
 pub struct Semantics;
 
 impl Semantics {
-    /// The node-local behavior of a right-hand side — its own operation only,
-    /// excluding callees, callbacks, and sub-blocks.
+    /// The node-local behavior of a right-hand side — its own operation only, excluding callees, callbacks, and sub-blocks.
     pub fn local_behavior(rhs: &Rhs) -> LocalBehavior {
         match rhs {
-            // Pure structure: a call's effects are its callee's summary; a
-            // match, switch, or Nat fold contributes only its sub-blocks';
-            // aliasing and projection are total and allocation-free.
+            // Pure structure: a call's effects are its callee's summary; a match, switch, or Nat fold contributes only its sub-blocks'; aliasing and projection are total and allocation-free.
             Rhs::Alias(_)
             | Rhs::Apply { .. }
             | Rhs::Project { .. }
@@ -249,18 +221,14 @@ impl Semantics {
             Rhs::Cell { operation, .. } => Self::cell(*operation),
             Rhs::Foreign { .. } => LocalBehavior::host(),
             Rhs::Intrinsic { intrinsic, .. } => Self::intrinsic(*intrinsic),
-            // Building an aggregate allocates an immutable value; a sequence
-            // fold materializes suffix views.
+            // Building an aggregate allocates an immutable value; a sequence fold materializes suffix views.
             Rhs::Product { .. } | Rhs::Construct { .. } | Rhs::FoldSequence { .. } => {
                 LocalBehavior::alloc(Allocation::Immutable)
             }
         }
     }
 
-    /// The behavior of a scalar operation. Division and remainder may trap
-    /// (zero divisor; signed overflow), and the float-to-integer conversions
-    /// may trap on non-finite or out-of-range input; every other scalar
-    /// operation is total and allocation-free.
+    /// The behavior of a scalar operation. Division and remainder may trap (zero divisor; signed overflow), and the float-to-integer conversions may trap on non-finite or out-of-range input; every other scalar operation is total and allocation-free.
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
@@ -278,9 +246,7 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a sequence operation. Indexing may trap out of bounds;
-    /// slicing may trap and allocates a view; append, concat, and build
-    /// allocate; length and equality are total.
+    /// The behavior of a sequence operation. Indexing may trap out of bounds; slicing may trap and allocates a view; append, concat, and build allocate; length and equality are total.
     pub fn sequence(operation: SequenceOp) -> LocalBehavior {
         use SequenceOp::*;
         match operation {
@@ -293,9 +259,7 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a cell operation: creation allocates a mutable
-    /// identity, reading observes state, writing mutates it. None is
-    /// removable on an unused result alone.
+    /// The behavior of a cell operation: creation allocates a mutable identity, reading observes state, writing mutates it. None is removable on an unused result alone.
     pub fn cell(operation: CellOperation) -> LocalBehavior {
         match operation {
             CellOperation::New => LocalBehavior::alloc(Allocation::Mutable),
@@ -304,8 +268,7 @@ impl Semantics {
         }
     }
 
-    /// The node-local behavior of an intrinsic. `LstMap` allocates its result
-    /// list; the mapper's own behavior is composed by the effect summary.
+    /// The node-local behavior of an intrinsic. `LstMap` allocates its result list; the mapper's own behavior is composed by the effect summary.
     pub fn intrinsic(intrinsic: Intrinsic) -> LocalBehavior {
         match intrinsic {
             Intrinsic::LstMap => LocalBehavior::alloc(Allocation::Immutable),
@@ -328,22 +291,16 @@ impl Semantics {
     }
 }
 
-/// The outcome of constant-folding an operation over fully-known operands.
-/// The three cases stay distinct because control-flow simplification depends
-/// on the difference: a known trap must survive as an explicit computation —
-/// never dead code, never a compile-time panic, never [`Unknown`].
+/// The outcome of constant-folding an operation over fully-known operands. The three cases stay distinct because control-flow simplification depends on the difference: a known trap must survive as an explicit computation — never dead code, never a compile-time panic, never [`Unknown`].
 ///
 /// [`Unknown`]: FoldOutcome::Unknown
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FoldOutcome {
     /// The operation evaluates to this constant.
     Value(Constant),
-    /// The operation is known to trap at runtime; the optimizer must keep it
-    /// as an explicit residual computation.
+    /// The operation is known to trap at runtime; the optimizer must keep it as an explicit residual computation.
     WouldTrap(TrapKind),
-    /// Nothing is known: an operand is not a constant, the operation has no
-    /// constant carrier (a list operation), or the fold deliberately declines
-    /// (a float min/max with a NaN operand, which Rust and wasm disagree on).
+    /// Nothing is known: an operand is not a constant, the operation has no constant carrier (a list operation), or the fold deliberately declines (a float min/max with a NaN operand, which Rust and wasm disagree on).
     Unknown,
 }
 
@@ -365,11 +322,7 @@ pub enum TrapKind {
 }
 
 impl Semantics {
-    /// Constant-fold a scalar operation over its operands, under the numeric
-    /// law: exact `u32`/`i32` (add, subtract — monus for `Nat` — and multiply
-    /// wrap the full 32-bit carrier and never trap) and bit-preserving
-    /// binary32. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is
-    /// the lowering's decision. i31 appears nowhere here.
+    /// Constant-fold a scalar operation over its operands, under the numeric law: exact `u32`/`i32` (add, subtract — monus for `Nat` — and multiply wrap the full 32-bit carrier and never trap) and bit-preserving binary32. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is the lowering's decision. i31 appears nowhere here.
     pub fn fold_operation(operation: Operation, operands: &[Constant]) -> FoldOutcome {
         use Operation::*;
 
@@ -510,11 +463,7 @@ impl Semantics {
         fold_outcome(compute())
     }
 
-    /// Constant-fold a sequence operation. Only packed-binary operations can
-    /// fold — the constant domain has no list carrier, so list operations are
-    /// always [`FoldOutcome::Unknown`] here (the evaluator interprets them
-    /// over its own value domain instead). Elements stay grain-shaped: a byte
-    /// grain yields `Byte`, a bit grain `Bool`.
+    /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). Elements stay grain-shaped: a byte grain yields `Byte`, a bit grain `Bool`.
     pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
         use {Grain, SequenceOp::*};
 
@@ -589,8 +538,7 @@ fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {
     }
 }
 
-/// Map a shared-semantics division outcome ([`DivTrap`]) into
-/// the fold's constant/trap split.
+/// Map a shared-semantics division outcome ([`DivTrap`]) into the fold's constant/trap split.
 fn div_result<T>(
     result: Result<T, DivTrap>,
     wrap: fn(T) -> Constant,

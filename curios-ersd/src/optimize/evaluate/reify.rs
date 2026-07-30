@@ -1,12 +1,6 @@
 //! Materializing a runtime value back into arena statements.
 //!
-//! A leaf value interns as a [`Constant`] and needs no statement; a list,
-//! product, or constructor materializes its already-reified fields into a
-//! `Let` binding the corresponding construction right-hand side, appended to
-//! `out` in dependency order for the caller to splice ahead of the candidate.
-//! A closure result materializes as a deep copy of its function with its
-//! reified captures wired in, bound by a `Functions` statement — what makes
-//! the runtime-args `Fmt` collapse reachable.
+//! A leaf value interns as a [`Constant`] and needs no statement; a list, product, or constructor materializes its already-reified fields into a `Let` binding the corresponding construction right-hand side, appended to `out` in dependency order for the caller to splice ahead of the candidate. A closure result materializes as a deep copy of its function with its reified captures wired in, bound by a `Functions` statement — what makes the runtime-args `Fmt` collapse reachable.
 
 use {
     super::{
@@ -24,9 +18,7 @@ use {
     },
 };
 
-/// Check that `value` can fully materialize — the same budget charges and
-/// closure gates as [`reify`], with no module mutation — so a failed
-/// reification never strands half-emitted statements in the arena.
+/// Check that `value` can fully materialize — the same budget charges and closure gates as [`reify`], with no module mutation — so a failed reification never strands half-emitted statements in the arena.
 pub(super) fn reify_check(
     module: &Module,
     value: &Value,
@@ -78,10 +70,7 @@ pub(super) fn reify_check_all(
     Ok(())
 }
 
-/// Materialize `value` into `module`, appending construction statements to
-/// `out` in dependency order, and return the atom naming the result. The
-/// caller has already run [`reify_check`], so failure cannot strand emitted
-/// statements.
+/// Materialize `value` into `module`, appending construction statements to `out` in dependency order, and return the atom naming the result. The caller has already run [`reify_check`], so failure cannot strand emitted statements.
 pub(super) fn reify(
     module: &mut Module,
     value: &Value,
@@ -144,20 +133,14 @@ pub(super) fn reify(
     }
 }
 
-/// Materialize a closure: reify each captured value to an atom (nesting
-/// captured closures), then deep-copy the closure's function with those atoms
-/// substituted for its free values, introduced by a `Functions` statement. A
-/// free value the captures do not cover is a top-level identity kept
-/// verbatim.
+/// Materialize a closure: reify each captured value to an atom (nesting captured closures), then deep-copy the closure's function with those atoms substituted for its free values, introduced by a `Functions` statement. A free value the captures do not cover is a top-level identity kept verbatim.
 fn reify_closure(
     module: &mut Module,
     closure: &Rc<Closure>,
     budget: &mut ReifyBudget,
     out: &mut Vec<StatementId>,
 ) -> Result<Atom, Bail> {
-    // The copy keeps outward function references verbatim; every one must be
-    // item-bound to stay in scope at an arbitrary splice site — a reference
-    // to a *locally* bound function outside the copied region declines.
+    // The copy keeps outward function references verbatim; every one must be item-bound to stay in scope at an arbitrary splice site — a reference to a *locally* bound function outside the copied region declines.
     if !outward_functions_item_bound(module, closure.function) {
         return Err(Bail::Unsupported);
     }
@@ -188,8 +171,7 @@ pub(super) fn reify_all(
     Ok(atoms)
 }
 
-/// Whether every function the region rooted at `root` references outside
-/// itself is bound by a top-level item.
+/// Whether every function the region rooted at `root` references outside itself is bound by a top-level item.
 fn outward_functions_item_bound(module: &Module, root: FunctionId) -> bool {
     let mut item_bound = BTreeSet::<FunctionId>::new();
     for &item in module.items() {

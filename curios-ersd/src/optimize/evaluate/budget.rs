@@ -1,13 +1,6 @@
 //! The deterministic fuel that bounds compile-time evaluation.
 //!
-//! Every limit is a fixed constant, so a compile is reproducible regardless
-//! of machine or timing. A format-string parse over a short literal runs
-//! hundreds of steps and its UTF-8 revalidation a few thousand, so the
-//! per-candidate step budget is generous while the shared pass pool caps the
-//! whole-module cost. The call-depth cap bounds native recursion (each
-//! interpreted call recurses into a host Rust frame); the reify caps bound
-//! one replacement. Exhaustion bails to leave the candidate untouched —
-//! never a panic.
+//! Every limit is a fixed constant, so a compile is reproducible regardless of machine or timing. A format-string parse over a short literal runs hundreds of steps and its UTF-8 revalidation a few thousand, so the per-candidate step budget is generous while the shared pass pool caps the whole-module cost. The call-depth cap bounds native recursion (each interpreted call recurses into a host Rust frame); the reify caps bound one replacement. Exhaustion bails to leave the candidate untouched — never a panic.
 
 use super::value::Bail;
 
@@ -20,8 +13,7 @@ pub(super) const PASS_BUDGET: usize = 500_000;
 /// Call-nesting cap: each interpreted call recurses into a host Rust frame.
 pub(super) const MAX_CALL_DEPTH: usize = 256;
 
-/// Caps on one replacement: materialized nodes, and packed payload bytes
-/// plus list elements.
+/// Caps on one replacement: materialized nodes, and packed payload bytes plus list elements.
 pub(super) const MAX_REIFY_NODES: usize = 2_048;
 pub(super) const MAX_REIFY_BYTES: usize = 65_536;
 

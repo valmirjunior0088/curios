@@ -1,15 +1,10 @@
 //! The sequence operation alphabet and the sequence kinds.
 //!
-//! Sequence operations form their own family beside the scalar
-//! [`Operation`](super::Operation)s: the packed-binary forms carry their
-//! [`Grain`] so `Bool`- and `Byte`-grained binaries stay distinct shapes, and
-//! the variadic construction/concatenation forms carry their whole operand
-//! list in the statement's operand vector.
+//! Sequence operations form their own family beside the scalar [`Operation`](super::Operation)s: the packed-binary forms carry their [`Grain`] so `Bool`- and `Byte`-grained binaries stay distinct shapes, and the variadic construction/concatenation forms carry their whole operand list in the statement's operand vector.
 
 use curios_base::Grain;
 
-/// A packed-binary or list operation. Operand order is documented per variant;
-/// [`arity`](SequenceOp::arity) is the single authoritative operand contract.
+/// A packed-binary or list operation. Operand order is documented per variant; [`arity`](SequenceOp::arity) is the single authoritative operand contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -67,8 +62,7 @@ impl SequenceOp {
     }
 }
 
-/// The sequence kind a fold eliminates — a homogeneous list or a packed binary
-/// of a given grain — enough to recover exact element and suffix behavior.
+/// The sequence kind a fold eliminates — a homogeneous list or a packed binary of a given grain — enough to recover exact element and suffix behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",

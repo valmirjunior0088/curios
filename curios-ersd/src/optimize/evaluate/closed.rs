@@ -1,11 +1,6 @@
 //! The closed-term evaluation driver.
 //!
-//! A two-phase plan/apply split: interpretation borrows the module immutably
-//! (a closure names a module function) while installing a replacement mutates
-//! it. The plan phase finds every closed candidate call and records its
-//! freestanding result; the apply phase materializes each result, splices the
-//! construction statements ahead of the candidate, rewrites the candidate to
-//! an alias or a residual, and re-verifies.
+//! A two-phase plan/apply split: interpretation borrows the module immutably (a closure names a module function) while installing a replacement mutates it. The plan phase finds every closed candidate call and records its freestanding result; the apply phase materializes each result, splices the construction statements ahead of the candidate, rewrites the candidate to an alias or a residual, and re-verifies.
 
 use {
     super::{
@@ -21,8 +16,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Where a candidate statement lives: inside a block, or in the module's
-/// top-level item list.
+/// Where a candidate statement lives: inside a block, or in the module's top-level item list.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Owner {
     Block(BlockId),
@@ -45,9 +39,7 @@ enum Kind {
     Call(FunctionId, Vec<Value>),
 }
 
-/// Fold every closed call the interpreter can finish, module-wide. Returns
-/// whether anything was installed — a curried chain folds one application per
-/// round, so the driver iterates until quiescent.
+/// Fold every closed call the interpreter can finish, module-wide. Returns whether anything was installed — a curried chain folds one application per round, so the driver iterates until quiescent.
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
     let analysis = Analysis::analyze(module);
@@ -61,10 +53,7 @@ fn plan(
     analysis: &Analysis,
     owners: &BTreeMap<StatementId, Owner>,
 ) -> Vec<Planned> {
-    // Every top-level function a reified closure names was bound — by
-    // dominance-order erasure — before the statement that first uses the
-    // folded call, so it stays in lexical scope even for a candidate nested
-    // in a match arm.
+    // Every top-level function a reified closure names was bound — by dominance-order erasure — before the statement that first uses the folded call, so it stays in lexical scope even for a candidate nested in a match arm.
     let mut evaluator = Evaluator::new(module, analysis);
     let mut planned = Vec::new();
     for (index, slot) in module.statements().iter().enumerate() {
@@ -102,12 +91,7 @@ fn plan(
     planned
 }
 
-/// Reification runs first, over every plan, and only *appends* to the arena;
-/// only once every plan is reified are the candidates rewritten and the
-/// materialized statements spliced in. The order matters: a reified closure
-/// deep-copies a source function and must read the original module, not one
-/// where an earlier plan's rewrite left an alias whose definition is not yet
-/// spliced into its block.
+/// Reification runs first, over every plan, and only *appends* to the arena; only once every plan is reified are the candidates rewritten and the materialized statements spliced in. The order matters: a reified closure deep-copies a source function and must read the original module, not one where an earlier plan's rewrite left an alias whose definition is not yet spliced into its block.
 fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     if planned.is_empty() {
         return false;
@@ -118,8 +102,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     let mut touched = BTreeSet::<Owner>::new();
 
     for plan in planned {
-        // Dry-run first: a plan that cannot fully materialize is skipped
-        // before anything is emitted, so nothing is ever stranded.
+        // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
         {
             let mut probe = ReifyBudget::new();
             let ok = match &plan.kind {
@@ -149,8 +132,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
                 match reify_all(module, &values, &mut budget, &mut spliced) {
                     Ok(arguments) => {
                         let callee = Atom::Function(function);
-                        // A residual identical to the original call would
-                        // churn forever; leave it untouched.
+                        // A residual identical to the original call would churn forever; leave it untouched.
                         if is_same_call(module, plan.statement, callee, &arguments) {
                             continue;
                         }

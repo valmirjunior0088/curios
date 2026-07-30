@@ -5,9 +5,7 @@ fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
     Atom::Constant(constant)
 }
 
-/// The `Async/join_all` idiom: a recursive group function called by the
-/// computed member's eager initializer. The first run's verifier over-rejected
-/// this shape; it is a supported program.
+/// The `Async/join_all` idiom: a recursive group function called by the computed member's eager initializer. The first run's verifier over-rejected this shape; it is a supported program.
 #[test]
 fn a_join_all_shaped_knot_verifies() {
     let mut builder = ErsdBuilder::new();
@@ -46,10 +44,7 @@ fn a_join_all_shaped_knot_verifies() {
     builder.finalize().expect("the join_all shape is supported");
 }
 
-/// The self-referential lazy value: a value-only group whose knot closes
-/// through a closure constructed by the initializer. The reference to the
-/// member under initialization is dormant, so it is admitted; the lowering
-/// knots it through a cell.
+/// The self-referential lazy value: a value-only group whose knot closes through a closure constructed by the initializer. The reference to the member under initialization is dormant, so it is admitted; the lowering knots it through a cell.
 #[test]
 fn a_self_referential_lazy_value_verifies() {
     let mut builder = ErsdBuilder::new();
@@ -85,8 +80,7 @@ fn a_self_referential_lazy_value_verifies() {
         .expect("the self-referential lazy value is supported");
 }
 
-/// A later computed member may evaluate an earlier one; only forward and self
-/// evaluation are unsatisfiable.
+/// A later computed member may evaluate an earlier one; only forward and self evaluation are unsatisfiable.
 #[test]
 fn a_backward_computed_reference_verifies() {
     let mut builder = ErsdBuilder::new();
@@ -128,8 +122,7 @@ fn a_computed_only_cycle_is_rejected() {
 
 #[test]
 fn a_direct_self_knot_is_admitted() {
-    // `rec loop = loop` is language-accepted: unused, the lowering drops it;
-    // used, the lowering rejects it. The verifier admits the shape.
+    // `rec loop = loop` is language-accepted: unused, the lowering drops it; used, the lowering rejects it. The verifier admits the shape.
     let mut builder = ErsdBuilder::new();
     let value = builder.value(Some("value".into()));
     builder.open_block();
@@ -365,9 +358,7 @@ fn a_projection_out_of_range_is_rejected() {
     assert!(error.0.contains("width"), "{error}");
 }
 
-/// A deeply nested module verifies (and a malformed one diagnoses) on the
-/// default test-thread stack: the walk is iterative, so nesting depth costs
-/// heap, not native stack.
+/// A deeply nested module verifies (and a malformed one diagnoses) on the default test-thread stack: the walk is iterative, so nesting depth costs heap, not native stack.
 #[test]
 fn a_deep_module_verifies_without_native_stack() {
     let builder = deep_switch_chain(50_000, false);
@@ -383,8 +374,7 @@ fn a_deep_malformed_module_diagnoses_without_native_stack() {
     assert!(error.0.contains("out of scope"), "{error}");
 }
 
-/// Build a `depth`-deep chain of nested `SwitchNat` defaults. With `malformed`
-/// the innermost block references a value that is never bound.
+/// Build a `depth`-deep chain of nested `SwitchNat` defaults. With `malformed` the innermost block references a value that is never bound.
 fn deep_switch_chain(depth: usize, malformed: bool) -> ErsdBuilder {
     let mut builder = ErsdBuilder::new();
     let zero = nat_atom(&mut builder, 0);

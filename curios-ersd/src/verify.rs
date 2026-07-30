@@ -1,27 +1,10 @@
-//! The module verifier — the finalize/test gate of every construction and
-//! transformation, checking exactly the language contract.
+//! The module verifier — the finalize/test gate of every construction and transformation, checking exactly the language contract.
 //!
-//! Structural rules: every referenced identity resolves to a live slot of its
-//! kind; every value use is dominated by its unique binding in the lexical
-//! scope structure; every live block, statement, value, function, and
-//! recursive group has exactly one structural owner (an unowned or doubly
-//! owned one is an error, which also rejects ownership cycles); operand counts
-//! agree with each operation's own arity; products, constructors, and matches
-//! agree with their registered schemas; matches are exhaustive or defaulted.
+//! Structural rules: every referenced identity resolves to a live slot of its kind; every value use is dominated by its unique binding in the lexical scope structure; every live block, statement, value, function, and recursive group has exactly one structural owner (an unowned or doubly owned one is an error, which also rejects ownership cycles); operand counts agree with each operation's own arity; products, constructors, and matches agree with their registered schemas; matches are exhaustive or defaulted.
 //!
-//! Recursion admission mirrors the language: recursion through functions is
-//! unrestricted, and a group's computed member may *evaluate* only earlier
-//! computed members — a reference from inside a function body constructed
-//! during initialization is dormant and unrestricted. That single rule admits
-//! the corpus's value-recursion idioms (a `join_all`-shaped knot whose
-//! initializer calls a group function, a value-only self-referential lazy
-//! value whose knot closes through a constructed closure) while rejecting
-//! exactly the computed-only *evaluation* cycles no initialization order can
-//! satisfy. Every rule is corpus-certified: a rule that rejects a supported
-//! program is a bug in the rule.
+//! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed member may *evaluate* only earlier computed members — a reference from inside a function body constructed during initialization is dormant and unrestricted. That single rule admits the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure) while rejecting exactly the computed-only *evaluation* cycles no initialization order can satisfy. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
 //!
-//! The walk is iterative over an explicit task stack, so a deep module
-//! diagnoses on the default test-thread stack instead of overflowing it.
+//! The walk is iterative over an explicit task stack, so a deep module diagnoses on the default test-thread stack instead of overflowing it.
 
 #[cfg(test)]
 mod tests;
@@ -35,8 +18,7 @@ use {
     std::collections::HashSet,
 };
 
-/// A verification failure: the first rule violation found, as a rendered
-/// diagnostic.
+/// A verification failure: the first rule violation found, as a rendered diagnostic.
 #[derive(Debug, Clone)]
 pub struct VerifyError(pub String);
 
@@ -49,19 +31,15 @@ impl std::fmt::Display for VerifyError {
 impl std::error::Error for VerifyError {}
 
 impl Module {
-    /// Check the module against the representation contract, reporting the
-    /// first violation. Deterministic: the same module always reports the same
-    /// diagnostic.
+    /// Check the module against the representation contract, reporting the first violation. Deterministic: the same module always reports the same diagnostic.
     pub fn verify(&self) -> Result<(), VerifyError> {
         Verifier::new(self).run()
     }
 }
 
-/// One step of the iterative walk, in execution order (the stack pushes each
-/// step sequence reversed).
+/// One step of the iterative walk, in execution order (the stack pushes each step sequence reversed).
 enum Task {
-    /// Mark and walk a block: its statements in order, its terminator, then
-    /// its shallow unbinding.
+    /// Mark and walk a block: its statements in order, its terminator, then its shallow unbinding.
     Block(BlockId),
     /// Check one statement and enqueue its sub-walks.
     Statement(StatementId),
@@ -83,9 +61,7 @@ enum Task {
     ExitInit,
 }
 
-/// The recursion-admission context of one computed member's initializer: the
-/// group's computed members in order, the index being initialized, and the
-/// function depth at entry (a use at a greater depth is dormant).
+/// The recursion-admission context of one computed member's initializer: the group's computed members in order, the index being initialized, and the function depth at entry (a use at a greater depth is dormant).
 struct InitContext {
     computed: Vec<ValueId>,
     limit: usize,
@@ -130,8 +106,7 @@ impl<'m> Verifier<'m> {
             return Err(VerifyError("the module has no entry block".into()));
         };
 
-        // The module's top level is a virtual block: items in order, then the
-        // entry block, with item bindings ambient for everything after them.
+        // The module's top level is a virtual block: items in order, then the entry block, with item bindings ambient for everything after them.
         self.push_sequence(
             self.module
                 .items()
@@ -281,8 +256,7 @@ impl<'m> Verifier<'m> {
         }
     }
 
-    /// Append the walk of one function definition, entered at its binding
-    /// site: params bound around the body, dormant depth incremented.
+    /// Append the walk of one function definition, entered at its binding site: params bound around the body, dormant depth incremented.
     fn push_function_walk(
         &mut self,
         tasks: &mut Vec<Task>,
@@ -595,13 +569,7 @@ impl<'m> Verifier<'m> {
                         site()
                     )));
                 }
-                // Recursion admission: inside an eager initializer (and not
-                // inside a function constructed since entering it), a computed
-                // member of the group may only be an earlier one — or the
-                // member being initialized itself. A self-knot is admitted
-                // because the language accepts it: unused, the lowering drops
-                // it (mirroring the legacy path); used, the lowering rejects
-                // it with a diagnostic. Forward references stay unsatisfiable.
+                // Recursion admission: inside an eager initializer (and not inside a function constructed since entering it), a computed member of the group may only be an earlier one — or the member being initialized itself. A self-knot is admitted because the language accepts it: unused, the lowering drops it (mirroring the legacy path); used, the lowering rejects it with a diagnostic. Forward references stay unsatisfiable.
                 for context in &self.init_contexts {
                     if self.function_depth == context.function_depth
                         && let Some(position) =
@@ -664,8 +632,7 @@ impl<'m> Verifier<'m> {
         Ok(())
     }
 
-    /// Cross-check the registered schema links: every family lists exactly the
-    /// constructors that back-link to it, each exactly once.
+    /// Cross-check the registered schema links: every family lists exactly the constructors that back-link to it, each exactly once.
     fn check_schema_links(&self) -> Result<(), VerifyError> {
         let mut listed = vec![0usize; self.module.constructors().len()];
         for (index, family) in self.module.families().iter().enumerate() {
@@ -702,9 +669,7 @@ impl<'m> Verifier<'m> {
         Ok(())
     }
 
-    /// After the walk: every live slot in a tombstoned arena was owned exactly
-    /// once (the walk already rejected double ownership), so anything
-    /// unvisited is leaked.
+    /// After the walk: every live slot in a tombstoned arena was owned exactly once (the walk already rejected double ownership), so anything unvisited is leaked.
     fn check_ownership_complete(&self) -> Result<(), VerifyError> {
         for (index, slot) in self.module.blocks().iter().enumerate() {
             if slot.is_some() && !self.visited_blocks.contains(&BlockId(index as u32)) {

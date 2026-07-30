@@ -3,8 +3,7 @@ use {
     curios_abi::{ForeignFunction, WireSignature, WireType},
 };
 
-/// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...);
-/// entry returns used. The pure unused item drops; the others stay.
+/// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...); entry returns used. The pure unused item drops; the others stay.
 #[test]
 fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     let mut builder = ErsdBuilder::new();
@@ -48,8 +47,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     assert_eq!(module.items().len(), 2, "{printed}");
 }
 
-/// A dead function web (mutually recursive combinators, never referenced)
-/// drops whole; a reached recursive group survives whole.
+/// A dead function web (mutually recursive combinators, never referenced) drops whole; a reached recursive group survives whole.
 #[test]
 fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
     let mut builder = ErsdBuilder::new();

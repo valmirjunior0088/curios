@@ -1,11 +1,6 @@
-//! The monoid worker/wrapper: reassociate a monoid-deferred self-recursion
-//! into a tail-threaded accumulator.
+//! The monoid worker/wrapper: reassociate a monoid-deferred self-recursion into a tail-threaded accumulator.
 //!
-//! A recursion whose result feeds a monoid combine (`count_w(t) + 1`,
-//! `chunk ++ rest(t)`) cannot be a tail call: the combine sits after the
-//! recursion, so the runtime grows a native frame per element and overflows
-//! on corpus-sized input. But `w(x, acc)` with the combine's addend moved
-//! into `acc` *is* a loop:
+//! A recursion whose result feeds a monoid combine (`count_w(t) + 1`, `chunk ++ rest(t)`) cannot be a tail call: the combine sits after the recursion, so the runtime grows a native frame per element and overflows on corpus-sized input. But `w(x, acc)` with the combine's addend moved into `acc` *is* a loop:
 //!
 //! ```text
 //!   rec f(x) = … f(t) ⊕ k …
@@ -13,17 +8,7 @@
 //!      rec w(x, acc) = … w(t, acc ⊕ k) …   (base arms return acc ⊕ v)
 //! ```
 //!
-//! This is a correctness transform, not an optimization — without it the
-//! deferred-context corpus overflows the native stack — and it is
-//! sound-but-incomplete: outside the recognized envelope it is a no-op,
-//! never a miscompile. The envelope, structural in ANF: a leaf tail block
-//! ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend
-//! defined before the call, so moving only the *pure combine* across the
-//! recursion reorders nothing observable), a bare tail self-call, or a base;
-//! one uniform registered monoid; a non-commutative monoid only with the
-//! recursion on the right. Associativity plus an erasure-stable identity is
-//! exactly what the reassociation consumes — the only algebraic fact the
-//! oracle carries, because this is its only consumer.
+//! This is a correctness transform, not an optimization — without it the deferred-context corpus overflows the native stack — and it is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile. The envelope, structural in ANF: a leaf tail block ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend defined before the call, so moving only the *pure combine* across the recursion reorders nothing observable), a bare tail self-call, or a base; one uniform registered monoid; a non-commutative monoid only with the recursion on the right. Associativity plus an erasure-stable identity is exactly what the reassociation consumes — the only algebraic fact the oracle carries, because this is its only consumer.
 
 #[cfg(test)]
 mod tests;
@@ -36,13 +21,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// A monoid registered for accumulator reassociation, keyed in the erased
-/// operators. No `And` row: boolean and bitwise `and` share an erased
-/// operator with different identities, so no single seed is sound for both.
-/// No append rows: `BinAppend`/`LstAppend` append an *element* to a
-/// sequence — heterogeneous, so the accumulator rewrite's carriers do not
-/// line up (the legacy engine's append rows fired on shapes this corpus does
-/// not contain; the gate below is the arbiter if one ever appears).
+/// A monoid registered for accumulator reassociation, keyed in the erased operators. No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`LstAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up (the legacy engine's append rows fired on shapes this corpus does not contain; the gate below is the arbiter if one ever appears).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Monoid {
     NatAdd,
@@ -66,13 +45,7 @@ impl Monoid {
         })
     }
 
-    /// The monoid a combine right-hand side performs: a direct operation, or
-    /// a two-argument call that resolves through *forwarder* functions to
-    /// one. The corpus combines through concept witnesses (`a + b` is
-    /// `Add/add(a, b)`, a forwarder onto `Nat/add`, a forwarder onto the
-    /// primitive), so the resolver is what makes the envelope reach idiomatic
-    /// code at all; unfolding a pure forwarder chain preserves meaning
-    /// exactly.
+    /// The monoid a combine right-hand side performs: a direct operation, or a two-argument call that resolves through *forwarder* functions to one. The corpus combines through concept witnesses (`a + b` is `Add/add(a, b)`, a forwarder onto `Nat/add`, a forwarder onto the primitive), so the resolver is what makes the envelope reach idiomatic code at all; unfolding a pure forwarder chain preserves meaning exactly.
     fn of_rhs(module: &Module, rhs: &Rhs) -> Option<(Monoid, Atom, Atom)> {
         match rhs {
             Rhs::Operation {
@@ -104,9 +77,7 @@ impl Monoid {
         }
     }
 
-    /// Every registered monoid commutes. A future non-commutative row (an
-    /// append over one carrier) must re-introduce the placement rule: the
-    /// recursion only on the right, the addend folded as `acc ⊕ k`.
+    /// Every registered monoid commutes. A future non-commutative row (an append over one carrier) must re-introduce the placement rule: the recursion only on the right, the addend folded as `acc ⊕ k`.
     fn commutative(self) -> bool {
         let _ = self;
         true
@@ -132,9 +103,7 @@ fn operation(operation: Operation, left: Atom, right: Atom) -> Rhs {
     }
 }
 
-/// The scalar operation a binary forwarder chain bottoms out in: a function
-/// whose body is exactly one statement over its two parameters in order —
-/// the operation itself, or a saturated call to the next forwarder.
+/// The scalar operation a binary forwarder chain bottoms out in: a function whose body is exactly one statement over its two parameters in order — the operation itself, or a saturated call to the next forwarder.
 fn resolve_forwarder(module: &Module, function: FunctionId, budget: usize) -> Option<Operation> {
     if budget == 0 {
         return None;
@@ -185,10 +154,7 @@ enum Leaf {
 /// Rebase every recognized function, module-wide.
 pub(super) fn rebase_monoid_recursion(module: &mut Module) {
     curios_profile::profile!("rebase_monoid_recursion");
-    // Targets: self-recursive functions bound by a `Functions` statement
-    // (anywhere — item or block), recognized one at a time. Collect first;
-    // rewriting appends statements and functions but never disturbs another
-    // target's blocks.
+    // Targets: self-recursive functions bound by a `Functions` statement (anywhere — item or block), recognized one at a time. Collect first; rewriting appends statements and functions but never disturbs another target's blocks.
     let targets: Vec<(StatementId, FunctionId)> = module
         .statements()
         .iter()
@@ -220,9 +186,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
         return;
     };
 
-    // The wrapper keeps the function's identity: fresh parameters, a new body
-    // that seeds the worker with the monoid identity. The worker takes the
-    // original parameters plus the accumulator and the original body.
+    // The wrapper keeps the function's identity: fresh parameters, a new body that seeds the worker with the monoid identity. The worker takes the original parameters plus the accumulator and the original body.
     let worker = module.reserve_function();
     let acc = module.add_value(Some("acc".into()));
     let identity = module.intern_constant(monoid.identity());
@@ -297,9 +261,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
                 else {
                     continue;
                 };
-                // The combine now runs first, folding the addend into the
-                // accumulator; the call becomes a tail call to the worker
-                // threading it, and the block returns the call's result.
+                // The combine now runs first, folding the addend into the accumulator; the call becomes a tail call to the worker threading it, and the block returns the call's result.
                 module.set_statement(
                     combine,
                     Statement::Let {
@@ -387,18 +349,14 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     );
 }
 
-/// Recognize a function's tail spine: one uniform monoid, at least one
-/// combine, every self-call in the function's whole region accounted for on
-/// the spine, and the addend defined before the call (structurally: the call
-/// and combine are the block's last two statements).
+/// Recognize a function's tail spine: one uniform monoid, at least one combine, every self-call in the function's whole region accounted for on the spine, and the addend defined before the call (structurally: the call and combine are the block's last two statements).
 fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Monoid, Vec<Leaf>)> {
     let mut leaves = Vec::new();
     let mut monoid: Option<Monoid> = None;
     let mut combines = 0usize;
     let mut spine_calls = 0usize;
 
-    // Walk the tail chain: a block whose return is the result of a trailing
-    // dispatch recurses into its arms; anything else is a leaf.
+    // Walk the tail chain: a block whose return is the result of a trailing dispatch recurses into its arms; anything else is a leaf.
     let mut work = vec![body];
     let mut seen = BTreeSet::new();
     while let Some(block) = work.pop() {
@@ -416,8 +374,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
             .last()
             .and_then(|&statement| module.statement(statement).map(|s| (statement, s)));
 
-        // A trailing dispatch whose result the block returns: its arms are
-        // tail positions.
+        // A trailing dispatch whose result the block returns: its arms are tail positions.
         if let Some((
             _,
             Statement::Let {
@@ -500,9 +457,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
     }
     let monoid = monoid?;
 
-    // Every self-reference in the function's whole region must be one of the
-    // spine calls: a self-call off the spine (or the function escaping as a
-    // value from its own body) declines the transform.
+    // Every self-reference in the function's whole region must be one of the spine calls: a self-call off the spine (or the function escaping as a value from its own body) declines the transform.
     if count_self_references(module, function) != spine_calls {
         return None;
     }
@@ -510,8 +465,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
     Some((monoid, leaves))
 }
 
-/// Count every reference to `function` inside its own region, including
-/// nested function bodies.
+/// Count every reference to `function` inside its own region, including nested function bodies.
 fn count_self_references(module: &Module, function: FunctionId) -> usize {
     let mut count = 0usize;
     let mut functions = vec![function];

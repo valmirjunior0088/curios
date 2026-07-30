@@ -1,22 +1,8 @@
 //! Reachability and eager-effect pruning — the shrink-before-lower pass.
 //!
-//! After fresh erasure the item chain carries the *entire* fixed prelude,
-//! lexically reachable even for a program that names almost none of it;
-//! lowering it and running Cont's whole-module fixpoint over it is the arena
-//! path's dominant cost, and Cont cannot recover the loss: item granularity
-//! and effect summaries dissolve into the entry's initialization code at CPS
-//! conversion. A top-level item is kept when it is **reachable** — it binds
-//! something the entry block (or a kept item) transitively references — or
-//! **effectful** — its eager evaluation is observable under the effect
-//! summary (a trap, exit, host call, state access, observable allocation, or
-//! a call reaching one), so top-level initialization runs it even unused.
+//! After fresh erasure the item chain carries the *entire* fixed prelude, lexically reachable even for a program that names almost none of it; lowering it and running Cont's whole-module fixpoint over it is the arena path's dominant cost, and Cont cannot recover the loss: item granularity and effect summaries dissolve into the entry's initialization code at CPS conversion. A top-level item is kept when it is **reachable** — it binds something the entry block (or a kept item) transitively references — or **effectful** — its eager evaluation is observable under the effect summary (a trap, exit, host call, state access, observable allocation, or a call reaching one), so top-level initialization runs it even unused.
 //!
-//! Function and value reachability are mutually dependent, so both close
-//! together over the item reference graph, seeded by the entry block's free
-//! references and the effectful items. Kept items retain their original
-//! order (definition before use), everything owned only by dropped items is
-//! tombstoned, and the pruned module re-verifies. Deterministic: identity
-//! order everywhere.
+//! Function and value reachability are mutually dependent, so both close together over the item reference graph, seeded by the entry block's free references and the effectful items. Kept items retain their original order (definition before use), everything owned only by dropped items is tombstoned, and the pruned module re-verifies. Deterministic: identity order everywhere.
 
 #[cfg(test)]
 mod tests;
@@ -29,9 +15,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// The entities one item's whole subtree binds and references — nested
-/// function bodies included. Free references (`used − bound`) drive
-/// reachability; the bound and owned sets are what to keep when it survives.
+/// The entities one item's whole subtree binds and references — nested function bodies included. Free references (`used − bound`) drive reachability; the bound and owned sets are what to keep when it survives.
 #[derive(Default)]
 struct Subtree {
     used_functions: BTreeSet<FunctionId>,
@@ -55,10 +39,7 @@ impl Subtree {
     }
 }
 
-/// Drop the items the program neither reaches nor runs for observable
-/// effect. `proven_pure` names items whose eager evaluation the interpreter
-/// proved inert — they are never seeded as observable, so a dead proven-pure
-/// group drops, carrying its web with it.
+/// Drop the items the program neither reaches nor runs for observable effect. `proven_pure` names items whose eager evaluation the interpreter proved inert — they are never seeded as observable, so a dead proven-pure group drops, carrying its web with it.
 pub(super) fn prune_unreachable(
     module: &mut Module,
     proven_pure: &std::collections::BTreeSet<StatementId>,
@@ -67,8 +48,7 @@ pub(super) fn prune_unreachable(
     let Some(entry) = module.entry() else { return };
     let items = module.items().to_vec();
 
-    // Each item's subtree is disjoint from the others', so one walk apiece
-    // maps every bound entity to exactly one item.
+    // Each item's subtree is disjoint from the others', so one walk apiece maps every bound entity to exactly one item.
     let subtrees: Vec<Subtree> = items
         .iter()
         .map(|&item| walk_subtree(module, vec![item], Vec::new()))
@@ -86,8 +66,7 @@ pub(super) fn prune_unreachable(
         }
     }
 
-    // Roots: whatever the entry block references, plus every item whose eager
-    // evaluation is observable.
+    // Roots: whatever the entry block references, plus every item whose eager evaluation is observable.
     let summary = Summary::analyze(module, analysis);
     let mut kept = BTreeSet::<usize>::new();
     let mut work = Vec::<usize>::new();
@@ -132,8 +111,7 @@ pub(super) fn prune_unreachable(
         }
     }
 
-    // Retain the kept items in order and everything they (or the entry
-    // block's own region) own; tombstone the rest.
+    // Retain the kept items in order and everything they (or the entry block's own region) own; tombstone the rest.
     let mut keep_functions = entry_subtree.bound_functions.clone();
     keep_functions.extend(entry_subtree.used_functions.iter());
     let mut keep_values = entry_subtree.bound_values.clone();
@@ -169,9 +147,7 @@ pub(super) fn prune_unreachable(
         .expect("the reachability prune preserves a verifiable module");
 }
 
-/// Walk one region's whole subtree — statements, control sub-blocks, nested
-/// function bodies, recursive-group initializers — collecting what it binds,
-/// owns, and references. Iterative.
+/// Walk one region's whole subtree — statements, control sub-blocks, nested function bodies, recursive-group initializers — collecting what it binds, owns, and references. Iterative.
 fn walk_subtree(module: &Module, statements: Vec<StatementId>, blocks: Vec<BlockId>) -> Subtree {
     let mut subtree = Subtree::default();
     let mut statements = statements;

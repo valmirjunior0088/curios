@@ -25,8 +25,7 @@ fn traps_and_effects_classify_by_operation() {
 
 #[test]
 fn constructing_functions_is_dormant_and_aggregates_are_discardable() {
-    // Dormancy: binding a function performs nothing. Immutable allocation is
-    // operational but not observable — an unused product is deletable.
+    // Dormancy: binding a function performs nothing. Immutable allocation is operational but not observable — an unused product is deletable.
     let product = Rhs::Product {
         schema: ProductId(0),
         fields: vec![],

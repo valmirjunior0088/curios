@@ -1,19 +1,8 @@
 //! The fueled big-step, call-by-value interpreter over the direct-style ANF.
 //!
-//! The interpreter walks blocks — statements then a terminator — so tail
-//! position, the only place an effect may residualize, is the statement whose
-//! result the block returns. ANF hoists every effect into a `Let`, so a
-//! `Foreign` feeding a block's `Return` is a tail-position effect and
-//! residualizes to a single host call — exactly the `Handle/write(<bytes>)` the
-//! `Fmt` collapse produces.
+//! The interpreter walks blocks — statements then a terminator — so tail position, the only place an effect may residualize, is the statement whose result the block returns. ANF hoists every effect into a `Let`, so a `Foreign` feeding a block's `Return` is a tail-position effect and residualizes to a single host call — exactly the `Handle/write(<bytes>)` the `Fmt` collapse produces.
 //!
-//! Closedness and scope: a candidate call is evaluated from an empty frame;
-//! every atom it transitively reads must resolve to a constant, a module
-//! function, or a top-level item value (a CAF forced on demand and memoized),
-//! never a runtime binder. A function reference closes on demand against the
-//! current frame. Scalar and packed-binary operations fold through
-//! [`Semantics`] — the single source of truth under the numeric law — while
-//! list operations, closures, and `LstMap` are interpreted directly.
+//! Closedness and scope: a candidate call is evaluated from an empty frame; every atom it transitively reads must resolve to a constant, a module function, or a top-level item value (a CAF forced on demand and memoized), never a runtime binder. A function reference closes on demand against the current frame. Scalar and packed-binary operations fold through [`Semantics`] — the single source of truth under the numeric law — while list operations, closures, and `LstMap` are interpreted directly.
 
 use {
     super::{
@@ -33,9 +22,7 @@ use {
     },
 };
 
-/// A lexical frame: the values in scope, innermost last. Identities are
-/// unique per module, so lookup scans from the back and a scope pops by
-/// truncation.
+/// A lexical frame: the values in scope, innermost last. Identities are unique per module, so lookup scans from the back and a scope pops by truncation.
 struct Frame {
     values: Vec<(ValueId, Value)>,
 }
@@ -74,16 +61,13 @@ pub(super) enum Outcome {
     Bail(Bail),
 }
 
-/// A residual installed in place of a folded candidate: a tail-position host
-/// call, or a tail call to a module function whose body performs an effect it
-/// cannot residualize itself.
+/// A residual installed in place of a folded candidate: a tail-position host call, or a tail call to a module function whose body performs an effect it cannot residualize itself.
 pub(super) enum Residual {
     Foreign(ForeignId, Vec<Value>),
     Call(FunctionId, Vec<Value>),
 }
 
-/// Where a forced CAF's value comes from: a top-level item `Let` right-hand
-/// side, or an eager recursive-group member's initializer block.
+/// Where a forced CAF's value comes from: a top-level item `Let` right-hand side, or an eager recursive-group member's initializer block.
 enum CafSource<'m> {
     Rhs(&'m Rhs),
     Block(BlockId),
@@ -93,16 +77,10 @@ enum CafSource<'m> {
 pub(super) struct Evaluator<'m> {
     module: &'m Module,
     analysis: &'m Analysis,
-    /// Every `Let`-defined value, module-wide, forced on demand. Forcing from
-    /// an empty frame naturally declines anything not transitively closed (a
-    /// parameter or binder leaks as an unknown), so this is exactly the
-    /// "local CAF" generalization that lets curried chains rooted in
-    /// entry-block locals fold.
+    /// Every `Let`-defined value, module-wide, forced on demand. Forcing from an empty frame naturally declines anything not transitively closed (a parameter or binder leaks as an unknown), so this is exactly the "local CAF" generalization that lets curried chains rooted in entry-block locals fold.
     definitions: BTreeMap<ValueId, &'m Rhs>,
     rec_caf: BTreeMap<ValueId, BlockId>,
-    /// Functions bound by top-level items — the only callees a residual call
-    /// may name (a locally bound function is out of scope at an arbitrary
-    /// candidate site).
+    /// Functions bound by top-level items — the only callees a residual call may name (a locally bound function is out of scope at an arbitrary candidate site).
     item_functions: BTreeSet<FunctionId>,
     /// Memoized CAF values; `None` poisons a value whose forcing failed hard.
     cache: BTreeMap<ValueId, Option<Value>>,
@@ -112,8 +90,7 @@ pub(super) struct Evaluator<'m> {
 }
 
 impl<'m> Evaluator<'m> {
-    /// Build an interpreter over a module and its analysis. The top-level
-    /// value bindings are the module's item chain.
+    /// Build an interpreter over a module and its analysis. The top-level value bindings are the module's item chain.
     pub(super) fn new(module: &'m Module, analysis: &'m Analysis) -> Self {
         let mut definitions = BTreeMap::new();
         let mut rec_caf = BTreeMap::new();
@@ -151,8 +128,7 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    /// Whether an atom names a closed value — a constant, a module function,
-    /// or a top-level item value — so a call over such atoms is a candidate.
+    /// Whether an atom names a closed value — a constant, a module function, or a top-level item value — so a call over such atoms is a candidate.
     pub(super) fn is_closed_atom(&self, atom: Atom) -> bool {
         match atom {
             Atom::Constant(_) | Atom::Function(_) => true,
@@ -162,10 +138,7 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    /// Evaluate every computed member of a function-free eager group, forcing
-    /// each as a CAF (verifier-guaranteed acyclic, so forcing terminates).
-    /// `None` if any member bails or performs an effect — leaving the whole
-    /// group untouched.
+    /// Evaluate every computed member of a function-free eager group, forcing each as a CAF (verifier-guaranteed acyclic, so forcing terminates). `None` if any member bails or performs an effect — leaving the whole group untouched.
     pub(super) fn evaluate_computed_group(
         &mut self,
         values: &[RecValue],
@@ -202,9 +175,7 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    /// Close a function over its free values against the current frame. A
-    /// free value that is a top-level CAF resolves on demand at use; one that
-    /// is neither in scope nor top-level declines the fold.
+    /// Close a function over its free values against the current frame. A free value that is a top-level CAF resolves on demand at use; one that is neither in scope nor top-level declines the fold.
     fn close(&self, function: FunctionId, frame: &Frame) -> Result<Value, Bail> {
         let mut captured = Vec::new();
         for &free in self.analysis.free_values(function) {
@@ -221,10 +192,7 @@ impl<'m> Evaluator<'m> {
         })))
     }
 
-    /// The memoized value of a top-level CAF. A failed forcing poisons the
-    /// value with a hard bail — never `Effect`, so an effectful CAF is never
-    /// residualized as a call — except on fuel exhaustion, which leaves it
-    /// uncached for a fresher attempt.
+    /// The memoized value of a top-level CAF. A failed forcing poisons the value with a hard bail — never `Effect`, so an effectful CAF is never residualized as a call — except on fuel exhaustion, which leaves it uncached for a fresher attempt.
     fn force_toplevel(&mut self, value: ValueId) -> Result<Value, Bail> {
         if let Some(cached) = self.cache.get(&value) {
             return cached.clone().ok_or(Bail::Unknown);
@@ -256,8 +224,7 @@ impl<'m> Evaluator<'m> {
         result
     }
 
-    /// Evaluate a block in non-tail position, where the result must be a
-    /// value: a `Stuck` cannot arise (an effect outside the tail bails).
+    /// Evaluate a block in non-tail position, where the result must be a value: a `Stuck` cannot arise (an effect outside the tail bails).
     fn value_of_block(&mut self, block: BlockId, frame: &mut Frame) -> Result<Value, Bail> {
         match self.eval_block(block, frame, false) {
             Outcome::Done(held) => Ok(held),
@@ -266,9 +233,7 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    /// Evaluate a block: statements in order, then the terminator. In tail
-    /// position the last statement — when it defines the returned value — is
-    /// evaluated in tail position, so a `Foreign` there residualizes.
+    /// Evaluate a block: statements in order, then the terminator. In tail position the last statement — when it defines the returned value — is evaluated in tail position, so a `Foreign` there residualizes.
     fn eval_block(&mut self, block: BlockId, frame: &mut Frame, tail: bool) -> Outcome {
         if let Err(bail) = self.budget.charge() {
             return Outcome::Bail(bail);
@@ -279,8 +244,7 @@ impl<'m> Evaluator<'m> {
         };
         let returned = match &block.terminator {
             Terminator::Return(atom) => *atom,
-            // An exit is an effect the candidate binding cannot become; the
-            // tail-call boundary converts it into a residual call instead.
+            // An exit is an effect the candidate binding cannot become; the tail-call boundary converts it into a residual call instead.
             Terminator::Exit(_) => return Outcome::Bail(Bail::Effect),
             Terminator::Unreachable => return Outcome::Bail(Bail::Trap),
         };
@@ -305,12 +269,9 @@ impl<'m> Evaluator<'m> {
                         }
                     }
                 }
-                // Function groups resolve their members on demand at each
-                // reference; introducing them binds no value here.
+                // Function groups resolve their members on demand at each reference; introducing them binds no value here.
                 Some(Statement::Functions { .. }) => {}
-                // A recursive group with computed members needs eager
-                // initialization the interpreter does not model; decline. A
-                // function-only group binds on demand.
+                // A recursive group with computed members needs eager initialization the interpreter does not model; decline. A function-only group binds on demand.
                 Some(Statement::Rec { group })
                     if module
                         .rec_group(*group)
@@ -413,15 +374,13 @@ impl<'m> Evaluator<'m> {
                 empty,
                 step,
             } => self.eval_fold_sequence(*grain, *scrutinee, *empty, step, frame),
-            // A host call is an effect: it residualizes in tail position with
-            // evaluated operands, and bails everywhere else.
+            // A host call is an effect: it residualizes in tail position with evaluated operands, and bails everywhere else.
             Rhs::Foreign { foreign, operands } => match self.eval_operands(operands, frame) {
                 Ok(operands) if tail => Outcome::Stuck(Residual::Foreign(*foreign, operands)),
                 Ok(_) => Outcome::Bail(Bail::Effect),
                 Err(bail) => Outcome::Bail(bail),
             },
-            // A cell operation's identity is its program point: never
-            // residualized, never folded.
+            // A cell operation's identity is its program point: never residualized, never folded.
             Rhs::Cell { .. } => Outcome::Bail(Bail::Effect),
             Rhs::Intrinsic {
                 intrinsic: Intrinsic::LstMap,
@@ -450,12 +409,7 @@ impl<'m> Evaluator<'m> {
         };
 
         match self.enter(&closure, args.clone(), tail) {
-            // Boundary conversion: the callee performs an effect it cannot
-            // residualize itself, but this call is the candidate's tail and
-            // names an *item-bound* function — in scope at every candidate
-            // site — so the call with its evaluated arguments is the
-            // residual, rerunning the callee in full at this point. A locally
-            // bound callee would be out of scope where the residual installs.
+            // Boundary conversion: the callee performs an effect it cannot residualize itself, but this call is the candidate's tail and names an *item-bound* function — in scope at every candidate site — so the call with its evaluated arguments is the residual, rerunning the callee in full at this point. A locally bound callee would be out of scope where the residual installs.
             Outcome::Bail(Bail::Effect) if tail => match callee {
                 Atom::Function(function) if self.item_functions.contains(&function) => {
                     Outcome::Stuck(Residual::Call(function, args))
@@ -610,8 +564,7 @@ impl<'m> Evaluator<'m> {
             Ok(held) => held,
             Err(bail) => return Outcome::Bail(bail),
         };
-        // A right fold in erasure order: the last element folds first, seeing
-        // the empty suffix; each earlier element sees the suffix after it.
+        // A right fold in erasure order: the last element folds first, seeing the empty suffix; each earlier element sees the suffix after it.
         for cut in (0..elements.len()).rev() {
             if let Err(bail) = self.budget.charge() {
                 return Outcome::Bail(bail);
@@ -677,8 +630,7 @@ fn outcome(result: Result<Value, Bail>) -> Outcome {
     }
 }
 
-/// A value folds, a known trap bails so the runtime trap survives, and a lack
-/// of knowledge bails.
+/// A value folds, a known trap bails so the runtime trap survives, and a lack of knowledge bails.
 fn fold(outcome: FoldOutcome) -> Outcome {
     match outcome {
         FoldOutcome::Value(constant) => Outcome::Done(Value::from_constant(&constant)),
@@ -691,9 +643,7 @@ fn leaves(values: &[Value]) -> Option<Vec<Constant>> {
     values.iter().map(Value::as_constant).collect()
 }
 
-/// The elements of a sequence value as the fold binds them: a list's own
-/// elements, or a packed binary's grains — byte grain as `Byte`, bit grain as
-/// `Bool`.
+/// The elements of a sequence value as the fold binds them: a list's own elements, or a packed binary's grains — byte grain as `Byte`, bit grain as `Bool`.
 fn fold_elements(grain: SequenceGrain, sequence: &Value) -> Result<Vec<Value>, Bail> {
     match (grain, sequence) {
         (SequenceGrain::List, Value::Lst(elements)) => Ok(elements.as_ref().clone()),
@@ -763,8 +713,7 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
     }
 }
 
-/// The suffix a fold's step binder sees: the remaining list, or the remaining
-/// grains rebuilt into a binary.
+/// The suffix a fold's step binder sees: the remaining list, or the remaining grains rebuilt into a binary.
 fn suffix_view(grain: SequenceGrain, remainder: &[Value]) -> Value {
     match grain {
         SequenceGrain::List => Value::Lst(Rc::new(remainder.to_vec())),

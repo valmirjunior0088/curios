@@ -8,8 +8,7 @@ fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
     Atom::Constant(constant)
 }
 
-/// Every completed lowering has already passed `CpsModule::verify` inside
-/// `lower_to_cont`; the shape assertions on top read the printed module.
+/// Every completed lowering has already passed `CpsModule::verify` inside `lower_to_cont`; the shape assertions on top read the printed module.
 fn lowered(module: &Module) -> String {
     lower_to_cont(module).to_string()
 }
@@ -68,8 +67,7 @@ fn bool_and_byte_collapse_onto_the_nat_carrier() {
     let module = builder.finalize().expect("verifies");
 
     let printed = lowered(&module);
-    // Bool ops ride Nat bit ops; NatToByte masks; Byte comparisons are Nat
-    // comparisons. No Bool- or Byte-shaped operation survives the door.
+    // Bool ops ride Nat bit ops; NatToByte masks; Byte comparisons are Nat comparisons. No Bool- or Byte-shaped operation survives the door.
     assert!(printed.contains("NatAnd"), "{printed}");
     assert!(printed.contains("255"), "{printed}");
     assert!(printed.contains("NatEql"), "{printed}");
@@ -148,8 +146,7 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     let module = builder.finalize().expect("verifies");
 
     let printed = lowered(&module);
-    // The constructor is the flat tuple (tag, payload…); dispatch reads the
-    // tag with TplGet(0) and the payload with TplGet(1).
+    // The constructor is the flat tuple (tag, payload…); dispatch reads the tag with TplGet(0) and the payload with TplGet(1).
     assert!(printed.contains("TplGet(0)"), "{printed}");
     assert!(printed.contains("TplGet(1)"), "{printed}");
     assert!(printed.contains("switch"), "{printed}");
@@ -264,8 +261,7 @@ fn a_mixed_recursive_group_lowers_to_rec_init() {
 
 #[test]
 fn a_value_only_knot_lowers_through_cells() {
-    // rec { lazy = Pair { force: fn() = lazy } } — the knot ties through a
-    // compiler-internal cell: allocated, stored once, read at closure entry.
+    // rec { lazy = Pair { force: fn() = lazy } } — the knot ties through a compiler-internal cell: allocated, stored once, read at closure entry.
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),

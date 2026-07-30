@@ -1,22 +1,8 @@
 //! Specialization of self-recursive functions on literal constructor spines.
 //!
-//! The closed-term evaluator leaves one shape it cannot finish: a
-//! self-recursive function applied to a **constant** inductive value with
-//! *runtime* companion arguments — `Fmt/go_with` over a parsed format-string
-//! spine, with a runtime `finish` and accumulator. Cont never runs closed
-//! recursion to a constant, so this residual would ship the whole combinator
-//! web unless the arena unrolls it.
+//! The closed-term evaluator leaves one shape it cannot finish: a self-recursive function applied to a **constant** inductive value with *runtime* companion arguments — `Fmt/go_with` over a parsed format-string spine, with a runtime `finish` and accumulator. Cont never runs closed recursion to a constant, so this residual would ship the whole combinator web unless the arena unrolls it.
 //!
-//! This pass mints one specialized function per `(target, position, spine)`:
-//! a verbatim deep copy with the baked parameter dropped and instead bound
-//! locally to the reified spine — *binding, not substitution* — then folded:
-//! a match on the now-known spine takes its arm, a known projection reads its
-//! field, and a self-recursive call whose spine argument folds to a strictly
-//! smaller literal is rewritten to the next specialization. The chain is
-//! finite because every mint keys on a strict subterm of its requester's
-//! spine; the budgets are belt and braces. A recursive call whose spine does
-//! not fold falls back to the generic target — always correct, never
-//! required to fire.
+//! This pass mints one specialized function per `(target, position, spine)`: a verbatim deep copy with the baked parameter dropped and instead bound locally to the reified spine — *binding, not substitution* — then folded: a match on the now-known spine takes its arm, a known projection reads its field, and a self-recursive call whose spine argument folds to a strictly smaller literal is rewritten to the next specialization. The chain is finite because every mint keys on a strict subterm of its requester's spine; the budgets are belt and braces. A recursive call whose spine does not fold falls back to the generic target — always correct, never required to fire.
 
 use {
     super::{budget::ReifyBudget, copy::deep_copy_function, reify::reify, value::Value},
@@ -31,8 +17,7 @@ use {
     },
 };
 
-/// Module-wide cap on minted specializations. A format spine of `k`
-/// directives mints about `2k + 1`.
+/// Module-wide cap on minted specializations. A format spine of `k` directives mints about `2k + 1`.
 const MAX_SPECIALIZATIONS: usize = 64;
 
 /// A literal larger than this many nodes is not a specialization key.
@@ -61,9 +46,7 @@ pub(crate) fn specialize_literal_spines(module: &mut Module) {
         }
     }
 
-    // Taking a match arm orphans the untaken arms' values; they stay live
-    // until the following prune tombstones them, so verification is deferred
-    // to the end of the driver.
+    // Taking a match arm orphans the untaken arms' values; they stay live until the following prune tombstones them, so verification is deferred to the end of the driver.
     apply(module, &minter, rewrites);
 }
 
@@ -79,11 +62,7 @@ struct Site {
     spine: Value,
 }
 
-/// The specializable targets: directly self-recursive functions bound by a
-/// one-member `Functions` item, so the target and everything it names stay in
-/// scope where its specializations install. The function may sit in a larger
-/// recursive component — the fold only re-specializes its *direct* self
-/// calls, and the copy redirects them to the generic original.
+/// The specializable targets: directly self-recursive functions bound by a one-member `Functions` item, so the target and everything it names stay in scope where its specializations install. The function may sit in a larger recursive component — the fold only re-specializes its *direct* self calls, and the copy redirects them to the generic original.
 fn find_targets(module: &Module, analysis: &Analysis) -> BTreeMap<FunctionId, Target> {
     let mut targets = BTreeMap::new();
     for &item in module.items() {
@@ -122,11 +101,7 @@ fn plan_sites(
     def_index: &BTreeMap<ValueId, StatementId>,
     targets: &BTreeMap<FunctionId, Target>,
 ) -> Vec<Site> {
-    // A site inside a target's own region is excluded: its rewrite would make
-    // the target's body reference the specialization group, which installs
-    // *after* the target's binding item — a forward reference the verifier
-    // rejects. Self-recursion over a literal spine specializes only inside
-    // minted copies, whose shared group keeps every reference backward.
+    // A site inside a target's own region is excluded: its rewrite would make the target's body reference the specialization group, which installs *after* the target's binding item — a forward reference the verifier rejects. Self-recursion over a literal spine specializes only inside minted copies, whose shared group keeps every reference backward.
     let own_statements: BTreeMap<FunctionId, BTreeSet<StatementId>> = targets
         .keys()
         .map(|&target| {
@@ -188,9 +163,7 @@ fn spine_argument(
     })
 }
 
-/// The compile-time literal an atom names, following aliases: a constant, or
-/// a construction over further literals. Bounded, so a deep or cyclic chain
-/// terminates.
+/// The compile-time literal an atom names, following aliases: a constant, or a construction over further literals. Bounded, so a deep or cyclic chain terminates.
 fn resolve_literal(
     module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
@@ -292,8 +265,7 @@ fn spine_key(value: &Value, out: &mut String) {
     }
 }
 
-/// Mints and memoizes specializations, remembering each against its target
-/// for installation.
+/// Mints and memoizes specializations, remembering each against its target for installation.
 struct Minter {
     memo: BTreeMap<String, FunctionId>,
     minted: BTreeMap<FunctionId, Vec<FunctionId>>,
@@ -309,8 +281,7 @@ impl Minter {
         }
     }
 
-    /// The specialization of `target` at `position` for `spine`, minted (and
-    /// recursively folded) on first use.
+    /// The specialization of `target` at `position` for `spine`, minted (and recursively folded) on first use.
     fn request(
         &mut self,
         module: &mut Module,
@@ -329,9 +300,7 @@ impl Minter {
         }
         self.budget -= 1;
 
-        // Materialize the spine locally, deep-copy the target, drop the
-        // baked parameter and bind it to the spine ahead of the copied body.
-        // Dry-run first so a declined mint strands nothing.
+        // Materialize the spine locally, deep-copy the target, drop the baked parameter and bind it to the spine ahead of the copied body. Dry-run first so a declined mint strands nothing.
         {
             let mut probe = ReifyBudget::new();
             super::reify::reify_check(module, spine, &mut probe).ok()?;
@@ -367,9 +336,7 @@ impl Minter {
         Some(spec)
     }
 
-    /// Fold what the baked spine decides in a minted body: take known match
-    /// arms, read known projections, and re-specialize self-recursive calls
-    /// over strictly smaller spines. Iterates to a fixed point.
+    /// Fold what the baked spine decides in a minted body: take known match arms, read known projections, and re-specialize self-recursive calls over strictly smaller spines. Iterates to a fixed point.
     fn fold_known(&mut self, module: &mut Module, spec: FunctionId, target: FunctionId) {
         loop {
             let def_index = definition_index(module);
@@ -522,8 +489,7 @@ fn apply(
     module.set_items(rebuilt);
 }
 
-/// The target a one-member `Functions` item binds, when it has minted
-/// specializations.
+/// The target a one-member `Functions` item binds, when it has minted specializations.
 fn binds_target(
     module: &Module,
     statement: StatementId,
@@ -600,10 +566,7 @@ fn resolve_product(
     }
 }
 
-/// Inline a decided branch block in place of the eliminating statement: bind
-/// the payload to the arm's binders, splice the arm's statements, and alias
-/// the result to the arm's returned atom. Declines an arm that exits or
-/// traps, leaving the eliminator for Cont.
+/// Inline a decided branch block in place of the eliminating statement: bind the payload to the arm's binders, splice the arm's statements, and alias the result to the arm's returned atom. Declines an arm that exits or traps, leaving the eliminator for Cont.
 fn take_block(
     module: &mut Module,
     block: BlockId,
@@ -649,8 +612,7 @@ fn take_block(
     true
 }
 
-/// Every block a function region owns, descending through nested functions —
-/// unlike `control_blocks`, which stops at a nested function body.
+/// Every block a function region owns, descending through nested functions — unlike `control_blocks`, which stops at a nested function body.
 fn region_blocks(module: &Module, root: FunctionId) -> Vec<BlockId> {
     let mut work = vec![root];
     let mut seen_functions = BTreeSet::new();

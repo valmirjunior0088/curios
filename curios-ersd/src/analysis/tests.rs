@@ -27,10 +27,7 @@ fn use_counts_are_exact() {
     assert_eq!(analysis.value_uses(doubled), 1, "the entry terminator");
 }
 
-/// outer(p) { x = alias glob; functions inner; return inner }
-/// inner() { s = NatAdd(x, p); return s }
-/// Free values: inner frees x and p; outer frees only glob (x and p are bound
-/// in outer, and inner's frees propagate into outer before subtraction).
+/// outer(p) { x = alias glob; functions inner; return inner } inner() { s = NatAdd(x, p); return s } Free values: inner frees x and p; outer frees only glob (x and p are bound in outer, and inner's frees propagate into outer before subtraction).
 #[test]
 fn free_values_derive_transitively_through_nested_functions() {
     let mut builder = ErsdBuilder::new();
@@ -86,9 +83,7 @@ fn free_values_derive_transitively_through_nested_functions() {
     );
 }
 
-/// Recursion through nesting is visible in the reference graph: outer binds
-/// inner (edge) and inner calls outer (edge), so they form one recursive
-/// component.
+/// Recursion through nesting is visible in the reference graph: outer binds inner (edge) and inner calls outer (edge), so they form one recursive component.
 #[test]
 fn nesting_recursion_forms_one_component() {
     let mut builder = ErsdBuilder::new();

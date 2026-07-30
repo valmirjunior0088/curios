@@ -3,9 +3,7 @@ use {
     curios_abi::{ForeignFunction, WireSignature, WireType},
 };
 
-/// rec count(n) = switch-nat n { 0 => 0, default => count(n - 1) + 1 };
-/// entry: count(k) with k a runtime-ish parameterless alias (kept opaque by
-/// referencing the function itself so evaluation cannot close it).
+/// rec count(n) = switch-nat n { 0 => 0, default => count(n - 1) + 1 }; entry: count(k) with k a runtime-ish parameterless alias (kept opaque by referencing the function itself so evaluation cannot close it).
 #[test]
 fn a_monoid_deferred_recursion_gains_a_worker() {
     let mut builder = ErsdBuilder::new();

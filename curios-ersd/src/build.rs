@@ -1,22 +1,8 @@
 //! The checked builder — the construction surface of the representation.
 //!
-//! Every producer (erasure, the transformations' reification paths, and the
-//! tests) constructs modules through this type: it owns identity allocation,
-//! the open-block discipline that gives the operand law its home ("bound as a
-//! statement in the innermost open block"), schema and recursion registration,
-//! constant and foreign interning, and finalization, which runs the module
-//! verifier. The arena mutators on [`Module`] stay crate-private behind
-//! it.
+//! Every producer (erasure, the transformations' reification paths, and the tests) constructs modules through this type: it owns identity allocation, the open-block discipline that gives the operand law its home ("bound as a statement in the innermost open block"), schema and recursion registration, constant and foreign interning, and finalization, which runs the module verifier. The arena mutators on [`Module`] stay crate-private behind it.
 //!
-//! The module's item list is the outermost block: `let_value`,
-//! `let_functions`, and `let_rec` emit into the innermost open block, and with
-//! no block open they append to the top-level item list — one uniform
-//! emission path, so a producer walking an expression never cares whether it
-//! is lowering an item body or a nested position. The `item_*` forms are the
-//! explicit top-level surface (they assert no block is open). Blocks nest as
-//! a stack — [`open_block`](ErsdBuilder::open_block) pushes,
-//! [`seal_block`](ErsdBuilder::seal_block) pops and freezes the block with its
-//! terminator.
+//! The module's item list is the outermost block: `let_value`, `let_functions`, and `let_rec` emit into the innermost open block, and with no block open they append to the top-level item list — one uniform emission path, so a producer walking an expression never cares whether it is lowering an item body or a nested position. The `item_*` forms are the explicit top-level surface (they assert no block is open). Blocks nest as a stack — [`open_block`](ErsdBuilder::open_block) pushes, [`seal_block`](ErsdBuilder::seal_block) pops and freezes the block with its terminator.
 
 #[cfg(test)]
 mod tests;
@@ -43,9 +29,7 @@ impl ErsdBuilder {
         Self::default()
     }
 
-    /// Resume construction over a restored prefix module: the archived
-    /// prelude's arenas continue growing under the user suffix. The skipped
-    /// constant-interning index is rebuilt here, and no block is open.
+    /// Resume construction over a restored prefix module: the archived prelude's arenas continue growing under the user suffix. The skipped constant-interning index is rebuilt here, and no block is open.
     pub fn resume(mut module: Module) -> Self {
         module.reindex_constants();
         Self {
@@ -59,8 +43,7 @@ impl ErsdBuilder {
         &self.module
     }
 
-    /// Hand the module over *unfinished* — no entry, no verification — as a
-    /// replayable prefix. [`resume`](Self::resume) is the inverse.
+    /// Hand the module over *unfinished* — no entry, no verification — as a replayable prefix. [`resume`](Self::resume) is the inverse.
     pub fn into_module(self) -> Module {
         assert!(
             self.open_blocks.is_empty(),
@@ -69,8 +52,7 @@ impl ErsdBuilder {
         self.module
     }
 
-    /// Mint a fresh value identity — a parameter, arm binder, or fold binder.
-    /// Statement results are minted by the emission methods themselves.
+    /// Mint a fresh value identity — a parameter, arm binder, or fold binder. Statement results are minted by the emission methods themselves.
     pub fn value(&mut self, debug_name: Option<String>) -> ValueId {
         self.module.add_value(debug_name)
     }
@@ -90,14 +72,12 @@ impl ErsdBuilder {
         self.module.add_product(schema)
     }
 
-    /// Register a variant family; its constructors follow through
-    /// [`constructor`](Self::constructor), in declaration order.
+    /// Register a variant family; its constructors follow through [`constructor`](Self::constructor), in declaration order.
     pub fn family(&mut self, debug_name: Option<String>) -> FamilyId {
         self.module.add_family(debug_name)
     }
 
-    /// Register the next constructor of `family`; its position in the family
-    /// is its discriminant.
+    /// Register the next constructor of `family`; its position in the family is its discriminant.
     pub fn constructor(
         &mut self,
         family: FamilyId,
@@ -107,9 +87,7 @@ impl ErsdBuilder {
         self.module.add_constructor(family, debug_name, fields)
     }
 
-    /// Mint a function identity whose definition follows later, so recursive
-    /// bodies can reference their own or a sibling's identity. Finalization
-    /// rejects a reservation that was never defined.
+    /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. Finalization rejects a reservation that was never defined.
     pub fn reserve_function(&mut self) -> FunctionId {
         self.module.reserve_function()
     }
@@ -132,8 +110,7 @@ impl ErsdBuilder {
         );
     }
 
-    /// Group a set of computed recursive-group members with their eager
-    /// initializer blocks into a registered group.
+    /// Group a set of computed recursive-group members with their eager initializer blocks into a registered group.
     pub fn rec_group(
         &mut self,
         functions: Vec<FunctionId>,
@@ -148,14 +125,12 @@ impl ErsdBuilder {
         })
     }
 
-    /// Open a nested block; subsequent `let_*` statements land in it until
-    /// [`seal_block`](Self::seal_block) closes it.
+    /// Open a nested block; subsequent `let_*` statements land in it until [`seal_block`](Self::seal_block) closes it.
     pub fn open_block(&mut self) {
         self.open_blocks.push(Vec::new());
     }
 
-    /// Seal the innermost open block with its terminator and return its
-    /// identity.
+    /// Seal the innermost open block with its terminator and return its identity.
     pub fn seal_block(&mut self, terminator: Terminator) -> BlockId {
         let statements = self
             .open_blocks
@@ -167,8 +142,7 @@ impl ErsdBuilder {
         })
     }
 
-    /// Bind `rhs` to a fresh value in the innermost open block, or as the next
-    /// top-level item when no block is open.
+    /// Bind `rhs` to a fresh value in the innermost open block, or as the next top-level item when no block is open.
     pub fn let_value(&mut self, debug_name: Option<String>, rhs: Rhs) -> ValueId {
         let result = self.module.add_value(debug_name);
         let statement = self.module.add_statement(Statement::Let { result, rhs });
@@ -215,17 +189,12 @@ impl ErsdBuilder {
         self.module.push_item(statement);
     }
 
-    /// Set the entry block, evaluated after the items to produce the program's
-    /// result.
+    /// Set the entry block, evaluated after the items to produce the program's result.
     pub fn set_entry(&mut self, entry: BlockId) {
         self.module.set_entry(entry);
     }
 
-    /// Finish construction: reject leftover open blocks and dangling function
-    /// reservations, then run the module verifier and hand the module over.
-    /// (An empty function slot is a construction error here; after removal
-    /// lands with its consumer, the same slot is an ordinary tombstone to the
-    /// verifier.)
+    /// Finish construction: reject leftover open blocks and dangling function reservations, then run the module verifier and hand the module over. (An empty function slot is a construction error here; after removal lands with its consumer, the same slot is an ordinary tombstone to the verifier.)
     pub fn finalize(self) -> Result<Module, VerifyError> {
         if !self.open_blocks.is_empty() {
             return Err(VerifyError(format!(
