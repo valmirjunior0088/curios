@@ -213,21 +213,13 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
             Ok(bin_type(*grain))
         }
 
-        // A bare list literal is the one primitive that does not carry its
-        // element type. The elaborator invents a metavariable and lets
-        // unification ground it; the kernel has no metavariables, so it reads
-        // the type off the first element and requires the rest to agree. An
-        // empty literal names no type at all and is refused rather than
-        // guessed — a `[]` that survived elaboration should carry the
-        // `Lst/nil` spelling that does name one.
-        Prim::Lst(elements) => {
-            let Some((first, rest)) = elements.split_first() else {
-                return Err(KernelError::Unclassified(Term::prim(prim.clone())));
-            };
-
-            let element = infer(kernel, first)?;
-            for other in rest {
-                check(kernel, other, &element)?;
+        // A list literal carries its element type like every other `Lst`
+        // operation — `[]` included, which is the case that used to be refused
+        // for having no element to read a type from.
+        Prim::Lst(element, elements) => {
+            let element = check_is_type(kernel, element)?;
+            for entry in elements {
+                check(kernel, entry, &element)?;
             }
 
             Ok(lst_type(element))

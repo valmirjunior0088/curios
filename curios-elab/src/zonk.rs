@@ -1260,7 +1260,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::BinConcat(Grain::B, terms) => Prim::BinConcat(Grain::B, zonk_terms(context, terms)?),
 
         Prim::LstType(t) => Prim::LstType(zonk_term(context, t)?),
-        Prim::Lst(elems) => Prim::Lst(zonk_terms(context, elems)?),
+        Prim::Lst(elem, elems) => Prim::Lst(zonk_term(context, elem)?, zonk_terms(context, elems)?),
         Prim::LstLen(a, b) => Prim::LstLen(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::LstGet(a, b, c) => Prim::LstGet(
             zonk_term(context, a)?,

@@ -132,7 +132,9 @@ pub enum Prim {
     BinAppend(Grain, Term, Term),
     BinConcat(Grain, Vec<Term>),
     LstType(Term),
-    Lst(Vec<Term>),
+    // A list literal, carrying its element type: the one value form whose
+    // elements alone cannot name it — `[]` has nothing to read a type from.
+    Lst(Term, Vec<Term>),
     LstLen(Term, Term),
     LstGet(Term, Term, Term),
     LstSlice(Term, Term, Term, Term),
@@ -913,10 +915,11 @@ impl Prim {
 
             Prim::Foreign(_, args) => args.iter().for_each(&mut *visit),
 
-            Prim::BinConcat(Grain::X, terms)
-            | Prim::BinConcat(Grain::B, terms)
-            | Prim::Lst(terms) => terms.iter().for_each(&mut *visit),
-            Prim::LstConcat(ty, terms) => {
+            Prim::BinConcat(Grain::X, terms) | Prim::BinConcat(Grain::B, terms) => {
+                terms.iter().for_each(&mut *visit)
+            }
+
+            Prim::Lst(ty, terms) | Prim::LstConcat(ty, terms) => {
                 visit(ty);
                 terms.iter().for_each(&mut *visit);
             }
@@ -1087,7 +1090,10 @@ impl Prim {
                 operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
             Prim::LstType(elem) => Prim::LstType(visit.visit_subterm(elem)),
-            Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
+            Prim::Lst(elem, elems) => Prim::Lst(
+                visit.visit_subterm(elem),
+                elems.iter().map(|e| visit.visit_subterm(e)).collect(),
+            ),
             Prim::LstLen(ty, list) => traverse_binary(ty, list, visit, Prim::LstLen),
             Prim::LstGet(ty, list, index) => Prim::LstGet(
                 visit.visit_subterm(ty),

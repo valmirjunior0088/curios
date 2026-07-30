@@ -271,11 +271,11 @@ enum LstFront {
 /// empty list is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
 fn peel_front_lst(lst: &Term) -> LstFront {
     match &**lst {
-        Subterm::Prim(Prim::Lst(elems)) => match elems.split_first() {
+        Subterm::Prim(Prim::Lst(elem, elems)) => match elems.split_first() {
             None => LstFront::Empty,
             Some((head, rest)) => LstFront::Cons {
                 head: head.clone(),
-                tail: Subterm::Prim(Prim::Lst(rest.to_vec())).into(),
+                tail: Subterm::Prim(Prim::Lst(elem.clone(), rest.to_vec())).into(),
             },
         },
         // A symbolic cons: decode the head off the leading non-empty literal segment;
@@ -283,7 +283,7 @@ fn peel_front_lst(lst: &Term) -> LstFront {
         Subterm::Prim(Prim::LstConcat(elem, segments)) => match segments.split_first() {
             Some((first, rest)) if is_nonempty_lst_literal(first) => {
                 let mut lead = match &**first {
-                    Subterm::Prim(Prim::Lst(elems)) => elems.clone(),
+                    Subterm::Prim(Prim::Lst(_, elems)) => elems.clone(),
                     _ => unreachable!("guard checked a non-empty `Lst` literal lead segment"),
                 };
 
@@ -292,13 +292,13 @@ fn peel_front_lst(lst: &Term) -> LstFront {
                 let mut segments = Vec::with_capacity(rest.len() + 1);
 
                 if !lead.is_empty() {
-                    segments.push(Subterm::Prim(Prim::Lst(lead)).into());
+                    segments.push(Subterm::Prim(Prim::Lst(elem.clone(), lead)).into());
                 }
 
                 segments.extend(rest.iter().cloned());
 
                 let tail = match segments.len() {
-                    0 => Subterm::Prim(Prim::Lst(vec![])).into(),
+                    0 => Subterm::Prim(Prim::Lst(elem.clone(), vec![])).into(),
                     1 => segments.into_iter().next().unwrap(),
                     _ => Subterm::Prim(Prim::LstConcat(elem.clone(), segments)).into(),
                 };
@@ -331,7 +331,7 @@ fn is_empty_bin(grain: Grain, term: &Term) -> bool {
 // `cons` injects an element at the front as the singleton literal `[h]`; the `Lst`
 // eliminator recognizes a non-empty literal lead segment to decode a symbolic cons.
 fn is_nonempty_lst_literal(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Lst(elems)) if !elems.is_empty())
+    matches!(&**term, Subterm::Prim(Prim::Lst(_, elems)) if !elems.is_empty())
 }
 
 /// The free monoid's normalising *product* — the constructor dual of

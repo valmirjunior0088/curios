@@ -324,7 +324,7 @@ fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
 fn lst_valued(prim: &Prim) -> bool {
     matches!(
         prim,
-        Prim::Lst(_) | Prim::LstConcat(_, _) | Prim::LstSlice(..) | Prim::LstAppend(..)
+        Prim::Lst(..) | Prim::LstConcat(_, _) | Prim::LstSlice(..) | Prim::LstAppend(..)
     )
 }
 
@@ -334,9 +334,10 @@ fn lst_valued(prim: &Prim) -> bool {
 /// run that never needs it.
 fn lst_elem(prim: &Prim) -> Option<Term> {
     match prim {
-        Prim::LstConcat(elem, _) | Prim::LstSlice(elem, ..) | Prim::LstAppend(elem, ..) => {
-            Some(elem.clone())
-        }
+        Prim::Lst(elem, _)
+        | Prim::LstConcat(elem, _)
+        | Prim::LstSlice(elem, ..)
+        | Prim::LstAppend(elem, ..) => Some(elem.clone()),
         _ => None,
     }
 }
@@ -408,7 +409,7 @@ fn lst_atoms(prim: &Prim) -> VecDeque<Atom<Term>> {
 
 fn lst_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
     match prim {
-        Prim::Lst(elems) => push(out, Atom::Literal(elems.clone())),
+        Prim::Lst(_, elems) => push(out, Atom::Literal(elems.clone())),
         Prim::LstConcat(_, operands) => operands.iter().for_each(|op| lst_collect_term(op, out)),
         Prim::LstSlice(_, base, lo, hi) => push(
             out,
@@ -469,7 +470,13 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
 fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
     fn into_term(atom: Atom<Term>, elem: &Option<Term>) -> Term {
         match atom {
-            Atom::Literal(elems) => Term::prim(Prim::Lst(elems)),
+            Atom::Literal(elems) => {
+                let elem = elem
+                    .clone()
+                    .expect("every Lst-valued producer carries its element type");
+
+                Term::prim(Prim::Lst(elem, elems))
+            }
             // A slice window rebuilds with the value's element type, threaded through
             // `elem` (every atom of an `Lst(T)` shares `T`).
             Atom::Window { base, lo, hi } => {

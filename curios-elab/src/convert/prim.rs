@@ -218,8 +218,20 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
 
             Ok(true)
         }
-        (Prim::Lst(this_ops), Prim::Lst(that_ops))
-        | (Prim::BinConcat(Grain::X, this_ops), Prim::BinConcat(Grain::X, that_ops))
+        (Prim::Lst(this_elem, this_ops), Prim::Lst(that_elem, that_ops)) => {
+            cmp.enqueue(Term::type_ground(), this_elem, that_elem);
+
+            if this_ops.len() != that_ops.len() {
+                return Ok(false);
+            }
+
+            for (this, that) in this_ops.into_iter().zip(that_ops) {
+                cmp.enqueue(Term::type_ground(), this, that);
+            }
+
+            Ok(true)
+        }
+        (Prim::BinConcat(Grain::X, this_ops), Prim::BinConcat(Grain::X, that_ops))
         | (Prim::BinConcat(Grain::B, this_ops), Prim::BinConcat(Grain::B, that_ops)) => {
             if this_ops.len() != that_ops.len() {
                 return Ok(false);

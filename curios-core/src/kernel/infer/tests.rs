@@ -406,30 +406,36 @@ fn a_primitive_operation_has_the_result_type_its_rule_states() {
     );
 }
 
-/// A bare list literal carries no element type, so the kernel reads one off the
-/// first element and requires the rest to agree. An empty literal names no type
-/// at all and is refused rather than guessed.
+/// A list literal carries its element type, every element checks against it —
+/// and `[]` types at exactly that carried element, the case that used to be
+/// refused for having no element to read a type from.
 #[test]
-fn a_list_literal_takes_its_element_type_from_its_elements() {
+fn a_list_literal_checks_its_elements_against_its_carried_type() {
     let mut kernel = kernel();
 
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::Lst(vec![nat(1), nat(2)]))),
+        infer(
+            &mut kernel,
+            &Term::prim(Prim::Lst(nat_type(), vec![nat(1), nat(2)])),
+        ),
         Ok(Term::prim(Prim::LstType(nat_type()))),
     );
 
     assert!(matches!(
         infer(
             &mut kernel,
-            &Term::prim(Prim::Lst(vec![nat(1), Term::prim(Prim::Bool(true))])),
+            &Term::prim(Prim::Lst(
+                nat_type(),
+                vec![nat(1), Term::prim(Prim::Bool(true))],
+            )),
         ),
         Err(KernelError::Mismatch { .. }),
     ));
 
-    assert!(matches!(
-        infer(&mut kernel, &Term::prim(Prim::Lst(Vec::new()))),
-        Err(KernelError::Unclassified(_)),
-    ));
+    assert_eq!(
+        infer(&mut kernel, &Term::prim(Prim::Lst(nat_type(), Vec::new()))),
+        Ok(Term::prim(Prim::LstType(nat_type()))),
+    );
 }
 
 /// A generic definition is checked *under* its own constraint set. `(x :

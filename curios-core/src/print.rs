@@ -673,7 +673,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
             }),
         ]),
         Prim::LstType(elem) => print_unary("Lst ", elem, depth),
-        Prim::Lst(elems) => flat([
+        Prim::Lst(_, elems) => flat([
             pure("["),
             sep_flat(elems.into_iter().map(move |e| sub(e, depth)), || pure(", ")),
             pure("]"),

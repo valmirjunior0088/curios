@@ -797,7 +797,7 @@ impl<E: Env> Walk<'_, E> {
             | Prim::BinSlice(..)
             | Prim::BinAppend(..)
             | Prim::BinConcat(..)
-            | Prim::Lst(_)
+            | Prim::Lst(..)
             | Prim::LstLen(..)
             | Prim::LstGet(..)
             | Prim::LstSlice(..)

@@ -660,7 +660,7 @@ impl<E: Env> Walk<'_, E> {
             ) => self.monoid_shape(FreeMonoid::Bin(*grain), term, fuel),
 
             Subterm::Prim(
-                Prim::Lst(_) | Prim::LstAppend(..) | Prim::LstConcat(..) | Prim::LstSlice(..),
+                Prim::Lst(..) | Prim::LstAppend(..) | Prim::LstConcat(..) | Prim::LstSlice(..),
             ) => self.monoid_shape(FreeMonoid::Lst, term, fuel),
 
             // Arithmetic descent. Both operations are monotone and floor-like

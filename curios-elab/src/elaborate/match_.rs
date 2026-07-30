@@ -182,7 +182,7 @@ fn elaborate_lst_match(
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch`
     // already do), so a hypothesis whose type mentions the scrutinee reduces at
     // the arm's value without a hand-written convoy.
-    let empty_value: Term = Subterm::Prim(Prim::Lst(vec![])).into();
+    let empty_value: Term = Subterm::Prim(Prim::Lst(elem.clone(), vec![])).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -202,7 +202,7 @@ fn elaborate_lst_match(
         let cons_value: Term = Subterm::Prim(Prim::LstConcat(
             elem.clone(),
             vec![
-                Subterm::Prim(Prim::Lst(vec![Term::free_var(&head_label)])).into(),
+                Subterm::Prim(Prim::Lst(elem.clone(), vec![Term::free_var(&head_label)])).into(),
                 Term::free_var(&tail_label),
             ],
         ))

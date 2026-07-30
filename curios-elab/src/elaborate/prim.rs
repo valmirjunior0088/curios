@@ -278,7 +278,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         // solve (an empty `[]` leaves it for a later unification to ground, exactly
         // as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which
         // borrows the concrete element type from `expected` before reaching here.
-        Prim::Lst(elems) => {
+        Prim::Lst(_, elems) => {
             let classifier = context.fresh_classifier_type("list element classifier");
             let elem_type = context.fresh_metavar(
                 classifier,
@@ -289,7 +289,10 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 },
             );
             let elaborated = check_lst_elems(context, elems, &elem_type)?;
-            (Prim::Lst(elaborated), lst_type(elem_type))
+            (
+                Prim::Lst(elem_type.clone(), elaborated),
+                lst_type(elem_type),
+            )
         }
         Prim::LstLen(type_, list) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
@@ -423,12 +426,15 @@ pub(crate) fn elaborate_prim(
     // through to `synth_prim`, which mints a fresh element-type metavar; the
     // check-after-infer unification then equates `Lst(?T)` with the expected
     // type (pinning `?M := Lst`, or reporting the genuine mismatch).
-    if let (Prim::Lst(elems), Mode::Check(expected)) = (prim, &mode)
+    if let (Prim::Lst(_, elems), Mode::Check(expected)) = (prim, &mode)
         && let Subterm::Prim(Prim::LstType(elem_type)) = &*reduce_with(context, expected)?
     {
         let elaborated = check_lst_elems(context, elems, elem_type)?;
 
-        return Ok((Term::prim(Prim::Lst(elaborated)), expected.clone()));
+        return Ok((
+            Term::prim(Prim::Lst(elem_type.clone(), elaborated)),
+            expected.clone(),
+        ));
     }
 
     // `LstConcat` mirrors `Lst`'s bidirectionality — and must, because the

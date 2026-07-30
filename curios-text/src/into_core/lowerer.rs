@@ -1031,6 +1031,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         entries: &[LstEntry],
         mut lower: impl FnMut(&Term) -> Result<curios_elab::Term, Error>,
     ) -> Result<curios_elab::Prim, Error> {
+        // The literal's element-type slot: an implicit the literal cannot
+        // name, minted fresh and solved by elaboration — bidirectionally from
+        // the expected type when checking, from the elements otherwise.
+        let element = || curios_elab::Term::metavar(self.context.fresh_metavar());
+
         let mut operands = Vec::new();
         let mut run = Vec::new();
 
@@ -1040,6 +1045,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 LstEntry::Spread(term) => {
                     if !run.is_empty() {
                         operands.push(curios_elab::Term::prim(curios_elab::Prim::Lst(
+                            element(),
                             std::mem::take(&mut run),
                         )));
                     }
@@ -1050,17 +1056,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
 
         if operands.is_empty() {
-            return Ok(curios_elab::Prim::Lst(run));
+            return Ok(curios_elab::Prim::Lst(element(), run));
         }
 
         if !run.is_empty() {
-            operands.push(curios_elab::Term::prim(curios_elab::Prim::Lst(run)));
+            operands.push(curios_elab::Term::prim(curios_elab::Prim::Lst(
+                element(),
+                run,
+            )));
         }
 
-        Ok(curios_elab::Prim::LstConcat(
-            curios_elab::Term::metavar(self.context.fresh_metavar()),
-            operands,
-        ))
+        Ok(curios_elab::Prim::LstConcat(element(), operands))
     }
 
     /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free

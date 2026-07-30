@@ -62,7 +62,7 @@ impl SeqCarrier<'_> {
     /// The empty sequence — the value the empty arm refines the scrutinee to.
     fn empty_value(self) -> Term {
         match self {
-            SeqCarrier::Lst { .. } => Term::prim(Prim::Lst(vec![])),
+            SeqCarrier::Lst { element } => Term::prim(Prim::Lst(element.clone(), vec![])),
             SeqCarrier::Bin { grain } => Term::prim(Prim::Bin(grain, PackedBin::empty())),
         }
     }
@@ -74,7 +74,10 @@ impl SeqCarrier<'_> {
         match self {
             SeqCarrier::Lst { element } => Term::prim(Prim::LstConcat(
                 element.clone(),
-                vec![Term::prim(Prim::Lst(vec![head.clone()])), tail.clone()],
+                vec![
+                    Term::prim(Prim::Lst(element.clone(), vec![head.clone()])),
+                    tail.clone(),
+                ],
             )),
             SeqCarrier::Bin { grain } => Term::prim(Prim::BinConcat(
                 grain,

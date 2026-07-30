@@ -423,11 +423,14 @@ fn reduce_flt_mul_computes() {
 fn reduce_lst_get_returns_element_at_index() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
-        Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
-        Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
-    ]));
+    let list = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![
+            Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
+        ],
+    ));
 
     assert_eq!(
         reduce(
@@ -459,9 +462,10 @@ fn reduce_lst_get_returns_element_at_index() {
 fn reduce_lst_get_errors_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-    ]));
+    let list = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![Subterm::Prim(Prim::Nat(Nat::new(1usize))).into()],
+    ));
 
     assert!(matches!(
         reduce(
@@ -517,10 +521,13 @@ fn reduce_bin_append_adds_the_full_byte_range() {
 fn reduce_lst_append_adds_element() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
-        Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
-    ]));
+    let list = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![
+            Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
+        ],
+    ));
 
     assert_eq!(
         reduce(
@@ -532,11 +539,14 @@ fn reduce_lst_append_adds_element() {
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Lst(vec![
-            Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
-        ]))
+        Ok(Subterm::Prim(Prim::Lst(
+            Term::prim(Prim::NatType),
+            vec![
+                Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
+                Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
+                Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
+            ]
+        ))
         .into())
     );
 }
@@ -1041,7 +1051,10 @@ mod prim {
     fn lst_cons_seven(xs: &Term) -> Term {
         Term::prim(Prim::lst_concat(
             Term::prim(Prim::NatType),
-            [Term::prim(Prim::Lst(vec![lit(7)])), xs.clone()],
+            [
+                Term::prim(Prim::Lst(Term::prim(Prim::NatType), vec![lit(7)])),
+                xs.clone(),
+            ],
         ))
     }
 
@@ -1091,7 +1104,7 @@ mod prim {
                     lit(1)
                 ))
             ),
-            Subterm::Prim(Prim::Lst(vec![lit(7)])),
+            Subterm::Prim(Prim::Lst(Term::prim(Prim::NatType), vec![lit(7)])),
         );
 
         // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
@@ -1105,7 +1118,7 @@ mod prim {
                     lit(1)
                 ))
             ),
-            Subterm::Prim(Prim::Lst(Vec::new())),
+            Subterm::Prim(Prim::Lst(Term::prim(Prim::NatType), Vec::new())),
         );
     }
 
@@ -1133,7 +1146,10 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::lst_len(
                     Term::prim(Prim::NatType),
-                    Term::prim(Prim::Lst(vec![lit(1), lit(2), lit(3)]))
+                    Term::prim(Prim::Lst(
+                        Term::prim(Prim::NatType),
+                        vec![lit(1), lit(2), lit(3)]
+                    ))
                 )),
             ),
             Subterm::Prim(Prim::Nat(Nat::new(3usize))),

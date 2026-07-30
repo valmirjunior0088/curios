@@ -596,16 +596,22 @@ fn convert_prim_nat_to_int_recurses_into_operand() {
 fn convert_prim_lst_compares_element_wise() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-        Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
-    ]))
+    let this = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
+        ],
+    ))
     .into();
 
-    let that = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-        Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
-    ]))
+    let that = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
+        ],
+    ))
     .into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -615,15 +621,19 @@ fn convert_prim_lst_compares_element_wise() {
 fn convert_prim_lst_rejects_different_lengths() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-    ]))
+    let this = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![Subterm::Prim(Prim::Nat(Nat::new(1usize))).into()],
+    ))
     .into();
 
-    let that = Subterm::Prim(Prim::Lst(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-        Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
-    ]))
+    let that = Subterm::Prim(Prim::Lst(
+        Term::prim(Prim::NatType),
+        vec![
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
+            Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
+        ],
+    ))
     .into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));

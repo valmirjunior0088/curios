@@ -357,7 +357,7 @@ fn bin_shape(grain: Grain, value: Term) -> Shape<u8> {
 /// Classify a reduced `Lst` value into its product shape (generators are elements).
 fn lst_shape(value: Term) -> Shape<Term> {
     match Term::unwrap_or_clone(value) {
-        Subterm::Prim(Prim::Lst(elems)) => Shape::Literal(elems),
+        Subterm::Prim(Prim::Lst(_, elems)) => Shape::Literal(elems),
         Subterm::Prim(Prim::LstConcat(_, operands)) => Shape::Concat(operands),
         Subterm::Prim(Prim::LstAppend(_, base, elem)) => Shape::Append(base, elem),
         other => Shape::Opaque(other.into()),
@@ -1493,12 +1493,13 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let elem = reducer.reduce(elem.clone())?;
             Ok(Subterm::Prim(Prim::lst_type(elem)))
         }
-        Prim::Lst(elems) => {
+        Prim::Lst(elem, elems) => {
+            let elem = reducer.reduce(elem.clone())?;
             let elems = elems
                 .iter()
                 .map(|e| reducer.reduce(e.clone()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Subterm::Prim(Prim::Lst(elems)))
+            Ok(Subterm::Prim(Prim::Lst(elem, elems)))
         }
         Prim::LstLen(type_, list) => {
             let type_ = reducer.reduce(type_.clone())?;
@@ -1523,7 +1524,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
-            if let (Subterm::Prim(Prim::Lst(elems)), Some(i)) = (&*list, i) {
+            if let (Subterm::Prim(Prim::Lst(_, elems)), Some(i)) = (&*list, i) {
                 let len = elems.len();
                 return match elems.get(i).cloned().map(Term::unwrap_or_clone) {
                     Some(elem) => Ok(elem),
@@ -1571,7 +1572,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             // the cons peel below bottoms out on (the `Lst` twin of `BinSlice`'s
             // empty-slice identity).
             if start_reduced == end_reduced {
-                return Ok(Subterm::Prim(Prim::Lst(Vec::new())));
+                return Ok(Subterm::Prim(Prim::Lst(type_.clone(), Vec::new())));
             }
             // A nested slice reassociates: `slice(slice(a, p, q), i, j) =
             // slice(a, p + i, p + j)`. Sound for the in-range bounds real call sites
@@ -1586,9 +1587,9 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let s = as_index(&start_reduced);
             let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
-            if let (Subterm::Prim(Prim::Lst(elems)), Some(s), Some(e)) = (&*list, s, e) {
+            if let (Subterm::Prim(Prim::Lst(_, elems)), Some(s), Some(e)) = (&*list, s, e) {
                 return match elems.get(s..e) {
-                    Some(slice) => Ok(Subterm::Prim(Prim::Lst(slice.to_vec()))),
+                    Some(slice) => Ok(Subterm::Prim(Prim::Lst(type_.clone(), slice.to_vec()))),
                     None => Err(ReduceError::LstSliceOutOfRange {
                         len: elems.len(),
                         start: s,
@@ -1618,7 +1619,8 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                             zero,
                             dec(&end_reduced),
                         ));
-                        let head_singleton: Term = Subterm::Prim(Prim::Lst(vec![head])).into();
+                        let head_singleton: Term =
+                            Subterm::Prim(Prim::Lst(type_.clone(), vec![head])).into();
                         let consed = Term::prim(Prim::lst_concat(type_, [head_singleton, rest]));
                         return reducer.reduce(consed).map(Term::unwrap_or_clone);
                     }
@@ -1646,9 +1648,9 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             let list = reducer.reduce_forced(list.clone())?;
             let elem = reducer.reduce(elem.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
-                Subterm::Prim(Prim::Lst(mut elems)) => {
+                Subterm::Prim(Prim::Lst(lst_elem, mut elems)) => {
                     elems.push(elem);
-                    Subterm::Prim(Prim::Lst(elems))
+                    Subterm::Prim(Prim::Lst(lst_elem, elems))
                 }
                 list => Subterm::Prim(Prim::lst_append(type_, list, elem)),
             })
@@ -1665,15 +1667,15 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             // `[]`-handling (`core::spine`); see `normalize_concat`.
             fn literal(operand: &Term) -> Option<&[Term]> {
                 match &**operand {
-                    Subterm::Prim(Prim::Lst(elems)) => Some(elems.as_slice()),
+                    Subterm::Prim(Prim::Lst(_, elems)) => Some(elems.as_slice()),
                     _ => None,
                 }
             }
             Ok(normalize_concat(
                 reduced,
                 literal,
-                |elems| Subterm::Prim(Prim::Lst(elems)),
-                |kept| Subterm::Prim(Prim::lst_concat(type_, kept)),
+                |elems| Subterm::Prim(Prim::Lst(type_.clone(), elems)),
+                |kept| Subterm::Prim(Prim::lst_concat(type_.clone(), kept)),
             ))
         }
         // `map`: the eliminator homomorphism. The literal case applies `f`
@@ -1692,6 +1694,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                 lst_shape(lst),
                 |elems| {
                     Term::prim(Prim::Lst(
+                        b.clone(),
                         elems
                             .into_iter()
                             .map(|x| Term::apply(f.clone(), [x]))

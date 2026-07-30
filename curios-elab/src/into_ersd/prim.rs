@@ -317,7 +317,7 @@ pub(super) fn erase_prim(
             )
         }
 
-        Prim::Lst(elements) => {
+        Prim::Lst(_, elements) => {
             // Elaborate already checked this literal against a list type; the
             // element type is re-derived only to lower the elements.
             let element_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {

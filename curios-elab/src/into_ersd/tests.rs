@@ -202,7 +202,10 @@ fn sequences_transcribe_without_carrier_choices() {
     let body = Term::let_(
         &lst,
         Term::prim(Prim::LstType(Term::prim(Prim::NatType))),
-        Term::prim(Prim::Lst(vec![nat_lit(1), nat_lit(2)])),
+        Term::prim(Prim::Lst(
+            Term::prim(Prim::NatType),
+            vec![nat_lit(1), nat_lit(2)],
+        )),
         Term::prim(Prim::LstLen(
             Term::prim(Prim::NatType),
             Term::free_var(&lst),
@@ -667,7 +670,7 @@ fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
     let items = vec![definition(
         "xs",
         lst_ty.clone(),
-        Term::prim(Prim::Lst(vec![nat_lit(1)])),
+        Term::prim(Prim::Lst(Term::prim(Prim::NatType), vec![nat_lit(1)])),
     )];
     let body = Term::lst_match(
         Term::free_var(&global("xs")),
