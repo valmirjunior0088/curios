@@ -3,7 +3,8 @@ use {
     crate::{
         Atom, Carrier, Cases, Free, InductArm, InductDecl, Invert, Many, Match, MotiveShape, Nat,
         Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices,
-        check_motive, check_prim_head, invert_indices, is_prop, reduce_with, refine_head,
+        check_motive, check_prim_head, invert_indices, is_prop, pinned_by_targets, reduce_with,
+        refine_head,
     },
     curios_base::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
@@ -520,9 +521,11 @@ fn elaborate_bool_match(
 }
 
 /// Whether a single-constructor proposition admits large elimination: every
-/// payload binder must be non-informative — a proposition itself, or *forced* by
-/// appearing in the constructor's index targets (recovered from the scrutinee's
-/// type, as `Eq`'s `refl(z) : (z, z)` recovers `z` from its indices).
+/// payload binder must be non-informative — a proposition itself, or *pinned*
+/// by the constructor's index targets (matching a value against a target
+/// recovers the binder, as `Eq`'s `refl(z) : (z, z)` recovers `z`), decided by
+/// the walk both checkers share. Occurrence is not determination: `blur(a)`
+/// mentions `a` and pins nothing, since `blur` need not be injective.
 fn singleton_eliminable(
     context: &mut Context,
     induct_decl: &InductDecl,
@@ -548,8 +551,13 @@ fn singleton_eliminable(
         }
     };
 
-    // A binder is forced iff it occurs in the terminal's index expressions.
-    let forced = terminal.free_vars();
+    // A binder is forced iff the terminal's index targets pin it. A terminal
+    // that is not the constructed family type decomposes to nothing, which is
+    // the stricter direction.
+    let forced = match &*terminal {
+        Subterm::InductType(constructed) => pinned_by_targets(&constructed.indices),
+        _ => Vec::new(),
+    };
     for (name, ty) in &binders {
         if !forced.contains(name) && !is_prop(context, ty)? {
             return Ok(false);

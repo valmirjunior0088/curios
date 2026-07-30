@@ -23,7 +23,7 @@
 mod tests;
 
 use {
-    super::{Kernel, KernelError, Sort, infer::check, sort::sort_of},
+    super::{Kernel, KernelError, Sort, infer::check},
     crate::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseContext, group_totality, yields_a_sort,
@@ -49,7 +49,7 @@ pub fn check_definition(
     kernel.restore_budget();
     kernel.assume_universes(universes);
 
-    sort_of(kernel, type_)?;
+    Sort::of(kernel, type_)?;
     check(kernel, body, type_)?;
 
     kernel.define(name, type_, body, universes);
@@ -89,7 +89,7 @@ pub fn check_rec_group(
     for index in 0..group.length() {
         let type_ = group.member_type(index);
 
-        let sort = sort_of(kernel, &type_)?;
+        let sort = Sort::of(kernel, &type_)?;
         check(kernel, &group.member_body(index), &type_)?;
 
         // A proof-typed or type-yielding member is deleted by erasure, so its
@@ -189,7 +189,7 @@ fn check_sizing<B: Bound + Clone>(
         let mut position = 0;
         let mut telescope = telescope.clone();
         while let Telescope::Cons(domain, rest) = telescope {
-            if let Sort::Type(level) = sort_of(kernel, &domain)? {
+            if let Sort::Type(level) = Sort::of(kernel, &domain)? {
                 let upper = if position < uniform { &raised } else { bound };
 
                 if !kernel.level_leq(&level, upper) {
@@ -225,7 +225,7 @@ pub fn check_entrypoint(
 
     match expected {
         Some(type_) => {
-            sort_of(kernel, type_)?;
+            Sort::of(kernel, type_)?;
             check(kernel, body, type_)
         }
         None => super::infer::infer(kernel, body).map(|_| ()),

@@ -1,6 +1,5 @@
 use crate::{
-    Global, InductDecl, Kernel, Level, Prim, Telescope, Term, UniverseContext,
-    kernel::sort::{Sort, sort_of},
+    Global, InductDecl, Kernel, Level, Prim, Telescope, Term, UniverseContext, kernel::sort::Sort,
 };
 use curios_base::{Plicity, Qualifier, RootId};
 
@@ -44,7 +43,7 @@ fn a_primitive_type_sits_at_level_zero() {
     let mut kernel = kernel();
 
     assert_eq!(
-        sort_of(&mut kernel, &Term::prim(Prim::NatType)),
+        Sort::of(&mut kernel, &Term::prim(Prim::NatType)),
         Ok(Sort::Type(Level::zero())),
     );
 }
@@ -56,13 +55,13 @@ fn a_universe_is_one_level_above_itself() {
     let mut kernel = kernel();
 
     assert_eq!(
-        sort_of(&mut kernel, &Term::type_ground()),
+        Sort::of(&mut kernel, &Term::type_ground()),
         Ok(Sort::Type(
             Level::zero().succ().expect("level zero succeeds")
         )),
     );
     assert_eq!(
-        sort_of(&mut kernel, &Term::prop()),
+        Sort::of(&mut kernel, &Term::prop()),
         Ok(Sort::Type(Level::zero())),
     );
 }
@@ -73,8 +72,8 @@ fn a_nominal_types_sort_is_the_one_its_declaration_states() {
     let proposition = declare(&mut kernel, "P", Term::prop());
     let data = declare(&mut kernel, "D", Term::type_ground());
 
-    assert_eq!(sort_of(&mut kernel, &proposition), Ok(Sort::Prop));
-    assert_eq!(sort_of(&mut kernel, &data), Ok(Sort::Type(Level::zero())),);
+    assert_eq!(Sort::of(&mut kernel, &proposition), Ok(Sort::Prop));
+    assert_eq!(Sort::of(&mut kernel, &data), Ok(Sort::Type(Level::zero())),);
 }
 
 /// Π into a proposition is a proposition however large its domain, which is
@@ -87,7 +86,7 @@ fn a_function_into_a_proposition_is_a_proposition() {
 
     let pi = Term::func_type([(binder, Term::prim(Prim::NatType))], proposition);
 
-    assert_eq!(sort_of(&mut kernel, &pi), Ok(Sort::Prop));
+    assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Prop));
 }
 
 #[test]
@@ -100,7 +99,7 @@ fn a_function_into_data_takes_the_join_of_its_parts() {
         Term::prim(Prim::NatType),
     );
 
-    assert_eq!(sort_of(&mut kernel, &pi), Ok(Sort::Type(Level::zero())));
+    assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Type(Level::zero())));
 }
 
 /// A record of nothing but propositions is a proposition — but the *empty*
@@ -115,10 +114,10 @@ fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
         (binder(0, "a"), proposition.clone()),
         (binder(1, "b"), proposition),
     ]);
-    assert_eq!(sort_of(&mut kernel, &all_props), Ok(Sort::Prop));
+    assert_eq!(Sort::of(&mut kernel, &all_props), Ok(Sort::Prop));
 
     let unit = Term::tuple_type(Vec::<(crate::Free, Term)>::new());
-    assert_eq!(sort_of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
+    assert_eq!(Sort::of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
 }
 
 /// One relevant field is enough to make the whole record relevant: its
@@ -133,7 +132,7 @@ fn one_relevant_field_makes_a_record_relevant() {
         (binder(1, "b"), Term::prim(Prim::NatType)),
     ]);
 
-    assert_eq!(sort_of(&mut kernel, &mixed), Ok(Sort::Type(Level::zero())));
+    assert_eq!(Sort::of(&mut kernel, &mixed), Ok(Sort::Type(Level::zero())));
 }
 
 /// A list *of* proofs is not a proposition: it has a length, so two lists are
@@ -145,7 +144,7 @@ fn a_list_of_proofs_is_not_a_proposition() {
 
     let list = Term::prim(Prim::LstType(proposition));
 
-    assert_eq!(sort_of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
+    assert_eq!(Sort::of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
 }
 
 /// The type of a hypothesis is read off the binder it was opened at, which is
@@ -156,9 +155,9 @@ fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let proposition = declare(&mut kernel, "P", Term::prop());
     let hypothesis = crate::Free::local(0, Some("h"));
 
-    // `h : P`, so `sort_of(P)` is `Prop` and the *type of h* is `P`.
+    // `h : P`, so `Sort::of(P)` is `Prop` and the *type of h* is `P`.
     kernel.assume(&hypothesis, &Term::prop());
-    let sort = sort_of(&mut kernel, &Term::free_var(&hypothesis));
+    let sort = Sort::of(&mut kernel, &Term::free_var(&hypothesis));
 
     assert_eq!(sort, Ok(Sort::Prop));
     let _ = proposition;
@@ -173,7 +172,7 @@ fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     let type_ = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
     assert_eq!(
-        sort_of(&mut kernel, &type_),
+        Sort::of(&mut kernel, &type_),
         Err(crate::KernelError::Undeclared(name)),
     );
 }
@@ -185,7 +184,7 @@ fn a_value_in_type_position_is_refused() {
     let mut kernel = kernel();
 
     assert!(matches!(
-        sort_of(&mut kernel, &Term::prim(Prim::Bool(true))),
+        Sort::of(&mut kernel, &Term::prim(Prim::Bool(true))),
         Err(crate::KernelError::Unclassified(_)),
     ));
 }

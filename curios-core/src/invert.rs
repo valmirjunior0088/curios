@@ -16,9 +16,55 @@
 //! borrowing conversion represents.
 
 use {
-    super::{Free, InductType, Judge, Peel, Subterm, Telescope, Term, peel_prim},
+    super::{Free, InductType, Judge, Peel, Subterm, Telescope, Term, Variant, peel_prim},
     std::collections::BTreeSet,
 };
+
+/// The payload binders an index target set *determines* — the singleton rung's
+/// side condition, shared by both checkers exactly as the unifier below is: a
+/// total function of the targets alone, so a second copy would be a second run
+/// rather than a second opinion.
+///
+/// A binder is determined when matching a value against the target recovers it.
+/// That holds when the target is the binder itself, and — recursively — when it
+/// is a constructor application and the binder sits in one of its arguments,
+/// because constructors are injective and their tags are disjoint.
+///
+/// It does **not** hold for a binder under anything else. `blur(a)` is an
+/// arbitrary function of `a`: knowing its value recovers nothing, since `blur`
+/// need not be injective and in the case that motivated this rule is the
+/// constant zero. Reading occurrence as determination — asking only whether `a`
+/// appears anywhere in the target — is the mistake, and it is the difference
+/// between a singleton and a proposition with a payload a program can read.
+///
+/// Total by construction: a target this cannot decompose contributes nothing,
+/// so a shape nobody anticipated yields *fewer* determined binders and a
+/// stricter guard, never a looser one.
+pub fn pinned_by_targets(targets: &[Term]) -> Vec<Free> {
+    fn walk(target: &Term, determined: &mut Vec<Free>) {
+        match &**target {
+            Subterm::Var(var) => determined.push(var.unwrap().clone()),
+            // Constructors are injective and their tags disjoint, so matching
+            // recovers every argument. Parameters are not walked: they are the
+            // family's, fixed before this constructor was reached.
+            Subterm::Variant(Variant { payload, .. }) => {
+                for component in payload {
+                    walk(component, determined);
+                }
+            }
+            // Anything else — an application, a projection, a primitive, a
+            // stuck match — determines nothing.
+            _ => {}
+        }
+    }
+
+    let mut determined = Vec::new();
+    for target in targets {
+        walk(target, &mut determined);
+    }
+
+    determined
+}
 
 /// The outcome of inversion: either every index position decomposed (or
 /// refused) cleanly, yielding the forced arm-binder solutions, or some

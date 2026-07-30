@@ -162,29 +162,23 @@ fn a_foreign_declaration_is_confined_to_wire_types() {
 
 // The large-elimination guard again, at its *singleton* rung. A one-constructor
 // proposition may eliminate into data only when every payload binder is
-// non-informative — a proposition itself, or recovered from the scrutinee's
-// indices, as `Eq`'s `refl(@z) : (z, z)` recovers `z`. `singleton_eliminable`
-// decides "recovered" by `terminal.free_vars()`: a *syntactic* occurrence test.
+// non-informative — a proposition itself, or *pinned* by the constructor's
+// index targets, as `Eq`'s `refl(@z) : (z, z)` recovers `z`.
 //
 // Occurring in an index target is not the same as being determined by one.
 // `blur` is constant, so `Loose(0)` is inhabited by `mk(0)` and by `mk(7)`
-// alike, and no index tells them apart — yet `a` occurs in `blur(a)`, so the
-// guard reads it as forced and admits the elimination. Proof irrelevance then
-// identifies the two inhabitants while `extract` observes them apart, and the
-// gap is a closed inhabitant of `False`. The program below prints "FORGED"
-// today; it must be refused.
+// alike, and no index tells them apart — proof irrelevance identifies the two
+// inhabitants while `extract` would observe them apart, and the gap is a
+// closed inhabitant of `False`. `singleton_eliminable` once read `a` as forced
+// because it *occurs* in `blur(a)` — a syntactic occurrence test — and this
+// program printed "FORGED". Both checkers now decide the condition by the
+// shared `pinned_by_targets` walk: a binder counts only when matching a value
+// against the target recovers it, which `blur(a)` never does.
 //
-// The two ends of the discrimination are already covered by fixtures here: the
-// same declaration with target `(0)` is rejected, and `(a)` is a genuinely
-// forced binder that must stay accepted. Only the middle — an occurrence that
-// does not determine — escapes.
-//
-// The diagnostic asserted is the guard's, because the guard is the perimeter
-// entry that let this through. A fix that instead refuses the *declaration* —
-// requiring a constructor's index targets to be patterns rather than arbitrary
-// terms — is equally legitimate and would need this expectation updated.
+// The two ends of the discrimination are covered alongside: the same
+// declaration with target `(0)` is rejected below, and `(a)` is a genuinely
+// forced binder that must stay accepted.
 #[test]
-#[ignore = "open: the elaborator still admits this; the kernel refuses it, but nothing runs the kernel yet"]
 fn a_non_injective_index_target_does_not_force_its_binder() {
     let source = r#"
         use /std/{Nat, Eq, False};
@@ -212,12 +206,10 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
     rejected_by(source, "cannot eliminate the proposition");
 }
 
-// The lower end of that discrimination, and the reason the hole is in the
-// occurrence test rather than in the guard as a whole: drop `a` from the index
-// target and the guard fires. Without this, a fix could "close" the hole by
-// rejecting every indexed proposition and nothing here would notice.
+// The lower end of that discrimination: drop `a` from the index target and the
+// guard fires. Without this, a fix could "close" the hole above by rejecting
+// every indexed proposition and nothing here would notice.
 #[test]
-#[ignore = "control for the fixture above; ignored with it so the pair stays read as a pair"]
 fn an_unmentioned_payload_binder_is_not_forced() {
     let source = r#"
         use /std/{Nat};

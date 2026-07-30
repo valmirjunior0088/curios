@@ -2,7 +2,7 @@
 //! was supposed to.
 //!
 //! This is the rule set. Everything else in the kernel exists to serve it —
-//! `whnf` so a type can be looked at, `sort_of` so a proposition can be
+//! `whnf` so a type can be looked at, `Sort::of` so a proposition can be
 //! recognized, `convert` so two types can be compared. What is written here is
 //! the language's typing rules, one per term form, and it is meant to be read
 //! that way.
@@ -43,9 +43,9 @@ mod tests;
 
 use {
     super::{
-        Kernel, KernelError,
+        Kernel, KernelError, Sort,
         convert::{convert, scoped},
-        sort::{self, sort_of},
+        synth_neutral,
     },
     crate::{
         Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Proj, Rec, RecMember, Reducer,
@@ -134,9 +134,9 @@ fn infer_node(
             .cloned()
             .ok_or_else(|| KernelError::Unbound(var.unwrap().clone())),
 
-        // A type former is a type, at the universe `sort_of` computes for it —
+        // A type former is a type, at the universe `Sort::of` computes for it —
         // the join of its parts, or `Prop` when it lands there.
-        Subterm::FuncType(_) | Subterm::TupleType(_) => Ok(sort_of(kernel, term)?.term()),
+        Subterm::FuncType(_) | Subterm::TupleType(_) => Ok(Sort::of(kernel, term)?.term()),
 
         // λ: check each domain is a type, then the body under those binders.
         // The result is the Π over the same telescope.
@@ -248,7 +248,7 @@ fn infer_node(
         }
 
         // A fully applied nominal family has the sort its declaration states.
-        Subterm::InductType(_) | Subterm::StructType(_) => Ok(sort_of(kernel, term)?.term()),
+        Subterm::InductType(_) | Subterm::StructType(_) => Ok(Sort::of(kernel, term)?.term()),
 
         // A constructor application: its signature, instantiated at the
         // declaration's parameters, ends in the type it constructs — including
@@ -393,7 +393,7 @@ fn infer_node(
                 let type_ = binding.type_().release(&refs);
                 let value = binding.value().release(&refs);
 
-                sort_of(kernel, &type_)?;
+                Sort::of(kernel, &type_)?;
                 check(kernel, &value, &type_)?;
                 values.push(value);
             }
@@ -416,7 +416,7 @@ fn infer_node(
             let mut erased_member: Option<Term> = None;
             for index in 0..group.length() {
                 let type_ = group.member_type(index);
-                let sort = sort_of(kernel, &type_)?;
+                let sort = Sort::of(kernel, &type_)?;
                 check(kernel, &group.member_body(index), &type_)?;
 
                 // As in `check_rec_group`: a proof-typed or type-yielding
@@ -444,7 +444,7 @@ fn infer_node(
 
         // A polymorphic name at a stated instance: its scheme, substituted.
         Subterm::UniverseInst(UniverseInst { head, levels }) => {
-            match sort::synth_neutral(kernel, term)? {
+            match synth_neutral(kernel, term)? {
                 Some(type_) => Ok(type_),
                 None => {
                     let _ = (head, levels);
@@ -855,7 +855,7 @@ fn infer_telescope(
             Ok(Telescope::Done(Box::new(type_)))
         }
         Telescope::Cons(domain, rest) => {
-            sort_of(kernel, &domain)?;
+            Sort::of(kernel, &domain)?;
 
             let binder = kernel.fresh(rest.first_hint());
             let mark = kernel.mark();

@@ -30,7 +30,7 @@ pub struct StructDecl {
     pub fields: Telescope<()>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the
     /// type-former's kind. A fully-applied `StructType { name, .. }` has this
-    /// sort, which `sort_of` reads to decide propositional irrelevance.
+    /// sort, which `Sort::of` reads to decide propositional irrelevance.
     pub result_sort: Term,
     /// The declaring module's qualifier (e.g. `Foo/Bar`); the root module is
     /// the empty qualifier. Compared against the use-site module for the

@@ -241,7 +241,7 @@ The sophistication of these analyses is corpus-forced, not discretionary, and ca
 
 **C5 — The free-monoid carriers' arms. Landed — and it reopened the refusing frontier.** The rule is the typing face of the fact `uncons` computes with and `close` traverses by: the identity arm inhabits the motive at the carrier's empty value, and the cons arm — under the peeled generator, the tail, and an induction hypothesis at that tail — inhabits it at one generator over the tail, with the case values spelled exactly as elaboration spells them and the scrutinee substituted to the case value as in every other arm. The carrier's element type must agree with the scrutinee's. (The `Switch` default was never actually a hole — it is checked at the scrutinee's own instance, the only one it has; the docs listing it were the overhang.)
 
-Measured: **21 became 52**, zero cleared — thirty-one newly *visible* disagreements, all in the `BigNat`/`Eq` fold-proof corpus, at positions the kernel had never compared before. Two apparent classes in the tally: `Eq.{0}` vs `Eq.{u}` level mismatches at motive instances, and same-headed `is_trimmed`/`combine` forms that likely stall on the syntactically-compared conversion positions. Undiagnosed, deliberately: the inventory exists so these are counted before any is designed for. The walk also slowed to ~278s — the arm checks drive conversion through large stuck folds — likewise unprofiled and recorded as open.
+Measured: **21 became 52**, zero cleared — thirty-one newly *visible* disagreements, all in the `BigNat`/`Eq` fold-proof corpus, at positions the kernel had never compared before. Two apparent classes in the tally: `Eq.{0}` vs `Eq.{u}` level mismatches at motive instances, and same-headed `is_trimmed`/`combine` forms that likely stall on the syntactically-compared conversion positions. Undiagnosed, deliberately: the inventory exists so these are counted before any is designed for. The walk also slowed to ~278s; profiled and resolved under Measurements below — the cost was never the arm checks' conversions but the specialization substitution they ran.
 
 ### D — Cut what cannot admit a program
 
@@ -290,6 +290,10 @@ After C3's carried element type: **21 of 1050** — the 17-item `Unclassified` c
 After A4's descent gate: **still 38 of 1050**, zero `NotDescending` — every proof-typed and type-yielding `rec` in the prelude descends — at **16.6s → 164s** for the inventory, the open cost fork recorded under A4.
 
 After A3's shared positivity (and the declaration-pass reordering it forced): **still 38 of 1050**, byte-identical to the C1 baseline — both declaration gates pass the whole prelude.
+
+After the substitution rewrite — `eliminate::substitute` as one identity-memoized, free-vars-pruned traversal instead of `Scope::close` then `open`, whose unpruned, unshared capture expanded shared DAGs to trees at every arm: **still 52 of 1050**, verdict lists diff-identical and memo parity holding, and the inventory's 278s fell to **71s for inventory plus parity together** — five whole-prelude walks. The cost was one *passing* item, `/std/BigNat/add/raw_assoc`, at 87s per walk with 62s in substitution; the refused items cost 1.6s combined, so the doomed-conversion hypothesis was wrong. The profile that settled it was `curios-profile`'s capture, run on the kernel for the first time.
+
+After the singleton side condition moved to the shared walk (`pinned_by_targets` in `invert.rs`, decided identically by both checkers; the elaborator's occurrence test retired): the two perimeter fixtures un-ignore and pass, the whole prelude rebuilds unaffected, and the last known open route to `False` is closed — the certifying table above stays empty, and the elaborator now matches it.
 
 After C2's declaration sizing: **still 38 of 1050** — every prelude declaration satisfies the size condition, and the evidence the check does anything is its hand-built fixture, as with coverage.
 

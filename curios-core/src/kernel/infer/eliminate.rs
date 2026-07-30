@@ -62,8 +62,8 @@ use {
     super::{check, infer},
     crate::{
         Atom, Bound, Free, InductArm, InductDecl, InductType, Invert, Kernel, KernelError, Many,
-        Reducer, Scope, Subterm, Telescope, Term, Variant, Visit, invert_indices,
-        kernel::sort::sort_of,
+        Reducer, Scope, Subterm, Telescope, Term, Variant, Visit, invert_indices, kernel::Sort,
+        pinned_by_targets,
     },
 };
 
@@ -398,7 +398,7 @@ fn guard_large_elimination(
     motive: &Scope<Many>,
 ) -> Result<(), KernelError> {
     let scrutinee_type: Term = Subterm::InductType(family.clone()).into();
-    if !sort_of(kernel, &scrutinee_type)?.is_prop() {
+    if !Sort::of(kernel, &scrutinee_type)?.is_prop() {
         return Ok(());
     }
 
@@ -414,7 +414,7 @@ fn guard_large_elimination(
         .collect::<Vec<_>>();
     let refs = binders.iter().collect::<Vec<_>>();
     let result = motive.open(&refs);
-    let relevant = sort_of(kernel, &result).map(|sort| !sort.is_prop());
+    let relevant = Sort::of(kernel, &result).map(|sort| !sort.is_prop());
     kernel.retract(mark);
 
     if !relevant? {
@@ -441,7 +441,7 @@ fn guard_large_elimination(
                         return Ok(false);
                     };
 
-                    let determined = forced(&constructed.indices);
+                    let determined = pinned_by_targets(&constructed.indices);
 
                     for component in payload {
                         let Subterm::Var(var) = &**component else {
@@ -483,7 +483,7 @@ fn guard_large_elimination(
 /// A proof does not: irrelevance makes any two interchangeable. A type does
 /// not either: erasure deletes it. Anything else does.
 fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
-    if sort_of(kernel, type_)?.is_prop() {
+    if Sort::of(kernel, type_)?.is_prop() {
         return Ok(false);
     }
 
@@ -491,47 +491,4 @@ fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, Kernel
         &*kernel.reduce_forced(type_.clone())?,
         Subterm::Type(_) | Subterm::Prop
     ))
-}
-
-/// The payload binders an index target set *determines*.
-///
-/// A binder is determined when matching a value against the target recovers it.
-/// That holds when the target is the binder itself, and — recursively — when it
-/// is a constructor application and the binder sits in one of its arguments,
-/// because constructors are injective and their tags are disjoint.
-///
-/// It does **not** hold for a binder under anything else. `blur(a)` is an
-/// arbitrary function of `a`: knowing its value recovers nothing, since `blur`
-/// need not be injective and in the case that motivated this rule is the
-/// constant zero. Reading occurrence as determination — asking only whether `a`
-/// appears anywhere in the target — is the mistake, and it is the difference
-/// between a singleton and a proposition with a payload a program can read.
-///
-/// Total by construction: a target this cannot decompose contributes nothing,
-/// so a shape nobody anticipated yields *fewer* determined binders and a
-/// stricter guard, never a looser one.
-fn forced(indices: &[Term]) -> Vec<Free> {
-    fn walk(target: &Term, determined: &mut Vec<Free>) {
-        match &**target {
-            Subterm::Var(var) => determined.push(var.unwrap().clone()),
-            // Constructors are injective and their tags disjoint, so matching
-            // recovers every argument. Parameters are not walked: they are the
-            // family's, fixed before this constructor was reached.
-            Subterm::Variant(Variant { payload, .. }) => {
-                for component in payload {
-                    walk(component, determined);
-                }
-            }
-            // Anything else — an application, a projection, a primitive, a
-            // stuck match — determines nothing.
-            _ => {}
-        }
-    }
-
-    let mut determined = Vec::new();
-    for target in indices {
-        walk(target, &mut determined);
-    }
-
-    determined
 }

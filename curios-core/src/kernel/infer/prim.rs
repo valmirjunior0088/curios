@@ -13,7 +13,7 @@
 
 use {
     super::{check, infer},
-    crate::{Kernel, KernelError, Prim, Subterm, Term, wire_term},
+    crate::{Kernel, KernelError, Prim, Subterm, Term, kernel::Sort, wire_term},
     curios_base::Grain,
 };
 
@@ -74,10 +74,10 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         | Prim::HandleType => Ok(Term::type_ground()),
 
         // A parameterized former is a type at whatever level its element sits
-        // at, which is what `sort_of` reports for it.
+        // at, which is what `Sort::of` reports for it.
         Prim::LstType(element) | Prim::CellType(element) => {
             let element = element.clone();
-            let sort = super::sort::sort_of(kernel, &element)?;
+            let sort = Sort::of(kernel, &element)?;
             let _ = check_is_type(kernel, &element)?;
 
             Ok(sort.term())
@@ -276,7 +276,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         }
 
         // A mutable cell. Its identity is what makes a `Cell` of proofs
-        // relevant — see `sort_of`.
+        // relevant — see `Sort::of`.
         Prim::Cell(element, initial) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, initial, &element)?;

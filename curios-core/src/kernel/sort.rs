@@ -54,8 +54,8 @@ impl Sort {
 /// Decode a term that is *already* a universe — a kind's codomain, a match
 /// motive, a synthesized neutral's type — into the sort it names.
 ///
-/// Distinct from [`sort_of`], which classifies an arbitrary type:
-/// `as_sort(Prop)` is `Prop`, whereas `sort_of(Prop)` is `Type 0`, since the
+/// Distinct from [`Sort::of`], which classifies an arbitrary type:
+/// `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the
 /// universe `Prop` is itself `Type`-sorted.
 pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, KernelError> {
     let reduced = whnf(kernel, universe.clone())?;
@@ -67,87 +67,89 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Kern
     }
 }
 
-/// The sort of `type_`.
-pub(crate) fn sort_of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
-    let reduced = kernel.reduce_forced(type_.clone())?;
+impl Sort {
+    /// The sort of `type_`.
+    pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
+        let reduced = kernel.reduce_forced(type_.clone())?;
 
-    match &*reduced {
-        // A nominal type's sort is declared, not derived: the declaration says
-        // whether the family lands in `Type` or in `Prop`, at the universes
-        // this occurrence instantiated it at.
-        Subterm::InductType(InductType {
-            name, universes, ..
-        }) => {
-            let declaration = kernel
-                .induct_decl(name)
-                .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
-            kernel.check_instance(&declaration.universe_context, universes)?;
-            let result_sort =
-                instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
+        match &*reduced {
+            // A nominal type's sort is declared, not derived: the declaration says
+            // whether the family lands in `Type` or in `Prop`, at the universes
+            // this occurrence instantiated it at.
+            Subterm::InductType(InductType {
+                name, universes, ..
+            }) => {
+                let declaration = kernel
+                    .induct_decl(name)
+                    .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+                kernel.check_instance(&declaration.universe_context, universes)?;
+                let result_sort =
+                    instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
 
-            as_sort(kernel, &result_sort)
+                as_sort(kernel, &result_sort)
+            }
+            Subterm::StructType(StructType {
+                name, universes, ..
+            }) => {
+                let declaration = kernel
+                    .struct_decl(name)
+                    .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+                kernel.check_instance(&declaration.universe_context, universes)?;
+                let result_sort =
+                    instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
+
+                as_sort(kernel, &result_sort)
+            }
+
+            // A *non-empty* record of propositions is a proposition. The empty
+            // tuple is unit rather than a proposition: it is what an effect returns
+            // (`/std/print : .. -> {}`), so it must be kept at runtime, and calling
+            // it a proposition would erase it.
+            Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
+                let telescope = telescope.clone();
+                scoped(kernel, |kernel| sort_of_sigma(kernel, telescope))
+            }
+            Subterm::TupleType(_) => Ok(Sort::Type(Level::zero())),
+
+            // Π into a proposition is a proposition, regardless of what it
+            // quantifies over — that is what makes `(n : Nat) -> P(n)` erasable.
+            // Otherwise the level is the join of the domains and the codomain.
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                let telescope = telescope.clone();
+                scoped(kernel, |kernel| sort_of_pi(kernel, telescope))
+            }
+
+            Subterm::Prim(prim) => sort_of_prim(kernel, prim),
+
+            // A type-valued `match` (`rec Lt = match n : Prop | ..`): its motive is
+            // the sort, which every arm shares.
+            Subterm::Match(m) => {
+                let binders = (0..m.motive.arity())
+                    .map(|_| Term::free_var(&kernel.fresh(None)))
+                    .collect::<Vec<_>>();
+                let refs = binders.iter().collect::<Vec<_>>();
+                let motive = m.motive.open(&refs);
+
+                as_sort(kernel, &motive)
+            }
+
+            // A neutral type — a `Prop` hypothesis, or a family application stuck
+            // on a variable. Its synthesized type *is* its sort.
+            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) | Subterm::RecMember(_) => {
+                let synthesized = synth_neutral(kernel, &reduced)?
+                    .ok_or_else(|| KernelError::Unclassified(reduced.clone()))?;
+
+                as_sort(kernel, &synthesized)
+            }
+
+            // `Type u : Type (u + 1)`, and `Prop : Type 0`.
+            Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
+            Subterm::Prop => Ok(Sort::Type(Level::zero())),
+
+            Subterm::UniverseInst(instance) => Sort::of(kernel, &instance.head),
+
+            _ => Err(KernelError::Unclassified(reduced.clone())),
         }
-        Subterm::StructType(StructType {
-            name, universes, ..
-        }) => {
-            let declaration = kernel
-                .struct_decl(name)
-                .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
-            kernel.check_instance(&declaration.universe_context, universes)?;
-            let result_sort =
-                instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
-
-            as_sort(kernel, &result_sort)
-        }
-
-        // A *non-empty* record of propositions is a proposition. The empty
-        // tuple is unit rather than a proposition: it is what an effect returns
-        // (`/std/print : .. -> {}`), so it must be kept at runtime, and calling
-        // it a proposition would erase it.
-        Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
-            let telescope = telescope.clone();
-            scoped(kernel, |kernel| sort_of_sigma(kernel, telescope))
-        }
-        Subterm::TupleType(_) => Ok(Sort::Type(Level::zero())),
-
-        // Π into a proposition is a proposition, regardless of what it
-        // quantifies over — that is what makes `(n : Nat) -> P(n)` erasable.
-        // Otherwise the level is the join of the domains and the codomain.
-        Subterm::FuncType(FuncType { telescope, .. }) => {
-            let telescope = telescope.clone();
-            scoped(kernel, |kernel| sort_of_pi(kernel, telescope))
-        }
-
-        Subterm::Prim(prim) => sort_of_prim(kernel, prim),
-
-        // A type-valued `match` (`rec Lt = match n : Prop | ..`): its motive is
-        // the sort, which every arm shares.
-        Subterm::Match(m) => {
-            let binders = (0..m.motive.arity())
-                .map(|_| Term::free_var(&kernel.fresh(None)))
-                .collect::<Vec<_>>();
-            let refs = binders.iter().collect::<Vec<_>>();
-            let motive = m.motive.open(&refs);
-
-            as_sort(kernel, &motive)
-        }
-
-        // A neutral type — a `Prop` hypothesis, or a family application stuck
-        // on a variable. Its synthesized type *is* its sort.
-        Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) | Subterm::RecMember(_) => {
-            let synthesized = synth_neutral(kernel, &reduced)?
-                .ok_or_else(|| KernelError::Unclassified(reduced.clone()))?;
-
-            as_sort(kernel, &synthesized)
-        }
-
-        // `Type u : Type (u + 1)`, and `Prop : Type 0`.
-        Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
-        Subterm::Prop => Ok(Sort::Type(Level::zero())),
-
-        Subterm::UniverseInst(instance) => sort_of(kernel, &instance.head),
-
-        _ => Err(KernelError::Unclassified(reduced.clone())),
     }
 }
 
@@ -181,7 +183,7 @@ fn sort_of_sigma(kernel: &mut Kernel, telescope: Telescope<()>) -> Result<Sort, 
             Telescope::Cons(field, rest) => {
                 // A field that is itself a proposition contributes no level:
                 // `Prop` sits below the hierarchy rather than in it.
-                if let Sort::Type(level) = sort_of(kernel, &field)? {
+                if let Sort::Type(level) = Sort::of(kernel, &field)? {
                     levels.push(level);
                 }
 
@@ -208,7 +210,7 @@ fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, K
     loop {
         match telescope {
             Telescope::Cons(domain, rest) => {
-                if let Sort::Type(level) = sort_of(kernel, &domain)? {
+                if let Sort::Type(level) = Sort::of(kernel, &domain)? {
                     levels.push(level);
                 }
 
@@ -217,7 +219,7 @@ fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, K
                 telescope = rest.open(&[&Term::free_var(&binder)]);
             }
             Telescope::Done(codomain) => {
-                return Ok(match sort_of(kernel, &codomain)? {
+                return Ok(match Sort::of(kernel, &codomain)? {
                     Sort::Prop => Sort::Prop,
                     Sort::Type(output) => {
                         levels.push(output);
@@ -252,7 +254,7 @@ fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
         Prim::LstType(element) | Prim::CellType(element) => {
             let element = element.clone();
 
-            Ok(match sort_of(kernel, &element)? {
+            Ok(match Sort::of(kernel, &element)? {
                 Sort::Type(level) => Sort::Type(level),
                 Sort::Prop => Sort::Type(Level::zero()),
             })

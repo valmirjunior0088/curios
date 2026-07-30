@@ -68,7 +68,7 @@ pub struct InductDecl {
     pub constructors: Vec<(Atom, InductParam)>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the
     /// type-constructor's kind. A fully-applied `InductType { name, .. }`
-    /// has this sort, which `sort_of` reads to decide propositional irrelevance.
+    /// has this sort, which `Sort::of` reads to decide propositional irrelevance.
     pub result_sort: Term,
     /// The exact source module that owns construction and elimination rights.
     /// This is finer-grained than `root`: nested modules in the same compilation

@@ -66,7 +66,7 @@ use prim::convert_prim;
 mod tests;
 
 use {
-    super::{Kernel, KernelError, sort::sort_of},
+    super::{Kernel, KernelError, Sort},
     crate::{
         Bound, FuncType, InductType, Proj, RecMember, Reducer, Struct, StructType, Subterm,
         Telescope, Term, Tuple, TupleType, UniverseInst,
@@ -160,7 +160,7 @@ fn compare(
     // Proof irrelevance. Deliberately before reduction: the point is that
     // neither side is examined, and reducing a proof in order to discover it
     // equals another proof is work whose answer was already known.
-    if sort_of(kernel, type_)?.is_prop() {
+    if Sort::of(kernel, type_)?.is_prop() {
         return Ok(true);
     }
 
