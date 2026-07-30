@@ -14,10 +14,11 @@
 
 use {
     super::{
-        Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
-        check_rec_group, check_struct_decl, positivity_vectors,
+        Erased, Kernel, KernelError, Sort, check_definition, check_entrypoint, check_induct_decl,
+        check_positions, check_rec_group, check_struct_decl, partial_definitions,
+        positivity_vectors,
     },
-    curios_core::{Definition, Free, Global, Item, Module, Term},
+    curios_core::{Definition, Free, Global, Item, Module, Reducer as _, Subterm, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -131,8 +132,16 @@ pub fn recheck_module_verdicts_uncached(module: &Module, budget: u64) -> Vec<Ver
     verdicts_from(Kernel::uncached(budget), module, 0)
 }
 
+/// One item's erased positions, carried with the name a refusal should be reported against.
+type ItemPositions = (Option<Global>, Vec<(Term, Erased)>);
+
+// Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
+#[allow(clippy::mutable_key_type)]
 fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Vec<Verdict> {
     let mut verdicts = Vec::new();
+    // What each item's check recorded, kept per item so a refusal names the item it came from. Classified as it drains rather than retained whole: only the positions the obligations are about survive, and sort-hood is asked once per distinct type.
+    let mut positions: Vec<ItemPositions> = Vec::new();
+    let mut erasure_memo: HashMap<Term, Option<Erased>> = HashMap::new();
 
     // Binder identities are one space shared across the lowerer, the elaborator, and the archived prelude. Seeding above the module's high-water mark is what keeps a binder the kernel mints — while comparing under a telescope, or eta-contracting — from aliasing one already in a term, which would be a capture.
     kernel.set_local_floor(module.binder_floor);
@@ -173,6 +182,8 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
             }
             continue;
         }
+
+        let item_name = item.declared_names().first().map(|&name| name.clone());
 
         match item {
             Item::Let(definition) => {
@@ -224,10 +235,41 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
                 }
             }
         }
+
+        let drained = kernel.take_checked();
+        positions.push((
+            item_name,
+            classify_positions(&mut kernel, drained, &mut erasure_memo),
+        ));
     }
 
     if let Err(error) = check_entrypoint(&mut kernel, &module.body, module.type_.as_ref()) {
         verdicts.push(Verdict { name: None, error });
+    }
+
+    let drained = kernel.take_checked();
+    positions.push((
+        None,
+        classify_positions(&mut kernel, drained, &mut erasure_memo),
+    ));
+
+    // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
+    let (partial, disagreements) = partial_definitions(&mut kernel, module, checked_from);
+    for (name, error) in disagreements {
+        verdicts.push(Verdict {
+            name: Some(name),
+            error,
+        });
+    }
+    let mut local_memo = HashMap::new();
+    for (name, item_positions) in &positions {
+        if let Err(error) = check_positions(&mut kernel, item_positions, &partial, &mut local_memo)
+        {
+            verdicts.push(Verdict {
+                name: name.clone(),
+                error,
+            });
+        }
     }
 
     // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the whole spliced program — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
@@ -261,4 +303,43 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     }
 
     verdicts
+}
+
+/// Which erased half each recorded position belongs to, or `None` for a term the obligations do not reach.
+///
+/// A term checked against a *sort* is itself a type; a term checked against a `Prop`-sorted type is a proof. Memoized by type, because a module checks vastly more terms than it has distinct types and hash-consing keeps that set small.
+#[allow(clippy::mutable_key_type)]
+fn classify_positions(
+    kernel: &mut Kernel,
+    checked: Vec<(Term, Term)>,
+    memo: &mut HashMap<Term, Option<Erased>>,
+) -> Vec<(Term, Erased)> {
+    let mut positions = Vec::new();
+
+    for (term, type_) in checked {
+        let erased = match memo.get(&type_) {
+            Some(erased) => *erased,
+            None => {
+                let erased = erased_half(kernel, &type_);
+                memo.insert(type_.clone(), erased);
+                erased
+            }
+        };
+        if let Some(erased) = erased {
+            positions.push((term, erased));
+        }
+    }
+
+    positions
+}
+
+/// The erased half a term checked against `type_` belongs to. A reduction or sorting failure yields `None`: the item walk reports the real error, and a position this cannot classify is one the obligations decline to constrain.
+fn erased_half(kernel: &mut Kernel, type_: &Term) -> Option<Erased> {
+    match kernel.reduce_forced(type_.clone()) {
+        Ok(reduced) if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) => Some(Erased::Type),
+        Ok(_) => Sort::of(kernel, type_)
+            .ok()
+            .and_then(|sort| sort.is_prop().then_some(Erased::Proof)),
+        Err(_) => None,
+    }
 }

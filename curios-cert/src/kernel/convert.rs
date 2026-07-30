@@ -777,7 +777,7 @@ fn compare_each(
 }
 
 /// [`compare`] at `Type`, for a child position whose type its head does not hand us. Weaker than a typed comparison, never stronger: see the module documentation on incompleteness.
-pub(in crate::kernel::convert) fn ground(
+fn ground(
     kernel: &mut Kernel,
     history: &mut History,
     this: &Term,

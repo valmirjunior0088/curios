@@ -9,6 +9,9 @@
 mod entail;
 pub use entail::*;
 
+mod obligation;
+pub use obligation::*;
+
 mod recheck;
 pub use recheck::*;
 

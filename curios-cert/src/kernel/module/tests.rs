@@ -1,5 +1,5 @@
 use {
-    crate::{Kernel, KernelError, kernel::module::check_induct_decl},
+    crate::{Kernel, KernelError, check_induct_decl},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Level, Telescope, Term, UniverseContext,

@@ -1,5 +1,5 @@
 use {
-    crate::{Kernel, KernelError, kernel::infer::infer},
+    crate::{Kernel, KernelError, infer},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Many, Prim, Scope, Telescope, Term,

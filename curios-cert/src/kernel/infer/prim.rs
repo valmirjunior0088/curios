@@ -6,7 +6,7 @@
 
 use {
     super::{check, infer},
-    crate::{Kernel, KernelError, kernel::Sort},
+    crate::{Kernel, KernelError, Sort},
     curios_base::Grain,
     curios_core::{Prim, Subterm, Term, wire_term},
 };

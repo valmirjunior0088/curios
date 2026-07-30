@@ -77,6 +77,11 @@ pub enum KernelError {
     },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
     Oversized { domain: Level, bound: Level },
+    /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or a `Prim::Exit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
+    NotTotal {
+        erased: crate::Erased,
+        reached: Option<Global>,
+    },
     /// A universe instance whose stated levels do not satisfy the scheme's constraint set. The scheme declared `lower ≤ upper` over its parameters; at this instance's levels, under the hypotheses of the item being checked, the inequality does not hold — which is the route back to the paradox the hierarchy exists to exclude.
     UniverseInstance { lower: Level, upper: Level },
 }
@@ -132,6 +137,20 @@ impl fmt::Display for KernelError {
             KernelError::NotDescending { type_ } => write!(
                 formatter,
                 "a recursive proof or type at `{type_}` does not descend",
+            ),
+            KernelError::NotTotal {
+                erased,
+                reached: Some(reached),
+            } => write!(
+                formatter,
+                "a {erased} position reaches `{reached}`, which is not known to terminate",
+            ),
+            KernelError::NotTotal {
+                erased,
+                reached: None,
+            } => write!(
+                formatter,
+                "a {erased} position does not terminate: it is a non-descending recursion or an exit",
             ),
             KernelError::NotPositive {
                 name,
@@ -240,6 +259,8 @@ pub struct Kernel {
     refinements: Vec<(Term, Term)>,
     /// The constraint set of the item being checked — its own declared hypotheses, assumed while its parameters are held abstract. A generic definition is valid exactly when it checks *under* its constraints, so the level judgments below consult these; discarding them was the route by which a correct polymorphic definition was refused.
     assumed: Vec<UniverseConstraint>,
+    /// Every term this walk has checked, with the type it was checked against — the seed for obligations (T) and (V), taken from the kernel's own typing rather than from another crate's record. Drained per item by [`Kernel::take_checked`].
+    checked: Vec<(Term, Term)>,
     definitions: HashMap<Free, Definition>,
     inducts: HashMap<Global, InductDecl>,
     structs: HashMap<Global, StructDecl>,
@@ -259,6 +280,7 @@ impl Kernel {
             forced_memo: HashMap::new(),
             refinements: Vec::new(),
             assumed: Vec::new(),
+            checked: Vec::new(),
             definitions: HashMap::new(),
             inducts: HashMap::new(),
             structs: HashMap::new(),
@@ -583,6 +605,16 @@ impl Kernel {
     }
 
     /// Restore the full budget for a new judgment.
+    /// Record a term and the type it was checked against. Obligations (T) and (V) read this: a term checked against a `Prop`-sorted type is a proof, and one checked against a sort is a type.
+    pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
+        self.checked.push((term.clone(), type_.clone()));
+    }
+
+    /// Take what this item's check recorded, leaving the record empty for the next one.
+    pub fn take_checked(&mut self) -> Vec<(Term, Term)> {
+        std::mem::take(&mut self.checked)
+    }
+
     pub fn restore_budget(&mut self) {
         self.remaining = self.budget;
     }
