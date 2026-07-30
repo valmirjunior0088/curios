@@ -77,7 +77,14 @@ pub(super) fn check_induct_arms(
     default: Option<&Term>,
     scrutinee: &Term,
 ) -> Result<(), KernelError> {
-    guard_large_elimination(kernel, declaration, family, motive)?;
+    // A match with no arms and no catch-all is a vacuous elimination: the
+    // coverage loop below must then prove *every* constructor impossible at
+    // the scrutinee's indices, so the eliminated instance is uninhabited and
+    // discharging it into a relevant result leaks nothing. The guard exists
+    // for eliminations that can run; this one cannot.
+    if !(cases.is_empty() && default.is_none()) {
+        guard_large_elimination(kernel, declaration, family, motive)?;
+    }
 
     for (tag, arm) in cases {
         check_arm(kernel, declaration, family, motive, scrutinee, tag, arm)?;
