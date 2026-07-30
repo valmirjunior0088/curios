@@ -3,7 +3,7 @@ name = "curios-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios core language: term representation, primitives, universes, and the nominal registry"
+description = "The Curios core language: the term representation and the independent kernel that re-checks it"
 
 [lints]
 workspace = true

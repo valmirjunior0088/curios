@@ -3,7 +3,7 @@ name = "curios-elab"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios elaborator: elaboration, typing, reduction, conversion, and erasure"
+description = "The Curios elaborator: elaboration, typing, conversion, universe solving, and erasure"
 
 [lints]
 workspace = true

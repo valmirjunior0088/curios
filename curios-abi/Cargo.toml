@@ -3,7 +3,7 @@ name = "curios-abi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Host/guest ABI wire constants shared by the curios compiler and runtime"
+description = "The host/guest wire contract shared by the Curios compiler and runtimes: ABI constants and self-describing foreign-function rows"
 
 [lints]
 workspace = true

@@ -3,7 +3,7 @@ name = "curios-web"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios <-> JavaScript boundary: wasm-bindgen exports of the pipeline plus the browser run harness"
+description = "The Curios browser boundary: wasm-bindgen compiler exports and the JavaScript run harness"
 
 [lints]
 workspace = true

@@ -1,0 +1,31 @@
+# curios-ersd
+
+The Curios erased IR: the flat, explicit, first-order stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cont`. Types, proofs, and erasable binders are gone by construction; the representation and its derived analyses belong to the crate rustdoc.
+
+## Design
+
+### The arena optimizer is thin
+
+**Decision.** The arena runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation, and the monoid worker/wrapper rebase — and nothing else. Every structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to `curios-cont`, which runs after the lowering.
+
+**Rationale.** The arena's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper). A second local-rewrite engine here would restate Cont's reductions over a second representation, and the two would drift.
+
+**Rejected.** Local reductions in the arena.
+
+### Shapes stay distinct
+
+**Decision.** The erased alphabet keeps erased Core's semantic identities intact — distinct scalar shapes, schema-carrying products and variants, dedicated Bool and Nat switches, first-class folds. One shape's operations are never reused for another, and conversions between shapes are explicit operations.
+
+**Rationale.** Every encoding decision — carriers, tag layouts, dispatch, loop synthesis — belongs exclusively to the lowering into Cont. Collapsing shapes early discards information the backend needs and cannot recover, and an operation reused across shapes acquires a per-context meaning the semantic oracle could no longer classify node-locally.
+
+### Numeric carriers are exact
+
+**Decision.** Core arithmetic is unbounded; the erased carriers are exact machine scalars — `Nat` as `u32`, `Int` as `i32`, `Flt` as binary32 — with their semantics owned by `curios_base::scalar`, the one constant-folding table every stage shares. The runtime's i31 envelope appears nowhere in the IR: a value the backend cannot box traps at the Wasm boundary instead of changing.
+
+**Rationale.** One shared semantics table means the stages' constant folders cannot drift from each other or from emitted code, and keeping the envelope out of the IR keeps a representation limit from becoming a silent semantic one.
+
+### One naming scheme for compiler identities
+
+**Decision.** Compiler-minted identities are spelled by one scheme from the erased stages through Wasm emission: `~{kind}{index}`, with the stored debug name appended after `$`; Wasm symbols derive theirs the same way with `$` as the only hint separator. Because surface names are alphanumeric-plus-underscore, the scheme cannot collide with a source spelling, and a hint never affects identity.
+
+**Rationale.** A printed identity must read back unambiguously and must never collide with a user's name; reserving the separator makes clash-freedom structural rather than probabilistic, and hints stay display-only so behavior cannot grow back onto spellings.

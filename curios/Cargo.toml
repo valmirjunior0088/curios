@@ -3,7 +3,7 @@ name = "curios"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios pipeline library and command-line compiler driver"
+description = "The Curios native compiler: CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling"
 
 [lints]
 workspace = true

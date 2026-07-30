@@ -3,7 +3,7 @@ name = "curios-base"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Foundational utilities shared across the curios pipeline: spans, entropy, the name! macro, parser/printer monads, and the slice suffix-view laws"
+description = "Foundational utilities shared across every Curios stage: spans, names, entropy, parser/printer monads, and packed values"
 
 [lints]
 workspace = true

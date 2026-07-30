@@ -21,7 +21,7 @@ members = [
 [workspace.package]
 version = "0.5.0"
 edition = "2024"
-description = "Work-in-progress functional dependently typed programming language"
+description = "The Curios programming language: a dependently typed functional language compiled to WebAssembly-GC"
 license = "Apache-2.0"
 
 [workspace.lints.rust]

@@ -3,7 +3,7 @@ name = "curios-prelude"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The build-scoped archived Curios sys/syn/std prelude"
+description = "The build-scoped archive of Curios's fixed /sys, /syn, and /std prelude"
 build = "build.rs"
 
 [lints]

@@ -3,7 +3,7 @@ name = "curios-ersd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios erased IR: ersd->ersd optimization and lowering to continuations"
+description = "The Curios erased IR: post-erasure optimization and lowering to continuations"
 
 [lints]
 workspace = true

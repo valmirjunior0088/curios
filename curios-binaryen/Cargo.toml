@@ -3,7 +3,7 @@ name = "curios-binaryen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Wasm optimization for curios, built from a downloaded Binaryen source release"
+description = "Binaryen-backed WebAssembly optimization for Curios, built from a pinned source release"
 
 [lints]
 workspace = true

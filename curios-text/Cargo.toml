@@ -3,7 +3,7 @@ name = "curios-text"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios surface syntax: lexer/parser and lowering to core"
+description = "The Curios surface syntax: lexer, parser, printer, module resolution, and lowering to core"
 
 [lints]
 workspace = true

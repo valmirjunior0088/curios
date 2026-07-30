@@ -3,7 +3,7 @@ name = "curios-pipeline"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The curios pipeline: compile_entrypoint driving text -> core -> ersd -> cont -> wasm"
+description = "The pure Curios compile driver, from surface text to a WebAssembly module"
 
 [lints]
 workspace = true

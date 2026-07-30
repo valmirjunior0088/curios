@@ -113,7 +113,7 @@ fn str_literal_prints_its_bytes() {
 // on an explicit heap frame stack at O(1) native depth per link, so the length
 // a literal can reach is bounded by the reduction budget, not the stack. This
 // 500-byte literal sits an order of magnitude past that old cliff. See
-// documentation/DESIGN.md.
+// curios-elab/README.md.
 #[test]
 fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff
