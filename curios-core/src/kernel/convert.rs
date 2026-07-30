@@ -99,9 +99,18 @@ pub fn convert(
 #[derive(Default)]
 struct History {
     seen: HashSet<Goal>,
+    /// Unfolding retries currently on the path. Each retry opens a recursive
+    /// spelling whose spine may have *grown*, so its goals never recur into
+    /// `seen` and the coinductive rule cannot close the chain; past
+    /// [`RETRY_DEPTH`] the retry refuses instead — an incompleteness, never an
+    /// admission — because the shapes the rule exists for need one or two.
+    retries: usize,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+/// The deepest chain of unfolding retries conversion will follow.
+const RETRY_DEPTH: usize = 32;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 struct Goal {
     context: Vec<Term>,
     type_: Term,
@@ -110,23 +119,40 @@ struct Goal {
 }
 
 impl History {
-    /// Record a goal, reporting whether it was already there.
+    /// Enter a goal: `None` when it is already in progress — the coinductive
+    /// assumption — otherwise the recorded key, to be handed back to
+    /// [`History::leave`] when the goal completes.
     ///
     /// The rename is by position in the local context, so a goal reached again
     /// under an identically-typed prefix maps onto the same entry. `capture`
     /// turns each binder into a bound index; the results are keys and are never
     /// opened, so the loose indices they leave behind are inert.
-    fn recurs(&mut self, kernel: &Kernel, type_: &Term, this: &Term, that: &Term) -> bool {
+    fn enter(&mut self, kernel: &Kernel, type_: &Term, this: &Term, that: &Term) -> Option<Goal> {
         let binders = kernel.local_names();
         let refs = binders.iter().collect::<Vec<_>>();
         let rename = |term: &Term| term.capture(&refs);
 
-        !self.seen.insert(Goal {
+        let goal = Goal {
             context: kernel.local_types().iter().map(rename).collect(),
             type_: rename(type_),
             this: rename(this),
             that: rename(that),
-        })
+        };
+
+        match self.seen.insert(goal.clone()) {
+            true => Some(goal),
+            false => None,
+        }
+    }
+
+    /// Leave a completed goal, whatever its outcome. The set must hold exactly
+    /// the goals on the current path: a goal *refuted* in one subtree that
+    /// lingered here would be assumed to hold when a later subtree re-derives
+    /// it — the accepting direction — and a goal proven under in-progress
+    /// assumptions is not a fact once they are gone, so neither outcome may
+    /// stay.
+    fn leave(&mut self, goal: &Goal) {
+        self.seen.remove(goal);
     }
 }
 
@@ -165,11 +191,11 @@ fn compare(
         return Ok(true);
     }
 
-    if history.recurs(kernel, type_, this, that) {
+    let Some(goal) = history.enter(kernel, type_, this, that) else {
         return Ok(true);
-    }
+    };
 
-    match Term::unwrap_or_clone(kernel.reduce_forced(type_.clone())?) {
+    let outcome = match Term::unwrap_or_clone(kernel.reduce_forced(type_.clone())?) {
         Subterm::FuncType(FuncType { telescope, .. }) => {
             eta_function(kernel, history, telescope, this, that)
         }
@@ -182,7 +208,10 @@ fn compare(
 
             structural(kernel, history, &this, &that)
         }
-    }
+    };
+
+    history.leave(&goal);
+    outcome
 }
 
 /// Eta at a function type: apply both sides to the same fresh binders and
@@ -327,9 +356,21 @@ fn structural(
             Subterm::Tuple(Tuple { fields: right, .. }),
         ) => compare_each(kernel, history, left, right),
 
-        (Subterm::Apply(left), Subterm::Apply(right)) => Ok(left.plicities == right.plicities
-            && ground(kernel, history, &left.head, &right.head)?
-            && compare_each(kernel, history, &left.params, &right.params)?),
+        // Spine against spine, and when that fails, one definitional unfolding
+        // each: two applications of the same fold can differ in an argument
+        // position the fold discards — `is_trimmed(h ++ rest)` against
+        // `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when
+        // either head is a folded recursive call.
+        (Subterm::Apply(left), Subterm::Apply(right)) => {
+            if left.plicities == right.plicities
+                && ground(kernel, history, &left.head, &right.head)?
+                && compare_each(kernel, history, &left.params, &right.params)?
+            {
+                return Ok(true);
+            }
+
+            unfolded_retry(kernel, history, this, that)
+        }
 
         (
             Subterm::Proj(Proj {
@@ -449,20 +490,38 @@ fn structural(
         // induction hypothesis is the raw stuck fold-match on the same
         // argument. When the heads disagree, grant each side the one
         // definitional unfolding `force` withheld and compare what results.
-        // The recurrence rule bounds the cycles this can enter, and a shape
-        // with nothing to unfold falls back to the refusal it was.
-        _ => {
-            let left = unfold_spelling(kernel, this)?;
-            let right = unfold_spelling(kernel, that)?;
+        _ => unfolded_retry(kernel, history, this, that),
+    }
+}
 
-            match (left, right) {
-                (None, None) => Ok(false),
-                (left, right) => {
-                    let left = left.unwrap_or_else(|| this.clone());
-                    let right = right.unwrap_or_else(|| that.clone());
-                    ground(kernel, history, &left, &right)
-                }
-            }
+/// The last chance before a structural refusal: grant each side the one
+/// definitional unfolding `force` withheld and compare what results. `false`
+/// when neither side has a folded recursive spelling to open. The recurrence
+/// rule bounds the cycles this can enter.
+fn unfolded_retry(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, KernelError> {
+    if history.retries >= RETRY_DEPTH {
+        return Ok(false);
+    }
+
+    let left = unfold_spelling(kernel, this)?;
+    let right = unfold_spelling(kernel, that)?;
+
+    match (left, right) {
+        (None, None) => Ok(false),
+        (left, right) => {
+            let left = left.unwrap_or_else(|| this.clone());
+            let right = right.unwrap_or_else(|| that.clone());
+
+            history.retries += 1;
+            let outcome = ground(kernel, history, &left, &right);
+            history.retries -= 1;
+
+            outcome
         }
     }
 }
