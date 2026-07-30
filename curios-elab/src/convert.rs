@@ -1293,7 +1293,7 @@ impl Convert {
         }
     }
 
-    /// Solve `?id[spine] ≈ t` (the rigid side, already in weak-head normal form). Implements the pattern fragment: embedded-metavariable guard, occurs check, spine-as-renaming inversion (which subsumes the scope check), and re-validation against the frozen birth context, before committing the solution in birth-named form.
+    /// Solve `?id[spine] ≈ t` (the rigid side, already in weak-head normal form). Implements the pattern fragment: embedded-metavariable guard, occurs check, spine-as-renaming inversion (which subsumes the scope check, and reifies reducer-minted `let` definitions out of the candidate rather than refusing them), and re-validation against the frozen birth context, before committing the solution in birth-named form.
     fn solve(
         &mut self,
         context: &mut Context,
@@ -1419,46 +1419,73 @@ impl Convert {
             }
         }
 
-        let abstracted = match subjects.is_empty() {
+        let mut abstracted = match subjects.is_empty() {
             true => t.clone(),
             false => abstract_occurrences(t, &subjects),
         };
 
         // Scope check, through the inversion: every free variable of the (abstracted) candidate must correspond to exactly one birth binder. A name that is no entry at all can never become one — out of scope; a name only reachable through a non-pattern or duplicated slot is not provably determined — postpone.
+        //
+        // One class of free name is context entanglement rather than scope escape: `reduce_let` binds a `let` as an entropy-fresh context *definition* and leaves the name in the reduced spelling, so a candidate that arrived through the reducer can mention a definition no birth binder covers — refusing it would fail equations whose raw spelling is a perfectly scoped solution. Reify such a name by its definition and rescan: the value can only mention earlier definitions (each is released against the prefix that precedes it), so the loop terminates, and a value that embeds the solved metavariable or an unsolved one re-enters the occurs and embedded-metavariable verdicts it would have received in the candidate itself.
         let allowed = image
             .iter()
             .map(|(name, _)| name.clone())
             .chain(subjects.iter().map(|(_, birth)| birth.clone()))
             .collect::<HashSet<_>>();
-        for name in abstracted.free_vars() {
-            if allowed.contains(&name) {
-                continue;
+        loop {
+            let mut reify = None;
+            for name in abstracted.free_vars() {
+                if allowed.contains(&name) {
+                    continue;
+                }
+                // A top-level definition is a global constant, in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention it freely. This is what lets an item elaborate independently of the ambient prelude.
+                if context.is_top_level(&name) {
+                    continue;
+                }
+                if context.definition_body(&name).is_some() {
+                    reify = Some(name);
+                    break;
+                }
+                let mentioned = entries.is_empty()
+                    || entries
+                        .iter()
+                        .any(|entry| entry.free_vars().contains(&name));
+                #[cfg(feature = "profile")]
+                curios_profile::tracing::debug!(
+                    target: "curios_elab::solve",
+                    meta = id.0,
+                    %name,
+                    mentioned,
+                    "scope check rejected a free name",
+                );
+                return Ok(match mentioned {
+                    true => Solved::Postponed,
+                    false => Solved::Failed,
+                });
             }
-            // A top-level definition is a global constant, in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention it freely. This is what lets an item elaborate independently of the ambient prelude.
-            if context.is_top_level(&name) {
-                continue;
+            let Some(name) = reify else {
+                break;
+            };
+            let value = context
+                .definition_body(&name)
+                .expect("the rescan probe found this definition")
+                .clone();
+            let value_metavars = value.metavars();
+            if value_metavars.contains(&id) {
+                return Ok(Solved::Failed);
             }
-            let mentioned = entries.is_empty()
-                || entries
-                    .iter()
-                    .any(|entry| entry.free_vars().contains(&name));
-            #[cfg(feature = "profile")]
-            curios_profile::tracing::debug!(
-                target: "curios_elab::solve",
-                meta = id.0,
-                %name,
-                mentioned,
-                "scope check rejected a free name",
-            );
-            return Ok(match mentioned {
-                true => Solved::Postponed,
-                false => Solved::Failed,
-            });
+            if value_metavars
+                .iter()
+                .any(|other| context.metavar_solution(*other).is_none())
+            {
+                return Ok(Solved::Postponed);
+            }
+            abstracted = abstracted.capture(&[&name]).release(&[&value]);
         }
 
-        // Invert, storing the solution in birth-named form. The identity renaming (every invertible entry still its own birth binder, and nothing abstracted) skips the rewrite.
+        // Invert, storing the solution in birth-named form. The identity renaming (every invertible entry still its own birth binder, and nothing abstracted) skips the rewrite — from the possibly reified candidate, never the raw one, or the scope loop's substitutions would be discarded here.
         let inverted = if subjects.is_empty() && image.iter().all(|(img, birth)| img == *birth) {
-            t.clone()
+            abstracted.clone()
         } else {
             let binders = image.iter().map(|(name, _)| name).collect::<Vec<_>>();
             let birth_vars = image

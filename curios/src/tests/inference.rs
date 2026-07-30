@@ -1,6 +1,29 @@
 use curios_runtime::MockHost;
 
 #[test]
+fn an_implicit_solves_against_a_reduction_through_a_let() {
+    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y` — which the reducer splays into a context definition rather than substituting. The scope check once hard-failed that spelling as an out-of-scope name, so this program refused with a type mismatch; the reification loop in `solve` now unfolds the definition back into the candidate.
+    let source = r#"
+        use /std/{Nat, Eq, Handle, Str};
+
+        let through(x : Nat) -> Nat =
+            let y = x + 1;
+            match 0 < x
+            | true => y
+            | false => y + 1
+            end;
+
+        let probe(x : Nat) -> Eq(through(x), through(x)) = Eq/refl();
+
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(source, system).expect("expected the implicit to solve");
+    assert_eq!(io.output(), b"ok");
+}
+
+#[test]
 fn match_omitted_motive_infers() {
     // The same induction as `triangular_sum`, but with the motive omitted. It is non-dependent (every arm has type `std/Nat`), so the synthesized metavar motive is solved by the arms — no explicit `: std/Nat` needed.
     let source = r#"
