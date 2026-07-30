@@ -61,8 +61,9 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        Atom, Free, InductArm, InductDecl, InductType, Invert, Kernel, KernelError, Many, Reducer,
-        Scope, Subterm, Telescope, Term, Variant, invert_indices, kernel::sort::sort_of,
+        Atom, Bound, Free, InductArm, InductDecl, InductType, Invert, Kernel, KernelError, Many,
+        Reducer, Scope, Subterm, Telescope, Term, Variant, Visit, invert_indices,
+        kernel::sort::sort_of,
     },
 };
 
@@ -272,15 +273,49 @@ fn specialize(
 }
 
 /// `term` with every solved variable replaced by its solution, simultaneously.
+/// Parallel substitution of `solutions` into `term`, as one identity-memoized,
+/// free-vars-pruned traversal: a subtree mentioning no solved name is returned
+/// by reference, and a shared input node is rewritten once rather than once
+/// per occurrence, so sharing and warm memo cells survive the arm.
+///
+/// `Scope::close` followed by `open` computes the same term, but `close`'s
+/// capture rebuilds every node — unpruned and unshared — so each arm's
+/// specialization expanded shared subtrees into trees and re-copied nested
+/// bodies once per enclosing arm. Inserting a value verbatim under any binder
+/// depth is sound only while the value carries no loose index to shift; kernel
+/// solution values — case values and inverted index targets, complete terms
+/// both — never do, and the assert is what keeps that a checked contract.
 pub(super) fn substitute(term: &Term, solutions: &[(Free, Term)]) -> Term {
     if solutions.is_empty() {
         return term.clone();
     }
 
-    let names = solutions.iter().map(|(name, _)| name).collect::<Vec<_>>();
-    let values = solutions.iter().map(|(_, value)| value).collect::<Vec<_>>();
+    for (_, value) in solutions {
+        assert!(value.closed(), "substitution value carries a loose index");
+    }
 
-    Scope::close(Many(names.len()), &names, term.clone()).open(&values)
+    let solutions = solutions.to_vec();
+    let mut visit = Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, term| {
+            if let Subterm::Var(var) = &**term
+                && let Some(name) = var.as_free()
+                && let Some((_, value)) = solutions.iter().find(|(solved, _)| solved == name)
+            {
+                return Some(value.clone());
+            }
+
+            match solutions
+                .iter()
+                .any(|(solved, _)| term.mentions_free(solved))
+            {
+                true => None,
+                false => Some(term.clone()),
+            }
+        }),
+    );
+
+    term.traverse(&mut visit)
 }
 
 /// Re-assume, at its specialized type, every local whose type mentions a solved

@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-core/archive", "curios-ersd/archive"]
-profile = ["curios-profile/enabled"]
+profile = ["curios-profile/enabled", "curios-core/profile"]
 
 [dependencies]
 curios-profile = { workspace = true }
