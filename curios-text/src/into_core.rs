@@ -1,5 +1,6 @@
 mod context;
 use context::*;
+use curios_elab::TermBuilders as _;
 
 mod lowerer;
 use lowerer::*;

@@ -359,6 +359,219 @@ impl Term {
     }
 
     /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the primitive standing in for one where the normal form is a `Prim` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bin_match_scoped<H, EC, CC>(
+        grain: Grain,
+        head: H,
+        motive: Scope<Many>,
+        empty_case: EC,
+        head_binder: &Free,
+        tail_binder: &Free,
+        ih_binder: &Free,
+        cons_case: CC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        EC: Into<Term>,
+        CC: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::FreeMonoid {
+                carrier: Carrier::Bin {
+                    grain,
+                    empty_case: empty_case.into(),
+                    cons_case: Scope::close(
+                        Three,
+                        &[head_binder, tail_binder, ih_binder],
+                        cons_case.into(),
+                    ),
+                },
+            },
+        )
+    }
+
+    /// [`Term::bool_match`] over an already-built motive scope.
+    pub fn bool_match_scoped<H, F, T>(
+        head: H,
+        motive: Scope<Many>,
+        false_case: F,
+        true_case: T,
+    ) -> Self
+    where
+        H: Into<Term>,
+        F: Into<Term>,
+        T: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::Bool {
+                false_case: false_case.into(),
+                true_case: true_case.into(),
+            },
+        )
+    }
+
+    /// Build a function literal from `(plicity, label, annotation)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
+    pub fn func_marked<I, T, B>(params: I, body: B) -> Self
+    where
+        I: IntoIterator<Item = (Plicity, Free, T)>,
+        T: Into<Term>,
+        B: Into<Term>,
+    {
+        let mut plicities = Vec::new();
+        let telescope = Telescope::build(
+            params.into_iter().map(|(plicity, label, type_)| {
+                plicities.push(plicity);
+                (label, type_)
+            }),
+            body.into(),
+        );
+        assert_eq!(plicities.len(), telescope.len());
+
+        Self::from(Subterm::Func(Func {
+            telescope,
+            plicities,
+        }))
+    }
+
+    pub fn induct_type_at<U, I, P, J, Q>(name: Global, universes: U, params: I, indices: J) -> Self
+    where
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
+        Self::from(Subterm::InductType(InductType {
+            name,
+            universes: universes.into_iter().collect(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+            indices: indices.into_iter().map(|i| i.into()).collect(),
+        }))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn lst_match_scoped<H, EL, EC, CC>(
+        head: H,
+        elem: EL,
+        motive: Scope<Many>,
+        empty_case: EC,
+        head_binder: &Free,
+        tail_binder: &Free,
+        ih_binder: &Free,
+        cons_case: CC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        EL: Into<Term>,
+        EC: Into<Term>,
+        CC: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::FreeMonoid {
+                carrier: Carrier::Lst {
+                    elem: elem.into(),
+                    empty_case: empty_case.into(),
+                    cons_case: Scope::close(
+                        Three,
+                        &[head_binder, tail_binder, ih_binder],
+                        cons_case.into(),
+                    ),
+                },
+            },
+        )
+    }
+
+    /// [`Term::nat_match`] over an already-built motive scope.
+    pub fn nat_match_scoped<H, ZC, SC>(
+        head: H,
+        motive: Scope<Many>,
+        zero_case: ZC,
+        pred_binder: &Free,
+        ih_binder: &Free,
+        succ_case: SC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        ZC: Into<Term>,
+        SC: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::FreeMonoid {
+                carrier: Carrier::Nat {
+                    empty_case: zero_case.into(),
+                    cons_case: Scope::close(Two, &[pred_binder, ih_binder], succ_case.into()),
+                },
+            },
+        )
+    }
+
+    pub fn struct_at<U, I, P, J, Q>(name: Global, universes: U, params: I, fields: J) -> Self
+    where
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
+        Self::from(Subterm::Struct(Struct {
+            name,
+            universes: universes.into_iter().collect(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+            fields: fields.into_iter().map(|f| f.into()).collect(),
+            entries: vec![],
+        }))
+    }
+
+    /// [`Term::switch`] over an already-built motive scope.
+    pub fn switch_scoped<H, I, B, D>(head: H, motive: Scope<Many>, cases: I, default: D) -> Self
+    where
+        H: Into<Term>,
+        I: IntoIterator<Item = (u32, B)>,
+        B: Into<Term>,
+        D: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::Switch {
+                cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
+                default: default.into(),
+            },
+        )
+    }
+
+    pub fn variant_at<U, I, P, A, J, Q>(
+        name: Global,
+        universes: U,
+        params: I,
+        tag: A,
+        payload: J,
+    ) -> Self
+    where
+        U: IntoIterator<Item = Level>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        A: Into<Atom>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
+        Self::from(Subterm::Variant(Variant {
+            name,
+            universes: universes.into_iter().collect(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+            tag: tag.into(),
+            payload: payload.into_iter().map(|p| p.into()).collect(),
+        }))
+    }
+
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
@@ -424,41 +637,6 @@ impl Term {
         }
     }
 
-    /// Return the absolute free-variable head of a direct type-family alias.
-    ///
-    /// The declared type must structurally end in a literal [`Subterm::Type`] or [`Subterm::Prop`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
-    pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free> {
-        fn ends_in_literal_sort(term: &Term) -> bool {
-            match &**term {
-                Subterm::Type(_) | Subterm::Prop => true,
-                Subterm::FuncType(FuncType { telescope, .. }) => {
-                    ends_in_literal_sort(telescope.terminal())
-                }
-                _ => false,
-            }
-        }
-
-        fn application_head(term: &Term) -> Option<&Free> {
-            match &**term {
-                Subterm::Apply(Apply { head, .. }) => application_head(head),
-                Subterm::Var(var) => var.as_free(),
-                _ => None,
-            }
-        }
-
-        fn direct_head(term: &Term) -> Option<&Free> {
-            match &**term {
-                Subterm::Func(Func { telescope, .. }) => direct_head(telescope.terminal()),
-                _ => application_head(term),
-            }
-        }
-
-        ends_in_literal_sort(declared_type)
-            .then(|| direct_head(self))
-            .flatten()
-            .filter(|target| !target.is_local())
-    }
-
     pub fn span(&self) -> Option<Span> {
         self.span.clone()
     }
@@ -509,35 +687,12 @@ impl Term {
         }
     }
 
-    /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.
-    pub fn infix(op: NumOp, left: Term, right: Term) -> Self {
-        Self::from(Subterm::Infix(Infix { op, left, right }))
-    }
-
-    /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` primitive by `elaborate_numlit`.
-    pub fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self {
-        Self::from(Subterm::NumLit(NumLit {
-            magnitude,
-            signed,
-            negative,
-        }))
-    }
-
     /// A bare metavariable, as `into_core` mints one for a desugared hole (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin, so its solution is spliced silently at zonk.
     pub fn metavar(id: impl Into<MetaId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
             spine: Rc::new(Vec::new()),
             origin: None,
-        }))
-    }
-
-    /// A written goal `?`, as `into_core` mints one: a bare metavariable (empty spine, like [`Term::metavar`]) whose [`MetavarOrigin::Goal`] origin makes zonk *report* what elaboration determined for it — scope, type, and solution — instead of splicing silently.
-    pub fn goal(id: impl Into<MetaId>) -> Self {
-        Self::from(Subterm::Metavar(Metavar {
-            id: id.into(),
-            spine: Rc::new(Vec::new()),
-            origin: Some(MetavarOrigin::Goal),
         }))
     }
 
@@ -611,29 +766,6 @@ impl Term {
         )
     }
 
-    /// Build a function literal from `(plicity, label, annotation)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
-    pub fn func_marked<I, T, B>(params: I, body: B) -> Self
-    where
-        I: IntoIterator<Item = (Plicity, Free, T)>,
-        T: Into<Term>,
-        B: Into<Term>,
-    {
-        let mut plicities = Vec::new();
-        let telescope = Telescope::build(
-            params.into_iter().map(|(plicity, label, type_)| {
-                plicities.push(plicity);
-                (label, type_)
-            }),
-            body.into(),
-        );
-        assert_eq!(plicities.len(), telescope.len());
-
-        Self::from(Subterm::Func(Func {
-            telescope,
-            plicities,
-        }))
-    }
-
     /// Build an application whose arguments are all explicit — the common case; [`Term::apply_marked`] when call-site plicity marks matter.
     pub fn apply<H, I, P>(head: H, params: I) -> Self
     where
@@ -695,25 +827,6 @@ impl Term {
         }))
     }
 
-    /// A tuple literal carrying its written field names from `into_core`; elaboration checks them against the expected tuple type's labels and rebuilds the literal name-free. An all-`None` name list collapses to the positional normal form of [`Term::tuple`], so syntactic equality never splits on how the literal was spelled.
-    pub fn tuple_named<I, T>(fields: I) -> Self
-    where
-        I: IntoIterator<Item = (Option<String>, T)>,
-        T: Into<Term>,
-    {
-        let (mut names, fields): (Vec<_>, Vec<_>) = fields
-            .into_iter()
-            .map(|(name, term)| (name, term.into()))
-            .unzip();
-
-        // A literal with no written names is the same term as a positional one — keep the all-positional normal form (`names` empty) so syntactic equality does not split on how the literal was spelled.
-        if names.iter().all(Option::is_none) {
-            names = vec![];
-        }
-
-        Self::from(Subterm::Tuple(Tuple { fields, names }))
-    }
-
     /// A positional projection `head.index` — the normal form every post-elaboration projection takes (cf. [`Field`]).
     pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
         Self::from(Subterm::Proj(Proj {
@@ -741,22 +854,6 @@ impl Term {
         Self::induct_type_at(name, Vec::<Level>::new(), params, indices)
     }
 
-    pub fn induct_type_at<U, I, P, J, Q>(name: Global, universes: U, params: I, indices: J) -> Self
-    where
-        U: IntoIterator<Item = Level>,
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-        J: IntoIterator<Item = Q>,
-        Q: Into<Term>,
-    {
-        Self::from(Subterm::InductType(InductType {
-            name,
-            universes: universes.into_iter().collect(),
-            params: params.into_iter().map(|p| p.into()).collect(),
-            indices: indices.into_iter().map(|i| i.into()).collect(),
-        }))
-    }
-
     /// Build a [`Variant`] normal form — the body of a generated value-constructor function. `name`/`params` are stored redundantly on purpose; see the type's docs.
     pub fn variant<I, P, A, J, Q>(name: Global, params: I, tag: A, payload: J) -> Self
     where
@@ -769,52 +866,6 @@ impl Term {
         Self::variant_at(name, Vec::<Level>::new(), params, tag, payload)
     }
 
-    pub fn variant_at<U, I, P, A, J, Q>(
-        name: Global,
-        universes: U,
-        params: I,
-        tag: A,
-        payload: J,
-    ) -> Self
-    where
-        U: IntoIterator<Item = Level>,
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-        A: Into<Atom>,
-        J: IntoIterator<Item = Q>,
-        Q: Into<Term>,
-    {
-        Self::from(Subterm::Variant(Variant {
-            name,
-            universes: universes.into_iter().collect(),
-            params: params.into_iter().map(|p| p.into()).collect(),
-            tag: tag.into(),
-            payload: payload.into_iter().map(|p| p.into()).collect(),
-        }))
-    }
-
-    /// Build a [`StructType`] normal form — what the generated type-former's body reduces to. Users never write one directly; see the type's docs.
-    pub fn struct_type<I, P>(name: Global, params: I) -> Self
-    where
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-    {
-        Self::struct_type_at(name, Vec::<Level>::new(), params)
-    }
-
-    pub fn struct_type_at<U, I, P>(name: Global, universes: U, params: I) -> Self
-    where
-        U: IntoIterator<Item = Level>,
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-    {
-        Self::from(Subterm::StructType(StructType {
-            name,
-            universes: universes.into_iter().collect(),
-            params: params.into_iter().map(|p| p.into()).collect(),
-        }))
-    }
-
     /// A struct value with no written field names — the positional normal form (post-elaboration and every internal build), mirroring `tuple`.
     pub fn struct_<I, P, J, Q>(name: Global, params: I, fields: J) -> Self
     where
@@ -824,49 +875,6 @@ impl Term {
         Q: Into<Term>,
     {
         Self::struct_at(name, Vec::<Level>::new(), params, fields)
-    }
-
-    pub fn struct_at<U, I, P, J, Q>(name: Global, universes: U, params: I, fields: J) -> Self
-    where
-        U: IntoIterator<Item = Level>,
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-        J: IntoIterator<Item = Q>,
-        Q: Into<Term>,
-    {
-        Self::from(Subterm::Struct(Struct {
-            name,
-            universes: universes.into_iter().collect(),
-            params: params.into_iter().map(|p| p.into()).collect(),
-            fields: fields.into_iter().map(|f| f.into()).collect(),
-            entries: vec![],
-        }))
-    }
-
-    /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.
-    pub fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self
-    where
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-        J: IntoIterator<Item = (StructEntry, T)>,
-        T: Into<Term>,
-    {
-        let (mut entries, fields): (Vec<_>, Vec<_>) = fields
-            .into_iter()
-            .map(|(entry, term)| (entry, term.into()))
-            .unzip();
-
-        if entries.iter().all(|e| *e == StructEntry::Field(None)) {
-            entries = vec![];
-        }
-
-        Self::from(Subterm::Struct(Struct {
-            name,
-            universes: vec![],
-            params: params.into_iter().map(|p| p.into()).collect(),
-            fields,
-            entries,
-        }))
     }
 
     /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). [`Term::induct_match_marked`] carries per-binder plicity.
@@ -1020,16 +1028,6 @@ impl Term {
         }
     }
 
-    /// Carry a *written* motive — the surface term `into_core` lowered, before elaboration has closed it into a scope — as an arity-0 [`Scope`].
-    ///
-    /// Lowering cannot close the scope itself: the motive's arity is `n_indices + 1`, and the eliminated family is only known once the scrutinee's type is inferred. Arity 0 is a free tag for "not yet scoped" because no elaborated motive can have it — every eliminator binds at least the scrutinee, so `check_motive` always re-closes at arity 1 or more. `Scope::constant` performs no capture, so the term goes in and comes back out of `body()` untouched.
-    pub fn match_motive_written<M>(motive: M) -> Scope<Many>
-    where
-        M: Into<Term>,
-    {
-        Scope::constant(Many(0), motive.into())
-    }
-
     /// Build a match node around an already-built motive scope. The `*_scoped` constructors are `into_core`'s entry points: lowering carries the *written* motive term (see [`Term::match_motive_written`]) rather than a label and a body, because it cannot know the arity to close at. Every label-taking constructor above delegates here after building the canonical arity-1 scope.
     fn match_scoped(head: Term, motive: Scope<Many>, cases: Cases) -> Self {
         Self::from(Subterm::Match(Match {
@@ -1061,28 +1059,6 @@ impl Term {
         )
     }
 
-    /// [`Term::bool_match`] over an already-built motive scope.
-    pub fn bool_match_scoped<H, F, T>(
-        head: H,
-        motive: Scope<Many>,
-        false_case: F,
-        true_case: T,
-    ) -> Self
-    where
-        H: Into<Term>,
-        F: Into<Term>,
-        T: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::Bool {
-                false_case: false_case.into(),
-                true_case: true_case.into(),
-            },
-        )
-    }
-
     /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`Lst`'s.
     pub fn nat_match<H, M, ZC, SC>(
         head: H,
@@ -1106,32 +1082,6 @@ impl Term {
             pred_binder,
             ih_binder,
             succ_case,
-        )
-    }
-
-    /// [`Term::nat_match`] over an already-built motive scope.
-    pub fn nat_match_scoped<H, ZC, SC>(
-        head: H,
-        motive: Scope<Many>,
-        zero_case: ZC,
-        pred_binder: &Free,
-        ih_binder: &Free,
-        succ_case: SC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        ZC: Into<Term>,
-        SC: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::FreeMonoid {
-                carrier: Carrier::Nat {
-                    empty_case: zero_case.into(),
-                    cons_case: Scope::close(Two, &[pred_binder, ih_binder], succ_case.into()),
-                },
-            },
         )
     }
 
@@ -1169,39 +1119,6 @@ impl Term {
 
     /// [`Term::lst_match`] over an already-built motive scope.
     #[allow(clippy::too_many_arguments)]
-    pub fn lst_match_scoped<H, EL, EC, CC>(
-        head: H,
-        elem: EL,
-        motive: Scope<Many>,
-        empty_case: EC,
-        head_binder: &Free,
-        tail_binder: &Free,
-        ih_binder: &Free,
-        cons_case: CC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        EL: Into<Term>,
-        EC: Into<Term>,
-        CC: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::FreeMonoid {
-                carrier: Carrier::Lst {
-                    elem: elem.into(),
-                    empty_case: empty_case.into(),
-                    cons_case: Scope::close(
-                        Three,
-                        &[head_binder, tail_binder, ih_binder],
-                        cons_case.into(),
-                    ),
-                },
-            },
-        )
-    }
-
     /// Build the structural `Bin` eliminator ([`Carrier::Bin`]): an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
     pub fn bin_match<H, M, EC, CC>(
@@ -1235,38 +1152,6 @@ impl Term {
 
     /// [`Term::bin_match`] over an already-built motive scope.
     #[allow(clippy::too_many_arguments)]
-    pub fn bin_match_scoped<H, EC, CC>(
-        grain: Grain,
-        head: H,
-        motive: Scope<Many>,
-        empty_case: EC,
-        head_binder: &Free,
-        tail_binder: &Free,
-        ih_binder: &Free,
-        cons_case: CC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        EC: Into<Term>,
-        CC: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::FreeMonoid {
-                carrier: Carrier::Bin {
-                    grain,
-                    empty_case: empty_case.into(),
-                    cons_case: Scope::close(
-                        Three,
-                        &[head_binder, tail_binder, ih_binder],
-                        cons_case.into(),
-                    ),
-                },
-            },
-        )
-    }
-
     /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
     pub fn switch<H, M, I, B, D>(
         head: H,
@@ -1287,24 +1172,6 @@ impl Term {
             Self::motive_scope(motive_binder, motive.into()),
             cases,
             default,
-        )
-    }
-
-    /// [`Term::switch`] over an already-built motive scope.
-    pub fn switch_scoped<H, I, B, D>(head: H, motive: Scope<Many>, cases: I, default: D) -> Self
-    where
-        H: Into<Term>,
-        I: IntoIterator<Item = (u32, B)>,
-        B: Into<Term>,
-        D: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::Switch {
-                cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
-                default: default.into(),
-            },
         )
     }
 

@@ -156,6 +156,7 @@ pub enum Prim {
 }
 
 impl Prim {
+    /// A `NatAdd` node from anything term-shaped.
     /// A `NatEql` node from anything term-shaped.
     pub fn nat_eql<F, S>(left: F, right: S) -> Self
     where
@@ -165,13 +166,31 @@ impl Prim {
         Self::NatEql(left.into(), right.into())
     }
 
-    /// An `HandleEql` node — handle identity, the one pure `Handle` operation — from anything term-shaped.
-    pub fn io_eql<F, S>(left: F, right: S) -> Self
+    /// A `NatGt` node from anything term-shaped.
+    pub fn nat_gt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::HandleEql(left.into(), right.into())
+        Self::NatGt(left.into(), right.into())
+    }
+
+    /// A `NatGte` node from anything term-shaped.
+    pub fn nat_gte<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::NatGte(left.into(), right.into())
+    }
+
+    /// A `NatLte` node from anything term-shaped.
+    pub fn nat_lte<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::NatLte(left.into(), right.into())
     }
 
     /// A `NatNeq` node from anything term-shaped.
@@ -183,7 +202,6 @@ impl Prim {
         Self::NatNeq(left.into(), right.into())
     }
 
-    /// A `NatAdd` node from anything term-shaped.
     pub fn nat_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -210,24 +228,6 @@ impl Prim {
         Self::NatMul(left.into(), right.into())
     }
 
-    /// A `NatDiv` node from anything term-shaped.
-    pub fn nat_div<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::NatDiv(left.into(), right.into())
-    }
-
-    /// A `NatRem` node from anything term-shaped.
-    pub fn nat_rem<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::NatRem(left.into(), right.into())
-    }
-
     /// A `NatLt` node from anything term-shaped.
     pub fn nat_lt<F, S>(left: F, right: S) -> Self
     where
@@ -235,360 +235,6 @@ impl Prim {
         S: Into<Term>,
     {
         Self::NatLt(left.into(), right.into())
-    }
-
-    /// A `NatGt` node from anything term-shaped.
-    pub fn nat_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::NatGt(left.into(), right.into())
-    }
-
-    /// A `NatLte` node from anything term-shaped.
-    pub fn nat_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::NatLte(left.into(), right.into())
-    }
-
-    /// A `NatGte` node from anything term-shaped.
-    pub fn nat_gte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::NatGte(left.into(), right.into())
-    }
-
-    /// An `IntEql` node from anything term-shaped.
-    pub fn int_eql<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntEql(left.into(), right.into())
-    }
-
-    /// An `IntAdd` node from anything term-shaped.
-    pub fn int_add<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntAdd(left.into(), right.into())
-    }
-
-    /// An `IntSub` node from anything term-shaped.
-    pub fn int_sub<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntSub(left.into(), right.into())
-    }
-
-    /// An `IntMul` node from anything term-shaped.
-    pub fn int_mul<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntMul(left.into(), right.into())
-    }
-
-    /// An `IntNeq` node from anything term-shaped.
-    pub fn int_neq<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntNeq(left.into(), right.into())
-    }
-
-    /// An `IntDiv` node from anything term-shaped.
-    pub fn int_div<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntDiv(left.into(), right.into())
-    }
-
-    /// An `IntRem` node from anything term-shaped.
-    pub fn int_rem<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntRem(left.into(), right.into())
-    }
-
-    /// An `IntLt` node from anything term-shaped.
-    pub fn int_lt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntLt(left.into(), right.into())
-    }
-
-    /// An `IntGt` node from anything term-shaped.
-    pub fn int_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntGt(left.into(), right.into())
-    }
-
-    /// An `IntLte` node from anything term-shaped.
-    pub fn int_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntLte(left.into(), right.into())
-    }
-
-    /// An `IntGte` node from anything term-shaped.
-    pub fn int_gte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntGte(left.into(), right.into())
-    }
-
-    /// A `FltAdd` node from anything term-shaped.
-    pub fn flt_add<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltAdd(left.into(), right.into())
-    }
-
-    /// A `FltSub` node from anything term-shaped.
-    pub fn flt_sub<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltSub(left.into(), right.into())
-    }
-
-    /// A `FltMul` node from anything term-shaped.
-    pub fn flt_mul<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltMul(left.into(), right.into())
-    }
-
-    /// A `FltNeg` node from anything term-shaped.
-    pub fn flt_neg<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltNeg(inner.into())
-    }
-
-    /// A `FltAbs` node from anything term-shaped.
-    pub fn flt_abs<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltAbs(inner.into())
-    }
-
-    /// A `FltSqrt` node from anything term-shaped.
-    pub fn flt_sqrt<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltSqrt(inner.into())
-    }
-
-    /// A `FltFloor` node from anything term-shaped.
-    pub fn flt_floor<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltFloor(inner.into())
-    }
-
-    /// A `FltCeil` node from anything term-shaped.
-    pub fn flt_ceil<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltCeil(inner.into())
-    }
-
-    /// A `FltTrunc` node from anything term-shaped.
-    pub fn flt_trunc<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltTrunc(inner.into())
-    }
-
-    /// A `FltNearest` (round-ties-to-even) node from anything term-shaped.
-    pub fn flt_nearest<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltNearest(inner.into())
-    }
-
-    /// A `FltDiv` node from anything term-shaped.
-    pub fn flt_div<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltDiv(left.into(), right.into())
-    }
-
-    /// A `FltMin` node from anything term-shaped.
-    pub fn flt_min<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltMin(left.into(), right.into())
-    }
-
-    /// A `FltMax` node from anything term-shaped.
-    pub fn flt_max<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltMax(left.into(), right.into())
-    }
-
-    /// A `FltEql` node from anything term-shaped.
-    pub fn flt_eql<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltEql(left.into(), right.into())
-    }
-
-    /// A `FltNeq` node from anything term-shaped.
-    pub fn flt_neq<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltNeq(left.into(), right.into())
-    }
-
-    /// A `FltLt` node from anything term-shaped.
-    pub fn flt_lt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltLt(left.into(), right.into())
-    }
-
-    /// A `FltGt` node from anything term-shaped.
-    pub fn flt_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltGt(left.into(), right.into())
-    }
-
-    /// A `FltLte` node from anything term-shaped.
-    pub fn flt_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltLte(left.into(), right.into())
-    }
-
-    /// A `FltGte` node from anything term-shaped.
-    pub fn flt_gte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltGte(left.into(), right.into())
-    }
-
-    /// A `NatToInt` conversion node from anything term-shaped.
-    pub fn nat_to_int<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::NatToInt(inner.into())
-    }
-
-    /// An `IntToNat` conversion node from anything term-shaped.
-    pub fn int_to_nat<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::IntToNat(inner.into())
-    }
-
-    /// An `IntToFlt` conversion node from anything term-shaped.
-    pub fn int_to_flt<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::IntToFlt(inner.into())
-    }
-
-    /// A `NatToFlt` conversion node from anything term-shaped.
-    pub fn nat_to_flt<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::NatToFlt(inner.into())
-    }
-
-    /// A `FltToInt` conversion node from anything term-shaped.
-    pub fn flt_to_int<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltToInt(inner.into())
-    }
-
-    /// A `FltToNat` conversion node from anything term-shaped.
-    pub fn flt_to_nat<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltToNat(inner.into())
-    }
-
-    /// A `FltToLeBytes` node (a float's four little-endian bytes as a `Bin`) from anything term-shaped.
-    pub fn flt_to_le_bytes<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltToLeBytes(inner.into())
-    }
-
-    /// A `FltOfLeBytes` node (a float assembled from its four little-endian bytes) from anything term-shaped.
-    pub fn flt_of_le_bytes<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltOfLeBytes(inner.into())
     }
 
     /// A `BinLen` node from anything term-shaped.
@@ -723,34 +369,6 @@ impl Prim {
         T: Into<Term>,
     {
         Self::CellType(elem.into())
-    }
-
-    /// A cell allocation — the `Prim::Cell` variant — from a term-shaped element type and initial value.
-    pub fn cell_new<T, I>(type_: T, init: I) -> Self
-    where
-        T: Into<Term>,
-        I: Into<Term>,
-    {
-        Self::Cell(type_.into(), init.into())
-    }
-
-    /// A `CellSet` node from term-shaped element type, cell, and new value.
-    pub fn cell_set<T, C, V>(type_: T, cell: C, value: V) -> Self
-    where
-        T: Into<Term>,
-        C: Into<Term>,
-        V: Into<Term>,
-    {
-        Self::CellSet(type_.into(), cell.into(), value.into())
-    }
-
-    /// A `CellGet` node from term-shaped element type and cell.
-    pub fn cell_get<T, C>(type_: T, cell: C) -> Self
-    where
-        T: Into<Term>,
-        C: Into<Term>,
-    {
-        Self::CellGet(type_.into(), cell.into())
     }
 
     /// Visit each `Term` operand of `self`, in field order. The single source of truth for which fields of a primitive are its term operands — `reach`, `any_metavar`, and `collect_construction_names` all read it. (`traverse` keeps its own match: it rebuilds rather than visits.) The closure is taken `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region hot path allocation- and indirection-free.

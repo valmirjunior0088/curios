@@ -166,7 +166,7 @@ impl Free {
     }
 
     /// Whether this is a binder some scope opened, as opposed to a top-level definition. The typed replacement for testing a spelling for a marker character — see [`Subterm::has_local_free`](crate::Subterm).
-    pub(crate) fn is_local(&self) -> bool {
+    pub fn is_local(&self) -> bool {
         matches!(self, Free::Local(_))
     }
 

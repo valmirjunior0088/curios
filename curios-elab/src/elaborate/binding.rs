@@ -1,3 +1,4 @@
+use crate::TermBuilders as _;
 use {super::*, curios_core::Global};
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding folds through `Term::let_`, which merges the bindings back into a single flat `Let`. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.

@@ -1,4 +1,5 @@
 mod prim;
+use crate::TermBuilders as _;
 use prim::*;
 
 #[cfg(test)]

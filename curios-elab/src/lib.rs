@@ -8,6 +8,9 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Context`, not paths into the modules.
 
+mod builders;
+pub use builders::*;
+
 mod universe_solver;
 pub use universe_solver::*;
 

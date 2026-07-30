@@ -1,3 +1,4 @@
+use crate::PrimBuilders as _;
 use curios_core::*;
 use {
     crate::*,
