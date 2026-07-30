@@ -81,6 +81,7 @@ pub(crate) fn sort_of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelE
             let declaration = kernel
                 .induct_decl(name)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+            kernel.check_instance(&declaration.universe_context, universes)?;
             let result_sort =
                 instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
 
@@ -92,6 +93,7 @@ pub(crate) fn sort_of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelE
             let declaration = kernel
                 .struct_decl(name)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+            kernel.check_instance(&declaration.universe_context, universes)?;
             let result_sort =
                 instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
 
@@ -293,14 +295,16 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     return Ok(Some(type_.clone()));
                 }
 
-                let Some((scheme, _)) = kernel.scheme_of(name) else {
+                let Some((scheme, context)) = kernel.scheme_of(name) else {
                     return Ok(None);
                 };
-                let scheme = scheme.clone();
+                let (scheme, context) = (scheme.clone(), context.clone());
+                kernel.check_instance(&context, levels)?;
 
                 Ok(Some(instantiate_universe_levels_scoped(&scheme, levels)?))
             }
             Subterm::RecMember(RecMember { group, index }) => {
+                kernel.check_instance(group.universes(), levels)?;
                 let group = group.instantiate_universes(levels)?;
 
                 Ok(Some(group.member_type(*index)))

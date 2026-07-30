@@ -229,6 +229,7 @@ fn infer_node(
                     let declaration = kernel
                         .struct_decl(&name)
                         .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+                    kernel.check_instance(&declaration.universe_context, &universes)?;
                     let fields = instantiate_universe_levels_scoped(
                         &declaration.fields.clone(),
                         &universes,
@@ -263,7 +264,7 @@ fn infer_node(
                 .induct_decl(name)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?
                 .clone();
-            let declaration = instantiate_induct_decl(&declaration, universes)?;
+            let declaration = instantiate_induct_decl(kernel, &declaration, universes)?;
 
             let signature = declaration
                 .instantiate(tag, params)
@@ -307,6 +308,7 @@ fn infer_node(
                 .struct_decl(name)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?
                 .clone();
+            kernel.check_instance(&declaration.universe_context, universes)?;
             let telescope = instantiate_universe_levels_scoped(&declaration.fields, universes)?
                 .open_params(params);
 
@@ -490,7 +492,7 @@ fn check_cases(
                 .induct_decl(&family.name)
                 .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?
                 .clone();
-            let declaration = instantiate_induct_decl(&declaration, &family.universes)?;
+            let declaration = instantiate_induct_decl(kernel, &declaration, &family.universes)?;
 
             check_induct_arms(
                 kernel,
@@ -576,7 +578,7 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
     let upper = kernel.reduce_forced(expected.clone())?;
 
     match (&*lower, &*upper) {
-        (Subterm::Type(lower), Subterm::Type(upper)) => return Ok(lower.structurally_leq(upper)),
+        (Subterm::Type(lower), Subterm::Type(upper)) => return Ok(kernel.level_leq(lower, upper)),
         // `Prop : Type 0`, and a proposition is admitted wherever a type is.
         (Subterm::Prop, Subterm::Type(_)) => return Ok(true),
         // Plicity is part of a function type's identity, exactly as in
@@ -667,9 +669,12 @@ fn infer_telescope(
 /// A declaration with its universe parameters replaced by this occurrence's
 /// instance, so its constructor signatures speak of the right levels.
 fn instantiate_induct_decl(
+    kernel: &Kernel,
     declaration: &crate::InductDecl,
     levels: &[crate::Level],
 ) -> Result<crate::InductDecl, KernelError> {
+    kernel.check_instance(&declaration.universe_context, levels)?;
+
     let mut instantiated = declaration.clone();
 
     instantiated.params = instantiate_universe_levels_scoped(&instantiated.params, levels)?;

@@ -52,8 +52,8 @@ pub use whnf::*;
 
 use {
     super::{
-        Atom, Env, Free, Global, InductDecl, Judge, ReduceError, Reducer, StructDecl, Term,
-        UniverseContext, UniverseError,
+        Atom, Env, Free, Global, InductDecl, Judge, Level, LevelHead, ReduceError, Reducer,
+        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, entails,
     },
     curios_base::Entropy,
     std::{collections::HashMap, fmt},
@@ -105,6 +105,12 @@ pub enum KernelError {
     /// be legitimately absent only when its index targets cannot equal the
     /// actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
+    /// A universe instance whose stated levels do not satisfy the scheme's
+    /// constraint set. The scheme declared `lower ≤ upper` over its parameters;
+    /// at this instance's levels, under the hypotheses of the item being
+    /// checked, the inequality does not hold — which is the route back to the
+    /// paradox the hierarchy exists to exclude.
+    UniverseInstance { lower: Level, upper: Level },
 }
 
 impl From<ReduceError> for KernelError {
@@ -154,6 +160,10 @@ impl fmt::Display for KernelError {
             KernelError::MissingArm { family, tag } => write!(
                 formatter,
                 "no arm for `{tag}` of `{family}`, and its case is not impossible",
+            ),
+            KernelError::UniverseInstance { lower, upper } => write!(
+                formatter,
+                "this instance does not satisfy its scheme's `{lower} <= {upper}`",
             ),
         }
     }
@@ -220,6 +230,12 @@ pub struct Kernel {
     /// first. A local has a type and never a value: `let` substitutes rather
     /// than binding, so nothing in scope here can be unfolded.
     locals: Vec<(Free, Term)>,
+    /// The constraint set of the item being checked — its own declared
+    /// hypotheses, assumed while its parameters are held abstract. A generic
+    /// definition is valid exactly when it checks *under* its constraints, so
+    /// the level judgments below consult these; discarding them was the route
+    /// by which a correct polymorphic definition was refused.
+    assumed: Vec<UniverseConstraint>,
     definitions: HashMap<Free, Definition>,
     inducts: HashMap<Global, InductDecl>,
     structs: HashMap<Global, StructDecl>,
@@ -233,6 +249,7 @@ impl Kernel {
             remaining: budget,
             fresh_names: Entropy::new(),
             locals: Vec::new(),
+            assumed: Vec::new(),
             definitions: HashMap::new(),
             inducts: HashMap::new(),
             structs: HashMap::new(),
@@ -246,6 +263,72 @@ impl Kernel {
     /// alias theirs, and an alias between two distinct binders is a capture.
     pub fn set_local_floor(&mut self, floor: usize) {
         self.fresh_names.seed(floor);
+    }
+
+    /// Assume `universes`' constraints for the item about to be checked,
+    /// replacing the previous item's. Like [`Kernel::restore_budget`], this is
+    /// a declaration-boundary reset.
+    pub fn assume_universes(&mut self, universes: &UniverseContext) {
+        self.assumed = universes.constraints.clone();
+    }
+
+    /// Whether `lower ≤ upper` — structurally, or through the assumed
+    /// constraints of the item being checked.
+    pub(crate) fn level_leq(&self, lower: &Level, upper: &Level) -> bool {
+        lower.structurally_leq(upper) || entails(&self.assumed, lower, upper)
+    }
+
+    /// Whether two levels are equal under the assumed constraints — mutual
+    /// [`Kernel::level_leq`], with syntactic equality as the fast path.
+    pub(crate) fn level_eq(&self, left: &Level, right: &Level) -> bool {
+        left == right || (self.level_leq(left, right) && self.level_leq(right, left))
+    }
+
+    /// [`Kernel::level_eq`] pointwise over two instance vectors.
+    pub(crate) fn levels_eq(&self, left: &[Level], right: &[Level]) -> bool {
+        left.len() == right.len()
+            && left
+                .iter()
+                .zip(right)
+                .all(|(this, that)| self.level_eq(this, that))
+    }
+
+    /// Verify a stated instance satisfies its scheme's constraint set: each
+    /// declared `lower ≤ upper`, instantiated at this occurrence's levels, must
+    /// hold under the assumed constraints of the item being checked.
+    ///
+    /// A constraint level naming a parameter the instance does not supply is
+    /// refused rather than kept: an unsubstituted scheme parameter would be
+    /// misread as one of the ambient item's, which is the accepting direction.
+    pub(crate) fn check_instance(
+        &self,
+        context: &UniverseContext,
+        levels: &[Level],
+    ) -> Result<(), KernelError> {
+        let instantiate = |level: &Level| -> Result<Level, KernelError> {
+            if level.params().any(|param| param.0 >= levels.len()) {
+                return Err(KernelError::UniverseInstance {
+                    lower: level.clone(),
+                    upper: level.clone(),
+                });
+            }
+
+            Ok(level.substitute(|head| match head {
+                LevelHead::Param(param) => levels.get(param.0).cloned(),
+                LevelHead::Meta(_) => None,
+            })?)
+        };
+
+        for constraint in &context.constraints {
+            let lower = instantiate(&constraint.lower)?;
+            let upper = instantiate(&constraint.upper)?;
+
+            if !self.level_leq(&lower, &upper) {
+                return Err(KernelError::UniverseInstance { lower, upper });
+            }
+        }
+
+        Ok(())
     }
 
     /// Record a top-level definition: `name : type_ = value`, generalized over

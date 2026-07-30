@@ -270,7 +270,10 @@ fn structural(
     that: &Term,
 ) -> Result<bool, KernelError> {
     match (&**this, &**that) {
-        (Subterm::Type(left), Subterm::Type(right)) => Ok(left == right),
+        // Levels compare under the item's assumed constraints: two levels the
+        // hypotheses force equal are equal in every instance that satisfies
+        // them, which is what checking generically means.
+        (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right)),
         (Subterm::Prop, Subterm::Prop) => Ok(true),
 
         (Subterm::Prim(left), Subterm::Prim(right)) => convert_prim(kernel, history, left, right),
@@ -349,7 +352,7 @@ fn structural(
                 indices: right_indices,
             }),
         ) => Ok(left_name == right_name
-            && left_universes == right_universes
+            && kernel.levels_eq(left_universes, right_universes)
             && compare_each(kernel, history, left_params, right_params)?
             && compare_each(kernel, history, left_indices, right_indices)?),
 
@@ -365,12 +368,12 @@ fn structural(
                 params: right_params,
             }),
         ) => Ok(left_name == right_name
-            && left_universes == right_universes
+            && kernel.levels_eq(left_universes, right_universes)
             && compare_each(kernel, history, left_params, right_params)?),
 
         (Subterm::Variant(left), Subterm::Variant(right)) => Ok(left.name == right.name
             && left.tag == right.tag
-            && left.universes == right.universes
+            && kernel.levels_eq(&left.universes, &right.universes)
             && compare_each(kernel, history, &left.params, &right.params)?
             && compare_each(kernel, history, &left.payload, &right.payload)?),
 
@@ -390,7 +393,7 @@ fn structural(
                 ..
             }),
         ) => Ok(left_name == right_name
-            && left_universes == right_universes
+            && kernel.levels_eq(left_universes, right_universes)
             && compare_each(kernel, history, left_params, right_params)?
             && compare_each(kernel, history, left_fields, right_fields)?),
 
@@ -403,7 +406,9 @@ fn structural(
                 head: right,
                 levels: right_levels,
             }),
-        ) => Ok(left_levels == right_levels && ground(kernel, history, left, right)?),
+        ) => Ok(
+            kernel.levels_eq(left_levels, right_levels) && ground(kernel, history, left, right)?
+        ),
 
         // A stuck elimination. The scrutinee is compared up to conversion,
         // because that is the position an unfolding cycle travels through; the

@@ -432,6 +432,94 @@ fn a_list_literal_takes_its_element_type_from_its_elements() {
     ));
 }
 
+/// A generic definition is checked *under* its own constraint set. `(x :
+/// Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w`
+/// is among the hypotheses — discarding them was the route by which a correct
+/// polymorphic definition was refused.
+#[test]
+fn a_definition_checks_under_its_own_constraints() {
+    use crate::{
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
+        kernel::check_definition,
+    };
+
+    let (u, w) = (
+        Level::param(UniverseParam(0)),
+        Level::param(UniverseParam(1)),
+    );
+    let x = binder(0, "x");
+    let name = binder(1, "poly");
+
+    let type_ = Term::func_type(
+        [(x.clone(), Term::type_at(u.clone()))],
+        Term::type_at(w.clone()),
+    );
+    let body = Term::func([(x.clone(), Term::type_at(u.clone()))], Term::free_var(&x));
+
+    let constrained = UniverseContext {
+        parameter_count: 2,
+        constraints: vec![UniverseConstraint {
+            lower: u,
+            upper: w,
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let mut kernel = kernel();
+    assert_eq!(
+        check_definition(&mut kernel, &name, &type_, &body, &constrained),
+        Ok(()),
+    );
+
+    let unconstrained = UniverseContext {
+        parameter_count: 2,
+        constraints: Vec::new(),
+    };
+    let mut kernel = self::kernel();
+    assert!(matches!(
+        check_definition(&mut kernel, &name, &type_, &body, &unconstrained),
+        Err(KernelError::Mismatch { .. }),
+    ));
+}
+
+/// The other direction: an occurrence must *satisfy* the scheme it
+/// instantiates. A scheme declaring `u + 1 ≤ w` refuses the instance `{0, 0}`
+/// and admits `{0, 1}`.
+#[test]
+fn an_instance_must_satisfy_its_schemes_constraints() {
+    use crate::{
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
+    };
+
+    let u = Level::param(UniverseParam(0));
+    let w = Level::param(UniverseParam(1));
+    let name = binder(1, "bounded");
+
+    let mut kernel = kernel();
+    kernel.declare(
+        &name,
+        &Term::type_at(u.clone()),
+        &UniverseContext {
+            parameter_count: 2,
+            constraints: vec![UniverseConstraint {
+                lower: u.succ().expect("level has a successor"),
+                upper: w,
+                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+            }],
+        },
+    );
+
+    let at = |levels: Vec<Level>| Term::universe_inst(Term::free_var(&name), levels);
+
+    assert_eq!(
+        infer(&mut kernel, &at(vec![Level::zero(), one()])),
+        Ok(Term::type_at(Level::zero())),
+    );
+    assert!(matches!(
+        infer(&mut kernel, &at(vec![Level::zero(), Level::zero()])),
+        Err(KernelError::UniverseInstance { .. }),
+    ));
+}
+
 /// Elaboration-only syntax reaching the kernel means a term was handed over
 /// before elaboration finished with it.
 #[test]

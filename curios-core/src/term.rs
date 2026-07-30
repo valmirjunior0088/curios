@@ -2494,6 +2494,12 @@ impl RecGroup {
         self.item(index).body.open(&refs)
     }
 
+    /// The universe scheme this group was generalized under — what an instance
+    /// must satisfy.
+    pub fn universes(&self) -> &UniverseContext {
+        &self.scheme.context
+    }
+
     pub fn instantiate_universes(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
         if arguments.len() != self.scheme.context.parameter_count {
             return Err(UniverseError::InstanceArity {

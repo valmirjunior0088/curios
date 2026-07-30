@@ -41,6 +41,7 @@ pub fn check_definition(
     universes: &UniverseContext,
 ) -> Result<(), KernelError> {
     kernel.restore_budget();
+    kernel.assume_universes(universes);
 
     sort_of(kernel, type_)?;
     check(kernel, body, type_)?;
@@ -69,6 +70,7 @@ pub fn check_rec_group(
     universes: &UniverseContext,
 ) -> Result<(), KernelError> {
     kernel.restore_budget();
+    kernel.assume_universes(universes);
 
     if names.len() != group.length() {
         return Err(KernelError::Arity {
@@ -104,6 +106,7 @@ pub fn check_entrypoint(
     expected: Option<&Term>,
 ) -> Result<(), KernelError> {
     kernel.restore_budget();
+    kernel.assume_universes(&UniverseContext::empty());
 
     match expected {
         Some(type_) => {
