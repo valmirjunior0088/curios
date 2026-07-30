@@ -3,9 +3,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// The builtin import names, byte for byte and in declaration order — the wire
-/// ABI contract between the wasm emitter and the runtime linker. A mismatch
-/// here silently strands an import, so the whole list is pinned.
+/// The builtin import names, byte for byte and in declaration order — the wire ABI contract between the wasm emitter and the runtime linker. A mismatch here silently strands an import, so the whole list is pinned.
 #[test]
 fn names_are_the_wire_abi() {
     let names = host_ops()
@@ -44,9 +42,7 @@ fn names_are_the_wire_abi() {
     );
 }
 
-/// Labels are the guest binding names, so they must be as unique as the import
-/// names (`register` already enforces name uniqueness; this pins the seed's
-/// labels too).
+/// Labels are the guest binding names, so they must be as unique as the import names (`register` already enforces name uniqueness; this pins the seed's labels too).
 #[test]
 fn labels_are_unique() {
     let store = host_ops();
@@ -55,9 +51,7 @@ fn labels_are_unique() {
     assert_eq!(labels.len(), store.len());
 }
 
-/// Result labels are the record fields the guest projects (`.status`,
-/// `.secs_hi`, …) — renaming one is a standard-library break, so the
-/// multi-result shapes are pinned.
+/// Result labels are the record fields the guest projects (`.status`, `.secs_hi`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.
 #[test]
 fn result_records_keep_their_labels() {
     let store = host_ops();
@@ -85,9 +79,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("env"), ["status", "value"]);
 }
 
-/// Every signature is well-formed: single results ride a name too (the guest
-/// type is the bare wire type, but the printer uses the label), and parameter
-/// names are unique within a signature.
+/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature.
 #[test]
 fn signatures_are_well_formed() {
     for function in host_ops().iter() {
@@ -114,8 +106,7 @@ fn signatures_are_well_formed() {
     }
 }
 
-/// The import name is the identity every stage links on, so a second row with
-/// the same name is a construction bug.
+/// The import name is the identity every stage links on, so a second row with the same name is a construction bug.
 #[test]
 #[should_panic(expected = "already registered")]
 fn register_rejects_a_duplicate_name() {
@@ -132,9 +123,7 @@ fn register_rejects_a_duplicate_name() {
     });
 }
 
-/// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed
-/// substrate `emit_sys_imports` reads instead of re-deriving membership by
-/// rebuilding this same store.
+/// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed substrate `emit_sys_imports` reads instead of re-deriving membership by rebuilding this same store.
 #[test]
 fn host_ops_rows_are_stamped_with_the_sys_namespace() {
     assert!(
@@ -144,9 +133,7 @@ fn host_ops_rows_are_stamped_with_the_sys_namespace() {
     );
 }
 
-/// Identity is the wasm import pair: `label` and `signature` don't participate
-/// (a cached row matches a freshly minted one), but the namespace does — one
-/// import name under `sys` and under `ffi` names two different imports.
+/// Identity is the wasm import pair: `label` and `signature` don't participate (a cached row matches a freshly minted one), but the namespace does — one import name under `sys` and under `ffi` names two different imports.
 #[test]
 fn equality_is_the_import_pair() {
     let base = |namespace, label: &str| ForeignFunction {
