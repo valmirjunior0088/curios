@@ -19,9 +19,15 @@
 //! elaborator's export metadata, islands, roots, and totality flags, none of
 //! which bear on whether a term is well-typed.
 
+#[cfg(test)]
+mod tests;
+
 use {
-    super::{Kernel, KernelError, infer::check, sort::sort_of},
-    crate::{Free, RecGroup, Term, UniverseContext},
+    super::{Kernel, KernelError, Sort, infer::check, sort::sort_of},
+    crate::{
+        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term,
+        UniverseContext,
+    },
 };
 
 /// Check `name : type_ = body`, then bring it into scope.
@@ -96,6 +102,99 @@ pub fn check_rec_group(
     }
 
     Ok(())
+}
+
+/// Check an `induct` declaration's registry entry: the size condition, under
+/// the declaration's own universe hypotheses.
+///
+/// Payload well-sortedness and registry-versus-binding agreement fall out of
+/// the ordinary item walk, because a declaration lowers to a `rec` group of
+/// real definitions. What does not fall out is the *constructor size
+/// condition* — each `Type`-sorted domain of a constructor must sit at or
+/// below the family's declared level, with one extra rung of slack for the
+/// uniform parameters — because the item walk computes each signature's sort
+/// and compares it to nothing. This is the clause that keeps an inductive from
+/// containing the universe it lives in, which is the paradox the hierarchy
+/// exists to exclude.
+///
+/// Call after *both* registries are seeded: a signature may name any
+/// declaration, its own family included.
+pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
+    kernel.restore_budget();
+    kernel.assume_universes(&declaration.universe_context);
+
+    for constructor in declaration.signatures() {
+        check_sizing(
+            kernel,
+            &constructor.telescope,
+            declaration.params.len(),
+            &declaration.result_sort,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// [`check_induct_decl`] for a `struct`: one field telescope instead of one
+/// telescope per constructor, under the same rule.
+pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
+    kernel.restore_budget();
+    kernel.assume_universes(&declaration.universe_context);
+
+    check_sizing(
+        kernel,
+        &declaration.fields,
+        declaration.params.len(),
+        &declaration.result_sort,
+    )
+}
+
+/// Walk one declaration telescope, requiring each `Type`-sorted domain to sit
+/// at or below the declared result level — one rung higher for the leading
+/// `uniform` binders, which are the declaration's parameters.
+///
+/// A `Prop`-sorted result imposes no condition: `Prop` is impredicative, and
+/// what keeps *that* sound is the large-elimination guard, not sizing. A
+/// `Prop`-sorted domain imposes none either — `Prop` sits below every level.
+fn check_sizing<B: Bound + Clone>(
+    kernel: &mut Kernel,
+    telescope: &Telescope<B>,
+    uniform: usize,
+    result_sort: &Term,
+) -> Result<(), KernelError> {
+    let result = kernel.reduce_forced(result_sort.clone())?;
+    let Subterm::Type(bound) = &*result else {
+        return Ok(());
+    };
+    let raised = bound.checked_add(1)?;
+
+    let mark = kernel.mark();
+    let outcome = (|| {
+        let mut position = 0;
+        let mut telescope = telescope.clone();
+        while let Telescope::Cons(domain, rest) = telescope {
+            if let Sort::Type(level) = sort_of(kernel, &domain)? {
+                let upper = if position < uniform { &raised } else { bound };
+
+                if !kernel.level_leq(&level, upper) {
+                    return Err(KernelError::Oversized {
+                        domain: level,
+                        bound: upper.clone(),
+                    });
+                }
+            }
+
+            let binder = kernel.fresh(rest.first_hint());
+            kernel.assume(&binder, &domain);
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+            position += 1;
+        }
+
+        Ok(())
+    })();
+    kernel.retract(mark);
+
+    outcome
 }
 
 /// Check a term that closes the program — an entrypoint body, with no name to

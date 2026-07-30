@@ -105,6 +105,10 @@ pub enum KernelError {
     /// be legitimately absent only when its index targets cannot equal the
     /// actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
+    /// A constructor payload, uniform parameter, or field whose level exceeds
+    /// the declaring family's result sort — the size condition that keeps an
+    /// inductive from containing the universe it lives in.
+    Oversized { domain: Level, bound: Level },
     /// A universe instance whose stated levels do not satisfy the scheme's
     /// constraint set. The scheme declared `lower ≤ upper` over its parameters;
     /// at this instance's levels, under the hypotheses of the item being
@@ -160,6 +164,10 @@ impl fmt::Display for KernelError {
             KernelError::MissingArm { family, tag } => write!(
                 formatter,
                 "no arm for `{tag}` of `{family}`, and its case is not impossible",
+            ),
+            KernelError::Oversized { domain, bound } => write!(
+                formatter,
+                "a declaration domain at level `{domain}` exceeds its family's `{bound}`",
             ),
             KernelError::UniverseInstance { lower, upper } => write!(
                 formatter,

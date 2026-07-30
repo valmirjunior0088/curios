@@ -30,7 +30,10 @@
 use {
     super::{
         Free, Global, Item, Kernel, KernelError, Module, Term,
-        kernel::{check_definition, check_entrypoint, check_rec_group},
+        kernel::{
+            check_definition, check_entrypoint, check_induct_decl, check_rec_group,
+            check_struct_decl,
+        },
         totality::mentioned,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -170,6 +173,27 @@ pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
     }
     for (name, declaration) in &module.struct_decls {
         kernel.declare_struct(name, declaration);
+    }
+
+    // Declaration acceptance, after both registries are seeded so a signature
+    // may name any declaration, its own family included. This is the size
+    // condition — the clause the item walk cannot supply, because it computes
+    // each signature's sort and compares it to nothing.
+    for (name, declaration) in &module.induct_decls {
+        if let Err(error) = check_induct_decl(&mut kernel, declaration) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error,
+            });
+        }
+    }
+    for (name, declaration) in &module.struct_decls {
+        if let Err(error) = check_struct_decl(&mut kernel, declaration) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error,
+            });
+        }
     }
 
     for index in dependency_order(module) {
