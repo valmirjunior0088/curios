@@ -33,15 +33,35 @@ use {
     num_traits::ToPrimitive,
 };
 
-/// The kernel's reduction strategy: everything unfolds, nothing is remembered.
+/// The kernel's reduction strategy: everything unfolds, and what a local-free
+/// term unfolds to is remembered — see the memo fields on [`Kernel`] for what
+/// that does and does not concede.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        whnf(self, term)
+        if let Some(replayed) = self.whnf_hit(&term, false) {
+            return replayed;
+        }
+
+        let before = self.consumption();
+        let reduct = whnf(self, term.clone())?;
+        let replay = self.replay_since(reduct.clone(), before);
+        self.whnf_store(term, false, replay);
+
+        Ok(reduct)
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        let reduced = whnf(self, term)?;
-        force(self, reduced)
+        if let Some(replayed) = self.whnf_hit(&term, true) {
+            return replayed;
+        }
+
+        let before = self.consumption();
+        let reduced = whnf(self, term.clone())?;
+        let reduct = force(self, reduced)?;
+        let replay = self.replay_since(reduct.clone(), before);
+        self.whnf_store(term, true, replay);
+
+        Ok(reduct)
     }
 }
 
@@ -77,7 +97,7 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 
         let mut step = match Term::unwrap_or_clone(term) {
             Subterm::Prim(prim) => Step::Stop(reduce_prim(kernel, &prim)?.into()),
-            Subterm::Var(var) => step_var(kernel, var),
+            Subterm::Var(var) => step_var(kernel, var)?,
             Subterm::Apply(apply) => step_apply(kernel, apply)?,
             Subterm::Proj(proj) => step_proj(kernel, proj)?,
             Subterm::Func(func) => step_func(kernel, func),
@@ -118,11 +138,28 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 }
 
 /// Delta: unfold a definition, or leave the variable as the normal form it is.
-fn step_var(kernel: &Kernel, var: Var) -> Step {
-    match kernel.value(var.unwrap()) {
-        Some(value) => Step::Continue(value.clone()),
-        None => Step::Stop(Term::var(var)),
+///
+/// The body is reduced once and its reduct remembered, so the next occurrence
+/// of the name — in this spine or any later one — continues from the reduct
+/// instead of re-deriving it. A definition body is closed, so the memo entry
+/// depends on nothing but the definition store. The nested `whnf` recurses one
+/// native frame per link of a definition-reference chain, which is authored
+/// depth, not data depth.
+fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
+    let Some(body) = kernel.value(var.unwrap()).cloned() else {
+        return Ok(Step::Stop(Term::var(var)));
+    };
+
+    if let Some(replayed) = kernel.unfold_hit(var.unwrap()) {
+        return Ok(Step::Continue(replayed?));
     }
+
+    let before = kernel.consumption();
+    let reduct = whnf(kernel, body)?;
+    let replay = kernel.replay_since(reduct.clone(), before);
+    kernel.unfold_store(var.unwrap().clone(), replay);
+
+    Ok(Step::Continue(reduct))
 }
 
 /// Beta: open a function's telescope over the arguments applied to it.

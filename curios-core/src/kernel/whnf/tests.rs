@@ -406,3 +406,55 @@ fn restoring_the_budget_refills_it() {
     kernel.restore_budget();
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
 }
+
+/// A remembered reduct is the same answer the term would compute — including
+/// across a scope boundary, which a local-free key cannot observe.
+#[test]
+fn a_memoized_unfold_answers_the_same_across_scopes() {
+    let mut kernel = kernel();
+    let name = binder(0, "two");
+    kernel.define(
+        &name,
+        &nat_type(),
+        &Term::prim(Prim::nat_add(nat(1), nat(1))),
+        &UniverseContext::default(),
+    );
+
+    let mark = kernel.mark();
+    let binder_ = binder(1, "x");
+    kernel.assume(&binder_, &nat_type());
+    let inside = kernel
+        .reduce_forced(Term::free_var(&name))
+        .expect("reduces");
+    kernel.retract(mark);
+
+    let outside = kernel
+        .reduce_forced(Term::free_var(&name))
+        .expect("reduces");
+    assert_eq!(inside, outside);
+    assert_eq!(outside, nat(2));
+}
+
+/// Redefining a name clears every memo, so validity is by construction rather
+/// than by an append-only assumption.
+#[test]
+fn a_redefinition_clears_the_memos() {
+    let mut kernel = kernel();
+    let name = binder(0, "n");
+
+    kernel.define(&name, &nat_type(), &nat(1), &UniverseContext::default());
+    assert_eq!(
+        kernel
+            .reduce_forced(Term::free_var(&name))
+            .expect("reduces"),
+        nat(1),
+    );
+
+    kernel.define(&name, &nat_type(), &nat(2), &UniverseContext::default());
+    assert_eq!(
+        kernel
+            .reduce_forced(Term::free_var(&name))
+            .expect("reduces"),
+        nat(2),
+    );
+}

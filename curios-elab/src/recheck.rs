@@ -156,7 +156,18 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
 /// first refusal, so one item with three problems reports one. Good for
 /// classifying what is missing, wrong for estimating how much is left.
 pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
-    let mut kernel = Kernel::new(budget);
+    verdicts_with(Kernel::new(budget), module)
+}
+
+/// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
+///
+/// Exists for one purpose: asserting that memoization changes no verdict — the
+/// property that makes a memo an evaluation strategy rather than a store.
+pub fn recheck_module_verdicts_uncached(module: &Module, budget: u64) -> Vec<Verdict> {
+    verdicts_with(Kernel::uncached(budget), module)
+}
+
+fn verdicts_with(mut kernel: Kernel, module: &Module) -> Vec<Verdict> {
     let mut verdicts = Vec::new();
 
     // Binder identities are one space shared across the lowerer, the

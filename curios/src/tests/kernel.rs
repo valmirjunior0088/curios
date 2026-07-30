@@ -36,7 +36,10 @@
 //! how the next gap gets found.
 
 use {
-    curios_elab::{KernelError, Module, Term, recheck_module, recheck_module_verdicts},
+    curios_elab::{
+        KernelError, Module, Term, recheck_module, recheck_module_verdicts,
+        recheck_module_verdicts_uncached,
+    },
     curios_pipeline::{Stage, compile_entrypoint},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
@@ -176,6 +179,21 @@ fn kernel_disagreements() {
             println!("        {name}  —  {}", class(&verdict.error));
         }
     }
+}
+
+/// Memoization is an evaluation strategy exactly as long as switching it off
+/// changes nothing. This runs the whole-prelude walk both ways and requires the
+/// verdict lists identical — the same instrument that validated the
+/// defunctionalized judgment (identical counts across profiles).
+#[test]
+#[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
+fn kernel_memo_parity() {
+    let module = elaborated("()");
+
+    assert_eq!(
+        recheck_module_verdicts(&module, crate::DEFAULT_STEP_BUDGET),
+        recheck_module_verdicts_uncached(&module, crate::DEFAULT_STEP_BUDGET),
+    );
 }
 
 /// The smallest thing that is still a whole program: the kernel walks every

@@ -247,6 +247,15 @@ impl Judge for Kernel {
     }
 }
 
+/// One remembered reduction: the reduct, and everything computing it consumed
+/// — so a hit can charge exactly what a recomputation would have.
+#[derive(Debug, Clone)]
+pub(crate) struct Replay {
+    reduct: Term,
+    steps: u64,
+    mints: usize,
+}
+
 /// A top-level name's entry: what it is, and what it unfolds to if anything.
 ///
 /// The universe context is not decoration. A definition with universe
@@ -283,6 +292,41 @@ pub struct Kernel {
     /// first. A local has a type and never a value: `let` substitutes rather
     /// than binding, so nothing in scope here can be unfolded.
     locals: Vec<(Free, Term)>,
+    /// Whether the evaluation memos below are consulted. On by default;
+    /// [`Kernel::uncached`] exists so a test can assert that switching them off
+    /// changes no verdict — the property that makes them an evaluation strategy
+    /// rather than a store.
+    memoized: bool,
+    /// The weak-head reduct each *monomorphic* definition's body reaches, keyed
+    /// by name and computed on first delta — the analog of Lean's `m_unfold`,
+    /// which its trusted `type_checker` holds beside `m_whnf` and
+    /// `m_whnf_core`. Definition bodies are closed, so an entry depends on
+    /// nothing but the definition store, and [`Kernel::define`] clears every
+    /// memo if it ever *overwrites* a name — so validity is by construction,
+    /// not by an append-only assumption.
+    ///
+    /// This is not the kind of store the warning below forbids. A metavariable
+    /// heap or a refinement layer *injects* answers a term alone could not
+    /// produce; a memo replays the kernel's own pure function of
+    /// `(term, definitions)`, computed once. The measured cost of refusing
+    /// even that was a 10× whole-prelude re-check, spent re-deriving the same
+    /// prelude spines for every recursive group the totality gate walks.
+    ///
+    /// Every entry carries what its computation consumed — budget steps and
+    /// minted binder identities — and a hit charges exactly both. The budget
+    /// prices the work a term *denotes*, performed or replayed, and the
+    /// entropy counter advances as if the eta probes had run, so the whole
+    /// observable trajectory — refusal payloads, exhaustion points, every
+    /// later-minted identity — is bit-identical with the memos on or off.
+    /// `kernel_memo_parity` is the test that holds this to account.
+    unfold_memo: HashMap<Free, Replay>,
+    /// Weak-head reducts of *local-free* terms, per entry point (plain, and
+    /// rec-forced). Local-free — every free variable a definition name — is
+    /// what makes a key scope-independent: whnf reads no local (locals carry
+    /// no values by design) and no constraint, so the reduct is a function of
+    /// the definition store alone, and no key can dangle a retracted binder.
+    whnf_memo: HashMap<Term, Replay>,
+    forced_memo: HashMap<Term, Replay>,
     /// The constraint set of the item being checked — its own declared
     /// hypotheses, assumed while its parameters are held abstract. A generic
     /// definition is valid exactly when it checks *under* its constraints, so
@@ -302,10 +346,109 @@ impl Kernel {
             remaining: budget,
             fresh_names: Entropy::new(),
             locals: Vec::new(),
+            memoized: true,
+            unfold_memo: HashMap::new(),
+            whnf_memo: HashMap::new(),
+            forced_memo: HashMap::new(),
             assumed: Vec::new(),
             definitions: HashMap::new(),
             inducts: HashMap::new(),
             structs: HashMap::new(),
+        }
+    }
+
+    /// A kernel whose evaluation memos are off — every reduction re-derived
+    /// from scratch. Exists for one purpose: asserting that memoization changes
+    /// no verdict.
+    pub fn uncached(budget: u64) -> Self {
+        Self {
+            memoized: false,
+            ..Self::new(budget)
+        }
+    }
+
+    /// The remembered reduct of `name`'s body, with the replayed computation's
+    /// whole consumption charged.
+    pub(crate) fn unfold_hit(&mut self, name: &Free) -> Option<Result<Term, ReduceError>> {
+        if !self.memoized {
+            return None;
+        }
+
+        let replay = self.unfold_memo.get(name).cloned()?;
+
+        Some(self.charge(replay))
+    }
+
+    /// Remember what `name`'s body reduces to, and what computing it consumed.
+    pub(crate) fn unfold_store(&mut self, name: Free, replay: Replay) {
+        if self.memoized {
+            self.unfold_memo.insert(name, replay);
+        }
+    }
+
+    /// The remembered weak-head reduct of a local-free `term`, per entry point,
+    /// with the replayed computation's whole consumption charged.
+    pub(crate) fn whnf_hit(
+        &mut self,
+        term: &Term,
+        forced: bool,
+    ) -> Option<Result<Term, ReduceError>> {
+        if !self.memoized || term.has_local_free() {
+            return None;
+        }
+
+        let replay = match forced {
+            false => self.whnf_memo.get(term).cloned()?,
+            true => self.forced_memo.get(term).cloned()?,
+        };
+
+        Some(self.charge(replay))
+    }
+
+    /// Remember a local-free `term`'s weak-head reduct and its consumption.
+    pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
+        if !self.memoized || term.has_local_free() {
+            return;
+        }
+
+        match forced {
+            false => self.whnf_memo.insert(term, replay),
+            true => self.forced_memo.insert(term, replay),
+        };
+    }
+
+    /// A consumption snapshot, for measuring what a computation charges.
+    pub(crate) fn consumption(&self) -> (u64, usize) {
+        (self.remaining, self.fresh_names.count())
+    }
+
+    /// The [`Replay`] for `reduct`, measured against the snapshot taken before
+    /// the computation ran.
+    pub(crate) fn replay_since(&self, reduct: Term, (budget, minted): (u64, usize)) -> Replay {
+        Replay {
+            reduct,
+            steps: budget - self.remaining,
+            mints: self.fresh_names.count() - minted,
+        }
+    }
+
+    /// Charge a replayed computation's whole consumption at once. Exhausting
+    /// here is exactly where the recomputation would have exhausted mid-chain,
+    /// and it reports the same error; the entropy advances as if every probe
+    /// binder had been minted, so later identities land where they would have.
+    fn charge(&mut self, replay: Replay) -> Result<Term, ReduceError> {
+        self.fresh_names
+            .seed(self.fresh_names.count() + replay.mints);
+
+        match self.remaining.checked_sub(replay.steps) {
+            Some(remaining) => {
+                self.remaining = remaining;
+                Ok(replay.reduct)
+            }
+            None => {
+                self.remaining = 0;
+                Err(ReduceError::Exhausted)
+            }
         }
     }
 
@@ -387,7 +530,7 @@ impl Kernel {
     /// Record a top-level definition: `name : type_ = value`, generalized over
     /// `universes`.
     pub fn define(&mut self, name: &Free, type_: &Term, value: &Term, universes: &UniverseContext) {
-        self.definitions.insert(
+        let previous = self.definitions.insert(
             name.clone(),
             Definition {
                 type_: type_.clone(),
@@ -395,13 +538,21 @@ impl Kernel {
                 universes: universes.clone(),
             },
         );
+
+        // A redefinition invalidates every remembered reduct — the memos'
+        // validity is by construction, never by an append-only assumption.
+        if previous.is_some() {
+            self.unfold_memo.clear();
+            self.whnf_memo.clear();
+            self.forced_memo.clear();
+        }
     }
 
     /// Record a top-level name with a type and no body — a `foreign`
     /// declaration, or one kept opaque. It never unfolds, so it is a permanent
     /// neutral.
     pub fn declare(&mut self, name: &Free, type_: &Term, universes: &UniverseContext) {
-        self.definitions.insert(
+        let previous = self.definitions.insert(
             name.clone(),
             Definition {
                 type_: type_.clone(),
@@ -409,6 +560,12 @@ impl Kernel {
                 universes: universes.clone(),
             },
         );
+
+        if previous.is_some() {
+            self.unfold_memo.clear();
+            self.whnf_memo.clear();
+            self.forced_memo.clear();
+        }
     }
 
     /// Register an `induct` declaration's registry entry.
