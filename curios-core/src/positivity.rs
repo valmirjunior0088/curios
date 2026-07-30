@@ -83,12 +83,12 @@ pub struct NotPositive {
 /// [`Env::struct_decl`]), whose vector was computed when that declaration was —
 /// sound at the replay boundary because prelude items cannot mention user code,
 /// so every out-of-set declaration is a sink of the occurrence relation.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     inducts: &BTreeMap<Global, InductDecl>,
     structs: &BTreeMap<Global, StructDecl>,
 ) -> Result<BTreeMap<Global, Vec<Polarity>>, NotPositive> {
+    curios_profile::profile!("positivity_vectors");
     if inducts.is_empty() && structs.is_empty() {
         return Ok(BTreeMap::new());
     }

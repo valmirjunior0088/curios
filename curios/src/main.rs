@@ -56,6 +56,28 @@ fn dispatch() -> Result<(), String> {
 
             emit_exe(&cwasm, &output)?;
         }
+        #[cfg(feature = "profile")]
+        Mode::Profile { input_path } => {
+            let (entrypoint, loader) = curios::load(&input_path)?;
+            let (compilation, report) = curios_profile::capture(|| {
+                curios_pipeline::compile_entrypoint(budget, &entrypoint, loader, |_| {})
+            });
+
+            println!("total_ms\tcalls\tmin_ms\tmax_ms\ttarget\tname");
+            for summary in report.summaries() {
+                println!(
+                    "{:.3}\t{}\t{:.3}\t{:.3}\t{}\t{}",
+                    summary.total().as_secs_f64() * 1_000.0,
+                    summary.calls(),
+                    summary.min().as_secs_f64() * 1_000.0,
+                    summary.max().as_secs_f64() * 1_000.0,
+                    summary.target(),
+                    summary.name(),
+                );
+            }
+
+            compilation.map(|_| ())?;
+        }
     }
 
     Ok(())

@@ -3,10 +3,5 @@
 mod compile;
 pub use compile::*;
 
-#[cfg(feature = "profile")]
-mod profile;
-#[cfg(feature = "profile")]
-pub use profile::*;
-
 #[cfg(test)]
 mod tests;

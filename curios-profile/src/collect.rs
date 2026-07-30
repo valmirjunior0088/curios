@@ -1,22 +1,6 @@
-//! Scoped collection of Curios compiler profiling spans.
-//!
-//! Compiler crates emit spans but never install a subscriber. [`capture`] owns
-//! one profiling session on the current thread, returning aggregate timings to
-//! its caller without changing the process-global tracing subscriber.
-//!
-//! The `profile` feature fans out from `curios` through `curios-pipeline` to
-//! every compiler crate: each crate exposes `profile = ["dep:tracing"]`, so
-//! spans exist only in profiling builds. A measurement point is a function
-//! attributed with `#[cfg_attr(feature = "profile", tracing::instrument(level
-//! = "trace", skip_all))]`; without the feature the attribute compiles to
-//! nothing. To break down the individual steps of a loop — where instrumenting
-//! the stepped function would still aggregate all its calls — wrap each call
-//! site with `curios_base::profile_span!` (see its documentation).
-//!
-//! Stage entrypoints and optimizer passes carry permanent spans. A span added
-//! to isolate one investigation — attribute or `profile_span!` alike — is
-//! temporary instrumentation, removed once the question is answered, never
-//! left as a metrics API.
+//! Scoped collection of profiling spans: [`capture`] owns one subscriber on
+//! the current thread and returns aggregate timings for every span the
+//! operation emitted, without changing the process-global subscriber.
 
 use {
     std::{
@@ -286,14 +270,15 @@ fn finish_report(aggregates: &Aggregates) -> ProfileReport {
 mod tests {
     use super::*;
 
-    #[tracing::instrument(level = "trace", skip_all)]
     fn outer() {
+        let _span = tracing::trace_span!("outer").entered();
         inner();
         inner();
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
-    fn inner() {}
+    fn inner() {
+        let _span = tracing::trace_span!("inner").entered();
+    }
 
     #[test]
     fn capture_aggregates_nested_profile_spans() {

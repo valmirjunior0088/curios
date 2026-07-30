@@ -1824,12 +1824,12 @@ fn audit_public_exposures(
 /// metavariable ids were minted for the module's holes: the floor
 /// `elaborate_module` needs so the ids it mints for implicit-argument
 /// insertion never collide with these.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_elab::Module, usize, usize, ForeignStore), Error> {
+    curios_profile::profile!("into_core");
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
@@ -1919,11 +1919,11 @@ pub fn into_core(
 }
 
 /// Resolve and lower the fixed roots once for build-time archival.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn prepare_prelude(
     input: &PreludeModules,
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedPrelude, Error> {
+    curios_profile::profile!("prepare_prelude");
     let (Resolved { mut table, modules }, roots) = Resolved::for_prelude(input)?;
     let public = interface::resolve_prelude(&roots, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
@@ -2005,13 +2005,13 @@ pub fn prepare_prelude(
 }
 
 /// Lower only entry-owned modules and merge them onto a restored fixed prefix.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn into_core_with_prelude(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     prepared: &PreparedPrelude,
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_elab::Module, usize, usize, ForeignStore), Error> {
+    curios_profile::profile!("into_core_with_prelude");
     let mut resolved = Resolved {
         modules: HashMap::new(),
         table: prepared.table.clone().into_iter().collect(),

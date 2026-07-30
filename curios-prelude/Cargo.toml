@@ -11,14 +11,14 @@ workspace = true
 
 [features]
 profile = [
-    "dep:tracing",
-    "dep:tracing-subscriber",
+    "curios-profile/enabled",
     "curios-text/profile",
     "curios-elab/profile",
     "curios-ersd/profile",
 ]
 
 [dependencies]
+curios-profile = { workspace = true }
 curios-abi = { workspace = true, features = ["archive"] }
 curios-base = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
@@ -26,7 +26,6 @@ curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
 rkyv = { workspace = true }
 sha2 = "0.11.0"
-tracing = { workspace = true, optional = true }
 
 [build-dependencies]
 curios-abi = { workspace = true, features = ["archive"] }
@@ -37,13 +36,7 @@ curios-ersd = { workspace = true, features = ["archive"] }
 rkyv = { workspace = true }
 sha2 = "0.11.0"
 # The build script is where the fixed prelude is actually elaborated, so it is
-# the only place a subscriber can observe compiler spans and events for that
-# work. `curios::profile` cannot serve here: it belongs to the native product,
-# which depends on this crate. The extra `fmt`/`env-filter` features stay local
-# rather than joining the workspace pin, so the leaner `curios` subscriber does
-# not inherit them.
-tracing = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, features = [
-    "fmt",
-    "env-filter",
-], optional = true }
+# the only place a capture can observe compiler spans for that work — hence the
+# same dependency in both kinds: the library's measurement points and the build
+# script's collector activate together through `curios-profile/enabled`.
+curios-profile = { workspace = true }

@@ -123,8 +123,8 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
 /// Zonk a whole [`Module`]: substitute metavariable solutions throughout every
 /// top-level item plus the entrypoint body and annotation, yielding a meta-free
 /// module for `erase` (§9).
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
+    curios_profile::profile!("zonk_module");
     let items = module
         .items
         .iter()

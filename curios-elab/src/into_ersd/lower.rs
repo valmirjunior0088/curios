@@ -256,12 +256,12 @@ fn project_module(module: &Module) -> Module {
 /// [`Module`]. Top-level items are erased in dominance order as the
 /// module's item chain; the entrypoint body becomes the entry block, checked
 /// against `expected`.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn erase_module(
     context: &mut Context,
     module: &Module,
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
+    curios_profile::profile!("erase_module");
     let module = UniverseErased::<Module>::project(module)?.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Erasure is re-derivation of elaborated terms, never surface elaboration,
@@ -500,11 +500,11 @@ impl ErasedPrelude {
 
 /// Erase the fixed prelude's items into a replayable prefix. The prelude
 /// module carries no entrypoint of its own; only its item chain is erased.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn erase_prelude_prefix(
     context: &mut Context,
     prelude: &Module,
 ) -> Result<ErasedPrelude, Error> {
+    curios_profile::profile!("erase_prelude_prefix");
     let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
@@ -537,7 +537,6 @@ pub fn erase_prelude_prefix(
 /// in place, its items the prelude's own followed by the user's, which is what
 /// `elaborate_module_with_prelude` returns. Both are what let this skip
 /// re-deriving the standard library on every compilation.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn erase_module_with_prelude(
     context: &mut Context,
     prelude: &Module,
@@ -545,6 +544,7 @@ pub fn erase_module_with_prelude(
     expected: &Term,
     prefix: ErasedPrelude,
 ) -> Result<curios_ersd::Module, Error> {
+    curios_profile::profile!("erase_module_with_prelude");
     let prelude = UniverseErased::<Module>::project_validated(prelude);
     let module = UniverseErased::<Module>::project_extending(&prelude, module)?.into_inner();
     let prelude = prelude.into_inner();

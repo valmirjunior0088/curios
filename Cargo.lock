@@ -18,15 +18,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "aho-corasick"
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -478,11 +469,10 @@ dependencies = [
  "curios-elab",
  "curios-ersd",
  "curios-pipeline",
+ "curios-profile",
  "curios-runtime",
  "curios-text",
  "curios-wasm",
- "tracing",
- "tracing-subscriber",
  "wasmtime",
 ]
 
@@ -520,8 +510,8 @@ version = "0.5.0"
 dependencies = [
  "curios-abi",
  "curios-base",
+ "curios-profile",
  "curios-wasm",
- "tracing",
 ]
 
 [[package]]
@@ -530,10 +520,10 @@ version = "0.5.0"
 dependencies = [
  "curios-abi",
  "curios-base",
+ "curios-profile",
  "num-bigint",
  "num-traits",
  "rkyv",
- "tracing",
 ]
 
 [[package]]
@@ -544,10 +534,10 @@ dependencies = [
  "curios-base",
  "curios-core",
  "curios-ersd",
+ "curios-profile",
  "num-bigint",
  "num-traits",
  "rkyv",
- "tracing",
 ]
 
 [[package]]
@@ -557,9 +547,9 @@ dependencies = [
  "curios-abi",
  "curios-base",
  "curios-cont",
+ "curios-profile",
  "num-bigint",
  "rkyv",
- "tracing",
 ]
 
 [[package]]
@@ -571,9 +561,9 @@ dependencies = [
  "curios-elab",
  "curios-ersd",
  "curios-prelude",
+ "curios-profile",
  "curios-text",
  "curios-wasm",
- "tracing",
 ]
 
 [[package]]
@@ -584,9 +574,16 @@ dependencies = [
  "curios-base",
  "curios-elab",
  "curios-ersd",
+ "curios-profile",
  "curios-text",
  "rkyv",
  "sha2 0.11.0",
+]
+
+[[package]]
+name = "curios-profile"
+version = "0.5.0"
+dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
@@ -613,10 +610,10 @@ dependencies = [
  "curios-abi",
  "curios-base",
  "curios-elab",
+ "curios-profile",
  "num-bigint",
  "num-traits",
  "rkyv",
- "tracing",
 ]
 
 [[package]]
@@ -976,15 +973,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
-name = "matchers"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
-dependencies = [
- "regex-automata",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1195,23 +1183,6 @@ dependencies = [
  "serde",
  "smallvec",
 ]
-
-[[package]]
-name = "regex-automata"
-version = "0.4.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f388202e4b80542a0921078cc23b6333bcf1409c1e3f86404cae4766a6131db"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-syntax",
-]
-
-[[package]]
-name = "regex-syntax"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rend"
@@ -1561,19 +1532,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
  "pin-project-lite",
- "tracing-attributes",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-attributes"
-version = "0.1.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1591,12 +1550,8 @@ version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
 dependencies = [
- "matchers",
- "once_cell",
- "regex-automata",
  "sharded-slab",
  "thread_local",
- "tracing",
  "tracing-core",
 ]
 

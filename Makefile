@@ -41,7 +41,6 @@ curios/profile:
 	cargo run \
 		--release \
 		--package curios \
-		--bin profile \
 		--features profile \
 		--target-dir "$(CARGO_TARGET_DIR)" \
-		-- "$(CURIOS_PROFILE_SOURCE)"
+		-- profile "$(CURIOS_PROFILE_SOURCE)"

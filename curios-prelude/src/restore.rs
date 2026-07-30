@@ -56,8 +56,8 @@ thread_local! {
     });
 }
 
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn validate_archive() -> Result<&'static ArchivedPreludeArchive, String> {
+    curios_profile::profile!("validate_archive");
     validate_bytes(BYTES, SCHEMA, EXPECTED_FINGERPRINT)
 }
 
@@ -114,8 +114,8 @@ fn archived() -> &'static ArchivedPreludeArchive {
 /// from any other build. Walking the whole standard library again per
 /// compilation to re-derive an answer already settled cost ~175 ms of a ~680 ms
 /// release compile of a one-line program.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn restore_archive() -> PreludeArchive {
+    curios_profile::profile!("restore_archive");
     rkyv::deserialize::<PreludeArchive, rkyv::rancor::Error>(archived())
         .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"))
 }
@@ -125,8 +125,8 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Borrow this thread's reusable restored Text/Core prelude.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
+    curios_profile::profile!("with_prelude");
     PRELUDE.with(|prelude| use_prelude(prelude))
 }
 

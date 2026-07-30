@@ -1,0 +1,22 @@
+[package]
+name = "curios-profile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Programmatic profiling for the Curios workspace: span macros and the aggregate capture subscriber"
+
+[lints]
+workspace = true
+
+[features]
+enabled = ["dep:tracing", "dep:tracing-subscriber"]
+
+# The one place in the workspace these are named, so the pins live here
+# rather than in the workspace table. No `attributes` feature: the workspace
+# instruments through `profile!`/`profile_span!`, never the proc macro.
+[dependencies]
+tracing = { version = "0.1.44", default-features = false, features = ["std"], optional = true }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = [
+    "std",
+    "registry",
+], optional = true }

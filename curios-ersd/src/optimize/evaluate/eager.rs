@@ -18,11 +18,11 @@ use {
 
 /// The item statements whose eager evaluation the interpreter proves performs
 /// no effect.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn prove_eager_groups_pure(
     module: &Module,
     analysis: &Analysis,
 ) -> BTreeSet<StatementId> {
+    curios_profile::profile!("prove_eager_groups_pure");
     let mut evaluator = Evaluator::new(module, analysis);
     let mut pure = BTreeSet::new();
     for &item in module.items() {

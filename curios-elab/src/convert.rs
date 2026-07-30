@@ -253,7 +253,7 @@ fn apply_param_types(
 /// than in how a wrapper is generalized.
 #[cfg(feature = "profile")]
 fn probe_level_fallback(site: &'static str, type_: &Term) {
-    tracing::debug!(
+    curios_profile::tracing::debug!(
         target: "curios_elab::sort",
         site,
         type_ = %type_,
@@ -1467,7 +1467,7 @@ impl Convert {
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
         if metavars.contains(&id) {
             #[cfg(feature = "profile")]
-            tracing::debug!(target: "curios_elab::solve", meta = id.0, "failed: occurs check");
+            curios_profile::tracing::debug!(target: "curios_elab::solve", meta = id.0, "failed: occurs check");
             return Ok(Solved::Failed);
         }
 
@@ -1479,7 +1479,7 @@ impl Convert {
             .any(|other| context.metavar_solution(*other).is_none())
         {
             #[cfg(feature = "profile")]
-            tracing::debug!(
+            curios_profile::tracing::debug!(
                 target: "curios_elab::solve",
                 meta = id.0,
                 blockers = %metavars
@@ -1503,7 +1503,7 @@ impl Convert {
             // No birth record (e.g. a synthesis-position hole that never reached
             // a checking site): nothing to validate against, cannot solve.
             #[cfg(feature = "profile")]
-            tracing::debug!(target: "curios_elab::solve", meta = id.0, "failed: no birth record");
+            curios_profile::tracing::debug!(target: "curios_elab::solve", meta = id.0, "failed: no birth record");
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope.clone();
@@ -1636,7 +1636,7 @@ impl Convert {
                     .iter()
                     .any(|entry| entry.free_vars().contains(&name));
             #[cfg(feature = "profile")]
-            tracing::debug!(
+            curios_profile::tracing::debug!(
                 target: "curios_elab::solve",
                 meta = id.0,
                 %name,
@@ -1679,7 +1679,7 @@ impl Convert {
             let resolved = inverted.capture(&binders).release(&refs);
             if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
                 #[cfg(feature = "profile")]
-                tracing::debug!(
+                curios_profile::tracing::debug!(
                     target: "curios_elab::solve",
                     meta = id.0,
                     "postponed: inversion round-trip disagreed",
@@ -1716,7 +1716,7 @@ impl Convert {
                     // otherwise discarded — and it is exactly what explains a
                     // rejected candidate that looks correct at the use site.
                     #[cfg(feature = "profile")]
-                    tracing::debug!(
+                    curios_profile::tracing::debug!(
                         target: "curios_elab::solve",
                         meta = id.0,
                         error = %_error,
@@ -1729,7 +1729,7 @@ impl Convert {
 
         if !revalidated {
             #[cfg(feature = "profile")]
-            tracing::debug!(
+            curios_profile::tracing::debug!(
                 target: "curios_elab::solve",
                 meta = id.0,
                 against = %result,

@@ -50,8 +50,8 @@ use {
 /// entry block — becomes the parameterless Cps entry `main`, delivering its
 /// result to a bodyless `return_cont`. The produced module is verified; a
 /// failure is a lowering bug, not a user error, so it panics.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
+    curios_profile::profile!("lower_to_cont");
     let mut lowerer = Lowerer {
         source,
         module: curios_cont::CpsModule::new(),

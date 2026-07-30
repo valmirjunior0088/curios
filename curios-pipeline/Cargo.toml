@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 profile = [
-    "dep:tracing",
+    "curios-profile/enabled",
     "curios-text/profile",
     "curios-prelude/profile",
     "curios-elab/profile",
@@ -19,6 +19,7 @@ profile = [
 ]
 
 [dependencies]
+curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-text = { workspace = true }
 curios-prelude = { workspace = true }
@@ -26,4 +27,3 @@ curios-elab = { workspace = true }
 curios-ersd = { workspace = true }
 curios-cont = { workspace = true }
 curios-wasm = { workspace = true }
-tracing = { workspace = true, optional = true }

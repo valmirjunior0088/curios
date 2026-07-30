@@ -9,10 +9,10 @@ description = "The curios continuation-passing IR: cont->cont optimization and w
 workspace = true
 
 [features]
-profile = ["dep:tracing"]
+profile = ["curios-profile/enabled"]
 
 [dependencies]
+curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
 curios-wasm = { workspace = true }
-tracing = { workspace = true, optional = true }

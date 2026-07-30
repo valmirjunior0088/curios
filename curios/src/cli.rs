@@ -40,6 +40,15 @@ pub(crate) enum Mode {
         )]
         output_path: Option<PathBuf>,
     },
+
+    /// Present only in profiling builds: the mode exists exactly when the
+    /// spans it collects do.
+    #[cfg(feature = "profile")]
+    #[command(about = "Profile one compilation and print per-span aggregates")]
+    Profile {
+        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
+        input_path: PathBuf,
+    },
 }
 
 #[derive(Debug, Parser)]

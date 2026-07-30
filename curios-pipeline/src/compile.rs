@@ -29,7 +29,6 @@ use {
 /// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call:
 /// prepared Text state is merged with the user graph, then the archived Core
 /// prefix is replayed and only the user suffix is type-checked.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
     entrypoint: &Entrypoint,
@@ -39,6 +38,7 @@ pub(crate) fn elaborate_and_zonk<O>(
 where
     O: FnMut(Stage<'_>),
 {
+    curios_profile::profile!("elaborate_and_zonk");
     observe(Stage::Text(entrypoint));
 
     let (lowered, metavars, universe_floor, user_foreigns) = with_prelude(|prelude| {
@@ -75,11 +75,11 @@ where
 /// The back half of [`compile_entrypoint`]: from a verified erased module
 /// through optimization, the lowering into Cont, Cont optimization, and wasm
 /// emission, observing every stage in order.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn lower_from_ersd<O>(mut ersd_module: curios_ersd::Module, observe: &mut O) -> curios_wasm::Module
 where
     O: FnMut(Stage<'_>),
 {
+    curios_profile::profile!("lower_from_ersd");
     observe(Stage::Ersd(&ersd_module));
 
     // Shrink before lowering: drop the items the program neither reaches nor
@@ -111,7 +111,6 @@ where
 /// prefix is restored and replayed, only the user suffix erases, the arena
 /// transformations shrink and rebase the module, and the lowering into Cont
 /// makes every encoding decision once (see `curios_ersd::lower_to_cont`).
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint<O>(
     budget: u64,
     entrypoint: &Entrypoint,
@@ -121,6 +120,7 @@ pub fn compile_entrypoint<O>(
 where
     O: FnMut(Stage<'_>),
 {
+    curios_profile::profile!("compile_entrypoint");
     let (module, core_type, foreigns) =
         elaborate_and_zonk(budget, entrypoint, loader, &mut observe)?;
 

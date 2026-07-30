@@ -240,12 +240,12 @@ pub fn classify_module(
 /// wrote rather than re-deriving it — classification reduces, so doing it once
 /// per module is the difference between one pass over the group corpus and
 /// three.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn record_totality(
     context: &mut Context,
     module: &mut Module,
     inherited: &BTreeMap<Global, Totality>,
 ) {
+    curios_profile::profile!("record_totality");
     let classified = classify_module(context, module, inherited);
     let of = |name: &Global| classified.get(name).copied().unwrap_or_default();
 
@@ -347,12 +347,12 @@ fn faults(
 /// `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity
 /// exists to forbid without ever writing an `induct`. Runs post-zonk, after
 /// [`record_totality`], whose flags it reads.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<(), Error> {
+    curios_profile::profile!("check_type_totality");
     let mut positions = type_positions(module);
     positions.extend(checked_type_positions(context)?);
     report(context, module, &positions, inherited, Erased::Type)
@@ -407,12 +407,12 @@ fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error>
 /// behind a proposition never fires and the program continues with a forged
 /// invariant. Independent of [`check_type_totality`]: neither obligation
 /// subsumes the other.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn check_proof_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<(), Error> {
+    curios_profile::profile!("check_proof_totality");
     let positions = checked_proof_positions(context)?;
     report(context, module, &positions, inherited, Erased::Proof)
 }

@@ -965,11 +965,11 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     // is the breakdown a whole-module timing cannot give.
     // `steps` reports what the declaration spent of its budget.
     #[cfg(feature = "profile")]
-    let _declaration = tracing::info_span!(
+    let _declaration = curios_profile::tracing::info_span!(
         target: "curios_elab::declaration",
         "declaration",
         name = %item_names,
-        steps = tracing::field::Empty,
+        steps = curios_profile::tracing::field::Empty,
     )
     .entered();
 
@@ -1021,7 +1021,6 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
 ///
 /// The prefix diverges at exactly one point: after [`check_concept_registry`],
 /// its items are *replayed* into the context rather than elaborated.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn elaborate_module_suffix(
     context: &mut Context,
     prefix: Option<&Module>,
@@ -1030,6 +1029,7 @@ fn elaborate_module_suffix(
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
+    curios_profile::profile!("elaborate_module_suffix");
     // Seed the context's registries before any item is checked: an inductive's
     // type-constructor and value-constructor definitions reference their own
     // registry entry (`elaborate_induct_type`/`elaborate_variant`), and
@@ -1249,13 +1249,13 @@ fn suffix_keys<T>(
 /// the zonk. `inherited` carries the classifications of a replayed prefix, whose
 /// own verdicts were settled when its archive was built; it is empty for a
 /// from-scratch elaboration, where the module defines every name it mentions.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn finalize_and_check(
     context: &mut Context,
     mut module: Module,
     body_type: Term,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<(Module, Term), Error> {
+    curios_profile::profile!("finalize_and_check");
     let mut entry_terms = vec![module.body.clone()];
     let has_annotation = module.type_.is_some();
     if let Some(type_) = &module.type_ {
@@ -1294,7 +1294,6 @@ fn finalize_and_check(
 ///
 /// The paired operation exists so a cached module and its body type can never
 /// come from different metavariable stores.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
@@ -1302,6 +1301,7 @@ pub fn elaborate_and_zonk_module(
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
+    curios_profile::profile!("elaborate_and_zonk_module");
     let (module, body_type) =
         elaborate_module_suffix(context, None, module, metavar_floor, universe_floor, mode)?;
     // Nothing is inherited: `module` is the whole program, so every name it
@@ -1333,7 +1333,6 @@ pub fn elaborate_and_zonk_module(
 /// skips the prefix by `prelude.items.len()` and reuses the prelude's already
 /// projected terms for it rather than re-deriving the standard library on every
 /// compilation.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn elaborate_and_zonk_with_prelude(
     context: &mut Context,
     prelude: &Module,
@@ -1342,6 +1341,7 @@ pub fn elaborate_and_zonk_with_prelude(
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
+    curios_profile::profile!("elaborate_and_zonk_with_prelude");
     let (suffix, body_type) = elaborate_module_suffix(
         context,
         Some(prelude),

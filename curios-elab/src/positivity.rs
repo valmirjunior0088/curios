@@ -19,8 +19,8 @@ use super::{Context, Error, Module, positivity_vectors};
 /// computed once at archive-build time and answers from this context's
 /// registry — sound because prelude items cannot mention user code, so no
 /// cycle crosses the boundary.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<(), Error> {
+    curios_profile::profile!("check_positivity");
     let vectors = positivity_vectors(context, &module.induct_decls, &module.struct_decls).map_err(
         |refusal| {
             Error::not_strictly_positive(

@@ -42,8 +42,8 @@ use types::*;
 mod tests;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
+    curios_profile::profile!("into_wasm");
     let machine = lower(module);
     let structured = structurize(&machine);
     let mut wasm_module = curios_wasm::Module::new("module");

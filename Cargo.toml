@@ -1,6 +1,22 @@
 [workspace]
 resolver = "2"
-members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios-ersd", "curios-core", "curios-elab", "curios-text", "curios-prelude", "curios-pipeline", "curios-web", "curios", "curios-binaryen", "curios-runtime"]
+members = [
+    "curios-abi",
+    "curios-base",
+    "curios-wasm",
+    "curios-cont",
+    "curios-ersd",
+    "curios-core",
+    "curios-elab",
+    "curios-text",
+    "curios-prelude",
+    "curios-pipeline",
+    "curios-profile",
+    "curios-web",
+    "curios",
+    "curios-binaryen",
+    "curios-runtime",
+]
 
 [workspace.package]
 version = "0.5.0"
@@ -17,6 +33,7 @@ unused_self = "warn"
 [workspace.dependencies]
 curios = { path = "curios" }
 curios-abi = { path = "curios-abi" }
+curios-profile = { path = "curios-profile" }
 curios-base = { path = "curios-base" }
 curios-wasm = { path = "curios-wasm" }
 curios-cont = { path = "curios-cont" }
@@ -29,9 +46,7 @@ curios-pipeline = { path = "curios-pipeline" }
 curios-web = { path = "curios-web" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
-wasmtime = { version = "46.0.1", default-features = false, features = ["runtime", "gc", "gc-copying", "std"] }
 num-bigint = { version = "0.5.1" }
 num-traits = { version = "0.2.19" }
-tracing = { version = "0.1.44", default-features = false, features = ["std", "attributes"] }
-tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "registry"] }
+wasmtime = { version = "46.0.1", default-features = false, features = ["runtime", "gc", "gc-copying", "std"] }
 rkyv = { version = "0.8.16", default-features = false, features = ["alloc", "bytecheck", "little_endian", "pointer_width_32", "std", "unaligned"] }

@@ -48,8 +48,8 @@ enum Kind {
 /// Fold every closed call the interpreter can finish, module-wide. Returns
 /// whether anything was installed — a curried chain folds one application per
 /// round, so the driver iterates until quiescent.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
+    curios_profile::profile!("evaluate_closed_terms");
     let analysis = Analysis::analyze(module);
     let owners = index_owners(module);
     let planned = plan(module, &analysis, &owners);
