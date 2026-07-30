@@ -265,7 +265,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source")
-        .with_type("()".parse().unwrap());
+        .with_type("{}".parse().unwrap());
 
     let mut cont_optm = None;
 
@@ -314,7 +314,7 @@ fn fmt_print_runtime_args_specializes_spine() {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source")
-        .with_type("()".parse().unwrap());
+        .with_type("{}".parse().unwrap());
 
     let mut ersd_optm = None;
 
@@ -374,7 +374,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source")
-        .with_type("()".parse().unwrap());
+        .with_type("{}".parse().unwrap());
 
     let mut ersd_optm = None;
     let mut cont_optm = None;

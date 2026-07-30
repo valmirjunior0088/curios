@@ -109,17 +109,26 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
 ///
 /// The count is per *item*, not per disagreement: an item stops at its own first refusal, so one item with three problems reports one. Good for classifying what is missing, wrong for estimating how much is left.
 pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
-    verdicts_with(Kernel::new(budget), module)
+    verdicts_from(Kernel::new(budget), module, 0)
+}
+
+/// [`recheck_module_verdicts`] judging only the items at index `checked_from` and later, defining every earlier item on the archive's word.
+///
+/// The prefix is the archive-replayed prelude, and the faith placed in it is in the archive's *construction*, not in any per-compile claim: the prelude build runs the full walk over exactly this prefix and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at ~24× the cost of the whole rest of the pipeline.
+///
+/// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because the registry is spliced and those passes cost milliseconds; only the per-item typing judgment honors the boundary.
+pub fn recheck_module_suffix(module: &Module, budget: u64, checked_from: usize) -> Vec<Verdict> {
+    verdicts_from(Kernel::new(budget), module, checked_from)
 }
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
 ///
 /// Exists for one purpose: asserting that memoization changes no verdict — the property that makes a memo an evaluation strategy rather than a store.
 pub fn recheck_module_verdicts_uncached(module: &Module, budget: u64) -> Vec<Verdict> {
-    verdicts_with(Kernel::uncached(budget), module)
+    verdicts_from(Kernel::uncached(budget), module, 0)
 }
 
-fn verdicts_with(mut kernel: Kernel, module: &Module) -> Vec<Verdict> {
+fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Vec<Verdict> {
     let mut verdicts = Vec::new();
 
     // Binder identities are one space shared across the lowerer, the elaborator, and the archived prelude. Seeding above the module's high-water mark is what keeps a binder the kernel mints — while comparing under a telescope, or eta-contracting — from aliasing one already in a term, which would be a capture.
@@ -135,6 +144,32 @@ fn verdicts_with(mut kernel: Kernel, module: &Module) -> Vec<Verdict> {
 
     for index in dependency_order(module) {
         let item = &module.items[index];
+
+        // A prefix item enters the environment exactly as a refused item would — defined at its declared type with its real body — so every judged item downstream sees what a fully judged walk would have shown it.
+        if index < checked_from {
+            match item {
+                Item::Let(definition) => {
+                    kernel.define(
+                        &Free::from(&definition.name),
+                        &definition.type_,
+                        &definition.body,
+                        &definition.universe_context,
+                    );
+                }
+                Item::Rec(rec) => {
+                    let universes = rec.group.universe_context().clone();
+                    for (member, name) in item.declared_names().into_iter().enumerate() {
+                        kernel.define(
+                            &Free::from(name),
+                            &rec.group.member_type(member),
+                            &Term::rec_member(rec.group.clone(), member),
+                            &universes,
+                        );
+                    }
+                }
+            }
+            continue;
+        }
 
         match item {
             Item::Let(definition) => {

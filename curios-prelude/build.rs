@@ -12,8 +12,8 @@ use {
     curios_base::{Qualifier, RootId},
     curios_core::{Global, Sharing},
     curios_elab::{
-        Context, Item, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
-        validate_lowered_universe_seeds, validate_universes,
+        Context, DEFAULT_STEP_BUDGET, Item, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
+        recheck_module_verdicts, validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, PreludeModules, prepare_prelude, sys_module},
     sha2::{Digest, Sha256},
@@ -108,6 +108,17 @@ fn build() {
     // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration establishes that the bytes it reads are exactly the bytes written from this value — content digest, schema, source fingerprint, and bytecheck — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_prelude_prefix` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
+
+    // The archive-verdict pattern's establishing half: per-compile rechecking defines this prefix on faith, and this walk is that faith's whole ground — an archive that exists is one whose every item the kernel accepted.
+    let refusals = recheck_module_verdicts(&core, DEFAULT_STEP_BUDGET);
+    if let Some(verdict) = refusals.first() {
+        panic!(
+            "fixed prelude failed the kernel: {} of {} items refused, first: {}",
+            refusals.len(),
+            core.items.len(),
+            verdict.error,
+        );
+    }
 
     let ersd =
         erase_prelude_prefix(&mut Context::with_default_budget(), &core).unwrap_or_else(|error| {

@@ -5,7 +5,10 @@ use {
     curios_abi::ForeignStore,
     curios_cont::{into_wasm, optimize},
     curios_core::Term,
-    curios_elab::{Context, Mode, elaborate_and_zonk_with_prelude, erase_module_with_prelude},
+    curios_elab::{
+        Context, Mode, elaborate_and_zonk_with_prelude, erase_module_with_prelude,
+        recheck_module_suffix,
+    },
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},
@@ -101,6 +104,21 @@ where
     curios_profile::profile!("compile_entrypoint");
     let (module, core_type, foreigns) =
         elaborate_and_zonk(budget, entrypoint, loader, &mut observe)?;
+
+    // The independent kernel's second opinion, on the compile path: the archive-replayed prelude prefix was walked when the archive was built, so only the entry suffix is judged here — a refusal fails the compile.
+    {
+        curios_profile::profile!("recheck_suffix");
+        let checked_from = with_prelude(|prelude| prelude.core().items.len());
+        if let Some(verdict) = recheck_module_suffix(&module, budget, checked_from)
+            .into_iter()
+            .next()
+        {
+            return Err(match &verdict.name {
+                Some(name) => format!("the kernel refused {name}: {}", verdict.error),
+                None => format!("the kernel refused the entrypoint: {}", verdict.error),
+            });
+        }
+    }
 
     let ersd_module = with_prelude(|prelude| {
         erase_module_with_prelude(
