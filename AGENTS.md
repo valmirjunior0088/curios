@@ -53,7 +53,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
 | Fixed prelude | `curios-prelude` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive |
-| Term representation | `curios-core` | `Term` and its binder discipline, the primitive roster and folds, universe levels, registry entries, names, and the printer |
+| Term representation | `curios-core` | `Term` and its binder discipline, the primitive roster and folds, universe levels, registry entries, the finished-program `Module` both checkers walk, names, and the printer |
 | Trusted certifier | `curios-cert` | The independent kernel, the `Env`/`Judge` seam, and the shared inversion, positivity, totality, and entailment analyses |
 | Type theory | `curios-elab` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
 | Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |

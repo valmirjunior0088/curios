@@ -13,9 +13,9 @@ mod tests;
 
 use {
     super::{Kernel, KernelError, Sort, infer::check},
-    crate::{Totality, group_totality, yields_a_sort},
+    crate::{group_totality, yields_a_sort},
     curios_core::{
-        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term,
+        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseContext,
     },
 };

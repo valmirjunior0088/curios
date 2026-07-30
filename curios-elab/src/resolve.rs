@@ -11,7 +11,7 @@ use {
     },
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType, Subterm,
+        Concept, Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType, Subterm,
         Telescope, Term, UniverseContext, WitnessOrigin,
     },
     std::collections::{BTreeSet, HashSet},
@@ -750,7 +750,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
 
     // Three-color DFS over the superclass edges.
     fn visit(
-        concepts: &std::collections::BTreeMap<Global, super::Concept>,
+        concepts: &std::collections::BTreeMap<Global, Concept>,
         name: &Global,
         visiting: &mut BTreeSet<Global>,
         done: &mut BTreeSet<Global>,

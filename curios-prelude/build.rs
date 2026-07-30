@@ -10,9 +10,10 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
+    curios_core::Item,
     curios_core::{Global, Sharing},
     curios_elab::{
-        Context, DEFAULT_STEP_BUDGET, Item, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
+        Context, DEFAULT_STEP_BUDGET, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
         recheck_module_verdicts, validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, PreludeModules, prepare_prelude, sys_module},
@@ -233,7 +234,7 @@ fn fingerprint(manifest: &Path, sources: &[PathBuf]) -> [u8; 32] {
     digest.finalize().into()
 }
 
-fn validate_syntax_targets(module: &curios_elab::Module) {
+fn validate_syntax_targets(module: &curios_core::Module) {
     let names = module
         .items
         .iter()

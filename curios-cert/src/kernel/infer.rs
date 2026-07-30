@@ -29,8 +29,8 @@ use {
     },
     curios_core::{
         Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Proj, Rec, RecMember, Reducer,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Variant,
-        instantiate_universe_levels_scoped,
+        Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, UniverseInst,
+        Variant, instantiate_universe_levels_scoped,
     },
 };
 
@@ -363,7 +363,7 @@ fn infer_node(
             }
 
             if let Some(type_) = erased_member
-                && crate::group_totality(kernel, group) != crate::Totality::Total
+                && crate::group_totality(kernel, group) != Totality::Total
             {
                 return Err(KernelError::NotDescending {
                     type_: Box::new(type_),

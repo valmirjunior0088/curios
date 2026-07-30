@@ -11,7 +11,7 @@ use {
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: curios_core::Global,
-    pub kind: curios_elab::DefinitionKind,
+    pub kind: curios_core::DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
     pub type_: curios_core::Term,
@@ -19,15 +19,15 @@ pub(super) struct FlatLet {
 }
 
 impl FlatLet {
-    pub(super) fn into_core(self) -> curios_elab::Definition {
-        curios_elab::Definition {
+    pub(super) fn into_core(self) -> curios_core::Definition {
+        curios_core::Definition {
             root: self.root,
             island: self.island,
             name: self.name,
             kind: self.kind,
             universe_context: curios_core::UniverseContext::empty(),
             // Lowering cannot know this. `curios_elab::record_totality` computes the definition's totality after elaboration and zonking and writes it back here.
-            totality: curios_cert::Totality::default(),
+            totality: curios_core::Totality::default(),
             type_: self.type_,
             body: self.body,
         }
@@ -79,10 +79,10 @@ impl FlatItem {
             .collect()
     }
 
-    pub(super) fn into_core(self) -> curios_elab::Item {
+    pub(super) fn into_core(self) -> curios_core::Item {
         match self {
-            FlatItem::Let(let_) => curios_elab::Item::Let(let_.into_core()),
-            FlatItem::Rec(items) => curios_elab::Item::Rec(curios_elab::RecItem::new(
+            FlatItem::Let(let_) => curios_core::Item::Let(let_.into_core()),
+            FlatItem::Rec(items) => curios_core::Item::Rec(curios_core::RecItem::new(
                 items.into_iter().map(FlatLet::into_core).collect(),
             )),
         }

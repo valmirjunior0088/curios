@@ -125,7 +125,7 @@ fn let_bound_tuple_with_an_effectful_field_lowers() {
 
 #[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
-    // The exact case that used to overflow: a meta-free entrypoint (no holes) that still pulls in the whole std/std prelude. Assembling and traversing the old N-deep nested term overflowed the stack during construction and in every pass; the flat `curios_elab::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
+    // The exact case that used to overflow: a meta-free entrypoint (no holes) that still pulls in the whole std/std prelude. Assembling and traversing the old N-deep nested term overflowed the stack during construction and in every pass; the flat `curios_core::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         id(/std/Nat, 5)

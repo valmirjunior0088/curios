@@ -9,14 +9,12 @@
 //! The boundary validates what it has not already seen validated, and projects what is not already projected — which for the replay entrypoint is only the user suffix. The prelude arrives immutable and checked from `curios-prelude`'s restore, and the merged module's leading items are that same prelude, so validating and projecting either of them again is a walk of the whole standard library for an answer already in hand. Doing both was measured at ~320 ms of a ~1000 ms release compilation of a one-line program, and it fell inside the erasure context's step budget, which a debug build then exceeded on `programs/hello_curios.crs`.
 
 use {
-    super::{
-        Context, Error, Item, Module, RecItem, expect_prim_head, infer, reduce_with, refine_head,
-    },
+    super::{Context, Error, expect_prim_head, infer, reduce_with, refine_head},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductArm, InductDecl,
-        InductType, Let, Many, Match, Nat, Prim, PrimHead, Proj, Rec, RecMember, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
-        wire_term,
+        InductType, Item, Let, Many, Match, Nat, Prim, PrimHead, Proj, Rec, RecItem, RecMember,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
+        Variant, wire_term,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,

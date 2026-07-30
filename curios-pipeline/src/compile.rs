@@ -22,7 +22,7 @@ pub(crate) fn elaborate_and_zonk<O>(
     entrypoint: &Entrypoint,
     loader: RootSource,
     observe: &mut O,
-) -> Result<(curios_elab::Module, Term, ForeignStore), String>
+) -> Result<(curios_core::Module, Term, ForeignStore), String>
 where
     O: FnMut(Stage<'_>),
 {

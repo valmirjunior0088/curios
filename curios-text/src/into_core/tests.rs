@@ -61,7 +61,7 @@ fn written_type(id: usize) -> curios_core::Term {
     curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(id)))
 }
 
-fn elaborate_source(src: &str) -> curios_elab::Module {
+fn elaborate_source(src: &str) -> curios_core::Module {
     let (module, metavar_floor, universe_floor, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
@@ -80,7 +80,7 @@ fn elaborate_source(src: &str) -> curios_elab::Module {
     .0
 }
 
-fn elaboration_paths(src: &str) -> (curios_elab::Module, curios_elab::Module) {
+fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     let (lowered, metavar_floor, universe_floor, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
@@ -237,7 +237,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_elab::Item::Let(definition) if definition.name.symbol() == "/id" => {
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/id" => {
                 Some(definition)
             }
             _ => None,
@@ -285,8 +285,8 @@ fn inductive_constructor_ownership_is_explicit() {
         .items
         .iter()
         .flat_map(|item| match item {
-            curios_elab::Item::Let(definition) => vec![definition.clone()],
-            curios_elab::Item::Rec(rec) => rec.definitions(),
+            curios_core::Item::Let(definition) => vec![definition.clone()],
+            curios_core::Item::Rec(rec) => rec.definitions(),
         })
         .map(|definition| {
             (
@@ -302,12 +302,12 @@ fn inductive_constructor_ownership_is_explicit() {
         vec![
             (
                 global_name("/Result"),
-                curios_elab::DefinitionKind::InductiveType,
+                curios_core::DefinitionKind::InductiveType,
                 2,
             ),
             (
                 global_name("/Result/success"),
-                curios_elab::DefinitionKind::InductiveConstructor {
+                curios_core::DefinitionKind::InductiveConstructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("success"),
                 },
@@ -315,7 +315,7 @@ fn inductive_constructor_ownership_is_explicit() {
             ),
             (
                 global_name("/Result/failure"),
-                curios_elab::DefinitionKind::InductiveConstructor {
+                curios_core::DefinitionKind::InductiveConstructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("failure"),
                 },
@@ -335,7 +335,7 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_elab::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
                 Some(definition)
             }
             _ => None,
@@ -357,7 +357,7 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_elab::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
                 Some(definition)
             }
             _ => None,
@@ -369,16 +369,16 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
     assert_eq!(let_.bindings.len(), 2);
 }
 
-fn universe_parameters(module: &curios_elab::Module, name: &str) -> usize {
+fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
     module
         .items
         .iter()
         .find_map(|item| match item {
-            curios_elab::Item::Let(definition) if definition.name.symbol() == name => {
+            curios_core::Item::Let(definition) if definition.name.symbol() == name => {
                 Some(definition.universe_context.parameter_count)
             }
             // An inductive and its constructors are one recursive group, so a lookup restricted to `Let` would miss every one of them.
-            curios_elab::Item::Rec(rec) => rec
+            curios_core::Item::Rec(rec) => rec
                 .definitions()
                 .iter()
                 .find(|definition| definition.name.symbol() == name)
@@ -1648,13 +1648,13 @@ fn module_member_is_not_classified_as_a_generated_nominal_member() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_elab::Item::Let(definition) if definition.name.symbol() == "/Foo/bar" => {
+            curios_core::Item::Let(definition) if definition.name.symbol() == "/Foo/bar" => {
                 Some(definition)
             }
             _ => None,
         })
         .expect("module member definition");
-    assert_eq!(bar.kind, curios_elab::DefinitionKind::Authored);
+    assert_eq!(bar.kind, curios_core::DefinitionKind::Authored);
 }
 
 #[test]
@@ -2307,7 +2307,7 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
         module
             .items
             .iter()
-            .any(|item| matches!(item, curios_elab::Item::Let(d) if d.name.symbol() == "/outer")),
+            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.symbol() == "/outer")),
         "outer elaborated"
     );
 }

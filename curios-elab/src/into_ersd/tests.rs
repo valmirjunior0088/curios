@@ -2,7 +2,7 @@ use curios_core::*;
 use {
     crate::*,
     curios_base::{Plicity, Qualifier, RootId},
-    curios_cert::Totality,
+    curios_core::Totality,
     std::collections::{BTreeMap, BTreeSet},
 };
 

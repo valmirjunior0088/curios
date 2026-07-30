@@ -1,8 +1,8 @@
 use {
-    super::{Erased, Module},
+    super::Erased,
     curios_base::{Int, Plicity, Qualifier, Span},
     curios_core::{
-        Atom, Level, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
+        Atom, Level, Module, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
         build_rename, build_shorten, display_names, with_pretty_names, with_short_names,
     },
     num_bigint::BigUint,

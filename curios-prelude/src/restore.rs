@@ -2,8 +2,9 @@
 
 use {
     crate::{ArchivedPreludeArchive, PreludeArchive, SCHEMA},
+    curios_core::Module,
     curios_core::Term,
-    curios_elab::{ErasedPrelude, Module},
+    curios_elab::ErasedPrelude,
     curios_text::PreparedPrelude,
     std::{cell::LazyCell, sync::OnceLock},
 };
@@ -112,7 +113,7 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
 #[cfg(test)]
 mod tests {
     use {
-        super::*, crate::SYNTAX, curios_core::Global, curios_elab::Item, std::collections::BTreeSet,
+        super::*, crate::SYNTAX, curios_core::Global, curios_core::Item, std::collections::BTreeSet,
     };
 
     #[test]

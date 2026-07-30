@@ -14,9 +14,6 @@ pub use builders::*;
 mod universe_solver;
 pub use universe_solver::*;
 
-mod module;
-pub use module::*;
-
 mod concept;
 pub use concept::*;
 

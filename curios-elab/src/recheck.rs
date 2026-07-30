@@ -13,12 +13,12 @@
 //! Nothing in the pipeline calls this. The kernel does not yet accept the whole standard library, so wiring it into every build would refuse programs that are fine — and a checker that has to be bypassed is worth nothing. It is an API and a test surface until the gaps named above are closed.
 
 use {
-    super::{Item, Module, totality::mentioned},
+    super::totality::mentioned,
     curios_cert::{
         Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
         check_rec_group, check_struct_decl, positivity_vectors,
     },
-    curios_core::{Free, Global, Term},
+    curios_core::{Free, Global, Item, Module, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 

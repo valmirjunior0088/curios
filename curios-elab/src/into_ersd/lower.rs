@@ -4,11 +4,14 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, InductDecl, Item, Let, Module, Subterm,
-        Telescope, Term, emitted, prim,
+        Binding, Bound, Context, Environment, Error, InductDecl, Let, Subterm, Telescope, Term,
+        emitted, prim,
     },
-    crate::{Concept, Definition, validate_bound_universes, validate_universes},
-    curios_core::{Free, Global, InductParam, StructDecl, project_erased_universes},
+    crate::{validate_bound_universes, validate_universes},
+    curios_core::{
+        Concept, Definition, Free, Global, InductParam, Item, Module, StructDecl,
+        project_erased_universes,
+    },
     std::collections::{BTreeMap, BTreeSet},
 };
 

@@ -1,15 +1,14 @@
 use {
     super::{
-        Concept, DefinitionKind, Error, Goal, HeadKey, UniverseMark, UniverseSolver,
-        UniverseStateToken, Witness, WitnessKey,
+        Error, Goal, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
     },
     curios_base::{Entropy, Qualifier, RootId, Span},
-    curios_cert::Totality,
     curios_core::ReduceError,
     curios_core::{
-        Bound, Free, Global, HeadTag, ImplicitOrigin, InductDecl, Level, MetaId, Metavar,
-        MetavarOrigin, StructDecl, Subterm, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+        Bound, Concept, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl, Level,
+        MetaId, Metavar, MetavarOrigin, StructDecl, Subterm, Term, Totality,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
         instantiate_universe_levels_scoped, project_erased_universes,
     },
     std::{

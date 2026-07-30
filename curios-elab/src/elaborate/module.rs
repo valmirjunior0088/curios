@@ -1,19 +1,19 @@
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Concept, Definition, DefinitionKind, Item, Module, RecItem, check_concept_registry,
-        check_positivity, check_proof_totality, check_rec_item_totality, check_type_totality,
-        check_written_type_totality, finish_deferred_witnesses, is_prop,
+        check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
+        check_type_totality, check_written_type_totality, finish_deferred_witnesses, is_prop,
         record_definition_totality, record_totality, recorded_totality, reduce_with,
         register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_field_telescope,
         zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
-    curios_cert::{Totality, group_totality},
+    curios_cert::group_totality,
     curios_core::{
-        Bound, Free, FuncType, Global, InductDecl, InductParam, Level, SelfReference, StructDecl,
-        Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
+        Bound, Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl,
+        InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope,
+        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
     std::{
         cell::RefCell,

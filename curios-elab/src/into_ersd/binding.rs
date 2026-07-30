@@ -3,8 +3,9 @@
 //! Items become statements of the module's top-level item list, evaluated eagerly in emission order. Bindings persist in the Core base frame (no scoping frame), so later items and the entrypoint reduce through them — top-level cross-references are already free names.
 
 use {
-    super::{BTreeMap, BTreeSet, Bound, Context, Error, Item, Lowering, Module, Outcome},
+    super::{BTreeMap, BTreeSet, Bound, Context, Error, Lowering, Outcome},
     curios_core::Free,
+    curios_core::{Item, Module},
 };
 
 impl Lowering {

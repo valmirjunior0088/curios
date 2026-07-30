@@ -20,7 +20,7 @@ use {
     curios_core::{
         Apply, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, Global, InductArm, Layer,
         Let, Match, Nat, Prim, Proj, Rec, RecGroup, RecMember, Scope, Struct, Subterm, Telescope,
-        Term, Tuple, Variant,
+        Term, Totality, Tuple, Variant,
     },
     num_bigint::BigUint,
     std::collections::{BTreeMap, BTreeSet},
@@ -40,28 +40,6 @@ const EXPAND_FUEL: usize = 16;
 ///
 /// Closure is worst-case exponential in the number of call sites. The prelude's largest group closes in tens of matrices; a group that blows past this is classified `Partial`, which is the conservative direction.
 const CLOSURE_LIMIT: usize = 4096;
-
-/// Whether a definition is known to terminate on every input.
-///
-/// `Partial` is "not proven total", never "proven divergent": a productive corecursive definition and a genuine infinite loop are both `Partial`, and both remain legal wherever erasure keeps them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
-pub enum Totality {
-    /// Every recursive group this definition contains descends, it does not mention [`Prim::Exit`], and neither does anything it reaches.
-    Total,
-    /// Not proven total. The conservative default: a definition whose classification is unknown is `Partial`, never `Total`.
-    #[default]
-    Partial,
-}
-
-impl Totality {
-    pub fn is_total(self) -> bool {
-        matches!(self, Totality::Total)
-    }
-}
 
 /// How a call argument's size compares to the caller parameter it is graded against.
 ///

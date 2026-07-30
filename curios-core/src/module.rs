@@ -1,18 +1,46 @@
+//! The finished program: a flat list of top-level [`Item`]s over the nominal registries they are checked against.
+//!
+//! This is what a checker is handed. Elaboration produces it and erasure consumes it, but the shape itself is representation — a [`Definition`] is a name, a universe context, a type, and a body, and a [`RecItem`] is the same for a recursive group whose members reference each other through one shared [`RecGroup`] binder rather than through free names. Both checkers walk this structure, which is why it lives here rather than beside either of them.
+//!
+//! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`Concept`]), the witness set, the binder high-water mark a checker must seed above, and the entrypoint's own type and body.
+//!
+//! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable runs a solver and belongs to `curios-elab`; whether a definition terminates runs the size-change engine and belongs to `curios-cert`. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
+
 use {
-    super::{Concept, universe_context_validate},
-    curios_base::{Qualifier, RootId},
-    curios_cert::Totality,
-    curios_core::{
-        Atom, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
+    super::{
+        Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
         StructDecl, Term, UniverseContext, UniverseError, UniverseSeed, build_shorten,
         project_erased_universes, with_short_names,
     },
+    curios_base::{Qualifier, RootId},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
         rc::Rc,
     },
 };
+
+/// Whether a definition is known to terminate on every input.
+///
+/// `Partial` is "not proven total", never "proven divergent": a productive corecursive definition and a genuine infinite loop are both `Partial`, and both remain legal wherever erasure keeps them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub enum Totality {
+    /// Every recursive group this definition contains descends, it does not mention `Prim::Exit`, and neither does anything it reaches.
+    Total,
+    /// Not proven total. The conservative default: a definition whose classification is unknown is `Partial`, never `Total`.
+    #[default]
+    Partial,
+}
+
+impl Totality {
+    pub fn is_total(self) -> bool {
+        matches!(self, Totality::Total)
+    }
+}
 
 /// How a lowered definition was introduced.
 ///
@@ -64,7 +92,7 @@ pub struct Definition {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub(crate) struct RecDefinition {
+pub struct RecDefinition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub island: Qualifier,
@@ -80,15 +108,15 @@ pub(crate) struct RecDefinition {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct RecItem {
-    pub(crate) definitions: Vec<RecDefinition>,
-    pub(crate) group: RecGroup,
+    pub definitions: Vec<RecDefinition>,
+    pub group: RecGroup,
 }
 
 impl RecItem {
     /// This group with universe data projected out of every member, in place.
     ///
     /// The universe context is cleared here as it is on a [`Definition`]: the projection's whole purpose is that no universe data survives into Ersd.
-    pub(crate) fn projected(&self) -> Self {
+    pub fn projected(&self) -> Self {
         Self {
             definitions: self.definitions.clone(),
             group: self
@@ -107,7 +135,6 @@ impl RecItem {
             .first()
             .map(|definition| definition.universe_context.clone())
             .unwrap_or_default();
-        universe_context_validate(&universe_context)?;
         if !definitions
             .iter()
             .all(|definition| definition.universe_context == universe_context)
@@ -171,7 +198,7 @@ impl RecItem {
             .collect()
     }
 
-    pub(crate) fn island(&self) -> Qualifier {
+    pub fn island(&self) -> Qualifier {
         self.definitions
             .first()
             .map(|definition| definition.island.clone())
@@ -200,7 +227,7 @@ impl Item {
     /// How a diagnostic names this item.
     ///
     /// An authored declaration is named by its path. A witness has no authored path — that is the point of `satisfy` — so it is named by the module it was declared in, which is the coordinate a reader can actually act on.
-    pub(crate) fn describe(&self) -> String {
+    pub fn describe(&self) -> String {
         let described = |definition: &Definition| match definition.name.qualifier() {
             Some(path) => path.join(),
             None => match definition.island.is_root() {
@@ -341,7 +368,7 @@ impl Module {
     }
 
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
-    pub(crate) fn module_symbols(&self) -> Vec<Global> {
+    pub fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
         for item in &self.items {
             match item {
@@ -397,7 +424,7 @@ impl fmt::Display for Module {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, curios_core::Subterm};
+    use {super::*, crate::Subterm};
 
     fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         let global = Global::Authored(Qualifier::from([name]));

@@ -11,10 +11,9 @@
 //! At the replay site the module in hand is the user suffix alone, so a prelude definition is a sink of this relation. That is sound for the same reason it is sound for positivity — prelude items cannot mention user code — and it is why partiality persists on the definition rather than being recomputed.
 
 use {
-    crate::{Definition, Item, Module},
     curios_core::{
-        Bound, Func, FuncType, Global, Let, Match, Prim, Rec, RecMember, Struct, Subterm,
-        Telescope, Term, Variant,
+        Bound, Definition, Func, FuncType, Global, Item, Let, Match, Module, Prim, Rec, RecMember,
+        Struct, Subterm, Telescope, Term, Variant,
     },
     std::collections::{BTreeMap, BTreeSet},
 };

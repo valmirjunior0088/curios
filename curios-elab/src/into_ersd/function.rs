@@ -9,7 +9,7 @@ use {
         Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Telescope, Term,
         emitted, erasure_mask, infer, is_erasable, reduce_with,
     },
-    crate::DefinitionKind,
+    curios_core::DefinitionKind,
     curios_core::Global,
 };
 

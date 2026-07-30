@@ -1,46 +1,15 @@
-//! Registry entries for concepts (record-shaped interfaces) and witnesses (their registered inhabitants) — the instance-argument machinery's flat stores, carried on the [`Module`](super::Module) and mirrored into the [`Context`](super::Context) exactly like `induct_decls`/`struct_decls`.
+//! Witness registry entries and the keys resolution looks them up by.
 //!
-//! A concept lowers to a representation-public nominal structure (its [`StructDecl`] (super::StructDecl) entry drives literals and projections); the [`Concept`] entry here adds what resolution needs on top: the field labels, the superclass mask, and the parameter telescope. A witness lowers to an ordinary top-level definition; its [`Witness`] entry keys that definition in the program-wide table under `(concept name, tuple of parameter heads)`, the [`WitnessKey`] of [`HeadKey`]s.
+//! The [`Concept`](curios_core::Concept) entry itself is representation and lives in `curios-core` beside the other registry entries; what stays here is the instance-argument machinery: a [`Witness`] keys an ordinary top-level definition in the program-wide table under `(concept name, tuple of parameter heads)` — the [`WitnessKey`] of [`HeadKey`]s — and resolution searches that table.
 
 #[cfg(test)]
 mod tests;
 
 use {
     curios_base::{Grain, Qualifier, RootId},
-    curios_core::{Global, Prim, Sharing, Subterm, Telescope, Term, UniverseContext},
+    curios_core::{Global, Prim, Subterm, Telescope, Term, UniverseContext},
     std::fmt,
 };
-
-/// One concept declaration's registry entry.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
-pub struct Concept {
-    pub universe_context: UniverseContext,
-    /// The declaration's parameter telescope, e.g. `(A : Type)` for `concept Show(A : Type)`. Ends in `()` like a `StructDecl`'s.
-    pub params: Telescope<()>,
-    /// Field labels in declaration order — the positions witness struct literals fill and method wrappers project.
-    pub fields: Vec<String>,
-    /// Superclass edges: `(field position, super concept qualified name)` for each `use`-marked field. The graph over all concepts must be acyclic (checked when the registries are seeded).
-    pub supers: Vec<(usize, Global)>,
-    /// The compilation root that declares this concept — consulted by the orphan-rule ownership check in `register_witness`.
-    pub root: RootId,
-}
-
-impl Concept {
-    /// This concept with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
-    pub(crate) fn shared(&self, sharing: &Sharing) -> Self {
-        Self {
-            universe_context: self.universe_context.clone(),
-            params: sharing.share(&self.params),
-            fields: self.fields.clone(),
-            supers: self.supers.clone(),
-            root: self.root,
-        }
-    }
-}
 
 /// One registered witness: the qualified name of its backing definition and that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution instantiates the telescope fresh at every use.
 #[derive(Debug, Clone, PartialEq)]

@@ -3,8 +3,7 @@
 //! This is deliberately not a stable interchange format. The schema only distinguishes incompatible compiler builds; Cargo regenerates the image in this crate's `OUT_DIR` whenever its inputs change.
 
 use {
-    curios_core::Term,
-    curios_elab::{ErasedPrelude, Module},
+    curios_core::Module, curios_core::Term, curios_elab::ErasedPrelude,
     curios_text::PreparedPrelude,
 };
 

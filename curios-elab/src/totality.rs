@@ -17,9 +17,11 @@ use reach::*;
 mod tests;
 
 use {
-    super::{Context, Definition, Error, Item, Module, RecItem, is_prop, zonk},
-    curios_cert::{Totality, group_totality, yields_a_sort},
-    curios_core::{Global, Prim, Rec, RecGroup, Subterm, Term},
+    super::{Context, Error, is_prop, zonk},
+    curios_cert::{group_totality, yields_a_sort},
+    curios_core::{
+        Definition, Global, Item, Module, Prim, Rec, RecGroup, RecItem, Subterm, Term, Totality,
+    },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 /// Which half of erasure an obligation guards.

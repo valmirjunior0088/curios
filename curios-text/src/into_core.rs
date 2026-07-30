@@ -135,7 +135,7 @@ pub struct PreparedPrelude {
     roots: Vec<(String, RootId)>,
     table: BTreeMap<Qualifier, ModuleInfo>,
     public: BTreeMap<Qualifier, PublicInterface>,
-    core: curios_elab::Module,
+    core: curios_core::Module,
     metavariable_floor: usize,
     binder_floor: usize,
     witness_floor: usize,
@@ -143,7 +143,7 @@ pub struct PreparedPrelude {
 }
 
 impl PreparedPrelude {
-    pub fn core(&self) -> &curios_elab::Module {
+    pub fn core(&self) -> &curios_core::Module {
         &self.core
     }
 
@@ -416,7 +416,7 @@ fn process_items(
     flat_items: &mut Vec<FlatItem>,
     induct_decls: &mut BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &mut BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    concepts: &mut BTreeMap<curios_core::Global, curios_elab::Concept>,
+    concepts: &mut BTreeMap<curios_core::Global, curios_core::Concept>,
     witnesses: &mut BTreeSet<curios_core::Global>,
     foreigns: &mut ForeignStore,
     modules: &HashMap<Qualifier, Rc<Module>>,
@@ -519,7 +519,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_elab::DefinitionKind::Authored,
+                    kind: curios_core::DefinitionKind::Authored,
                     name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                     island: context.island(),
                     root: context.root(),
@@ -535,7 +535,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_elab::DefinitionKind::Authored,
+                    kind: curios_core::DefinitionKind::Authored,
                     name: curios_core::Global::Authored(path),
                     island: context.island(),
                     root: context.root(),
@@ -550,7 +550,7 @@ fn process_items(
                         let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
-                            kind: curios_elab::DefinitionKind::Authored,
+                            kind: curios_core::DefinitionKind::Authored,
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             root: context.root(),
@@ -733,7 +733,7 @@ fn process_items(
                             )
                         };
                         Ok(FlatLet {
-                            kind: curios_elab::DefinitionKind::InductiveType,
+                            kind: curios_core::DefinitionKind::InductiveType,
                             name: curios_core::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
                             root: context.root(),
@@ -835,7 +835,7 @@ fn process_items(
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
-                            kind: curios_elab::DefinitionKind::InductiveConstructor {
+                            kind: curios_core::DefinitionKind::InductiveConstructor {
                                 owner: context.prefixed(&u.label),
                                 tag: curios_core::Atom::from(c.label.as_str()),
                             },
@@ -931,7 +931,7 @@ fn process_items(
                 };
 
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_elab::DefinitionKind::StructType,
+                    kind: curios_core::DefinitionKind::StructType,
                     name: curios_core::Global::Authored(context.prefixed(&s.label)),
                     island: context.island(),
                     root: context.root(),
@@ -1033,7 +1033,7 @@ fn process_items(
 
                 concepts.insert(
                     name.clone(),
-                    curios_elab::Concept {
+                    curios_core::Concept {
                         universe_context: curios_core::UniverseContext::empty(),
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),
@@ -1053,7 +1053,7 @@ fn process_items(
                     )
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_elab::DefinitionKind::ConceptType,
+                    kind: curios_core::DefinitionKind::ConceptType,
                     name: curios_core::Global::Authored(context.prefixed(&concept.label)),
                     island: context.island(),
                     root: context.root(),
@@ -1091,7 +1091,7 @@ fn process_items(
 
                     let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
-                        kind: curios_elab::DefinitionKind::ConceptMethod {
+                        kind: curios_core::DefinitionKind::ConceptMethod {
                             owner: context.prefixed(&concept.label),
                         },
                         name: curios_core::Global::Authored(
@@ -1142,7 +1142,7 @@ fn process_items(
 
                 let lower = Lowerer::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_elab::DefinitionKind::Witness,
+                    kind: curios_core::DefinitionKind::Witness,
                     name: name.clone(),
                     island: context.island(),
                     root: context.root(),
@@ -1610,12 +1610,12 @@ fn audit_public_exposures(
     Ok(())
 }
 
-/// Lower an [`Entrypoint`] to a [`curios_elab::Module`]. Also returns how many metavariable ids were minted for the module's holes: the floor `elaborate_module` needs so the ids it mints for implicit-argument insertion never collide with these.
+/// Lower an [`Entrypoint`] to a [`curios_core::Module`]. Also returns how many metavariable ids were minted for the module's holes: the floor `elaborate_module` needs so the ids it mints for implicit-argument insertion never collide with these.
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_elab::Module, usize, usize, ForeignStore), Error> {
+) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     curios_profile::profile!("into_core");
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
@@ -1679,7 +1679,7 @@ pub fn into_core(
         .collect();
 
     Ok((
-        curios_elab::Module {
+        curios_core::Module {
             items,
             universe_seeds: universe_seeds.into_inner(),
             induct_decls,
@@ -1758,7 +1758,7 @@ pub fn prepare_prelude(
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
-    let core = curios_elab::Module {
+    let core = curios_core::Module {
         items,
         universe_seeds: universe_seeds.into_inner(),
         induct_decls,
@@ -1788,7 +1788,7 @@ pub fn into_core_with_prelude(
     loader: &RootSource,
     prepared: &PreparedPrelude,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_elab::Module, usize, usize, ForeignStore), Error> {
+) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     curios_profile::profile!("into_core_with_prelude");
     let mut resolved = Resolved {
         modules: HashMap::new(),
@@ -1866,7 +1866,7 @@ pub fn into_core_with_prelude(
     );
 
     Ok((
-        curios_elab::Module {
+        curios_core::Module {
             items,
             universe_seeds: universe_seeds.into_inner(),
             induct_decls,
