@@ -68,7 +68,7 @@ pub let parse(s : Str) -> Fmt =
     parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
 
 rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_with(T, f) =
-    match f : (f) => format_type_with(T, f)
+    match f
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
     | show(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
