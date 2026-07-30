@@ -45,10 +45,11 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! Several positions are compared syntactically rather than up to conversion: a
-//! stuck elimination's motive and arms, a `rec` group, and the arguments of a
-//! spine, which are compared at `Type` rather than at the types the head
-//! assigns them. Each is a place where the kernel may reject a term the
+//! Two concessions remain. A `rec` group is compared syntactically. And every
+//! child position without a typed context — a spine's arguments, and a stuck
+//! elimination's motive and arms under their opaque binders — is compared at
+//! `Type` rather than at the types its head assigns, which forfeits eta and
+//! irrelevance there. Each is a place where the kernel may reject a term the
 //! elaborator accepted.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an
@@ -68,8 +69,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, Sort},
     crate::{
-        Bound, FuncType, InductType, Proj, RecMember, Reducer, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, UniverseInst,
+        Bound, Carrier, Cases, FuncType, InductType, Many, Proj, RecMember, Reducer, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UniverseInst,
     },
     std::collections::HashSet,
 };
@@ -413,15 +414,20 @@ fn structural(
             kernel.levels_eq(left_levels, right_levels) && ground(kernel, history, left, right)?
         ),
 
-        // A stuck elimination. The scrutinee is compared up to conversion,
-        // because that is the position an unfolding cycle travels through; the
-        // motive and the arms are required to be identical. Two eliminations
-        // that enumerate different constructors compute differently on some
-        // input even where they agree on this one, and deciding *which*
-        // differences are harmless is a judgment this kernel does not yet make.
-        (Subterm::Match(left), Subterm::Match(right)) => Ok(left.motive == right.motive
-            && left.cases == right.cases
-            && ground(kernel, history, &left.head, &right.head)?),
+        // A stuck elimination. Everything is compared up to conversion: the
+        // scrutinee because that is the position an unfolding cycle travels
+        // through, and the motive and arms because a delta-unfolded caller and
+        // its spelled-out twin differ exactly there — `step(c, st)` against
+        // `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose
+        // arms are convertible but not identical. The shape stays rigid: tags,
+        // plicities, arity, and default presence must agree exactly, because
+        // two eliminations enumerating different constructors compute
+        // differently on some input even where they agree on this one.
+        (Subterm::Match(left), Subterm::Match(right)) => {
+            Ok(ground(kernel, history, &left.head, &right.head)?
+                && ground_scope(kernel, history, &left.motive, &right.motive)?
+                && ground_cases(kernel, history, &left.cases, &right.cases)?)
+        }
 
         // A folded recursive call, and a `rec` that forcing declined to unfold.
         // Both are compared syntactically: the interesting case — a cycle that
@@ -437,6 +443,196 @@ fn structural(
                 index: right_index,
             }),
         ) => Ok(left_index == right_index && left == right),
+
+        _ => Ok(false),
+    }
+}
+
+/// Open both scopes at one shared set of opaque binders and compare the bodies
+/// at `Type`. The binders are assumed at `Type` as a stand-in, sound because
+/// `ground` is already the untyped concession: a binder's recorded type feeds
+/// only the conversion history's context key, identically on both sides.
+fn ground_scope(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Scope<Many>,
+    that: &Scope<Many>,
+) -> Result<bool, KernelError> {
+    if this.arity() != that.arity() {
+        return Ok(false);
+    }
+
+    scoped(kernel, |kernel| {
+        let occurrences = opaque_binders(kernel, this.arity());
+        let refs = occurrences.iter().collect::<Vec<_>>();
+        ground(kernel, history, &this.open(&refs), &that.open(&refs))
+    })
+}
+
+/// [`ground_scope`] at the free-monoid cons arities, whose scopes carry their
+/// binder count in the type.
+fn ground_scope_two(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Scope<Two>,
+    that: &Scope<Two>,
+) -> Result<bool, KernelError> {
+    scoped(kernel, |kernel| {
+        let o = opaque_binders(kernel, 2);
+        ground(
+            kernel,
+            history,
+            &this.open(&[&o[0], &o[1]]),
+            &that.open(&[&o[0], &o[1]]),
+        )
+    })
+}
+
+fn ground_scope_three(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Scope<Three>,
+    that: &Scope<Three>,
+) -> Result<bool, KernelError> {
+    scoped(kernel, |kernel| {
+        let o = opaque_binders(kernel, 3);
+        ground(
+            kernel,
+            history,
+            &this.open(&[&o[0], &o[1], &o[2]]),
+            &that.open(&[&o[0], &o[1], &o[2]]),
+        )
+    })
+}
+
+fn opaque_binders(kernel: &mut Kernel, arity: usize) -> Vec<Term> {
+    (0..arity)
+        .map(|_| {
+            let binder = kernel.fresh(None);
+            kernel.assume(&binder, &Term::type_ground());
+            Term::free_var(&binder)
+        })
+        .collect()
+}
+
+/// Compare two stuck eliminations' arm sets up to conversion, shape held
+/// rigid: matching variants, tags in the same canonical order, equal
+/// plicities, and agreeing default presence.
+fn ground_cases(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Cases,
+    that: &Cases,
+) -> Result<bool, KernelError> {
+    match (this, that) {
+        (
+            Cases::Bool {
+                false_case: this_false,
+                true_case: this_true,
+            },
+            Cases::Bool {
+                false_case: that_false,
+                true_case: that_true,
+            },
+        ) => Ok(ground(kernel, history, this_false, that_false)?
+            && ground(kernel, history, this_true, that_true)?),
+
+        (
+            Cases::Switch {
+                cases: this_cases,
+                default: this_default,
+            },
+            Cases::Switch {
+                cases: that_cases,
+                default: that_default,
+            },
+        ) => {
+            if this_cases.len() != that_cases.len() {
+                return Ok(false);
+            }
+            for ((this_key, this_body), (that_key, that_body)) in this_cases.iter().zip(that_cases)
+            {
+                if this_key != that_key || !ground(kernel, history, this_body, that_body)? {
+                    return Ok(false);
+                }
+            }
+            ground(kernel, history, this_default, that_default)
+        }
+
+        (
+            Cases::Induct {
+                cases: this_cases,
+                default: this_default,
+            },
+            Cases::Induct {
+                cases: that_cases,
+                default: that_default,
+            },
+        ) => {
+            if this_cases.len() != that_cases.len() {
+                return Ok(false);
+            }
+            for ((this_tag, this_arm), (that_tag, that_arm)) in this_cases.iter().zip(that_cases) {
+                if this_tag != that_tag
+                    || this_arm.plicities != that_arm.plicities
+                    || !ground_scope(kernel, history, &this_arm.body, &that_arm.body)?
+                {
+                    return Ok(false);
+                }
+            }
+            match (this_default, that_default) {
+                (None, None) => Ok(true),
+                (Some(this_default), Some(that_default)) => {
+                    ground(kernel, history, this_default, that_default)
+                }
+                _ => Ok(false),
+            }
+        }
+
+        (Cases::FreeMonoid { carrier: this }, Cases::FreeMonoid { carrier: that }) => {
+            match (this, that) {
+                (
+                    Carrier::Nat {
+                        empty_case: this_empty,
+                        cons_case: this_cons,
+                    },
+                    Carrier::Nat {
+                        empty_case: that_empty,
+                        cons_case: that_cons,
+                    },
+                ) => Ok(ground(kernel, history, this_empty, that_empty)?
+                    && ground_scope_two(kernel, history, this_cons, that_cons)?),
+                (
+                    Carrier::Bin {
+                        grain: this_grain,
+                        empty_case: this_empty,
+                        cons_case: this_cons,
+                    },
+                    Carrier::Bin {
+                        grain: that_grain,
+                        empty_case: that_empty,
+                        cons_case: that_cons,
+                    },
+                ) => Ok(this_grain == that_grain
+                    && ground(kernel, history, this_empty, that_empty)?
+                    && ground_scope_three(kernel, history, this_cons, that_cons)?),
+                (
+                    Carrier::Lst {
+                        elem: this_elem,
+                        empty_case: this_empty,
+                        cons_case: this_cons,
+                    },
+                    Carrier::Lst {
+                        elem: that_elem,
+                        empty_case: that_empty,
+                        cons_case: that_cons,
+                    },
+                ) => Ok(ground(kernel, history, this_elem, that_elem)?
+                    && ground(kernel, history, this_empty, that_empty)?
+                    && ground_scope_three(kernel, history, this_cons, that_cons)?),
+                _ => Ok(false),
+            }
+        }
 
         _ => Ok(false),
     }
