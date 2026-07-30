@@ -1,11 +1,4 @@
-//! The Curios ↔ JavaScript boundary, for a browser build (`cargo build` +
-//! `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's
-//! Gotchas): a wasm-bindgen export of the pure compile
-//! pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness
-//! spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry
-//! export) directly, like any embedder; the numeric status/stdio codes it
-//! answers with derive from `curios-abi`, the same source the compiler and
-//! runtime cite.
+//! The Curios ↔ JavaScript boundary, for a browser build (`cargo build` + `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's Known build constraints): a wasm-bindgen export of the pure compile pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
 
 mod abi;
 use abi::*;
@@ -27,20 +20,14 @@ use {
     wasm_bindgen::prelude::*,
 };
 
-/// The same budget the native compiler uses, so a program that compiles in the
-/// playground compiles at the command line and the reverse. A wall-clock bound
-/// could not promise that: the tab and the terminal are different machines.
+/// The same budget the native compiler uses, so a program that compiles in the playground compiles at the command line and the reverse. A wall-clock bound could not promise that: the tab and the terminal are different machines.
 const BUDGET: u64 = DEFAULT_STEP_BUDGET;
 
 pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
 }
 
-/// Compile `source` (no external module imports — see `RootSource::none()`) to
-/// the wasm module bytes, or a formatted error string on parse/type/lowering
-/// failure. A program's own `foreign` declarations import under `ffi` by
-/// fully qualified name — the caller implements them via `run`'s
-/// `hooks.foreign`, keyed by exactly those names.
+/// Compile `source` (no external module imports — see `RootSource::none()`) to the wasm module bytes, or a formatted error string on parse/type/lowering failure. A program's own `foreign` declarations import under `ffi` by fully qualified name — the caller implements them via `run`'s `hooks.foreign`, keyed by exactly those names.
 #[wasm_bindgen]
 pub fn compile(source: &str) -> Result<Uint8Array, String> {
     let entrypoint = source

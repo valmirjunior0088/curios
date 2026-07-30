@@ -1,11 +1,4 @@
-//! The wire-ABI `Bin` bridge: a tiny GC module giving JavaScript accessors over
-//! the compiler's `$bytes` heap type — the flat payload every object-language
-//! `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness
-//! instantiates this module and reads/builds byte strings through its
-//! exports. It declares the compiler's `array (mut i8)` payload shape locally
-//! — wasm-GC canonicalizes structural types, so the refs it produces and
-//! consumes are interchangeable with a compiled program's, no matter that the
-//! two modules were instantiated separately.
+//! The wire-ABI `Bin` bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings through its exports. It declares the compiler's `array (mut i8)` payload shape locally — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
 
 use curios_wasm::{
     ArrayType, BlockType, CompType, Export, Expr, FieldType, Func, FuncName, FuncType, HeapType,
@@ -35,9 +28,7 @@ pub(crate) fn bytes_sub_type() -> SubType {
     }
 }
 
-/// A `block $done (loop $continue ...)` pair whose body runs `step` for `i`
-/// from 0 to `len` (both preexisting locals): the copy loop shared by the two
-/// bulk transfers.
+/// A `block $done (loop $continue ...)` pair whose body runs `step` for `i` from 0 to `len` (both preexisting locals): the copy loop shared by the two bulk transfers.
 fn counted_loop(i: &LocalName, len: &LocalName, step: Vec<Instr>) -> Instr {
     let done = LabelName::from("done");
     let continue_ = LabelName::from("continue");
@@ -84,12 +75,7 @@ fn set(local: &LocalName) -> Instr {
     }
 }
 
-/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the
-/// four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set` — each
-/// body its parameters' `local.get`s followed by one array op), and the bulk
-/// lane — the exported memory plus `bin_load`/`bin_store`, which copy a whole
-/// byte string between a `bytes` array and the memory at offset 0 so JS pays
-/// one boundary call per string instead of one per byte.
+/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — the exported memory plus `bin_load`/`bin_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte.
 pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
@@ -201,8 +187,7 @@ pub(crate) fn bridge_module() -> Module {
         heap_type: HeapType::Concrete(bin.clone()),
     });
 
-    // bin_load(b): memory[0..len] = b[0..len]; returns len. The caller grows
-    // the memory to at least len bytes first.
+    // bin_load(b): memory[0..len] = b[0..len]; returns len. The caller grows the memory to at least len bytes first.
     let load_name = FuncName::from("bin_load");
     module.add_type(
         TypeName::from("bin_load"),
@@ -237,8 +222,7 @@ pub(crate) fn bridge_module() -> Module {
     );
     module.add_export("bin_load", Export::Func(load_name));
 
-    // bin_store(len): returns a fresh bytes array filled from memory[0..len].
-    // The caller wrote the bytes into the memory first.
+    // bin_store(len): returns a fresh bytes array filled from memory[0..len]. The caller wrote the bytes into the memory first.
     let store_name = FuncName::from("bin_store");
     module.add_type(
         TypeName::from("bin_store"),

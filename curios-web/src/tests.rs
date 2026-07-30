@@ -1,6 +1,4 @@
-//! Tests for the browser bridge helpers. Program-side `Bytes` is a rope
-//! (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the
-//! forced flat payload, which is what the bridge accessors read and write.
+//! Tests for the browser bridge helpers. Program-side `Bytes` is a rope (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
     curios_runtime::shared_engine,
@@ -29,9 +27,7 @@ fn export(store: &mut Store<()>, instance: &Instance, name: &str) -> Func {
         .unwrap_or_else(|| panic!("missing export {name}"))
 }
 
-/// Call `func` untyped and return its single result. Untyped calls are the
-/// point: they type-check dynamically, which succeeds exactly when the
-/// bridge's declared shapes are right.
+/// Call `func` untyped and return its single result. Untyped calls are the point: they type-check dynamically, which succeeds exactly when the bridge's declared shapes are right.
 fn call(store: &mut Store<()>, func: &Func, params: &[Val]) -> Val {
     let mut results = vec![Val::I32(0); 1];
 
@@ -41,8 +37,7 @@ fn call(store: &mut Store<()>, func: &Func, params: &[Val]) -> Val {
     results.remove(0)
 }
 
-/// The bridge's `bytes` declaration matches the compiler's `array (mut i8)`
-/// host-boundary shape — the premise of the whole canonicalization scheme.
+/// The bridge's `bytes` declaration matches the compiler's `array (mut i8)` host-boundary shape — the premise of the whole canonicalization scheme.
 #[test]
 fn bytes_type_is_the_compiler_boundary_shape() {
     assert_eq!(
@@ -121,8 +116,7 @@ fn bridge_accessors_roundtrip() {
     }
 }
 
-/// The bulk lane end to end: bytes written into the exported memory become a
-/// `bytes` array via `bin_store`, and `bin_load` copies them back out.
+/// The bulk lane end to end: bytes written into the exported memory become a `bytes` array via `bin_store`, and `bin_load` copies them back out.
 #[test]
 fn bulk_transfers_roundtrip_through_the_memory() {
     let mut store = Store::new(shared_engine(), ());
