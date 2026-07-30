@@ -231,6 +231,14 @@ fn parse_string_literal_is_str() {
 }
 
 #[test]
+fn unrecognized_string_escape_is_literal_backslash_and_char() {
+    assert_eq!(
+        "\"\\%\"".parse::<Term>().unwrap(),
+        Term::from(Subterm::Syn(Syn::Str("\\%".to_string())))
+    );
+}
+
+#[test]
 fn parse_char_literal_multi_char_is_error() {
     assert!("'ab'".parse::<Term>().is_err());
 }
