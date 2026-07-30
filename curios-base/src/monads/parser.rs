@@ -74,9 +74,7 @@ impl<'a> ParserState<'a> {
         self.string.is_empty()
     }
 
-    /// Rebuilds the state at an absolute byte `offset` into the same source. Used
-    /// by [`memoize`] to resume from a cached parse without re-walking the input;
-    /// all parser offsets are byte offsets, so slicing `source.text` is exact.
+    /// Rebuilds the state at an absolute byte `offset` into the same source. Used by [`memoize`] to resume from a cached parse without re-walking the input; all parser offsets are byte offsets, so slicing `source.text` is exact.
     fn jump_to(self, offset: usize) -> Self {
         Self {
             offset,
@@ -256,31 +254,17 @@ where
     }
 }
 
-/// One cached parse at a given grammar key and start offset: either the produced
-/// value (type-erased, since the table is shared across the memoized parsers) paired
-/// with the end offset to resume at, or the verbatim error the parser failed with.
+/// One cached parse at a given grammar key and start offset: either the produced value (type-erased, since the table is shared across the memoized parsers) paired with the end offset to resume at, or the verbatim error the parser failed with.
 type MemoEntry = Result<(Rc<dyn Any>, usize), ParserError>;
 
 thread_local! {
-    /// Packrat cache for [`memoize`]d parsers, keyed by `(grammar key, byte offset)`.
-    /// Cleared at the start of every [`run_parser`] so offsets never collide across
-    /// independent parses. Per-thread, so concurrent parses (e.g. the test suite)
-    /// don't share it.
+    /// Packrat cache for [`memoize`]d parsers, keyed by `(grammar key, byte offset)`. Cleared at the start of every [`run_parser`] so offsets never collide across independent parses. Per-thread, so concurrent parses (e.g. the test suite) don't share it.
     static MEMO: RefCell<HashMap<(u32, usize), MemoEntry>> = RefCell::new(HashMap::new());
 }
 
-/// Wraps a parser so its result at each start offset is computed once and reused.
-/// This is what makes the term grammar linear instead of exponential: the same
-/// position is probed by several overlapping alternatives (a `(` is tried as a
-/// dependent function type, then a non-dependent one, then a lambda, then parens),
-/// and without memoization each retry re-parses the whole nested subterm.
+/// Wraps a parser so its result at each start offset is computed once and reused. This is what makes the term grammar linear instead of exponential: the same position is probed by several overlapping alternatives (a `(` is tried as a dependent function type, then a non-dependent one, then a lambda, then parens), and without memoization each retry re-parses the whole nested subterm.
 ///
-/// Sound as straight packrat because the wrapped parsers (`parse_term`,
-/// `parse_atomic_term`) are pure functions of the offset — parsing carries no
-/// symbol table or other context that could make the same input parse differently.
-/// `key` distinguishes the grammar nonterminals that share the table. The wrapped
-/// parser must never re-enter itself at the *same* offset without consuming input
-/// (no left recursion), which the term grammar satisfies.
+/// Sound as straight packrat because the wrapped parsers (`parse_term`, `parse_atomic_term`) are pure functions of the offset — parsing carries no symbol table or other context that could make the same input parse differently. `key` distinguishes the grammar nonterminals that share the table. The wrapped parser must never re-enter itself at the *same* offset without consuming input (no left recursion), which the term grammar satisfies.
 pub fn memoize<'a, A>(key: u32, parser: Parser<'a, A>) -> Parser<'a, A>
 where
     A: Clone + 'static,
@@ -384,11 +368,7 @@ pub fn take_eof<'a>() -> Parser<'a, ()> {
     })
 }
 
-/// Succeeds (consuming nothing) only when the byte immediately before the
-/// current offset is whitespace, or we are at the start of input. The infix
-/// operator parser uses it to require a space on the *left* of an operator —
-/// the right space is required by consuming whitespace after the symbol — so
-/// `a - 42` is subtraction while the glued `-42` stays a literal.
+/// Succeeds (consuming nothing) only when the byte immediately before the current offset is whitespace, or we are at the start of input. The infix operator parser uses it to require a space on the *left* of an operator — the right space is required by consuming whitespace after the symbol — so `a - 42` is subtraction while the glued `-42` stays a literal.
 pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
     Parser::new(|state| {
         let preceded = state.offset == 0
@@ -407,9 +387,7 @@ pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
     })
 }
 
-/// Succeeds (consuming nothing) only when the remaining input does *not* start
-/// with `unexpected`. A negative look-ahead — e.g. to read a postfix `!` only
-/// when it is not the start of the `!=` operator.
+/// Succeeds (consuming nothing) only when the remaining input does *not* start with `unexpected`. A negative look-ahead — e.g. to read a postfix `!` only when it is not the start of the `!=` operator.
 pub fn not_ahead<'a>(unexpected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.string.starts_with(unexpected) {
         true => Err(ParserError::new(
@@ -525,11 +503,7 @@ where
     })
 }
 
-/// A bookmarked parse position, for building a [`crate::Span`] after the
-/// fact from two positions captured at different points in a grammar —
-/// [`spanned`] only covers what its one wrapped parser itself consumes, so a
-/// node whose span should reach further (e.g. through a tail parsed by a
-/// separate step) needs this instead.
+/// A bookmarked parse position, for building a [`crate::Span`] after the fact from two positions captured at different points in a grammar — [`spanned`] only covers what its one wrapped parser itself consumes, so a node whose span should reach further (e.g. through a tail parsed by a separate step) needs this instead.
 #[derive(Debug, Clone)]
 pub struct Mark {
     offset: usize,
@@ -537,8 +511,7 @@ pub struct Mark {
 }
 
 impl Mark {
-    /// The span between this mark and `end` (order-independent — whichever
-    /// offset is smaller becomes the start).
+    /// The span between this mark and `end` (order-independent — whichever offset is smaller becomes the start).
     pub fn to(&self, end: &Mark) -> crate::Span {
         let (start, end) = match self.offset <= end.offset {
             true => (self.offset, end.offset),
@@ -549,8 +522,7 @@ impl Mark {
     }
 }
 
-/// The current parse position as a value, for later use with [`Mark::to`].
-/// Consumes no input.
+/// The current parse position as a value, for later use with [`Mark::to`]. Consumes no input.
 pub fn mark<'a>() -> Parser<'a, Mark> {
     Parser::new(|state| {
         Ok((
@@ -563,12 +535,7 @@ pub fn mark<'a>() -> Parser<'a, Mark> {
     })
 }
 
-/// Consumes one separator between `sep_by*` items: `Ok(Some(state))` advances
-/// past it, `Ok(None)` means it wasn't there (a recoverable failure — the
-/// caller ends the list), and an uncaught failure propagates. Panics on
-/// zero-width progress, like the repetition combinators. Shared by
-/// [`sep_by0`], [`sep_by0_trailing`], and [`sep_by1`], which otherwise had
-/// this loop step verbatim three times over.
+/// Consumes one separator between `sep_by*` items: `Ok(Some(state))` advances past it, `Ok(None)` means it wasn't there (a recoverable failure — the caller ends the list), and an uncaught failure propagates. Panics on zero-width progress, like the repetition combinators. Shared by [`sep_by0`], [`sep_by0_trailing`], and [`sep_by1`], which otherwise had this loop step verbatim three times over.
 fn parse_separator<'a, S, G>(
     g: &mut G,
     state: ParserState<'a>,
@@ -626,9 +593,7 @@ where
     })
 }
 
-/// Like [`sep_by0`], but admits (and drops) one trailing separator: a
-/// separator followed by a failed item parse ends the list with the separator
-/// consumed instead of failing, so `{ a, b, }` parses like `{ a, b }`.
+/// Like [`sep_by0`], but admits (and drops) one trailing separator: a separator followed by a failed item parse ends the list with the separator consumed instead of failing, so `{ a, b, }` parses like `{ a, b }`.
 pub fn sep_by0_trailing<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,
@@ -709,9 +674,7 @@ where
     })
 }
 
-/// Like [`sep_by1`], but admits (and drops) one trailing separator — the
-/// nonempty sibling of [`sep_by0_trailing`]: `(a, b,)` parses like `(a, b)`,
-/// while an empty list still fails on the first item.
+/// Like [`sep_by1`], but admits (and drops) one trailing separator — the nonempty sibling of [`sep_by0_trailing`]: `(a, b,)` parses like `(a, b)`, while an empty list still fails on the first item.
 pub fn sep_by1_trailing<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,

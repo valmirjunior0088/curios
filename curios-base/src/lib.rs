@@ -1,10 +1,4 @@
-//! Foundational utilities shared across every Curios pipeline stage: source
-//! spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the
-//! parser/printer monad combinators, the resolved-module-path `Qualifier`
-//! identity, the value types the surface
-//! (`curios-text`) and core (`curios-elab`) `Term` representations share
-//! verbatim (`Plicity`, `NumOp`, `Int`, `Flt`). Compiler-known `/syn` names
-//! belong to `curios-prelude`, alongside the source declarations they name.
+//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the parser/printer monad combinators, the resolved-module-path `Qualifier` identity, the value types the surface (`curios-text`) and core (`curios-elab`) `Term` representations share verbatim (`Plicity`, `NumOp`, `Int`, `Flt`). Compiler-known `/syn` names belong to `curios-prelude`, alongside the source declarations they name.
 
 mod macros;
 

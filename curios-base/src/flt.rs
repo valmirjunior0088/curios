@@ -116,8 +116,7 @@ impl Div for Flt {
     }
 }
 
-// C `fmod`: `x - trunc(x / y) * y` (the sign of the dividend), matching `f32`'s
-// `%` and the `cont -> wasm` expansion of `Flt.rem`.
+// C `fmod`: `x - trunc(x / y) * y` (the sign of the dividend), matching `f32`'s `%` and the `cont -> wasm` expansion of `Flt.rem`.
 impl Rem for Flt {
     type Output = Self;
 

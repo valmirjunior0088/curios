@@ -35,8 +35,7 @@ fn is_within_rejects_ancestors_and_siblings() {
     assert!(!Qualifier::from(["a", "c"]).is_within(&module));
 }
 
-// Segment-wise, not textual: a longer segment that merely starts with the
-// ancestor's is a different module.
+// Segment-wise, not textual: a longer segment that merely starts with the ancestor's is a different module.
 #[test]
 fn is_within_compares_whole_segments() {
     assert!(!Qualifier::from(["Foobar"]).is_within(&Qualifier::from(["Foo"])));

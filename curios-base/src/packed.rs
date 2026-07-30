@@ -1,7 +1,6 @@
 //! Shared packed storage for the two primitive binary-sequence grains.
 //!
-//! Values are immutable windows over a shared byte buffer. Bit zero is the
-//! least-significant bit of the first byte, so advancing a B tail is O(1).
+//! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte, so advancing a B tail is O(1).
 
 use std::{hash::Hash, sync::Arc};
 
@@ -108,8 +107,7 @@ impl PackedBin {
         self.bytes.get(self.bit_offset / 8 + index).copied()
     }
     pub fn to_packed_bytes(&self) -> Vec<u8> {
-        // An aligned window has no padding bits to mask, so its stored bytes
-        // already are the packed form.
+        // An aligned window has no padding bits to mask, so its stored bytes already are the packed form.
         if let Some(bytes) = self.as_bytes() {
             return bytes.to_vec();
         }
@@ -140,8 +138,7 @@ impl PackedBin {
 
     pub fn concat<'a>(values: impl IntoIterator<Item = &'a Self>) -> Self {
         let values: Vec<_> = values.into_iter().collect();
-        // Aligned operands (every byte string) concatenate by bulk byte copy;
-        // only unaligned bit windows need the per-bit repack.
+        // Aligned operands (every byte string) concatenate by bulk byte copy; only unaligned bit windows need the per-bit repack.
         if values.iter().all(|value| value.is_x_aligned()) {
             let mut bytes =
                 Vec::with_capacity(values.iter().map(|value| value.bit_length / 8).sum());
@@ -184,8 +181,7 @@ impl Eq for PackedBin {}
 impl Hash for PackedBin {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.bit_length.hash(state);
-        // `Vec<u8>` hashes as its slice, so both arms feed the hasher the same
-        // logical packed bytes — the aligned arm just skips the allocation.
+        // `Vec<u8>` hashes as its slice, so both arms feed the hasher the same logical packed bytes — the aligned arm just skips the allocation.
         match self.as_bytes() {
             Some(bytes) => bytes.hash(state),
             None => self.to_packed_bytes().hash(state),

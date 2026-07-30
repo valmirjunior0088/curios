@@ -12,9 +12,7 @@ impl Mint for usize {
     }
 }
 
-/// A deterministic gensym source: a monotonic counter, `Cell`-backed so that
-/// fresh values can be minted under shared borrows. `T` is what one tick
-/// mints — raw `usize` ids by default, or any name type implementing [`Mint`].
+/// A deterministic gensym source: a monotonic counter, `Cell`-backed so that fresh values can be minted under shared borrows. `T` is what one tick mints — raw `usize` ids by default, or any name type implementing [`Mint`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entropy<T = usize> {
     counter: Cell<usize>,
@@ -30,8 +28,7 @@ impl<T> Entropy<T> {
         }
     }
 
-    /// Raise the minting floor: every value handed out from now on is built
-    /// from a raw counter `>= floor`.
+    /// Raise the minting floor: every value handed out from now on is built from a raw counter `>= floor`.
     pub fn seed(&self, floor: usize) {
         self.counter.set(self.counter.get().max(floor));
     }
