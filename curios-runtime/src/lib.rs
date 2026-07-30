@@ -1,7 +1,4 @@
-//! Runtime-only Curios engine: deserialize a precompiled module and run it on an
-//! embedded wasmtime, wiring the `sys.*` host imports. This crate never names
-//! Cranelift or Binaryen — precompilation lives in `curios`, which reuses
-//! [`shared_engine`] and [`run_bytes`] from here.
+//! Runtime-only Curios engine: deserialize a precompiled module and run it on an embedded wasmtime, wiring the `sys.*` host imports. This crate never names Cranelift or Binaryen — precompilation lives in `curios`, which reuses [`shared_engine`] and [`run_bytes`] from here.
 
 mod bundle;
 pub use bundle::*;

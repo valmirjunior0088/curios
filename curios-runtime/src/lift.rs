@@ -16,16 +16,14 @@ impl Lift for () {
     }
 }
 
-/// A descriptor lifts from its wire token bytes (a `Bin`): the three stdio
-/// encodings map to the named streams, anything else is a host-minted handle.
+/// A descriptor lifts from its wire token bytes (a `Bin`): the three stdio encodings map to the named streams, anything else is a host-minted handle.
 impl Lift for Handle {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(Handle::from_bytes(Vec::<u8>::lift(caller, params)?))
     }
 }
 
-/// `open`'s mode lifts from its `/std/File` `Mode` tag. An out-of-range tag is a
-/// codegen bug (the inductive only marshals `0`/`1`/`2`), so it panics.
+/// `open`'s mode lifts from its `/std/File` `Mode` tag. An out-of-range tag is a codegen bug (the inductive only marshals `0`/`1`/`2`), so it panics.
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(match params[0].unwrap_i32() as u32 {
@@ -49,8 +47,7 @@ impl Lift for i32 {
     }
 }
 
-// Pairs lift positionally: each component consumes one param slot. (Every
-// single-value impl above reads `params[0]`, so slicing re-aligns them.)
+// Pairs lift positionally: each component consumes one param slot. (Every single-value impl above reads `params[0]`, so slicing re-aligns them.)
 impl<A: Lift, B: Lift> Lift for (A, B) {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok((
@@ -60,8 +57,7 @@ impl<A: Lift, B: Lift> Lift for (A, B) {
     }
 }
 
-// Triples lift positionally too — `poll(handles, events, timeout)` is the one
-// host import with three operands.
+// Triples lift positionally too — `poll(handles, events, timeout)` is the one host import with three operands.
 impl<A: Lift, B: Lift, C: Lift> Lift for (A, B, C) {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok((
@@ -94,9 +90,7 @@ impl Lift for Vec<u8> {
     }
 }
 
-/// Read an `Lst(Nat)`/`Lst(Handle)` host-import argument: a `params[0]` anyref array
-/// whose elements are i31-boxed scalars (the module's uniform `Lst` shape, not
-/// `Bin`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
+/// Read an `Lst(Nat)`/`Lst(Handle)` host-import argument: a `params[0]` anyref array whose elements are i31-boxed scalars (the module's uniform `Lst` shape, not `Bin`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
 fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
         return Err(wasmtime::Error::msg("expected non-null anyref"));
@@ -129,9 +123,7 @@ impl Lift for Vec<Poll> {
     }
 }
 
-/// Read an `Lst(Bin)` host-import argument: a `params[0]` anyref array whose
-/// elements are themselves `Bin`s (i8 arrays). The inbound dual of `lower.rs`'s
-/// `Vec<Vec<u8>>` lowering; `Lst(Handle)` rides this shape now that a handle is bytes.
+/// Read an `Lst(Bin)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bin`s (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `Lst(Handle)` rides this shape now that a handle is bytes.
 fn lift_bin_array(
     caller: &mut Caller<'_, ()>,
     param: &Val,
@@ -155,8 +147,7 @@ fn lift_bin_array(
         .collect()
 }
 
-/// `Lst(Handle)` lifts each token through the same stdio/handle classification a
-/// single `Handle` does — `poll`'s `handles` array.
+/// `Lst(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `poll`'s `handles` array.
 impl Lift for Vec<Handle> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_bin_array(caller, &params[0])?

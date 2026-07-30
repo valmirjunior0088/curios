@@ -1,21 +1,13 @@
 use {super::Handle, num_bigint::BigUint, std::collections::HashMap};
 
-/// A host's handle table: an unbounded `BigUint` mint counter paired with the
-/// live-handle map keyed by minted token bytes, generic over the host's resource
-/// type `T`. Each host wraps one in a `Mutex` so a mint (read the counter, bump
-/// it, file the resource) is atomic. The counter never wraps, so a token is
-/// never reused — a closed handle's bytes are removed and never minted again,
-/// making use-after-close a loud miss rather than a silent alias. The map tracks
-/// live handles only, so it is sized by what is currently open, not by how many
-/// were ever opened.
+/// A host's handle table: an unbounded `BigUint` mint counter paired with the live-handle map keyed by minted token bytes, generic over the host's resource type `T`. Each host wraps one in a `Mutex` so a mint (read the counter, bump it, file the resource) is atomic. The counter never wraps, so a token is never reused — a closed handle's bytes are removed and never minted again, making use-after-close a loud miss rather than a silent alias. The map tracks live handles only, so it is sized by what is currently open, not by how many were ever opened.
 pub(crate) struct Table<T> {
     next: BigUint,
     map: HashMap<Vec<u8>, T>,
 }
 
 impl<T> Table<T> {
-    /// A fresh table: the mint counter seeded one past the stdio tokens, no live
-    /// handles.
+    /// A fresh table: the mint counter seeded one past the stdio tokens, no live handles.
     pub(crate) fn new() -> Self {
         Self {
             next: BigUint::from(Handle::HANDLE_SEED),
@@ -23,10 +15,7 @@ impl<T> Table<T> {
         }
     }
 
-    /// Mint a fresh handle for `resource`: encode the next token (its canonical
-    /// LE bytes), bump the counter so the token is never reused, and file the
-    /// resource under those bytes. The bytes are the handle the guest shuttles
-    /// back; `close` removes them and the counter never reproduces them.
+    /// Mint a fresh handle for `resource`: encode the next token (its canonical LE bytes), bump the counter so the token is never reused, and file the resource under those bytes. The bytes are the handle the guest shuttles back; `close` removes them and the counter never reproduces them.
     pub(crate) fn mint(&mut self, resource: T) -> Handle {
         let bytes = self.next.to_bytes_le();
         self.next += 1u32;
@@ -43,9 +32,7 @@ impl<T> Table<T> {
         self.map.get_mut(&handle.bytes())
     }
 
-    /// File `resource` under `handle`, keeping the exact token the guest already
-    /// holds — used to re-file a handle whose state changed in place (e.g.
-    /// `connect` turning a socket into a stream).
+    /// File `resource` under `handle`, keeping the exact token the guest already holds — used to re-file a handle whose state changed in place (e.g. `connect` turning a socket into a stream).
     pub(crate) fn insert(&mut self, handle: &Handle, resource: T) {
         self.map.insert(handle.bytes(), resource);
     }
@@ -98,8 +85,7 @@ mod tests {
         assert_eq!(table.get(&a), None);
         assert_eq!(table.remove(&a), None);
 
-        // A later mint never reuses the closed token (the counter never wraps),
-        // and the stale handle keeps missing rather than aliasing the new entry.
+        // A later mint never reuses the closed token (the counter never wraps), and the stale handle keeps missing rather than aliasing the new entry.
         let b = table.mint(99);
         assert_ne!(b.bytes(), a.bytes());
         assert_eq!(table.get(&a), None);

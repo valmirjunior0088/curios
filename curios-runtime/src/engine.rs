@@ -16,11 +16,7 @@ use {
     },
 };
 
-/// The one wasm engine for the whole process. Building an `Engine` stands up the
-/// Cranelift backend and is expensive, so it is created once and shared; `Engine`
-/// is `Send + Sync` (internally reference-counted), so a `static` is sound and a
-/// clone is cheap. Every module, store, and type below is created against it, so
-/// they stay engine-consistent.
+/// The one wasm engine for the whole process. Building an `Engine` stands up the Cranelift backend and is expensive, so it is created once and shared; `Engine` is `Send + Sync` (internally reference-counted), so a `static` is sound and a clone is cheap. Every module, store, and type below is created against it, so they stay engine-consistent.
 pub fn shared_engine() -> &'static Engine {
     static ENGINE: LazyLock<Engine> = LazyLock::new(|| {
         let mut config = Config::new();
@@ -28,11 +24,7 @@ pub fn shared_engine() -> &'static Engine {
         config.wasm_function_references(true);
         config.wasm_gc(true);
         config.wasm_tail_call(true);
-        // The collector is left at `Collector::Auto`: the workspace `wasmtime`
-        // dependency compiles in only `gc-copying`, so `Auto` resolves to the
-        // copying (semi-space) collector — bump-allocation with an in-wasm fast
-        // path, so `struct.new`/`array.new` no longer round-trip through the
-        // `gc_alloc_raw` libcall the deferred-reference-counting collector requires.
+        // The collector is left at `Collector::Auto`: the workspace `wasmtime` dependency compiles in only `gc-copying`, so `Auto` resolves to the copying (semi-space) collector — bump-allocation with an in-wasm fast path, so `struct.new`/`array.new` no longer round-trip through the `gc_alloc_raw` libcall the deferred-reference-counting collector requires.
 
         Engine::new(&config).expect("failed to create wasm engine")
     });
@@ -40,14 +32,7 @@ pub fn shared_engine() -> &'static Engine {
     &ENGINE
 }
 
-/// The wasmtime type of one host import, derived from its `WireSignature` —
-/// the same derivation `cont`'s wasm emitter applies to the module's import
-/// section, so the two ends cannot drift (and wasmtime validates them against
-/// each other at instantiation). Scalar params cross raw `i32`, scalar results
-/// pre-boxed as i31 refs; `Bin`/`Handle` are the concrete i8-array, `Lst` the
-/// anyref-element array — wasmtime-universe mirrors of curios-cont's
-/// `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference
-/// crosses the boundary as); keep the two ends in sync.
+/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `cont`'s wasm emitter applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalar params cross raw `i32`, scalar results pre-boxed as i31 refs; `Bin`/`Handle` are the concrete i8-array, `Lst` the anyref-element array — wasmtime-universe mirrors of curios-cont's `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference crosses the boundary as); keep the two ends in sync.
 ///
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let bin_ref = ValType::Ref(RefType::new(
@@ -86,21 +71,11 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     )
 }
 
-/// A type-erased host implementation: the closure wasmtime calls for one
-/// import, already wrapped in its [`Lift`]/[`Lower`] plumbing. `Arc`ed so
-/// [`ForeignBindings`] can keep the registry while handing wasmtime its own
-/// handle.
+/// A type-erased host implementation: the closure wasmtime calls for one import, already wrapped in its [`Lift`]/[`Lower`] plumbing. `Arc`ed so [`ForeignBindings`] can keep the registry while handing wasmtime its own handle.
 type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
-/// The host side of a foreign registry: for each [`ForeignFunction`] in a
-/// store, the trampoline implementing it. `instantiate` fills the `sys`-tier
-/// one from the [`Host`] trait, and links *pull-based* — it walks the
-/// module's imports and defines exactly what the module demands, so an import
-/// with no registered implementation is a clean, named error instead of a
-/// stranded wasmtime lookup. An embedder builds its own `ffi`-tier one from a
-/// [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it
-/// wants to supply.
+/// The host side of a foreign registry: for each [`ForeignFunction`] in a store, the trampoline implementing it. `instantiate` fills the `sys`-tier one from the [`Host`] trait, and links *pull-based* — it walks the module's imports and defines exactly what the module demands, so an import with no registered implementation is a clean, named error instead of a stranded wasmtime lookup. An embedder builds its own `ffi`-tier one from a [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it wants to supply.
 pub struct ForeignBindings {
     foreigns: ForeignStore,
     trampolines: HashMap<String, Trampoline>,
@@ -115,18 +90,12 @@ impl ForeignBindings {
         }
     }
 
-    /// No bindings — the store every no-FFI caller passes through
-    /// [`run_bytes`]/`instantiate`, since a program with no `foreign`
-    /// declarations imports nothing under `ffi`.
+    /// No bindings — the store every no-FFI caller passes through [`run_bytes`]/`instantiate`, since a program with no `foreign` declarations imports nothing under `ffi`.
     pub fn empty() -> Self {
         Self::new(ForeignStore::new())
     }
 
-    /// Implement the store row named `name` with a typed closure. A `foreign`
-    /// declaration's row is named by its fully qualified name (e.g.
-    /// `/foo/double`). Every row must be implemented exactly once, and only
-    /// rows can be implemented — violations are construction bugs, so they
-    /// panic.
+    /// Implement the store row named `name` with a typed closure. A `foreign` declaration's row is named by its fully qualified name (e.g. `/foo/double`). Every row must be implemented exactly once, and only rows can be implemented — violations are construction bugs, so they panic.
     pub fn define<Li, Lo, F>(&mut self, name: &str, f: F)
     where
         Li: Lift,
@@ -150,9 +119,7 @@ impl ForeignBindings {
         );
     }
 
-    /// Define the import named `name` into `linker` under `namespace`, typing
-    /// it from its store row — the pull side of the registry, driven by the
-    /// module's own import section.
+    /// Define the import named `name` into `linker` under `namespace`, typing it from its store row — the pull side of the registry, driven by the module's own import section.
     fn link(
         &self,
         linker: &mut Linker<()>,
@@ -180,12 +147,7 @@ impl ForeignBindings {
     }
 }
 
-/// The registry of builtin implementations: every [`host_ops`] row bound to
-/// its [`HostOps`] method. The store and the trait are generated from one
-/// authored list in `curios-abi`, and these hand-written bindings are
-/// cross-checked against both — each `define` name must be a real store row
-/// (asserted), and each method call must match the trait (compiler-checked) —
-/// so the three stay in agreement without a fourth independent spelling.
+/// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method. The store and the trait are generated from one authored list in `curios-abi`, and these hand-written bindings are cross-checked against both — each `define` name must be a real store row (asserted), and each method call must match the trait (compiler-checked) — so the three stay in agreement without a fourth independent spelling.
 fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
     let mut impls = ForeignBindings::new(host_ops());
 
@@ -338,9 +300,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls
 }
 
-/// A process exit requested via `proc/exit`. Carried out of the wasm call as a
-/// trap so it unwinds cleanly; `instantiate_and_run` catches it and recovers the
-/// code, distinguishing a clean exit from a real trap.
+/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate_and_run` catches it and recovers the code, distinguishing a clean exit from a real trap.
 #[derive(Debug)]
 struct ExitTrap(i32);
 
@@ -352,17 +312,11 @@ impl fmt::Display for ExitTrap {
 
 impl Error for ExitTrap {}
 
-/// Run a precompiled module — `.cwasm` bytes produced by
-/// `Engine::precompile_module` for this exact wasmtime version and engine
-/// configuration — returning the process exit code (`0` when `main` returns
-/// normally, otherwise the code passed to `proc/exit`).
+/// Run a precompiled module — `.cwasm` bytes produced by `Engine::precompile_module` for this exact wasmtime version and engine configuration — returning the process exit code (`0` when `main` returns normally, otherwise the code passed to `proc/exit`).
 ///
 /// # Safety contract
 ///
-/// `payload` must be unmodified output of `precompile_module` for this engine.
-/// Provenance is guaranteed by callers: the launcher reads it from its own
-/// trusted footer, and `curios` produces it in-process. `Module::deserialize`
-/// performs only light validation, so a foreign blob could execute arbitrary code.
+/// `payload` must be unmodified output of `precompile_module` for this engine. Provenance is guaranteed by callers: the launcher reads it from its own trusted footer, and `curios` produces it in-process. `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code.
 pub fn run_bytes<H: HostOps + Send + Sync + 'static>(
     payload: &[u8],
     host: H,
@@ -377,11 +331,7 @@ pub fn run_bytes<H: HostOps + Send + Sync + 'static>(
     instantiate(engine, &module, host, bindings)
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its
-/// entrypoint, returning the process exit code. `bindings` supplies the
-/// `ffi`-tier implementations for the module's own `foreign` declarations
-/// (pass [`ForeignBindings::empty`] for a program that declares none). The
-/// deserialize/instantiate split [`run_bytes`] factors out.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none). The deserialize/instantiate split [`run_bytes`] factors out.
 fn instantiate<H: HostOps + Send + Sync + 'static>(
     engine: &Engine,
     module: &Module,
@@ -391,15 +341,11 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
     let impls = sys_impls(Arc::new(host));
     let mut linker = Linker::new(engine);
 
-    // Pull-based linking: the module's own import section drives what gets
-    // defined, so only the functions the program calls are wired and a demand
-    // the registry cannot meet is a named error.
+    // Pull-based linking: the module's own import section drives what gets defined, so only the functions the program calls are wired and a demand the registry cannot meet is a named error.
     for import in module.imports() {
         match import.module() {
             "sys" => match import.name() {
-                // `exit` never returns: it traps with the code, which the
-                // caller below catches. A registry trampoline cannot trap, so
-                // it is wired directly, outside the store.
+                // `exit` never returns: it traps with the code, which the caller below catches. A registry trampoline cannot trap, so it is wired directly, outside the store.
                 "exit" => {
                     let exit_type = FuncType::new(engine, [ValType::I32], []);
 

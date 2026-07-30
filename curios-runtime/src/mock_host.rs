@@ -6,9 +6,7 @@ use {
     },
 };
 
-/// The in-memory file map: path → contents, behind a shared lock. A live
-/// [`MockHost`] writes it during the run; the [`MockIo`] handle a test holds
-/// reads it back afterwards. `clone` shares the one underlying map.
+/// The in-memory file map: path → contents, behind a shared lock. A live [`MockHost`] writes it during the run; the [`MockIo`] handle a test holds reads it back afterwards. `clone` shares the one underlying map.
 #[derive(Clone)]
 struct MockFileSystem {
     inner: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
@@ -32,8 +30,7 @@ impl MockFileSystem {
         self.inner.lock().unwrap().insert(path.to_vec(), vec![]);
     }
 
-    /// Create `path` empty if absent, leaving any existing contents — `open` in
-    /// append mode.
+    /// Create `path` empty if absent, leaving any existing contents — `open` in append mode.
     fn ensure(&self, path: &[u8]) {
         self.inner.lock().unwrap().entry(path.to_vec()).or_default();
     }
@@ -48,8 +45,7 @@ impl MockFileSystem {
             .extend_from_slice(bytes);
     }
 
-    /// Borrow `path`'s contents (empty if absent) under the lock, so a read can
-    /// serve a slice without cloning the whole file.
+    /// Borrow `path`'s contents (empty if absent) under the lock, so a read can serve a slice without cloning the whole file.
     fn with<R>(&self, path: &[u8], serve: impl FnOnce(&[u8]) -> R) -> R {
         let files = self.inner.lock().unwrap();
 
@@ -68,69 +64,47 @@ struct MockFile {
     position: usize,
 }
 
-/// A live in-memory *outbound* connection: the scripted response and a read
-/// cursor into it. Writes to a connection are accepted and discarded.
+/// A live in-memory *outbound* connection: the scripted response and a read cursor into it. Writes to a connection are accepted and discarded.
 struct MockClient {
     response: Vec<u8>,
     position: usize,
 }
 
-/// A live in-memory *inbound* connection minted by `accept`: `read` serves the
-/// scripted request from `position`, and `write` appends to `captures[capture]`
-/// so a test can inspect what the server sent back.
+/// A live in-memory *inbound* connection minted by `accept`: `read` serves the scripted request from `position`, and `write` appends to `captures[capture]` so a test can inspect what the server sent back.
 struct MockServer {
     request: Vec<u8>,
     position: usize,
     capture: usize,
 }
 
-/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-
-/// memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle
-/// between states: `socket` mints a `Socket`, `connect` turns it into an
-/// `Outbound` stream, `listen` turns it into a `Listener` that `accept` pulls
-/// `Inbound` streams from; `open` files a `File`. `close` drops any kind.
+/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket` mints a `Socket`, `connect` turns it into an `Outbound` stream, `listen` turns it into a `Listener` that `accept` pulls `Inbound` streams from; `open` files a `File`. `close` drops any kind.
 enum MockResource {
     File(MockFile),
-    /// A finished name lookup minted by `lookup`, holding the resolved address
-    /// blobs `resolve` drains. The scripted host resolves synchronously, so the
-    /// handle is ready the moment it is minted.
+    /// A finished name lookup minted by `lookup`, holding the resolved address blobs `resolve` drains. The scripted host resolves synchronously, so the handle is ready the moment it is minted.
     Resolved(Vec<Vec<u8>>),
     Outbound(MockClient),
     Inbound(MockServer),
     Socket,
     Listener,
-    /// A server TLS config token minted by `tls_server_config`. The scripted
-    /// host runs cleartext, so it carries no real configuration — it only marks
-    /// the handle so `start_tls_server` can recognise it.
+    /// A server TLS config token minted by `tls_server_config`. The scripted host runs cleartext, so it carries no real configuration — it only marks the handle so `start_tls_server` can recognise it.
     TlsConfig,
 }
 
-/// The scripted, in-memory [`Host`] used by the test suite — the mirror of
-/// `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and
-/// read what the run produced through the [`MockIo`] handle `build` returns.
+/// The scripted, in-memory [`Host`] used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    /// Scripted stdin, pre-joined and newline-terminated; `read(Handle::Stdin, …)`
-    /// drains its front and reports `Status::Eof` once it runs dry.
+    /// Scripted stdin, pre-joined and newline-terminated; `read(Handle::Stdin, …)` drains its front and reports `Status::Eof` once it runs dry.
     input: Mutex<VecDeque<u8>>,
-    /// Every byte written to stdout and stderr, concatenated in write order —
-    /// the streams are not distinguished. Shared with [`MockIo::output`].
+    /// Every byte written to stdout and stderr, concatenated in write order — the streams are not distinguished. Shared with [`MockIo::output`].
     output: Arc<Mutex<Vec<u8>>>,
-    /// The in-memory filesystem backing `open`/`read`/`write`/`close`. Shared
-    /// with [`MockIo::file`].
+    /// The in-memory filesystem backing `open`/`read`/`write`/`close`. Shared with [`MockIo::file`].
     files: MockFileSystem,
-    /// One table for every non-stdio handle, keyed by token bytes: open files,
-    /// outbound/inbound connections, and unconnected/listening sockets. The BSD
-    /// lifecycle transitions a handle in place (`socket` → `connect`/`listen` →
-    /// `accept`) and `close` releases any kind uniformly — the scripted mirror
-    /// of `OsHost`'s real-resource table.
+    /// One table for every non-stdio handle, keyed by token bytes: open files, outbound/inbound connections, and unconnected/listening sockets. The BSD lifecycle transitions a handle in place (`socket` → `connect`/`listen` → `accept`) and `close` releases any kind uniformly — the scripted mirror of `OsHost`'s real-resource table.
     table: Mutex<Table<MockResource>>,
-    /// Scripted network endpoints: `host:port` → the bytes a connection serves
-    /// on read. Read-only during the run; connecting elsewhere is refused.
+    /// Scripted network endpoints: `host:port` → the bytes a connection serves on read. Read-only during the run; connecting elsewhere is refused.
     endpoints: HashMap<Vec<u8>, Vec<u8>>,
     /// Scripted inbound requests, one served per `accept` (FIFO).
     inbound: Mutex<VecDeque<Vec<u8>>>,
-    /// Captured server responses: one entry per accepted connection, the
-    /// concatenation of its writes. Shared with [`MockIo::captures`].
+    /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
     clock_wall_seq: Mutex<VecDeque<(u32, u32, u32)>>,
@@ -145,14 +119,12 @@ pub struct MockHost {
 }
 
 impl MockHost {
-    /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters,
-    /// then `build` for the `(host, io)` pair.
+    /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters, then `build` for the `(host, io)` pair.
     pub fn builder() -> MockHostBuilder {
         MockHostBuilder::default()
     }
 
-    /// Mint a fresh handle for `resource` under the table lock (see
-    /// [`Table::mint`]).
+    /// Mint a fresh handle for `resource` under the table lock (see [`Table::mint`]).
     fn mint(&self, resource: MockResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
     }
@@ -181,10 +153,7 @@ impl HostOps for MockHost {
     }
 
     fn lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
-        // One synthetic address blob: the `host:port` key `net` uses, so
-        // `connect` can recover the scripted endpoint from the blob. Stashed
-        // behind a handle `poll` reports ready and `resolve` drains, mirroring
-        // the async OS path without a real pipe.
+        // One synthetic address blob: the `host:port` key `net` uses, so `connect` can recover the scripted endpoint from the blob. Stashed behind a handle `poll` reports ready and `resolve` drains, mirroring the async OS path without a real pipe.
         let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
 
         (
@@ -216,8 +185,7 @@ impl HostOps for MockHost {
     }
 
     fn connect(&self, io: Handle, addr: &[u8]) -> Status {
-        // The handle must be an unconnected socket minted by `socket`; consume
-        // it up front so a refusal leaves no half-open handle behind.
+        // The handle must be an unconnected socket minted by `socket`; consume it up front so a refusal leaves no half-open handle behind.
         {
             let mut table = self.table.lock().unwrap();
 
@@ -246,8 +214,7 @@ impl HostOps for MockHost {
     }
 
     fn start_tls(&self, io: Handle, _sni: &[u8]) -> Status {
-        // The scripted host serves cleartext; a client TLS upgrade is a no-op
-        // identity over the existing outbound connection.
+        // The scripted host serves cleartext; a client TLS upgrade is a no-op identity over the existing outbound connection.
         if matches!(
             self.table.lock().unwrap().get(&io),
             Some(MockResource::Outbound(_))
@@ -259,8 +226,7 @@ impl HostOps for MockHost {
     }
 
     fn tls_server_config(&self, _cert: &[u8], _key: &[u8]) -> (Status, Handle) {
-        // No real config under test — just mint a token the handle table can
-        // hand back to `start_tls_server`.
+        // No real config under test — just mint a token the handle table can hand back to `start_tls_server`.
         (Status::Ok, self.mint(MockResource::TlsConfig))
     }
 
@@ -298,8 +264,7 @@ impl HostOps for MockHost {
             return (Status::NotFound, Handle::Other(Vec::new()));
         }
 
-        // Pull the next scripted request. An exhausted queue fails the accept,
-        // ending the serve loop (a real blocking accept would park forever).
+        // Pull the next scripted request. An exhausted queue fails the accept, ending the serve loop (a real blocking accept would park forever).
         let request = match self.inbound.lock().unwrap().pop_front() {
             Some(request) => request,
             None => return (Status::NotFound, Handle::Other(Vec::new())),
@@ -339,10 +304,7 @@ impl HostOps for MockHost {
     }
 
     fn poll(&self, handles: &[Handle], events: &[Poll], _: i32) -> Vec<Poll> {
-        // In-memory data is always ready, so readiness just mirrors the requested
-        // interest: a known handle reports `revents == events`, an unknown one
-        // reports nothing. The deterministic in-memory oracle — any scheduler
-        // resolves in a single step under test.
+        // In-memory data is always ready, so readiness just mirrors the requested interest: a known handle reports `revents == events`, an unknown one reports nothing. The deterministic in-memory oracle — any scheduler resolves in a single step under test.
         let table = self.table.lock().unwrap();
 
         handles
@@ -370,9 +332,7 @@ impl HostOps for MockHost {
     fn read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
         match &io {
             Handle::Stdin => {
-                // Scripted stdin is one pre-joined buffer; serve up to `count` of
-                // its front and report EOF once it is drained (the sender is fixed
-                // at build time, so a dry buffer is end-of-input, never a wait).
+                // Scripted stdin is one pre-joined buffer; serve up to `count` of its front and report EOF once it is drained (the sender is fixed at build time, so a dry buffer is end-of-input, never a wait).
                 let mut input = self.input.lock().unwrap();
 
                 if input.is_empty() {
@@ -412,8 +372,7 @@ impl HostOps for MockHost {
     }
 
     fn write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
-        // The in-memory sink always takes the whole buffer in one go, so a
-        // successful write reports the full length and never `WouldBlock`.
+        // The in-memory sink always takes the whole buffer in one go, so a successful write reports the full length and never `WouldBlock`.
         let full = bytes.len() as u32;
 
         match &io {
@@ -438,15 +397,13 @@ impl HostOps for MockHost {
 
                 (Status::Ok, full)
             }
-            // Inbound (accepted) connection: capture the response bytes so a
-            // test can inspect what the server wrote back.
+            // Inbound (accepted) connection: capture the response bytes so a test can inspect what the server wrote back.
             Some(MockResource::Inbound(conn)) => {
                 self.captures.lock().unwrap()[conn.capture].extend_from_slice(bytes);
 
                 (Status::Ok, full)
             }
-            // Outbound connection: accept and discard (the in-memory test host
-            // does not capture request bytes).
+            // Outbound connection: accept and discard (the in-memory test host does not capture request bytes).
             Some(MockResource::Outbound(_)) => (Status::Ok, full),
             _ => (Status::NotFound, 0),
         }
@@ -497,9 +454,7 @@ impl HostOps for MockHost {
     }
 }
 
-/// Serve up to `count` bytes of `contents` from `*position`, advancing the
-/// cursor; `Status::Eof` with empty bytes once it reaches the end. The shared
-/// shape of every scripted read (file, inbound request, outbound response).
+/// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; `Status::Eof` with empty bytes once it reaches the end. The shared shape of every scripted read (file, inbound request, outbound response).
 fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec<u8>) {
     if *position >= contents.len() {
         return (Status::Eof, vec![]);
@@ -512,9 +467,7 @@ fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec
     (Status::Ok, bytes)
 }
 
-/// The inspectable side of a [`MockHost`]: the shared buffers the run writes
-/// into. The host is moved into the runner, so a test holds this handle to read
-/// stdout, files, and server captures back out afterwards.
+/// The inspectable side of a [`MockHost`]: the shared buffers the run writes into. The host is moved into the runner, so a test holds this handle to read stdout, files, and server captures back out afterwards.
 pub struct MockIo {
     output: Arc<Mutex<Vec<u8>>>,
     files: MockFileSystem,
@@ -522,28 +475,23 @@ pub struct MockIo {
 }
 
 impl MockIo {
-    /// Every byte the guest wrote to stdout and stderr, concatenated in write
-    /// order. The two streams are not distinguished.
+    /// Every byte the guest wrote to stdout and stderr, concatenated in write order. The two streams are not distinguished.
     pub fn output(&self) -> Vec<u8> {
         self.output.lock().unwrap().clone()
     }
 
-    /// The contents of `path` in the in-memory filesystem after the run, or
-    /// `None` if it was never seeded or written.
+    /// The contents of `path` in the in-memory filesystem after the run, or `None` if it was never seeded or written.
     pub fn file(&self, path: &[u8]) -> Option<Vec<u8>> {
         self.files.get(path)
     }
 
-    /// The captured server responses: one entry per accepted connection, the
-    /// concatenation of the bytes its handler wrote back.
+    /// The captured server responses: one entry per accepted connection, the concatenation of the bytes its handler wrote back.
     pub fn captures(&self) -> Vec<Vec<u8>> {
         self.captures.lock().unwrap().clone()
     }
 }
 
-/// Fluent seed for a [`MockHost`]: gather the scripted inputs (stdin, files,
-/// network endpoints, clocks, …) as plain values, then [`build`](Self::build)
-/// wraps them for the run and hands back the host and its [`MockIo`].
+/// Fluent seed for a [`MockHost`]: gather the scripted inputs (stdin, files, network endpoints, clocks, …) as plain values, then [`build`](Self::build) wraps them for the run and hands back the host and its [`MockIo`].
 #[derive(Default)]
 pub struct MockHostBuilder {
     input: Vec<u8>,
@@ -557,8 +505,7 @@ pub struct MockHostBuilder {
 }
 
 impl MockHostBuilder {
-    /// Append one line to scripted stdin; the newline the terminal would
-    /// deliver is appended for you.
+    /// Append one line to scripted stdin; the newline the terminal would deliver is appended for you.
     fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
         self.input.extend_from_slice(line.as_ref());
         self.input.push(b'\n');
@@ -591,8 +538,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the network endpoints served by `connect`: `(host:port, response)`
-    /// pairs. Connecting to an unscripted endpoint is refused.
+    /// Script the network endpoints served by `connect`: `(host:port, response)` pairs. Connecting to an unscripted endpoint is refused.
     pub fn net<E, R, I>(mut self, endpoints: I) -> Self
     where
         E: AsRef<[u8]>,
@@ -608,9 +554,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the inbound requests served by `accept`, one per accepted
-    /// connection (FIFO). An exhausted queue makes `accept` fail, which ends a
-    /// `serve` loop (a real blocking `accept` would park there).
+    /// Script the inbound requests served by `accept`, one per accepted connection (FIFO). An exhausted queue makes `accept` fail, which ends a `serve` loop (a real blocking `accept` would park there).
     pub fn inbound<R: AsRef<[u8]>, I: IntoIterator<Item = R>>(mut self, requests: I) -> Self {
         self.inbound
             .extend(requests.into_iter().map(|r| r.as_ref().to_vec()));
@@ -618,8 +562,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the wall-clock readings served by `clock_wall`, in order. When the
-    /// script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
+    /// Script the wall-clock readings served by `clock_wall`, in order. When the script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
     pub fn wall<I: IntoIterator<Item = (u32, u32, u32)>>(mut self, readings: I) -> Self {
         self.clock_wall_seq.extend(readings);
 
@@ -655,8 +598,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Wrap the seeded values into a live host and its [`MockIo`] inspection
-    /// handle: the host is moved into the runner, the handle stays behind.
+    /// Wrap the seeded values into a live host and its [`MockIo`] inspection handle: the host is moved into the runner, the handle stays behind.
     pub fn build(self) -> (MockHost, MockIo) {
         let output = Arc::new(Mutex::new(Vec::new()));
         let files = MockFileSystem::new(self.files);
@@ -710,8 +652,7 @@ mod tests {
         // ...and a double close is a no-op, not a panic.
         host.close(handle.clone());
 
-        // A second open never reuses the closed token, and the stale handle keeps
-        // missing rather than aliasing the freshly opened file.
+        // A second open never reuses the closed token, and the stale handle keeps missing rather than aliasing the freshly opened file.
         let (status, fresh) = host.open(b"g", Mode::Write);
         assert!(matches!(status, Status::Ok));
         assert_ne!(handle.bytes(), fresh.bytes());

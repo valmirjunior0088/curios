@@ -30,8 +30,7 @@ impl Lower for Status {
     }
 }
 
-/// A descriptor lowers as its wire token bytes — a `Bin` (an i8 array), the same
-/// uniform shape the runtime keys handles on.
+/// A descriptor lowers as its wire token bytes — a `Bin` (an i8 array), the same uniform shape the runtime keys handles on.
 impl Lower for Handle {
     fn lower(
         self,
@@ -42,8 +41,7 @@ impl Lower for Handle {
     }
 }
 
-/// Scalar results cross the boundary pre-boxed as i31 refs so generated code
-/// can land them directly in anyref block params (see `emit_sys_imports`).
+/// Scalar results cross the boundary pre-boxed as i31 refs so generated code can land them directly in anyref block params (see `emit_sys_imports`).
 impl Lower for u32 {
     fn lower(
         self,
@@ -59,8 +57,7 @@ impl Lower for u32 {
     }
 }
 
-// Pairs lower positionally: each component fills one result slot. (Every
-// single-value impl writes `results[0]`, so slicing re-aligns them.)
+// Pairs lower positionally: each component fills one result slot. (Every single-value impl writes `results[0]`, so slicing re-aligns them.)
 impl<A: Lower, B: Lower> Lower for (A, B) {
     fn lower(
         self,
@@ -90,19 +87,12 @@ impl<A: Lower, B: Lower, C: Lower> Lower for (A, B, C) {
     }
 }
 
-/// The GC array type an `i8` byte array (`Bin`) allocates under — shared by
-/// every wire shape that carries raw bytes, whether directly (`Vec<u8>`) or
-/// as `Lst(Bin)`'s per-element `Bin`s (`Vec<Vec<u8>>`), and by `engine.rs`'s
-/// `host_func_type`, which describes the same shape for a host import's
-/// static function type.
+/// The GC array type an `i8` byte array (`Bin`) allocates under — shared by every wire shape that carries raw bytes, whether directly (`Vec<u8>`) or as `Lst(Bin)`'s per-element `Bin`s (`Vec<Vec<u8>>`), and by `engine.rs`'s `host_func_type`, which describes the same shape for a host import's static function type.
 pub(crate) fn i8_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8))
 }
 
-/// The GC array type the uniform `Lst` shape allocates under — a `(mut (ref
-/// null any))` element array, shared by every `Lst` lowering regardless of
-/// what its elements themselves are (`Vec<Poll>`'s i31s, `Vec<Vec<u8>>`'s
-/// `Bin`s), and by `engine.rs`'s `host_func_type` for the same reason.
+/// The GC array type the uniform `Lst` shape allocates under — a `(mut (ref null any))` element array, shared by every `Lst` lowering regardless of what its elements themselves are (`Vec<Poll>`'s i31s, `Vec<Vec<u8>>`'s `Bin`s), and by `engine.rs`'s `host_func_type` for the same reason.
 pub(crate) fn anyref_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(
         engine,
@@ -138,10 +128,7 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// `Lst(Nat)`: `poll`'s parallel `revents` masks, lowered as an array of
-/// i31-boxed bits. Same uniform `Lst` shape as `Vec<Vec<u8>>` below (anyref
-/// elements over the codegen's `lst_type`), only the elements are i31s rather
-/// than `Bin`s — the outbound dual of `lift.rs`'s `lift_i31_array`.
+/// `Lst(Nat)`: `poll`'s parallel `revents` masks, lowered as an array of i31-boxed bits. Same uniform `Lst` shape as `Vec<Vec<u8>>` below (anyref elements over the codegen's `lst_type`), only the elements are i31s rather than `Bin`s — the outbound dual of `lift.rs`'s `lift_i31_array`.
 impl Lower for Vec<Poll> {
     fn lower(
         self,
@@ -169,10 +156,7 @@ impl Lower for Vec<Poll> {
     }
 }
 
-/// `Lst(Bin)`: an array of `anyref` whose elements are `Bin`s (`i8` arrays). The
-/// outer element type `(mut (ref null any))` matches the codegen's uniform
-/// `lst_type`, so the array's runtime type is the one downstream `ref.cast`s
-/// expect.
+/// `Lst(Bin)`: an array of `anyref` whose elements are `Bin`s (`i8` arrays). The outer element type `(mut (ref null any))` matches the codegen's uniform `lst_type`, so the array's runtime type is the one downstream `ref.cast`s expect.
 impl Lower for Vec<Vec<u8>> {
     fn lower(
         self,
