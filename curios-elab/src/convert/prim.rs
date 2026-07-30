@@ -5,11 +5,7 @@ use {
 };
 
 pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
-    // Two `Bin`/`Lst` values are the free monoid on their bytes/elements: peel the
-    // longest common prefix (`core::spine`). `Stuck` falls through to the
-    // structural arms below, which compare like-shaped symbolic operands (slices,
-    // appends) and `Lst` element runs that the peel leaves opaque — so the peel only
-    // ever strengthens conversion, never weakens it.
+    // Two `Bin`/`Lst` values are the free monoid on their bytes/elements: peel the longest common prefix (`core::spine`). `Stuck` falls through to the structural arms below, which compare like-shaped symbolic operands (slices, appends) and `Lst` element runs that the peel leaves opaque — so the peel only ever strengthens conversion, never weakens it.
     if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_lst(&this, &that)) {
         match peel {
             Peel::Equal => return Ok(true),
@@ -31,8 +27,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::BinType(Grain::B), Prim::BinType(Grain::B))
         | (Prim::HandleType, Prim::HandleType) => Ok(true),
         (Prim::Handle(this), Prim::Handle(that)) => Ok(this == that),
-        // Two `Nat`s are the free monoid on one generator: peel the shared
-        // successor spine and enqueue the residual tails (`core::spine`).
+        // Two `Nat`s are the free monoid on one generator: peel the shared successor spine and enqueue the residual tails (`core::spine`).
         (Prim::Nat(actual), Prim::Nat(target)) => Ok(match peel_nat(&actual, &target) {
             Peel::Equal => true,
             Peel::Clash | Peel::Stuck => false,

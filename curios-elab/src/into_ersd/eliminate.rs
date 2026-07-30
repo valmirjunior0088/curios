@@ -1,25 +1,8 @@
 //! Eliminations: the semantic identity selection the specification names.
 //!
-//! Unlike the legacy path, which desugars every elimination onto the `Nat`
-//! carrier, each Core elimination erases to its most precise arena form —
-//! `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the
-//! sequence itself, and schema-carrying `MatchVariant` whose arms bind the
-//! payload directly. Both fold forms keep the peel-versus-fold distinction: a
-//! cons arm that ignores its induction hypothesis is a case split, peeled to
-//! a single-key dispatch rather than an n-step fold, so a non-tail recursive
-//! caller does not re-run the whole fold at every level.
+//! Unlike the legacy path, which desugars every elimination onto the `Nat` carrier, each Core elimination erases to its most precise arena form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both fold forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis is a case split, peeled to a single-key dispatch rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level.
 //!
-//! The scrutinee is erased exactly once. The fold forms alias a non-variable
-//! head on the Core side first — a fresh variable defined as the head, its
-//! label mapped to the once-erased operand — because their peels re-derive
-//! Core terms from the head (`head - 1`, the sequence's length and slices),
-//! and walking those must re-resolve to the same operand instead of
-//! re-erasing an effectful expression. The dispatch forms (`Bool`, `Switch`,
-//! the inductive match) never re-derive from the head, so they refine the
-//! *original* head term — arm bodies were elaborated against reductions
-//! keyed on that term, and refining an alias in its place would break their
-//! re-derived typing. Arm-side refinement is typing-only: it reproduces the
-//! context the arm was elaborated in and emits nothing.
+//! The scrutinee is erased exactly once. The fold forms alias a non-variable head on the Core side first — a fresh variable defined as the head, its label mapped to the once-erased operand — because their peels re-derive Core terms from the head (`head - 1`, the sequence's length and slices), and walking those must re-resolve to the same operand instead of re-erasing an effectful expression. The dispatch forms (`Bool`, `Switch`, the inductive match) never re-derive from the head, so they refine the *original* head term — arm bodies were elaborated against reductions keyed on that term, and refining an alias in its place would break their re-derived typing. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
 use {
     super::{
@@ -31,8 +14,7 @@ use {
     curios_core::{Free, Level},
 };
 
-/// The `Lst`/`Bin` carrier a sequence fold eliminates: the carrier-specific
-/// reads, so the fold erasure stays carrier-agnostic.
+/// The `Lst`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
 #[derive(Clone, Copy)]
 enum SeqCarrier<'a> {
     Lst { element: &'a Term },
@@ -47,8 +29,7 @@ impl SeqCarrier<'_> {
         }
     }
 
-    /// The type of the element the cons arm binds — the list element type, or
-    /// the grain's own scalar shape for a packed binary.
+    /// The type of the element the cons arm binds — the list element type, or the grain's own scalar shape for a packed binary.
     fn element_type(self) -> Term {
         match self {
             SeqCarrier::Lst { element } => element.clone(),
@@ -67,9 +48,7 @@ impl SeqCarrier<'_> {
         }
     }
 
-    /// The cons value `head :: tail` — the monoid operation on a singleton and
-    /// the tail, the same shape elaboration checked the arm under, so the arm
-    /// refines the scrutinee to the term it was elaborated against.
+    /// The cons value `head :: tail` — the monoid operation on a singleton and the tail, the same shape elaboration checked the arm under, so the arm refines the scrutinee to the term it was elaborated against.
     fn cons_value(self, head: &Term, tail: &Term) -> Term {
         match self {
             SeqCarrier::Lst { element } => Term::prim(Prim::LstConcat(
@@ -126,9 +105,7 @@ impl SeqCarrier<'_> {
     }
 }
 
-/// The match-wide data an inductive elimination threads to each arm. The motive
-/// opens at the scrutinee's indices followed by the head — the case's target
-/// indices in an enumerated arm, the actual ones in the default.
+/// The match-wide data an inductive elimination threads to each arm. The motive opens at the scrutinee's indices followed by the head — the case's target indices in an enumerated arm, the actual ones in the default.
 struct InductMatch<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
@@ -204,10 +181,7 @@ impl Lowering {
         }
     }
 
-    /// Erase the scrutinee exactly once. A variable head passes through; a
-    /// compound head is walked once, then aliased on the Core side — a fresh
-    /// variable defined as the head, mapped to the erased operand — so every
-    /// Core term later re-derived from the head resolves to the same operand.
+    /// Erase the scrutinee exactly once. A variable head passes through; a compound head is walked once, then aliased on the Core side — a fresh variable defined as the head, mapped to the erased operand — so every Core term later re-derived from the head resolves to the same operand.
     fn scrutinee_operand(
         &mut self,
         context: &mut Context,
@@ -227,9 +201,7 @@ impl Lowering {
         Ok(Ok((Term::free_var(&name), atom)))
     }
 
-    /// Open a fresh block, erase `body` as a tail refined by `head = value`
-    /// and typed at `motive(value)`, and seal it — the leaf-arm shape with no
-    /// payload binders.
+    /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at `motive(value)`, and seal it — the leaf-arm shape with no payload binders.
     fn refined_arm(
         &mut self,
         context: &mut Context,
@@ -247,9 +219,7 @@ impl Lowering {
         Ok(self.seal(outcome))
     }
 
-    /// Open a fresh block, erase `body` as a tail typed at `expected` without
-    /// refining the scrutinee, and seal it — the catch-all default and the
-    /// peeled dispatch arm.
+    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default and the peeled dispatch arm.
     fn open_arm(
         &mut self,
         context: &mut Context,
@@ -261,8 +231,7 @@ impl Lowering {
         Ok(self.seal(outcome))
     }
 
-    /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct
-    /// from a `Nat` dispatch.
+    /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct from a `Nat` dispatch.
     fn erase_bool(
         &mut self,
         context: &mut Context,
@@ -300,8 +269,7 @@ impl Lowering {
         ))
     }
 
-    /// A sparse `Nat` dispatch — `SwitchNat`: each case refines the scrutinee
-    /// to its key; the default sees the unrefined head.
+    /// A sparse `Nat` dispatch — `SwitchNat`: each case refines the scrutinee to its key; the default sees the unrefined head.
     fn erase_switch(
         &mut self,
         context: &mut Context,
@@ -334,9 +302,7 @@ impl Lowering {
         ))
     }
 
-    /// A `Nat` free-monoid elimination: a successor arm that uses its
-    /// induction hypothesis is a `FoldNat`; one that ignores it is a case
-    /// split, peeled to a single-key dispatch at `pred := head - 1`.
+    /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, peeled to a single-key dispatch at `pred := head - 1`.
     fn erase_nat_fold(
         &mut self,
         context: &mut Context,
@@ -385,8 +351,7 @@ impl Lowering {
             ));
         }
 
-        // Induction: bind the predecessor and the hypothesis, then erase the
-        // successor arm at `motive(pred + 1)`.
+        // Induction: bind the predecessor and the hypothesis, then erase the successor arm at `motive(pred + 1)`.
         let pred_hint = cons_case.first_hint().map(str::to_string);
         let hypothesis_hint = cons_case.second_hint().map(str::to_string);
         let pred_label = context.fresh(pred_hint.as_deref());
@@ -430,10 +395,7 @@ impl Lowering {
         ))
     }
 
-    /// A `Lst`/`Bin` free-monoid elimination: a cons arm that uses its
-    /// hypothesis is a first-class `FoldSequence` whose step binds the
-    /// element, the suffix, and the accumulator; one that ignores it is a
-    /// case split, peeled to a length dispatch over `seq[0]` and `seq[1..]`.
+    /// A `Lst`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a case split, peeled to a length dispatch over `seq[0]` and `seq[1..]`.
     #[allow(clippy::too_many_arguments)]
     fn erase_seq_fold(
         &mut self,
@@ -454,8 +416,7 @@ impl Lowering {
 
         let empty = self.refined_arm(context, &head, &carrier.empty_value(), motive, empty_case)?;
 
-        // The hypothesis is dead: a case split over the length, peeling the
-        // cons arm at the head element and tail slice.
+        // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
         if !cons_case.uses(2) {
             let length = carrier.len(&head);
             let index = emitted!(self.walk(context, &length, &Term::prim(Prim::NatType), None)?);
@@ -538,12 +499,7 @@ impl Lowering {
         ))
     }
 
-    /// A nominal inductive elimination — a schema-carrying `MatchVariant`
-    /// whose arms bind the payload positionally. A constructor with no arm is
-    /// covered by the default or, absent one, trapped by an `Unreachable`
-    /// arm; an erasable (proof/type) scrutinee has no runtime tag and reduces
-    /// to its single live arm. A vacuous elimination (no arms, no default) is
-    /// unreachable code and diverges without erasing the head.
+    /// A nominal inductive elimination — a schema-carrying `MatchVariant` whose arms bind the payload positionally. A constructor with no arm is covered by the default or, absent one, trapped by an `Unreachable` arm; an erasable (proof/type) scrutinee has no runtime tag and reduces to its single live arm. A vacuous elimination (no arms, no default) is unreachable code and diverges without erasing the head.
     fn erase_induct(
         &mut self,
         context: &mut Context,
@@ -588,8 +544,7 @@ impl Lowering {
             actual_indices: &actual_indices,
         };
 
-        // A proof/type scrutinee carries no runtime tag; its subsingleton
-        // elimination reduces to its single live arm, erased inline.
+        // A proof/type scrutinee carries no runtime tag; its subsingleton elimination reduces to its single live arm, erased inline.
         if is_erasable(context, &head_type)? {
             return self.erase_erasable_scrutinee(context, &m, &induct_decl, cases, default);
         }
@@ -621,9 +576,7 @@ impl Lowering {
                     )?;
                     arms.push(arm);
                 }
-                // A missing constructor without a default is provably
-                // impossible: an `Unreachable` arm, still declaring its
-                // payload binders to satisfy the constructor's arity.
+                // A missing constructor without a default is provably impossible: an `Unreachable` arm, still declaring its payload binders to satisfy the constructor's arity.
                 None if default.is_none() => {
                     let bindings = mask
                         .iter()
@@ -659,10 +612,7 @@ impl Lowering {
         ))
     }
 
-    /// One constructor arm: bind its payload (a kept field to a fresh value in
-    /// payload order, an erased field to the unit constant), refine the
-    /// scrutinee and indices, and erase the body as a tail at the opened
-    /// motive.
+    /// One constructor arm: bind its payload (a kept field to a fresh value in payload order, an erased field to the unit constant), refine the scrutinee and indices, and erase the body as a tail at the opened motive.
     fn variant_arm(
         &mut self,
         context: &mut Context,
@@ -710,8 +660,7 @@ impl Lowering {
         })
     }
 
-    /// The catch-all default: binds nothing and sees the unrefined head, so
-    /// the motive opens at the match's actual parameters/indices and head.
+    /// The catch-all default: binds nothing and sees the unrefined head, so the motive opens at the match's actual parameters/indices and head.
     fn default_arm(
         &mut self,
         context: &mut Context,
@@ -723,10 +672,7 @@ impl Lowering {
         self.open_arm(context, &expected, default)
     }
 
-    /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the
-    /// subsingleton elimination reduces to its single live arm, erased inline
-    /// in the current block. Every payload binder is erased and resolves to
-    /// the unit constant; the head is never erased (it is a dropped value).
+    /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the subsingleton elimination reduces to its single live arm, erased inline in the current block. Every payload binder is erased and resolves to the unit constant; the head is never erased (it is a dropped value).
     fn erase_erasable_scrutinee(
         &mut self,
         context: &mut Context,
@@ -735,8 +681,7 @@ impl Lowering {
         cases: &[(Atom, InductArm)],
         default: Option<&Term>,
     ) -> Result<Outcome, Error> {
-        // No enumerated arm — a bare `_` ladder over a subsingleton: the
-        // default is the single live result and binds nothing.
+        // No enumerated arm — a bare `_` ladder over a subsingleton: the default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
             let default = default.expect("erase: erasable match with no arms has a default");
             let default_refs = m.actual_indices.iter().chain([m.head]).collect::<Vec<_>>();
@@ -766,10 +711,7 @@ impl Lowering {
     }
 }
 
-/// Assume the payload binders at their instantiated types, refine the
-/// scrutinee to `tag(vars)` and the actual indices to this case's targets,
-/// and return the arm body's expected type. Typing-only: it touches the
-/// context and emits nothing.
+/// Assume the payload binders at their instantiated types, refine the scrutinee to `tag(vars)` and the actual indices to this case's targets, and return the arm body's expected type. Typing-only: it touches the context and emits nothing.
 fn refine_arm(
     context: &mut Context,
     m: &InductMatch<'_>,

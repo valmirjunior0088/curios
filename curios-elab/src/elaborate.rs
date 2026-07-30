@@ -42,10 +42,7 @@ use {
     std::collections::{BTreeSet, VecDeque},
 };
 
-/// The elaboration mode (§6). `Infer` synthesizes a type; `Check(expected)`
-/// drives the term against a known type, hitting `expect` at each synthesizable
-/// node's turnaround and consuming `expected` directly at naturally-checked
-/// nodes (`Func`, `Tuple`, `Metavar`).
+/// The elaboration mode (§6). `Infer` synthesizes a type; `Check(expected)` drives the term against a known type, hitting `expect` at each synthesizable node's turnaround and consuming `expected` directly at naturally-checked nodes (`Func`, `Tuple`, `Metavar`).
 #[derive(Debug, Clone)]
 pub enum Mode {
     Infer,
@@ -53,8 +50,7 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// The expected type this mode carries — the elaboration-cache key's second
-    /// component (`None` in `Infer`).
+    /// The expected type this mode carries — the elaboration-cache key's second component (`None` in `Infer`).
     fn expected(&self) -> Option<Term> {
         match self {
             Mode::Check(expected) => Some(expected.clone()),
@@ -63,9 +59,7 @@ impl Mode {
     }
 }
 
-/// One dispatch of the [`elaborate`] driver: descend into a child node, or
-/// settle the current node with its un-restamped `(rebuilt, type)` result and
-/// the node it belongs to (for span restamping).
+/// One dispatch of the [`elaborate`] driver: descend into a child node, or settle the current node with its un-restamped `(rebuilt, type)` result and the node it belongs to (for span restamping).
 enum Step {
     Descend(Term, Mode),
     Settle(Term, (Term, Term)),
@@ -76,23 +70,9 @@ pub(crate) fn elaborate(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // The elaboration driver. Most nodes elaborate through the recursive
-    // `elaborate_subterm` (routed via the elaboration cache), their native
-    // depth tracking the written program's binder nesting. The exception is a
-    // *ground, all-explicit application*: its argument nesting is data-shaped (a
-    // string literal's `Utf8` derivation is one `more(c, st, t, rest)` link per
-    // byte), so recursing once per link would cost native stack in the data's
-    // length. Those are defunctionalized onto an explicit frame stack — the
-    // reducer's `PendingMatch` move, one level up — so the whole spine is
-    // absorbed by this one loop's `frames` vector at O(1) native depth per
-    // link. See `elaborate/apply.rs` for the frame and walk.
+    // The elaboration driver. Most nodes elaborate through the recursive `elaborate_subterm` (routed via the elaboration cache), their native depth tracking the written program's binder nesting. The exception is a *ground, all-explicit application*: its argument nesting is data-shaped (a string literal's `Utf8` derivation is one `more(c, st, t, rest)` link per byte), so recursing once per link would cost native stack in the data's length. Those are defunctionalized onto an explicit frame stack — the reducer's `PendingMatch` move, one level up — so the whole spine is absorbed by this one loop's `frames` vector at O(1) native depth per link. See `elaborate/apply.rs` for the frame and walk.
     //
-    // Span restamping stays at this boundary, outside the cache: each settled
-    // node's rebuilt term takes its own span (innermost-wins) before it feeds a
-    // parent frame, matching the recursive `check(rest)`. Errors drain and
-    // return rather than `?`-unwind: `locate` stamps the failing node's span
-    // first (deepest, first-wins) then each pending frame's, reproducing native
-    // unwinding's deepest-node report.
+    // Span restamping stays at this boundary, outside the cache: each settled node's rebuilt term takes its own span (innermost-wins) before it feeds a parent frame, matching the recursive `check(rest)`. Errors drain and return rather than `?`-unwind: `locate` stamps the failing node's span first (deepest, first-wins) then each pending frame's, reproducing native unwinding's deepest-node report.
     let mut frames: Vec<ElabFrame> = Vec::new();
     let mut work_term = term.clone();
     let mut work_mode = mode;
@@ -102,9 +82,7 @@ pub(crate) fn elaborate(
             Ok(step) => step,
             Err(error) => return Err(error.locate(work_term.span(), &frames)),
         };
-        // Drain: a settled result takes its own span (innermost-wins), then
-        // returns (no frame left) or resolves against the innermost pending
-        // frame, which itself settles or descends again.
+        // Drain: a settled result takes its own span (innermost-wins), then returns (no frame left) or resolves against the innermost pending frame, which itself settles or descends again.
         loop {
             match step {
                 Step::Descend(child_term, child_mode) => {
@@ -117,12 +95,7 @@ pub(crate) fn elaborate(
                         Some(span) => rebuilt.with_span(span),
                         None => rebuilt,
                     };
-                    // Obligation (V)'s seed. Every settled node passes here with
-                    // the type it settled at, which is the judgment `reach.rs`
-                    // used to re-derive from the finished term. Taken after the
-                    // restamp so the recorded term is the one that reaches the
-                    // module, and independent of `Mode` because `type_` is the
-                    // term's type whether it was checked or inferred.
+                    // Obligation (V)'s seed. Every settled node passes here with the type it settled at, which is the judgment `reach.rs` used to re-derive from the finished term. Taken after the restamp so the recorded term is the one that reaches the module, and independent of `Mode` because `type_` is the term's type whether it was checked or inferred.
                     context.record_checked(&rebuilt, &type_);
                     match frames.pop() {
                         None => return Ok((rebuilt, type_)),
@@ -145,11 +118,7 @@ pub(crate) fn elaborate(
 }
 
 impl Context {
-    /// Dispatch one node for the [`elaborate`] driver. A ground, all-explicit
-    /// application takes the iterative fast path (probe the cache, then start
-    /// its frame walk, pushing onto `frames`); every other node — and every
-    /// application the fast path declines — routes through the recursive
-    /// `elaborate_subterm` behind the elaboration cache, exactly as before.
+    /// Dispatch one node for the [`elaborate`] driver. A ground, all-explicit application takes the iterative fast path (probe the cache, then start its frame walk, pushing onto `frames`); every other node — and every application the fast path declines — routes through the recursive `elaborate_subterm` behind the elaboration cache, exactly as before.
     fn dispatch_node(
         &mut self,
         term: &Term,
@@ -182,10 +151,7 @@ impl Context {
 }
 
 impl Error {
-    /// Locate a draining elaboration error: stamp the failing node's span first
-    /// — deepest, and [`Error::at`] is first-wins — then each pending frame
-    /// innermost-first (the top of the stack is the deepest pending
-    /// application), reproducing the span native `?`-unwinding would report.
+    /// Locate a draining elaboration error: stamp the failing node's span first — deepest, and [`Error::at`] is first-wins — then each pending frame innermost-first (the top of the stack is the deepest pending application), reproducing the span native `?`-unwinding would report.
     fn locate(self, span: Option<Span>, frames: &[ElabFrame]) -> Self {
         let mut error = self.at_opt(span);
         for frame in frames.iter().rev() {
@@ -200,10 +166,7 @@ fn elaborate_subterm(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // Synthesizable nodes compute their type and hit the `expect` turnaround in
-    // `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`)
-    // consume `mode` directly and return early. Every arm returns the rebuilt
-    // term — binders re-closed, lambda domains solved (§9).
+    // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved (§9).
     let (rebuilt, type_) = match &**term {
         Subterm::Type(level) => (
             term.clone(),

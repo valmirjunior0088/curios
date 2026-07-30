@@ -1,13 +1,6 @@
-//! The erasure environment: the maps from Core identities to the arena
-//! identities they lower to.
+//! The erasure environment: the maps from Core identities to the arena identities they lower to.
 //!
-//! Opened binders receive globally fresh Core labels and top-level names are
-//! module-unique, so one flat value map is unambiguous without scope
-//! save/restore. The schema maps memoize the arena identities Core
-//! declarations lower to — registered lazily on first use, when the
-//! dominance-ordered item chain guarantees the declaration's dependencies are
-//! already defined — so a type constructed or matched at many sites shares
-//! one schema.
+//! Opened binders receive globally fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore. The schema maps memoize the arena identities Core declarations lower to — registered lazily on first use, when the dominance-ordered item chain guarantees the declaration's dependencies are already defined — so a type constructed or matched at many sites shares one schema.
 
 use {
     super::BTreeMap,
@@ -23,18 +16,11 @@ use {
 pub(super) enum Binding {
     /// The operand holding the name's erased value.
     Atom(curios_ersd::Atom),
-    /// A dropped (erasable) binder — a proof or a type with no runtime value.
-    /// Referencing it yields the unit constant and records the dangle for the
-    /// function-body collapse.
+    /// A dropped (erasable) binder — a proof or a type with no runtime value. Referencing it yields the unit constant and records the dangle for the function-body collapse.
     Dropped,
 }
 
-/// A registered structure's layout. The mask is the declaration's opaque
-/// signature mask (one flag per declared field, `true` where the field is
-/// erased), computed once with the parameters abstract, so construction and
-/// projection agree on the relevant-field arithmetic at every instantiation.
-/// `schema` is `None` for a newtype — a single relevant field collapses to
-/// its bare value, with no product node.
+/// A registered structure's layout. The mask is the declaration's opaque signature mask (one flag per declared field, `true` where the field is erased), computed once with the parameters abstract, so construction and projection agree on the relevant-field arithmetic at every instantiation. `schema` is `None` for a newtype — a single relevant field collapses to its bare value, with no product node.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -46,15 +32,13 @@ pub(super) struct ProductRow {
 }
 
 impl ProductRow {
-    /// The runtime projection index of declared field `index`: the count of
-    /// relevant fields before it.
+    /// The runtime projection index of declared field `index`: the count of relevant fields before it.
     pub(super) fn relevant_before(&self, index: usize) -> u32 {
         self.mask[..index].iter().filter(|&&erased| !erased).count() as u32
     }
 }
 
-/// A registered constructor: its arena identity and the declaration's opaque
-/// signature mask over its payload fields (`true` where a field is erased).
+/// A registered constructor: its arena identity and the declaration's opaque signature mask over its payload fields (`true` where a field is erased).
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -65,8 +49,7 @@ pub(super) struct ConstructorRow {
     pub(super) mask: Vec<bool>,
 }
 
-/// A registered inductive: its variant family and its constructors in
-/// runtime-tag (registry) order.
+/// A registered inductive: its variant family and its constructors in runtime-tag (registry) order.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -86,9 +69,7 @@ pub(super) struct Environment {
     values: BTreeMap<Free, Binding>,
     struct_decls: BTreeMap<Global, ProductRow>,
     induct_decls: BTreeMap<Global, FamilyRow>,
-    /// Anonymous tuple schemas, interned by relevant-field width — an
-    /// arity-`n` product is one untyped layout regardless of which tuple
-    /// built it.
+    /// Anonymous tuple schemas, interned by relevant-field width — an arity-`n` product is one untyped layout regardless of which tuple built it.
     tuples: BTreeMap<usize, curios_ersd::ProductId>,
 }
 

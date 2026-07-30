@@ -1,23 +1,13 @@
-//! Recursive groups — local `rec` blocks, rec-member selections, and the
-//! top-level recursive items.
+//! Recursive groups — local `rec` blocks, rec-member selections, and the top-level recursive items.
 //!
-//! Members are classified syntactically: a member whose body is a lambda is a
-//! function member (a reserved arena function), anything else is an eagerly
-//! computed member (a value with an initializer block). Every member is
-//! pre-bound before any body is erased, so mutual references resolve; source
-//! order is preserved as the eager initialization order. An all-function
-//! group erases to a `Functions` statement, a mixed or value-only group to a
-//! recursive group — and the representation's verifier owns the rejection of
-//! the recursion classes the language does not admit (a computed member
-//! evaluating itself or a later member), so no diagnostic is re-derived here.
+//! Members are classified syntactically: a member whose body is a lambda is a function member (a reserved arena function), anything else is an eagerly computed member (a value with an initializer block). Every member is pre-bound before any body is erased, so mutual references resolve; source order is preserved as the eager initialization order. An all-function group erases to a `Functions` statement, a mixed or value-only group to a recursive group — and the representation's verifier owns the rejection of the recursion classes the language does not admit (a computed member evaluating itself or a later member), so no diagnostic is re-derived here.
 
 use {
     super::{Context, Error, Lowering, Outcome, Rec, RecMember, Scope, Subterm, Term},
     curios_core::Free,
 };
 
-/// One classified member of a recursive group, pre-bound for mutual
-/// visibility before any body is erased.
+/// One classified member of a recursive group, pre-bound for mutual visibility before any body is erased.
 enum Member {
     Function(curios_ersd::FunctionId),
     Computed(curios_ersd::ValueId),
@@ -64,8 +54,7 @@ impl Lowering {
         })
     }
 
-    /// Erase a bare rec-member selection: the whole group is introduced, then
-    /// the selected member's operand is the result.
+    /// Erase a bare rec-member selection: the whole group is introduced, then the selected member's operand is the result.
     pub(super) fn erase_rec_member(
         &mut self,
         context: &mut Context,
@@ -83,8 +72,7 @@ impl Lowering {
         self.erase_rec(context, &rec, expected, hint)
     }
 
-    /// Erase a top-level recursive item. Bindings persist in the base frame
-    /// (no scoping frame), exactly like `let` items.
+    /// Erase a top-level recursive item. Bindings persist in the base frame (no scoping frame), exactly like `let` items.
     pub(super) fn erase_rec_item(
         &mut self,
         context: &mut Context,
@@ -119,10 +107,7 @@ impl Lowering {
         self.emit_group(context, &names, &hints, &members)
     }
 
-    /// Pre-bind every member, erase function bodies and computed
-    /// initializers, and emit the group statement (`Functions` when every
-    /// member is a function, a recursive group otherwise). Statement emission
-    /// falls through to the top-level item list when no block is open.
+    /// Pre-bind every member, erase function bodies and computed initializers, and emit the group statement (`Functions` when every member is a function, a recursive group otherwise). Statement emission falls through to the top-level item list when no block is open.
     fn emit_group(
         &mut self,
         context: &mut Context,

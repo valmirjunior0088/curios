@@ -1,14 +1,6 @@
-//! The lowering driver: the entry point, the expression walk, and the binding
-//! forms.
+//! The lowering driver: the entry point, the expression walk, and the binding forms.
 //!
-//! The walk mirrors the legacy recursive erasure's control structure (its
-//! stack behavior is the no-regression baseline) but produces operands under
-//! the operand law instead of terms: [`Outcome::Emitted`] carries the atom a
-//! subexpression erased to, [`Outcome::Diverged`] carries the terminator that
-//! seals the innermost block when the subexpression provably never yields a
-//! value. Every non-atomic computation is bound by the builder at the point
-//! the walk reaches it, so evaluation order is statement order by
-//! construction.
+//! The walk mirrors the legacy recursive erasure's control structure (its stack behavior is the no-regression baseline) but produces operands under the operand law instead of terms: [`Outcome::Emitted`] carries the atom a subexpression erased to, [`Outcome::Diverged`] carries the terminator that seals the innermost block when the subexpression provably never yields a value. Every non-atomic computation is bound by the builder at the point the walk reaches it, so evaluation order is statement order by construction.
 
 use {
     super::{
@@ -27,15 +19,12 @@ pub(super) enum Outcome {
     Diverged(curios_ersd::Terminator),
 }
 
-/// The erasure state: the checked builder constructing the module and the
-/// environment mapping Core names to their operands.
+/// The erasure state: the checked builder constructing the module and the environment mapping Core names to their operands.
 #[derive(Default)]
 pub(super) struct Lowering {
     pub(super) builder: curios_ersd::ErsdBuilder,
     pub(super) environment: Environment,
-    /// Dropped binder labels referenced from a retained position. Consumed by
-    /// the function-body collapse: a proof-valued body that dangles a binder
-    /// its own lambda dropped is replaced by the unit constant.
+    /// Dropped binder labels referenced from a retained position. Consumed by the function-body collapse: a proof-valued body that dangles a binder its own lambda dropped is replaced by the unit constant.
     pub(super) dangled: BTreeSet<Free>,
 }
 
@@ -60,29 +49,16 @@ impl UniverseErased<Module> {
         Ok(Self(project_module(module)))
     }
 
-    /// Project a module whose universes were already validated by the boundary
-    /// that produced it, skipping the check rather than repeating it.
+    /// Project a module whose universes were already validated by the boundary that produced it, skipping the check rather than repeating it.
     ///
-    /// The archived prelude is the case this exists for: `curios-prelude`
-    /// validates it as it restores, which is the point where untrusted bytes
-    /// become a `Module`, and the value is immutable from then on. Re-validating
-    /// at every use walked the whole standard library a second time per
-    /// compilation — inside the erasure context's step budget, at that —
-    /// to re-derive an answer the restore already had.
+    /// The archived prelude is the case this exists for: `curios-prelude` validates it as it restores, which is the point where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating at every use walked the whole standard library a second time per compilation — inside the erasure context's step budget, at that — to re-derive an answer the restore already had.
     pub(super) fn project_validated(module: &Module) -> Self {
         Self(project_module(module))
     }
 
-    /// Project a module that extends an already-projected `prefix`, validating
-    /// and projecting only what it adds.
+    /// Project a module that extends an already-projected `prefix`, validating and projecting only what it adds.
     ///
-    /// `elaborate_module_with_prelude` returns the prelude's declarations
-    /// concatenated with the user's, so the merged module's leading items *are*
-    /// the prelude's — cloned, not re-elaborated. Projecting it whole therefore
-    /// walked the entire standard library a second time to produce terms
-    /// [`Lowering::erase_items`] then skips. Splicing the prefix back in keeps
-    /// the item indices the skip count relies on while validating and rebuilding
-    /// only the suffix.
+    /// `elaborate_module_with_prelude` returns the prelude's declarations concatenated with the user's, so the merged module's leading items *are* the prelude's — cloned, not re-elaborated. Projecting it whole therefore walked the entire standard library a second time to produce terms [`Lowering::erase_items`] then skips. Splicing the prefix back in keeps the item indices the skip count relies on while validating and rebuilding only the suffix.
     pub(super) fn project_extending(prefix: &Self, module: &Module) -> Result<Self, Error> {
         let prefix = &prefix.0;
         let residual = Module {
@@ -113,8 +89,7 @@ impl UniverseErased<Module> {
     }
 }
 
-/// The entries `module` declares that `prefix` does not — the user's own, given
-/// that the merged module's tables are the prelude's extended in place.
+/// The entries `module` declares that `prefix` does not — the user's own, given that the merged module's tables are the prelude's extended in place.
 fn added<T: Clone>(
     module: &BTreeMap<Global, T>,
     prefix: &BTreeMap<Global, T>,
@@ -143,20 +118,14 @@ fn project_definition(definition: &Definition) -> Definition {
         universe_context: Default::default(),
         island: definition.island.clone(),
         root: definition.root,
-        // Totality is elaboration-only metadata, projected out here alongside
-        // the universe context: the gates run before erasure and nothing past
-        // it reads the flag, so archiving a second copy per definition would
-        // pay for a fact no consumer of this representation asks.
+        // Totality is elaboration-only metadata, projected out here alongside the universe context: the gates run before erasure and nothing past it reads the flag, so archiving a second copy per definition would pay for a fact no consumer of this representation asks.
         totality: Default::default(),
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
     }
 }
 
-/// Build the representation sealed by [`UniverseErased<Module>`]. Universe
-/// arguments have no runtime identity; projecting them once also prevents
-/// reduction from repeatedly specializing polymorphic Core bodies while
-/// lowering them.
+/// Build the representation sealed by [`UniverseErased<Module>`]. Universe arguments have no runtime identity; projecting them once also prevents reduction from repeatedly specializing polymorphic Core bodies while lowering them.
 fn project_module(module: &Module) -> Module {
     Module {
         items: module
@@ -164,10 +133,7 @@ fn project_module(module: &Module) -> Module {
             .iter()
             .map(|item| match item {
                 Item::Let(definition) => Item::Let(project_definition(definition)),
-                // Projected in place. Opening the group and re-closing it
-                // rebuilds every node twice over and discards every memoized
-                // derivation on the way, where the rewrite itself is uniform
-                // under the group's own binders and needs neither.
+                // Projected in place. Opening the group and re-closing it rebuilds every node twice over and discards every memoized derivation on the way, where the rewrite itself is uniform under the group's own binders and needs neither.
                 Item::Rec(rec) => Item::Rec(rec.projected()),
             })
             .collect(),
@@ -199,8 +165,7 @@ fn project_module(module: &Module) -> Module {
                         module: declaration.module.clone(),
                         root: declaration.root,
                         rep_public: declaration.rep_public,
-                        // Polarity is elaboration-only metadata, projected out here
-                        // alongside the universe context.
+                        // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
                     },
                 )
@@ -220,8 +185,7 @@ fn project_module(module: &Module) -> Module {
                         module: declaration.module.clone(),
                         root: declaration.root,
                         rep_public: declaration.rep_public,
-                        // Polarity is elaboration-only metadata, projected out here
-                        // alongside the universe context.
+                        // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
                     },
                 )
@@ -250,10 +214,7 @@ fn project_module(module: &Module) -> Module {
     }
 }
 
-/// Erase a whole meta-free [`Module`] into a verified arena
-/// [`Module`]. Top-level items are erased in dominance order as the
-/// module's item chain; the entrypoint body becomes the entry block, checked
-/// against `expected`.
+/// Erase a whole meta-free [`Module`] into a verified arena [`Module`]. Top-level items are erased in dominance order as the module's item chain; the entrypoint body becomes the entry block, checked against `expected`.
 pub fn erase_module(
     context: &mut Context,
     module: &Module,
@@ -262,11 +223,9 @@ pub fn erase_module(
     curios_profile::profile!("erase_module");
     let module = UniverseErased::<Module>::project(module)?.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
-    // Erasure is re-derivation of elaborated terms, never surface elaboration,
-    // so the representation-privacy checks are suppressed for the whole walk.
+    // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
-        // Erasure runs with its own `Context`; seed the registries the
-        // re-derived types consult before any item does.
+        // Erasure runs with its own `Context`; seed the registries the re-derived types consult before any item does.
         for (name, induct_decl) in &module.induct_decls {
             context.register_induct(name, induct_decl.clone())?;
         }
@@ -282,9 +241,7 @@ pub fn erase_module(
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
 
-        // The verifier is the rejection point for the recursion classes the
-        // language does not admit (a computed-only evaluation cycle); any other
-        // failure here is an erasure bug, indistinguishable at this boundary.
+        // The verifier is the rejection point for the recursion classes the language does not admit (a computed-only evaluation cycle); any other failure here is an erasure bug, indistinguishable at this boundary.
         lowering
             .builder
             .finalize()
@@ -293,8 +250,7 @@ pub fn erase_module(
 }
 
 impl Lowering {
-    /// Seal the innermost open block: a computed value returns, a divergence
-    /// keeps its own terminator.
+    /// Seal the innermost open block: a computed value returns, a divergence keeps its own terminator.
     pub(super) fn seal(&mut self, outcome: Outcome) -> curios_ersd::BlockId {
         match outcome {
             Outcome::Emitted(atom) => self
@@ -304,8 +260,7 @@ impl Lowering {
         }
     }
 
-    /// Bind a compound right-hand side in the innermost open block (or as a
-    /// top-level item) and hand back its result operand.
+    /// Bind a compound right-hand side in the innermost open block (or as a top-level item) and hand back its result operand.
     pub(super) fn bind(&mut self, hint: Option<&str>, rhs: curios_ersd::Rhs) -> Outcome {
         let result = self.builder.let_value(hint.map(str::to_string), rhs);
         Outcome::Emitted(curios_ersd::Atom::Value(result))
@@ -316,16 +271,9 @@ impl Lowering {
         curios_ersd::Atom::Constant(self.builder.constant(curios_ersd::Constant::Unit))
     }
 
-    /// Erase each value against its telescope domain under `mask`, opening the
-    /// telescope with the un-erased value so later dependent domains stay
-    /// correct. Erasable slots are dropped entirely; kept slots erase through
-    /// [`kept_operand`](Self::kept_operand).
+    /// Erase each value against its telescope domain under `mask`, opening the telescope with the un-erased value so later dependent domains stay correct. Erasable slots are dropped entirely; kept slots erase through [`kept_operand`](Self::kept_operand).
     ///
-    /// The one walk that consumes a signature mask, shared by every site that
-    /// fills a telescope: struct, variant, and tuple construction, and the
-    /// argument list of an application. Its slot-for-slot agreement with
-    /// [`erasure_mask`](super::erasure_mask) is what fixes a function's runtime
-    /// arity, so it must stay a single implementation.
+    /// The one walk that consumes a signature mask, shared by every site that fills a telescope: struct, variant, and tuple construction, and the argument list of an application. Its slot-for-slot agreement with [`erasure_mask`](super::erasure_mask) is what fixes a function's runtime arity, so it must stay a single implementation.
     pub(super) fn masked_fields<B: Bound>(
         &mut self,
         context: &mut Context,
@@ -351,9 +299,7 @@ impl Lowering {
         Ok(Ok(atoms))
     }
 
-    /// Erase one expression to an operand. `expected` is the type the
-    /// expression was checked against, consumed where a runtime shape must be
-    /// read off it; `hint` names the statement when this expression binds one.
+    /// Erase one expression to an operand. `expected` is the type the expression was checked against, consumed where a runtime shape must be read off it; `hint` names the statement when this expression binds one.
     pub(super) fn walk(
         &mut self,
         context: &mut Context,
@@ -361,8 +307,7 @@ impl Lowering {
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        // Attach this term's span to any error from erasing it, exactly like
-        // the legacy wrapper.
+        // Attach this term's span to any error from erasing it, exactly like the legacy wrapper.
         let result = self.walk_subterm(context, term, expected, hint);
         match term.span() {
             Some(span) => result.map_err(|error| error.at(span)),
@@ -379,8 +324,7 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         match &**term {
             Subterm::Prim(primitive) => prim::erase_prim(self, context, primitive, expected, hint),
-            // Type formers carry nothing to lower; their value is the unit of
-            // a retained-but-erased slot.
+            // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.
             Subterm::Type(_)
             | Subterm::Prop
             | Subterm::FuncType(_)
@@ -420,9 +364,7 @@ impl Lowering {
         }
     }
 
-    /// Erase a let block binding for binding, in written order: each value is
-    /// erased once (the operand law), defined in the Core context so dependent
-    /// types reduce through it, and mapped to its operand; then the tail.
+    /// Erase a let block binding for binding, in written order: each value is erased once (the operand law), defined in the Core context so dependent types reduce through it, and mapped to its operand; then the tail.
     fn erase_let(
         &mut self,
         context: &mut Context,
@@ -439,20 +381,11 @@ impl Lowering {
                     (local.type_().release(&refs), local.value().release(&refs))
                 };
 
-                // The arena identity uniquifies by index, so the hint stays
-                // the clean source label; the `#`-uniquified fresh name is
-                // only the Core context key.
+                // The arena identity uniquifies by index, so the hint stays the clean source label; the `#`-uniquified fresh name is only the Core context key.
                 let label = binding.tail.hint_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
-                // A proof- or type-valued binding is walked, not collapsed: a
-                // written binding evaluates under call-by-value even when its
-                // *result* is erased, so an effectful never-returning body
-                // (`let _ = /std/proc/exit(3); …`) still runs. The erased
-                // residue a proof body can produce — projections of erased
-                // fields, dropped binders, applications of erased content —
-                // collapses to the unit constant at its own site (see
-                // `erase_apply` and `erase_proj`).
+                // A proof- or type-valued binding is walked, not collapsed: a written binding evaluates under call-by-value even when its *result* is erased, so an effectful never-returning body (`let _ = /std/proc/exit(3); …`) still runs. The erased residue a proof body can produce — projections of erased fields, dropped binders, applications of erased content — collapses to the unit constant at its own site (see `erase_apply` and `erase_proj`).
                 let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
                 context.define_assuming(&name, &type_, &value, None);
@@ -466,12 +399,7 @@ impl Lowering {
     }
 }
 
-/// A replayable prefix: the fixed prelude erased into an unfinished arena
-/// module (items only, no entry), together with the erasure environment that
-/// maps prelude Core names to their arena operands. Archived by
-/// `curios-prelude` behind the `archive` feature and restored there once per
-/// thread; every production compile consumes an owned clone, so the prelude
-/// is never re-erased from source.
+/// A replayable prefix: the fixed prelude erased into an unfinished arena module (items only, no entry), together with the erasure environment that maps prelude Core names to their arena operands. Archived by `curios-prelude` behind the `archive` feature and restored there once per thread; every production compile consumes an owned clone, so the prelude is never re-erased from source.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -489,15 +417,13 @@ pub struct ErasedPrelude {
 }
 
 impl ErasedPrelude {
-    /// Whether the prefix holds any erased items — the freshness probe the
-    /// archive tests use.
+    /// Whether the prefix holds any erased items — the freshness probe the archive tests use.
     pub fn is_empty(&self) -> bool {
         self.module.items().is_empty()
     }
 }
 
-/// Erase the fixed prelude's items into a replayable prefix. The prelude
-/// module carries no entrypoint of its own; only its item chain is erased.
+/// Erase the fixed prelude's items into a replayable prefix. The prelude module carries no entrypoint of its own; only its item chain is erased.
 pub fn erase_prelude_prefix(
     context: &mut Context,
     prelude: &Module,
@@ -521,20 +447,9 @@ pub fn erase_prelude_prefix(
     })
 }
 
-/// Replay an erased prelude prefix and erase only the user suffix and
-/// entrypoint body. The Core context is re-seeded with the prelude's
-/// definitions (so the suffix's re-derived types reduce through them), the
-/// builder resumes over the restored arenas, and the suffix items erase in
-/// dominance order among themselves — every prelude reference is already
-/// bound.
+/// Replay an erased prelude prefix and erase only the user suffix and entrypoint body. The Core context is re-seeded with the prelude's definitions (so the suffix's re-derived types reduce through them), the builder resumes over the restored arenas, and the suffix items erase in dominance order among themselves — every prelude reference is already bound.
 ///
-/// Two things about `prelude` are the caller's to guarantee, and both hold for
-/// the archived prelude that `curios-prelude` restores — the only prelude this
-/// is called with. Its universes are taken as already validated, at the restore
-/// boundary where the bytes became a `Module`; and `module` must be it extended
-/// in place, its items the prelude's own followed by the user's, which is what
-/// `elaborate_module_with_prelude` returns. Both are what let this skip
-/// re-deriving the standard library on every compilation.
+/// Two things about `prelude` are the caller's to guarantee, and both hold for the archived prelude that `curios-prelude` restores — the only prelude this is called with. Its universes are taken as already validated, at the restore boundary where the bytes became a `Module`; and `module` must be it extended in place, its items the prelude's own followed by the user's, which is what `elaborate_module_with_prelude` returns. Both are what let this skip re-deriving the standard library on every compilation.
 pub fn erase_module_with_prelude(
     context: &mut Context,
     prelude: &Module,
@@ -556,9 +471,7 @@ pub fn erase_module_with_prelude(
             context.register_struct(name, struct_decl.clone())?;
         }
 
-        // Re-seed the Core context with the prelude's definitions, mirroring
-        // the legacy replay: later items and the entrypoint reduce through
-        // them.
+        // Re-seed the Core context with the prelude's definitions, mirroring the legacy replay: later items and the entrypoint reduce through them.
         for item in &prelude.items {
             match item {
                 super::Item::Let(definition) => {

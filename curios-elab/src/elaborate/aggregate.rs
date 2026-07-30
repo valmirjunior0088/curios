@@ -23,10 +23,7 @@ pub(super) fn elaborate_tuple_type(
         }
     }
 
-    // Labels are part of the type's identity and the target of `.label`
-    // resolution, so they must be unique and survive the rebuild verbatim
-    // (the walk gensyms its binders to keep nested frames collision-free;
-    // `relabel` restores the written names afterwards).
+    // Labels are part of the type's identity and the target of `.label` resolution, so they must be unique and survive the rebuild verbatim (the walk gensyms its binders to keep nested frames collision-free; `relabel` restores the written names afterwards).
     let source_labels = tt.telescope.labels();
     for (position, label) in source_labels.iter().enumerate() {
         if !label.is_empty() && source_labels[..position].contains(label) {
@@ -41,8 +38,7 @@ pub(super) fn elaborate_tuple_type(
 
     let rebuilt: Term = Subterm::TupleType(TupleType { telescope }).into();
 
-    // A tuple type's sort: `Prop` when every field is a proposition (`{}` is the
-    // base case), `Type` otherwise — so a record of proofs checks against `Prop`.
+    // A tuple type's sort: `Prop` when every field is a proposition (`{}` is the base case), `Type` otherwise — so a record of proofs checks against `Prop`.
     let sort = sort_term(context, &rebuilt)?;
     Ok((rebuilt, sort))
 }
@@ -53,9 +49,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    // Both tuples and structs project; the field telescope is the tuple type's
-    // own, or the struct's (instantiated at the head type's parameters). A struct
-    // additionally enforces representation privacy here (§7).
+    // Both tuples and structs project; the field telescope is the tuple type's own, or the struct's (instantiated at the head type's parameters). A struct additionally enforces representation privacy here (§7).
     let telescope = match &*head_type {
         Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
         Subterm::StructType(StructType {
@@ -72,12 +66,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
                 universes,
             )?;
 
-            // The use-site module is the enclosing item's qualifier prefix
-            // (`Context::island`, set per item by `elaborate_module`). A
-            // private representation is transparent within its declaring
-            // module's subtree, so the check is containment, not equality: the
-            // declaring module and its descendants may open it, its ancestors
-            // and siblings may not.
+            // The use-site module is the enclosing item's qualifier prefix (`Context::island`, set per item by `elaborate_module`). A private representation is transparent within its declaring module's subtree, so the check is containment, not equality: the declaring module and its descendants may open it, its ancestors and siblings may not.
             if !struct_decl.rep_public
                 && context
                     .island()
@@ -95,10 +84,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
         other => return Err(Error::not_a_tuple(other.clone())),
     };
 
-    // A label projection resolves to its position here and is rebuilt
-    // positionally — nothing below elaboration ever sees a label. Lookup is
-    // unambiguous because duplicate labels are rejected when the tuple type
-    // itself elaborates.
+    // A label projection resolves to its position here and is rebuilt positionally — nothing below elaboration ever sees a label. Lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates.
     let index = match field {
         Field::Index(index) => *index,
         Field::Label(label) => {
@@ -106,9 +92,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             match labels.iter().position(|l| l == label) {
                 Some(index) => index,
                 None => {
-                    // A concept's superclass fields carry a minted internal
-                    // label and are not projectable by name — never surface
-                    // them among the available fields.
+                    // A concept's superclass fields carry a minted internal label and are not projectable by name — never surface them among the available fields.
                     let supers: Vec<usize> = match &*head_type {
                         Subterm::StructType(StructType { name, .. }) => context
                             .concept(name)
@@ -141,10 +125,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     Ok((Term::proj(head, index), field_type))
 }
 
-/// Type a primitive inductive type against its registry entry: the parameters
-/// and indices are checked pointwise (dependently) as one flat argument list
-/// through the declaration's full index telescope (whose leading binders are
-/// the parameters), and the whole node is a `Type`.
+/// Type a primitive inductive type against its registry entry: the parameters and indices are checked pointwise (dependently) as one flat argument list through the declaration's full index telescope (whose leading binders are the parameters), and the whole node is a `Type`.
 pub(super) fn elaborate_induct_type(
     context: &mut Context,
     ut: &InductType,
@@ -196,10 +177,7 @@ pub(super) fn elaborate_induct_type(
     ))
 }
 
-/// Type a primitive constructor value against its registry signature: the
-/// instantiated parameters and the payload are checked through the
-/// constructor's full telescope, whose terminal gives the constructed
-/// `InductType`.
+/// Type a primitive constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`.
 pub(super) fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,

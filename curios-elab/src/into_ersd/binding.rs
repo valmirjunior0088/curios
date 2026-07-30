@@ -1,9 +1,6 @@
 //! Top-level items: the dominance-ordered item chain.
 //!
-//! Items become statements of the module's top-level item list, evaluated
-//! eagerly in emission order. Bindings persist in the Core base frame (no
-//! scoping frame), so later items and the entrypoint reduce through them —
-//! top-level cross-references are already free names.
+//! Items become statements of the module's top-level item list, evaluated eagerly in emission order. Bindings persist in the Core base frame (no scoping frame), so later items and the entrypoint reduce through them — top-level cross-references are already free names.
 
 use {
     super::{BTreeMap, BTreeSet, Bound, Context, Error, Item, Lowering, Module, Outcome},
@@ -11,9 +8,7 @@ use {
 };
 
 impl Lowering {
-    /// Erase every top-level item from `start` on, in dominance order among
-    /// themselves (see [`dominance_order`]); items before `start` are an
-    /// already-erased prefix whose bindings the environment carries.
+    /// Erase every top-level item from `start` on, in dominance order among themselves (see [`dominance_order`]); items before `start` are an already-erased prefix whose bindings the environment carries.
     pub(super) fn erase_items(
         &mut self,
         context: &mut Context,
@@ -32,11 +27,7 @@ impl Lowering {
                     )?;
                     let atom = match outcome {
                         Outcome::Emitted(atom) => atom,
-                        // A diverging initializer (a vacuous elimination) has
-                        // no result operand; give it the computed-member
-                        // encoding — a value whose init block seals with the
-                        // divergence terminator — so the program traps at
-                        // initialization, matching the entry-block convention.
+                        // A diverging initializer (a vacuous elimination) has no result operand; give it the computed-member encoding — a value whose init block seals with the divergence terminator — so the program traps at initialization, matching the entry-block convention.
                         Outcome::Diverged(terminator) => {
                             let value = self.builder.value(Some(definition.name.symbol()));
                             self.builder.open_block();
@@ -65,22 +56,11 @@ impl Lowering {
     }
 }
 
-/// The module's top-level items in dominance order — every item precedes the
-/// items that reference it — as indices into `module.items`.
+/// The module's top-level items in dominance order — every item precedes the items that reference it — as indices into `module.items`.
 ///
-/// The surface-to-core lowering already sorts the items it can see, but a
-/// witness reference is only spliced into its consumer during elaboration,
-/// after that sort has run — so a witness definition can sit after a consumer
-/// in the flat list. Eager erasure resolves every reference to an
-/// already-bound operand as it threads the chain, so it needs a true dominance
-/// order: the same Kahn sort, re-run over the elaborated terms whose free
-/// variables now include the spliced witness references. (The legacy path
-/// resolves top-level names lazily against one global environment and never
-/// needed this.)
+/// The surface-to-core lowering already sorts the items it can see, but a witness reference is only spliced into its consumer during elaboration, after that sort has run — so a witness definition can sit after a consumer in the flat list. Eager erasure resolves every reference to an already-bound operand as it threads the chain, so it needs a true dominance order: the same Kahn sort, re-run over the elaborated terms whose free variables now include the spliced witness references. (The legacy path resolves top-level names lazily against one global environment and never needed this.)
 ///
-/// Independent items keep their flat order (lowest-index-ready tiebreak). A
-/// value cycle across top-level items is unexpressible, so the stall fallback
-/// that emits the lowest remaining item only guarantees termination.
+/// Independent items keep their flat order (lowest-index-ready tiebreak). A value cycle across top-level items is unexpressible, so the stall fallback that emits the lowest remaining item only guarantees termination.
 fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
     let items = &module.items[start..];
     let count = items.len();
@@ -95,8 +75,7 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
         })
         .collect::<BTreeMap<Free, usize>>();
 
-    // A reference to an item before `start` is already bound and carries no
-    // edge; only references among the suffix items order the sort.
+    // A reference to an item before `start` is already bound and carries no edge; only references among the suffix items order the sort.
     let dependencies = items
         .iter()
         .enumerate()
@@ -122,10 +101,7 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
     order.into_iter().map(|index| index + start).collect()
 }
 
-/// Every global name an item references: the free variables of its types and
-/// bodies, plus — for an item declaring a registered inductive or struct — the
-/// free variables of that registry entry's telescopes, whose field and index
-/// types live nowhere in the type former's own normal-form body.
+/// Every global name an item references: the free variables of its types and bodies, plus — for an item declaring a registered inductive or struct — the free variables of that registry entry's telescopes, whose field and index types live nowhere in the type former's own normal-form body.
 fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<Free> {
     let mut names = BTreeSet::new();
     match item {

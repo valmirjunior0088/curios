@@ -100,9 +100,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
     let m = context.fresh(Some("m"));
     let x = context.fresh(Some("x"));
 
-    // Dispatch inspects the reduced head's `Variant`; the arm's binder is
-    // bound call-by-name to the flat projection `head.1`, which then reduces
-    // to the payload component.
+    // Dispatch inspects the reduced head's `Variant`; the arm's binder is bound call-by-name to the flat projection `head.1`, which then reduces to the payload component.
     let term: Term = Term::induct_match(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
@@ -121,9 +119,7 @@ fn reduce_inductive_match_absent_tag_takes_default() {
     let mut context = context();
     let m = context.fresh(Some("m"));
 
-    // The scrutinee is `some(42)`, but only `none` has an explicit arm; the
-    // `some` tag is absent from the cases, so dispatch falls through to the
-    // binding-free `| _ =>` default (no payload projected).
+    // The scrutinee is `some(42)`, but only `none` has an explicit arm; the `some` tag is absent from the cases, so dispatch falls through to the binding-free `| _ =>` default (no payload projected).
     let term: Term = Term::induct_match_default(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
@@ -141,8 +137,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
     let m = context.fresh(Some("m"));
     let x = context.fresh(Some("x"));
 
-    // With the `some` arm present, dispatch selects it (binding the payload)
-    // rather than the default — the default is only for absent tags.
+    // With the `some` arm present, dispatch selects it (binding the payload) rather than the default — the default is only for absent tags.
     let term: Term = Term::induct_match_default(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
@@ -227,10 +222,7 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
 
 #[test]
 fn reduce_let_binds_each_value_to_its_own_slot() {
-    // Two distinct bindings referenced together in the tail: pins the positional
-    // correctness of `reduce_let`'s environment open. The tail is `(λ p q. q) a b`,
-    // so the result is `b`'s value — and only if `a`/`b` land in the right slots.
-    // A transposed open would beta-reduce to `a`'s value instead.
+    // Two distinct bindings referenced together in the tail: pins the positional correctness of `reduce_let`'s environment open. The tail is `(λ p q. q) a b`, so the result is `b`'s value — and only if `a`/`b` land in the right slots. A transposed open would beta-reduce to `a`'s value instead.
     let mut context = context();
     let p = context.fresh(Some("p"));
     let q = context.fresh(Some("q"));
@@ -258,9 +250,7 @@ fn reduce_let_binds_each_value_to_its_own_slot() {
 
 #[test]
 fn reduce_let_shadowing_tail_picks_innermost() {
-    // `let x = 3; let x = 7; x` — two bindings share the name `x`. The flat
-    // block is built by name-based `capture`, so the tail's `x` must bind to the
-    // *innermost* binding (7), not the shadowed outer one (3).
+    // `let x = 3; let x = 7; x` — two bindings share the name `x`. The flat block is built by name-based `capture`, so the tail's `x` must bind to the *innermost* binding (7), not the shadowed outer one (3).
     let mut context = context();
     let x_binder = context.fresh(Some("x"));
 
@@ -277,10 +267,7 @@ fn reduce_let_shadowing_tail_picks_innermost() {
 
 #[test]
 fn reduce_let_shadowing_value_sees_the_outer_binding() {
-    // `let x = 5; let x = x; x` — the middle binding's value is the *outer* `x`,
-    // since a `let` is non-recursive. Merging must leave that reference free so
-    // the enclosing binder captures it to the first binding, not to itself: a
-    // self-capture would define `x := x` and diverge instead of yielding 5.
+    // `let x = 5; let x = x; x` — the middle binding's value is the *outer* `x`, since a `let` is non-recursive. Merging must leave that reference free so the enclosing binder captures it to the first binding, not to itself: a self-capture would define `x := x` and diverge instead of yielding 5.
     let mut context = context();
     let x_binder = context.fresh(Some("x"));
 
@@ -302,12 +289,7 @@ fn reduce_let_shadowing_value_sees_the_outer_binding() {
 
 #[test]
 fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
-    // A long straight-line `let` sequence must lower to a single flat `Let`
-    // block, not a nest: `Term::let_` merges each binding into the block already
-    // built for its tail, so folding the chain bottom-up (as `into_core` and the
-    // elaborator's rebuild both do) yields one node. That flatness is what bounds
-    // every walk over it — `reduce` here, and `traverse` via `reach` — to a loop
-    // instead of one native stack frame per binding.
+    // A long straight-line `let` sequence must lower to a single flat `Let` block, not a nest: `Term::let_` merges each binding into the block already built for its tail, so folding the chain bottom-up (as `into_core` and the elaborator's rebuild both do) yields one node. That flatness is what bounds every walk over it — `reduce` here, and `traverse` via `reach` — to a loop instead of one native stack frame per binding.
     let depth = 1000;
     let mut context = Context::with_default_budget();
     let binders = (0..depth)
@@ -338,8 +320,7 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
         other => panic!("expected a single flat `Let` block, got {other:?}"),
     }
 
-    // Every reference is internal (no free variables escape), and both `reach`
-    // and `reduce` compute over the whole depth without recursing per binding.
+    // Every reference is internal (no free variables escape), and both `reach` and `reduce` compute over the whole depth without recursing per binding.
     assert_eq!(term.reach(), 0);
     let t1 = Instant::now();
     assert_eq!(reduce(&mut context, term), Ok(nat(0)));
@@ -408,9 +389,7 @@ fn reduce_int_eql_returns_true_or_false_bool() {
 fn reduce_flt_mul_stays_stuck() {
     let mut context = context();
 
-    // `Flt` is opaque at the type level: the operation is its own normal form
-    // even over literals, so no IEEE semantics enters definitional equality.
-    // Runtime-faithful folding belongs to `curios-ersd`'s partial evaluator.
+    // `Flt` is opaque at the type level: the operation is its own normal form even over literals, so no IEEE semantics enters definitional equality. Runtime-faithful folding belongs to `curios-ersd`'s partial evaluator.
     let product: Term = Subterm::Prim(Prim::flt_mul(
         Subterm::Prim(Prim::Flt(Flt::from_f32(1.5))),
         Subterm::Prim(Prim::Flt(Flt::from_f32(2.0))),
@@ -577,10 +556,7 @@ fn reduce_does_not_eta_reduce_tuple() {
     let mut context = context();
     let r = context.fresh(Some("r"));
 
-    // Tuple η is type-directed and lives in `convert`, not `reduce`:
-    // `reduce` cannot verify `r`'s arity without type info, so collapsing
-    // `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more
-    // fields than the tuple does.
+    // Tuple η is type-directed and lives in `convert`, not `reduce`: `reduce` cannot verify `r`'s arity without type info, so collapsing `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more fields than the tuple does.
     let term: Term = Term::tuple([
         Term::proj(Term::free_var(&r), 0),
         Term::proj(Term::free_var(&r), 1),
@@ -674,13 +650,11 @@ fn redefine_invalidates_reduction_cached_under_the_old_value() {
     let x_binder = context.fresh(Some("x"));
     let x: Term = Term::free_var(&x_binder);
 
-    // First definition: x reduces to 4 and the reduct — which no longer
-    // mentions `x` — is cached.
+    // First definition: x reduces to 4 and the reduct — which no longer mentions `x` — is cached.
     context.define(&x_binder, &nat(4), None);
     assert_eq!(reduce(&mut context, x.clone()), Ok(nat(4)));
 
-    // Rebinding the same label must evict that entry even though a selective
-    // retain keyed on mentions of `x` cannot see it.
+    // Rebinding the same label must evict that entry even though a selective retain keyed on mentions of `x` cannot see it.
     context.define(&x_binder, &nat(5), None);
     assert_eq!(reduce(&mut context, x), Ok(nat(5)));
 }
@@ -697,8 +671,7 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
         assert_eq!(reduce(context, x.clone()), Ok(nat(4)));
     });
 
-    // After the frame pops, x has no definition again. A stale cache entry
-    // would still return "inner"; the cache clear on leave_frame prevents that.
+    // After the frame pops, x has no definition again. A stale cache entry would still return "inner"; the cache clear on leave_frame prevents that.
     assert_eq!(reduce(&mut context, x.clone()), Ok(x));
 }
 
@@ -721,15 +694,13 @@ fn reduce_solved_metavar_yields_solution() {
 
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
-    // An unsolved metavariable reduces to itself, but that reduct names an
-    // unsolved metavariable, so it is deliberately not memoized.
+    // An unsolved metavariable reduces to itself, but that reduct names an unsolved metavariable, so it is deliberately not memoized.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
     let solution = nat(1);
     context.solve_metavar(MetaId(0), solution.clone());
 
-    // Nothing stale was cached, so the reduct now follows the solution —
-    // `solve_metavar` needs no cache clear.
+    // Nothing stale was cached, so the reduct now follows the solution — `solve_metavar` needs no cache clear.
     assert_eq!(reduce(&mut context, m), Ok(solution));
 }
 
@@ -752,12 +723,7 @@ fn refinement_is_suppressible() {
 
 // === Type-level partial arithmetic ===========================================
 //
-// A literal zero divisor is mathematically undefined and reports through a
-// `ReduceError` (the `BinGet` pattern, span and all) — never a Rust panic.
-// Runtime *range* limits, by contrast, never error here: `Nat`/`Int` are
-// unbounded at the type level, folds compute exactly, and the 31-bit
-// narrowing is enforced downstream (`ersd`'s carriers at the erase boundary,
-// the i31 traps in `cont` → wasm).
+// A literal zero divisor is mathematically undefined and reports through a `ReduceError` (the `BinGet` pattern, span and all) — never a Rust panic. Runtime *range* limits, by contrast, never error here: `Nat`/`Int` are unbounded at the type level, folds compute exactly, and the 31-bit narrowing is enforced downstream (`ersd`'s carriers at the erase boundary, the i31 traps in `cont` → wasm).
 
 #[test]
 fn reduce_nat_div_by_zero_reports() {
@@ -855,8 +821,7 @@ fn reduce_int_div_by_zero_reports() {
 fn reduce_int_arithmetic_is_unbounded() {
     let mut context = context();
 
-    // Past the runtime's i31 range the type level keeps computing exactly —
-    // the limit is the runtime's, enforced downstream, not the checker's.
+    // Past the runtime's i31 range the type level keeps computing exactly — the limit is the runtime's, enforced downstream, not the checker's.
     assert_eq!(
         reduce(
             &mut context,
@@ -884,8 +849,7 @@ fn reduce_int_arithmetic_is_unbounded() {
 fn reduce_flt_to_int_stays_stuck() {
     let mut context = context();
 
-    // Opaque at the type level even on an exactly representable value: reading
-    // a float *is* float semantics, and none of it decides conversion.
+    // Opaque at the type level even on an exactly representable value: reading a float *is* float semantics, and none of it decides conversion.
     let exact = Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
         2147483648.0,
     )))));
@@ -921,8 +885,7 @@ mod prim {
         Term::unwrap_or_clone(reduce(context, term).expect("reduces"))
     }
 
-    // Symbolic successor bounds the family must decide — exactly the cases the old
-    // bespoke `lt` rule handled, now shared by the whole family (a regression guard).
+    // Symbolic successor bounds the family must decide — exactly the cases the old bespoke `lt` rule handled, now shared by the whole family (a regression guard).
     #[test]
     fn comparisons_decide_symbolic_successor_bounds() {
         let mut context = context();
@@ -953,8 +916,7 @@ mod prim {
             Subterm::Prim(Prim::Bool(false)),
         );
 
-        // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ
-        // once the shared floor is peeled).
+        // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ once the shared floor is peeled).
         assert_eq!(
             reduced(
                 &mut context,
@@ -963,8 +925,7 @@ mod prim {
             Subterm::Prim(Prim::Bool(false)),
         );
 
-        // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable
-        // (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
+        // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
         assert_eq!(
             reduced(
                 &mut context,
@@ -981,9 +942,7 @@ mod prim {
         ));
     }
 
-    // Soundness gate for the distributing `Nat/mul`: on closed inputs it must still
-    // agree with the host product — the literal fold the floor distribution
-    // subsumes (`il = ir = 0`, so only the floors `sl · sr` remain).
+    // Soundness gate for the distributing `Nat/mul`: on closed inputs it must still agree with the host product — the literal fold the floor distribution subsumes (`il = ir = 0`, so only the floors `sl · sr` remain).
     #[test]
     fn mul_agrees_with_literal_product() {
         let mut context = context();
@@ -999,10 +958,7 @@ mod prim {
         }
     }
 
-    // `Nat/mul` distributes a literal factor over a symbolic successor floor, the
-    // multiplicative twin of `NatAdd`'s floor law: `(x + 1) · c` and `x · c + c`
-    // reduce to the same normal form (either side may be the literal). Two symbolic
-    // operands have no literal factor, so the product stays neutral.
+    // `Nat/mul` distributes a literal factor over a symbolic successor floor, the multiplicative twin of `NatAdd`'s floor law: `(x + 1) · c` and `x · c + c` reduce to the same normal form (either side may be the literal). Two symbolic operands have no literal factor, so the product stays neutral.
     #[test]
     fn mul_distributes_literal_over_symbolic_floor() {
         let mut context = context();
@@ -1040,9 +996,7 @@ mod prim {
         ));
     }
 
-    // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons
-    // `Lst/get` and `Lst/slice` previously could not peel (they folded only literal
-    // arrays), now decoded one element at a time like their `Bin` twins.
+    // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons `Lst/get` and `Lst/slice` previously could not peel (they folded only literal arrays), now decoded one element at a time like their `Bin` twins.
     fn lst_cons_seven(xs: &Term) -> Term {
         Term::prim(Prim::lst_concat(
             Term::prim(Prim::NatType),
@@ -1117,8 +1071,7 @@ mod prim {
         );
     }
 
-    // `Lst/len` distributes over the monoid like `Bin/len`: a symbolic cons or
-    // append reduces its length to a `succ` spine instead of stalling.
+    // `Lst/len` distributes over the monoid like `Bin/len`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
     #[test]
     fn lst_len_distributes_over_cons_and_append() {
         let mut context = context();
@@ -1177,8 +1130,7 @@ mod prim {
         );
     }
 
-    // The full slice is the identity even over a symbolic array: `slice(xs, 0, len
-    // xs) = xs` (the `Lst` twin of `BinSlice`'s full-window identity).
+    // The full slice is the identity even over a symbolic array: `slice(xs, 0, len xs) = xs` (the `Lst` twin of `BinSlice`'s full-window identity).
     #[test]
     fn lst_slice_full_window_is_identity() {
         let mut context = context();
@@ -1199,9 +1151,7 @@ mod prim {
         );
     }
 
-    // `Bin/eql` decides definitional equality through the spine peel: reflexivity and
-    // a peeled-equal pair fold to `true`, a definite byte/length clash to `false`,
-    // and a genuinely undecided pair stays neutral.
+    // `Bin/eql` decides definitional equality through the spine peel: reflexivity and a peeled-equal pair fold to `true`, a definite byte/length clash to `false`, and a genuinely undecided pair stays neutral.
     #[test]
     fn bin_eql_decides_structurally() {
         let mut context = context();
@@ -1235,8 +1185,7 @@ mod prim {
             Subterm::Prim(Prim::Bool(false)),
         );
 
-        // A first-byte clash decides `false` even past a shared symbolic tail:
-        // `eql([1] ++ x, [2] ++ x) = false`.
+        // A first-byte clash decides `false` even past a shared symbolic tail: `eql([1] ++ x, [2] ++ x) = false`.
         let lhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![1]), x.clone()]));
         let rhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![2]), x.clone()]));
         assert_eq!(
@@ -1313,9 +1262,7 @@ mod prim {
         );
     }
 
-    // A nested `Lst/slice` reassociates to one slice over the base, even when the
-    // base is symbolic: `slice(slice(xs, 1, 5), 0, 2) = slice(xs, 1, 3)` (the `Lst`
-    // twin of `BinSlice`'s window reassociation).
+    // A nested `Lst/slice` reassociates to one slice over the base, even when the base is symbolic: `slice(slice(xs, 1, 5), 0, 2) = slice(xs, 1, 3)` (the `Lst` twin of `BinSlice`'s window reassociation).
     #[test]
     fn lst_slice_reassociates_nested() {
         let mut context = context();
@@ -1348,20 +1295,11 @@ mod prim {
     }
 }
 
-/// The kernel in `curios-core` re-decides reduction from the term alone, with
-/// none of this crate's machinery — no cache, no refinements, no metavariables.
-/// These tests are the check that the two agree where they must.
+/// The kernel in `curios-core` re-decides reduction from the term alone, with none of this crate's machinery — no cache, no refinements, no metavariables. These tests are the check that the two agree where they must.
 ///
-/// Agreement is worth asserting precisely because the implementations are
-/// separate. If the kernel simply called this reducer the tests would be
-/// tautologies; because it does not, a divergence here is a real disagreement
-/// about what a term computes to, and one of the two is wrong.
+/// Agreement is worth asserting precisely because the implementations are separate. If the kernel simply called this reducer the tests would be tautologies; because it does not, a divergence here is a real disagreement about what a term computes to, and one of the two is wrong.
 ///
-/// The known *deliberate* divergences are internal to reduction and invisible
-/// in the result: a `let` is an environment step here and a substitution there,
-/// and a match arm binds a projection of the scrutinee here and the payload
-/// itself there. Both routes land on the same weak-head normal form, which is
-/// exactly what these assertions pin.
+/// The known *deliberate* divergences are internal to reduction and invisible in the result: a `let` is an environment step here and a substitution there, and a match arm binds a projection of the scrutinee here and the payload itself there. Both routes land on the same weak-head normal form, which is exactly what these assertions pin.
 mod kernel_agreement {
     use curios_core::*;
     use {
@@ -1464,8 +1402,7 @@ mod kernel_agreement {
         let pred = context.fresh(Some("pred"));
         let ih = context.fresh(Some("ih"));
 
-        // The cons arm sums the hypothesis, so the whole spine is walked
-        // rather than one layer peeled.
+        // The cons arm sums the hypothesis, so the whole spine is walked rather than one layer peeled.
         agree(Term::nat_match(
             nat(5),
             Some(&m),

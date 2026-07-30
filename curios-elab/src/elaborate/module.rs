@@ -22,19 +22,11 @@ use {
     },
 };
 
-/// The universe arguments `value` applies to `name`'s declaration, at the first
-/// occurrence that carries them.
+/// The universe arguments `value` applies to `name`'s declaration, at the first occurrence that carries them.
 ///
-/// An application reaches finalization in either of two forms: the nominal
-/// normal form, which carries its instance in [`StructType`]'s or
-/// [`InductType`]'s own universe vector, or an explicit instance on an
-/// unreduced occurrence of the type-former. Both name the same levels in the
-/// same order, so either answers the question.
+/// An application reaches finalization in either of two forms: the nominal normal form, which carries its instance in [`StructType`]'s or [`InductType`]'s own universe vector, or an explicit instance on an unreduced occurrence of the type-former. Both name the same levels in the same order, so either answers the question.
 ///
-/// The two nominal cases are separate arms rather than one, because the node a
-/// declaration normalizes to is what distinguishes a concept from an inductive
-/// here. Nothing about the *name* does — deciding by inspecting `name` would be
-/// guessing at a fact the term already states.
+/// The two nominal cases are separate arms rather than one, because the node a declaration normalizes to is what distinguishes a concept from an inductive here. Nothing about the *name* does — deciding by inspecting `name` would be guessing at a fact the term already states.
 fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
     let found = Rc::new(RefCell::new(None));
     let sink = Rc::clone(&found);
@@ -72,11 +64,7 @@ fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
     found.borrow_mut().take()
 }
 
-/// Walk a (params-first) telescope, checking each binder's type against `Type`
-/// under the earlier binders (fresh-gensym, assume), and return the rebuilt
-/// `(label, type)` entries alongside the telescope's terminal — opened under
-/// those binders. Runs in the caller's frame; the same gensym-then-relabel
-/// discipline as `elaborate_tuple_type`.
+/// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
@@ -145,19 +133,9 @@ fn add_declaration_sizing<B: Bound>(
     })
 }
 
-/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
-/// types. `into_core` records the declaration's lowered spellings, and a lowered
-/// type must never leak into later reduction: implicit insertion saturates
-/// applications during elaboration, and an under-applied index type (e.g.
-/// `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at
-/// the wrong arity the first time `reduce` meets the registry copy.
+/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an under-applied index type (e.g. `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
 ///
-/// Called from `elaborate_module_rec` after the group's signatures are
-/// reassumed rebuilt and *before* any body is checked — index types may
-/// mention the group's own members (resolved through the assumed signatures),
-/// and the type-constructor bodies' `InductType` nodes check their arguments
-/// against this very telescope. A name with no registry entry is an ordinary
-/// binding; no-op.
+/// Called from `elaborate_module_rec` after the group's signatures are reassumed rebuilt and *before* any body is checked — index types may mention the group's own members (resolved through the assumed signatures), and the type-constructor bodies' `InductType` nodes check their arguments against this very telescope. A name with no registry entry is an ordinary binding; no-op.
 fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
@@ -171,8 +149,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
         .map(|label| label.to_string())
         .collect::<Vec<_>>();
 
-    // Walk the full (params-first) index telescope, checking each entry type
-    // against `Type` under the earlier binders.
+    // Walk the full (params-first) index telescope, checking each entry type against `Type` under the earlier binders.
     let (entries, ()) = context
         .with_frame(|context| check_telescope_entries(context, induct_decl.indices.clone()))?;
 
@@ -199,15 +176,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
     Ok(())
 }
 
-/// Rebuild a registry entry's constructor signatures with *elaborated* types —
-/// the second phase of the registry rebuild (see
-/// [`elaborate_induct_indices`]). Payload types may apply the inductive group's
-/// type constructors, so this runs from `elaborate_module_rec` only after the
-/// group's rebuilt bodies are defined; each terminal — the constructed
-/// `InductType` normal form — routes through `elaborate_induct_type`, which
-/// checks the parameters and the case's target indices against the
-/// already-rebuilt index telescope and returns another `InductType` node, the
-/// shape `case_target_indices` and the match elaborators rely on.
+/// Rebuild a registry entry's constructor signatures with *elaborated* types — the second phase of the registry rebuild (see [`elaborate_induct_indices`]). Payload types may apply the inductive group's type constructors, so this runs from `elaborate_module_rec` only after the group's rebuilt bodies are defined; each terminal — the constructed `InductType` normal form — routes through `elaborate_induct_type`, which checks the parameters and the case's target indices against the already-rebuilt index telescope and returns another `InductType` node, the shape `case_target_indices` and the match elaborators rely on.
 fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result<(), Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
@@ -233,8 +202,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             tag.clone(),
             InductParam {
                 telescope: Telescope::build(entries, terminal).relabel(&label_refs),
-                // Plicity is metadata parallel to the telescope; elaboration
-                // re-checks the types but never changes the calling convention.
+                // Plicity is metadata parallel to the telescope; elaboration re-checks the types but never changes the calling convention.
                 plicities: param.plicities.clone(),
             },
         ));
@@ -258,13 +226,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
     Ok(())
 }
 
-/// Rebuild a struct's registry telescopes with *elaborated* types, so the field
-/// types `erase` and later construction sites consult are saturated (implicit
-/// insertion) and reduce correctly — the struct analogue of
-/// [`elaborate_induct_indices`], over the single (params-first) field
-/// telescope. Called from `elaborate_module_let` once the type-former is
-/// defined (field types may mention the struct itself and earlier items). A
-/// name with no registry entry is an ordinary binding; no-op.
+/// Rebuild a struct's registry telescopes with *elaborated* types, so the field types `erase` and later construction sites consult are saturated (implicit insertion) and reduce correctly — the struct analogue of [`elaborate_induct_indices`], over the single (params-first) field telescope. Called from `elaborate_module_let` once the type-former is defined (field types may mention the struct itself and earlier items). A name with no registry entry is an ordinary binding; no-op.
 fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(());
@@ -286,15 +248,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     let (entries, ()) = context.with_frame(|context| -> Result<_, Error> {
         let (entries, ()) = check_telescope_entries(context, struct_decl.fields.clone())?;
 
-        // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof
-        // irrelevance, yet projection is an *unguarded* eliminator — it reads a
-        // field out of a value the theory believes is interchangeable with any
-        // other. That is consistent only when no field is informative, the
-        // singleton-elimination condition (`elaborate_match::singleton_eliminable`)
-        // checked here at declaration time rather than per projection. A struct
-        // carries no indices, so nothing is forced and the condition reduces to:
-        // every field type is itself a proposition. With this enforced, every
-        // projection lands in a `Prop`, so `elaborate_proj` needs no guard.
+        // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
         if declared_prop {
             for (i, (_, ty)) in entries[n_params..].iter().enumerate() {
                 if !is_prop(context, ty)? {
@@ -341,26 +295,13 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     Ok(())
 }
 
-/// The levels of a declaration's result sort that occur nowhere a use site can
-/// reach — the levels no occurrence could ever choose.
+/// The levels of a declaration's result sort that occur nowhere a use site can reach — the levels no occurrence could ever choose.
 ///
-/// `id : (A : Type u) -> A -> A` is genuinely polymorphic: a caller picks `A`,
-/// and with it `u`. `Lte : Nat -> Nat -> Type u` is not. Nothing at a use site
-/// supplies that `u`, so generalizing it mints a parameter every occurrence
-/// must instantiate for no benefit — which is how a proof about naturals ends
-/// up universe-polymorphic, and how a string literal's per-byte constructor
-/// applications each mint fresh levels.
+/// `id : (A : Type u) -> A -> A` is genuinely polymorphic: a caller picks `A`, and with it `u`. `Lte : Nat -> Nat -> Type u` is not. Nothing at a use site supplies that `u`, so generalizing it mints a parameter every occurrence must instantiate for no benefit — which is how a proof about naturals ends up universe-polymorphic, and how a string literal's per-byte constructor applications each mint fresh levels.
 ///
-/// Minimizing instead is sound for two reasons. Cumulativity already lets a
-/// declaration sitting at `Type 0` be used where a higher universe is expected,
-/// so the parameter buys no expressiveness. And `minimize` takes least
-/// solutions *subject to the recorded constraints*, so a level that genuinely
-/// depends on an argument still lands there: `List(A : Type u) : Type v` keeps
-/// `v = u`, because constructor sizing constrains it, rather than collapsing to
-/// zero.
+/// Minimizing instead is sound for two reasons. Cumulativity already lets a declaration sitting at `Type 0` be used where a higher universe is expected, so the parameter buys no expressiveness. And `minimize` takes least solutions *subject to the recorded constraints*, so a level that genuinely depends on an argument still lands there: `List(A : Type u) : Type v` keeps `v = u`, because constructor sizing constrains it, rather than collapsing to zero.
 ///
-/// A level occurring in both a binder domain and the result sort stays in the
-/// interface — the caller chooses it, and the result merely mentions it.
+/// A level occurring in both a binder domain and the result sort stays in the interface — the caller chooses it, and the result merely mentions it.
 fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
     fn peel<'a>(term: &'a Term, domains: &mut Vec<&'a Term>) -> &'a Term {
         match &**term {
@@ -401,24 +342,7 @@ fn finalize_definition(
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 
-    // A method wrapper is not independently polymorphic. Its own type mentions
-    // only a *subset* of its concept's levels — `pure` names some, `bind`
-    // others — so generalizing it alone yields fewer parameters than the
-    // concept has (`Monad` 5 against `pure` 2, `bind` 1). But the type also
-    // carries the concept applied at *all* of them, through the `use w : C(..)`
-    // binder, and the levels outside the wrapper's own generalized set then
-    // have nothing to name them: `level w escapes its universe parameter
-    // context`. So the wrapper must inherit the concept's whole context. Lean
-    // and Rocq both hand a projection its structure's universe parameters
-    // verbatim, for the same reason.
-    // The owner comes from `into_core`, which records it where the wrapper is
-    // generated; re-deriving it by splitting `name` would misread an ordinary
-    // definition that merely happens to sit under a concept's namespace.
-    // Inheriting the context is only half the work: those levels are still
-    // metas, and ordinary finalization — the one thing that would solve them —
-    // is exactly what must not run here, because it would mint the wrapper's
-    // own parameters in its own order. `finalize_at_instance` binds the concept
-    // application's arguments to the inherited parameters positionally instead.
+    // A method wrapper is not independently polymorphic. Its own type mentions only a *subset* of its concept's levels — `pure` names some, `bind` others — so generalizing it alone yields fewer parameters than the concept has (`Monad` 5 against `pure` 2, `bind` 1). But the type also carries the concept applied at *all* of them, through the `use w : C(..)` binder, and the levels outside the wrapper's own generalized set then have nothing to name them: `level w escapes its universe parameter context`. So the wrapper must inherit the concept's whole context. Lean and Rocq both hand a projection its structure's universe parameters verbatim, for the same reason. The owner comes from `into_core`, which records it where the wrapper is generated; re-deriving it by splitting `name` would misread an ordinary definition that merely happens to sit under a concept's namespace. Inheriting the context is only half the work: those levels are still metas, and ordinary finalization — the one thing that would solve them — is exactly what must not run here, because it would mint the wrapper's own parameters in its own order. `finalize_at_instance` binds the concept application's arguments to the inherited parameters positionally instead.
     if let DefinitionKind::ConceptMethod { owner } = kind {
         let owner = Global::Authored(owner.clone());
         let universe_context = context
@@ -448,18 +372,9 @@ fn finalize_definition(
         let body = context.zonk_universe_levels(&body)?;
         return Ok((universe_context, type_, body));
     }
-    // A value constructor stands in the same relation to its inductive as a
-    // method wrapper does to its concept, and fails the same way. `Result(S, F)`
-    // has two universe parameters; `success` mentions only `S` in its payload,
-    // so generalizing it alone mints its own `Param(0..1)` in meta-id order and
-    // displaces the inductive's — which `generalize` then shifts up past the
-    // declared count, leaving `Param(2)`/`Param(3)` with nothing to name them.
-    // A constructor is not independently polymorphic: its universes *are* the
-    // inductive's, so it inherits that context and binds its instance to those
-    // parameters positionally.
+    // A value constructor stands in the same relation to its inductive as a method wrapper does to its concept, and fails the same way. `Result(S, F)` has two universe parameters; `success` mentions only `S` in its payload, so generalizing it alone mints its own `Param(0..1)` in meta-id order and displaces the inductive's — which `generalize` then shifts up past the declared count, leaving `Param(2)`/`Param(3)` with nothing to name them. A constructor is not independently polymorphic: its universes *are* the inductive's, so it inherits that context and binds its instance to those parameters positionally.
     //
-    // Like `ConceptMethod`, the owner is a field `into_core` records where the
-    // constructor is generated, not something recovered from `name`.
+    // Like `ConceptMethod`, the owner is a field `into_core` records where the constructor is generated, not something recovered from `name`.
     if let DefinitionKind::InductiveConstructor { owner, .. } = kind {
         let owner = Global::Authored(owner.clone());
         let universe_context = context
@@ -472,12 +387,7 @@ fn finalize_definition(
             })?
             .universe_context
             .clone();
-        // A constructor of a *parameterless* inductive results in a bare
-        // self-reference: an occurrence inside the group is monomorphic in the
-        // group's own universes, and `stamp_declaration_instance` only gives it
-        // an explicit instance after this finalization runs. So a missing
-        // instance is not a malformed constructor — it denotes the identity
-        // instance, which is what the stamp would write.
+        // A constructor of a *parameterless* inductive results in a bare self-reference: an occurrence inside the group is monomorphic in the group's own universes, and `stamp_declaration_instance` only gives it an explicit instance after this finalization runs. So a missing instance is not a malformed constructor — it denotes the identity instance, which is what the stamp would write.
         let instance = declaration_instance(&type_, &owner)
             .unwrap_or_else(|| universe_context.identity_instance());
         let mut metas = context.universe_metas_in(&type_);
@@ -522,10 +432,7 @@ fn finalize_definition(
         );
     }
 
-    // The signature and any registry telescope form the declaration's
-    // interface: a use site instantiates exactly these. Levels reachable only
-    // through the body are internal classifiers and are minimized instead, as
-    // are the levels of the result sort — see [`result_sort_only_metas`].
+    // The signature and any registry telescope form the declaration's interface: a use site instantiates exactly these. Levels reachable only through the body are internal classifiers and are minimized instead, as are the levels of the result sort — see [`result_sort_only_metas`].
     let determined = result_sort_only_metas(context, &type_);
     let mut interface = context.universe_metas_in(&type_);
     interface.retain(|meta| !determined.contains(meta));
@@ -543,9 +450,7 @@ fn finalize_definition(
     let universe_context = context.finalize_universe_metas(interface, internal)?;
     let levels = universe_context.identity_instance();
     let owned = BTreeSet::from([name.clone()]);
-    // A non-recursive definition's own name stays free in its signature, body,
-    // and registry entry: nothing captures it, so each occurrence carries the
-    // instance itself.
+    // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself.
     let free = SelfReference::Free;
     let type_ = curios_core::stamp_declaration_instance(
         &context.zonk_universe_levels(&type_)?,
@@ -611,25 +516,15 @@ fn finalize_definition(
     Ok((universe_context, type_, body))
 }
 
-/// Type-check a single non-recursive top-level definition, `define` it into the
-/// *current* (persistent base) frame, and return its rebuilt form. The flat
-/// analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail
-/// recursion: the binding must stay in scope for every later item and the
-/// entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes
-/// the lowered one no longer interchangeable; see the comment below), and the
-/// rebuilt `Definition` flows on to `zonk`/`erase`.
+/// Type-check a single non-recursive top-level definition, `define` it into the *current* (persistent base) frame, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
-    // Γ and the definition store key on the free-variable identity; the nominal
-    // registries key on the definition's own name.
+    // Γ and the definition store key on the free-variable identity; the nominal registries key on the definition's own name.
     let name = Free::from(&def.name);
     let outer_site = context.set_checked_site(&format!("'{}'", def.name));
     check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
     let type_ = crate::check_is_sort(context, &def.type_)?.0;
 
-    // A witness declaration registers into the program-wide table as soon as
-    // its signature is known — *before* its body elaborates, so a recursive
-    // witness (a `Show(Tree)` whose fields show subtrees) can resolve through
-    // its own entry.
+    // A witness declaration registers into the program-wide table as soon as its signature is known — *before* its body elaborates, so a recursive witness (a `Show(Tree)` whose fields show subtrees) can resolve through its own entry.
     if context.is_witness_declaration(&def.name) {
         register_witness(
             context,
@@ -645,15 +540,10 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     let body = check(context, &def.body, type_.clone())?;
     context.sweep_parked()?;
 
-    // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones:
-    // implicit-argument insertion saturates applications during elaboration,
-    // and the untyped reducer (type-level evaluation in later items' types)
-    // would meet a lowered form's under-applied calls and open a telescope at
-    // the wrong arity. Pre-insertion the two were interchangeable; no longer.
+    // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity. Pre-insertion the two were interchangeable; no longer.
     context.define_assuming(&name, &type_, &body, Some(&def.kind));
 
-    // A struct's type-former lowers to a standalone `let`; rebuild its registry
-    // telescopes now that the former is defined (no-op for an ordinary let).
+    // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
     elaborate_struct(context, &def.name)?;
 
     let (universe_context, type_, body) =
@@ -678,18 +568,13 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
         body,
     };
 
-    // Classify now, so a later item's *written* type can be refused before it is
-    // reduced. A `let` is its own group, hence total as far as the group verdict
-    // is concerned.
+    // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
     record_definition_totality(context, &definition, Totality::Total);
 
     Ok(definition)
 }
 
-/// Type-check a flat top-level `rec` item and return its rebuilt structural
-/// group. The input is opened over the export names for elaboration; the output
-/// captures those names back into one [`RecItem`] and publishes each export as
-/// its folded structural member.
+/// Type-check a flat top-level `rec` item and return its rebuilt structural group. The input is opened over the export names for elaboration; the output captures those names back into one [`RecItem`] and publishes each export as its folded structural member.
 fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
     let defs = rec.definitions();
     // See `elaborate_module_let`: Γ keys on identities, the registries on names.
@@ -707,18 +592,12 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         types.push(crate::check_is_sort(context, &def.type_)?.0);
     }
 
-    // Upgrade the assumptions to the *rebuilt* signatures before any body is
-    // checked (see `elaborate_rec`): a lowered (under-applied) type must not
-    // leak into later reduction. The lowered forms were only needed above,
-    // while the signatures checked each other.
+    // Upgrade the assumptions to the *rebuilt* signatures before any body is checked (see `elaborate_rec`): a lowered (under-applied) type must not leak into later reduction. The lowered forms were only needed above, while the signatures checked each other.
     for (name, type_) in names.iter().zip(&types) {
         context.reassume(name, type_);
     }
 
-    // An inductive's type bindings always lower as one `rec` group whose member
-    // names are the registry keys. Rebuild the registry index telescopes here
-    // — after the rebuilt signatures are assumed (index types may mention the
-    // group), before any body's `InductType` node checks against them.
+    // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the rebuilt signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
     for def in &defs {
         elaborate_induct_indices(context, &def.name)?;
     }
@@ -744,9 +623,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
     context.retry_parked()?;
 
-    // Registry rebuild, phase two: constructor payload types may apply the
-    // group's type constructors, so their signatures (and `InductType`
-    // terminals) elaborate only now that the rebuilt bodies are defined.
+    // Registry rebuild, phase two: constructor payload types may apply the group's type constructors, so their signatures (and `InductType` terminals) elaborate only now that the rebuilt bodies are defined.
     for def in &defs {
         elaborate_induct_constructors(context, &def.name)?;
     }
@@ -806,9 +683,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         );
     }
 
-    // As for a single definition, the group's interface is its member
-    // signatures and registry telescopes; levels reachable only through a
-    // member body are internal and minimized rather than generalized.
+    // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized.
     let mut interface = types
         .iter()
         .flat_map(|type_| context.universe_metas_in(type_))
@@ -829,11 +704,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .collect::<BTreeSet<_>>();
     let universe_context = context.finalize_universe_metas(interface, internal)?;
 
-    // The group's members are monomorphic in their own universes, so every
-    // occurrence of one member inside the group — in a signature, a body, or a
-    // rebuilt registry telescope — denotes the group's own instance. Those
-    // occurrences were elaborated before the parameters existed and carry no
-    // instance at all until this rewrite gives them one.
+    // The group's members are monomorphic in their own universes, so every occurrence of one member inside the group — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();
     let owned = defs
         .iter()
@@ -854,8 +725,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         ))
     }
 
-    // `RecItem::try_new` captures the member names into the group's binder, so
-    // the signatures and bodies reach it with their self-references bound.
+    // `RecItem::try_new` captures the member names into the group's binder, so the signatures and bodies reach it with their self-references bound.
     let types = types
         .iter()
         .map(|type_| stamp(context, type_, &owned, SelfReference::Bound, &instance))
@@ -876,9 +746,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 Ok((
                     tag,
                     InductParam {
-                        // A registry telescope is stored outside the group and
-                        // instantiated per use site, so its self-references
-                        // are free and must carry the instance themselves.
+                        // A registry telescope is stored outside the group and instantiated per use site, so its self-references are free and must carry the instance themselves.
                         telescope: stamp(
                             context,
                             &constructor.telescope,
@@ -927,8 +795,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         })
         .collect();
     let rec = RecItem::try_new(definitions)?;
-    // Before the members are defined into the context, because the shape this
-    // rejects makes reducing a *use* of one of them overflow the stack.
+    // Before the members are defined into the context, because the shape this rejects makes reducing a *use* of one of them overflow the stack.
     check_rec_item_totality(context, &rec)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
@@ -942,8 +809,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         context.set_assumption_universe_context(&name, universe_context.clone());
     }
 
-    // Classify the whole group at once: its members may mention each other, so
-    // no member's verdict is settled until the group's descent is.
+    // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.
     let group = group_totality(context, &rec.group);
     for definition in rec.definitions() {
         record_definition_totality(context, &definition, group);
@@ -952,10 +818,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     Ok(rec)
 }
 
-/// Elaborate one persistent module item and perform every item-boundary
-/// obligation. Both module drivers use this path so universe transactions,
-/// parked work, witnesses, privacy islands, and error attribution cannot
-/// drift.
+/// Elaborate one persistent module item and perform every item-boundary obligation. Both module drivers use this path so universe transactions, parked work, witnesses, privacy islands, and error attribution cannot drift.
 fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Error> {
     let item_module = match item {
         Item::Let(definition) => definition.island.clone(),
@@ -964,10 +827,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     context.set_island(item_module);
 
     let item_names = item.describe();
-    // One span per top-level item is the natural unit for the fixed prelude:
-    // its close event attributes elapsed time to a declaration by name, which
-    // is the breakdown a whole-module timing cannot give.
-    // `steps` reports what the declaration spent of its budget.
+    // One span per top-level item is the natural unit for the fixed prelude: its close event attributes elapsed time to a declaration by name, which is the breakdown a whole-module timing cannot give. `steps` reports what the declaration spent of its budget.
     #[cfg(feature = "profile")]
     let _declaration = curios_profile::tracing::info_span!(
         target: "curios_elab::declaration",
@@ -977,20 +837,14 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     )
     .entered();
 
-    // The step budget is per declaration, so it is restored here rather than
-    // drained across the module: whether this item typechecks must not depend
-    // on how much the items before it happened to spend.
+    // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
     context.restore_budget();
 
     let elaborated = match item {
         Item::Let(definition) => elaborate_module_let(context, definition).map(Item::Let),
         Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
     }
-    // Attribute *every* failure to the item that caused it, not only universe
-    // invariants. A whole-module diagnostic with no declaration name — an
-    // exhausted budget or an effect reduced at the type level — costs a full
-    // prelude rebuild to localize, which is the expensive way to learn one
-    // string.
+    // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
     .map_err(|error| error.in_declaration(&item_names))?;
 
     retry_deferred_witnesses(context)?;
@@ -1003,28 +857,13 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     Ok(elaborated)
 }
 
-/// Elaborate a [`Module`] against an already-elaborated *prefix*, returning the
-/// suffix it added (§9). Each top-level item is checked and `define`d
-/// *cumulatively in the persistent base frame* — never a popped `with_frame` —
-/// so every definition stays in scope for later items, the entrypoint `body`, and
-/// (through `mode`) its type annotation. Returns the rebuilt suffix alongside the
-/// body's type, reduced through the accumulated definitions.
+/// Elaborate a [`Module`] against an already-elaborated *prefix*, returning the suffix it added (§9). Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
 ///
-/// Elaboration is authoritative: the returned module — not the lowered input — is
-/// what `zonk_module` then makes meta-free for `erase`.
+/// Elaboration is authoritative: the returned module — not the lowered input — is what `zonk_module` then makes meta-free for `erase`.
 ///
-/// **One protocol serves both entry points**, and that is the point. `prefix` is
-/// `None` for a from-scratch elaboration and the cached prelude for a replay;
-/// every step below degenerates to the whole-module reading when it is `None`,
-/// so there is no second implementation to keep in agreement. There used to be:
-/// the replay path transcribed this function's thirteen steps inline and threaded
-/// the prelude through them, and the two copies agreeing was maintained by
-/// reading. That is the shape every configuration-dependent defect in this
-/// subsystem has had — a rule correct in the configuration its author was looking
-/// at and wrong in the other one.
+/// **One protocol serves both entry points**, and that is the point. `prefix` is `None` for a from-scratch elaboration and the cached prelude for a replay; every step below degenerates to the whole-module reading when it is `None`, so there is no second implementation to keep in agreement. There used to be: the replay path transcribed this function's thirteen steps inline and threaded the prelude through them, and the two copies agreeing was maintained by reading. That is the shape every configuration-dependent defect in this subsystem has had — a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
-/// The prefix diverges at exactly one point: after [`check_concept_registry`],
-/// its items are *replayed* into the context rather than elaborated.
+/// The prefix diverges at exactly one point: after [`check_concept_registry`], its items are *replayed* into the context rather than elaborated.
 fn elaborate_module_suffix(
     context: &mut Context,
     prefix: Option<&Module>,
@@ -1034,16 +873,9 @@ fn elaborate_module_suffix(
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     curios_profile::profile!("elaborate_module_suffix");
-    // Seed the context's registries before any item is checked: an inductive's
-    // type-constructor and value-constructor definitions reference their own
-    // registry entry (`elaborate_induct_type`/`elaborate_variant`), and
-    // `elaborate_struct`/`elaborate_proj` consult the struct registry (which
-    // `elaborate_struct` rebuilds). The prefix's entries go in verbatim, then
-    // the suffix's own — `register_*` rejects a duplicate key, so the suffix
-    // must exclude what the prefix already holds.
+    // Seed the context's registries before any item is checked: an inductive's type-constructor and value-constructor definitions reference their own registry entry (`elaborate_induct_type`/`elaborate_variant`), and `elaborate_struct`/`elaborate_proj` consult the struct registry (which `elaborate_struct` rebuilds). The prefix's entries go in verbatim, then the suffix's own — `register_*` rejects a duplicate key, so the suffix must exclude what the prefix already holds.
     if let Some(prefix) = prefix {
-        // The prefix's verdicts, settled when its archive was built, so a user
-        // item's written type can be refused against them before it reduces.
+        // The prefix's verdicts, settled when its archive was built, so a user item's written type can be refused against them before it reduces.
         context.seed_totality(&recorded_totality(prefix));
         for (name, induct_decl) in &prefix.induct_decls {
             context.register_induct(name, induct_decl.clone())?;
@@ -1056,9 +888,7 @@ fn elaborate_module_suffix(
         }
     }
 
-    // The suffix's own keys, kept so the rebuilt entries can be pulled back out
-    // below. With no prefix every key is the suffix's, which is exactly what a
-    // from-scratch elaboration wants.
+    // The suffix's own keys, kept so the rebuilt entries can be pulled back out below. With no prefix every key is the suffix's, which is exactly what a from-scratch elaboration wants.
     let induct_keys = suffix_keys(&module.induct_decls, prefix.map(|p| &p.induct_decls));
     let struct_keys = suffix_keys(&module.struct_decls, prefix.map(|p| &p.struct_decls));
 
@@ -1068,10 +898,7 @@ fn elaborate_module_suffix(
     for name in &struct_keys {
         context.register_struct(name, module.struct_decls[name].clone())?;
     }
-    // Concept metadata and witness markers, alongside — witness *table* entries
-    // register per item (`elaborate_module_let`), once the elaborated head
-    // exists. With every concept present, the superclass graph can be validated
-    // up front.
+    // Concept metadata and witness markers, alongside — witness *table* entries register per item (`elaborate_module_let`), once the elaborated head exists. With every concept present, the superclass graph can be validated up front.
     for (name, concept) in &module.concepts {
         if !prefix.is_some_and(|prefix| prefix.concepts.contains_key(name)) {
             context.register_concept(name, concept.clone())?;
@@ -1082,12 +909,7 @@ fn elaborate_module_suffix(
     }
     check_concept_registry(context)?;
 
-    // Replay the cached prefix into the persistent base frame: `define_assuming`
-    // reproduces exactly the state `elaborate_module_let`/`_rec` leave behind
-    // (assume the type, define the body), but with no re-checking — these terms
-    // are already elaborated. A prefix witness re-registers its (already
-    // elaborated) signature into the witness table, which is per-elaboration
-    // state and not cached on the module.
+    // Replay the cached prefix into the persistent base frame: `define_assuming` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind (assume the type, define the body), but with no re-checking — these terms are already elaborated. A prefix witness re-registers its (already elaborated) signature into the witness table, which is per-elaboration state and not cached on the module.
     if let Some(prefix) = prefix {
         for item in &prefix.items {
             match item {
@@ -1129,10 +951,7 @@ fn elaborate_module_suffix(
         }
     }
 
-    // Implicit-argument insertion mints metavariables during elaboration; floor
-    // the counter above `into_core`'s (which returns the count alongside the
-    // lowered module) so the id spaces never collide. A cached prefix is
-    // meta-free, so its ids never collide with the user range either.
+    // Implicit-argument insertion mints metavariables during elaboration; floor the counter above `into_core`'s (which returns the count alongside the lowered module) so the id spaces never collide. A cached prefix is meta-free, so its ids never collide with the user range either.
     context.seed_metavars(metavar_floor);
     context.set_local_floor(module.binder_floor);
     context.seed_universes(&module.universe_seeds, universe_floor);
@@ -1145,20 +964,15 @@ fn elaborate_module_suffix(
     }
 
     context.set_island(Qualifier::empty());
-    // The entrypoint expression is not an item, so it gets its own budget on
-    // the same footing as one.
+    // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.
     context.restore_budget();
     let (body, body_type) = elaborate(context, &module.body, mode)?;
-    // The whole program has elaborated: a witness goal still deferred will
-    // never find a table entry — report it now.
+    // The whole program has elaborated: a witness goal still deferred will never find a table entry — report it now.
     finish_deferred_witnesses(context)?;
     context.drain_parked()?;
     let body_type = reduce_with(context, &body_type)?;
 
-    // The output carries the *rebuilt* registry entries (pulled back from the
-    // context, where the per-group rebuild re-registered them), so `zonk_module`
-    // and `erase` see elaborated telescopes. An entry whose declaring item was
-    // pruned keeps its lowered form — nothing consults it.
+    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `zonk_module` and `erase` see elaborated telescopes. An entry whose declaring item was pruned keeps its lowered form — nothing consults it.
     let induct_decls = induct_keys
         .into_iter()
         .map(|name| {
@@ -1215,8 +1029,7 @@ fn elaborate_module_suffix(
     Ok((module, body_type))
 }
 
-/// The keys `module` declares that `prefix` does not — every key when there is
-/// no prefix.
+/// The keys `module` declares that `prefix` does not — every key when there is no prefix.
 fn suffix_keys<T>(
     module: &BTreeMap<Global, T>,
     prefix: Option<&BTreeMap<Global, T>>,
@@ -1230,29 +1043,15 @@ fn suffix_keys<T>(
 
 /// Finalize an elaborated module and run the **soundness perimeter** over it.
 ///
-/// This is the single place every whole-module check the consistency claim rests
-/// on is applied, and every entry point that produces an elaborated module must
-/// come through it. Keeping the sequence in one function is not tidiness: the
-/// checks were previously written out at each entry point, so "what does
-/// soundness depend on?" was answered by diffing two call sites, and a check
-/// added to one and not the other would have degraded the claim silently for
-/// every real compilation.
+/// This is the single place every whole-module check the consistency claim rests on is applied, and every entry point that produces an elaborated module must come through it. Keeping the sequence in one function is not tidiness: the checks were previously written out at each entry point, so "what does soundness depend on?" was answered by diffing two call sites, and a check added to one and not the other would have degraded the claim silently for every real compilation.
 ///
 /// The order is load-bearing, in three places:
 ///
-/// - `default_universes` then `zonk_module` come first, which is what makes
-///   everything after metavariable-free by construction — `zonk_module` errors
-///   on an unsolved hole, so no metavariable can later be solved to a partial or
-///   negatively-occurring term. `zonk_module` also runs `validate_universes`.
-/// - [`Context::restore_budget`] precedes the passes because they reduce, and
-///   each has to spend on the same footing as an item rather than on whatever
-///   the last item left.
+/// - `default_universes` then `zonk_module` come first, which is what makes everything after metavariable-free by construction — `zonk_module` errors on an unsolved hole, so no metavariable can later be solved to a partial or negatively-occurring term. `zonk_module` also runs `validate_universes`.
+/// - [`Context::restore_budget`] precedes the passes because they reduce, and each has to spend on the same footing as an item rather than on whatever the last item left.
 /// - [`record_totality`] precedes both gates, which read the flags it stamps.
 ///
-/// `check_positivity` is independent of the rest and could sit anywhere after
-/// the zonk. `inherited` carries the classifications of a replayed prefix, whose
-/// own verdicts were settled when its archive was built; it is empty for a
-/// from-scratch elaboration, where the module defines every name it mentions.
+/// `check_positivity` is independent of the rest and could sit anywhere after the zonk. `inherited` carries the classifications of a replayed prefix, whose own verdicts were settled when its archive was built; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
 fn finalize_and_check(
     context: &mut Context,
     mut module: Module,
@@ -1279,13 +1078,7 @@ fn finalize_and_check(
     let body_type = zonk(context, &body_type)?;
     context.restore_budget();
 
-    // Positivity gates the zonked registries rather than running inside
-    // elaboration: the telescopes it reads are final here, and meta-free, so an
-    // unsolved hole reports as an unsolved hole instead of as an unseeable
-    // occurrence. At a replay the module in hand is the suffix alone, which is
-    // what this must see — the replayed prefix carries the vectors its archive
-    // was built with, and since prefix items cannot mention the suffix they are
-    // sinks of the occurrence relation, so no cycle crosses the boundary.
+    // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
     check_positivity(context, &mut module)?;
     record_totality(context, &mut module, inherited);
     check_type_totality(context, &module, inherited)?;
@@ -1296,8 +1089,7 @@ fn finalize_and_check(
 
 /// Elaborate a whole [`Module`] with no cached prefix, then zonk and check it.
 ///
-/// The paired operation exists so a cached module and its body type can never
-/// come from different metavariable stores.
+/// The paired operation exists so a cached module and its body type can never come from different metavariable stores.
 pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
@@ -1308,35 +1100,17 @@ pub fn elaborate_and_zonk_module(
     curios_profile::profile!("elaborate_and_zonk_module");
     let (module, body_type) =
         elaborate_module_suffix(context, None, module, metavar_floor, universe_floor, mode)?;
-    // Nothing is inherited: `module` is the whole program, so every name it
-    // mentions it also defines.
+    // Nothing is inherited: `module` is the whole program, so every name it mentions it also defines.
     finalize_and_check(context, module, body_type, &BTreeMap::new())
 }
 
-/// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already
-/// elaborated, reusing the cached result instead of re-type-checking it.
+/// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already elaborated, reusing the cached result instead of re-type-checking it.
 ///
-/// `prelude` is the elaborated + zonked prelude-only module — its `items` are
-/// the whole prelude in dependency order (its trivial `body`/`type_` are
-/// ignored). The lowered `module` still carries the *whole* program as
-/// `text::into_core` produced it, and the prelude is its **leading prefix**: with
-/// the prune gone every program lowers the same prelude, and since prelude items
-/// depend only on each other they always topologically sort ahead of the user
-/// items.
+/// `prelude` is the elaborated + zonked prelude-only module — its `items` are the whole prelude in dependency order (its trivial `body`/`type_` are ignored). The lowered `module` still carries the *whole* program as `text::into_core` produced it, and the prelude is its **leading prefix**: with the prune gone every program lowers the same prelude, and since prelude items depend only on each other they always topologically sort ahead of the user items.
 ///
-/// Sound because the prelude is program-independent: its items never see user
-/// code, and — since top-level definitions are excluded from a metavariable's Γ
-/// (`Context::identity_snapshot`) — a user item elaborates against the
-/// identical local context it would with no prefix at all, so the solutions (and
-/// the zonked output) are identical.
+/// Sound because the prelude is program-independent: its items never see user code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — a user item elaborates against the identical local context it would with no prefix at all, so the solutions (and the zonked output) are identical.
 ///
-/// The returned module keeps that shape: its items are `prelude`'s own, cloned
-/// unchanged and in order, followed by the user's, and its registries are
-/// `prelude`'s extended in place. That is a contract, not an artifact of how the
-/// splice happens to be written — [`crate::erase_module_with_prelude`]
-/// skips the prefix by `prelude.items.len()` and reuses the prelude's already
-/// projected terms for it rather than re-deriving the standard library on every
-/// compilation.
+/// The returned module keeps that shape: its items are `prelude`'s own, cloned unchanged and in order, followed by the user's, and its registries are `prelude`'s extended in place. That is a contract, not an artifact of how the splice happens to be written — [`crate::erase_module_with_prelude`] skips the prefix by `prelude.items.len()` and reuses the prelude's already projected terms for it rather than re-deriving the standard library on every compilation.
 pub fn elaborate_and_zonk_with_prelude(
     context: &mut Context,
     prelude: &Module,
@@ -1354,9 +1128,7 @@ pub fn elaborate_and_zonk_with_prelude(
         universe_floor,
         mode,
     )?;
-    // The prelude's own stamps come out of the archive already closed, so
-    // inheriting them is what lets a user proof see that `/std/Async/bind` is
-    // partial without walking `/std` again.
+    // The prelude's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
     let inherited = recorded_totality(prelude);
     let (suffix, body_type) = finalize_and_check(context, suffix, body_type, &inherited)?;
 

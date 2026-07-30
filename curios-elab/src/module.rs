@@ -15,15 +15,9 @@ use {
 
 /// How a lowered definition was introduced.
 ///
-/// This is elaboration metadata, not a fact inferred from the flattened
-/// qualified name. In particular, a module and a nominal type may share a
-/// qualifier without turning ordinary module members into generated nominal
-/// members.
+/// This is elaboration metadata, not a fact inferred from the flattened qualified name. In particular, a module and a nominal type may share a qualifier without turning ordinary module members into generated nominal members.
 ///
-/// A generated member names its origin in full: `InductiveConstructor` carries
-/// both the inductive it belongs to *and* which constructor it is, so the
-/// registry correspondence is read off the pair rather than re-synthesized by
-/// joining an owner and a tag into a name and looking that name up.
+/// A generated member names its origin in full: `InductiveConstructor` carries both the inductive it belongs to *and* which constructor it is, so the registry correspondence is read off the pair rather than re-synthesized by joining an owner and a tag into a name and looking that name up.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
     feature = "archive",
@@ -41,10 +35,7 @@ pub enum DefinitionKind {
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
 ///
-/// A standalone top-level `let` uses free `Var`s keyed by `name`. A definition
-/// returned by [`RecItem::definitions`] is the opened view of a scoped
-/// recursive member and likewise uses the group's export names; the
-/// authoritative recursive type and body remain in [`RecItem::group`].
+/// A standalone top-level `let` uses free `Var`s keyed by `name`. A definition returned by [`RecItem::definitions`] is the opened view of a scoped recursive member and likewise uses the group's export names; the authoritative recursive type and body remain in [`RecItem::group`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "archive",
@@ -54,39 +45,19 @@ pub struct Definition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub universe_context: UniverseContext,
-    /// This definition's declaring module — `name`'s qualifier prefix,
-    /// precomputed once by `into_core` (before `name` was flattened) rather
-    /// than re-derived from it later. Stamped into `Context::island` per item
-    /// by `elaborate_module_suffix` for the representation-privacy checks (§7), which
-    /// test subtree containment against it rather than equality;
-    /// the same value `Structure::module` carries for type declarations.
-    /// Islands are surface-elaboration state: erasure re-derives types with
-    /// privacy suppressed and never stamps them.
+    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks (§7), which test subtree containment against it rather than equality; the same value `Structure::module` carries for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
-    /// This definition's declaring root — `island`'s leading segment,
-    /// precomputed once by `into_core` the same way `Concept`/`StructDecl`/
-    /// `InductDecl` are, so `Context::set_island` (and, downstream, the
-    /// orphan-rule check) never has to re-derive it from `island` itself.
+    /// This definition's declaring root — `island`'s leading segment, precomputed once by `into_core` the same way `Concept`/`StructDecl`/ `InductDecl` are, so `Context::set_island` (and, downstream, the orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,
-    /// Whether this definition terminates on every input, together with
-    /// everything it reaches. Written back by [`crate::record_totality`] after
-    /// zonking — like `polarities` on a declaration, and for the same reason:
-    /// the analysis needs final, meta-free terms, so construction cannot know
-    /// the answer. It defaults to [`Totality::Partial`], which is what makes a
-    /// site that forgets to stamp it fail closed rather than open.
+    /// Whether this definition terminates on every input, together with everything it reaches. Written back by [`crate::record_totality`] after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
     ///
-    /// This is the cross-module summary the erasure gates read. A user program
-    /// that mentions a prelude definition inherits the flag rather than
-    /// re-analyzing the prelude, which is sound because "partial" already means
-    /// "something partial is in its closure".
+    /// This is the cross-module summary the erasure gates read. A user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure".
     pub totality: Totality,
     pub type_: Term,
     pub body: Term,
 }
 
-/// Export metadata for one member of a flat top-level recursive group. The
-/// member's type and body live only in [`RecItem::group`], scoped over every
-/// export in the group.
+/// Export metadata for one member of a flat top-level recursive group. The member's type and body live only in [`RecItem::group`], scoped over every export in the group.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
     feature = "archive",
@@ -97,17 +68,11 @@ pub(crate) struct RecDefinition {
     pub kind: DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
-    /// Per member, not per group. The group's *descent* is decided once for all
-    /// of them, but the transitive closure is not: an accepted group can still
-    /// have one member that reaches something partial while its sibling does
-    /// not. See [`Definition::totality`].
+    /// Per member, not per group. The group's *descent* is decided once for all of them, but the transitive closure is not: an accepted group can still have one member that reaches something partial while its sibling does not. See [`Definition::totality`].
     pub totality: Totality,
 }
 
-/// A flat top-level recursive item backed by the same structural fixed-point
-/// representation as a local [`super::Rec`]. Keeping the export metadata
-/// separate preserves the module's flat architecture without retaining a
-/// second, free-name copy of each recursive type and body.
+/// A flat top-level recursive item backed by the same structural fixed-point representation as a local [`super::Rec`]. Keeping the export metadata separate preserves the module's flat architecture without retaining a second, free-name copy of each recursive type and body.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "archive",
@@ -121,8 +86,7 @@ pub struct RecItem {
 impl RecItem {
     /// This group with universe data projected out of every member, in place.
     ///
-    /// The universe context is cleared here as it is on a [`Definition`]: the
-    /// projection's whole purpose is that no universe data survives into Ersd.
+    /// The universe context is cleared here as it is on a [`Definition`]: the projection's whole purpose is that no universe data survives into Ersd.
     pub(crate) fn projected(&self) -> Self {
         Self {
             definitions: self.definitions.clone(),
@@ -181,8 +145,7 @@ impl RecItem {
 
     /// Open the recursive scopes against their exported names.
     ///
-    /// The returned definitions are a read-only projection; the authoritative
-    /// types and bodies remain structurally shared in the group's scheme.
+    /// The returned definitions are a read-only projection; the authoritative types and bodies remain structurally shared in the group's scheme.
     pub fn definitions(&self) -> Vec<Definition> {
         let names = self
             .definitions
@@ -221,8 +184,7 @@ impl Definition {
     }
 }
 
-/// A top-level item: a single `let` definition, or a `rec` group of
-/// mutually-recursive definitions (which may reference each other by `name`).
+/// A top-level item: a single `let` definition, or a `rec` group of mutually-recursive definitions (which may reference each other by `name`).
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "archive",
@@ -236,9 +198,7 @@ pub enum Item {
 impl Item {
     /// How a diagnostic names this item.
     ///
-    /// An authored declaration is named by its path. A witness has no authored
-    /// path — that is the point of `satisfy` — so it is named by the module it
-    /// was declared in, which is the coordinate a reader can actually act on.
+    /// An authored declaration is named by its path. A witness has no authored path — that is the point of `satisfy` — so it is named by the module it was declared in, which is the coordinate a reader can actually act on.
     pub(crate) fn describe(&self) -> String {
         let described = |definition: &Definition| match definition.name.qualifier() {
             Some(path) => path.join(),
@@ -271,15 +231,9 @@ impl Item {
     }
 }
 
-/// The whole program as a *flat* list of top-level `items`, the entrypoint
-/// `body`, and its optional `type_` annotation.
+/// The whole program as a *flat* list of top-level `items`, the entrypoint `body`, and its optional `type_` annotation.
 ///
-/// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that
-/// `text::into_core` used to fold the entire prelude into — the construction
-/// (`Scope::close` over the whole accumulator at each step) and every pass that
-/// recursed along its `.tail` spine were both O(N) in stack and overflowed at
-/// prelude depth (BUG.md). `Subterm::Let`/`Rec` remain for genuine *local*,
-/// in-expression bindings, which are shallow.
+/// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that `text::into_core` used to fold the entire prelude into — the construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine were both O(N) in stack and overflowed at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "archive",
@@ -287,54 +241,30 @@ impl Item {
 )]
 pub struct Module {
     pub items: Vec<Item>,
-    /// Lowering-time metadata for every universe metavariable id in this
-    /// module. Finalized, zonked modules clear this vector.
+    /// Lowering-time metadata for every universe metavariable id in this module. Finalized, zonked modules clear this vector.
     pub universe_seeds: Vec<UniverseSeed>,
-    /// Inductive declarations' registry entries, keyed by the type's qualified
-    /// name. Carried on the module — not on a `Context` — because elaboration
-    /// and erasure each run with their *own* `Context` (see `run::compile`);
-    /// both seed their context's flat inductive store from here on entry.
+    /// Inductive declarations' registry entries, keyed by the type's qualified name. Carried on the module — not on a `Context` — because elaboration and erasure each run with their *own* `Context` (see `run::compile`); both seed their context's flat inductive store from here on entry.
     pub induct_decls: BTreeMap<Global, InductDecl>,
-    /// Struct declarations' registry entries, keyed by the type's qualified
-    /// name. Carried on the module like `induct_decls` (and for the same reason):
-    /// elaboration and erasure each seed their own `Context` from here on entry.
+    /// Struct declarations' registry entries, keyed by the type's qualified name. Carried on the module like `induct_decls` (and for the same reason): elaboration and erasure each seed their own `Context` from here on entry.
     pub struct_decls: BTreeMap<Global, StructDecl>,
-    /// Concept declarations' resolution metadata, keyed by the concept's
-    /// qualified name (each concept's record shape also lives in
-    /// `struct_decls`). Seeded into the elaboration `Context` on entry; erasure
-    /// never consults it.
+    /// Concept declarations' resolution metadata, keyed by the concept's qualified name (each concept's record shape also lives in `struct_decls`). Seeded into the elaboration `Context` on entry; erasure never consults it.
     pub concepts: BTreeMap<Global, Concept>,
-    /// The definition names that are witness declarations. Elaboration
-    /// registers each into the witness table when its signature elaborates —
-    /// carried as names (not keys) because the table key needs the
-    /// *elaborated* head, which only exists once elaboration runs.
+    /// The definition names that are witness declarations. Elaboration registers each into the witness table when its signature elaborates — carried as names (not keys) because the table key needs the *elaborated* head, which only exists once elaboration runs.
     pub witnesses: BTreeSet<Global>,
     /// One past the highest binder index `into_core` minted for this module.
     ///
-    /// Binder identities are one space shared with `Context::fresh`, so
-    /// elaboration seeds its counter here (`Context::set_local_floor`). The
-    /// archived prelude carries its own high-water mark for the same reason: a
-    /// replayed term's binders were minted in an earlier compiler run, and a
-    /// fresh mint that aliased one of them would silently capture.
+    /// Binder identities are one space shared with `Context::fresh`, so elaboration seeds its counter here (`Context::set_local_floor`). The archived prelude carries its own high-water mark for the same reason: a replayed term's binders were minted in an earlier compiler run, and a fresh mint that aliased one of them would silently capture.
     pub binder_floor: usize,
     pub type_: Option<Term>,
     pub body: Term,
 }
 
 impl Module {
-    /// This module with every term hash-consed against `sharing` — one shared
-    /// allocation per distinct structure.
+    /// This module with every term hash-consed against `sharing` — one shared allocation per distinct structure.
     ///
-    /// Built for the archived prelude. Elaboration constructs the same types,
-    /// telescopes, and proof spines independently in definition after
-    /// definition, and nothing deduplicates them, because `Rc` sharing only ever
-    /// arises from *cloning* a value: two definitions that build the same type
-    /// build it twice. Measured over the prelude, 389,264 nodes covered 19,908
-    /// distinct structures — a 19.6x expansion that the archive stores in full
-    /// and every restored traversal then walks in full.
+    /// Built for the archived prelude. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Measured over the prelude, 389,264 nodes covered 19,908 distinct structures — a 19.6x expansion that the archive stores in full and every restored traversal then walks in full.
     ///
-    /// Pass the same [`Sharing`] to every snapshot archived together so equal
-    /// structures collapse across them as well as within each.
+    /// Pass the same [`Sharing`] to every snapshot archived together so equal structures collapse across them as well as within each.
     pub fn shared(&self, sharing: &Sharing) -> Module {
         let definition = |definition: &Definition| Definition {
             name: definition.name.clone(),
@@ -365,10 +295,7 @@ impl Module {
                                 totality: member.totality,
                             })
                             .collect(),
-                        // Mapped in place rather than opened and re-closed: the
-                        // round trip rebuilds every node twice and drops every
-                        // memoized derivation with it, and the rebuilt nodes
-                        // would escape this very pass.
+                        // Mapped in place rather than opened and re-closed: the round trip rebuilds every node twice and drops every memoized derivation with it, and the rebuilt nodes would escape this very pass.
                         group: rec.group.map_members(|term| sharing.share(term)),
                     }),
                 })
@@ -396,13 +323,7 @@ impl Module {
         }
     }
 
-    /// Re-fold the flat module into the legacy nested `Let`/`Rec` `Term` it
-    /// replaced (items are already in binding order). Test-only: lets the
-    /// `into_core`/`erase` suites keep asserting against the historical shape — and
-    /// keep feeding a single `Term` to `erase` — without rewriting every
-    /// expectation. Drops `type_` (the old `run` helper only returned the term).
-    /// Not `#[cfg(test)]`: its callers live in `curios`'s test suite, a
-    /// different crate, where that cfg would never activate.
+    /// Re-fold the flat module into the legacy nested `Let`/`Rec` `Term` it replaced (items are already in binding order). Test-only: lets the `into_core`/`erase` suites keep asserting against the historical shape — and keep feeding a single `Term` to `erase` — without rewriting every expectation. Drops `type_` (the old `run` helper only returned the term). Not `#[cfg(test)]`: its callers live in `curios`'s test suite, a different crate, where that cfg would never activate.
     pub fn into_nested_term(self) -> Term {
         self.items
             .into_iter()
@@ -418,8 +339,7 @@ impl Module {
             })
     }
 
-    /// Every global qualified name in `self`: each definition (`let`/`rec`), each
-    /// inductive type, each struct type. The universe a global is shortened *against*.
+    /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
     pub(crate) fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
         for item in &self.items {
@@ -439,9 +359,7 @@ impl Module {
 }
 
 impl fmt::Display for Module {
-    // Printed by *iterating* the flat items (never re-folding into a nested term),
-    // so `--print core` stays O(N) and cannot re-trigger the prelude-depth
-    // overflow this representation removed.
+    // Printed by *iterating* the flat items (never re-folding into a nested term), so `--print core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         with_short_names(Rc::new(build_shorten(&self.module_symbols())), || {
             for item in &self.items {

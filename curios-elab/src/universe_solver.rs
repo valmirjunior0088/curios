@@ -1,9 +1,6 @@
 //! The transactional universe constraint solver.
 //!
-//! Elaboration machinery, not representation: it owns the live inequality
-//! store, the difference graph that decides consistency, and the marks that
-//! roll a speculative branch back. The levels, contexts, and schemes it solves
-//! over live in `universe`, which knows nothing about any of this.
+//! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `universe`, which knows nothing about any of this.
 
 mod constraints;
 use constraints::{ConstraintStore, StoreMark};
@@ -19,8 +16,7 @@ use {
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
 
-/// A stable point to which all universe assignments and constraints can be
-/// rolled back after a speculative elaboration branch.
+/// A stable point to which all universe assignments and constraints can be rolled back after a speculative elaboration branch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UniverseMark {
     constraints: StoreMark,
@@ -154,9 +150,7 @@ impl DifferenceGraph {
             return Ok(None);
         }
 
-        // Predecessors form a forest while the graph is feasible. Making an
-        // ancestor depend on its descendant closes a cycle; the strict
-        // distance improvement proves that cycle has negative total weight.
+        // Predecessors form a forest while the graph is feasible. Making an ancestor depend on its descendant closes a cycle; the strict distance improvement proves that cycle has negative total weight.
         let mut cursor = from;
         let mut path = vec![edge_index];
         loop {
@@ -240,12 +234,10 @@ fn atomic_difference_edge(
     }
 }
 
-/// The difference-graph fragment one constraint contributes: the nodes it
-/// names and the edges relating them.
+/// The difference-graph fragment one constraint contributes: the nodes it names and the edges relating them.
 type DifferenceFragment = (BTreeSet<DifferenceNode>, Vec<DifferenceEdge>);
 
-/// Encode a constraint whose right-hand maxima have one forced viable choice.
-/// `Ok(None)` means that the exact disjunctive solver is required.
+/// Encode a constraint whose right-hand maxima have one forced viable choice. `Ok(None)` means that the exact disjunctive solver is required.
 fn forced_difference_edges(
     constraint: &UniverseConstraint,
     index: usize,
@@ -316,12 +308,9 @@ pub struct UniverseSolver {
 }
 
 impl UniverseSolver {
-    /// The metas reachable from `metas` through constraints and solutions —
-    /// the declaration's universe closure.
+    /// The metas reachable from `metas` through constraints and solutions — the declaration's universe closure.
     ///
-    /// Reachability is a graph search over the occurrence index, so each
-    /// constraint is visited once per newly reached level rather than once per
-    /// pass over the whole store.
+    /// Reachability is a graph search over the occurrence index, so each constraint is visited once per newly reached level rather than once per pass over the whole store.
     fn connected_metas(
         &self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
@@ -430,9 +419,7 @@ impl UniverseSolver {
         }
     }
 
-    /// Restore both stores to `mark`. Solutions are unwound first: the
-    /// constraint journal's pre-images were taken *before* the assignments
-    /// that rewrote them, so the two unwind in the same direction.
+    /// Restore both stores to `mark`. Solutions are unwound first: the constraint journal's pre-images were taken *before* the assignments that rewrote them, so the two unwind in the same direction.
     pub fn rollback(&mut self, mark: UniverseMark) {
         while self.solution_log.len() > mark.solution_log_len {
             let meta = self.solution_log.pop().unwrap();
@@ -446,10 +433,7 @@ impl UniverseSolver {
         self.constraints.as_slice()
     }
 
-    /// Release inference constraints after their enclosing declaration has
-    /// finalized. Any relation that remains externally meaningful has already
-    /// been projected into that declaration's [`UniverseContext`]; later uses
-    /// reinsert the stored residual context at fresh instances.
+    /// Release inference constraints after their enclosing declaration has finalized. Any relation that remains externally meaningful has already been projected into that declaration's [`UniverseContext`]; later uses reinsert the stored residual context at fresh instances.
     pub(crate) fn clear_constraints(&mut self) {
         self.constraints.clear();
         self.consistency = None;
@@ -542,9 +526,7 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Minimize flexible metas from their current lower bounds. Repeating to a
-    /// fixpoint handles classifier chains; unconstrained flexible metas become
-    /// zero. Generalizable metas are left for declaration finalization.
+    /// Minimize flexible metas from their current lower bounds. Repeating to a fixpoint handles classifier chains; unconstrained flexible metas become zero. Generalizable metas are left for declaration finalization.
     pub fn solve_flexible(&mut self) -> Result<(), UniverseError> {
         let metas = (0..self.metas.len())
             .map(UniverseMetaId)
@@ -559,16 +541,9 @@ impl UniverseSolver {
             .is_some_and(|entry| entry.role == UniverseRole::Flexible && entry.solution.is_none())
     }
 
-    /// The bound `lower ≤ max(c, atom + k)` places on `atom`, or `None` when it
-    /// places none.
+    /// The bound `lower ≤ max(c, atom + k)` places on `atom`, or `None` when it places none.
     ///
-    /// With `c = 0` the atom must cover `lower` outright, and cancelling `k`
-    /// answers directly. With `c > 0` the upper side already covers everything
-    /// up to `c` on its own, so only the part of `lower` exceeding `c`
-    /// constrains the atom — and whether `c` covers `lower` is decidable only
-    /// when `lower` is a known constant. A larger constant *is* determined:
-    /// `c` cannot supply it, so the atom must, even though the upper side is
-    /// not a bare atom.
+    /// With `c = 0` the atom must cover `lower` outright, and cancelling `k` answers directly. With `c > 0` the upper side already covers everything up to `c` on its own, so only the part of `lower` exceeding `c` constrains the atom — and whether `c` covers `lower` is decidable only when `lower` is a known constant. A larger constant *is* determined: `c` cannot supply it, so the atom must, even though the upper side is not a bare atom.
     fn atom_lower_bound(upper_constant: u32, upper_offset: u32, lower: Level) -> Option<Level> {
         if upper_constant != 0 {
             if lower.atoms().next().is_some() {
@@ -581,15 +556,9 @@ impl UniverseSolver {
         lower.cancel_offset(upper_offset)
     }
 
-    /// The least level satisfying every `lower ≤ meta + k` bound, or `None`
-    /// when some bound still mentions an unsolved flexible level and the
-    /// answer would not yet be final.
+    /// The least level satisfying every `lower ≤ meta + k` bound, or `None` when some bound still mentions an unsolved flexible level and the answer would not yet be final.
     ///
-    /// Cancelling `k` yields the principal solution only when every lower atom
-    /// carries at least that offset. Otherwise the solution would need a
-    /// predecessor expression, which the level algebra deliberately does not
-    /// contain, and finalization retains the relation as constrained
-    /// polymorphism instead.
+    /// Cancelling `k` yields the principal solution only when every lower atom carries at least that offset. Otherwise the solution would need a predecessor expression, which the level algebra deliberately does not contain, and finalization retains the relation as constrained polymorphism instead.
     fn principal_lower_bound(&self, meta: UniverseMetaId) -> Result<Option<Level>, UniverseError> {
         let head = LevelHead::Meta(meta);
         let mut lowers = Vec::new();
@@ -622,17 +591,9 @@ impl UniverseSolver {
         Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
     }
 
-    /// The least level satisfying the *currently known* part of every
-    /// `lower ≤ meta + k` bound, reading each still-open flexible level in a
-    /// lower position as its least value, zero.
+    /// The least level satisfying the *currently known* part of every `lower ≤ meta + k` bound, reading each still-open flexible level in a lower position as its least value, zero.
     ///
-    /// [`Self::principal_lower_bound`] refuses to answer while any lower bound
-    /// mentions an open level, because the answer could still grow. That is the
-    /// right rule while propagation can still make progress, but a cycle of
-    /// mutual bounds never does: every level in it is waiting for another.
-    /// Weakening the open atoms to zero yields an *implied* bound — a level is
-    /// monotone in its atoms, so the result is a sound floor rather than a
-    /// guess — which is enough to break the tie and resume propagation.
+    /// [`Self::principal_lower_bound`] refuses to answer while any lower bound mentions an open level, because the answer could still grow. That is the right rule while propagation can still make progress, but a cycle of mutual bounds never does: every level in it is waiting for another. Weakening the open atoms to zero yields an *implied* bound — a level is monotone in its atoms, so the result is a sound floor rather than a guess — which is enough to break the tie and resume propagation.
     fn grounded_lower_bound(&self, meta: UniverseMetaId) -> Result<Option<Level>, UniverseError> {
         let head = LevelHead::Meta(meta);
         let mut lowers = Vec::new();
@@ -668,8 +629,7 @@ impl UniverseSolver {
         Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
     }
 
-    /// Whether any constraint genuinely bounds `meta` from above. A level with
-    /// no such bound has the unconditional least solution zero.
+    /// Whether any constraint genuinely bounds `meta` from above. A level with no such bound has the unconditional least solution zero.
     fn is_upper_bounded(&self, meta: UniverseMetaId) -> bool {
         self.constraints
             .mentioning(LevelHead::Meta(meta))
@@ -680,9 +640,7 @@ impl UniverseSolver {
             })
     }
 
-    /// The levels whose own bounds mention `meta`, and which may therefore
-    /// become solvable once `meta` is. Collected before the assignment, since
-    /// committing it substitutes `meta` out of exactly these constraints.
+    /// The levels whose own bounds mention `meta`, and which may therefore become solvable once `meta` is. Collected before the assignment, since committing it substitutes `meta` out of exactly these constraints.
     fn dependents_of(&self, meta: UniverseMetaId) -> BTreeSet<UniverseMetaId> {
         self.constraints
             .mentioning(LevelHead::Meta(meta))
@@ -694,10 +652,7 @@ impl UniverseSolver {
 
     /// Minimize the flexible levels in `metas` to their least solutions.
     ///
-    /// Solving is worklist-driven: a level is revisited only when one of the
-    /// levels its bounds mention has just been solved. Rescanning every
-    /// constraint for every level after every assignment is what made this
-    /// quadratic in the size of a declaration's universe closure.
+    /// Solving is worklist-driven: a level is revisited only when one of the levels its bounds mention has just been solved. Rescanning every constraint for every level after every assignment is what made this quadratic in the size of a declaration's universe closure.
     fn solve_flexible_in(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
         self.merge_forced_equalities(metas)?;
 
@@ -721,12 +676,7 @@ impl UniverseSolver {
                 }
             }
 
-            // A flexible level that occurs only in lower positions is zero.
-            // Default the lowest such id, then resume propagation: for
-            // `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. Taking these
-            // before the stalled levels below is what keeps that derivation
-            // available, since a level nothing bounds from above can never be
-            // the one holding a cycle together.
+            // A flexible level that occurs only in lower positions is zero. Default the lowest such id, then resume propagation: for `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. Taking these before the stalled levels below is what keeps that derivation available, since a level nothing bounds from above can never be the one holding a cycle together.
             if let Some(meta) = metas
                 .iter()
                 .copied()
@@ -742,9 +692,7 @@ impl UniverseSolver {
                 continue;
             }
 
-            // Everything still open is now bounded above by a level that is
-            // itself unsolved, so propagation alone will never resume: each
-            // member is waiting on another.
+            // Everything still open is now bounded above by a level that is itself unsolved, so propagation alone will never resume: each member is waiting on another.
             let stalled = metas
                 .iter()
                 .copied()
@@ -766,24 +714,11 @@ impl UniverseSolver {
         self.check_consistent()
     }
 
-    /// Break a stalled set by closing each of its components at the grounded
-    /// floor, keeping only the closures that survive a consistency check.
-    /// Returns the levels whose bounds mentioned a committed one.
+    /// Break a stalled set by closing each of its components at the grounded floor, keeping only the closures that survive a consistency check. Returns the levels whose bounds mentioned a committed one.
     ///
-    /// A stall has two shapes, and only one of them may be closed. A *cycle* of
-    /// mutual bounds — `max(1, ?u) ≤ max(1, ?v)` with its converse, which is
-    /// what witness dispatch emits — has a least solution, and the floor
-    /// assignment witnesses it. A *disjunction* like `1 ≤ max(?u, ?v)` has
-    /// none: either level may carry the bound, so choosing one is arbitrary and
-    /// would silently strip a declaration of polymorphism it is entitled to
-    /// keep. Attempting the floor and rolling back on inconsistency
-    /// distinguishes them without either shape having to be recognized
-    /// syntactically: the disjunction's floor reduces to `1 ≤ 0` and fails,
-    /// while the cycle's reduces to `1 ≤ 1` and holds.
+    /// A stall has two shapes, and only one of them may be closed. A *cycle* of mutual bounds — `max(1, ?u) ≤ max(1, ?v)` with its converse, which is what witness dispatch emits — has a least solution, and the floor assignment witnesses it. A *disjunction* like `1 ≤ max(?u, ?v)` has none: either level may carry the bound, so choosing one is arbitrary and would silently strip a declaration of polymorphism it is entitled to keep. Attempting the floor and rolling back on inconsistency distinguishes them without either shape having to be recognized syntactically: the disjunction's floor reduces to `1 ≤ 0` and fails, while the cycle's reduces to `1 ≤ 1` and holds.
     ///
-    /// Components are closed independently so that one unresolvable
-    /// disjunction cannot veto an unrelated cycle elsewhere in the same
-    /// declaration.
+    /// Components are closed independently so that one unresolvable disjunction cannot veto an unrelated cycle elsewhere in the same declaration.
     fn close_stalled_components(
         &mut self,
         stalled: &BTreeSet<UniverseMetaId>,
@@ -798,9 +733,7 @@ impl UniverseSolver {
                 .collect::<BTreeSet<_>>();
             remaining = remaining.difference(&component).copied().collect();
 
-            // Every floor is read from the same pre-assignment state, so the
-            // component closes simultaneously rather than each member seeing
-            // the levels committed before it.
+            // Every floor is read from the same pre-assignment state, so the component closes simultaneously rather than each member seeing the levels committed before it.
             let floors = component
                 .iter()
                 .map(|meta| {
@@ -830,14 +763,7 @@ impl UniverseSolver {
         Ok(woken)
     }
 
-    /// Collapse exact bidirectional atom inequalities before allocating
-    /// generalized parameters. This handles the equality classes generated by
-    /// conversion without pretending that arbitrary max equalities are
-    /// syntactically unifiable.
-    /// Each round collects *every* forced equality rather than the first.
-    /// Merging can expose new ones — `a ≤ c` and `c ≤ b` become mutual once
-    /// `a` and `b` coincide — so rounds still repeat to a fixpoint, but a
-    /// round costs one pass over the store instead of one pass per merge.
+    /// Collapse exact bidirectional atom inequalities before allocating generalized parameters. This handles the equality classes generated by conversion without pretending that arbitrary max equalities are syntactically unifiable. Each round collects *every* forced equality rather than the first. Merging can expose new ones — `a ≤ c` and `c ≤ b` become mutual once `a` and `b` coincide — so rounds still repeat to a fixpoint, but a round costs one pass over the store instead of one pass per merge.
     fn merge_forced_equalities(
         &mut self,
         metas: &BTreeSet<UniverseMetaId>,
@@ -904,11 +830,7 @@ impl UniverseSolver {
 
     /// Commit a solution, then normalize the constraints that mention it.
     ///
-    /// Substituting here rather than re-zonking at every read is what keeps
-    /// the store's normalization invariant: the work is proportional to the
-    /// solved level's degree, and every later reader sees a settled
-    /// inequality. A second assignment to one meta is ignored, so a solution
-    /// is committed at most once and the journal stays a faithful inverse.
+    /// Substituting here rather than re-zonking at every read is what keeps the store's normalization invariant: the work is proportional to the solved level's degree, and every later reader sees a settled inequality. A second assignment to one meta is ignored, so a solution is committed at most once and the journal stays a faithful inverse.
     fn assign(&mut self, meta: UniverseMetaId, level: Level) -> Result<(), UniverseError> {
         let entry = self
             .metas
@@ -929,8 +851,7 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Instantiate a closed context, returning its fresh argument vector after
-    /// inserting the substituted residual constraints transactionally.
+    /// Instantiate a closed context, returning its fresh argument vector after inserting the substituted residual constraints transactionally.
     pub fn instantiate(
         &mut self,
         context: &UniverseContext,
@@ -943,16 +864,9 @@ impl UniverseSolver {
         Ok(levels)
     }
 
-    /// Insert a closed context's residual constraints at an already chosen
-    /// occurrence instance. Used when re-elaborating an explicit
-    /// `UniverseInst`: its stored arguments are authoritative and must not be
-    /// replaced by a second fresh instantiation.
+    /// Insert a closed context's residual constraints at an already chosen occurrence instance. Used when re-elaborating an explicit `UniverseInst`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
     ///
-    /// A stored context is validated where it is built ([`Self::generalize`])
-    /// and where it is restored (`validate_universes`), not here: every
-    /// occurrence of every polymorphic binding instantiates, and re-deciding a
-    /// context's consistency per occurrence repeats a whole constraint solve
-    /// for an invariant that cannot have changed.
+    /// A stored context is validated where it is built ([`Self::generalize`]) and where it is restored (`validate_universes`), not here: every occurrence of every polymorphic binding instantiates, and re-deciding a context's consistency per occurrence repeats a whole constraint solve for an invariant that cannot have changed.
     pub fn instantiate_at(
         &mut self,
         context: &UniverseContext,
@@ -993,9 +907,7 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Generalize the requested unsolved metas in deterministic id order,
-    /// rewriting all constraints that mention only those metas into a closed
-    /// declaration context.
+    /// Generalize the requested unsolved metas in deterministic id order, rewriting all constraints that mention only those metas into a closed declaration context.
     pub fn generalize(
         &self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
@@ -1053,14 +965,9 @@ impl UniverseSolver {
         Ok((context, replacement))
     }
 
-    /// Solve `metas` as if each were an inferred output, restoring their
-    /// declared roles afterwards. Solving ranges over `scope` so a minimized
-    /// level can still be determined by its relations to levels outside the
-    /// requested set.
+    /// Solve `metas` as if each were an inferred output, restoring their declared roles afterwards. Solving ranges over `scope` so a minimized level can still be determined by its relations to levels outside the requested set.
     ///
-    /// Minimization is a property of the *position* a level occupies rather
-    /// than of the level itself: one written `Type` is an input where a use
-    /// site can choose it and an ordinary classifier where it cannot.
+    /// Minimization is a property of the *position* a level occupies rather than of the level itself: one written `Type` is an input where a use site can choose it and an ordinary classifier where it cannot.
     fn minimize(
         &mut self,
         metas: &BTreeSet<UniverseMetaId>,
@@ -1085,15 +992,9 @@ impl UniverseSolver {
         solved
     }
 
-    /// Minimize inference-only levels and bind every surviving input meta as a
-    /// deterministic declaration parameter.
+    /// Minimize inference-only levels and bind every surviving input meta as a deterministic declaration parameter.
     ///
-    /// `interface` is the declaration's externally visible universe surface —
-    /// its type and the registry signatures a use site instantiates. `internal`
-    /// levels occur only in the body, so no occurrence could ever choose them;
-    /// they are minimized instead of becoming parameters a caller cannot
-    /// supply. An internal level with no principal solution is still
-    /// generalized, because the residual context must stay closed.
+    /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed.
     pub fn finalize(
         &mut self,
         interface: impl IntoIterator<Item = UniverseMetaId>,
@@ -1120,21 +1021,11 @@ impl UniverseSolver {
         Ok(context)
     }
 
-    /// Issue a declaration into an *inherited* context, binding `instance` to
-    /// that context's parameters by position.
+    /// Issue a declaration into an *inherited* context, binding `instance` to that context's parameters by position.
     ///
-    /// A concept method wrapper is not independently polymorphic. It is issued
-    /// in its concept's context, and the levels its `use w : C(…)` binder
-    /// carries are that context's parameters in declaration order, so solving
-    /// position `i` to `Param(i)` is the identity substitution. Every level the
-    /// instance does not name directly is related to one that it does by the
-    /// constraints unification already recorded, and minimizing from those
-    /// lower bounds settles it at the parameter that forced it.
+    /// A concept method wrapper is not independently polymorphic. It is issued in its concept's context, and the levels its `use w : C(…)` binder carries are that context's parameters in declaration order, so solving position `i` to `Param(i)` is the identity substitution. Every level the instance does not name directly is related to one that it does by the constraints unification already recorded, and minimizing from those lower bounds settles it at the parameter that forced it.
     ///
-    /// This is deliberately not [`Self::finalize`]: finalization mints
-    /// parameters for the metas it finds in ascending meta-id order, and a
-    /// wrapper's own binder metas are minted before its instance metas, so
-    /// that order need not agree with the concept's.
+    /// This is deliberately not [`Self::finalize`]: finalization mints parameters for the metas it finds in ascending meta-id order, and a wrapper's own binder metas are minted before its instance metas, so that order need not agree with the concept's.
     pub fn finalize_at_instance(
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
@@ -1157,9 +1048,7 @@ impl UniverseSolver {
             let mut atoms = level.atoms();
             match (level.constant_part(), atoms.next(), atoms.next()) {
                 (0, Some((LevelHead::Meta(meta), 0)), None) => self.assign(meta, parameter)?,
-                // An argument that is neither the parameter itself nor an open
-                // meta was already forced elsewhere, and nothing in the
-                // declaration can denote the concept's parameter in its place.
+                // An argument that is neither the parameter itself nor an open meta was already forced elsewhere, and nothing in the declaration can denote the concept's parameter in its place.
                 _ => return Err(UniverseError::EscapingLevel),
             }
         }
@@ -1173,31 +1062,15 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Commit `instance` to the levels `determined` already fixes, position by
-    /// position.
+    /// Commit `instance` to the levels `determined` already fixes, position by position.
     ///
-    /// A witness inhabits its goal and no other, so the levels its scheme
-    /// introduces at a use site carry no freedom — the goal fixes them.
-    /// Conversion alone does not say so: cumulativity makes a concept
-    /// application's universe arguments a bound rather than an equation, and a
-    /// bounded-but-unsolved level is left for declaration finalization.
+    /// A witness inhabits its goal and no other, so the levels its scheme introduces at a use site carry no freedom — the goal fixes them. Conversion alone does not say so: cumulativity makes a concept application's universe arguments a bound rather than an equation, and a bounded-but-unsolved level is left for declaration finalization.
     ///
-    /// These must therefore be *solutions*, not constraints. A goal that
-    /// deferred resolves after its consuming declaration finalized, so no
-    /// finalization remains to turn a bound into a value, and the enclosing
-    /// item's `clear_constraints` would discard a constraint unsolved.
+    /// These must therefore be *solutions*, not constraints. A goal that deferred resolves after its consuming declaration finalized, so no finalization remains to turn a bound into a value, and the enclosing item's `clear_constraints` would discard a constraint unsolved.
     ///
-    /// Positions whose instance level is already solved, or whose determining
-    /// level is itself still open, are left alone: this pins what is knowable
-    /// and never invents a solution.
+    /// Positions whose instance level is already solved, or whose determining level is itself still open, are left alone: this pins what is knowable and never invents a solution.
     ///
-    /// The goal fixes only the levels its own application mentions. A witness
-    /// scheme may carry more — `satisfy Monad(Async)` generalizes levels its
-    /// *body* needs, which no goal could determine — so `minted` names the
-    /// whole instance, and whatever the goal leaves open is minimized from its
-    /// lower bounds. That is precisely how [`Self::finalize`] treats a level
-    /// reachable only through a body, applied here because the declaration
-    /// that would have done it has already closed.
+    /// The goal fixes only the levels its own application mentions. A witness scheme may carry more — `satisfy Monad(Async)` generalizes levels its *body* needs, which no goal could determine — so `minted` names the whole instance, and whatever the goal leaves open is minimized from its lower bounds. That is precisely how [`Self::finalize`] treats a level reachable only through a body, applied here because the declaration that would have done it has already closed.
     pub fn close_instance(
         &mut self,
         minted: &[Level],
@@ -1257,8 +1130,7 @@ impl UniverseSolver {
             .filter(|meta| self.solution(*meta).is_none())
     }
 
-    /// Close a non-reusable result (the module entrypoint) at its least
-    /// universe solution instead of introducing a scheme.
+    /// Close a non-reusable result (the module entrypoint) at its least universe solution instead of introducing a scheme.
     pub fn default(
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
@@ -1270,8 +1142,7 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Explain an inconsistency from the constraint indices that closed the
-    /// cycle, widening the path with the origins of the levels it names.
+    /// Explain an inconsistency from the constraint indices that closed the cycle, widening the path with the origins of the levels it names.
     fn inconsistency_from_path(&self, path: Vec<usize>) -> UniverseError {
         let constraints = self.constraints.as_slice();
         let witness = path.first().copied().unwrap_or(0);
@@ -1361,9 +1232,7 @@ impl UniverseSolver {
         self.check_consistent_full()
     }
 
-    /// Decide consistency from scratch, branching on genuine right-hand
-    /// maxima. Reads the store directly: every stored constraint is already
-    /// normalized, so there is no separate zonked copy to drift from.
+    /// Decide consistency from scratch, branching on genuine right-hand maxima. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
     fn check_consistent_full(&self) -> Result<(), UniverseError> {
         let constraints = self.constraints.as_slice();
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1434,9 +1303,7 @@ impl UniverseSolver {
 
         /// One difference constraint over *indexed* nodes.
         ///
-        /// The search resolves node identity once, up front. Keeping `Node`
-        /// keys here instead made every relaxation step a `BTreeMap` lookup,
-        /// inside the innermost loop of an exponential search.
+        /// The search resolves node identity once, up front. Keeping `Node` keys here instead made every relaxation step a `BTreeMap` lookup, inside the innermost loop of an exponential search.
         #[derive(Debug, Clone, Copy)]
         struct Arc {
             from: usize,
@@ -1445,15 +1312,9 @@ impl UniverseSolver {
             origin: Option<usize>,
         }
 
-        /// A feasible potential over the committed arcs, maintained across the
-        /// branch search.
+        /// A feasible potential over the committed arcs, maintained across the branch search.
         ///
-        /// The invariant is that `distance` satisfies every arc currently in
-        /// `arcs`. Committing one more arc restores it by relaxing outward from
-        /// that arc alone, and backtracking replays the entries it changed.
-        /// Re-deriving the whole potential per search node instead — a full
-        /// Bellman-Ford over every arc — is what made this search dominate
-        /// elaboration.
+        /// The invariant is that `distance` satisfies every arc currently in `arcs`. Committing one more arc restores it by relaxing outward from that arc alone, and backtracking replays the entries it changed. Re-deriving the whole potential per search node instead — a full Bellman-Ford over every arc — is what made this search dominate elaboration.
         struct Search {
             arcs: Vec<Arc>,
             outgoing: Vec<Vec<usize>>,
@@ -1473,17 +1334,13 @@ impl UniverseSolver {
                 Self {
                     arcs: Vec::new(),
                     outgoing: vec![Vec::new(); node_count],
-                    // Every node has an implicit zero-weight edge from a
-                    // super-source, so the all-zero potential is feasible for
-                    // the empty arc set.
+                    // Every node has an implicit zero-weight edge from a super-source, so the all-zero potential is feasible for the empty arc set.
                     distance: vec![0; node_count],
                     predecessor: vec![None; node_count],
                 }
             }
 
-            /// Tighten `to` along one arc. `Ok(None)` means the potential
-            /// already satisfied it; `Err` means committing it closes a
-            /// negative cycle, reported as the origins around that cycle.
+            /// Tighten `to` along one arc. `Ok(None)` means the potential already satisfied it; `Err` means committing it closes a negative cycle, reported as the origins around that cycle.
             fn relax(
                 &mut self,
                 arc: usize,
@@ -1497,9 +1354,7 @@ impl UniverseSolver {
                     return Ok(None);
                 }
 
-                // Predecessors form a forest while the potential is feasible.
-                // Making an ancestor depend on its descendant closes a cycle,
-                // and the strict improvement proves its weight is negative.
+                // Predecessors form a forest while the potential is feasible. Making an ancestor depend on its descendant closes a cycle, and the strict improvement proves its weight is negative.
                 let mut cursor = from;
                 let mut path = vec![arc];
                 loop {
@@ -1548,8 +1403,7 @@ impl UniverseSolver {
                 Ok(())
             }
 
-            /// Commit one arc, restoring feasibility. On failure the search is
-            /// left exactly as it was, so a refuted branch costs nothing.
+            /// Commit one arc, restoring feasibility. On failure the search is left exactly as it was, so a refuted branch costs nothing.
             fn commit(&mut self, arc: Arc) -> Result<Undo, Vec<usize>> {
                 let index = self.arcs.len();
                 self.arcs.push(arc);
@@ -1584,12 +1438,9 @@ impl UniverseSolver {
             }
         }
 
-        /// `budget` bounds the nodes this search may visit. Exhausting it is
-        /// reported as `Err(None)`, distinct from a refuted branch, so the
-        /// caller can name the clause shape instead of spinning.
+        /// `budget` bounds the nodes this search may visit. Exhausting it is reported as `Err(None)`, distinct from a refuted branch, so the caller can name the clause shape instead of spinning.
         ///
-        /// Reaching the last clause needs no final check: feasibility is the
-        /// search's invariant, so an assignment that committed is a model.
+        /// Reaching the last clause needs no final check: feasibility is the search's invariant, so an assignment that committed is a model.
         fn choose(
             clauses: &[(usize, Vec<Option<Arc>>)],
             clause: usize,
@@ -1607,8 +1458,7 @@ impl UniverseSolver {
             let mut best_failure = None;
             for choice in &clauses[clause].1 {
                 let (result, undo) = match choice {
-                    // A clause alternative that needs no arc is already
-                    // satisfied by the committed potential.
+                    // A clause alternative that needs no arc is already satisfied by the committed potential.
                     None => (choose(clauses, clause + 1, search, budget), None),
                     Some(arc) => match search.commit(*arc) {
                         Ok(undo) => (choose(clauses, clause + 1, search, budget), Some(undo)),
@@ -1636,11 +1486,7 @@ impl UniverseSolver {
             ))
         }
 
-        // A maximum on the left is conjunctive. A maximum on the right is a
-        // finite disjunction: under any satisfying valuation, each left atom
-        // is dominated by at least one right atom. Enumerating those symbolic
-        // choices and checking their difference graphs decides consistency
-        // without searching numeric universe assignments.
+        // A maximum on the left is conjunctive. A maximum on the right is a finite disjunction: under any satisfying valuation, each left atom is dominated by at least one right atom. Enumerating those symbolic choices and checking their difference graphs decides consistency without searching numeric universe assignments.
         let mut nodes = BTreeSet::from([Node::Zero]);
         for constraint in constraints {
             nodes.extend(
@@ -1679,10 +1525,7 @@ impl UniverseSolver {
                 .atoms()
                 .map(|(head, offset)| (Some(head), offset))
                 .collect::<Vec<_>>();
-            // Canonical normalization leaves a zero constant beside atoms
-            // only when every atom dominates it for every natural valuation.
-            // Keeping that redundant branch would multiply the consistency
-            // search by two for nearly every ordinary max constraint.
+            // Canonical normalization leaves a zero constant beside atoms only when every atom dominates it for every natural valuation. Keeping that redundant branch would multiply the consistency search by two for nearly every ordinary max constraint.
             if upper_parts.is_empty() || constraint.upper.constant != 0 {
                 upper_parts.push((None, constraint.upper.constant));
             }
@@ -1720,9 +1563,7 @@ impl UniverseSolver {
                 weight: 0,
                 origin: None,
             })
-            // Ordinary difference constraints have exactly one symbolic RHS
-            // choice; they hold under every branch assignment, so they belong
-            // to the base potential rather than the search.
+            // Ordinary difference constraints have exactly one symbolic RHS choice; they hold under every branch assignment, so they belong to the base potential rather than the search.
             .chain(
                 clauses
                     .iter()
@@ -1738,11 +1579,7 @@ impl UniverseSolver {
             }
         }
 
-        // Narrowest clause first. A clause whose alternatives are all refuted
-        // by the committed arcs fails at the shallowest possible depth, so
-        // ordering by width prunes the tree before it is built rather than
-        // after. The decision is unchanged — only the order in which the same
-        // finite set of assignments is explored.
+        // Narrowest clause first. A clause whose alternatives are all refuted by the committed arcs fails at the shallowest possible depth, so ordering by width prunes the tree before it is built rather than after. The decision is unchanged — only the order in which the same finite set of assignments is explored.
         let mut branches = clauses
             .into_iter()
             .filter(|(_, choices)| choices.len() != 1)
@@ -1751,11 +1588,7 @@ impl UniverseSolver {
 
         // Bounding the search is what makes this decision procedure total.
         //
-        // Accepting is always justified: a satisfying branch assignment is a
-        // model of the original constraints, so any `Ok` here is sound however
-        // few branches were explored. Only *refuting* needs the whole tree, so
-        // exhausting the budget means "not decided", and the caller reports it
-        // rather than continuing an exponential walk.
+        // Accepting is always justified: a satisfying branch assignment is a model of the original constraints, so any `Ok` here is sound however few branches were explored. Only *refuting* needs the whole tree, so exhausting the budget means "not decided", and the caller reports it rather than continuing an exponential walk.
         const SEARCH_BUDGET: u64 = 200_000;
         let mut budget = SEARCH_BUDGET;
         let consistency = choose(&branches, 0, &mut search, &mut budget);
@@ -1775,16 +1608,11 @@ impl UniverseSolver {
     }
 }
 
-/// Validate that every constraint in `context` mentions only that context's own
-/// parameters and no metavariable, and that the set is satisfiable.
+/// Validate that every constraint in `context` mentions only that context's own parameters and no metavariable, and that the set is satisfiable.
 ///
-/// A context is always closed. Universe polymorphism belongs to declarations, so
-/// there is no enclosing scheme whose parameters a context could still
-/// reference.
+/// A context is always closed. Universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a context could still reference.
 ///
-/// A free function on the solver side rather than a method on
-/// [`UniverseContext`]: deciding satisfiability is a judgment, and it runs a
-/// solver. The context itself is data and knows nothing about how it is checked.
+/// A free function on the solver side rather than a method on [`UniverseContext`]: deciding satisfiability is a judgment, and it runs a solver. The context itself is data and knows nothing about how it is checked.
 pub(crate) fn universe_context_validate(context: &UniverseContext) -> Result<(), UniverseError> {
     for constraint in &context.constraints {
         let valid = |level: &Level| {

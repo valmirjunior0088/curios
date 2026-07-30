@@ -1,34 +1,14 @@
-//! What the erased half of a program reaches: obligation (T)'s seeding, and the
-//! closure both obligations share.
+//! What the erased half of a program reaches: obligation (T)'s seeding, and the closure both obligations share.
 //!
-//! **(T)** is seeded here, from every type position, and takes the *aggressive*
-//! reading: everything a type reaches must be total, not merely the values a
-//! type-level eliminator scrutinizes. The narrow reading is unsound, because a
-//! *total* type-level function applied to a *partial value* reties the negative
-//! knot that strict positivity exists to forbid.
+//! **(T)** is seeded here, from every type position, and takes the *aggressive* reading: everything a type reaches must be total, not merely the values a type-level eliminator scrutinizes. The narrow reading is unsound, because a *total* type-level function applied to a *partial value* reties the negative knot that strict positivity exists to forbid.
 //!
-//! **(V) is not seeded here**, and the difference is the point. (T) asks a
-//! *syntactic* question — which written positions are types — and its aggressive
-//! reading deliberately answers more generously than any typing judgment would:
-//! it seeds the body of every definition whose type ends in a sort, which is how
-//! it reaches through `/std/BigNat/Canonical` into `is_trimmed`, a dependency no
-//! annotation records. A walk can answer that completely. (V) asks a *typing*
-//! question — which terms are propositions — and a walk can only re-derive it
-//! from the finished term, incompletely; elaboration already decided it for
-//! every term in the program. So (V) is seeded where that answer is known, by
-//! [`Context::record_checked`](crate::Context), and arrives here as positions
-//! rather than being reconstructed. See [`super::checked_proof_positions`].
+//! **(V) is not seeded here**, and the difference is the point. (T) asks a *syntactic* question — which written positions are types — and its aggressive reading deliberately answers more generously than any typing judgment would: it seeds the body of every definition whose type ends in a sort, which is how it reaches through `/std/BigNat/Canonical` into `is_trimmed`, a dependency no annotation records. A walk can answer that completely. (V) asks a *typing* question — which terms are propositions — and a walk can only re-derive it from the finished term, incompletely; elaboration already decided it for every term in the program. So (V) is seeded where that answer is known, by [`Context::record_checked`](crate::Context), and arrives here as positions rather than being reconstructed. See [`super::checked_proof_positions`].
 //!
-//! Neither obligation subsumes the other. The type-level `rec` route violates
-//! only (T); the partial-carrier and `exit` routes violate only (V).
+//! Neither obligation subsumes the other. The type-level `rec` route violates only (T); the partial-carrier and `exit` routes violate only (V).
 //!
-//! The closure follows a definition into its **body**, not only its type. That
-//! is easy to overlook and load-bearing, for the same `Canonical` reason.
+//! The closure follows a definition into its **body**, not only its type. That is easy to overlook and load-bearing, for the same `Canonical` reason.
 //!
-//! At the replay site the module in hand is the user suffix alone, so a prelude
-//! definition is a sink of this relation. That is sound for the same reason it
-//! is sound for positivity — prelude items cannot mention user code — and it is
-//! why partiality persists on the definition rather than being recomputed.
+//! At the replay site the module in hand is the user suffix alone, so a prelude definition is a sink of this relation. That is sound for the same reason it is sound for positivity — prelude items cannot mention user code — and it is why partiality persists on the definition rather than being recomputed.
 
 use {
     crate::{Definition, Item, Module},
@@ -36,14 +16,9 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// A term the erased half of the program must be total in, and what a
-/// diagnostic should call it.
+/// A term the erased half of the program must be total in, and what a diagnostic should call it.
 ///
-/// The obligations are stated over *terms*, not over the names those terms
-/// mention, because a `rec` written inline in an erased position mentions no
-/// name at all. Reporting the reached definitions alone would let
-/// `rec Bad : Type = Sink(Bad)`, written as a local binding, satisfy every
-/// closure while retying exactly the knot the closure exists to forbid.
+/// The obligations are stated over *terms*, not over the names those terms mention, because a `rec` written inline in an erased position mentions no name at all. Reporting the reached definitions alone would let `rec Bad : Type = Sink(Bad)`, written as a local binding, satisfy every closure while retying exactly the knot the closure exists to forbid.
 pub(crate) struct Position {
     pub(crate) term: Term,
     pub(crate) site: String,
@@ -58,11 +33,7 @@ fn push(positions: &mut Vec<Position>, site: &str, term: &Term) {
 
 /// Every term in a type position.
 ///
-/// "Type position" is read syntactically and generously: a declared type, a
-/// binder annotation, a match motive, a declaration telescope, a nominal type
-/// former, a primitive type former, and the *body* of any definition whose own
-/// type ends in a sort — the last being what reaches through
-/// `/std/BigNat/Canonical` into `is_trimmed`.
+/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, a primitive type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/BigNat/Canonical` into `is_trimmed`.
 pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
     let mut positions = Vec::new();
 
@@ -88,17 +59,14 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
         );
     }
 
-    // The entrypoint expression and its annotation are not items, so nothing
-    // above reaches them. An exploit needs only a local `rec` and one
-    // construction, both of which fit in the trailing expression.
+    // The entrypoint expression and its annotation are not items, so nothing above reaches them. An exploit needs only a local `rec` and one construction, both of which fit in the trailing expression.
     if let Some(type_) = &module.type_ {
         push(&mut positions, "the entrypoint's type", type_);
         annotations(type_, "the entrypoint's type", &mut positions);
     }
     annotations(&module.body, "the entrypoint", &mut positions);
 
-    // A declaration's telescopes are types by construction, and its parameter
-    // and field types can name anything.
+    // A declaration's telescopes are types by construction, and its parameter and field types can name anything.
     for (name, declaration) in &module.induct_decls {
         let site = format!("a parameter of '{name}'");
         entries(&declaration.params, &site, &mut positions);
@@ -126,8 +94,7 @@ pub(crate) fn seeds(positions: &[Position]) -> BTreeSet<Global> {
     seeds
 }
 
-/// Close `seeds` over the definitions they name, following each into both its
-/// type and its body.
+/// Close `seeds` over the definitions they name, following each into both its type and its body.
 pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
     let bodies = definitions(module)
         .map(|definition| {
@@ -145,9 +112,7 @@ pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Gl
     let mut frontier = reached.iter().cloned().collect::<Vec<_>>();
     while let Some(name) = frontier.pop() {
         let Some(named) = bodies.get(&name) else {
-            // Outside the module under analysis: a replayed prelude
-            // definition, whose own closure was settled when the archive was
-            // built.
+            // Outside the module under analysis: a replayed prelude definition, whose own closure was settled when the archive was built.
             continue;
         };
         for next in named {
@@ -187,8 +152,7 @@ fn entries<B: Bound>(telescope: &Telescope<B>, site: &str, positions: &mut Vec<P
     }
 }
 
-/// Whether this type's terminal, after peeling every arrow, is a sort — the
-/// test for "this definition denotes a type or a proposition".
+/// Whether this type's terminal, after peeling every arrow, is a sort — the test for "this definition denotes a type or a proposition".
 fn ends_in_sort(type_: &Term) -> bool {
     let mut current = type_.clone();
     loop {
@@ -209,22 +173,12 @@ fn ends_in_sort(type_: &Term) -> bool {
     }
 }
 
-/// Walk a term and mark every type written inside it: binder annotations,
-/// match motives, `let` and `rec` declared types, nominal and primitive type
-/// formers.
+/// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and primitive type formers.
 #[allow(clippy::mutable_key_type)]
 fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
-    // Iterative, and deduplicated on node identity, for one reason each. A
-    // string literal's UTF-8 derivation threads its scanner state forwards, so
-    // link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain
-    // is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that
-    // revisits shared nodes pays the square while recursing one native frame per
-    // link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack
-    // overflow above 16KiB.
+    // Iterative, and deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack overflow above 16KiB.
     //
-    // Deduplicating is site-preserving because `site` is fixed for the whole
-    // walk: every position this pushes carries the site it was called with, so
-    // a node reached twice would only ever push the same position twice.
+    // Deduplicating is site-preserving because `site` is fixed for the whole walk: every position this pushes carries the site it was called with, so a node reached twice would only ever push the same position twice.
     let mut seen: std::collections::HashSet<Term> = std::collections::HashSet::new();
     let mut pending = vec![term.clone()];
 
@@ -239,8 +193,7 @@ fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
 /// One node's contribution to [`annotations`], with its children queued.
 fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending: &mut Vec<Term>) {
     match &**term {
-        // A type former stands for its whole self; nothing inside it is a
-        // value position the aggressive reading would treat differently.
+        // A type former stands for its whole self; nothing inside it is a value position the aggressive reading would treat differently.
         Subterm::FuncType(_)
         | Subterm::TupleType(_)
         | Subterm::InductType(_)
@@ -310,9 +263,7 @@ pub(crate) fn offenders(
 
 /// Why one position fails its obligation.
 ///
-/// A position can fail without naming anything: an inline `rec` that does not
-/// descend, or a `Prim::Exit`, is partial on its own account. Reporting only
-/// reached names would miss exactly the shapes that need no name.
+/// A position can fail without naming anything: an inline `rec` that does not descend, or a `Prim::Exit`, is partial on its own account. Reporting only reached names would miss exactly the shapes that need no name.
 pub(crate) enum Fault {
     Named(Global),
     Inline,

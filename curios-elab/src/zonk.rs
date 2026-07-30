@@ -22,27 +22,14 @@ use {
     },
 };
 
-/// Substitute every solved metavariable in `term` by its (recursively zonked)
-/// solution, yielding a meta-free term (§9). An unsolved metavariable is a
-/// residual hole the elaborator never pinned down — reported as `cannot_infer`
-/// at its occurrence span. The result flows downstream to `erase`, which is then
-/// guaranteed never to meet a `Subterm::Metavar`.
+/// Substitute every solved metavariable in `term` by its (recursively zonked) solution, yielding a meta-free term (§9). An unsolved metavariable is a residual hole the elaborator never pinned down — reported as `cannot_infer` at its occurrence span. The result flows downstream to `erase`, which is then guaranteed never to meet a `Subterm::Metavar`.
 ///
-/// Substitution replaces a metavariable node by its solution. A solution is
-/// spelled with the birth telescope's names and is *not* in general a closed
-/// term; the occurrence's spine (its delayed substitution) records what each
-/// birth binder corresponds to at the splice site, so `zonk_term` resolves
-/// by rewriting the solution through it. Every solved occurrence carries its
-/// spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no
-/// bare copy of a birthed hole survives to be spliced.
+/// Substitution replaces a metavariable node by its solution. A solution is spelled with the birth telescope's names and is *not* in general a closed term; the occurrence's spine (its delayed substitution) records what each birth binder corresponds to at the splice site, so `zonk_term` resolves by rewriting the solution through it. Every solved occurrence carries its spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no bare copy of a birthed hole survives to be spliced.
 pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
     zonk_term(context, term)
 }
 
-/// Materialize the solutions already committed for term metavariables without
-/// rejecting holes that remain legitimately deferred. Universe levels are
-/// preserved verbatim: declaration finalization rewrites them only after this
-/// pass has exposed the levels hidden in solved term-meta solutions.
+/// Materialize the solutions already committed for term metavariables without rejecting holes that remain legitimately deferred. Universe levels are preserved verbatim: declaration finalization rewrites them only after this pass has exposed the levels hidden in solved term-meta solutions.
 pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
     if !value.has_metavar() {
         return value.clone();
@@ -123,9 +110,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     materialize(value, Rc::new(solutions))
 }
 
-/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every
-/// top-level item plus the entrypoint body and annotation, yielding a meta-free
-/// module for `erase` (§9).
+/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item plus the entrypoint body and annotation, yielding a meta-free module for `erase` (§9).
 pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
     curios_profile::profile!("zonk_module");
     let items = module
@@ -142,8 +127,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .map(|type_| zonk_term(context, type_))
         .transpose()?;
 
-    // The registry's telescopes flow into `erase`, which runs meta-free with
-    // its own (solution-less) context — so they are zonked like everything else.
+    // The registry's telescopes flow into `erase`, which runs meta-free with its own (solution-less) context — so they are zonked like everything else.
     let induct_decls = module
         .induct_decls
         .iter()
@@ -203,8 +187,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         universe_seeds: Vec::new(),
         induct_decls,
         struct_decls,
-        // Concept metadata and witness markers carry no terms of their own
-        // (each concept's telescopes live in `struct_decls`, zonked above).
+        // Concept metadata and witness markers carry no terms of their own (each concept's telescopes live in `struct_decls`, zonked above).
         concepts: module
             .concepts
             .iter()
@@ -270,13 +253,7 @@ pub(crate) fn validate_bound_universes<B: Bound>(
         if level.is_closed(visible_parameter_count) {
             Ok(level.clone())
         } else {
-            // Name the numbers. A level prints its parameters as letters that
-            // cycle (`u`..`z`, then `u1`), so neither the offending index nor
-            // the bound it broke can be read off `{level}`, and the bound
-            // itself is a sum: a nested scheme's own parameters sit innermost
-            // and the enclosing binders it may still reference follow. Which
-            // of the two is short is the whole diagnosis, and recovering it
-            // otherwise costs a rebuild.
+            // Name the numbers. A level prints its parameters as letters that cycle (`u`..`z`, then `u1`), so neither the offending index nor the bound it broke can be read off `{level}`, and the bound itself is a sum: a nested scheme's own parameters sit innermost and the enclosing binders it may still reference follow. Which of the two is short is the whole diagnosis, and recovering it otherwise costs a rebuild.
             let detail = if level.metas().next().is_some() {
                 "it still holds an unsolved universe metavariable".to_string()
             } else {
@@ -313,11 +290,7 @@ fn validate_instance_arities<B: Bound>(
     let owner = owner.to_string();
     let error = Rc::new(RefCell::new(None));
     let found = Rc::clone(&error);
-    // Inspection only — the hook always returns `None` and the rebuilt value is
-    // discarded. Memoized on node identity so a structurally shared term is
-    // checked once per distinct node rather than once per occurrence: an
-    // unmemoized rewrite here rebuilt, and immediately dropped, one node per
-    // occurrence, which on a lowered string literal is O(n^2) of pure garbage.
+    // Inspection only — the hook always returns `None` and the rebuilt value is discarded. Memoized on node identity so a structurally shared term is checked once per distinct node rather than once per occurrence: an unmemoized rewrite here rebuilt, and immediately dropped, one node per occurrence, which on a lowered string literal is O(n^2) of pure garbage.
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| {
@@ -508,11 +481,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             )));
         }
     }
-    // Both directions of the generated-member correspondence, read off the
-    // definition's own recorded origin. A constructor names the inductive it
-    // belongs to *and* which case it is, so this checks the registry entry
-    // exists and actually declares that case — without joining an owner and a
-    // tag back into a name to look up.
+    // Both directions of the generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
     for (name, (kind, _)) in &definition_schemes {
         match kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
@@ -660,9 +629,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
     Ok(())
 }
 
-/// Validate the lowering-time universe allocator contract before replaying a
-/// prepared Text module. Every meta reachable from lowered Core must have a
-/// corresponding seed below the recorded allocator floor.
+/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from lowered Core must have a corresponding seed below the recorded allocator floor.
 pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<(), Error> {
     if module.universe_seeds.len() != floor {
         return Err(Error::UniverseInvariant(format!(
@@ -747,10 +714,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
     })
 }
 
-/// The report a written goal `?` errors out with: the local scope frozen at
-/// its birth, the goal's type, and the solution elaboration committed (if
-/// any) — each zonked for *display*, keeping the raw spelling where unsolved
-/// holes survive (the same tolerance the no-witness report uses).
+/// The report a written goal `?` errors out with: the local scope frozen at its birth, the goal's type, and the solution elaboration committed (if any) — each zonked for *display*, keeping the raw spelling where unsolved holes survive (the same tolerance the no-witness report uses).
 fn goal_report(context: &Context, id: MetaId) -> Error {
     let display = |term: &Term| zonk_term(context, term).unwrap_or_else(|_| term.clone());
     match context.metavar_entry(id) {
@@ -763,38 +727,27 @@ fn goal_report(context: &Context, id: MetaId) -> Error {
             display(&entry.result),
             context.metavar_solution(id).map(display),
         ),
-        // A goal elaboration never reached was never birthed, so there is no
-        // scope or type to report — unreachable in practice, since every kept
-        // item elaborates.
+        // A goal elaboration never reached was never birthed, so there is no scope or type to report — unreachable in practice, since every kept item elaborates.
         None => Error::CannotInfer,
     }
 }
 
 pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
-    // A metavariable node *is* the substitution site: replace it by its solution,
-    // recursively zonked (the solution may itself mention solved metavariables).
+    // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
     if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
-        // A written goal `?` never splices — the whole point of writing it was
-        // the report. Solved or not, error with what elaboration determined:
-        // the frozen scope, the goal's type, and the solution when one landed.
+        // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
         if matches!(origin, Some(MetavarOrigin::Goal)) {
             return Err(goal_report(context, *id).at_opt(term.span()));
         }
 
         let solution = context.metavar_solution(*id).ok_or_else(|| {
-            // An unsolved metavariable the *elaborator* minted (an omitted
-            // implicit or witness argument) is reported by the binder it
-            // filled — the provenance rides on the node itself — not as a
-            // bare hole: the user never wrote this metavariable, so a generic
-            // "cannot infer" would point at nothing they can see.
+            // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
             let error = match origin {
                 Some(MetavarOrigin::Implicit(origin)) => {
                     Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
                 }
                 Some(MetavarOrigin::Witness(origin)) => {
-                    // The birth record's `result` is the goal type; display it
-                    // through whatever solutions landed, keeping the raw
-                    // spelling if holes survive.
+                    // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.
                     let goal = context
                         .metavar_entry(*id)
                         .map(|entry| entry.result.clone())
@@ -812,15 +765,10 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
             }
         })?;
 
-        // Resolve the solution in its own (named) frame first: nested solved
-        // metavariables are substituted before the spine splice below.
+        // Resolve the solution in its own (named) frame first: nested solved metavariables are substituted before the spine splice below.
         let resolved = zonk_term(context, solution)?;
 
-        // A contextual occurrence: the spine records, in this site's own
-        // (already de-Bruijn-correct) form, what each birth binder
-        // corresponds to here. Zonk the spine entries (they may embed
-        // solved metavariables), then splice the solution through them —
-        // birth names captured, spine terms released.
+        // A contextual occurrence: the spine records, in this site's own (already de-Bruijn-correct) form, what each birth binder corresponds to here. Zonk the spine entries (they may embed solved metavariables), then splice the solution through them — birth names captured, spine terms released.
         let entry = context
             .metavar_entry(*id)
             .expect("a solved metavariable has a birth entry");
@@ -845,15 +793,9 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
         });
     }
 
-    // Fast path: a subtree with neither term nor universe metavariables is
-    // already fully zonked. A solved term metavariable's solution can be
-    // term-meta-free while still carrying levels that declaration
-    // finalization solved, so universe metas must keep descending.
+    // Fast path: a subtree with neither term nor universe metavariables is already fully zonked. A solved term metavariable's solution can be term-meta-free while still carrying levels that declaration finalization solved, so universe metas must keep descending.
     //
-    // Both halves read cached per-node bits. Testing the metavariable *set*
-    // for emptiness instead answers the same question — the set is empty
-    // exactly when the bit is false — but re-walks the whole subtree at every
-    // level on the way down, which is quadratic on a deep spine.
+    // Both halves read cached per-node bits. Testing the metavariable *set* for emptiness instead answers the same question — the set is empty exactly when the bit is false — but re-walks the whole subtree at every level on the way down, which is quadratic on a deep spine.
     if !term.has_metavar() && !term.has_universe_meta() {
         return Ok(term.clone());
     }
@@ -893,8 +835,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 .collect::<Result<_, _>>()?,
         }),
 
-        // `Infix`/`NumLit` are elaboration-transient: `elaborate` replaces every
-        // occurrence with a concrete `Prim` before zonk ever runs.
+        // `Infix`/`NumLit` are elaboration-transient: `elaborate` replaces every occurrence with a concrete `Prim` before zonk ever runs.
         Subterm::Infix(_) => unreachable!("infix node survived elaboration into zonk"),
         Subterm::NumLit(_) => unreachable!("numeric-literal node survived elaboration into zonk"),
 
@@ -1110,8 +1051,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
     })
 }
 
-/// Zonk a primitive's term operands. Mirrors `traverse_prim`'s rebuild, but
-/// fallibly substitutes metavariable solutions rather than de Bruijn shifting.
+/// Zonk a primitive's term operands. Mirrors `traverse_prim`'s rebuild, but fallibly substitutes metavariable solutions rather than de Bruijn shifting.
 fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
     Ok(match prim {
         Prim::BoolType
@@ -1306,12 +1246,9 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
     })
 }
 
-/// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and its
-/// trailing body/return type, which is a real term to recurse into.
+/// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and its trailing body/return type, which is a real term to recurse into.
 ///
-/// A free function rather than an inherent method on [`Telescope`]: the
-/// telescope is representation, this is the elaborator's metavariable
-/// machinery, and only the latter may name [`Context`].
+/// A free function rather than an inherent method on [`Telescope`]: the telescope is representation, this is the elaborator's metavariable machinery, and only the latter may name [`Context`].
 pub(crate) fn zonk_telescope(
     context: &Context,
     telescope: &Telescope<Term>,
@@ -1325,9 +1262,7 @@ pub(crate) fn zonk_telescope(
     }
 }
 
-/// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is
-/// `()`, which carries no metavariables and is rebuilt as-is. The companion of
-/// [`zonk_telescope`], and a free function for the same reason.
+/// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is `()`, which carries no metavariables and is rebuilt as-is. The companion of [`zonk_telescope`], and a free function for the same reason.
 pub(crate) fn zonk_field_telescope(
     context: &Context,
     telescope: &Telescope<()>,
@@ -1341,12 +1276,9 @@ pub(crate) fn zonk_field_telescope(
     }
 }
 
-/// Replace every solved universe metavariable under `value`'s binders by its
-/// recursively zonked solution, shifting each solution past the binders it
-/// crosses.
+/// Replace every solved universe metavariable under `value`'s binders by its recursively zonked solution, shifting each solution past the binders it crosses.
 ///
-/// Lives here rather than beside the scoped-rewrite traversals it calls: those
-/// are representation, while [`UniverseSolver`] is elaboration state.
+/// Lives here rather than beside the scoped-rewrite traversals it calls: those are representation, while [`UniverseSolver`] is elaboration state.
 pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
     value: &B,
     solver: &UniverseSolver,

@@ -1,24 +1,8 @@
-//! Witness resolution: filling omitted `use`-plicity arguments (§ instance
-//! arguments). A goal is a metavariable standing in a `use` slot together with
-//! its (concept application) type. Resolution is deterministic, in strict
-//! order:
+//! Witness resolution: filling omitted `use`-plicity arguments (§ instance arguments). A goal is a metavariable standing in a `use` slot together with its (concept application) type. Resolution is deterministic, in strict order:
 //!
-//! 1. **Local scope, direct** — the `use` binders in Γ, innermost-first;
-//!    first match wins (shadowing, like names).
-//! 2. **Local scope, superclass projection** — projections of local `use`
-//!    binders through the (acyclic) superclass graph, breadth-first by depth;
-//!    two matches at the same minimal depth are ambiguous.
-//! 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads
-//!    of every parameter)`; a hit instantiates the witness's telescope (fresh
-//!    metavariables for `@` binders, recursive goals for `use` premises) and
-//!    unifies its result type against the goal. No projections here.
-//! 4. **Flex head** — any parameter still headed by a metavariable parks the
-//!    goal, woken when a watched metavariable solves.
+//! 1. **Local scope, direct** — the `use` binders in Γ, innermost-first; first match wins (shadowing, like names). 2. **Local scope, superclass projection** — projections of local `use` binders through the (acyclic) superclass graph, breadth-first by depth; two matches at the same minimal depth are ambiguous. 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads of every parameter)`; a hit instantiates the witness's telescope (fresh metavariables for `@` binders, recursive goals for `use` premises) and unifies its result type against the goal. No projections here. 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
 //!
-//! A rigid, keyable head with no table entry *defers* rather than failing:
-//! items elaborate in order, and a later item may register the witness. The
-//! deferred store is retried after every item and drained — erroring — once
-//! the whole module has elaborated.
+//! A rigid, keyable head with no table entry *defers* rather than failing: items elaborate in order, and a later item may register the witness. The deferred store is retried after every item and drained — erroring — once the whole module has elaborated.
 
 use {
     super::{
@@ -41,13 +25,11 @@ enum Resolution {
     Flex,
     /// The key is rigid and keyable but the table has no entry (yet) — defer.
     Missing,
-    /// Definitely unresolvable: rigid non-keyable head, or a table hit whose
-    /// remaining parameters do not unify. The caller reports `NoWitness`.
+    /// Definitely unresolvable: rigid non-keyable head, or a table hit whose remaining parameters do not unify. The caller reports `NoWitness`.
     NoMatch,
 }
 
-/// Best-effort display form of a goal for diagnostics: substitute the
-/// solutions that have landed, keeping the raw spelling if any hole survives.
+/// Best-effort display form of a goal for diagnostics: substitute the solutions that have landed, keeping the raw spelling if any hole survives.
 fn display_goal(context: &Context, goal: &Term) -> Term {
     super::zonk(context, goal).unwrap_or_else(|_| goal.clone())
 }
@@ -60,8 +42,7 @@ fn no_witness_error(context: &Context, goal: &Term, provenance: &WitnessOrigin) 
     )
 }
 
-/// Whether the (reduced) term is headed by an unsolved metavariable —
-/// including a stuck application of one, the higher-kinded case (`?M(?A)`).
+/// Whether the (reduced) term is headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case (`?M(?A)`).
 fn flex_head(context: &Context, term: &Term) -> bool {
     match &**term {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
@@ -70,8 +51,7 @@ fn flex_head(context: &Context, term: &Term) -> bool {
     }
 }
 
-/// The goal type as a concept application: its (reduced) `StructType` name and
-/// parameters, when that name is a registered concept.
+/// The goal type as a concept application: its (reduced) `StructType` name and parameters, when that name is a registered concept.
 fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Vec<Level>, Vec<Term>)> {
     let Subterm::StructType(StructType {
         name,
@@ -92,10 +72,7 @@ enum Probe {
     Undecided,
 }
 
-/// Whether `candidate` converts with `goal`, *without* committing: solutions
-/// the comparison lands are rolled back regardless of the verdict. Used to
-/// test every same-depth superclass projection before committing the unique
-/// match.
+/// Whether `candidate` converts with `goal`, *without* committing: solutions the comparison lands are rolled back regardless of the verdict. Used to test every same-depth superclass projection before committing the unique match.
 fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
     let mark = context.solution_mark();
     let outcome =
@@ -113,8 +90,7 @@ fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<P
     })
 }
 
-/// Like [`probe_match`], but a positive verdict keeps its solutions — the
-/// unification is what pins the goal's open parameters to the candidate's.
+/// Like [`probe_match`], but a positive verdict keeps its solutions — the unification is what pins the goal's open parameters to the candidate's.
 fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
     let mark = context.solution_mark();
     let outcome =
@@ -137,8 +113,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
     })
 }
 
-/// Run the resolution algorithm for `goal`. `origin` anchors spans and parked
-/// premise goals. Solutions committed by a successful match stay in force.
+/// Run the resolution algorithm for `goal`. `origin` anchors spans and parked premise goals. Solutions committed by a successful match stay in force.
 fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<Resolution, Error> {
     let goal_whnf = reduce_with(context, goal)?;
 
@@ -149,12 +124,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
 
     let concept_app = as_concept_app(context, &goal_whnf);
 
-    // Step 4 gates steps 1–3 for concept goals: a flex parameter must
-    // park rather than match eagerly, or an in-scope binder of the same
-    // concept would overcommit the hole (`Show(?T)` grabbing a local
-    // `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a
-    // first-param-only gate would let `Into(Nat, ?B)` reach the table with an
-    // incomplete key and wrongly defer.
+    // Step 4 gates steps 1–3 for concept goals: a flex parameter must park rather than match eagerly, or an in-scope binder of the same concept would overcommit the hole (`Show(?T)` grabbing a local `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a first-param-only gate would let `Into(Nat, ?B)` reach the table with an incomplete key and wrongly defer.
     if let Some((_, _, params)) = &concept_app {
         for param in params {
             let head = reduce_with(context, param)?;
@@ -175,12 +145,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
 
     // Step 1: local `use` binders, innermost-first, first match wins.
     //
-    // Retrying a parked goal restores its frozen frame's witness binders on top
-    // of whatever scope is live at retry time, so a binder that was already in
-    // scope at park time can appear twice. Binder names are globally fresh and
-    // unique, so a repeated name denotes the *same* binder; dedup by name (the
-    // retained occurrence is arbitrary but identical) to keep the superclass
-    // search from reporting a projection against itself as ambiguous.
+    // Retrying a parked goal restores its frozen frame's witness binders on top of whatever scope is live at retry time, so a binder that was already in scope at park time can appear twice. Binder names are globally fresh and unique, so a repeated name denotes the *same* binder; dedup by name (the retained occurrence is arbitrary but identical) to keep the superclass search from reporting a projection against itself as ambiguous.
     let mut binders = context.witness_scope().to_vec();
     let mut seen = HashSet::new();
     binders.retain(|(name, _)| seen.insert(name.clone()));
@@ -192,8 +157,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
         }
     }
 
-    // Steps 2–3 need a concept goal; anything else has no projections and no
-    // table to consult.
+    // Steps 2–3 need a concept goal; anything else has no projections and no table to consult.
     let Some((concept_name, universes, params)) = concept_app else {
         return Ok(match saw_undecided {
             true => Resolution::Flex,
@@ -209,9 +173,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
         .instantiate_at(&concept.universe_context, &universes)
         .map_err(Error::from)?;
 
-    // Step 2: superclass projections of local binders, breadth-first by
-    // depth. The graph is acyclic (checked at registration), so this is
-    // finite; two matches at the same minimal depth are ambiguous.
+    // Step 2: superclass projections of local binders, breadth-first by depth. The graph is acyclic (checked at registration), so this is finite; two matches at the same minimal depth are ambiguous.
     let mut frontier: Vec<Term> = Vec::new();
     for (name, type_) in binders.iter().rev() {
         let reduced = reduce_with(context, type_)?;
@@ -257,8 +219,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
         frontier = next;
     }
 
-    // Step 3: the global table — pure lookup by (concept, tuple of every
-    // parameter head).
+    // Step 3: the global table — pure lookup by (concept, tuple of every parameter head).
     let mut heads = Vec::with_capacity(params.len());
     for param in &params {
         let head = reduce_with(context, param)?;
@@ -286,13 +247,9 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     instantiate(context, &witness, &goal_whnf, origin)
 }
 
-/// The immediate superclass projections of a node whose type reduces to a
-/// concept application: `(projection term, projected field type)` per
-/// `use`-marked field.
+/// The immediate superclass projections of a node whose type reduces to a concept application: `(projection term, projected field type)` per `use`-marked field.
 fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Term, Term)>, Error> {
-    // The node's type: a local binder's assumption, or the previously computed
-    // field type — re-derive it via inference-free means: nodes are either a
-    // free var (assumption lookup) or a projection whose type we compute here.
+    // The node's type: a local binder's assumption, or the previously computed field type — re-derive it via inference-free means: nodes are either a free var (assumption lookup) or a projection whose type we compute here.
     let node_type = node_type(context, node)?;
     let reduced = reduce_with(context, &node_type)?;
     let Subterm::StructType(StructType {
@@ -328,8 +285,7 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
     Ok(out)
 }
 
-/// The type of a step-2 node: an assumption for a variable, or the projected
-/// field type for a projection (recursing on its head).
+/// The type of a step-2 node: an assumption for a variable, or the projected field type for a projection (recursing on its head).
 fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
     match &**node {
         Subterm::Var(var) => context
@@ -368,11 +324,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
     }
 }
 
-/// Instantiate a table hit: fresh metavariables for `@` binders, recursive
-/// goals for `use` premises, then unify the result type against the goal
-/// (which checks the parameters past the head). Premise goals run through the
-/// same algorithm; a premise that parks leaves its metavariable in the built
-/// term, spliced once it solves.
+/// Instantiate a table hit: fresh metavariables for `@` binders, recursive goals for `use` premises, then unify the result type against the goal (which checks the parameters past the head). Premise goals run through the same algorithm; a premise that parks leaves its metavariable in the built term, spliced once it solves.
 fn instantiate(
     context: &mut Context,
     witness: &Witness,
@@ -438,8 +390,7 @@ fn instantiate(
         _ => (Vec::new(), Vec::new(), signature),
     };
 
-    // Instantiated premise types must reflect solutions the terminal
-    // unification lands, so unify first, then resolve premises.
+    // Instantiated premise types must reflect solutions the terminal unification lands, so unify first, then resolve premises.
     match commit_match(context, &terminal, goal)? {
         Probe::Yes => {}
         Probe::No => {
@@ -452,25 +403,10 @@ fn instantiate(
         }
     }
 
-    // The witness inhabits *this* goal and no other, so the levels its scheme
-    // introduced here are determined by the goal's — they are not free.
-    // Conversion alone does not say so: cumulativity makes a concept
-    // application's universe arguments a bound rather than an equation, and
-    // `solve_flexible_in` deliberately leaves a bounded-but-unsolved level for
-    // declaration finalization to generalize. That is sound only while the
-    // consuming declaration is still open. A goal that *defers* — the normal
-    // case for a `/syn` declaration whose witness lives in `/std`, since the
-    // two roots import mutually — resolves long after its consumer finalized,
-    // and the level it mints then has nothing left to close it.
-    // Pin the instantiation to what the goal already fixes. This must run
-    // *before* the premises: a premise goal is stated in terms of these levels,
-    // so pinning first is what makes the same argument hold recursively for
-    // every witness the premises pull in.
+    // The witness inhabits *this* goal and no other, so the levels its scheme introduced here are determined by the goal's — they are not free. Conversion alone does not say so: cumulativity makes a concept application's universe arguments a bound rather than an equation, and `solve_flexible_in` deliberately leaves a bounded-but-unsolved level for declaration finalization to generalize. That is sound only while the consuming declaration is still open. A goal that *defers* — the normal case for a `/syn` declaration whose witness lives in `/std`, since the two roots import mutually — resolves long after its consumer finalized, and the level it mints then has nothing left to close it. Pin the instantiation to what the goal already fixes. This must run *before* the premises: a premise goal is stated in terms of these levels, so pinning first is what makes the same argument hold recursively for every witness the premises pull in.
     if !minted.is_empty() {
         let terminal = reduce_with(context, &terminal)?;
-        // A terminal that is not a concept application pins nothing, but its
-        // levels still have to be closed, so the minimizing pass runs either
-        // way.
+        // A terminal that is not a concept application pins nothing, but its levels still have to be closed, so the minimizing pass runs either way.
         let (instance, determined) = match (
             as_concept_app(context, &terminal),
             as_concept_app(context, goal),
@@ -496,9 +432,7 @@ fn instantiate(
     Ok(Resolution::Solved(term))
 }
 
-/// Attempt a freshly minted witness goal: solve it now, park it on a flex
-/// key, or defer it on a missing table entry. A definite failure is an error
-/// at `origin`'s span.
+/// Attempt a freshly minted witness goal: solve it now, park it on a flex key, or defer it on a missing table entry. A definite failure is an error at `origin`'s span.
 pub(crate) fn attempt_witness_goal(
     context: &mut Context,
     slot: MetaId,
@@ -542,8 +476,7 @@ pub(crate) fn attempt_witness_goal(
     }
 }
 
-/// Retry a parked or deferred witness goal under its frozen frame. Called by
-/// `retry_parked`'s wake path and the deferred-goal sweeps.
+/// Retry a parked or deferred witness goal under its frozen frame. Called by `retry_parked`'s wake path and the deferred-goal sweeps.
 pub(crate) fn retry_witness(
     context: &mut Context,
     slot: MetaId,
@@ -593,9 +526,7 @@ pub(crate) fn retry_witness(
     }
 }
 
-/// Retry every deferred witness goal — after an item, when new witnesses may
-/// have registered. Goals that stay unresolvable re-defer; solutions that land
-/// wake parked constraints.
+/// Retry every deferred witness goal — after an item, when new witnesses may have registered. Goals that stay unresolvable re-defer; solutions that land wake parked constraints.
 pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
     let deferred = context.take_deferred_witnesses();
     if deferred.is_empty() {
@@ -619,14 +550,7 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
         };
         retry_witness(context, slot, goal, provenance, origin, frame)?;
 
-        // The deferred store is retried only *between* items, so the
-        // declaration that raised this goal has already finalized: its universe
-        // scheme is fixed, and no later pass will generalize or minimize a
-        // level introduced now. `instantiate` pins the witness's instance
-        // against the goal for exactly that reason. Check it held. Without
-        // this, a level that slips through is reported by `zonk` at the end of
-        // the module as an anonymous `?uN` escaping, naming neither the goal
-        // that introduced it nor the witness it came from.
+        // The deferred store is retried only *between* items, so the declaration that raised this goal has already finalized: its universe scheme is fixed, and no later pass will generalize or minimize a level introduced now. `instantiate` pins the witness's instance against the goal for exactly that reason. Check it held. Without this, a level that slips through is reported by `zonk` at the end of the module as an anonymous `?uN` escaping, naming neither the goal that introduced it nor the witness it came from.
         if let Some(solution) = context.metavar_solution(slot).cloned()
             && solution.any_universe_meta(|meta| {
                 context
@@ -644,9 +568,7 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
     context.retry_parked()
 }
 
-/// The end-of-module sweep: retry once more, then report any survivor — the
-/// whole program has elaborated, so a still-missing table entry will never
-/// register.
+/// The end-of-module sweep: retry once more, then report any survivor — the whole program has elaborated, so a still-missing table entry will never register.
 pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
     retry_deferred_witnesses(context)?;
 
@@ -667,14 +589,7 @@ pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Err
     Ok(())
 }
 
-/// Register an elaborated definition as a witness: validate its telescope
-/// (no explicit binders, regular premises), key it on the tuple of rigid
-/// heads of the concept's parameters, and insert it into the
-/// program-wide table — rejecting a duplicate key. `signature` is the
-/// definition's *elaborated* type; `root` is its declaring `Definition`'s
-/// own precomputed root (consulted by the orphan-rule check below, never
-/// re-derived here). Registration ignores `pub`: visibility governs the
-/// name, never table membership.
+/// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type; `root` is its declaring `Definition`'s own precomputed root (consulted by the orphan-rule check below, never re-derived here). Registration ignores `pub`: visibility governs the name, never table membership.
 pub(crate) fn register_witness(
     context: &mut Context,
     name: &Global,
@@ -685,9 +600,7 @@ pub(crate) fn register_witness(
 ) -> Result<(), Error> {
     let reduced = reduce_with(context, signature)?;
 
-    // Peel the telescope, opening each binder with its own label as a neutral
-    // free variable (elaborated binder labels are entropy-fresh, so they
-    // cannot collide).
+    // Peel the telescope, opening each binder with its own label as a neutral free variable (elaborated binder labels are entropy-fresh, so they cannot collide).
     let mut binders: Vec<(Plicity, Free, Term)> = Vec::new();
     let terminal = match &*reduced {
         Subterm::FuncType(ft) => {
@@ -742,9 +655,7 @@ pub(crate) fn register_witness(
     }
     let key = WitnessKey(heads);
 
-    // Termination (Haskell-98-lite): every `use` premise applies a concept to
-    // *variables bound by this witness's own telescope* — resolution through
-    // it is then structurally decreasing, with no fuel or tabling.
+    // Termination (Haskell-98-lite): every `use` premise applies a concept to *variables bound by this witness's own telescope* — resolution through it is then structurally decreasing, with no fuel or tabling.
     let binder_names: BTreeSet<&Free> = binders.iter().map(|(_, n, _)| n).collect();
     for (plicity, _, type_) in &binders {
         if !matches!(plicity, Plicity::Witness) {
@@ -782,22 +693,9 @@ pub(crate) fn register_witness(
         }
     }
 
-    // The orphan rule: a witness may be declared only where the concept it
-    // witnesses, or at least one rigid type in its key, is already declared —
-    // never by a third root unrelated to both. Without this, two unrelated
-    // roots could each legally `satisfy` the same `(concept, key)` pair, a
-    // collision that is unfixable once both are linked into one program (see
-    // `documentation/ROADMAP.md`'s Type System section). Checked before the duplicate-key
-    // insert below: "not allowed to register this at all" is the more
-    // fundamental violation than "and it also collides."
+    // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/ROADMAP.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
     //
-    // A privileged root (`sys`/`syn`/`std`) is exempt: the three are one
-    // coordinated standard library, not independent unrelated packages, so
-    // e.g. a `/std`-declared `Eql(Str)` witness bridging `/sys`'s `Eql`
-    // concept and `/syn`'s `Str` type is exactly the sanctioned pattern
-    // (`/std` facades for `/sys`/`/syn`-homed concepts and types), not an
-    // orphan instance. The check only bites an ordinary root — the entry
-    // program today, an untrusted external package once one exists.
+    // A privileged root (`sys`/`syn`/`std`) is exempt: the three are one coordinated standard library, not independent unrelated packages, so e.g. a `/std`-declared `Eql(Str)` witness bridging `/sys`'s `Eql` concept and `/syn`'s `Str` type is exactly the sanctioned pattern (`/std` facades for `/sys`/`/syn`-homed concepts and types), not an orphan instance. The check only bites an ordinary root — the entry program today, an untrusted external package once one exists.
     let concept_root = context
         .concept(concept_name)
         .expect("the concept was looked up above")
@@ -835,8 +733,7 @@ pub(crate) fn register_witness(
     Ok(())
 }
 
-/// Validate the seeded concept registry: every superclass edge targets a
-/// registered, different concept, and the graph is acyclic.
+/// Validate the seeded concept registry: every superclass edge targets a registered, different concept, and the graph is acyclic.
 pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let concepts = context.concepts();
 

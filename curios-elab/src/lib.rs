@@ -6,11 +6,8 @@
 //!
 //! Everything else is that pipeline's machinery: `term`/`scope` define the term language and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]); `reduce` is budget-bounded type-level evaluation (`normalize` for full normal forms); `convert` decides definitional equality, solving metavariables and distinguishing hard mismatches from goals merely blocked on unsolved metas (`Outcome`) so `typing` can park and retry them; `resolve` implements witness (concept) resolution with global coherence checks; `invert` proves omitted match arms impossible; `print`/`names` render terms for [`Error`] messages.
 //!
-//! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Term`, not paths into the modules.
+//! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Context`, not paths into the modules.
 
-/// The core language this stage elaborates into: terms, binders, primitives,
-/// universes, and the nominal registry. Re-exported flat so the elaborator's
-/// modules keep naming them unqualified, as they did when they lived here.
 mod universe_solver;
 pub use universe_solver::*;
 

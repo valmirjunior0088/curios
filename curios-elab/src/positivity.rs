@@ -1,27 +1,15 @@
 //! The elaborator's driver for the shared strict-positivity analysis.
 //!
-//! The analysis itself lives in `curios-cert` (see that module for the rule
-//! and its rationale) and is run by both checkers; what belongs here is the
-//! driving: which declarations are analyzed (this module's — the whole program
-//! at archive build, the user suffix at a replay), where the vectors are
-//! persisted (the registry entries, riding the prelude archive), and how a
-//! refusal is rendered (a spanned [`Error`] naming the offending part).
+//! The analysis itself lives in `curios-cert` (see that module for the rule and its rationale) and is run by both checkers; what belongs here is the driving: which declarations are analyzed (this module's — the whole program at archive build, the user suffix at a replay), where the vectors are persisted (the registry entries, riding the prelude archive), and how a refusal is rendered (a spanned [`Error`] naming the offending part).
 
 use {
     super::{Context, Error, Module},
     curios_cert::positivity_vectors,
 };
 
-/// Reject every `induct` and `struct` declaration in `module` that is not
-/// strictly positive, and record each surviving declaration's parameter
-/// polarities on its registry entry.
+/// Reject every `induct` and `struct` declaration in `module` that is not strictly positive, and record each surviving declaration's parameter polarities on its registry entry.
 ///
-/// Runs on zonked Core, so the telescopes the analysis reads are final and
-/// meta-free. `module` is exactly the declaration set to analyze; anything the
-/// walk reaches outside it is a replayed prelude declaration, whose vector was
-/// computed once at archive-build time and answers from this context's
-/// registry — sound because prelude items cannot mention user code, so no
-/// cycle crosses the boundary.
+/// Runs on zonked Core, so the telescopes the analysis reads are final and meta-free. `module` is exactly the declaration set to analyze; anything the walk reaches outside it is a replayed prelude declaration, whose vector was computed once at archive-build time and answers from this context's registry — sound because prelude items cannot mention user code, so no cycle crosses the boundary.
 pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<(), Error> {
     curios_profile::profile!("check_positivity");
     let vectors = positivity_vectors(context, &module.induct_decls, &module.struct_decls).map_err(

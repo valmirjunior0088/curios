@@ -1,23 +1,8 @@
 //! Functions and saturated application.
 //!
-//! A lambda reserves its arena identity, classifies each parameter against
-//! the checked function type's telescope (an erasable parameter — a proof or
-//! a type — is dropped from the runtime signature entirely), erases its body
-//! into an owned block, and is bound by a one-member `Functions` statement at
-//! its defining position; the expression's operand is the function atom. No
-//! captures are stored anywhere — free values are derived by analysis.
+//! A lambda reserves its arena identity, classifies each parameter against the checked function type's telescope (an erasable parameter — a proof or a type — is dropped from the runtime signature entirely), erases its body into an owned block, and is bound by a one-member `Functions` statement at its defining position; the expression's operand is the function atom. No captures are stored anywhere — free values are derived by analysis.
 //!
-//! Application evaluates head first, then the kept arguments in order (the
-//! order the legacy pipeline sequenced at CPS conversion; under the operand
-//! law the erasure order *is* the runtime order). An application at an
-//! erasable (proof-/type-producing) function type whose callee is not a
-//! direct function reference is erased content applied to arguments — it
-//! collapses to the unit constant; a direct function reference keeps its
-//! call, because a never-returning host effect is proof-typed but must run.
-//! Arguments to erasable parameters are dropped; a kept slot whose
-//! instantiated type is a proof or a type is filled with the unit constant
-//! rather than a materialized witness (proof irrelevance — the slot stays,
-//! only its contents collapse).
+//! Application evaluates head first, then the kept arguments in order (the order the legacy pipeline sequenced at CPS conversion; under the operand law the erasure order *is* the runtime order). An application at an erasable (proof-/type-producing) function type whose callee is not a direct function reference is erased content applied to arguments — it collapses to the unit constant; a direct function reference keeps its call, because a never-returning host effect is proof-typed but must run. Arguments to erasable parameters are dropped; a kept slot whose instantiated type is a proof or a type is filled with the unit constant rather than a materialized witness (proof irrelevance — the slot stays, only its contents collapse).
 
 use {
     super::{
@@ -42,9 +27,7 @@ impl Lowering {
         Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))
     }
 
-    /// Erase a lambda into a previously reserved function identity — shared by
-    /// the expression form above (which reserves and binds it) and recursive
-    /// groups (which reserve every member first for mutual visibility).
+    /// Erase a lambda into a previously reserved function identity — shared by the expression form above (which reserves and binds it) and recursive groups (which reserve every member first for mutual visibility).
     pub(super) fn define_lambda(
         &mut self,
         context: &mut Context,
@@ -63,9 +46,7 @@ impl Lowering {
         let mut dropped = Vec::new();
 
         let body = context.with_frame(|context| -> Result<_, Error> {
-            // Walk the lambda's telescope (whose `Done` is the body) alongside
-            // the checked function type's telescope (whose `Done` is the
-            // output type), opening both with one fresh variable per binder.
+            // Walk the lambda's telescope (whose `Done` is the body) alongside the checked function type's telescope (whose `Done` is the output type), opening both with one fresh variable per binder.
             let mut body_telescope = func.telescope.clone();
             let mut type_telescope = ft.telescope;
             let (body, output) = loop {
@@ -75,8 +56,7 @@ impl Lowering {
                         let label = body_rest.first_hint().map(str::to_string);
                         let name = context.fresh(label.as_deref());
                         let variable = Term::free_var(&name);
-                        // The flag is read before the binder is assumed: a
-                        // parameter's type never depends on the parameter.
+                        // The flag is read before the binder is assumed: a parameter's type never depends on the parameter.
                         let erasable = is_erasable(context, &type_)?;
                         context.assume(&name, &type_);
                         if erasable {
@@ -99,12 +79,7 @@ impl Lowering {
             let outcome = self.walk(context, &body, &output, None)?;
             match outcome {
                 Outcome::Emitted(atom) => {
-                    // Collapse the body to a unit only when it is both
-                    // proof/type-valued AND references a binder this lambda
-                    // dropped — a dangling proof result. An effectful body
-                    // that merely happens to be proof-typed keeps its effect,
-                    // and a pure proof body referencing nothing dropped is
-                    // already content-free.
+                    // Collapse the body to a unit only when it is both proof/type-valued AND references a binder this lambda dropped — a dangling proof result. An effectful body that merely happens to be proof-typed keeps its effect, and a pure proof body referencing nothing dropped is already content-free.
                     let dangles = dropped.iter().any(|label| self.dangled.contains(label));
                     let result = if dangles && is_erasable(context, &output)? {
                         self.unit()
@@ -146,33 +121,17 @@ impl Lowering {
 
         let callee = emitted!(self.walk(context, head, &head_type, None)?);
 
-        // A proof-valued callee that is not a direct function reference is
-        // erased content standing where a function was expected — a projection
-        // of an erased field, a dropped binder, or a wrapper call returning an
-        // erased method: the application is proof content and collapses to the
-        // unit constant. The check must be value-driven, not type-driven: a
-        // *direct* function reference keeps its call even at an erasable type,
-        // because a never-returning host effect (`/std/proc/exit : (Nat) ->
-        // False`, polymorphic `/sys/exit`) is proof-typed but must run.
+        // A proof-valued callee that is not a direct function reference is erased content standing where a function was expected — a projection of an erased field, a dropped binder, or a wrapper call returning an erased method: the application is proof content and collapses to the unit constant. The check must be value-driven, not type-driven: a *direct* function reference keeps its call even at an erasable type, because a never-returning host effect (`/std/proc/exit : (Nat) -> False`, polymorphic `/sys/exit`) is proof-typed but must run.
         if !matches!(callee, curios_ersd::Atom::Function(_)) && is_erasable(context, &head_type)? {
             return Ok(Outcome::Emitted(self.unit()));
         }
 
-        // A `Prop` family's constructor is the one direct call that *is* safe to
-        // drop: it is pure, so no host effect rides on it, and its layout keeps
-        // no payload (see `induct_row`). Its arguments exist only to fill fields
-        // erasure has already removed — and they may mention binders erasure
-        // dropped, so walking them would compute over placeholder units. The
-        // never-returning host effects the check above protects are foreign
-        // definitions, never constructors.
+        // A `Prop` family's constructor is the one direct call that *is* safe to drop: it is pure, so no host effect rides on it, and its layout keeps no payload (see `induct_row`). Its arguments exist only to fill fields erasure has already removed — and they may mention binders erasure dropped, so walking them would compute over placeholder units. The never-returning host effects the check above protects are foreign definitions, never constructors.
         if is_proof_constructor(context, head)? {
             return Ok(Outcome::Emitted(self.unit()));
         }
 
-        // The drop decision is the signature mask (opaque-opened), so it
-        // agrees with the function's fixed runtime arity even when a
-        // polymorphic domain is instantiated at a prop here; the kept walk
-        // erases against the instantiated (dependent) domain.
+        // The drop decision is the signature mask (opaque-opened), so it agrees with the function's fixed runtime arity even when a polymorphic domain is instantiated at a prop here; the kept walk erases against the instantiated (dependent) domain.
         let mask = erasure_mask(context, ft.clone())?;
         let arguments = match self.masked_fields(context, &mask, ft, params)? {
             Ok(arguments) => arguments,
@@ -182,11 +141,7 @@ impl Lowering {
         Ok(self.bind(hint, curios_ersd::Rhs::Apply { callee, arguments }))
     }
 
-    /// Erase a value held in a kept slot. The mask keeps the slot for uniform
-    /// arity, but this instantiation can still make it a proof or a type,
-    /// which carries no runtime content: proof irrelevance fills the slot
-    /// with the unit constant rather than materializing a witness no runtime
-    /// code reads.
+    /// Erase a value held in a kept slot. The mask keeps the slot for uniform arity, but this instantiation can still make it a proof or a type, which carries no runtime content: proof irrelevance fills the slot with the unit constant rather than materializing a witness no runtime code reads.
     pub(super) fn kept_operand(
         &mut self,
         context: &mut Context,
@@ -213,13 +168,7 @@ impl Lowering {
 
 /// Whether `head` names a constructor of a `Prop`-sorted inductive.
 ///
-/// The owning family comes from the definition's own
-/// [`DefinitionKind::InductiveConstructor`], recorded by `into_core` where the
-/// constructor function was generated. Splitting the name into a qualifier
-/// prefix and a last segment would instead ask whether some *other*
-/// declaration happens to be registered under this name's prefix — a question
-/// whose answer is only accidentally the same one, and which decides whether a
-/// call is dropped entirely.
+/// The owning family comes from the definition's own [`DefinitionKind::InductiveConstructor`], recorded by `into_core` where the constructor function was generated. Splitting the name into a qualifier prefix and a last segment would instead ask whether some *other* declaration happens to be registered under this name's prefix — a question whose answer is only accidentally the same one, and which decides whether a call is dropped entirely.
 fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Error> {
     let Subterm::Var(var) = &**head else {
         return Ok(false);

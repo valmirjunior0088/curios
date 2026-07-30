@@ -1,17 +1,10 @@
 //! Indexed storage for the solver's live inequalities.
 //!
-//! Two invariants make the solver's read paths cheap, and both are the reason
-//! this storage is a type rather than a pair of fields.
+//! Two invariants make the solver's read paths cheap, and both are the reason this storage is a type rather than a pair of fields.
 //!
-//! Every stored constraint is *already normalized* against the solutions
-//! committed so far. A reader never re-zonks; instead [`ConstraintStore`]
-//! rewrites the affected constraints when an assignment lands, which the
-//! occurrence index makes proportional to the assigned level's degree rather
-//! than to the whole store.
+//! Every stored constraint is *already normalized* against the solutions committed so far. A reader never re-zonks; instead [`ConstraintStore`] rewrites the affected constraints when an assignment lands, which the occurrence index makes proportional to the assigned level's degree rather than to the whole store.
 //!
-//! Every rewrite records its pre-image, so a solver mark can restore the exact
-//! state it named. Truncating the trailing constraints is not enough once an
-//! assignment may edit an older one in place.
+//! Every rewrite records its pre-image, so a solver mark can restore the exact state it named. Truncating the trailing constraints is not enough once an assignment may edit an older one in place.
 
 use {
     curios_core::{Level, LevelHead, UniverseConstraint},
@@ -66,9 +59,7 @@ impl ConstraintStore {
 
     /// The constraints mentioning `head`, in insertion order.
     ///
-    /// Solving reads a flexible level's bounds through this index. Scanning
-    /// every constraint per level instead is what made finalization quadratic
-    /// in the number of levels a declaration touches.
+    /// Solving reads a flexible level's bounds through this index. Scanning every constraint per level instead is what made finalization quadratic in the number of levels a declaration touches.
     pub(super) fn mentioning(&self, head: LevelHead) -> impl Iterator<Item = usize> + '_ {
         self.occurrences
             .get(&head)
@@ -100,10 +91,7 @@ impl ConstraintStore {
         position
     }
 
-    /// Drop the most recently pushed constraint. Only valid when nothing has
-    /// rewritten it since, which is how the insertion path uses it: a
-    /// constraint that fails its consistency check never survives to be
-    /// substituted into.
+    /// Drop the most recently pushed constraint. Only valid when nothing has rewritten it since, which is how the insertion path uses it: a constraint that fails its consistency check never survives to be substituted into.
     pub(super) fn pop(&mut self) {
         if self.constraints.is_empty() {
             return;
@@ -113,8 +101,7 @@ impl ConstraintStore {
         self.constraints.pop();
     }
 
-    /// Replace a constraint in place, journalling its pre-image so a later
-    /// rollback can restore it.
+    /// Replace a constraint in place, journalling its pre-image so a later rollback can restore it.
     pub(super) fn replace(&mut self, position: usize, constraint: UniverseConstraint) {
         self.unindex(position);
         let previous = std::mem::replace(&mut self.constraints[position], constraint);
@@ -122,8 +109,7 @@ impl ConstraintStore {
         self.index(position);
     }
 
-    /// Restore the store to `mark`: undo every rewrite recorded since, newest
-    /// first, then drop the constraints appended since.
+    /// Restore the store to `mark`: undo every rewrite recorded since, newest first, then drop the constraints appended since.
     pub(super) fn rollback(&mut self, mark: StoreMark) {
         while self.rewrites.len() > mark.rewrites {
             let (position, previous) = self.rewrites.pop().expect("rewrite log is non-empty");
@@ -144,9 +130,7 @@ impl ConstraintStore {
 
     /// Drop every constraint failing `keep` and rebuild the index.
     ///
-    /// Retaining renumbers the survivors, so the rewrite journal — which names
-    /// positions — cannot outlive it. Callers use this only at a declaration
-    /// boundary, past any mark that could still be rolled back to.
+    /// Retaining renumbers the survivors, so the rewrite journal — which names positions — cannot outlive it. Callers use this only at a declaration boundary, past any mark that could still be rolled back to.
     pub(super) fn retain(&mut self, keep: impl FnMut(&UniverseConstraint) -> bool) {
         self.constraints.retain(keep);
         self.occurrences.clear();
@@ -158,8 +142,7 @@ impl ConstraintStore {
 
     /// Rewrite every constraint mentioning `head` by `substitute`.
     ///
-    /// Returns the positions that changed, which the caller uses to decide
-    /// whether cached consistency survived.
+    /// Returns the positions that changed, which the caller uses to decide whether cached consistency survived.
     pub(super) fn substitute(
         &mut self,
         head: LevelHead,

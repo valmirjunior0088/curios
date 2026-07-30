@@ -25,8 +25,7 @@ fn opt_type() -> Term {
     Term::induct_type(nominal("Opt"), Vec::<Term>::new(), Vec::<Term>::new())
 }
 
-// induct Opt : Type | none() | some(x : Nat) end — an unindexed, two-constructor
-// data type, the minimal shape a `| _ =>` catch-all is interesting over.
+// induct Opt : Type | none() | some(x : Nat) end — an unindexed, two-constructor data type, the minimal shape a `| _ =>` catch-all is interesting over.
 fn register_opt(context: &mut Context) {
     let payload = context.fresh(Some("x"));
     context
@@ -133,10 +132,7 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     }
 }
 
-// Privacy is a property of surface elaboration: machinery re-deriving types
-// from already-elaborated terms runs under `with_suppressed_privacy` (no
-// island — no use site to judge from), which admits what enforcement rejects
-// and restores the island on exit.
+// Privacy is a property of surface elaboration: machinery re-deriving types from already-elaborated terms runs under `with_suppressed_privacy` (no island — no use site to judge from), which admits what enforcement rejects and restores the island on exit.
 #[test]
 fn privacy_suppression_admits_machinery_rederivation() {
     let mut context = context();
@@ -164,9 +160,7 @@ fn privacy_suppression_admits_machinery_rederivation() {
     ));
 }
 
-// The oracle's suppressions are a package: a re-validated candidate can embed
-// machinery-built projections of private representations, and a swallowed
-// privacy error would silently flip the verdict.
+// The oracle's suppressions are a package: a re-validated candidate can embed machinery-built projections of private representations, and a swallowed privacy error would silently flip the verdict.
 #[test]
 fn oracle_suppresses_privacy_as_part_of_its_package() {
     let mut context = context();
@@ -224,9 +218,7 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
 
     let (term, type_) = elaborate(&mut context, &func, Mode::Check(func_type.clone())).unwrap();
 
-    // Elaboration is authoritative: the rebuilt lambda carries its domain solved
-    // from the expected function type, so the hole is gone and the term is
-    // meta-free.
+    // Elaboration is authoritative: the rebuilt lambda carries its domain solved from the expected function type, so the hole is gone and the term is meta-free.
     assert!(term.metavars().is_empty());
     assert_eq!(type_, func_type);
 }
@@ -235,8 +227,7 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
 fn naturally_checked_func_cannot_infer() {
     let mut context = context();
 
-    // A lambda whose domain is an unconstrained hole (the bare `(x) => …` sugar)
-    // has nothing to synthesize a domain from, so inference still fails.
+    // A lambda whose domain is an unconstrained hole (the bare `(x) => …` sugar) has nothing to synthesize a domain from, so inference still fails.
     let x = context.fresh(Some("x"));
     let func = Term::func([(x, Term::metavar(0))], nat_lit(0));
     let result = elaborate(&mut context, &func, Mode::Infer);
@@ -253,9 +244,7 @@ fn annotated_func_infers_a_function_type() {
     let func = Term::func([(x.clone(), nat())], Term::free_var(&x));
     let (term, type_) = elaborate(&mut context, &func, Mode::Infer).unwrap();
 
-    // Meta-free, and convertible (alpha-insensitive) to the expected function
-    // type; a structural `assert_eq!` would trip only on the cosmetic fresh
-    // binder label the Infer arm generates.
+    // Meta-free, and convertible (alpha-insensitive) to the expected function type; a structural `assert_eq!` would trip only on the cosmetic fresh binder label the Infer arm generates.
     assert!(term.metavars().is_empty());
     assert!(
         convert_at(
@@ -272,13 +261,7 @@ fn annotated_func_infers_a_function_type() {
 fn check_on_a_hole_births_it_freezing_the_local_context() {
     let mut context = context();
 
-    // `x : Nat` is a genuine *local* binder — assumed inside a frame, the way a
-    // lambda or match body brings one into scope. Only locals are frozen into a
-    // metavariable's Γ; top-level definitions are excluded (a solution may
-    // mention them as globals instead — see `Context::identity_snapshot`), so
-    // the binder must be inside a frame to appear here. Checking the hole `?0`
-    // against `Nat` births it, recording `Nat` as its type and the in-scope
-    // locals as its frozen Γ.
+    // `x : Nat` is a genuine *local* binder — assumed inside a frame, the way a lambda or match body brings one into scope. Only locals are frozen into a metavariable's Γ; top-level definitions are excluded (a solution may mention them as globals instead — see `Context::identity_snapshot`), so the binder must be inside a frame to appear here. Checking the hole `?0` against `Nat` births it, recording `Nat` as its type and the in-scope locals as its frozen Γ.
     let x = context.fresh(Some("x"));
     let (term, type_) = context.with_frame(|context| {
         context.assume(&x, &nat());
@@ -286,9 +269,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
         elaborate(context, &hole, Mode::Check(nat())).unwrap()
     });
 
-    // Birth rebuilds the hole with the identity spine over its frozen Γ — the
-    // delayed substitution that keeps its eventual solution aligned through
-    // every later `close`/`open`.
+    // Birth rebuilds the hole with the identity spine over its frozen Γ — the delayed substitution that keeps its eventual solution aligned through every later `close`/`open`.
     assert_eq!(
         term,
         Term::metavar_birthed(0, None, vec![Term::free_var(&x)])
@@ -312,13 +293,10 @@ fn infer_on_an_unborn_hole_cannot_infer() {
 #[test]
 fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     let mut context = context();
-    // Mirror `elaborate_module_suffix`: written ids live below the floor, so the
-    // stand-in type metavariable minted here cannot collide with the goal's.
+    // Mirror `elaborate_module_suffix`: written ids live below the floor, so the stand-in type metavariable minted here cannot collide with the goal's.
     context.seed_metavars(1);
 
-    // A written goal in synthesis position does not die with `CannotInfer`:
-    // a fresh unmarked metavariable stands in as its type, and the goal is
-    // birthed under it so zonk can report it.
+    // A written goal in synthesis position does not die with `CannotInfer`: a fresh unmarked metavariable stands in as its type, and the goal is birthed under it so zonk can report it.
     let (term, type_) = elaborate(&mut context, &Term::goal(0), Mode::Infer).unwrap();
 
     assert!(matches!(&*term, Subterm::Metavar(m) if m.id == MetaId(0)));
@@ -334,9 +312,7 @@ fn inductive_match_default_relaxes_coverage() {
     register_opt(&mut context);
     let motive = context.fresh(Some("m"));
 
-    // `match some(5) : Nat | none() => 0 | _ => 99 end` — only `none` is
-    // enumerated; the un-written `some` constructor is covered by the catch-all,
-    // so this otherwise-incomplete match elaborates, at the motive's type.
+    // `match some(5) : Nat | none() => 0 | _ => 99 end` — only `none` is enumerated; the un-written `some` constructor is covered by the catch-all, so this otherwise-incomplete match elaborates, at the motive's type.
     let term = Term::induct_match_default(
         Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some(&motive),
@@ -355,8 +331,7 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
     register_opt(&mut context);
     let motive = context.fresh(Some("m"));
 
-    // The same match without the catch-all: `some` is genuinely missing from an
-    // unindexed inductive, so coverage fails.
+    // The same match without the catch-all: `some` is genuinely missing from an unindexed inductive, so coverage fails.
     let term = Term::induct_match(
         Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some(&motive),
@@ -367,8 +342,7 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
     assert!(elaborate(&mut context, &term, Mode::Infer).is_err());
 }
 
-// induct Flag : (b : Nat) -> Type | off() : (0) | on() : (1) end — the minimal
-// indexed family, for the motive binders a catch-all has to ride along with.
+// induct Flag : (b : Nat) -> Type | off() : (0) | on() : (1) end — the minimal indexed family, for the motive binders a catch-all has to ride along with.
 fn flag_type(index: Term) -> Term {
     Term::induct_type(nominal("Flag"), Vec::<Term>::new(), vec![index])
 }
@@ -415,10 +389,7 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
     let index = context.fresh(Some("b"));
     let motive = context.fresh(Some("m"));
 
-    // A `| _ =>` catch-all over an indexed family. Every motive binds its
-    // indices whether or not the body uses them, so there is no "pattern
-    // motive" for a default to conflict with: the enumerated arm is checked at
-    // its own case target index and the default at the scrutinee's actual one.
+    // A `| _ =>` catch-all over an indexed family. Every motive binds its indices whether or not the body uses them, so there is no "pattern motive" for a default to conflict with: the enumerated arm is checked at its own case target index and the default at the scrutinee's actual one.
     let term: Term = Subterm::Match(Match {
         head: Term::variant(
             nominal("Flag"),
@@ -450,9 +421,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
     register_flag(&mut context);
     let motive = context.fresh(Some("m"));
 
-    // The same match with an arity-1 motive: `Flag` has one index, so its
-    // eliminator's motive binds two names. A written motive that binds one is
-    // reported as itself, not as a downstream domain mismatch.
+    // The same match with an arity-1 motive: `Flag` has one index, so its eliminator's motive binds two names. A written motive that binds one is reported as itself, not as a downstream domain mismatch.
     let term: Term = Subterm::Match(Match {
         head: Term::variant(
             nominal("Flag"),

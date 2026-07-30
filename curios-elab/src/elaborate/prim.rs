@@ -6,10 +6,7 @@ use {
     std::sync::Arc,
 };
 
-/// Elaborate both operands of a homogeneous binary primitive at `operand`, then
-/// rebuild the variant through its constructor (`build`) and pair it with
-/// `result`. Lets each arm name itself once instead of destructuring an
-/// OR-pattern and re-matching just to reattach the elaborated operands.
+/// Elaborate both operands of a homogeneous binary primitive at `operand`, then rebuild the variant through its constructor (`build`) and pair it with `result`. Lets each arm name itself once instead of destructuring an OR-pattern and re-matching just to reattach the elaborated operands.
 fn binary(
     context: &mut Context,
     left: &Term,
@@ -23,8 +20,7 @@ fn binary(
     Ok((build(left, right), result))
 }
 
-/// The unary counterpart of [`binary`], for single-operand scalar/conversion
-/// primitives.
+/// The unary counterpart of [`binary`], for single-operand scalar/conversion primitives.
 fn unary(
     context: &mut Context,
     inner: &Term,
@@ -36,10 +32,7 @@ fn unary(
     Ok((build(inner), result))
 }
 
-/// Elaborate a packed binary value, requiring its inferred type to be the
-/// requested `Bits` or `Bytes` grain, and return the rebuilt operand. The
-/// indexing/slicing prims read their shape off the
-/// operand's type, so they infer it rather than checking against a known one.
+/// Elaborate a packed binary value, requiring its inferred type to be the requested `Bits` or `Bytes` grain, and return the rebuilt operand. The indexing/slicing prims read their shape off the operand's type, so they infer it rather than checking against a known one.
 fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
     let (bin, actual) = elaborate(context, bin, Mode::Infer)?;
     match &*reduce_with(context, &actual)? {
@@ -55,10 +48,7 @@ fn lst_type(elem: Term) -> Term {
     Subterm::Prim(Prim::LstType(elem)).into()
 }
 
-/// Check every element of an `Lst` literal against an already-determined element
-/// type, returning the rebuilt elements. Shared by the two ways the element type
-/// is fixed: borrowed from `expected` when checking, or a fresh metavar when
-/// inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Lst` arm).
+/// Check every element of an `Lst` literal against an already-determined element type, returning the rebuilt elements. Shared by the two ways the element type is fixed: borrowed from `expected` when checking, or a fresh metavar when inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Lst` arm).
 fn check_lst_elems(
     context: &mut Context,
     elems: &[Term],
@@ -73,10 +63,7 @@ fn check_lst_elems(
     Ok(elaborated)
 }
 
-/// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors
-/// the old `infer_prim`, but every operand obligation goes through
-/// `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim`
-/// is the authoritative (rebuilt) one that flows on to `zonk`/`erase` (§9).
+/// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors the old `infer_prim`, but every operand obligation goes through `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim` is the authoritative (rebuilt) one that flows on to `zonk`/`erase` (§9).
 fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error> {
     let nat_type: Term = Subterm::Prim(Prim::NatType).into();
     let byte_type: Term = Subterm::Prim(Prim::ByteType).into();
@@ -183,13 +170,11 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::FltGt(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltGt)?,
         Prim::FltLte(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltLte)?,
         Prim::FltGte(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltGte)?,
-        // `Flt/to_le_bytes` exposes the IEEE-754 bytes (`Bin`); `/std/Flt/to_str`
-        // renders them to the proof-carrying `/syn/Str` in Curios (Dragon4).
+        // `Flt/to_le_bytes` exposes the IEEE-754 bytes (`Bin`); `/std/Flt/to_str` renders them to the proof-carrying `/syn/Str` in Curios (Dragon4).
         Prim::FltToLeBytes(i) => {
             unary(context, i, &flt_type, bin_type.clone(), Prim::FltToLeBytes)?
         }
-        // `Flt/of_le_bytes` assembles a float from its IEEE-754 bytes — the
-        // inverse of `to_le_bytes`; traps unless the `Bin` is exactly 4 bytes.
+        // `Flt/of_le_bytes` assembles a float from its IEEE-754 bytes — the inverse of `to_le_bytes`; traps unless the `Bin` is exactly 4 bytes.
         Prim::FltOfLeBytes(i) => {
             unary(context, i, &bin_type, flt_type.clone(), Prim::FltOfLeBytes)?
         }
@@ -274,11 +259,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let (elem, sort) = crate::check_is_sort(context, elem)?;
             (Prim::LstType(elem), sort.term())
         }
-        // Inferring: the element type is unknown, so mint a fresh metavar — the
-        // implicit `@T` a `nil`/`cons` constructor would insert — which the elements
-        // solve (an empty `[]` leaves it for a later unification to ground, exactly
-        // as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which
-        // borrows the concrete element type from `expected` before reaching here.
+        // Inferring: the element type is unknown, so mint a fresh metavar — the implicit `@T` a `nil`/`cons` constructor would insert — which the elements solve (an empty `[]` leaves it for a later unification to ground, exactly as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which borrows the concrete element type from `expected` before reaching here.
         Prim::Lst(_, elems) => {
             let classifier = context.fresh_classifier_type("list element classifier");
             let elem_type = context.fresh_metavar(
@@ -345,17 +326,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::HandleType => (prim.clone(), Term::type_ground()),
         Prim::Handle(_) => (prim.clone(), io_type),
-        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather
-        // than the caller's choice — see `Prim::Exit` in `curios-core` for why
-        // fixing it at an inhabited type is what makes the primitive sound.
+        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather than the caller's choice — see `Prim::Exit` in `curios-core` for why fixing it at an inhabited type is what makes the primitive sound.
         Prim::Exit(code) => {
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
             (Prim::Exit(code), Term::tuple_type_unit())
         }
-        // A store-described host call: each operand checks against its wire
-        // type, and the result shape (unit, bare value, named record) is read
-        // off the signature. The arity is an invariant of construction (the
-        // prelude builds the argument list from the same signature).
+        // A store-described host call: each operand checks against its wire type, and the result shape (unit, bare value, named record) is read off the signature. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
         Prim::Foreign(function, args) => {
             let signature = &function.signature;
 
@@ -419,14 +395,7 @@ pub(crate) fn elaborate_prim(
     prim: &Prim,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Lst` is bidirectional. Checking against a concrete `Lst(T)`, it borrows
-    // the element type from `expected` — definitional, so each element is
-    // checked against the known type (better errors, and numeric element
-    // literals pick the right numeric type). Any other expected shape — a
-    // stuck `?M(?A)` awaiting the flex-apply imitation included — falls
-    // through to `synth_prim`, which mints a fresh element-type metavar; the
-    // check-after-infer unification then equates `Lst(?T)` with the expected
-    // type (pinning `?M := Lst`, or reporting the genuine mismatch).
+    // `Lst` is bidirectional. Checking against a concrete `Lst(T)`, it borrows the element type from `expected` — definitional, so each element is checked against the known type (better errors, and numeric element literals pick the right numeric type). Any other expected shape — a stuck `?M(?A)` awaiting the flex-apply imitation included — falls through to `synth_prim`, which mints a fresh element-type metavar; the check-after-infer unification then equates `Lst(?T)` with the expected type (pinning `?M := Lst`, or reporting the genuine mismatch).
     if let (Prim::Lst(_, elems), Mode::Check(expected)) = (prim, &mode)
         && let Subterm::Prim(Prim::LstType(elem_type)) = &*reduce_with(context, expected)?
     {
@@ -438,14 +407,7 @@ pub(crate) fn elaborate_prim(
         ));
     }
 
-    // `LstConcat` mirrors `Lst`'s bidirectionality — and must, because the
-    // lowering of a spread list literal `[a, ..xs, b]` mints a fresh metavar
-    // for the element-type slot. Checking against a concrete `Lst(T)`, solve
-    // the slot against `expected` FIRST (`expect` unifies `Lst(slot)` with
-    // it), so the operands — the literal chunks especially — elaborate
-    // against the known element type instead of default-solving it from the
-    // first element. Any other expected shape falls through to `synth_prim`,
-    // exactly as for `Lst`.
+    // `LstConcat` mirrors `Lst`'s bidirectionality — and must, because the lowering of a spread list literal `[a, ..xs, b]` mints a fresh metavar for the element-type slot. Checking against a concrete `Lst(T)`, solve the slot against `expected` FIRST (`expect` unifies `Lst(slot)` with it), so the operands — the literal chunks especially — elaborate against the known element type instead of default-solving it from the first element. Any other expected shape falls through to `synth_prim`, exactly as for `Lst`.
     if let (Prim::LstConcat(type_slot, operands), Mode::Check(expected)) = (prim, &mode)
         && let Subterm::Prim(Prim::LstType(_)) = &*reduce_with(context, expected)?
     {

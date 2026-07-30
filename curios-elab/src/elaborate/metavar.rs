@@ -10,12 +10,7 @@ pub(super) fn elaborate_tuple(
 
     let expected = match mode {
         Mode::Check(expected) => expected,
-        // Synthesis position: infer each field independently and form the
-        // *non-dependent* product. No field type can mention an earlier field
-        // (each is inferred in isolation), so the telescope is non-dependent —
-        // a dependent Σ-type only ever arises from a checking expectation. This
-        // is what lets an un-annotated `let (a, b) = (x, y)` infer `{ typeof x,
-        // typeof y }` instead of demanding an annotation.
+        // Synthesis position: infer each field independently and form the *non-dependent* product. No field type can mention an earlier field (each is inferred in isolation), so the telescope is non-dependent — a dependent Σ-type only ever arises from a checking expectation. This is what lets an un-annotated `let (a, b) = (x, y)` infer `{ typeof x, typeof y }` instead of demanding an annotation.
         Mode::Infer => {
             let mut elaborated = Vec::with_capacity(fields.len());
             let mut field_types = Vec::with_capacity(fields.len());
@@ -45,10 +40,7 @@ pub(super) fn elaborate_tuple(
         ));
     }
 
-    // Written field names are checked positionally against the expected
-    // type's labels and then dropped — the rebuilt literal is name-free.
-    // Reordering is deliberately not supported: in a dependent telescope the
-    // written order is the checking order.
+    // Written field names are checked positionally against the expected type's labels and then dropped — the rebuilt literal is name-free. Reordering is deliberately not supported: in a dependent telescope the written order is the checking order.
     let labels = type_telescope.labels();
     for (position, name) in names.iter().enumerate() {
         let Some(name) = name else { continue };
@@ -78,20 +70,14 @@ pub(super) fn elaborate_metavar(
     let id = metavar.id;
 
     match mode {
-        // Birth (§5): freeze the local context as Γ and record the type the hole
-        // is checked against. Births happen once per id, but a re-traversal in
-        // the same mode is idempotent — re-check the recorded type against the
-        // (identical) `expected`.
+        // Birth (§5): freeze the local context as Γ and record the type the hole is checked against. Births happen once per id, but a re-traversal in the same mode is idempotent — re-check the recorded type against the (identical) `expected`.
         Mode::Check(expected) => {
             if context.metavar_entry(id).is_some() {
                 let result = context.metavar_entry(id).unwrap().result.clone();
                 expect(context, term, &result, &expected)?;
                 Ok((term.clone(), expected))
             } else {
-                // Rebuild the hole with the identity spine over its frozen
-                // telescope: the rebuilt term is what flows downstream, so
-                // every surviving occurrence carries the delayed substitution.
-                // Telescope and spine are the shared per-Γ snapshot.
+                // Rebuild the hole with the identity spine over its frozen telescope: the rebuilt term is what flows downstream, so every surviving occurrence carries the delayed substitution. Telescope and spine are the shared per-Γ snapshot.
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, expected.clone());
 
@@ -103,15 +89,10 @@ pub(super) fn elaborate_metavar(
                 Ok((rebuilt, expected))
             }
         }
-        // A hole in synthesis position has no type to offer — unless it was
-        // already born in a checking position, in which case report that type.
+        // A hole in synthesis position has no type to offer — unless it was already born in a checking position, in which case report that type.
         Mode::Infer => match context.metavar_entry(id) {
             Some(entry) => Ok((term.clone(), entry.result.clone())),
-            // A written goal, though, must survive to zonk's report rather
-            // than die here: a fresh *unmarked* metavariable stands in as its
-            // type (unmarked so only the goal itself reports; the report then
-            // shows the stand-in — `?N` — if nothing ever pins it). Birth
-            // mirrors the checking arm, with the stand-in as `result`.
+            // A written goal, though, must survive to zonk's report rather than die here: a fresh *unmarked* metavariable stands in as its type (unmarked so only the goal itself reports; the report then shows the stand-in — `?N` — if nothing ever pins it). Birth mirrors the checking arm, with the stand-in as `result`.
             None if matches!(metavar.origin, Some(MetavarOrigin::Goal)) => {
                 let classifier = context.fresh_classifier_type("inferred goal classifier");
                 let result = context.fresh_unmarked_metavar(classifier, term.span());
@@ -130,11 +111,7 @@ pub(super) fn elaborate_metavar(
     }
 }
 
-/// Check `args` pointwise against the dependent telescope `signature` — each arg
-/// under the earlier ones — collecting the rebuilt args and returning the
-/// telescope's terminal, opened at those args. The caller checks arity first; the
-/// arity error differs by site. The given-args counterpart to
-/// `check_telescope_entries`.
+/// Check `args` pointwise against the dependent telescope `signature` — each arg under the earlier ones — collecting the rebuilt args and returning the telescope's terminal, opened at those args. The caller checks arity first; the arity error differs by site. The given-args counterpart to `check_telescope_entries`.
 pub(super) fn check_args_against<B: Bound>(
     context: &mut Context,
     signature: Telescope<B>,
@@ -148,21 +125,9 @@ pub(super) fn check_args_against<B: Bound>(
     Ok((elaborated, terminal))
 }
 
-/// Implicit-eta on the check turnaround. A reference whose type leads with an
-/// implicit binder, checked against a concrete *explicit* function type, has its
-/// leading implicits inserted as metavariables and is eta-expanded over the
-/// remaining explicit binders — so a bare `Lst/concat` is accepted where
-/// `(Lst B, Lst B) -> Lst B` is expected, instead of demanding
-/// `(l, r) => concat(l, r)`. Implicit insertion is otherwise an application-site
-/// mechanism (`elaborate_apply`); this is the one extension into value position.
-/// Producing a full lambda (rather than a partial application) keeps erase/CPS
-/// untouched: the output is an ordinary closure over a saturated call.
+/// Implicit-eta on the check turnaround. A reference whose type leads with an implicit binder, checked against a concrete *explicit* function type, has its leading implicits inserted as metavariables and is eta-expanded over the remaining explicit binders — so a bare `Lst/concat` is accepted where `(Lst B, Lst B) -> Lst B` is expected, instead of demanding `(l, r) => concat(l, r)`. Implicit insertion is otherwise an application-site mechanism (`elaborate_apply`); this is the one extension into value position. Producing a full lambda (rather than a partial application) keeps erase/CPS untouched: the output is an ordinary closure over a saturated call.
 ///
-/// Fires only for `Var`/`Proj` heads against a ground explicit-arrow expectation;
-/// every other shape returns the term unchanged for the ordinary `expect`. The
-/// expected-not-implicit gate preserves polymorphic-value assignment
-/// (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when
-/// it does not fire, or the inserted shape does not convert, behavior is as before.
+/// Fires only for `Var`/`Proj` heads against a ground explicit-arrow expectation; every other shape returns the term unchanged for the ordinary `expect`. The expected-not-implicit gate preserves polymorphic-value assignment (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when it does not fire, or the inserted shape does not convert, behavior is as before.
 pub(super) fn insert_implicits_on_check(
     context: &mut Context,
     term: &Term,
@@ -200,12 +165,7 @@ pub(super) fn insert_implicits_on_check(
         _ => "<function>".to_string(),
     };
 
-    // Walk the head's telescope: implicit binders become fresh metavariables
-    // (the inserted arguments), witness binders fresh metavariables with
-    // resolution goals, explicit binders fresh lambda parameters (the eta
-    // variables). `head_args` records all in telescope order so the body
-    // re-applies the head fully saturated; `open` threads the dependent
-    // substitution so a later binder mentioning an earlier one is instantiated.
+    // Walk the head's telescope: implicit binders become fresh metavariables (the inserted arguments), witness binders fresh metavariables with resolution goals, explicit binders fresh lambda parameters (the eta variables). `head_args` records all in telescope order so the body re-applies the head fully saturated; `open` threads the dependent substitution so a later binder mentioning an earlier one is instantiated.
     let mut head_args: Vec<(Plicity, Term)> = Vec::new();
     let mut binders: Vec<(Free, Term)> = Vec::new();
     let output = context.with_frame(|context| -> Result<Term, Error> {
@@ -243,9 +203,7 @@ pub(super) fn insert_implicits_on_check(
 
     let body = Term::apply_marked(rebuilt, head_args);
 
-    // No explicit binders to eta over (an all-implicit curried prefix, e.g.
-    // `(@A, @B) -> …`): the implicit-saturated application *is* the value, and its
-    // type is the opened output. Erasure drops the implicit arguments anyway.
+    // No explicit binders to eta over (an all-implicit curried prefix, e.g. `(@A, @B) -> …`): the implicit-saturated application *is* the value, and its type is the opened output. Erasure drops the implicit arguments anyway.
     if binders.is_empty() {
         return Ok((body, output));
     }

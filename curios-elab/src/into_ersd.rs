@@ -1,40 +1,12 @@
 //! Core erasure into the erased representation ([`curios_ersd::Module`]).
 //!
-//! It consumes the meta-free Core [`Module`] and lowers it through the
-//! checked [`curios_ersd::ErsdBuilder`] into a verified
-//! [`curios_ersd::Module`], preserving the language's semantic
-//! identities — distinct `Bool`/`Byte` shapes, first-class switches and folds,
-//! schema-carrying products and variants. Every encoding decision (carriers,
-//! tag layouts, dispatch, loop synthesis) belongs to the later lowering out
-//! of the representation, not to erasure.
+//! It consumes the meta-free Core [`Module`] and lowers it through the checked [`curios_ersd::ErsdBuilder`] into a verified [`curios_ersd::Module`], preserving the language's semantic identities — distinct `Bool`/`Byte` shapes, first-class switches and folds, schema-carrying products and variants. Every encoding decision (carriers, tag layouts, dispatch, loop synthesis) belongs to the later lowering out of the representation, not to erasure.
 //!
-//! Erasure is a transcription under the **operand law**: every source
-//! subexpression erases to exactly one operand ([`curios_ersd::Atom`]) —
-//! an atomic value directly, a compound one bound by a statement in the
-//! builder's innermost open block, in evaluation order — and every reuse
-//! references the bound atom, never a re-erased copy. Divergence is explicit:
-//! an expression that provably never yields a value (a process exit, a vacuous
-//! elimination) reports the terminator that seals its block instead of an
-//! atom, and dead code after it is never erased.
+//! Erasure is a transcription under the **operand law**: every source subexpression erases to exactly one operand ([`curios_ersd::Atom`]) — an atomic value directly, a compound one bound by a statement in the builder's innermost open block, in evaluation order — and every reuse references the bound atom, never a re-erased copy. Divergence is explicit: an expression that provably never yields a value (a process exit, a vacuous elimination) reports the terminator that seals its block instead of an atom, and dead code after it is never erased.
 //!
-//! Core classifies and traverses; the builder owns construction. Production
-//! compilation erases the fixed prelude once at compiler build time
-//! ([`erase_prelude_prefix`], archived by `curios-prelude`) and replays
-//! it under each program's user suffix ([`erase_module_with_prelude`]).
-//! Every entrypoint projects its Core module through the private
-//! `UniverseErased<Module>` boundary, which removes universe instances,
-//! declaration contexts, and nominal vectors once; no universe data reaches Ersd
-//! and reduction never specializes runtime code by universe instance.
+//! Core classifies and traverses; the builder owns construction. Production compilation erases the fixed prelude once at compiler build time ([`erase_prelude_prefix`], archived by `curios-prelude`) and replays it under each program's user suffix ([`erase_module_with_prelude`]). Every entrypoint projects its Core module through the private `UniverseErased<Module>` boundary, which removes universe instances, declaration contexts, and nominal vectors once; no universe data reaches Ersd and reduction never specializes runtime code by universe instance.
 //!
-//! The boundary validates what it has not already seen validated, and projects
-//! what is not already projected — which for the replay entrypoint is only the
-//! user suffix. The prelude arrives immutable and checked from
-//! `curios-prelude`'s restore, and the merged module's leading items are that
-//! same prelude, so validating and projecting either of them again is a walk of
-//! the whole standard library for an answer already in hand. Doing both was
-//! measured at ~320 ms of a ~1000 ms release compilation of a one-line program,
-//! and it fell inside the erasure context's step budget, which a debug
-//! build then exceeded on `programs/hello_curios.crs`.
+//! The boundary validates what it has not already seen validated, and projects what is not already projected — which for the replay entrypoint is only the user suffix. The prelude arrives immutable and checked from `curios-prelude`'s restore, and the merged module's leading items are that same prelude, so validating and projecting either of them again is a walk of the whole standard library for an answer already in hand. Doing both was measured at ~320 ms of a ~1000 ms release compilation of a one-line program, and it fell inside the erasure context's step budget, which a debug build then exceeded on `programs/hello_curios.crs`.
 
 use {
     super::{
@@ -76,8 +48,7 @@ mod prim;
 #[cfg(test)]
 mod tests;
 
-/// Unwrap an [`Outcome`] to its emitted atom, propagating divergence to the
-/// caller (the rest of the enclosing block is dead and is never erased).
+/// Unwrap an [`Outcome`] to its emitted atom, propagating divergence to the caller (the rest of the enclosing block is dead and is never erased).
 macro_rules! emitted {
     ($outcome:expr) => {
         match $outcome {

@@ -1,14 +1,6 @@
 use {super::*, curios_core::Global};
 
-/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node,
-/// so this loops over them — elaborating each binding's type/body, minting its
-/// binder, and defining it in a single frame — rather than recursing once per
-/// binding, which a long straight-line sequence of `let`s would overflow the
-/// stack with. The tail continues with one ordinary (recursive) `elaborate`,
-/// its depth bounded by how often `let` and `rec` alternate, not by chain
-/// length. Rebuilding folds through `Term::let_`, which merges the bindings
-/// back into a single flat `Let`. The whole block is one source term with one
-/// span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
+/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding folds through `Term::let_`, which merges the bindings back into a single flat `Let`. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
 pub(super) fn elaborate_let(
     context: &mut Context,
     let_: &Let,
@@ -27,21 +19,13 @@ pub(super) fn elaborate_let(
                 )
             };
 
-            // A bare metavar annotation is the lowering of a typeless local
-            // `let x = e` (equivalently `let x : _ = e`): infer the body's type
-            // instead of checking the body against the hole. This is what lets a
-            // lambda/tuple/atom body — which `check` against an unsolved hole
-            // would reject — be bound without an annotation. Otherwise check the
-            // body against the (possibly partial) annotation, as before.
+            // A bare metavar annotation is the lowering of a typeless local `let x = e` (equivalently `let x : _ = e`): infer the body's type instead of checking the body against the hole. This is what lets a lambda/tuple/atom body — which `check` against an unsolved hole would reject — be bound without an annotation. Otherwise check the body against the (possibly partial) annotation, as before.
             let (type_elaborated, body_elaborated) = match &*type_ {
                 Subterm::Metavar(_) => {
                     let (body_elaborated, inferred) = elaborate(context, &body, Mode::Infer)?;
                     (inferred, body_elaborated)
                 }
-                // The body is checked against — and the binder assumed at — the
-                // *rebuilt* annotation: insertion saturates applications during
-                // elaboration, and a lowered (under-applied) type reaching the
-                // reducer would open a telescope at the wrong arity.
+                // The body is checked against — and the binder assumed at — the *rebuilt* annotation: insertion saturates applications during elaboration, and a lowered (under-applied) type reaching the reducer would open a telescope at the wrong arity.
                 _ => {
                     let type_elaborated = crate::check_is_sort(context, &type_)?.0;
                     let body_elaborated = check(context, &body, type_elaborated.clone())?;
@@ -50,18 +34,14 @@ pub(super) fn elaborate_let(
             };
             let label = context.fresh(let_.tail.hint_iter().nth(index).flatten());
 
-            // Define the binding with the *rebuilt* body so the tail's
-            // type-level evaluation does not reduce through the lowered
-            // (under-applied) original.
+            // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original.
             context.define_assuming(&label, &type_elaborated, &body_elaborated, None);
 
             label_terms.push(Term::free_var(&label));
             triples.push((label, type_elaborated, body_elaborated));
         }
 
-        // Propagate `mode` into the tail: a `Check(expected)` turnaround happens
-        // where the bindings are in scope; `expected` comes from the outer scope
-        // and does not mention them, so comparing inside the frame is sound.
+        // Propagate `mode` into the tail: a `Check(expected)` turnaround happens where the bindings are in scope; `expected` comes from the outer scope and does not mention them, so comparing inside the frame is sound.
         let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
@@ -77,9 +57,7 @@ pub(super) fn elaborate_let(
     })
 }
 
-/// Elaborate a local `rec` group and its tail. The group's mutually-recursive
-/// bindings are one node, so this handles them at once; the tail recurses
-/// through one ordinary `elaborate`, bounded by `let`/`rec` alternation.
+/// Elaborate a local `rec` group and its tail. The group's mutually-recursive bindings are one node, so this handles them at once; the tail recurses through one ordinary `elaborate`, bounded by `let`/`rec` alternation.
 pub(super) fn elaborate_rec(
     context: &mut Context,
     rec: &Rec,
@@ -115,16 +93,12 @@ pub(super) fn elaborate_rec(
             types_elaborated.push(crate::check_is_sort(context, type_)?.0);
         }
 
-        // Upgrade the assumptions to the *rebuilt* signatures before any body is
-        // checked: a lowered (under-applied) type reaching the reducer would open
-        // a telescope at the wrong arity.
+        // Upgrade the assumptions to the *rebuilt* signatures before any body is checked: a lowered (under-applied) type reaching the reducer would open a telescope at the wrong arity.
         for (label, type_) in labels.iter().zip(&types_elaborated) {
             context.reassume(label, type_);
         }
 
-        // Recursive names point at protected slots, never lowered bodies. A
-        // sibling that productively needs an earlier member sees its rebuilt
-        // solution; a dependency on a later member parks on the unsolved slot.
+        // Recursive names point at protected slots, never lowered bodies. A sibling that productively needs an earlier member sees its rebuilt solution; a dependency on a later member parks on the unsolved slot.
         let slots = labels
             .iter()
             .zip(&types_elaborated)
@@ -158,10 +132,7 @@ pub(super) fn elaborate_rec(
             Subterm::Rec(rec) => rec.group,
             _ => unreachable!("rec constructs a recursive block"),
         };
-        // Before the members are defined and the tail elaborated: a local
-        // `rec Bad : Type = (Bad) -> False` overflows the stack at its first
-        // use, which is in that tail. Named by the hints the program wrote,
-        // not by the gensyms elaboration minted for them.
+        // Before the members are defined and the tail elaborated: a local `rec Bad : Type = (Bad) -> False` overflows the stack at its first use, which is in that tail. Named by the hints the program wrote, not by the gensyms elaboration minted for them.
         let names = rec
             .tail
             .hint_iter()
@@ -200,13 +171,7 @@ pub(super) fn elaborate_func(
     }
 }
 
-/// Park a whole *checking problem* (§8): a checked-only introduction form
-/// met an expected type whose structure is still an unsolved metavariable —
-/// possibly pinned by a constraint parked moments ago. A fresh placeholder
-/// metavariable stands in the rebuilt tree; once the expected type's metas
-/// solve, the problem re-checks under its frozen frame and the placeholder is
-/// solved with the rebuilt term (the spine machinery splices it wherever the
-/// occurrence travelled).
+/// Park a whole *checking problem* (§8): a checked-only introduction form met an expected type whose structure is still an unsolved metavariable — possibly pinned by a constraint parked moments ago. A fresh placeholder metavariable stands in the rebuilt tree; once the expected type's metas solve, the problem re-checks under its frozen frame and the placeholder is solved with the rebuilt term (the spine machinery splices it wherever the occurrence travelled).
 pub(super) fn park_checking(
     context: &mut Context,
     term: &Term,
@@ -225,16 +190,7 @@ pub(super) fn park_checking(
     Ok((stand_in, expected.clone()))
 }
 
-/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar
-/// primitive. In `Check` mode the expected type pins the choice; an expected
-/// type that is still a bare unsolved metavar — and `Infer` mode — fall back to
-/// the literal's shape default (`Int` when a sign was written, else `Nat`), and
-/// the closing `expect` then solves that metavar to the chosen type. The literal
-/// resolves *eagerly*: deferring it would strand downstream elaboration that
-/// needs the type immediately (a projection off the literal's type, say). The
-/// operator (`elaborate_infix`) pins its operand type from the non-literal side
-/// first, so a literal there sees a concrete type and `1 + flt` still works.
-/// Decimal literals never reach here; they parse straight to `Flt`.
+/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar primitive. In `Check` mode the expected type pins the choice; an expected type that is still a bare unsolved metavar — and `Infer` mode — fall back to the literal's shape default (`Int` when a sign was written, else `Nat`), and the closing `expect` then solves that metavar to the chosen type. The literal resolves *eagerly*: deferring it would strand downstream elaboration that needs the type immediately (a projection off the literal's type, say). The operator (`elaborate_infix`) pins its operand type from the non-literal side first, so a literal there sees a concrete type and `1 + flt` still works. Decimal literals never reach here; they parse straight to `Flt`.
 pub(super) fn elaborate_num_lit(
     context: &mut Context,
     num_lit: &NumLit,
@@ -257,8 +213,7 @@ pub(super) fn elaborate_num_lit(
         Mode::Check(expected) => {
             let reduced = reduce_with(context, expected)?;
             match &*reduced {
-                // Nothing concrete to resolve against yet — commit to the shape
-                // default; the closing `expect` solves the metavar to it.
+                // Nothing concrete to resolve against yet — commit to the shape default; the closing `expect` solves the metavar to it.
                 Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_none() => {
                     Term::unwrap_or_clone(default_type.clone())
                 }
@@ -298,8 +253,7 @@ pub(super) fn elaborate_num_lit(
             };
             (Prim::Flt(Flt::from_f32(value)), flt_type)
         }
-        // A concrete expected type that is non-numeric — or `Nat` for a negative
-        // literal — has no realization: report against the literal's own shape.
+        // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
         _ => {
             let Mode::Check(expected) = &mode else {
                 unreachable!("Infer-mode target is always the Nat/Int shape default");
@@ -320,12 +274,9 @@ pub(super) fn elaborate_num_lit(
     Ok((Term::prim(prim), type_))
 }
 
-/// The shape default for an infix operator whose operand type nothing pinned:
-/// any signed/negative literal operand forces `Int`, otherwise `Nat`.
+/// The shape default for an infix operator whose operand type nothing pinned: any signed/negative literal operand forces `Int`, otherwise `Nat`.
 ///
-/// A free function rather than an inherent method on [`Infix`]: the node is
-/// representation and lives in `curios-core`, while literal defaulting is an
-/// elaboration decision.
+/// A free function rather than an inherent method on [`Infix`]: the node is representation and lives in `curios-core`, while literal defaulting is an elaboration decision.
 pub(super) fn infix_default_type(infix: &Infix) -> Prim {
     let signed = |operand: &Term| matches!(&**operand, Subterm::NumLit(num_lit) if num_lit.signed);
 
@@ -336,26 +287,9 @@ pub(super) fn infix_default_type(infix: &Infix) -> Prim {
     }
 }
 
-/// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh
-/// operand-type metavar `?T` is pinned by the non-literal operands first (or,
-/// for arithmetic operators, by the expected result type), then defaulted from
-/// the operand literals if nothing constrains it; only then are the literal
-/// operands checked — against a `?T` that is already concrete, so they never
-/// force it to their own default. That ordering is what lets `1 + flt` resolve
-/// to `Flt` rather than a `Nat`/`Flt` mismatch.
+/// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for arithmetic operators, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
 ///
-/// Dispatch is then **one path**: every operator, `&&`/`||` included,
-/// desugars to a projection of a witness of its `/syn` concept
-/// ([`NumOp::concept_field`](NumOp::concept_field)) — `a + b` ≙
-/// `Add/add(a, b)`, primitives included,
-/// resolved by the same engine that fills `use` slots (so `no witness of
-/// Add(Point)` is the single error vocabulary, and what an operator means at
-/// a type is entirely a question of which witnesses exist). `!=` rebuilds as
-/// `BoolXor(Eql/eql(a, b), true)` — no `BoolNot` prim exists. The node never
-/// survives elaboration; witness projections over the statically-known
-/// primitive witnesses collapse back to bare `Prim` code in the backend
-/// (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)`
-/// collapses to `BoolEql` — see the codegen parity tests).
+/// Dispatch is then **one path**: every operator, `&&`/`||` included, desugars to a projection of a witness of its `/syn` concept ([`NumOp::concept_field`](NumOp::concept_field)) — `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). `!=` rebuilds as `BoolXor(Eql/eql(a, b), true)` — no `BoolNot` prim exists. The node never survives elaboration; witness projections over the statically-known primitive witnesses collapse back to bare `Prim` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
@@ -368,9 +302,7 @@ pub(super) fn elaborate_infix(
     let classifier = context.fresh_classifier_type("infix operand classifier");
     let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.span());
 
-    // An arithmetic operator returns its operand type, so an expected result
-    // type pins `?T` straight away; a comparison returns `Bool`, which says
-    // nothing about the operands, so only the operands can pin it.
+    // An arithmetic operator returns its operand type, so an expected result type pins `?T` straight away; a comparison returns `Bool`, which says nothing about the operands, so only the operands can pin it.
     if !infix.op.result_is_bool()
         && let Mode::Check(expected) = &mode
     {
@@ -390,8 +322,7 @@ pub(super) fn elaborate_infix(
         true => None,
     };
 
-    // Nothing pinned `?T` — every non-literal operand left it open. Default from
-    // the operand shapes so the literal operands have a concrete type to take.
+    // Nothing pinned `?T` — every non-literal operand left it open. Default from the operand shapes so the literal operands have a concrete type to take.
     if context.metavar_solution(operand_id).is_none() {
         let default = infix_default_type(infix);
         context.solve_metavar(operand_id, Subterm::Prim(default).into());
@@ -411,9 +342,7 @@ pub(super) fn elaborate_infix(
     let (concept_path, field_name) = infix.op.concept_field();
     let concept_name = Global::Authored(concept_path);
 
-    // The concept registry entry — absent only in an exotic embedding that
-    // elaborates without the embedded prelude, where the operator has nothing to
-    // dispatch through.
+    // The concept registry entry — absent only in an exotic embedding that elaborates without the embedded prelude, where the operator has nothing to dispatch through.
     let Some(concept) = context.concept(&concept_name).cloned() else {
         let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
         return Err(Error::operator_undefined(
@@ -422,20 +351,14 @@ pub(super) fn elaborate_infix(
         ));
     };
 
-    // Projection is positional over the *instantiated* field telescope
-    // (`Structure::fields_at` peels the leading parameter binders, exactly as
-    // `elaborate_proj` resolves a label), so the method's position among the
-    // concept's fields is the index — no parameter offset.
+    // Projection is positional over the *instantiated* field telescope (`Structure::fields_at` peels the leading parameter binders, exactly as `elaborate_proj` resolves a label), so the method's position among the concept's fields is the index — no parameter offset.
     let projection_index = concept
         .fields
         .iter()
         .position(|field| field == field_name)
         .expect("the syn operator concepts declare their table fields");
 
-    // Mint and attempt the witness goal exactly like an omitted `use`
-    // argument: it resolves, parks on a flex operand type, or defers to a
-    // later witness registration, and a definite miss reports
-    // `no witness of Add(Point)` — the single operator error vocabulary.
+    // Mint and attempt the witness goal exactly like an omitted `use` argument: it resolves, parks on a flex operand type, or defers to a later witness registration, and a definite miss reports `no witness of Add(Point)` — the single operator error vocabulary.
     let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
     let goal = Term::struct_type_at(concept_name.clone(), universes, vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
@@ -466,36 +389,15 @@ pub(super) fn elaborate_infix(
     Ok((rebuilt, result_type))
 }
 
-/// Check a lambda against an expected function type, aligning the lambda's own
-/// binders with the expected telescope *by plicity* and inserting every omitted
-/// hidden (implicit/witness) expected binder — the lambda-side counterpart of
-/// application-side hidden-argument insertion.
+/// Check a lambda against an expected function type, aligning the lambda's own binders with the expected telescope *by plicity* and inserting every omitted hidden (implicit/witness) expected binder — the lambda-side counterpart of application-side hidden-argument insertion.
 ///
-/// Two queues advance together: the lambda's written telescope (whose `Done` is
-/// the body) with its written plicities, and the expected type's telescope
-/// (whose `Done` is the output) with its canonical plicities. At each step:
+/// Two queues advance together: the lambda's written telescope (whose `Done` is the body) with its written plicities, and the expected type's telescope (whose `Done` is the output) with its canonical plicities. At each step:
 ///
-/// 1. matching plicities consume both — the written domain (a hole when the
-///    annotation was omitted, or the annotation itself) is unified against the
-///    expected domain via `expect`;
-/// 2. a mismatch at a hidden expected slot inserts that binder — a real fresh
-///    bound variable checked at the expected domain — and keeps the written
-///    binder for the following expected slot;
-/// 3. a mismatch at an *explicit* expected slot is a plicity error: an explicit
-///    slot is never skipped, and a marked binder can never claim one.
+/// 1. matching plicities consume both — the written domain (a hole when the annotation was omitted, or the annotation itself) is unified against the expected domain via `expect`; 2. a mismatch at a hidden expected slot inserts that binder — a real fresh bound variable checked at the expected domain — and keeps the written binder for the following expected slot; 3. a mismatch at an *explicit* expected slot is a plicity error: an explicit slot is never skipped, and a marked binder can never claim one.
 ///
-/// Once the written binders run out, every remaining hidden expected slot is
-/// synthesized; a leftover explicit slot is a missing-parameter arity error, and
-/// a leftover written binder is a too-many-parameters arity error. Alignment is
-/// positional by plicity, not by binder label.
+/// Once the written binders run out, every remaining hidden expected slot is synthesized; a leftover explicit slot is a missing-parameter arity error, and a leftover written binder is a too-many-parameters arity error. Alignment is positional by plicity, not by binder label.
 ///
-/// The rebuilt lambda carries the *complete canonical* telescope — inserted
-/// binders included — and the expected type's full plicity vector, so it re-checks
-/// against the same type consuming every binder directly and inserting nothing
-/// (idempotence, required for caching, parked-work replay, zonk, and archive
-/// restoration). Each rebuilt domain is the *expected* domain rather than the
-/// written hole, so re-closing it captures any free names it mentions — keeping
-/// nested lambda domains de-Bruijn-correct for `zonk`/`erase` (§9).
+/// The rebuilt lambda carries the *complete canonical* telescope — inserted binders included — and the expected type's full plicity vector, so it re-checks against the same type consuming every binder directly and inserting nothing (idempotence, required for caching, parked-work replay, zonk, and archive restoration). Each rebuilt domain is the *expected* domain rather than the written hole, so re-closing it captures any free names it mentions — keeping nested lambda domains de-Bruijn-correct for `zonk`/`erase` (§9).
 pub(super) fn elaborate_func_check(
     context: &mut Context,
     telescope: &Telescope<Term>,
@@ -512,9 +414,7 @@ pub(super) fn elaborate_func_check(
         _ => return Err(Error::not_a_function_type(expected.clone())),
     };
 
-    // Assume an inserted or consumed binder into the ordinary scope, joining the
-    // witness scope when the *expected* slot is a `use` binder so resolution in
-    // later domains and the body finds it there.
+    // Assume an inserted or consumed binder into the ordinary scope, joining the witness scope when the *expected* slot is a `use` binder so resolution in later domains and the body finds it there.
     fn assume_slot(context: &mut Context, name: &Free, plicity: Plicity, type_: &Term) {
         match plicity {
             Plicity::Witness => context.assume_witness(name, type_),
@@ -534,9 +434,7 @@ pub(super) fn elaborate_func_check(
                 (Telescope::Done(body), Telescope::Done(output)) => {
                     break check(context, &body, *output);
                 }
-                // Written binders are exhausted: synthesize every remaining
-                // expected slot, which must be hidden — an explicit slot is
-                // never inserted (a missing-parameter arity error instead).
+                // Written binders are exhausted: synthesize every remaining expected slot, which must be hidden — an explicit slot is never inserted (a missing-parameter arity error instead).
                 (Telescope::Done(body), Telescope::Cons(domain, rest)) => {
                     let plicity = e_plicities[e_idx];
                     if plicity == Plicity::Explicit {
@@ -553,8 +451,7 @@ pub(super) fn elaborate_func_check(
                     expected_tele = rest.open(&[&x]);
                     e_idx += 1;
                 }
-                // A written binder remains but the expected telescope ended:
-                // too many parameters.
+                // A written binder remains but the expected telescope ended: too many parameters.
                 (Telescope::Cons(..), Telescope::Done(_)) => {
                     break Err(Error::wrong_number_of_arguments(
                         e_plicities.len(),
@@ -565,10 +462,7 @@ pub(super) fn elaborate_func_check(
                     let w_plicity = written_plicities[w_idx];
                     let e_plicity = e_plicities[e_idx];
                     if w_plicity == e_plicity {
-                        // Consume both. Unify the *rebuilt* written annotation
-                        // against the expected domain (`expect` reduces both
-                        // sides; an omitted annotation is a hole `check` births
-                        // and `expect` solves to the expected domain).
+                        // Consume both. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
                         let w_domain = crate::check_is_sort(context, &w_domain)?.0;
                         expect(context, term, &w_domain, &e_domain)?;
                         let name = context.fresh(w_rest.first_hint());
@@ -580,8 +474,7 @@ pub(super) fn elaborate_func_check(
                         w_idx += 1;
                         e_idx += 1;
                     } else if e_plicity != Plicity::Explicit {
-                        // Insert this hidden expected slot; the written binder
-                        // waits for the following expected slot.
+                        // Insert this hidden expected slot; the written binder waits for the following expected slot.
                         let name = context.fresh(None);
                         let x = Term::free_var(&name);
                         assume_slot(context, &name, e_plicity, &e_domain);
@@ -605,16 +498,7 @@ pub(super) fn elaborate_func_check(
     Ok((Term::func_marked(domains, body), expected))
 }
 
-/// Synthesize a function type from a lambda's own domain annotations — the mirror
-/// of `elaborate_func_type`. Without an expected type no binders can be inserted,
-/// so the lambda's written plicity sequence is already canonical: the walk keeps
-/// each written mark, entering a `use` binder into the witness scope for later
-/// domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry
-/// exactly that sequence. A domain that stays an unconstrained hole (the bare
-/// `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference
-/// fails — exactly as a bare lambda in inference position did before annotations
-/// existed. The rebuilt lambda and its type share the same closed domains, so both
-/// stay de-Bruijn-correct.
+/// Synthesize a function type from a lambda's own domain annotations — the mirror of `elaborate_func_type`. Without an expected type no binders can be inserted, so the lambda's written plicity sequence is already canonical: the walk keeps each written mark, entering a `use` binder into the witness scope for later domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry exactly that sequence. A domain that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference fails — exactly as a bare lambda in inference position did before annotations existed. The rebuilt lambda and its type share the same closed domains, so both stay de-Bruijn-correct.
 pub(super) fn elaborate_func_infer(
     context: &mut Context,
     telescope: &Telescope<Term>,

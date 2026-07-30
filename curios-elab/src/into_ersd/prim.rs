@@ -1,13 +1,6 @@
-//! The primitive transcription: each Core primitive to its arena identity,
-//! shape for shape.
+//! The primitive transcription: each Core primitive to its arena identity, shape for shape.
 //!
-//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped,
-//! `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed
-//! binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) —
-//! every collapse onto a runtime carrier belongs to the lowering out of the
-//! representation. Unbounded type-level numerals narrow to the exact 32-bit
-//! domains here (the numeric law's Core border), with overflow reported as an
-//! error, never wrapped.
+//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) — every collapse onto a runtime carrier belongs to the lowering out of the representation. Unbounded type-level numerals narrow to the exact 32-bit domains here (the numeric law's Core border), with overflow reported as an error, never wrapped.
 
 use {
     super::{
@@ -75,8 +68,7 @@ impl Lowering {
         Outcome::Emitted(curios_ersd::Atom::Constant(self.builder.constant(constant)))
     }
 
-    /// Erase the operands (each against its type, in order) and bind a scalar
-    /// operation.
+    /// Erase the operands (each against its type, in order) and bind a scalar operation.
     fn operation(
         &mut self,
         context: &mut Context,
@@ -119,8 +111,7 @@ impl Lowering {
     }
 }
 
-/// Transcribe one primitive. `expected` is consumed only where a runtime shape
-/// must be read off the type — the element type of a list literal.
+/// Transcribe one primitive. `expected` is consumed only where a runtime shape must be read off the type — the element type of a list literal.
 pub(super) fn erase_prim(
     lowering: &mut Lowering,
     context: &mut Context,
@@ -128,8 +119,7 @@ pub(super) fn erase_prim(
     expected: &Term,
     hint: Option<&str>,
 ) -> Result<Outcome, Error> {
-    /// One scalar-operation arm: each operand erased against one shared
-    /// operand type.
+    /// One scalar-operation arm: each operand erased against one shared operand type.
     macro_rules! op {
         ($op:expr, $type_:expr, $($operand:expr),+) => {
             lowering.operation(context, $op, &[$(($operand, $type_())),+], hint)
@@ -318,8 +308,7 @@ pub(super) fn erase_prim(
         }
 
         Prim::Lst(_, elements) => {
-            // Elaborate already checked this literal against a list type; the
-            // element type is re-derived only to lower the elements.
+            // Elaborate already checked this literal against a list type; the element type is re-derived only to lower the elements.
             let element_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
                 Subterm::Prim(Prim::LstType(element_type)) => element_type,
                 _ => unreachable!("erase: list literal checked against non-list type"),
@@ -387,16 +376,13 @@ pub(super) fn erase_prim(
 
         &Prim::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
         Prim::HandleEql(l, r) => op!(curios_ersd::Operation::HandleEql, io_type, l, r),
-        // A process exit never yields a value: erase the code, then report the
-        // terminator that seals this block. Code after it is dead and is never
-        // erased.
+        // A process exit never yields a value: erase the code, then report the terminator that seals this block. Code after it is dead and is never erased.
         Prim::Exit(code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
             Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
         }
 
-        // A store-described host call: each operand erases against its wire
-        // type, read off the same signature elaboration checked it with.
+        // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
         Prim::Foreign(function, arguments) => {
             let mut atoms = Vec::with_capacity(arguments.len());
             for (argument, (_, wire_type)) in arguments.iter().zip(&function.signature.params) {

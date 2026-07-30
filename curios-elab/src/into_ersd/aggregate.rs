@@ -1,26 +1,15 @@
-//! Products, structs, variants, and projections — schema registration and the
-//! construction/projection sites.
+//! Products, structs, variants, and projections — schema registration and the construction/projection sites.
 //!
-//! Declarations register their post-erasure shape exactly once, lazily on
-//! first use (the dominance-ordered item chain guarantees their dependencies
-//! are defined by then), from the opaque signature view: parameters opened as
-//! fresh abstract variables, each field classified against the preceding
-//! binders. The mask is therefore fixed per declaration, so construction,
-//! matching, and projection agree on the relevant-field arithmetic at every
-//! instantiation; a kept slot whose *instantiation* is a proof is filled with
-//! the unit constant at the site instead ([`Lowering::kept_operand`]).
+//! Declarations register their post-erasure shape exactly once, lazily on first use (the dominance-ordered item chain guarantees their dependencies are defined by then), from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
 //!
-//! Collapses: a structure or subset tuple left with a single relevant field
-//! erases to that bare field (no product, no projection); anonymous tuples
-//! share one interned schema per relevant width.
+//! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 
 use super::{
     Context, Error, Field, Lowering, Outcome, Proj, Struct, StructType, Subterm, Telescope, Term,
     Tuple, TupleType, Variant, emitted, erasure_mask, reduce_with, signature_entries,
 };
 
-/// Open a parameter telescope with fresh assumed variables, handing back the
-/// abstract parameter terms a declaration's fields are instantiated at.
+/// Open a parameter telescope with fresh assumed variables, handing back the abstract parameter terms a declaration's fields are instantiated at.
 fn open_opaque(context: &mut Context, mut telescope: Telescope<()>) -> Vec<Term> {
     let mut params = Vec::new();
     loop {
@@ -87,14 +76,7 @@ impl Lowering {
             .cloned()
             .expect("erase: a registered inductive");
         let family = self.builder.family(Some(name.to_string()));
-        // A `Prop`-sorted family is proof-irrelevant, so erasure drops its
-        // inhabitants wholesale — payloads included. Classifying each payload
-        // on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)`
-        // has an abstract `A`, which is neither prop nor universe), leaving a
-        // live field inside an erased proof: rebuilding the constructor would
-        // then compute that field from binders the same erasure had dropped.
-        // `Prop` structures already guarantee this by declaration — their
-        // fields must be non-informative — so this aligns inductives with them.
+        // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
             &*reduce_with(context, &induct_decl.result_sort)?,
             Subterm::Prop
@@ -144,13 +126,9 @@ impl Lowering {
         schema
     }
 
-    /// Lower a tuple against its checked tuple type. Erasable fields drop; a
-    /// type left with one relevant field collapses to it, whether or not a drop
-    /// produced that width — the same relevant-arity rule [`struct_row`]
-    /// applies, and the rule [`erase_proj`] reads back.
+    /// Lower a tuple against its checked tuple type. Erasable fields drop; a type left with one relevant field collapses to it, whether or not a drop produced that width — the same relevant-arity rule [`struct_row`] applies, and the rule [`erase_proj`] reads back.
     ///
-    /// [`struct_row`]: Self::struct_row
-    /// [`erase_proj`]: Self::erase_proj
+    /// [`struct_row`]: Self::struct_row [`erase_proj`]: Self::erase_proj
     pub(super) fn erase_tuple(
         &mut self,
         context: &mut Context,
@@ -168,9 +146,7 @@ impl Lowering {
             "erase: tuple width disagrees with the tuple type",
         );
 
-        // Anonymous tuples have no declaration; the per-site signature mask is
-        // the layout, and construction and projection read the same concrete
-        // tuple type, so they agree.
+        // Anonymous tuples have no declaration; the per-site signature mask is the layout, and construction and projection read the same concrete tuple type, so they agree.
         let mask = erasure_mask(context, telescope.clone())?;
         let atoms = match self.masked_fields(context, &mask, telescope, &tuple.fields)? {
             Ok(atoms) => atoms,
@@ -192,8 +168,7 @@ impl Lowering {
         ))
     }
 
-    /// Lower a struct value: a newtype is its bare field; anything else is a
-    /// product over the declaration's schema.
+    /// Lower a struct value: a newtype is its bare field; anything else is a product over the declaration's schema.
     pub(super) fn erase_struct(
         &mut self,
         context: &mut Context,
@@ -225,9 +200,7 @@ impl Lowering {
         }
     }
 
-    /// Lower a constructor value to a schema-carrying `Construct`; the
-    /// discriminant is the constructor's registry position, recorded in the
-    /// registered family.
+    /// Lower a constructor value to a schema-carrying `Construct`; the discriminant is the constructor's registry position, recorded in the registered family.
     pub(super) fn erase_variant(
         &mut self,
         context: &mut Context,
@@ -262,9 +235,7 @@ impl Lowering {
         ))
     }
 
-    /// Lower a projection by relevant-field arithmetic. A head left with a
-    /// single relevant field already *is* that field, so the projection
-    /// vanishes.
+    /// Lower a projection by relevant-field arithmetic. A head left with a single relevant field already *is* that field, so the projection vanishes.
     pub(super) fn erase_proj(
         &mut self,
         context: &mut Context,
@@ -279,8 +250,7 @@ impl Lowering {
         let head_type = super::infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
 
-        // Projecting an *erased* field yields proof content only: the unit
-        // constant, never a runtime projection (the field has no slot).
+        // Projecting an *erased* field yields proof content only: the unit constant, never a runtime projection (the field has no slot).
         let erased_field = |mask: &[bool], index: usize| mask.get(index).copied().unwrap_or(false);
 
         let (row, width) = match &*head_type {

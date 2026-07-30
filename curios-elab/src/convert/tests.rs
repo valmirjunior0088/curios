@@ -59,8 +59,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     );
 }
 
-/// Build a lambda whose argument domains are irrelevant to conversion (which
-/// compares only bodies); each parameter gets a placeholder `Type` domain.
+/// Build a lambda whose argument domains are irrelevant to conversion (which compares only bodies); each parameter gets a placeholder `Type` domain.
 fn func<const N: usize>(binders: [&Free; N], body: impl Into<Term>) -> Term {
     Term::func(
         binders.map(|binder| (binder.clone(), Term::type_ground())),
@@ -100,8 +99,7 @@ fn convert_func_type_distinguishes_plicity() {
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
-    // Three telescopes with identical domains and results, differing only in the
-    // one binder's plicity.
+    // Three telescopes with identical domains and results, differing only in the one binder's plicity.
     let explicit = Term::func_type([(x.clone(), Term::type_ground())], Term::type_ground());
     let implicit = Term::func_type_marked(
         [(Plicity::Implicit, x.clone(), Term::type_ground())],
@@ -112,8 +110,7 @@ fn convert_func_type_distinguishes_plicity() {
         Term::type_ground(),
     );
 
-    // Plicity is part of function-type identity: every pairwise mix is
-    // non-convertible even though the dependent telescopes agree.
+    // Plicity is part of function-type identity: every pairwise mix is non-convertible even though the dependent telescopes agree.
     assert_eq!(conv(&mut context, &explicit, &implicit), Ok(false));
     assert_eq!(conv(&mut context, &explicit, &witness), Ok(false));
     assert_eq!(conv(&mut context, &implicit, &witness), Ok(false));
@@ -186,15 +183,13 @@ fn convert_inductive_match_compares_default() {
         Ok(true)
     );
 
-    // Same arm, different default body: not convertible — the default is a real
-    // arm, not erased provenance.
+    // Same arm, different default body: not convertible — the default is a real arm, not erased provenance.
     assert_eq!(
         conv(&mut context, &with_default(9), &with_default(8)),
         Ok(false)
     );
 
-    // A defaulted match never converts with an otherwise-identical bare one:
-    // presence of the catch-all is itself a difference.
+    // A defaulted match never converts with an otherwise-identical bare one: presence of the catch-all is itself a difference.
     let bare = Term::induct_match(
         Term::free_var(&r),
         Some(&m),
@@ -255,9 +250,7 @@ fn convert_prim_distinguishes_operator_kind() {
 
 // === Folded recursive calls (match-guarded delta) ===========================
 
-/// `λx. match x | none() => <none_value> | some(p) => head(p) end` — stuck at
-/// a neutral scrutinee, with a `head`-call in an arm to make unfolding
-/// self-feeding.
+/// `λx. match x | none() => <none_value> | some(p) => head(p) end` — stuck at a neutral scrutinee, with a `head`-call in an arm to make unfolding self-feeding.
 fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> Term {
     let scrutinee = context.fresh(Some("x"));
     let motive = context.fresh(Some("m"));
@@ -293,10 +286,7 @@ fn convert_folded_recursive_call_against_its_unfolding() {
 
     let folded = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
 
-    // The literal stuck body, spelled reducibly (the η-redex around `p`) so
-    // the sides are not syntactically equal: the folded call meets a
-    // non-apply shape, lazy delta unfolds it once, and the two stuck
-    // matches compare structurally.
+    // The literal stuck body, spelled reducibly (the η-redex around `p`) so the sides are not syntactically equal: the folded call meets a non-apply shape, lazy delta unfolds it once, and the two stuck matches compare structurally.
     let unfolded = Term::induct_match(
         Term::free_var(&a),
         Some(&m),
@@ -346,9 +336,7 @@ fn convert_same_recursive_head_compares_spines() {
     assert_eq!(conv(&mut context, &this, &other), Ok(false));
 }
 
-/// `body` is built over the member's own parameter, which this helper mints —
-/// a caller that wants the identity function has to be handed that binder, not
-/// mint a like-named one of its own.
+/// `body` is built over the member's own parameter, which this helper mints — a caller that wants the identity function has to be handed that binder, not mint a like-named one of its own.
 fn structural_rec_member(context: &mut Context, body: impl FnOnce(&Free) -> Term) -> Term {
     let member = context.fresh(Some("f"));
     let parameter = context.fresh(Some("x"));
@@ -390,12 +378,7 @@ fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively
     let f = context.fresh(Some("f"));
     let g = context.fresh(Some("g"));
     let a = context.fresh(Some("a"));
-    // Identical bodies, distinct names: each round unfolds both sides to the
-    // same stuck match and re-opens its `some` arm at a fresh binder — the
-    // recurrence differs from the previous round only in that opening
-    // entropy, so the canonicalized history recognizes the cycle and assumes
-    // it. No finite disagreement exists: the functions are bisimilar. Before
-    // goal canonicalization this pair spun to `Err(Exhausted)`.
+    // Identical bodies, distinct names: each round unfolds both sides to the same stuck match and re-opens its `some` arm at a fresh binder — the recurrence differs from the previous round only in that opening entropy, so the canonicalized history recognizes the cycle and assumes it. No finite disagreement exists: the functions are bisimilar. Before goal canonicalization this pair spun to `Err(Exhausted)`.
     let body = recursive_matcher(&mut context, &f, 0);
     context.define(&f, &body, None);
     let body = recursive_matcher(&mut context, &g, 0);
@@ -412,8 +395,7 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
     let f = context.fresh(Some("f"));
     let g = context.fresh(Some("g"));
     let a = context.fresh(Some("a"));
-    // The `none` arms disagree: the first unfolding round surfaces the
-    // finite disagreement on a sibling goal, well before the budget runs out.
+    // The `none` arms disagree: the first unfolding round surfaces the finite disagreement on a sibling goal, well before the budget runs out.
     let body = recursive_matcher(&mut context, &f, 0);
     context.define(&f, &body, None);
     let body = recursive_matcher(&mut context, &g, 1);
@@ -426,10 +408,7 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
 
 #[test]
 fn convert_growing_recursive_unfolding_spends_the_budget() {
-    // Its own small budget: the subject here is that the budget stops an
-    // unfolding that grows without bound, and this shape drives native
-    // recursion deep enough to overflow the stack somewhere above 20,000
-    // steps — well under the shipped default. See the note in `Context::new`.
+    // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, and this shape drives native recursion deep enough to overflow the stack somewhere above 20,000 steps — well under the shipped default. See the note in `Context::new`.
     let mut context = Context::new(20_000);
     let x = context.fresh(Some("x"));
     let m = context.fresh(Some("m"));
@@ -438,13 +417,7 @@ fn convert_growing_recursive_unfolding_spends_the_budget() {
     let f = context.fresh(Some("f"));
     let g = context.fresh(Some("g"));
     let a = context.fresh(Some("a"));
-    // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs —
-    // every unfolding round's arm goal is structurally new, one more `s` on
-    // the folded argument — so no cycle exists to detect and the comparison
-    // rightly spends the budget: the accepted cost of fully general
-    // recursion. (The growth rides the match arm so each round refolds and
-    // returns to the drain queue; bare `f = λx. f(s(x))` growth would nest
-    // inside one `reduce` call instead.)
+    // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs — every unfolding round's arm goal is structurally new, one more `s` on the folded argument — so no cycle exists to detect and the comparison rightly spends the budget: the accepted cost of fully general recursion. (The growth rides the match arm so each round refolds and returns to the drain queue; bare `f = λx. f(s(x))` growth would nest inside one `reduce` call instead.)
     let growing = |head: &Free| {
         Term::func(
             [(x.clone(), Term::prim(Prim::NatType))],
@@ -484,9 +457,7 @@ fn convert_recursive_values_are_bisimilar() {
     let mut context = context();
     let xs = context.fresh(Some("xs"));
     let ys = context.fresh(Some("ys"));
-    // Two distinct recursive value definitions unfolding to the same
-    // constructor shape: the payload goal recurs exactly (no openings
-    // involved), history cuts it, and the streams are equal coinductively.
+    // Two distinct recursive value definitions unfolding to the same constructor shape: the payload goal recurs exactly (no openings involved), history cuts it, and the streams are equal coinductively.
     let stream = |name: &Free| {
         Term::variant(
             nominal("E"),
@@ -513,9 +484,7 @@ fn convert_folded_recursive_call_against_neutral_head_is_false() {
     let body = recursive_matcher(&mut context, &f, 0);
     context.define(&f, &body, None);
 
-    // The recursive side unfolds to its stuck match, the neutral side
-    // cannot unfold at all: a structural mismatch, decided well within the
-    // budget.
+    // The recursive side unfolds to its stuck match, the neutral side cannot unfold at all: a structural mismatch, decided well within the budget.
     let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
     let neutral = Term::apply(Term::free_var(&h), [Term::free_var(&a)]);
     assert_eq!(conv(&mut context, &this, &neutral), Ok(false));
@@ -881,16 +850,11 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     // A 1-field tuple type {x : Nat}.
     let type_: Term = Term::tuple_type([(x.clone(), Term::prim(Prim::NatType))]);
 
-    // this = (p.0), that = (q.0). At the 1-field type both denote (a),
-    // so conversion should return true.
+    // this = (p.0), that = (q.0). At the 1-field type both denote (a), so conversion should return true.
     let this: Term = Term::tuple([Term::proj(Term::free_var(&p), 0)]);
     let that: Term = Term::tuple([Term::proj(Term::free_var(&q), 0)]);
 
-    // Even though eta_reduce_tuple widens each 1-tuple to its bare base
-    // (`Var p`, `Var q`), the convert loop then routes the neutral pair
-    // through `eta_expand_neutral`, which re-projects according to the
-    // TRUE type telescope (1 field). Each `proj(_, 0)` then reduces to
-    // `1`, so the comparison succeeds — the bug is masked here.
+    // Even though eta_reduce_tuple widens each 1-tuple to its bare base (`Var p`, `Var q`), the convert loop then routes the neutral pair through `eta_expand_neutral`, which re-projects according to the TRUE type telescope (1 field). Each `proj(_, 0)` then reduces to `1`, so the comparison succeeds — the bug is masked here.
     assert_eq!(convert(&mut context, &type_, &this, &that), Ok(true));
 }
 
@@ -931,9 +895,7 @@ fn convert_unit_typed_neutrals_in_type_argument() {
     let r_binder = context.fresh(Some("r"));
     let s_binder = context.fresh(Some("s"));
 
-    // F : (()) -> Type ; r, s : ()   (all neutral assumptions).
-    // r ≡ s by η for the empty tuple (unit / proof irrelevance), so F r ≡ F s.
-    // `conv` compares at `Type`, exactly as the pipeline does via `expect`.
+    // F : (()) -> Type ; r, s : ()   (all neutral assumptions). r ≡ s by η for the empty tuple (unit / proof irrelevance), so F r ≡ F s. `conv` compares at `Type`, exactly as the pipeline does via `expect`.
     context.assume(
         &func,
         &Term::func_type(
@@ -954,9 +916,7 @@ fn convert_unit_typed_neutrals_in_type_argument() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-// A struct's fields compare at their declared types, recovered from the
-// registry — so a proof-irrelevant (unit-typed) field equates distinct
-// neutrals, and two structs differing only there are convertible.
+// A struct's fields compare at their declared types, recovered from the registry — so a proof-irrelevant (unit-typed) field equates distinct neutrals, and two structs differing only there are convertible.
 #[test]
 fn convert_struct_unit_field_is_irrelevant() {
     let mut context = context();
@@ -1001,8 +961,7 @@ fn convert_struct_unit_field_is_irrelevant() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-// Likewise a variant's payload compares at its constructor's declared types,
-// so a unit-typed payload field is proof-irrelevant.
+// Likewise a variant's payload compares at its constructor's declared types, so a unit-typed payload field is proof-irrelevant.
 #[test]
 fn convert_variant_unit_payload_is_irrelevant() {
     let mut context = context();
@@ -1137,9 +1096,7 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
     ]);
     context.birth_metavar(MetaId(0), Vec::new(), pair_type);
 
-    // ?0 ≟ (1, 2). A bare tuple has no synthesizable type (`elaborate_tuple`
-    // is Check-only), so synthesize-then-convert re-validation rejected it;
-    // checking it against the frozen tuple result type admits it.
+    // ?0 ≟ (1, 2). A bare tuple has no synthesizable type (`elaborate_tuple` is Check-only), so synthesize-then-convert re-validation rejected it; checking it against the frozen tuple result type admits it.
     let pair = Term::tuple([nat(1), nat(2)]);
     assert_eq!(conv(&mut context, &Term::metavar(0), &pair), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&pair));
@@ -1157,8 +1114,7 @@ fn revalidation_rejects_ill_typed_candidate_through_checking() {
     ]);
     context.birth_metavar(MetaId(0), Vec::new(), pair_type);
 
-    // ?0 ≟ (1, 2, 3): a three-field tuple does not check against a two-field
-    // tuple type, so checking still rejects the candidate and commits nothing.
+    // ?0 ≟ (1, 2, 3): a three-field tuple does not check against a two-field tuple type, so checking still rejects the candidate and commits nothing.
     let wrong = Term::tuple([nat(1), nat(2), nat(3)]);
     assert_eq!(conv(&mut context, &Term::metavar(0), &wrong), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1213,8 +1169,7 @@ fn embedded_metavar_postpones_to_residual() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
 
-    // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the
-    // solve is postponed; nothing solves ?1, so it stays residual.
+    // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the solve is postponed; nothing solves ?1, so it stays residual.
     let candidate = Term::func_type([(x.clone(), Term::metavar(1))], Term::prim(Prim::NatType));
     assert_eq!(conv(&mut context, &Term::metavar(0), &candidate), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1223,8 +1178,7 @@ fn embedded_metavar_postpones_to_residual() {
 #[test]
 fn revalidation_rejects_ill_typed_solution() {
     let mut context = context();
-    // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bool`) does not
-    // type-check against Nat, so re-validation rejects it.
+    // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bool`) does not type-check against Nat, so re-validation rejects it.
     context.birth_metavar(MetaId(0), Vec::new(), Term::prim(Prim::NatType));
 
     let bool_ = Term::prim(Prim::BoolType);
@@ -1234,11 +1188,7 @@ fn revalidation_rejects_ill_typed_solution() {
 
 #[test]
 fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
-    // The §12 regression. Γ = (t : Type) with a counterfactual match-arm
-    // refinement `t := Nat` in force (as inside `bool_match b { true => ... }`,
-    // where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen*
-    // Γ = (t : Type) — its result type depends on the refined head, mirroring
-    // `m : T(b)`.
+    // The §12 regression. Γ = (t : Type) with a counterfactual match-arm refinement `t := Nat` in force (as inside `bool_match b { true => ... }`, where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen* Γ = (t : Type) — its result type depends on the refined head, mirroring `m : T(b)`.
     let mut context = context();
     let t_binder = context.fresh(Some("t"));
     context.assume(&t_binder, &Term::type_ground());
@@ -1249,9 +1199,7 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
         Term::free_var(&t_binder),
     );
 
-    // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds,
-    // but re-validation suppresses refinements, leaving `t` abstract, so `5 : t`
-    // fails and the solution is rejected — the program is unsound otherwise.
+    // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds, but re-validation suppresses refinements, leaving `t` abstract, so `5 : t` fails and the solution is rejected — the program is unsound otherwise.
     let t = Term::free_var(&t_binder);
     let occurrence = Term::metavar_birthed(0, None, vec![t.clone()]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
@@ -1261,9 +1209,7 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
 
 #[test]
 fn revalidation_accepts_a_refinement_independent_solution() {
-    // The §12 twin. The same refinement `t := Nat` is in force, but `?0`'s result
-    // type is `Nat` directly — it does not depend on the refined head. Re-validation
-    // checks `5 : Nat` with refinements suppressed (none are needed) and commits.
+    // The §12 twin. The same refinement `t := Nat` is in force, but `?0`'s result type is `Nat` directly — it does not depend on the refined head. Re-validation checks `5 : Nat` with refinements suppressed (none are needed) and commits.
     let mut context = context();
     let t = context.fresh(Some("t"));
     context.assume(&t, &Term::type_ground());
@@ -1292,13 +1238,11 @@ fn solve_inverts_a_renaming() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     let y = context.fresh(Some("y"));
-    // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the
-    // live name `y` (the enclosing binders were re-closed and reopened).
+    // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the live name `y` (the enclosing binders were re-closed and reopened).
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y)]);
 
-    // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named
-    // form: `a`, not `y`.
+    // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named form: `a`, not `y`.
     assert_eq!(
         conv(&mut context, &occurrence, &Term::free_var(&y)),
         Ok(true)
@@ -1316,8 +1260,7 @@ fn solve_through_an_identity_spine_matches_legacy() {
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
 
-    // The identity spine behaves exactly like the empty (legacy bare-hole)
-    // spine: the candidate is stored unchanged.
+    // The identity spine behaves exactly like the empty (legacy bare-hole) spine: the candidate is stored unchanged.
     assert_eq!(conv(&mut context, &occurrence, &nat(1)), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&nat(1)));
 }
@@ -1333,8 +1276,7 @@ fn solve_postpones_a_duplicated_renaming() {
         vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
         nat_type(),
     );
-    // Both entries are the same live name: which birth binder `y` stands for
-    // is ambiguous, so a candidate mentioning it is undecided, not unequal.
+    // Both entries are the same live name: which birth binder `y` stands for is ambiguous, so a candidate mentioning it is undecided, not unequal.
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), Term::free_var(&y)]);
 
     let outcome = convert_outcome(
@@ -1359,8 +1301,7 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
         vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
         nat_type(),
     );
-    // First slot a pattern variable, second a compound term: the candidate
-    // may depend on the first but not (yet) on the second.
+    // First slot a pattern variable, second a compound term: the candidate may depend on the first but not (yet) on the second.
     let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var(&z), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
 
@@ -1390,8 +1331,7 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
     let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var(&z), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound]);
 
-    // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot
-    // (and is not an occurrence of the whole entry): undecided.
+    // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot (and is not an occurrence of the whole entry): undecided.
     let outcome = convert_outcome(
         &mut context,
         &Term::type_ground(),
@@ -1411,8 +1351,7 @@ fn solve_rejects_an_out_of_image_variable() {
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y)]);
 
-    // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard
-    // mismatch, not a postponement.
+    // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard mismatch, not a postponement.
     let outcome = convert_outcome(
         &mut context,
         &Term::type_ground(),
@@ -1429,8 +1368,7 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
     let a = context.fresh(Some("a"));
     let y = context.fresh(Some("y"));
     let b = context.fresh(Some("b"));
-    // ?0 is already solved to its own binder, so an occurrence ?0[y] stands
-    // for `y` — a perfectly good pattern variable hiding behind a node.
+    // ?0 is already solved to its own binder, so an occurrence ?0[y] stands for `y` — a perfectly good pattern variable hiding behind a node.
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     context.solve_metavar(MetaId(0), Term::free_var(&a));
     let entry = Term::metavar_birthed(0, None, vec![Term::free_var(&y)]);
@@ -1461,13 +1399,11 @@ fn solve_abstracts_a_non_pattern_occurrence() {
         vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
         nat_type(),
     );
-    // A reduce-stable compound (a tuple is a normal form), matched by the
-    // raw spelling; the reduced-spelling case is the next test.
+    // A reduce-stable compound (a tuple is a normal form), matched by the raw spelling; the reduced-spelling case is the next test.
     let compound = Term::tuple([Term::free_var(&z)]);
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
 
-    // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the
-    // non-pattern entry, which abstracts to its birth binder `b`.
+    // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the non-pattern entry, which abstracts to its birth binder `b`.
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(
         context.metavar_solution(MetaId(0)),
@@ -1482,9 +1418,7 @@ fn parked_goals_retry_under_their_frozen_refinements() {
     let mut context = context();
     let b = context.fresh(Some("b"));
 
-    // Park (inside an arm-like frame) a goal that converts only through the
-    // frame's counterfactual refinement: `b` reduces to `Nat` via `refine`,
-    // not via any definition.
+    // Park (inside an arm-like frame) a goal that converts only through the frame's counterfactual refinement: `b` reduces to `Nat` via `refine`, not via any definition.
     context.with_frame(|context| {
         context.assume(&b, &Term::type_ground());
         context.refine(&b, &nat_type());
@@ -1498,8 +1432,7 @@ fn parked_goals_retry_under_their_frozen_refinements() {
         );
     });
 
-    // The frame is gone; the drain retries under the frozen one, where the
-    // refinement still holds and the goal converts.
+    // The frame is gone; the drain retries under the frozen one, where the refinement still holds and the goal converts.
     assert!(context.drain_parked().is_ok());
 }
 
@@ -1508,8 +1441,7 @@ fn parked_goals_without_their_refinement_mismatch() {
     let mut context = context();
     let b = context.fresh(Some("b"));
 
-    // Control: the same goal parked without the refinement cannot convert,
-    // and the drain reports it at its origin.
+    // Control: the same goal parked without the refinement cannot convert, and the drain reports it at its origin.
     context.with_frame(|context| {
         context.assume(&b, &Term::type_ground());
         context.park(
@@ -1537,10 +1469,7 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
         vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
         nat_type(),
     );
-    // `z + 1` successor-peels under reduction, and the candidate side arrives
-    // reduced — each subject contributes both spellings, so the occurrence
-    // still abstracts, and the round-trip verification accepts the pair by
-    // definitional (not syntactic) equality.
+    // `z + 1` successor-peels under reduction, and the candidate side arrives reduced — each subject contributes both spellings, so the occurrence still abstracts, and the round-trip verification accepts the pair by definitional (not syntactic) equality.
     let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var(&z), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
 
@@ -1557,9 +1486,7 @@ fn flex_flex_same_id_converts_through_equal_spines() {
     let a = context.fresh(Some("a"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
 
-    // Two occurrences of the same unsolved metavariable whose spines differ
-    // syntactically but agree definitionally (`1 + 1` reduces to `2`): the
-    // congruence probe discharges the goal without solving anything.
+    // Two occurrences of the same unsolved metavariable whose spines differ syntactically but agree definitionally (`1 + 1` reduces to `2`): the congruence probe discharges the goal without solving anything.
     let sum: Term = Subterm::Prim(Prim::nat_add(nat(1), nat(1))).into();
     let this = Term::metavar_birthed(0, None, vec![sum]);
     let that = Term::metavar_birthed(0, None, vec![nat(2)]);
@@ -1574,8 +1501,7 @@ fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
     let a = context.fresh(Some("a"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
 
-    // Disagreeing spines are not *unequal* — the solution may ignore the
-    // slot — so the pair parks rather than mismatching.
+    // Disagreeing spines are not *unequal* — the solution may ignore the slot — so the pair parks rather than mismatching.
     let this = Term::metavar_birthed(0, None, vec![nat(1)]);
     let that = Term::metavar_birthed(0, None, vec![nat(2)]);
 
@@ -1585,13 +1511,7 @@ fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
 
 #[test]
 fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
-    // The intersection wontfix's witness, pinned: two *distinct* unsolved
-    // metavariables over compatible telescopes, met through the same live
-    // name. Flex–flex assignment (`?0 := ?1` through the renaming) would
-    // discharge this; v1 does no intersection, so the pair parks and — with
-    // nothing else to pin either head — stays undecided. When intersection
-    // is built, this test should flip to `Converts` with `?0` solved to an
-    // occurrence of `?1` (and this comment retired).
+    // The intersection wontfix's witness, pinned: two *distinct* unsolved metavariables over compatible telescopes, met through the same live name. Flex–flex assignment (`?0 := ?1` through the renaming) would discharge this; v1 does no intersection, so the pair parks and — with nothing else to pin either head — stays undecided. When intersection is built, this test should flip to `Converts` with `?0` solved to an occurrence of `?1` (and this comment retired).
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
@@ -1621,9 +1541,7 @@ fn rollback_solutions_unwinds_to_the_mark() {
 
     context.rollback_solutions(mark);
 
-    // The solution past the mark is unwound; the one before it survives. This
-    // is the bracket `solve` wraps around re-validation, so a rejected
-    // candidate's nested solves leave no fingerprints.
+    // The solution past the mark is unwound; the one before it survives. This is the bracket `solve` wraps around re-validation, so a rejected candidate's nested solves leave no fingerprints.
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&nat(1)));
     assert_eq!(context.metavar_solution(MetaId(1)), None);
 }
@@ -1636,15 +1554,12 @@ fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
     let m = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
     let stuck: Term = Subterm::Prim(Prim::NatSub(m.clone(), nat(1))).into();
 
-    // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the
-    // subtraction. (`NatAdd` escapes via successor peeling; the other
-    // operators rely on this parking.)
+    // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the subtraction. (`NatAdd` escapes via successor peeling; the other operators rely on this parking.)
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &stuck, &nat(0));
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 
-    // Within one run, a sibling goal pins `?0 := 1`; the parked subtraction
-    // is retried, folds to `0`, and converts.
+    // Within one run, a sibling goal pins `?0 := 1`; the parked subtraction is retried, folds to `0`, and converts.
     let this = Term::tuple([stuck, m]);
     let that = Term::tuple([nat(0), nat(1)]);
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -1658,9 +1573,7 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     let m = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
 
-    // An inductive type against `Nat` is provably unequal whatever `?0` becomes —
-    // the heads are rigid — so the mismatch stays hard (and is reported at
-    // the use site, not deferred to the drain).
+    // An inductive type against `Nat` is provably unequal whatever `?0` becomes — the heads are rigid — so the mismatch stays hard (and is reported at the use site, not deferred to the drain).
     let induct_decl = Term::induct_type(nominal("Vec"), [m], Vec::<Term>::new());
     let outcome = convert_outcome(
         &mut context,
@@ -1679,10 +1592,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     context.birth_metavar(MetaId(0), vec![(n.clone(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&n)]);
 
-    // Inside a frame that counterfactually refines `n := 0` (a match arm),
-    // the goal `?0[n] ≈ n` still discharges — but the *committed* solution is
-    // the refinement-free `n`, not the arm-local `0`: a metavariable must not
-    // be pinned to a value that holds only counterfactually inside the arm.
+    // Inside a frame that counterfactually refines `n := 0` (a match arm), the goal `?0[n] ≈ n` still discharges — but the *committed* solution is the refinement-free `n`, not the arm-local `0`: a metavariable must not be pinned to a value that holds only counterfactually inside the arm.
     let converts = context.with_frame(|context| {
         context.refine(&n, &nat(0));
         conv(context, &occurrence, &Term::free_var(&n))
@@ -1698,16 +1608,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
 fn eta_at_unit_trusts_the_goal_type_label() {
     let mut context = context();
 
-    // Pinned wart, internal to the conversion API: when one side is the unit
-    // tuple literal `()`, `eta_expand_tuple` enqueues one goal per field —
-    // zero — and succeeds *without ever confirming the goal's type reduces to
-    // `{}`. So the kernel, asked directly, judges `() ≈ 1` at type `Nat`.
-    // Elaboration never produces a heterotyped goal (both sides of every
-    // `expect`/index comparison were checked at the same type), so this is
-    // not reachable from the surface language — but the conversion entry
-    // point is only sound under that caller invariant. If η-at-unit ever
-    // gates on the type actually being a 0-ary tuple type, flip this to
-    // `Ok(false)`.
+    // Pinned wart, internal to the conversion API: when one side is the unit tuple literal `()`, `eta_expand_tuple` enqueues one goal per field — zero — and succeeds *without ever confirming the goal's type reduces to `{}`. So the kernel, asked directly, judges `() ≈ 1` at type `Nat`. Elaboration never produces a heterotyped goal (both sides of every `expect`/index comparison were checked at the same type), so this is not reachable from the surface language — but the conversion entry point is only sound under that caller invariant. If η-at-unit ever gates on the type actually being a 0-ary tuple type, flip this to `Ok(false)`.
     assert_eq!(
         convert(
             &mut context,
@@ -1791,8 +1692,7 @@ fn imitation_solves_flex_apply_against_inductive() {
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
-    // The committed solution is the imitation, not the constant: applied to a
-    // different argument it yields Lst of *that* argument.
+    // The committed solution is the imitation, not the constant: applied to a different argument it yields Lst of *that* argument.
     let at_bool = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
     let lst_bool = Term::induct_type(
         nominal("Lst"),
@@ -1850,8 +1750,7 @@ fn imitation_splits_params_and_indices() {
         ),
     );
 
-    // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's
-    // body must mirror the rigid node's split or re-validation rejects it.
+    // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's body must mirror the rigid node's split or re-validation rejects it.
     let flex = Term::apply(Term::metavar(0), [nat_type(), nat(3)]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
@@ -1919,9 +1818,7 @@ fn imitation_arity_mismatch_blocks() {
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
-    // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2:
-    // v1 has no partial-application solutions, so the goal blocks (it is not
-    // provably unequal — a constant solution could exist).
+    // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2: v1 has no partial-application solutions, so the goal blocks (it is not provably unequal — a constant solution could exist).
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
@@ -1951,9 +1848,7 @@ fn imitation_leaves_rigid_apply_pairs_alone() {
     let kind = type_to_type(&mut context);
     context.assume(&f, &kind);
 
-    // A *rigid* stuck application against a nominal type is not the imitation
-    // case: the guard falls back to the neutral path, which cannot equate
-    // them — a definite mismatch, exactly as before the rule existed.
+    // A *rigid* stuck application against a nominal type is not the imitation case: the guard falls back to the neutral path, which cannot equate them — a definite mismatch, exactly as before the rule existed.
     let stuck = Term::apply(Term::free_var(&f), [nat_type()]);
     let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
@@ -1965,8 +1860,7 @@ fn imitation_solves_flex_apply_against_prim_former() {
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
-    // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0 := λT. Lst(T), the pairwise
-    // equation ?1 := Nat. This is what pins `M := Lst` for `Monad(Lst)`.
+    // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0 := λT. Lst(T), the pairwise equation ?1 := Nat. This is what pins `M := Lst` for `Monad(Lst)`.
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
     let rigid = Term::prim(Prim::LstType(nat_type()));

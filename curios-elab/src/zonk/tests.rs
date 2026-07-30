@@ -83,8 +83,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
     context.birth_metavar(MetaId(0), Vec::new(), nat());
     context.solve_metavar(MetaId(0), nat_lit(7));
 
-    // The catch-all default is a real term position, so a solved metavar sitting
-    // in it is resolved like any other.
+    // The catch-all default is a real term position, so a solved metavar sitting in it is resolved like any other.
     let scrutinee = context.fresh(Some("r"));
     let motive = context.fresh(Some("m"));
     let term = Term::induct_match_default(
@@ -202,8 +201,7 @@ fn zonk_rejects_an_unsolved_metavariable() {
 fn zonk_reports_a_solved_goal() {
     let mut context = context();
 
-    // A written goal `?` errors even when solved — the report carries the
-    // frozen scope, the goal's type, and the committed solution.
+    // A written goal `?` errors even when solved — the report carries the frozen scope, the goal's type, and the committed solution.
     let x = context.fresh(Some("x"));
     context.birth_metavar(MetaId(0), vec![(x.clone(), nat())], nat());
     context.solve_metavar(MetaId(0), nat_lit(7));

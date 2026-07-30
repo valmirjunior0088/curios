@@ -15,8 +15,7 @@ fn context() -> Context {
     Context::with_default_budget()
 }
 
-/// A top-level definition's identity, from the path a test writes — the same
-/// name [`definition`] declares it under. Fixture-only.
+/// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.
 fn global(path: &str) -> curios_core::Free {
     curios_core::Free::global(Qualifier::from([path]))
 }
@@ -87,8 +86,7 @@ entry {
 fn bool_and_byte_keep_their_shapes() {
     let mut context = context();
     let b = context.fresh(Some("b"));
-    // Bool stays Bool-shaped and Byte stays Byte-shaped: no Nat carrier appears
-    // anywhere in the erased output.
+    // Bool stays Bool-shaped and Byte stays Byte-shaped: no Nat carrier appears anywhere in the erased output.
     let body = Term::let_(
         &b,
         Term::prim(Prim::BoolType),
@@ -145,8 +143,7 @@ entry {
 #[test]
 fn items_erase_in_dominance_order() {
     let mut context = context();
-    // `a` references `b`, which is declared after it; the item chain must
-    // reorder so every reference is backward.
+    // `a` references `b`, which is declared after it; the item chain must reorder so every reference is backward.
     let items = vec![
         definition(
             "a",
@@ -234,8 +231,7 @@ entry {
 fn erasure_is_deterministic() {
     let mut context = context();
     let x = context.fresh(Some("x"));
-    // Both runs erase the *same* term under a fresh context, so any difference
-    // would be erasure's own, not a difference in the binders handed to it.
+    // Both runs erase the *same* term under a fresh context, so any difference would be erasure's own, not a difference in the binders handed to it.
     let build = |context: &mut Context| {
         let body = Term::let_(
             &x,
@@ -302,8 +298,7 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
     let mut context = context();
     let type_param = context.fresh(Some("A"));
     let x = context.fresh(Some("x"));
-    // (A : Type, x : A) => x — the type parameter is dropped; the runtime
-    // function takes one parameter and stores no captures.
+    // (A : Type, x : A) => x — the type parameter is dropped; the runtime function takes one parameter and stores no captures.
     let func_type = Term::func_type(
         [
             (type_param.clone(), Term::type_ground()),
@@ -351,8 +346,7 @@ fn a_capturing_closure_stores_no_capture_list() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y_binder = context.fresh(Some("y"));
-    // (y : Nat) => (x : Nat) => x + y — the inner closure references the
-    // outer parameter freely; analysis derives it, nothing is stored.
+    // (y : Nat) => (x : Nat) => x + y — the inner closure references the outer parameter freely; analysis derives it, nothing is stored.
     let inner_type = Term::func_type(
         [(x.clone(), Term::prim(Prim::NatType))],
         Term::prim(Prim::NatType),
@@ -385,8 +379,7 @@ fn a_capturing_closure_stores_no_capture_list() {
     let printed = erased.to_string();
     assert!(printed.contains("function ~f0$/make(~v0$y)"), "{printed}");
     assert!(printed.contains("NatAdd("), "{printed}");
-    // The inner closure's capture of `y` is derived, never stored: the outer
-    // parameter is the inner function's one free value.
+    // The inner closure's capture of `y` is derived, never stored: the outer parameter is the inner function's one free value.
     let analysis = curios_ersd::Analysis::analyze(&erased);
     let mut functions = erased.function_ids();
     let outer = functions.next().expect("the outer function");
@@ -406,8 +399,7 @@ fn opt_type() -> Term {
     Term::induct_type(nominal("Opt"), Vec::<Term>::new(), Vec::<Term>::new())
 }
 
-// induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some`
-// tag 1 (registry-sorted). Registered on the module so erasure seeds it.
+// induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some` tag 1 (registry-sorted). Registered on the module so erasure seeds it.
 fn opt_induct() -> InductDecl {
     let mut context = context();
     let x = context.fresh(Some("x"));
@@ -521,8 +513,7 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
     let x = context.fresh(Some("x"));
     let w = context.fresh(Some("w"));
     let sub = context.fresh(Some("sub"));
-    // { x : Nat, w : Prop-valued } erases to the bare Nat; its projection
-    // vanishes.
+    // { x : Nat, w : Prop-valued } erases to the bare Nat; its projection vanishes.
     let subset_type = Term::tuple_type([
         (x.clone(), Term::prim(Prim::NatType)),
         (w.clone(), Term::prop()),
@@ -773,9 +764,7 @@ fn an_effectful_scrutinee_is_erased_once() {
     let x = context.fresh(Some("x"));
     let pred = context.fresh(Some("pred"));
     let ih = context.fresh(Some("ih"));
-    // The peel path re-derives Core terms from the head (`n - 1`); an
-    // effectful compound head must still evaluate exactly once, through the
-    // alias.
+    // The peel path re-derives Core terms from the head (`n - 1`); an effectful compound head must still evaluate exactly once, through the alias.
     let io_read = Term::apply(Term::free_var(&global("read")), [nat_lit(0)]);
     let items = vec![definition(
         "read",
@@ -855,9 +844,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     let u = context.fresh(Some("u"));
     let produce = context.fresh(Some("produce"));
     let consume = context.fresh(Some("consume"));
-    // rec { produce() = consume; consume = produce } — a dormant knot: the
-    // computed member's initializer references the function, and the function
-    // body references the computed member (dormant until applied).
+    // rec { produce() = consume; consume = produce } — a dormant knot: the computed member's initializer references the function, and the function body references the computed member (dormant until applied).
     let produce_type = Term::func_type(
         [(
             u.clone(),
@@ -905,10 +892,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
-    // rec a = b; b = a — a mutual value-level cycle no initialization order
-    // satisfies. The verifier rejects it; erasure surfaces the diagnostic as
-    // an error, never a panic. (A *self*-knot `rec loop = loop` is admitted:
-    // the lowering drops it when unused, mirroring the legacy path.)
+    // rec a = b; b = a — a mutual value-level cycle no initialization order satisfies. The verifier rejects it; erasure surfaces the diagnostic as an error, never a panic. (A *self*-knot `rec loop = loop` is admitted: the lowering drops it when unused, mirroring the legacy path.)
     let type_ = Term::prim(Prim::NatType);
     let body = Term::rec(
         vec![

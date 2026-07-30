@@ -291,11 +291,7 @@ fn non_principal_flexible_bound_is_not_arbitrarily_defaulted() {
 
 /// The companion to [`non_principal_flexible_bound_is_not_arbitrarily_defaulted`].
 ///
-/// Mutual bounds force an equality and therefore *do* have a least solution,
-/// so leaving them open is not conservatism — it is a level that never gets
-/// solved. Witness dispatch emits exactly this shape, and every `%` slot in a
-/// module body failed to elaborate while propagation stalled on it: each level
-/// waits for the other, and neither is defaultable because both occur above.
+/// Mutual bounds force an equality and therefore *do* have a least solution, so leaving them open is not conservatism — it is a level that never gets solved. Witness dispatch emits exactly this shape, and every `%` slot in a module body failed to elaborate while propagation stalled on it: each level waits for the other, and neither is defaultable because both occur above.
 #[test]
 fn mutually_bounded_flexible_levels_close_at_their_floor() {
     let mut solver = UniverseSolver::new(0);
@@ -315,13 +311,7 @@ fn mutually_bounded_flexible_levels_close_at_their_floor() {
     assert_eq!(solver.solution(right), Some(&Level::zero()));
 }
 
-/// The same cycle, but forced above zero by a direct bound. `left` solves to 2
-/// from that bound, leaving `2 ≤ max(1, right)`. Its upper side is not a bare
-/// atom, so cancelling the offset alone does not answer it — but `max`'s own
-/// constant of 1 cannot supply 2, so `right ≥ 2` is determined rather than
-/// guessed. Before that was recognized the floor attempt tried `right := 0`,
-/// found `2 ≤ max(1, 0)` inconsistent, rolled back, and left `right` unsolved
-/// — surfacing as "level escapes its universe parameter context".
+/// The same cycle, but forced above zero by a direct bound. `left` solves to 2 from that bound, leaving `2 ≤ max(1, right)`. Its upper side is not a bare atom, so cancelling the offset alone does not answer it — but `max`'s own constant of 1 cannot supply 2, so `right ≥ 2` is determined rather than guessed. Before that was recognized the floor attempt tried `right := 0`, found `2 ≤ max(1, 0)` inconsistent, rolled back, and left `right` unsolved — surfacing as "level escapes its universe parameter context".
 #[test]
 fn a_mutually_bounded_cycle_closes_at_a_non_zero_floor() {
     let mut solver = UniverseSolver::new(0);
@@ -476,10 +466,7 @@ fn non_principal_flexible_levels_are_promoted_to_residual_parameters() {
     universe_context_validate(&context).unwrap();
 }
 
-/// A declaration context is closed: universe polymorphism belongs to
-/// declarations, and there is no enclosing scheme whose parameters a
-/// constraint could still mention. A parameter reaching finalization is
-/// therefore an escape, not an outer reference to be recorded.
+/// A declaration context is closed: universe polymorphism belongs to declarations, and there is no enclosing scheme whose parameters a constraint could still mention. A parameter reaching finalization is therefore an escape, not an outer reference to be recorded.
 #[test]
 fn generalization_rejects_a_constraint_mentioning_an_enclosing_parameter() {
     let mut solver = UniverseSolver::new(0);
@@ -503,8 +490,7 @@ fn level_parameter_names_stay_alphabetic_past_the_sixth() {
     let name = |index: usize| Level::param(UniverseParam(index)).to_string();
     assert_eq!(name(0), "u");
     assert_eq!(name(5), "z");
-    // `u + 6` is `{` in ASCII; a stepping scheme that runs off `z` prints
-    // punctuation where a level name belongs.
+    // `u + 6` is `{` in ASCII; a stepping scheme that runs off `z` prints punctuation where a level name belongs.
     assert_eq!(name(6), "u1");
     assert_eq!(name(8), "w1");
     assert_eq!(name(12), "u2");

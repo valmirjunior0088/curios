@@ -8,10 +8,7 @@ use {
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
 
-/// Source-location anchoring is the [`Error::Located`] wrapper's job — the
-/// elaborate/erase/zonk drivers attach the offending term's span as the error
-/// propagates. Variants therefore carry only what their message displays; a
-/// variant carries a `Term` only when the message prints it.
+/// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
     ReduceExhausted {
@@ -85,20 +82,15 @@ pub enum Error {
     DuplicateTupleLabel {
         label: String,
     },
-    /// A second `induct` registered under a name a prior declaration already
-    /// claims. The registry is global across every root elaborated into one
-    /// `Context`, so this is rejected rather than silently overwritten — the
-    /// same shape of collision `DuplicateWitness` guards for witnesses.
+    /// A second `induct` registered under a name a prior declaration already claims. The registry is global across every root elaborated into one `Context`, so this is rejected rather than silently overwritten — the same shape of collision `DuplicateWitness` guards for witnesses.
     DuplicateInduct {
         name: String,
     },
-    /// A second `struct` registered under a name a prior declaration already
-    /// claims — see `DuplicateInduct`.
+    /// A second `struct` registered under a name a prior declaration already claims — see `DuplicateInduct`.
     DuplicateStruct {
         name: String,
     },
-    /// A second `concept` registered under a name a prior declaration already
-    /// claims — see `DuplicateInduct`.
+    /// A second `concept` registered under a name a prior declaration already claims — see `DuplicateInduct`.
     DuplicateConcept {
         name: String,
     },
@@ -123,12 +115,7 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    /// A written function binder claims a slot whose plicity it does not match.
-    /// `position` is the binder's 1-based position among the written binders,
-    /// `expected` the plicity of the expected slot it aligned with, and `written`
-    /// the mark it carries. Under automatic hidden-binder insertion this fires
-    /// when a marked (`@`/`use`) binder reaches an *explicit* expected slot — an
-    /// explicit slot is never skipped and never marked.
+    /// A written function binder claims a slot whose plicity it does not match. `position` is the binder's 1-based position among the written binders, `expected` the plicity of the expected slot it aligned with, and `written` the mark it carries. Under automatic hidden-binder insertion this fires when a marked (`@`/`use`) binder reaches an *explicit* expected slot — an explicit slot is never skipped and never marked.
     BinderPlicityMismatch {
         position: usize,
         expected: Plicity,
@@ -150,32 +137,19 @@ pub enum Error {
     NotAInductType {
         head_type: Box<Term>,
     },
-    /// A strict proposition was eliminated into a relevant (data) result — a
-    /// large elimination that would observe which inhabitant it was, breaking
-    /// proof irrelevance. Permitted only for an empty or singleton proposition.
+    /// A strict proposition was eliminated into a relevant (data) result — a large elimination that would observe which inhabitant it was, breaking proof irrelevance. Permitted only for an empty or singleton proposition.
     LargeElimOfProp {
         name: String,
     },
-    /// A struct was declared at sort `Prop` but a field is informative (its type
-    /// is not itself a proposition). Proof irrelevance would then let projection
-    /// observe which inhabitant was built — the singleton-elimination condition,
-    /// applied at declaration time. `field` is the offending field; `field_type`
-    /// its type.
+    /// A struct was declared at sort `Prop` but a field is informative (its type is not itself a proposition). Proof irrelevance would then let projection observe which inhabitant was built — the singleton-elimination condition, applied at declaration time. `field` is the offending field; `field_type` its type.
     InformativePropStruct {
         name: String,
         field: String,
         field_type: Box<Term>,
     },
-    /// An `induct` or `struct` declaration is not strictly positive: it reaches
-    /// itself through a position that is not a plain payload. Such a
-    /// declaration is not the initial algebra of a polynomial functor, so the
-    /// eliminator it would hand back is not sound — the classic witness being
-    /// `induct Bad | c(f : (Bad) -> False) end`, which inhabits `False`.
+    /// An `induct` or `struct` declaration is not strictly positive: it reaches itself through a position that is not a plain payload. Such a declaration is not the initial algebra of a polynomial functor, so the eliminator it would hand back is not sound — the classic witness being `induct Bad | c(f : (Bad) -> False) end`, which inhabits `False`.
     ///
-    /// `site` is the constructor payload or struct field the offending path
-    /// starts from and `site_type` its type. The path itself may be longer than
-    /// one step: `polarity` is where it ends up, not where the named site
-    /// stands on its own.
+    /// `site` is the constructor payload or struct field the offending path starts from and `site_type` its type. The path itself may be longer than one step: `polarity` is where it ends up, not where the named site stands on its own.
     NotStrictlyPositive {
         name: String,
         site: String,
@@ -184,21 +158,15 @@ pub enum Error {
     },
     /// A position erasure deletes is not known to terminate.
     ///
-    /// Erasure deletes types and it deletes `Prop`-sorted proofs, and both must
-    /// be total: a divergent type breaks type formation, and a divergent proof
-    /// proves anything. General recursion is untouched everywhere erasure keeps
-    /// it, so this rejects a *position*, never a definition.
+    /// Erasure deletes types and it deletes `Prop`-sorted proofs, and both must be total: a divergent type breaks type formation, and a divergent proof proves anything. General recursion is untouched everywhere erasure keeps it, so this rejects a *position*, never a definition.
     ///
-    /// `offender` is the partial definition the position reaches, or `None`
-    /// when the position is partial on its own account — an inline `rec` that
-    /// does not descend, or an exit, neither of which has a name to blame.
+    /// `offender` is the partial definition the position reaches, or `None` when the position is partial on its own account — an inline `rec` that does not descend, or an exit, neither of which has a name to blame.
     PartialInErasedPosition {
         erased: Erased,
         site: String,
         offender: Option<String>,
     },
-    /// A struct literal's (or struct type's) head names a binding that is not a
-    /// struct; `found` is that binding's type.
+    /// A struct literal's (or struct type's) head names a binding that is not a struct; `found` is that binding's type.
     NotAStructType {
         found: Box<Term>,
     },
@@ -218,8 +186,7 @@ pub enum Error {
     UnknownDeclaration {
         name: String,
     },
-    /// A written field label does not match the declared label at its position
-    /// (fields are given in declaration order — no reordering).
+    /// A written field label does not match the declared label at its position (fields are given in declaration order — no reordering).
     UnknownStructField {
         name: String,
         label: String,
@@ -248,26 +215,22 @@ pub enum Error {
         name: String,
         found: Box<Term>,
     },
-    /// An unlabeled override after a `..` spread — gaps make positions
-    /// ambiguous, so every override must name its field.
+    /// An unlabeled override after a `..` spread — gaps make positions ambiguous, so every override must name its field.
     UnlabeledSpreadOverride {
         name: String,
     },
-    /// Overrides after a `..` spread must be an order-preserving subsequence
-    /// of the declared fields; `label` is repeated or out of place.
+    /// Overrides after a `..` spread must be an order-preserving subsequence of the declared fields; `label` is repeated or out of place.
     SpreadOverrideOutOfOrder {
         name: String,
         label: String,
         order: Vec<String>,
     },
-    /// Projecting a field of a struct whose representation is private, from
-    /// outside the declaring module's subtree (§7).
+    /// Projecting a field of a struct whose representation is private, from outside the declaring module's subtree (§7).
     PrivateField {
         name: String,
         field: String,
     },
-    /// Constructing or eliminating a nominal type whose representation is
-    /// private, from outside the declaring module's subtree (§7).
+    /// Constructing or eliminating a nominal type whose representation is private, from outside the declaring module's subtree (§7).
     PrivateRepresentation {
         name: String,
     },
@@ -275,79 +238,54 @@ pub enum Error {
         term: Box<Term>,
     },
     CannotInfer,
-    /// An overloaded infix operator applied at an operand type with no matching
-    /// scalar primitive — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The
-    /// `symbol` is the operator's spelling; `type_` is the resolved operand type.
+    /// An overloaded infix operator applied at an operand type with no matching scalar primitive — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
         type_: Box<Term>,
     },
-    /// An inserted implicit argument that unification never pinned. Carries
-    /// the insertion provenance (the applied function and the binder it
-    /// filled) so the report names the hole instead of a bare metavar id.
+    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id.
     UninferredImplicit {
         func: String,
         binder: String,
     },
-    /// A call supplies more `@`-arguments than the function has implicit
-    /// binders (the explicit-slot counterpart is `WrongNumberOfArguments`).
+    /// A call supplies more `@`-arguments than the function has implicit binders (the explicit-slot counterpart is `WrongNumberOfArguments`).
     TooManyImplicits {
         expected: usize,
         got: usize,
     },
-    /// A call supplies more `use`-arguments than the function has witness
-    /// binders (the `use` counterpart of `TooManyImplicits`).
+    /// A call supplies more `use`-arguments than the function has witness binders (the `use` counterpart of `TooManyImplicits`).
     TooManyWitnessArgs {
         expected: usize,
         got: usize,
     },
-    /// A witness goal that resolution could not discharge: no matching local
-    /// `use` binder, no superclass projection, and no witness-table entry.
-    /// `func`/`binder` are the insertion provenance (the applied function and
-    /// the `use` binder the goal fills).
+    /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `func`/`binder` are the insertion provenance (the applied function and the `use` binder the goal fills).
     NoWitness {
         goal: Box<Term>,
         func: String,
         binder: String,
     },
-    /// A written goal `?` reaching zonk — reported unconditionally, solved or
-    /// not: writing `?` asks what elaboration determined there, so the report
-    /// *is* the outcome and the program never compiles. Carries the display
-    /// frozen at the goal's birth: the local scope in binding order, the
-    /// goal's type, and the solution unification committed (if any). Each
-    /// scope binder is a free `Var` term (not a raw string) so it runs
-    /// through the same pretty-rename map as the types and solution, and the
-    /// report spells every name consistently.
+    /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently.
     Goal {
         scope: Vec<(Term, Term)>,
         goal: Box<Term>,
         solution: Option<Box<Term>>,
     },
-    /// Two witnesses registered under the same `(concept, key)` — global
-    /// coherence admits exactly one witness per key, program-wide.
+    /// Two witnesses registered under the same `(concept, key)` — global coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
         concept: String,
         key: super::WitnessKey,
-        /// The two declaring modules. Witnesses are anonymous, so the module
-        /// is the coordinate that locates them for a reader — carried from
-        /// each declaration's `island` rather than recovered by splitting the
-        /// compiler-minted name.
+        /// The two declaring modules. Witnesses are anonymous, so the module is the coordinate that locates them for a reader — carried from each declaration's `island` rather than recovered by splitting the compiler-minted name.
         first: Qualifier,
         second: Qualifier,
     },
-    /// A witness registered by a root that owns neither the concept nor any
-    /// key head's declaring root — the orphan rule: a coherence-relevant
-    /// registration must happen where the concept or a type it mentions is
-    /// already declared, so two unrelated roots cannot independently
-    /// `satisfy` the same concept+type and collide unfixably downstream.
+    /// A witness registered by a root that owns neither the concept nor any key head's declaring root — the orphan rule: a coherence-relevant registration must happen where the concept or a type it mentions is already declared, so two unrelated roots cannot independently `satisfy` the same concept+type and collide unfixably downstream.
     OrphanWitness {
         concept: String,
         key: super::WitnessKey,
         /// The declaring module — see [`Error::DuplicateWitness`].
         witness: Qualifier,
     },
-    /// Two distinct superclass projections of local `use` binders match a goal
-    /// at the same minimal depth — no principled tiebreak exists.
+    /// Two distinct superclass projections of local `use` binders match a goal at the same minimal depth — no principled tiebreak exists.
     AmbiguousWitness {
         goal: Box<Term>,
         first: Box<Term>,
@@ -357,67 +295,49 @@ pub enum Error {
     CyclicSuperclass {
         concept: String,
     },
-    /// A concept's `use`-marked field names a superclass that isn't a
-    /// registered concept at all (e.g. it resolves to a struct or inductive).
+    /// A concept's `use`-marked field names a superclass that isn't a registered concept at all (e.g. it resolves to a struct or inductive).
     UnknownSuperclass {
         concept: String,
         target: String,
     },
-    /// A witness's concept parameter at `position` (0-based) does not reduce
-    /// to a rigid nominal or primitive head — nothing to key the table entry
-    /// on.
+    /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or primitive head — nothing to key the table entry on.
     InvalidWitnessHead {
         witness: String,
         position: usize,
         head: Box<Term>,
     },
-    /// A witness's annotation does not elaborate to an application of a
-    /// registered concept.
+    /// A witness's annotation does not elaborate to an application of a registered concept.
     NotAConcept {
         witness: String,
         found: Box<Term>,
     },
-    /// A `use` premise of a witness applies its concept to something other
-    /// than the witness's own parameters — resolution through it would not be
-    /// structurally decreasing.
+    /// A `use` premise of a witness applies its concept to something other than the witness's own parameters — resolution through it would not be structurally decreasing.
     NonRegularWitnessPremise {
         witness: String,
         premise: Box<Term>,
     },
-    /// A witness telescope declares an explicit parameter; nothing could
-    /// supply it at resolution time.
+    /// A witness telescope declares an explicit parameter; nothing could supply it at resolution time.
     ExplicitWitnessParam {
         witness: String,
     },
     NatOverflow {
         value: BigUint,
     },
-    /// A program whose erased module fails the arena representation's
-    /// verifier — today exactly the recursion classes the language rejects
-    /// (a computed-only recursive cycle no initialization order satisfies).
-    /// The verifier owns rejection; erasure only surfaces its diagnostic.
+    /// A program whose erased module fails the arena representation's verifier — today exactly the recursion classes the language rejects (a computed-only recursive cycle no initialization order satisfies). The verifier owns rejection; erasure only surfaces its diagnostic.
     ErasedModuleInvalid {
         detail: String,
     },
-    /// An `Int` literal that survived to `erase` but does not fit `ersd`'s
-    /// `i32` carrier — the type level is unbounded, so the representation
-    /// narrowing lives at the erase boundary, like [`Error::NatOverflow`]'s
-    /// u32. (The runtime's own i31 limit is enforced where it appears:
-    /// `cont` → wasm lowering.)
+    /// An `Int` literal that survived to `erase` but does not fit `ersd`'s `i32` carrier — the type level is unbounded, so the representation narrowing lives at the erase boundary, like [`Error::NatOverflow`]'s u32. (The runtime's own i31 limit is enforced where it appears: `cont` → wasm lowering.)
     IntOverflow {
         value: Box<Int>,
     },
-    /// A written motive binds the wrong number of names. An eliminator's motive
-    /// abstracts the scrutinee's indices, in declaration order, and then the
-    /// scrutinee — `expected` of them. `name` is the eliminated family when
-    /// there is one to name (a primitive carrier has none).
+    /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (a primitive carrier has none).
     MotiveBinderCount {
         name: Option<String>,
         expected: usize,
         written: usize,
     },
-    /// An arm of an indexed-inductive match was omitted, but inversion could not
-    /// prove the case impossible at the scrutinee's indices.
+    /// An arm of an indexed-inductive match was omitted, but inversion could not prove the case impossible at the scrutinee's indices.
     MissingArmNotImpossible {
         tag: Atom,
     },
@@ -427,10 +347,7 @@ pub enum Error {
     },
     /// The declaration whose elaboration raised `error`.
     ///
-    /// A sibling of [`Error::Located`] rather than a message prefix: the
-    /// context is structured, so a consumer can still match on the underlying
-    /// error, and every failure gains a name without each raising site
-    /// formatting one.
+    /// A sibling of [`Error::Located`] rather than a message prefix: the context is structured, so a consumer can still match on the underlying error, and every failure gains a name without each raising site formatting one.
     InDeclaration {
         name: String,
         error: Box<Error>,
@@ -438,11 +355,7 @@ pub enum Error {
 }
 
 impl Error {
-    /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports
-    /// what the term did; naming it is this crate's job, which is why the
-    /// conversion lives on [`Error`] rather than on the core failure. The
-    /// `exhausted` callback lets each caller decide what a spent budget reports
-    /// — the term being reduced, or the pair being compared.
+    /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports what the term did; naming it is this crate's job, which is why the conversion lives on [`Error`] rather than on the core failure. The `exhausted` callback lets each caller decide what a spent budget reports — the term being reduced, or the pair being compared.
     pub(crate) fn from_reduce(error: ReduceError, exhausted: impl FnOnce() -> Error) -> Error {
         match error {
             ReduceError::Exhausted => exhausted(),
@@ -663,9 +576,7 @@ impl Error {
         }
     }
 
-    /// A nominal type whose declaration is missing from the registry — a
-    /// well-typed term can only carry a declared nominal head, so this is an
-    /// invariant violation surfaced as a diagnostic rather than a panic.
+    /// A nominal type whose declaration is missing from the registry — a well-typed term can only carry a declared nominal head, so this is an invariant violation surfaced as a diagnostic rather than a panic.
     pub(crate) fn unknown_declaration(name: String) -> Self {
         Self::UnknownDeclaration { name }
     }
@@ -911,8 +822,7 @@ impl Error {
         Self::MissingArmNotImpossible { tag }
     }
 
-    /// Name the declaration this error arose in. Innermost wins, matching
-    /// [`Error::at`]: a nested item keeps its own attribution.
+    /// Name the declaration this error arose in. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution.
     pub(crate) fn in_declaration(self, name: &str) -> Self {
         match self {
             Self::InDeclaration { .. } => self,
@@ -941,10 +851,7 @@ impl Error {
     }
 
     pub(crate) fn format(&self) -> String {
-        // Render with source-style names (axis (a)): collect the names appearing
-        // across every term this error displays, build one collision-aware
-        // rename map for them, and install it for the duration of the render so
-        // `inferred`/`expected` agree on what each name means.
+        // Render with source-style names (axis (a)): collect the names appearing across every term this error displays, build one collision-aware rename map for them, and install it for the duration of the render so `inferred`/`expected` agree on what each name means.
         let mut terms = Vec::new();
         self.collect_terms(&mut terms);
 
@@ -957,10 +864,7 @@ impl Error {
         curios_core::with_pretty_names(rename, || self.render())
     }
 
-    /// Like [`format`], additionally shortening global names against `module`'s
-    /// symbol table (axis (b)) — the qualified-name universe an error's globals
-    /// are spelled relative to. Used on the core error paths, where the lowered
-    /// module is in scope.
+    /// Like [`format`], additionally shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Used on the core error paths, where the lowered module is in scope.
     pub fn format_with(&self, module: &Module) -> String {
         curios_core::with_short_names(
             Rc::new(curios_core::build_shorten(&module.module_symbols())),
@@ -980,9 +884,7 @@ impl Error {
         }
     }
 
-    /// The terms this error embeds in its message, gathered so [`format`] can
-    /// pretty-print their names consistently. Recurses through the `Located`
-    /// wrapper; variants carrying no term contribute nothing.
+    /// The terms this error embeds in its message, gathered so [`format`] can pretty-print their names consistently. Recurses through the `Located` wrapper; variants carrying no term contribute nothing.
     fn collect_terms<'a>(&'a self, out: &mut Vec<&'a Term>) {
         match self {
             Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
@@ -1055,8 +957,7 @@ impl From<UniverseError> for Error {
     }
 }
 
-/// How a diagnostic names a declaring module. The root qualifier is the entry
-/// module — a legitimate value, not a missing one.
+/// How a diagnostic names a declaring module. The root qualifier is the entry module — a legitimate value, not a missing one.
 fn declaring_module(module: &Qualifier) -> String {
     match module.is_root() {
         true => "the entry module".to_string(),
@@ -1411,11 +1312,7 @@ impl fmt::Display for Error {
                 goal,
                 solution,
             } => {
-                // `?` itself is the turnstile: hypotheses as `name : type`
-                // lines, then `? : type` states the goal and `? = term` its
-                // solution — the declaration idiom `name : type = value`
-                // split into clauses about `?`. No `? =` line means nothing
-                // determined it.
+                // `?` itself is the turnstile: hypotheses as `name : type` lines, then `? : type` states the goal and `? = term` its solution — the declaration idiom `name : type = value` split into clauses about `?`. No `? =` line means nothing determined it.
                 write!(f, "goal `?`")?;
                 for (name, type_) in scope {
                     write!(f, "\n  {name} : {type_}")?;

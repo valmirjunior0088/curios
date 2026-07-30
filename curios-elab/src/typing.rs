@@ -7,18 +7,12 @@ use curios_core::{
     Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole,
 };
 
-/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
-/// as a thin shim so the many existing call sites (this module, `erase*.rs`,
-/// tests) read unchanged while erase is migrated to downstream lowering (§6).
+/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering (§6).
 pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
 }
 
-/// Checking counterpart to `infer`: `elaborate` in `Check` mode, returning the
-/// *elaborated* term. Drives `term` against a known `ty` — the rebuilt,
-/// de-Bruijn-correct subterm whose lambda domains are solved and whose binders
-/// are re-closed (§9). Elaboration is authoritative: this output, not the
-/// original lowered term, is what flows on to `zonk`/`erase`.
+/// Checking counterpart to `infer`: `elaborate` in `Check` mode, returning the *elaborated* term. Drives `term` against a known `ty` — the rebuilt, de-Bruijn-correct subterm whose lambda domains are solved and whose binders are re-closed (§9). Elaboration is authoritative: this output, not the original lowered term, is what flows on to `zonk`/`erase`.
 pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
 }
@@ -28,9 +22,7 @@ pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Er
         .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(term.clone())))
 }
 
-/// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit
-/// type so proof-irrelevance and eta fire at the terms' real sort. The inverter
-/// uses it to compare a binder's competing forcings at the binder's own type.
+/// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit type so proof-irrelevance and eta fire at the terms' real sort. The inverter uses it to compare a binder's competing forcings at the binder's own type.
 pub(crate) fn convert_at(
     context: &mut Context,
     type_: &Term,
@@ -44,27 +36,21 @@ pub(crate) fn convert_at(
     })
 }
 
-/// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
-/// as its type-of-a-type, so a proposition checks against `Prop`. Wraps
-/// `Sort::of`, mapping an exhausted budget to an error like the helpers above.
+/// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports as its type-of-a-type, so a proposition checks against `Prop`. Wraps `Sort::of`, mapping an exhausted budget to an error like the helpers above.
 pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
     Sort::of(context, type_)
         .map(Sort::term)
         .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))
 }
 
-/// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps
-/// `Sort::of`, mapping an exhausted budget like the helpers above.
+/// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
 pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     is_prop_in(context, &mut Vec::new(), type_)
 }
 
 /// [`is_prop`] under the binders a surrounding walk has opened.
 ///
-/// The binders are threaded rather than assumed into the [`Context`], because
-/// `Context::assume` bumps the mutation stamp that validates the memoization
-/// caches — see `convert::Opened`. A seeding walk that assumed instead would
-/// invalidate them at every binder it descended through.
+/// The binders are threaded rather than assumed into the [`Context`], because `Context::assume` bumps the mutation stamp that validates the memoization caches — see `convert::Opened`. A seeding walk that assumed instead would invalidate them at every binder it descended through.
 pub(crate) fn is_prop_in(
     context: &mut Context,
     opened: &mut Vec<(Free, Term)>,
@@ -75,8 +61,7 @@ pub(crate) fn is_prop_in(
         .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))
 }
 
-/// Elaborate `term` as a type/proposition without inventing an arbitrary
-/// expected universe upper bound.
+/// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
 pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {
         let classifier = context.fresh_classifier_type("written type hole");
@@ -92,14 +77,7 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
     }
 }
 
-/// Best-effort display form for a mismatch report: substitute the solutions
-/// that have landed, so the message names the actual disagreement rather than
-/// the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize)
-/// the result so a stuck concept-method projection standing in an index
-/// position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))`
-/// → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery.
-/// An unsolved metavariable makes `zonk` fail, in which case the raw spelling
-/// is kept; a normalization that exhausts its budget falls back to the merely-zonked form.
+/// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. An unsolved metavariable makes `zonk` fail, in which case the raw spelling is kept; a normalization that exhausts its budget falls back to the merely-zonked form.
 fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     let Ok(zonked) = super::zonk(context, term) else {
         return term.clone();
@@ -107,8 +85,7 @@ fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     super::normalize(context, zonked.clone()).unwrap_or(zonked)
 }
 
-/// A `type_mismatch` error naming both sides in their best-effort display
-/// form (see [`resolved_for_display`]).
+/// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]).
 fn display_mismatch(context: &mut Context, this: &Term, that: &Term) -> Error {
     Error::type_mismatch(
         resolved_for_display(context, this),
@@ -158,10 +135,7 @@ pub(crate) fn expect(
     match outcome {
         Outcome::Converts => context.retry_parked(),
         Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
-        // Undecided: blocked on unsolved metavariables. Park the goals to be
-        // retried when a watched metavariable is solved (§8) and succeed
-        // provisionally — unless conversion is currently a yes/no oracle, in
-        // which case undecided must stay a mismatch.
+        // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved (§8) and succeed provisionally — unless conversion is currently a yes/no oracle, in which case undecided must stay a mismatch.
         Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
                 return Err(display_mismatch(context, inferred, expected));
@@ -176,16 +150,9 @@ pub(crate) fn expect(
 }
 
 impl Context {
-    /// Retry parked constraints woken by freshly landed solutions, to fixpoint
-    /// (§8). A woken goal re-runs under its frozen frame: converts and is
-    /// dropped, mismatches and errors at its origin, or re-parks still
-    /// blocked. Each round consumes wake signals and ids solve exactly once,
-    /// so this terminates.
+    /// Retry parked constraints woken by freshly landed solutions, to fixpoint (§8). A woken goal re-runs under its frozen frame: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
     pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
-        // Never retry inside an oracle: re-validation swallows errors
-        // (`Err(_) => false`), so a woken goal's mismatch would vanish along
-        // with the goal itself — a silently dropped obligation. The wake
-        // signals stay queued; the next unsuppressed turnaround retries them.
+        // Never retry inside an oracle: re-validation swallows errors (`Err(_) => false`), so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.
         if self.parking_suppressed() {
             return Ok(());
         }
@@ -202,10 +169,7 @@ impl Context {
         }
     }
 
-    /// Retry every currently parked problem once without requiring the store
-    /// to become empty. Declaration finalization uses this to settle work that
-    /// is already decidable before closing universe metas, while witness goals
-    /// that genuinely depend on a later declaration remain parked.
+    /// Retry every currently parked problem once without requiring the store to become empty. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked.
     pub(crate) fn sweep_parked(&mut self) -> Result<(), Error> {
         let parked = self.take_parked();
         for goal in parked {
@@ -214,11 +178,7 @@ impl Context {
         self.retry_parked()
     }
 
-    /// Drain the parked store: retry everything to a fixpoint, then report
-    /// any survivor as a mismatch at its origin. Run after each top-level
-    /// item and after the entrypoint body, so an unresolvable constraint is
-    /// attributed to the definition that produced it and frozen frames do not
-    /// pile up.
+    /// Drain the parked store: retry everything to a fixpoint, then report any survivor as a mismatch at its origin. Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
     pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
         loop {
             self.retry_parked()?;
@@ -228,22 +188,18 @@ impl Context {
                 return Ok(());
             }
 
-            // Final sweep: attempt everything once more — a goal parked after
-            // the last solution landed has never been retried.
+            // Final sweep: attempt everything once more — a goal parked after the last solution landed has never been retried.
             let before = remaining.len();
             for parked in remaining {
                 retry_one(self, parked)?;
             }
 
-            // No progress in a full sweep: the rest can never resolve. Report
-            // the first at its origin.
+            // No progress in a full sweep: the rest can never resolve. Report the first at its origin.
             if self.parked_len() >= before && !self.has_newly_solved() {
                 if let Some(parked) = self.take_parked().into_iter().next() {
                     return Err(match parked.work {
                         super::ParkedWork::Conversion(goal) => {
-                            // A conversion stuck between two witness holes reads as
-                            // a bare metavariable mismatch; name the unresolved
-                            // witness it actually is instead.
+                            // A conversion stuck between two witness holes reads as a bare metavariable mismatch; name the unresolved witness it actually is instead.
                             match self
                                 .witness_hole(&goal.this)
                                 .or_else(|| self.witness_hole(&goal.that))
@@ -309,15 +265,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         Ok(
             match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
                 Outcome::Converts => Retry::Converts,
-                // Report through whatever solutions have landed: the normalized
-                // sides name the actual disagreement, not the metavariables it
-                // arrived wrapped in — and, deep-normalized, no stuck operator
-                // witness machinery in an index (see `resolved_for_display`).
-                // Best-effort, like every other display path: a term that
-                // cannot be normalized (an effectful primitive reached at the
-                // type level, a reduction out of budget) is reported as it stands.
-                // Propagating that failure would replace the mismatch the user
-                // needs to see with an artifact of rendering it.
+                // Report through whatever solutions have landed: the normalized sides name the actual disagreement, not the metavariables it arrived wrapped in — and, deep-normalized, no stuck operator witness machinery in an index (see `resolved_for_display`). Best-effort, like every other display path: a term that cannot be normalized (an effectful primitive reached at the type level, a reduction out of budget) is reported as it stands. Propagating that failure would replace the mismatch the user needs to see with an artifact of rendering it.
                 Outcome::Mismatch => Retry::Mismatch(
                     resolved_for_display(context, &goal.this),
                     resolved_for_display(context, &goal.that),
@@ -335,9 +283,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
 
     match outcome {
         Retry::Converts => Ok(()),
-        // Locate the mismatch at the construct that parked it, as every
-        // sibling arm of the drain does. A parked goal outlives the frame it
-        // came from, so without this the only surviving clue is the module.
+        // Locate the mismatch at the construct that parked it, as every sibling arm of the drain does. A parked goal outlives the frame it came from, so without this the only surviving clue is the module.
         Retry::Mismatch(this, that) => Err(Error::type_mismatch(this, that).at_opt(origin.span())),
         Retry::Blocked(goals) => {
             for goal in goals {
@@ -352,10 +298,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     }
 }
 
-/// Retry a parked *checking problem*: under the frozen frame, the expected
-/// type either still reduces to a bare metavariable (re-park) or has gained
-/// structure — run the check for real and solve the placeholder with the
-/// rebuilt term. Errors propagate carrying the term's own spans.
+/// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and solve the placeholder with the rebuilt term. Errors propagate carrying the term's own spans.
 fn retry_checking(
     context: &mut Context,
     term: Term,
@@ -394,25 +337,13 @@ fn retry_checking(
     }
 }
 
-/// Register a counterfactual match-arm refinement of a scrutinee (or a learned
-/// scrutinee index), so a context hypothesis whose type mentions it reduces at
-/// the arm's value. The frame holding the refinement is scoped to the arm, so
-/// the (counterfactual) assumption does not leak. Three keyings, by head shape:
+/// Register a counterfactual match-arm refinement of a scrutinee (or a learned scrutinee index), so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:
 ///
 /// - a `Var` reduces to the value (`refine`);
-/// - a projection — a `Bool`/`Nat` match on a tuple field — refines that
-///   projection (`refine_projection`);
-/// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)`
-///   — is canonicalized (head verbatim, arguments in WHNF) and recorded in the
-///   term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled
-///   with differently-reduced arguments still matches.
+/// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
+/// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is canonicalized (head verbatim, arguments in WHNF) and recorded in the term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled with differently-reduced arguments still matches.
 ///
-/// Also drives Rung-B index *learning* (`refine_head(actual, target)`), where
-/// `actual` is a scrutinee index: a `Var` index is the live case, and a
-/// *constructor* index records an entry the reducer never fires (it has no
-/// applied-head symbol to probe) — the inverter pins the arm binders the other
-/// way. A stuck-*application* index would be the genuinely cyclic case, but no
-/// inductive in the library is indexed by one.
+/// Also drives Rung-B index *learning* (`refine_head(actual, target)`), where `actual` is a scrutinee index: a `Var` index is the live case, and a *constructor* index records an entry the reducer never fires (it has no applied-head symbol to probe) — the inverter pins the arm binders the other way. A stuck-*application* index would be the genuinely cyclic case, but no inductive in the library is indexed by one.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
     match &**head {
         Subterm::Var(var) => {
@@ -429,19 +360,11 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
             })?;
 
-            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the
-            // method projected out of the witness — `(?w).1(a, hi)` — which is
-            // not the shape the reducer probes: by then it has become the
-            // primitive normal form `NatLte(a, hi)`. Registering only the
-            // verbatim key leaves the arm unrefined, silently, while the
-            // equivalent `Nat/lte(a, hi)` spelling refines. Register the probed
-            // form alongside it so both spellings agree.
+            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the primitive normal form `NatLte(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/lte(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
             if canonical.head_key().is_none()
                 && let Some(spined) = spine_whnf(context, head)?
             {
-                // Propagated, not swallowed: `canonical_scrutinee` is best-effort
-                // about arguments and returns only `Exhausted`, so discarding its
-                // error would discard a genuine exhaustion.
+                // Propagated, not swallowed: `canonical_scrutinee` is best-effort about arguments and returns only `Exhausted`, so discarding its error would discard a genuine exhaustion.
                 let resolved = super::canonical_scrutinee(context, &spined).map_err(|error| {
                     Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
                 })?;
@@ -458,24 +381,15 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
     Ok(())
 }
 
-/// Weak-head normal form of the *spine only*: reduce the function position and
-/// beta-open it over the arguments, repeating, but never reduce an argument and
-/// never evaluate the primitive node this lands on.
+/// Weak-head normal form of the *spine only*: reduce the function position and beta-open it over the arguments, repeating, but never reduce an argument and never evaluate the primitive node this lands on.
 ///
-/// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the
-/// `NatLte(a, hi)` the reducer actually probes, while leaving `a` and `hi`
-/// exactly as written. Reducing the whole application would do the same, but it
-/// forces the arguments — and an argument may legitimately contain an effect at
-/// the value level, which must keep being an error at the type level rather than
-/// being evaluated here.
+/// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the `NatLte(a, hi)` the reducer actually probes, while leaving `a` and `hi` exactly as written. Reducing the whole application would do the same, but it forces the arguments — and an argument may legitimately contain an effect at the value level, which must keep being an error at the type level rather than being evaluated here.
 ///
-/// `None` when the head does not resolve to a function, which is every
-/// non-dispatch scrutinee: those keep their verbatim key.
+/// `None` when the head does not resolve to a function, which is every non-dispatch scrutinee: those keep their verbatim key.
 fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let mut current = term.clone();
 
-    // Bounded: each step consumes one application layer of an elaborated
-    // dispatch, and a runaway is a bug rather than something to spin on.
+    // Bounded: each step consumes one application layer of an elaborated dispatch, and a runaway is a bug rather than something to spin on.
     for step in 0..16 {
         let Subterm::Apply(Apply { head, params, .. }) = &*current else {
             return Ok((step > 0).then_some(current));
@@ -492,17 +406,11 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
     Ok(None)
 }
 
-/// What an eliminator's motive must abstract: the scrutinee's indices, then the
-/// scrutinee itself. Parameters are never abstracted — they are uniform across
-/// constructors and fixed by the scrutinee's type.
+/// What an eliminator's motive must abstract: the scrutinee's indices, then the scrutinee itself. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type.
 pub(crate) enum MotiveShape<'a> {
-    /// A primitive carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the
-    /// motive binds only the scrutinee, at the carrier's own type.
+    /// A primitive carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
     Prim(&'a Term),
-    /// A nominal inductive: `indices` is the declaration's index telescope
-    /// already instantiated at the scrutinee's actual parameters
-    /// (`InductDecl::indices` under `open_params`), and the scrutinee binder
-    /// takes `I(p̄, ī)` at those index binders.
+    /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices` under `open_params`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
     Induct {
         name: &'a Global,
         universes: &'a [Level],
@@ -528,9 +436,7 @@ impl MotiveShape<'_> {
         }
     }
 
-    /// Assume this shape's binders in `context` under `labels`, each index type
-    /// opened with the preceding index binders and the scrutinee typed at those
-    /// binders. Returns the scrutinee's assumed type for the caller's use.
+    /// Assume this shape's binders in `context` under `labels`, each index type opened with the preceding index binders and the scrutinee typed at those binders. Returns the scrutinee's assumed type for the caller's use.
     fn assume(&self, context: &mut Context, binders: &[Free]) -> Term {
         let (scrutinee_binder, index_binders) = binders
             .split_last()
@@ -572,10 +478,7 @@ impl MotiveShape<'_> {
         scrutinee_type
     }
 
-    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a
-    /// *written* motive is checked against. The codomain is `Type` rather than
-    /// a sort variable because `Prop ⊑ Type` cumulativity already admits a
-    /// proposition-valued motive at the checking boundary (`expect`).
+    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is `Type` rather than a sort variable because `Prop ⊑ Type` cumulativity already admits a proposition-valued motive at the checking boundary (`expect`).
     fn motive_type(&self, context: &mut Context) -> Term {
         let mut binders = Vec::with_capacity(self.arity());
 
@@ -616,20 +519,11 @@ impl MotiveShape<'_> {
     }
 }
 
-/// Check that `motive` is a well-formed type family for an eliminator of the
-/// given [`MotiveShape`], returning it closed at that shape's arity.
+/// Check that `motive` is a well-formed type family for an eliminator of the given [`MotiveShape`], returning it closed at that shape's arity.
 ///
-/// Two inputs reach here. A motive already closed at the eliminator's arity —
-/// synthesized, or a rebuilt match coming back through re-elaboration — is
-/// opened under its assumed binders and its body checked against `Type`, then
-/// re-closed so the motive carries its solved form (§9). A *written* motive
-/// arrives from `into_core` un-scoped, in an arity-0 scope
-/// ([`Term::match_motive_written`]): it is an ordinary term, checked against
-/// the shape's motive type and then decomposed into the same canonical scope.
+/// Two inputs reach here. A motive already closed at the eliminator's arity — synthesized, or a rebuilt match coming back through re-elaboration — is opened under its assumed binders and its body checked against `Type`, then re-closed so the motive carries its solved form (§9). A *written* motive arrives from `into_core` un-scoped, in an arity-0 scope ([`Term::match_motive_written`]): it is an ordinary term, checked against the shape's motive type and then decomposed into the same canonical scope.
 ///
-/// The elided hole — the bare metavariable `into_core` mints for an absent
-/// motive — is neither: it is wrapped at the eliminator's arity and left for
-/// synthesis or for `solve` to fill in.
+/// The elided hole — the bare metavariable `into_core` mints for an absent motive — is neither: it is wrapped at the eliminator's arity and left for synthesis or for `solve` to fill in.
 pub(crate) fn check_motive(
     context: &mut Context,
     shape: &MotiveShape<'_>,
@@ -654,8 +548,7 @@ pub(crate) fn check_motive(
     }
 }
 
-/// The already-closed path: assume the shape's binders, check the opened body
-/// against `Type`, and re-close.
+/// The already-closed path: assume the shape's binders, check the opened body against `Type`, and re-close.
 fn check_closed_motive(
     context: &mut Context,
     shape: &MotiveShape<'_>,
@@ -683,14 +576,9 @@ fn check_closed_motive(
     })
 }
 
-/// The written path: an ordinary term checked against the shape's motive type,
-/// then decomposed into the canonical scope.
+/// The written path: an ordinary term checked against the shape's motive type, then decomposed into the canonical scope.
 ///
-/// A written motive is nearly always a lambda, and its binder count is checked
-/// up front so a miscount reports as itself rather than as a confusing
-/// domain mismatch. Decomposition beta-opens that lambda at the scope's own
-/// binders, leaving no redex behind. Anything else — a motive naming a
-/// top-level family — is eta-expanded instead.
+/// A written motive is nearly always a lambda, and its binder count is checked up front so a miscount reports as itself rather than as a confusing domain mismatch. Decomposition beta-opens that lambda at the scope's own binders, leaving no redex behind. Anything else — a motive naming a top-level family — is eta-expanded instead.
 fn check_written_motive(
     context: &mut Context,
     shape: &MotiveShape<'_>,
@@ -711,8 +599,7 @@ fn check_written_motive(
     let motive_type = shape.motive_type(context);
     let checked = check(context, written, motive_type)?;
 
-    // The written binder names become the scope's labels, so the motive prints
-    // back the way it was spelled.
+    // The written binder names become the scope's labels, so the motive prints back the way it was spelled.
     let hints = match &*checked {
         Subterm::Func(Func { telescope, .. }) if telescope.len() == arity => telescope
             .labels()
@@ -743,10 +630,7 @@ fn check_written_motive(
     })
 }
 
-/// Accept `head_type` (already reduced) when it is `expected`'s type-former,
-/// else the matching `not_*_type` error. The shared core of `expect_prim_head`
-/// and `elaborate`'s `elaborate_prim_head` — one source of truth for the
-/// `PrimHead` → type-former / error mapping.
+/// Accept `head_type` (already reduced) when it is `expected`'s type-former, else the matching `not_*_type` error. The shared core of `expect_prim_head` and `elaborate`'s `elaborate_prim_head` — one source of truth for the `PrimHead` → type-former / error mapping.
 pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Error> {
     let matches = match expected {
         PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
@@ -766,8 +650,7 @@ pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Ter
     }
 }
 
-/// Infer the scrutinee's type, reduce it, and require it to be the given prim
-/// type. Returns the reduced head type — used by `erase` to erase the head.
+/// Infer the scrutinee's type, reduce it, and require it to be the given prim type. Returns the reduced head type — used by `erase` to erase the head.
 pub(crate) fn expect_prim_head(
     context: &mut Context,
     head: &Term,
