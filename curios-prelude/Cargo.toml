@@ -29,16 +29,17 @@ rkyv = { workspace = true }
 sha2 = "0.11.0"
 
 [build-dependencies]
-curios-abi = { workspace = true, features = ["archive"] }
-curios-base = { workspace = true, features = ["archive"] }
-curios-core = { workspace = true, features = ["archive"] }
-curios-text = { workspace = true, features = ["archive"] }
-curios-elab = { workspace = true, features = ["archive"] }
-curios-ersd = { workspace = true, features = ["archive"] }
-rkyv = { workspace = true }
-sha2 = "0.11.0"
 # The build script is where the fixed prelude is actually elaborated, so it is
-# the only place a capture can observe compiler spans for that work — hence the
 # same dependency in both kinds: the library's measurement points and the build
 # script's collector activate together through `curios-profile/enabled`.
+# the only place a capture can observe compiler spans for that work — hence the
+curios-abi = { workspace = true, features = ["archive"] }
+curios-base = { workspace = true, features = ["archive"] }
+curios-cert = { workspace = true, features = ["archive"] }
+curios-core = { workspace = true, features = ["archive"] }
+curios-elab = { workspace = true, features = ["archive"] }
+curios-ersd = { workspace = true, features = ["archive"] }
 curios-profile = { workspace = true }
+curios-text = { workspace = true, features = ["archive"] }
+rkyv = { workspace = true }
+sha2 = "0.11.0"

@@ -10,11 +10,12 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
+    curios_cert::recheck_module_verdicts,
     curios_core::Item,
     curios_core::{Global, Sharing},
     curios_elab::{
         Context, DEFAULT_STEP_BUDGET, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
-        recheck_module_verdicts, validate_lowered_universe_seeds, validate_universes,
+        validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, PreludeModules, prepare_prelude, sys_module},
     sha2::{Digest, Sha256},

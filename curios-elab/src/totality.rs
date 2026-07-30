@@ -51,7 +51,7 @@ impl std::fmt::Display for Erased {
 pub fn record_definition_totality(context: &mut Context, definition: &Definition, group: Totality) {
     let partial = !group.is_total()
         || definition_is_locally_partial(context, definition, &mut LocalMemo::new())
-        || mentioned(definition).iter().any(|name| {
+        || definition.mentions().iter().any(|name| {
             context
                 .definition_totality(name)
                 .is_some_and(|totality| !totality.is_total())
@@ -110,7 +110,7 @@ pub fn classify_module(
             Item::Let(definition) => {
                 let partial = definition_is_locally_partial(context, definition, &mut memo);
                 local.insert(definition.name.clone(), partial);
-                mentions.insert(definition.name.clone(), mentioned(definition));
+                mentions.insert(definition.name.clone(), definition.mentions());
             }
             Item::Rec(rec) => {
                 let rejected = group_totality(context, &rec.group) == Totality::Partial;
@@ -118,7 +118,7 @@ pub fn classify_module(
                     let partial =
                         rejected || definition_is_locally_partial(context, &definition, &mut memo);
                     local.insert(definition.name.clone(), partial);
-                    mentions.insert(definition.name.clone(), mentioned(&definition));
+                    mentions.insert(definition.name.clone(), definition.mentions());
                 }
             }
         }
@@ -495,15 +495,4 @@ fn definition_is_locally_partial(
 ) -> bool {
     locally_partial(context, &definition.body, memo)
         || locally_partial(context, &definition.type_, memo)
-}
-
-/// Every top-level name this definition mentions, by free variable.
-pub(crate) fn mentioned(definition: &Definition) -> BTreeSet<Global> {
-    definition
-        .body
-        .free_vars()
-        .into_iter()
-        .chain(definition.type_.free_vars())
-        .filter_map(|free| free.as_global().cloned())
-        .collect()
 }

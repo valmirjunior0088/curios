@@ -3,12 +3,10 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
+    curios_cert::recheck_module_suffix,
     curios_cont::{into_wasm, optimize},
     curios_core::Term,
-    curios_elab::{
-        Context, Mode, elaborate_and_zonk_with_prelude, erase_module_with_prelude,
-        recheck_module_suffix,
-    },
+    curios_elab::{Context, Mode, elaborate_and_zonk_with_prelude, erase_module_with_prelude},
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},

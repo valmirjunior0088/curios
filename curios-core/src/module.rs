@@ -207,6 +207,16 @@ impl RecItem {
 }
 
 impl Definition {
+    /// Every top-level name this definition mentions, by free variable.
+    pub fn mentions(&self) -> BTreeSet<Global> {
+        self.body
+            .free_vars()
+            .into_iter()
+            .chain(self.type_.free_vars())
+            .filter_map(|free| free.as_global().cloned())
+            .collect()
+    }
+
     fn print(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{} : {} = {}", self.name, self.type_, self.body)
     }

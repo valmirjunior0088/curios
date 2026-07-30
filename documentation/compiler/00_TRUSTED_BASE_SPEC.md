@@ -17,7 +17,7 @@ A module is accepted only if the elaborator and the kernel both accept it.
 The kernel decides from the finished terms alone.
 ```
 
-`DESIGN.md` currently states the opposite, and states it correctly: *"An independent kernel is being built in `curios-core` and does not yet re-check anything, so it subtracts nothing from that base today."* `curios-elab/src/recheck.rs:25` says the same from the other side: *"Nothing in the pipeline calls this."*
+`DESIGN.md` currently states the opposite, and states it correctly: *"An independent kernel is being built in `curios-core` and does not yet re-check anything, so it subtracts nothing from that base today."* `curios-cert/src/recheck.rs:25` says the same from the other side: *"Nothing in the pipeline calls this."*
 
 **The elaboration rules leave the trusted base; the module plumbing does not.** `recheck_module`'s item walk and its dependency sort, `zonk_module`, the `Module`/`Item`/`Definition` types, and the archive round trip all stay — they decide *what* the kernel is asked about, which no amount of re-checking can validate. That residue is of order 1,800 lines, against 31,702 for the crate. An earlier revision of this document claimed the crate leaves entirely; it does not, and the narrower claim is the one to make.
 

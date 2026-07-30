@@ -47,8 +47,5 @@ pub use elaborate::*;
 mod into_ersd;
 pub use into_ersd::*;
 
-mod recheck;
-pub use recheck::*;
-
 mod zonk;
 pub use zonk::*;

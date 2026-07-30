@@ -1,6 +1,6 @@
-//! Running the independent kernel over a module this stage has accepted.
+//! Running the independent kernel over a whole module.
 //!
-//! This is the seam where the second opinion is actually asked for. Everything upstream — elaboration, unification, zonking, witness resolution — has already decided the module is well-typed; [`recheck_module`] hands the result to `curios-core`'s kernel, which decides again from the terms alone.
+//! This is the seam where the second opinion is actually asked for. Everything upstream — elaboration, unification, zonking, witness resolution — has already decided the module is well-typed; [`recheck_module`] decides again from the terms alone, and it lives in this crate so that deciding is something `cargo tree -p curios-cert` can account for.
 //!
 //! # Reading a disagreement
 //!
@@ -8,17 +8,16 @@
 //!
 //! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in `documentation/DESIGN.md`.
 //!
-//! # Not on the compile path
+//! # On the compile path
 //!
-//! Nothing in the pipeline calls this. The kernel does not yet accept the whole standard library, so wiring it into every build would refuse programs that are fine — and a checker that has to be bypassed is worth nothing. It is an API and a test surface until the gaps named above are closed.
+//! Every compilation calls this. `compile_entrypoint` runs [`recheck_module_suffix`] and fails the build on a refusal, judging the user's items while the archived prelude prefix is defined on the archive's word — the ground for that word being `curios-prelude`'s build script, which runs the full [`recheck_module_verdicts`] walk when the archive is constructed and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
 
 use {
-    super::totality::mentioned,
-    curios_cert::{
+    super::{
         Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
         check_rec_group, check_struct_decl, positivity_vectors,
     },
-    curios_core::{Free, Global, Item, Module, Term},
+    curios_core::{Definition, Free, Global, Item, Module, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -42,8 +41,12 @@ fn dependency_order(module: &Module) -> Vec<usize> {
         .enumerate()
         .map(|(index, item)| {
             let names: BTreeSet<Global> = match item {
-                Item::Let(definition) => mentioned(definition),
-                Item::Rec(rec) => rec.definitions().iter().flat_map(mentioned).collect(),
+                Item::Let(definition) => definition.mentions(),
+                Item::Rec(rec) => rec
+                    .definitions()
+                    .iter()
+                    .flat_map(Definition::mentions)
+                    .collect(),
             };
 
             names

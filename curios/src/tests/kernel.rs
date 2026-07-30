@@ -14,9 +14,9 @@
 
 use {
     curios_cert::KernelError,
+    curios_cert::{recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached},
     curios_core::Module,
     curios_core::Term,
-    curios_elab::{recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached},
     curios_pipeline::{Stage, compile_entrypoint},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,

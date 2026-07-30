@@ -9,7 +9,7 @@ pub enum Stage<'a> {
     Core(&'a curios_core::Module),
     /// Core after elaboration and zonking, which is the module every later stage consumes. Metavariable-free by construction — `zonk_module` errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. The prelude prefix is spliced back in from the archive.
     ///
-    /// The difference from [`Stage::Core`] is the absence of `Metavar`, `Infix`, and `NumLit`, which is exactly what the independent kernel requires of an input: this is the stage `curios_elab::recheck_module` takes, and [`Stage::Core`] is not.
+    /// The difference from [`Stage::Core`] is the absence of `Metavar`, `Infix`, and `NumLit`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::recheck_module` takes, and [`Stage::Core`] is not.
     CoreElab(&'a curios_core::Module),
     Ersd(&'a curios_ersd::Module),
     ErsdOptm(&'a curios_ersd::Module),

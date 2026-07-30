@@ -72,7 +72,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/SYNTAX.md` |
 | Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
 | Elaboration, typing, or conversion | `curios-elab/src/` | Text lowering, erasure, diagnostics, and integration tests |
-| Kernel judgments or shared analyses | `curios-cert/src/` | `curios-core`'s representation, `curios-elab/src/recheck.rs`, and `documentation/DESIGN.md`'s perimeter |
+| Kernel judgments or shared analyses | `curios-cert/src/` | `curios-core`'s representation, `curios-cert/src/recheck.rs`, and `documentation/DESIGN.md`'s perimeter |
 | Concepts or witness resolution | `curios-elab/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
 | Type erasure | `curios-elab/src/into_ersd*` | `curios-ersd` representation and downstream tests |
 | Erased optimization | `curios-ersd/src/optimize/` | `into_cont.rs`, derived analyses, deep-input and specialization tests |

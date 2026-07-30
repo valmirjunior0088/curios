@@ -572,6 +572,7 @@ name = "curios-pipeline"
 version = "0.5.0"
 dependencies = [
  "curios-abi",
+ "curios-cert",
  "curios-cont",
  "curios-core",
  "curios-elab",
@@ -588,6 +589,7 @@ version = "0.5.0"
 dependencies = [
  "curios-abi",
  "curios-base",
+ "curios-cert",
  "curios-core",
  "curios-elab",
  "curios-ersd",
