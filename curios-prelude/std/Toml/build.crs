@@ -10,8 +10,7 @@ end
 pub let build_empty : Build =
     Build { root = Map/empty(), side = Map/empty(), scope = [] };
 
--- Injective side-table key: tag, decimal name length, ':', name bytes, and for
--- `at` a '#'-separated decimal element index closed by ';'.
+-- Injective side-table key: tag, decimal name length, ':', name bytes, and for `at` a '#'-separated decimal element index closed by ';'.
 let seg_key(pre : Bytes, seg : Seg) -> Bytes =
     match seg
     | plain(name) =>
@@ -95,9 +94,7 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
         end
     end;
 
--- Resolve a segment path against the root, rebuilding the map spine persistently
--- and threading side-table updates. The first `unchecked` segments are the
--- already-validated scope prefix and are traversed without construction checks.
+-- Resolve a segment path against the root, rebuilding the map spine persistently and threading side-table updates. The first `unchecked` segments are the already-validated scope prefix and are traversed without construction checks.
 rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), unchecked : Nat, act : Act)
     -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
     match segs

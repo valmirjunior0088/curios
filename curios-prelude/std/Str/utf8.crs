@@ -1,9 +1,4 @@
--- Why `Str`'s operations are sound. Every function here manipulates a `Utf8`
--- scan witness rather than bytes alone: `check` decides one, `seq` concatenates
--- two, `drop_valid`/`take_valid` transport one across a slice, and the
--- `*_uninhabited` lemmas rule out the states a well-formed scan cannot reach.
--- `Str` is the parent, not a descendant, so it cannot see a private name in
--- here — everything the public API calls is exported.
+-- Why `Str`'s operations are sound. Every function here manipulates a `Utf8` scan witness rather than bytes alone: `check` decides one, `seq` concatenates two, `drop_valid`/`take_valid` transport one across a slice, and the `*_uninhabited` lemmas rule out the states a well-formed scan cannot reach. `Str` is the parent, not a descendant, so it cannot see a private name in here — everything the public API calls is exported.
 
 use /syn/Str/{classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};

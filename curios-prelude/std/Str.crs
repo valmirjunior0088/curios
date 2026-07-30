@@ -44,8 +44,7 @@ pub let flatten(parts : Lst(Str)) -> Str =
 pub let eql(a : Str, b : Str) -> Bool =
     Bytes/eql(to_bytes(a), to_bytes(b));
 
--- ASCII-insensitive equality folds only encoded ASCII letters. Every non-ASCII
--- UTF-8 byte is left untouched, so this is not Unicode case folding.
+-- ASCII-insensitive equality folds only encoded ASCII letters. Every non-ASCII UTF-8 byte is left untouched, so this is not Unicode case folding.
 let lower_ascii_byte(byte : Byte) -> Byte =
     let n = Byte/to_nat(byte);
     match Nat/in_range(n, 0x41, 0x5A)

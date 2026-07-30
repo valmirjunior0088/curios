@@ -112,8 +112,7 @@ let quotes(quote : Byte, count : Nat) -> Bytes =
 let is_crlf_at(input : Bytes, cur : Nat) -> Bool =
     byte_at_is(input, cur, (n) => n == 0x0D) && byte_at_is(input, cur + 1, (n) => n == 0x0A);
 
--- after a line-ending backslash: whitespace, then at least one newline, then
--- any further whitespace and newlines
+-- after a line-ending backslash: whitespace, then at least one newline, then any further whitespace and newlines
 rec trim_scan(input : Bytes, cur : Nat, seen_nl : Bool) -> Result(Nat, Str) =
     let stop : Result(Nat, Str) =
         match seen_nl

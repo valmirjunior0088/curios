@@ -1,8 +1,6 @@
 //! The build-script/library contract for Curios's compiler-local prelude image.
 //!
-//! This is deliberately not a stable interchange format. The schema only
-//! distinguishes incompatible compiler builds; Cargo regenerates the image in
-//! this crate's `OUT_DIR` whenever its inputs change.
+//! This is deliberately not a stable interchange format. The schema only distinguishes incompatible compiler builds; Cargo regenerates the image in this crate's `OUT_DIR` whenever its inputs change.
 
 use {
     curios_core::Term,

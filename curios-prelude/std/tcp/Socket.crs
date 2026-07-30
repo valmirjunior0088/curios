@@ -6,8 +6,7 @@ pub struct Socket : Type {
     Handle
 }
 
--- `Listener` is a sibling, so it cannot reach this representation; the
--- constructor is the public seam through which it wraps an accepted handle.
+-- `Listener` is a sibling, so it cannot reach this representation; the constructor is the public seam through which it wraps an accepted handle.
 pub let new(h : Handle) -> Socket =
     Socket { h };
 
@@ -39,8 +38,7 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
             let upgraded = upgrade(s.handle, host, settings.tls);
             match upgraded == /sys/Status/ok
             | true =>
-                -- A TLS stream is driven by rustls, not polled at the socket
-                -- layer, so it is left blocking on purpose.
+                -- A TLS stream is driven by rustls, not polled at the socket layer, so it is left blocking on purpose.
                 match settings.tls
                 | true => Result/success(Socket { s.handle })
                 | false =>

@@ -1,10 +1,4 @@
--- Strictly-positive naturals, as a `BigNat` paired with a proof that its packed
--- representation is nonempty (`is_cons(magnitude.rep)`). The record is transparent:
--- the accompanying proof, not an opaque wrapper, is what enforces the invariant, so
--- `.magnitude` is directly usable by consumers (e.g. `BigInt`). Operations delegate
--- to `BigNat` over the magnitude and transport the nonzero certificate through the
--- same raw ripple-carry the `BigNat` op runs, so the algebraic lemma corpus is a
--- one-line delegation each.
+-- Strictly-positive naturals, as a `BigNat` paired with a proof that its packed representation is nonempty (`is_cons(magnitude.rep)`). The record is transparent: the accompanying proof, not an opaque wrapper, is what enforces the invariant, so `.magnitude` is directly usable by consumers (e.g. `BigInt`). Operations delegate to `BigNat` over the magnitude and transport the nonzero certificate through the same raw ripple-carry the `BigNat` op runs, so the algebraic lemma corpus is a one-line delegation each.
 
 use /std/{Bool, Bits, Eq, False, True, BigNat, Show};
 use /std/Bool/{false_neq_true};
@@ -12,8 +6,7 @@ use /std/Bits/{cons};
 use /std/BigNat/{of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_canonical,
     trim, trim_of_trimmed, view, combine};
 
--- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold),
--- so it reduces on any cons-headed rep, even one with an opaque tail.
+-- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold), so it reduces on any cons-headed rep, even one with an opaque tail.
 pub let is_cons(rep : Bits) -> Prop =
     match rep | b\ => False | b\_\.._ => True end;
 
@@ -73,8 +66,7 @@ pub let dbl_succ(t : NonZero) -> NonZero =
 
 -- ===================== BigNat bridge =====================
 
--- reflect a BigNat as zero-or-nonzero, rebuilding the NonZero certificate bit by
--- bit through the smart constructors (recursion over BigNat's view, as in bit_len).
+-- reflect a BigNat as zero-or-nonzero, rebuilding the NonZero certificate bit by bit through the smart constructors (recursion over BigNat's view, as in bit_len).
 pub induct Split : pub Type
 | zero()
 | pos(NonZero)
@@ -96,11 +88,7 @@ pub rec of_big_nat(a : BigNat) -> Split =
 
 -- ===================== operations =====================
 
--- Each operation is a facade: the module's namesake binding is the operation and
--- the laws about it nest underneath — `NonZero/add` adds, `NonZero/add/assoc` is
--- its associativity, `NonZero/add/trim_non_zero` the certificate transport it is
--- built from. The helpers above are shared by more than one operation, so they
--- stay here, private to this subtree.
+-- Each operation is a facade: the module's namesake binding is the operation and the laws about it nest underneath — `NonZero/add` adds, `NonZero/add/assoc` is its associativity, `NonZero/add/trim_non_zero` the certificate transport it is built from. The helpers above are shared by more than one operation, so they stay here, private to this subtree.
 
 pub mod add;
 pub use add/{let add};

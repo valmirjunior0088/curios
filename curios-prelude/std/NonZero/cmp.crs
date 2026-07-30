@@ -1,6 +1,4 @@
--- Comparison of strictly-positive naturals. Every law is a one-line delegation:
--- the magnitudes decide the order, and `NonZero/eq` lifts a magnitude equality
--- back to the record, since the certificate is proof-irrelevant.
+-- Comparison of strictly-positive naturals. Every law is a one-line delegation: the magnitudes decide the order, and `NonZero/eq` lifts a magnitude equality back to the record, since the certificate is proof-irrelevant.
 
 use /std/{Order, Eq, BigNat, NonZero};
 use /std/Order/{cong_flip};

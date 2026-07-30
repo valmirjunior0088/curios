@@ -11,10 +11,7 @@ induct Stmt : Type
 | array_header(Lst(Str))
 end
 
--- The statement layer is written as recursive scanners over positions: a
--- recursive function applied to a symbolic input stays a residual application
--- under type-level reduction, where an equivalent combinator constant would
--- unfold its whole parser tree symbolically.
+-- The statement layer is written as recursive scanners over positions: a recursive function applied to a symbolic input stays a residual application under type-level reduction, where an equivalent combinator constant would unfold its whole parser tree symbolically.
 rec key_path_scan(input : Bytes, cur : Nat, acc : Lst(Str)) -> Result({Nat, Lst(Str)}, Str) =
     match key_part.run(input, cur)
     | failure(msg) => Result/failure(msg)

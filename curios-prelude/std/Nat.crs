@@ -102,10 +102,7 @@ satisfy Ord(Nat) {
     cmp(a, b) = cmp(a, b)
 }
 
--- The two ordering propositions are facades: the module's namesake binding is
--- the proposition and the laws about it nest underneath — `Nat/Lte` is the
--- `a <= b` family and `Nat/Lte/trans` its transitivity, `Nat/Lt` is the decided
--- `a < b` and `Nat/Lt/try` the procedure that decides it.
+-- The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lte` is the `a <= b` family and `Nat/Lte/trans` its transitivity, `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it.
 
 pub mod Lte;
 pub use Lte/{let Lte};

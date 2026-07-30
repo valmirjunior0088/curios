@@ -4,8 +4,7 @@ use curios_text::{
     CharacterSyntax, MonadSyntax, ProofSyntax, StringSyntax, SyntaxName, SyntaxRegistry,
 };
 
-/// Each target is stated as its module segments, so no stage has to split a
-/// path back apart to learn where the name lives.
+/// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)
 }

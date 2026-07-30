@@ -1,8 +1,4 @@
--- Addition of strictly-positive naturals. The magnitude adds as an ordinary
--- `BigNat`; the work here is carrying the nonzero certificate through the same
--- raw ripple-carry the `BigNat` ladder runs. `trim_non_zero` is the one helper
--- a sibling needs — `mul` reduces its own certificate to an addition — so it is
--- the only one this module exports.
+-- Addition of strictly-positive naturals. The magnitude adds as an ordinary `BigNat`; the work here is carrying the nonzero certificate through the same raw ripple-carry the `BigNat` ladder runs. `trim_non_zero` is the one helper a sibling needs — `mul` reduces its own certificate to an addition — so it is the only one this module exports.
 
 use /std/{Bool, Bits, Eq, False, True, BigNat, NonZero};
 use /std/Bool/{false_neq_true};

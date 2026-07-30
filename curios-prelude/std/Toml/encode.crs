@@ -84,9 +84,7 @@ let offset_str(mins : Int) -> Str =
         Str/flatten([sign, pad(mag / 60, 2), ":", pad(mag % 60, 2)])
     end;
 
--- Codec-owned rendering: `Int/to_str` negates through `Int/abs`, which sends the
--- minimum value's magnitude (+2^30) outside the boxed envelope; render the
--- minimum from its literal spelling instead of negating it.
+-- Codec-owned rendering: `Int/to_str` negates through `Int/abs`, which sends the minimum value's magnitude (+2^30) outside the boxed envelope; render the minimum from its literal spelling instead of negating it.
 let int_str(n : Int) -> Str =
     choose
     | n >= +0 => Nat/to_str(Int/to_nat(n))

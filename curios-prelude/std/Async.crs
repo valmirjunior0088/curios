@@ -1,10 +1,7 @@
 use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad};
 use /std/time/{Duration};
 
--- Both are scheduler plumbing: their operations exist so this module and its
--- descendants can drive a fiber, not so a program can complete someone else's
--- future. The modules stay private and only the two type names are re-exported,
--- which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
+-- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
 mod Waker;
 pub use Waker/{let Waker};
 
@@ -87,9 +84,7 @@ pub let using(@A : Type, h : Handle, fin : () -> {}, body : Async(A)) -> Async(A
 pub let go(body : Fiber) -> Async({}) =
     defer(() => fork_with(body, Token { Cell/new(false) }));
 
--- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and
--- the next read stalls the whole single-threaded scheduler, so the status is
--- reported rather than dropped.
+-- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and the next read stalls the whole single-threaded scheduler, so the status is reported rather than dropped.
 pub let nonblocking(h : Handle) -> Result({}, Handle/Error) =
     let status = /sys/set_nonblocking(h, true);
     match status == /sys/Status/ok
@@ -304,9 +299,7 @@ let expire_sleepers(sleeping : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
         end;
     walk(sleeping, Lst/nil(), Lst/nil());
 
--- No runnable job, nothing blocked on a handle, and no sleeper: the root can
--- never be fulfilled. Nominal and empty — it records that the fact occurred,
--- and leaves room to carry a diagnostic later without changing how callers match.
+-- No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. Nominal and empty — it records that the fact occurred, and leaves room to carry a diagnostic later without changing how callers match.
 pub struct Deadlock : pub Type {}
 
 pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
@@ -377,10 +370,7 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
                 let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
                 match Lst/len(Cell/get(blocked)) == 0 && Lst/len(Cell/get(sleeping)) == 0
                 | true =>
-                    -- Deadlock: no runnable job, nothing blocked on a handle, and
-                    -- no sleeper — the root can never be fulfilled, so there is no
-                    -- `A` to return. Reported to the caller; terminating the
-                    -- process is `run`'s decision, not the scheduler's.
+                    -- Deadlock: no runnable job, nothing blocked on a handle, and no sleeper — the root can never be fulfilled, so there is no `A` to return. Reported to the caller; terminating the process is `run`'s decision, not the scheduler's.
                     let _ = drain_all();
                     Result/failure(Deadlock {})
                 | false =>

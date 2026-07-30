@@ -1,7 +1,4 @@
--- `a < b` as a decided proposition: `True` when the machine comparison holds
--- and `False` otherwise, so a proof reduces away on any concrete pair rather
--- than being built constructor by constructor. `Nat/Lt` is the proposition,
--- `Nat/Lt/try` decides it, and the remaining laws bridge it to `Nat/Lte`.
+-- `a < b` as a decided proposition: `True` when the machine comparison holds and `False` otherwise, so a proof reduces away on any concrete pair rather than being built constructor by constructor. `Nat/Lt` is the proposition, `Nat/Lt/try` decides it, and the remaining laws bridge it to `Nat/Lte`.
 
 use /std/{Nat, Option, True, False};
 use /std/Nat/{Lte};

@@ -1,10 +1,4 @@
--- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a
--- transparent record pairing an LSB-first `Bits` rep with a `Canonical` proof that
--- the rep is trimmed (no redundant high zero bit), so equality is decided at the
--- `.rep` level and the certificate erases away. `View` (zero / succ low tail) is the
--- structural accessor consumers and single-operand recursions go through; two-operand
--- ops match `.rep` directly, build a raw untrimmed result, and route it through
--- `of_bits` — a single `trim` — at the public boundary.
+-- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a transparent record pairing an LSB-first `Bits` rep with a `Canonical` proof that the rep is trimmed (no redundant high zero bit), so equality is decided at the `.rep` level and the certificate erases away. `View` (zero / succ low tail) is the structural accessor consumers and single-operand recursions go through; two-operand ops match `.rep` directly, build a raw untrimmed result, and route it through `of_bits` — a single `trim` — at the public boundary.
 
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
@@ -221,10 +215,7 @@ pub rec trim_of_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(trim(x), x)
     end;
 
 
--- Each operation family is a facade: the module's namesake binding is the
--- operation, and the laws about it nest underneath — `BigNat/add` adds,
--- `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the
--- untrimmed `Bits` ladder it is built from.
+-- Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the untrimmed `Bits` ladder it is built from.
 
 pub mod add;
 pub use add/{let add};

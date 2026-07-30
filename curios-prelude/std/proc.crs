@@ -8,10 +8,6 @@ pub let env(name : Str) -> Option(Bytes) =
     | false => Option/none()
     end;
 
--- Unit, not a caller-chosen type: `exit` never returns, and a non-returning
--- term is unsound exactly when it inhabits a type nothing total inhabits. At
--- `{}` there is nothing to forge. A branch that exits must still produce a
--- value, so write `let _ = proc/exit(1); …` rather than passing the exit off as
--- the value itself.
+-- Unit, not a caller-chosen type: `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits. At `{}` there is nothing to forge. A branch that exits must still produce a value, so write `let _ = proc/exit(1); …` rather than passing the exit off as the value itself.
 pub let exit(code : Nat) -> {} =
     /sys/exit(code);

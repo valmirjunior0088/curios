@@ -21,9 +21,7 @@ pub rec raw(x : Bits, y : Bits, carry : Bool) -> Bits =
 pub let add(a : BigNat, b : BigNat) -> BigNat =
     of_bits(raw(a.rep, b.rep, false));
 
--- Facts about the full-adder bit functions above. They exist only to justify
--- this ladder's commutativity and cancellation, so they live with the adder
--- rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
+-- Facts about the full-adder bit functions above. They exist only to justify this ladder's commutativity and cancellation, so they live with the adder rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
 let xor3_comm(a : Bool, b : Bool, c : Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
     match a
     | true => match b | true => refl_at(xor3(true, true, c)) | false => refl_at(xor3(true, false, c)) end

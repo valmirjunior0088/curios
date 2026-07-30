@@ -25,10 +25,7 @@ use {
 };
 
 fn main() {
-    // Under the `profile` feature the whole build runs inside a programmatic
-    // capture — the report lands in `OUT_DIR/profile.tsv`, announced with one
-    // warning. There is deliberately no environment switch: the feature is the
-    // switch, and it is specified where every other build input is.
+    // Under the `profile` feature the whole build runs inside a programmatic capture — the report lands in `OUT_DIR/profile.tsv`, announced with one warning. There is deliberately no environment switch: the feature is the switch, and it is specified where every other build input is.
     #[cfg(feature = "profile")]
     {
         let ((), report) = curios_profile::capture(build);
@@ -108,14 +105,7 @@ fn build() {
         )
     });
 
-    // Every universe invariant the archive is trusted to satisfy is asserted
-    // here, on the value about to be serialized, and nowhere else. Restoration
-    // establishes that the bytes it reads are exactly the bytes written from
-    // this value — content digest, schema, source fingerprint, and bytecheck —
-    // so re-deriving the invariants per compilation only re-answers a question
-    // already settled. `erase_prelude_prefix` below happens to project
-    // through the same check, but inheriting the guarantee from an unrelated
-    // call is not the same as stating it.
+    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration establishes that the bytes it reads are exactly the bytes written from this value — content digest, schema, source fingerprint, and bytecheck — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_prelude_prefix` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
@@ -127,18 +117,9 @@ fn build() {
             )
         });
 
-    // Hash-cons every archived Core snapshot against one table, so structurally
-    // equal subterms collapse onto a single allocation across the lowered and
-    // elaborated views as well as within each. Elaboration builds the same
-    // types, telescopes, and proof spines independently in definition after
-    // definition and nothing deduplicates them, because `Rc` sharing only ever
-    // arises from cloning: two definitions that build the same type build it
-    // twice. rkyv shares by pointer address, so collapsing them here is also
-    // what lets the archive store each distinct structure once.
+    // Hash-cons every archived Core snapshot against one table, so structurally equal subterms collapse onto a single allocation across the lowered and elaborated views as well as within each. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
     //
-    // `ersd` is deliberately not included: it is a flat, index-addressed arena
-    // with no shared pointers to collapse, and it already interns its constants
-    // by value.
+    // `ersd` is deliberately not included: it is a flat, index-addressed arena with no shared pointers to collapse, and it already interns its constants by value.
     let sharing = Sharing::new();
     let prepared = prepared.shared(&sharing);
     let core = core.shared(&sharing);

@@ -55,8 +55,7 @@ end
 pub let Valid(b : Bytes) -> Prop =
     Utf8(Scan/lead(), b);
 
--- Scanning as a fold rather than as a derivation: the state after running
--- `step` over every byte of `b`, starting from `s`.
+-- Scanning as a fold rather than as a derivation: the state after running `step` over every byte of `b`, starting from `s`.
 pub rec scan_from(s : Scan, b : Bytes) -> Scan =
     match b
     | x\ => s
@@ -65,25 +64,15 @@ pub rec scan_from(s : Scan, b : Bytes) -> Scan =
 
 -- The reflection bridge, and the reason it exists.
 --
--- A `Utf8` derivation is one `more` link per byte, so writing one out for a
--- literal makes the *term* linear in the data — and everything that walks a
--- term inherits that: elaboration, zonking, both erasure obligations, and the
--- kernel's typing judgment. This says the same thing in constant size: `b`
--- scans to `lead` iff it is valid, so a proof *by computation* stands in for
--- the derivation, and the derivation is rebuilt by reduction only where some
--- proof actually eliminates it.
+-- A `Utf8` derivation is one `more` link per byte, so writing one out for a literal makes the *term* linear in the data — and everything that walks a term inherits that: elaboration, zonking, both erasure obligations, and the kernel's typing judgment. This says the same thing in constant size: `b` scans to `lead` iff it is valid, so a proof *by computation* stands in for the derivation, and the derivation is rebuilt by reduction only where some proof actually eliminates it.
 --
--- The recursion is on `b` and not on a derivation, which is what keeps
--- `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation —
--- working untouched.
+-- The recursion is on `b` and not on a derivation, which is what keeps `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation — working untouched.
 pub rec of_scan_eq_from(s : Scan, b : Bytes, p : Eq(scan_from(s, b), Scan/lead()))
     -> Utf8(s, b) =
     match b
-    -- `scan_from(s, x\)` is `s`, so `p` already says `s` is `lead`; `stop`
-    -- inhabits the goal there and transport carries it back.
+    -- `scan_from(s, x\)` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
     | x\ => Eq/subst((q) => Utf8(q, x\), Eq/sym(p), Utf8/stop())
-    -- `scan_from(s, x\h\..t)` is `scan_from(step(h, s), t)`, so `p` *is* the
-    -- premise the recursive call wants, with no rewriting.
+    -- `scan_from(s, x\h\..t)` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
     | x\h\..t => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
     end;
 
@@ -93,10 +82,7 @@ pub let of_scan_eq(b : Bytes, p : Eq(scan_from(Scan/lead(), b), Scan/lead()))
 
 -- The reflexivity the lowerer hands to `of_scan_eq`.
 --
--- Stated at `scan_from(lead, b)` on both sides so it is provable for *any* `b`;
--- it converts to the proof `of_scan_eq` wants exactly when `b` scans to `lead`,
--- which is where the computation happens. It lives in `/syn` because Rust
--- lowering emits it, which is what `/syn` membership means.
+-- Stated at `scan_from(lead, b)` on both sides so it is provable for *any* `b`; it converts to the proof `of_scan_eq` wants exactly when `b` scans to `lead`, which is where the computation happens. It lives in `/syn` because Rust lowering emits it, which is what `/syn` membership means.
 pub let refl_scan(b : Bytes)
     -> Eq(scan_from(Scan/lead(), b), scan_from(Scan/lead(), b)) =
     Eq/refl();

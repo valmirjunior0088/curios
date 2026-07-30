@@ -1,5 +1,4 @@
--- Successor of a strictly-positive natural. `BigNat/succ/raw` is cons-headed on
--- every input, so the certificate needs no hypothesis about the operand.
+-- Successor of a strictly-positive natural. `BigNat/succ/raw` is cons-headed on every input, so the certificate needs no hypothesis about the operand.
 
 use /std/{Bits, True, BigNat, NonZero};
 use /std/NonZero/{is_cons, nz_trimmed, raw_non_zero};

@@ -1,8 +1,4 @@
--- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces.
--- The map deliberately does not remember `K`: the trie's identity *is* that byte
--- string, so two key types serializing alike are the same key. `Key` is therefore a
--- write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a
--- caller wanting typed keys decodes at the boundary.
+-- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
 
 use /std/{Bytes, Byte, Nat, Bool, Str, Lst, Option};
 

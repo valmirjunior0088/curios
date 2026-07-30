@@ -62,8 +62,7 @@ pub let serve(host : Str, port : Nat, handler : (Socket) -> Async({})) -> Async(
         listen_loop(host, port, (h) =>
             match Async/nonblocking(h)
             | failure(_) =>
-                -- The connection cannot be served without non-blocking mode;
-                -- drop it rather than stalling the scheduler on it.
+                -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
                 let _ = /sys/close(h);
                 Async/pure(())
             | success(_) =>

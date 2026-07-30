@@ -1,6 +1,4 @@
--- Unicode scalar values are certified by /syn/Char. Classification and case
--- conversion in this initial API are deliberately ASCII-only; Unicode database
--- policy remains outside the foundational scalar type.
+-- Unicode scalar values are certified by /syn/Char. Classification and case conversion in this initial API are deliberately ASCII-only; Unicode database policy remains outside the foundational scalar type.
 
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};

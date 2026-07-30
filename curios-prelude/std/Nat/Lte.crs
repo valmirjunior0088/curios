@@ -1,7 +1,4 @@
--- `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts
--- `a <= b` to `a + 1 <= b + 1`. The family is this module's namesake, so
--- `Nat/Lte` is the proposition, `Nat/Lte/z` and `Nat/Lte/s` are its
--- constructors, and the laws about it sit alongside them.
+-- `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`. The family is this module's namesake, so `Nat/Lte` is the proposition, `Nat/Lte/z` and `Nat/Lte/s` are its constructors, and the laws about it sit alongside them.
 
 use /std/{Nat};
 

@@ -1,10 +1,4 @@
--- Arbitrary-precision integers: a sign tag over a strictly-positive `NonZero`
--- magnitude (or the distinguished `zero`). Every operation dispatches on the sign
--- constructors and delegates the magnitude arithmetic to `NonZero`/`BigNat`.
--- Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and
--- takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so
--- no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until
--- a consumer needs it (see documentation/REPRESENTATION_SPEC_PT4_BIGFLT.md).
+-- Arbitrary-precision integers: a sign tag over a strictly-positive `NonZero` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `NonZero`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md).
 
 use /std/{Nat, Int, Bool, Str, Order, BigNat, NonZero, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 
@@ -38,8 +32,7 @@ let signed(negative : Bool, a : BigNat) -> BigInt =
 pub let of_big_nat(a : BigNat) -> BigInt =
     signed(false, a);
 
--- x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the
--- truncating BigNat difference of the larger minus the smaller.
+-- x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
 pub let pos_sub(x : NonZero, y : NonZero) -> BigInt =
     match NonZero/cmp(x, y)
     | lt() => signed(true, y.magnitude - x.magnitude)
