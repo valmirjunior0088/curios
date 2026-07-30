@@ -670,6 +670,67 @@ fn check_free_monoid(
 
 /// Verify that `term` has type `expected`.
 pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), KernelError> {
+    // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
+    if let Subterm::Let(Let { bindings, tail }) = &**term {
+        let mut values = Vec::with_capacity(bindings.len());
+        for binding in bindings {
+            let refs = values.iter().collect::<Vec<_>>();
+            let type_ = binding.type_().release(&refs);
+            let value = binding.value().release(&refs);
+
+            Sort::of(kernel, &type_)?;
+            check(kernel, &value, &type_)?;
+            values.push(value);
+        }
+
+        let refs = values.iter().collect::<Vec<_>>();
+        let tail = tail.open(&refs);
+
+        return check(kernel, &tail, expected);
+    }
+
+    // The Π-introduction half of the checked rules below: a lambda checks against a function type by walking both telescopes under one shared binder set — each domain pair invariant by conversion, exactly as subsumption compares them — and checking the body against the expected codomain. Routing the body through `check` rather than inference is what lets a tuple body reach the Σ rule with its expectation intact; the inferred route would manufacture the non-dependent codomain first.
+    if let Subterm::Func(Func {
+        telescope,
+        plicities,
+    }) = &**term
+    {
+        let reduced = kernel.reduce_forced(expected.clone())?;
+        if let Subterm::FuncType(expected_func) = &*reduced
+            && *plicities == expected_func.plicities
+            && telescope.len() == expected_func.telescope.len()
+        {
+            let lambda = telescope.clone();
+            let against = expected_func.telescope.clone();
+            return scoped(kernel, |kernel| check_lambda(kernel, lambda, against));
+        }
+        // Anything else — a non-Π expectation, a plicity or arity mismatch — falls through, so the refusal keeps its ordinary inferred-versus-expected shape.
+    }
+
+    // The Σ-introduction rule stated directly: a tuple literal checks against a dependent telescope entry-wise, each component at its entry's type opened over the actual preceding components. Inference cannot reach this verdict — inferring the components independently manufactures a non-dependent tuple type whose telescope binds nothing, and no conversion can relate that to a telescope whose later entries mention its binders.
+    if let Subterm::Tuple(Tuple { fields, .. }) = &**term {
+        match Term::unwrap_or_clone(kernel.reduce_forced(expected.clone())?) {
+            Subterm::TupleType(TupleType { telescope }) => {
+                return check_fields(kernel, fields, telescope);
+            }
+            Subterm::StructType(StructType {
+                name,
+                universes,
+                params,
+            }) => {
+                let declaration = kernel
+                    .struct_decl(&name)
+                    .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+                kernel.check_instance(&declaration.universe_context, &universes)?;
+                let fields_telescope =
+                    instantiate_universe_levels_scoped(&declaration.fields.clone(), &universes)?;
+                return check_fields(kernel, fields, fields_telescope.open_params(&params));
+            }
+            // Not a telescope-shaped expectation: fall through, so the mismatch keeps its ordinary inferred-versus-expected shape.
+            _ => {}
+        }
+    }
+
     let inferred = infer(kernel, term)?;
 
     match subsumes(kernel, &inferred, expected)? {
@@ -679,6 +740,64 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
             expected: Box::new(expected.clone()),
         }),
     }
+}
+
+/// The telescope walk of the lambda rule above, under `scoped`'s retraction bracket: the guards on plicity and arity ran at the dispatch, so the two telescopes are structurally parallel by construction.
+fn check_lambda(
+    kernel: &mut Kernel,
+    lambda: Telescope<Term>,
+    against: Telescope<Term>,
+) -> Result<(), KernelError> {
+    let (mut lambda, mut against) = (lambda, against);
+
+    loop {
+        match (lambda, against) {
+            (Telescope::Cons(mine, mine_rest), Telescope::Cons(theirs, theirs_rest)) => {
+                Sort::of(kernel, &mine)?;
+                if !convert(kernel, &Term::type_ground(), &mine, &theirs)? {
+                    return Err(KernelError::Mismatch {
+                        inferred: Box::new(mine),
+                        expected: Box::new(theirs),
+                    });
+                }
+
+                let binder = kernel.fresh(mine_rest.first_hint());
+                kernel.assume(&binder, &theirs);
+                let occurrence = Term::free_var(&binder);
+
+                lambda = mine_rest.open(&[&occurrence]);
+                against = theirs_rest.open(&[&occurrence]);
+            }
+            (Telescope::Done(body), Telescope::Done(codomain)) => {
+                return check(kernel, &body, &codomain);
+            }
+            _ => unreachable!("the dispatch guarded the arities equal"),
+        }
+    }
+}
+
+/// The entry-wise walk of the tuple rule above: each component checked at its entry's type, the telescope then opened at that *actual* component so later entries see the value the binder stands for.
+fn check_fields(
+    kernel: &mut Kernel,
+    fields: &[Term],
+    mut telescope: Telescope<()>,
+) -> Result<(), KernelError> {
+    if telescope.len() != fields.len() {
+        return Err(KernelError::Arity {
+            expected: telescope.len(),
+            actual: fields.len(),
+        });
+    }
+
+    for field in fields {
+        let Telescope::Cons(type_, rest) = telescope else {
+            unreachable!("the arity guard bounds the walk to the telescope's length");
+        };
+        check(kernel, field, &type_)?;
+        telescope = rest.open(&[field]);
+    }
+
+    Ok(())
 }
 
 /// Whether a term of type `inferred` may stand where `expected` is wanted — the subsumption relation `inferred ≤ expected`.

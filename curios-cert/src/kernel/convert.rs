@@ -29,8 +29,9 @@ mod tests;
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
     curios_core::{
-        Bound, Carrier, Cases, Field, FuncType, InductType, Many, Proj, RecMember, Reducer, Scope,
-        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UniverseInst,
+        Bound, Carrier, Cases, Field, FuncType, Global, InductType, Level, Many, Proj, RecMember,
+        Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
+        UniverseInst, instantiate_universe_levels_scoped,
     },
     std::collections::HashSet,
 };
@@ -308,8 +309,14 @@ fn structural(
             }),
         ) => Ok(left_name == right_name
             && kernel.levels_eq(left_universes, right_universes)
-            && compare_each(kernel, history, left_params, right_params)?
-            && compare_each(kernel, history, left_indices, right_indices)?),
+            && induct_type_args(
+                kernel,
+                history,
+                left_name,
+                left_universes,
+                (left_params, left_indices),
+                (right_params, right_indices),
+            )?),
 
         (
             Subterm::StructType(StructType {
@@ -395,6 +402,46 @@ fn structural(
         // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
         _ => unfolded_retry(kernel, history, this, that),
     }
+}
+
+/// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Eq(@P, p, q)` with `P : Prop` converts with `Eq(@P, p, p)`, because no proof of a proposition is distinguishable from another. The struct-parameter analog of this gap is still grounded — no witness has forced it.
+fn induct_type_args(
+    kernel: &mut Kernel,
+    history: &mut History,
+    name: &Global,
+    universes: &[Level],
+    (left_params, left_indices): (&[Term], &[Term]),
+    (right_params, right_indices): (&[Term], &[Term]),
+) -> Result<bool, KernelError> {
+    if left_params.len() != right_params.len() || left_indices.len() != right_indices.len() {
+        return Ok(false);
+    }
+
+    let telescope = match kernel.induct_decl(name) {
+        Some(declaration) => declaration.indices.clone(),
+        // A declaration the registry seeding refused: keep the grounded comparison rather than inventing types.
+        None => {
+            return Ok(compare_each(kernel, history, left_params, right_params)?
+                && compare_each(kernel, history, left_indices, right_indices)?);
+        }
+    };
+    let mut telescope = instantiate_universe_levels_scoped(&telescope, universes)?;
+
+    for (left, right) in left_params
+        .iter()
+        .chain(left_indices)
+        .zip(right_params.iter().chain(right_indices))
+    {
+        let Telescope::Cons(type_, rest) = telescope else {
+            return Ok(false);
+        };
+        if !compare(kernel, history, &type_, left, right)? {
+            return Ok(false);
+        }
+        telescope = rest.open(&[left]);
+    }
+
+    Ok(true)
 }
 
 /// Eta at a nominal struct, untyped: a literal against a *neutral* inhabitant, projected field-wise. A `Prop`-sorted field converts by irrelevance without being compared — the declaration's field telescope says which those are — and the neutral restriction is what keeps an all-`Prop` or empty struct's vacuous field walk from equating its literal with an arbitrary term that merely appeared in the same untyped position.
