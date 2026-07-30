@@ -1,5 +1,4 @@
-//! The clap command-line surface: the `Cli` root and its `Mode` subcommands.
-//! Parsing only — the dispatch on the parsed value lives in `main.rs`.
+//! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`.
 
 use {
     clap::{Parser, Subcommand},
@@ -7,8 +6,7 @@ use {
     std::{path::PathBuf, sync::LazyLock},
 };
 
-/// [`curios_pipeline::Stage::NAMES`] joined with `,`, computed once on first
-/// use — the `--print` flag's default and help text.
+/// [`curios_pipeline::Stage::NAMES`] joined with `,`, computed once on first use — the `--print` flag's default and help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(","));
 
 #[derive(Debug, Subcommand)]
@@ -41,8 +39,7 @@ pub(crate) enum Mode {
         output_path: Option<PathBuf>,
     },
 
-    /// Present only in profiling builds: the mode exists exactly when the
-    /// spans it collects do.
+    /// Present only in profiling builds: the mode exists exactly when the spans it collects do.
     #[cfg(feature = "profile")]
     #[command(about = "Profile one compilation and print per-span aggregates")]
     Profile {

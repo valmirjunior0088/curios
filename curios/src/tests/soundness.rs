@@ -1,19 +1,10 @@
 //! End-to-end coverage for the two totality obligations.
 //!
-//! Erasure deletes types and it deletes `Prop`-sorted proofs, and both must be
-//! total: a divergent type breaks type formation, a divergent proof proves
-//! anything. What erasure *keeps* may diverge freely, which is why every
-//! rejection here is of a position and never of a definition.
+//! Erasure deletes types and it deletes `Prop`-sorted proofs, and both must be total: a divergent type breaks type formation, a divergent proof proves anything. What erasure *keeps* may diverge freely, which is why every rejection here is of a position and never of a definition.
 //!
-//! The size lattice and the classifier are unit-tested in
-//! `curios-elab/src/totality/tests.rs`; these check what a user can observe,
-//! through the prelude-replay path a real program takes — where the analysis
-//! sees only the user suffix and reads the prelude's verdicts back from the
-//! archive.
+//! The size lattice and the classifier are unit-tested in `curios-elab/src/totality/tests.rs`; these check what a user can observe, through the prelude-replay path a real program takes — where the analysis sees only the user suffix and reads the prelude's verdicts back from the archive.
 //!
-//! Each rejection asserts the *diagnostic*, not merely that compilation failed.
-//! A soundness test that accepts any error is worthless: a typo in the fixture
-//! would pass it while the hole stayed open.
+//! Each rejection asserts the *diagnostic*, not merely that compilation failed. A soundness test that accepts any error is worthless: a typo in the fixture would pass it while the hole stayed open.
 
 use {super::run, curios_runtime::MockHost};
 
@@ -29,9 +20,7 @@ fn rejected(source: &str) {
 
 /// As [`rejected`], and by **(V)** rather than by (T).
 ///
-/// Which gate fires is the whole claim of a (V)-only fixture: (T) runs first,
-/// so a fixture that accidentally put a partial definition in a type position
-/// would pass `rejected` while proving nothing about proof positions.
+/// Which gate fires is the whole claim of a (V)-only fixture: (T) runs first, so a fixture that accidentally put a partial definition in a type position would pass `rejected` while proving nothing about proof positions.
 fn rejected_as_a_proof(source: &str) {
     let (system, _io) = MockHost::builder().build();
     let error =
@@ -44,8 +33,7 @@ fn rejected_as_a_proof(source: &str) {
 
 /// As [`rejected`], and by **(T)** rather than by (V).
 ///
-/// The mirror of [`rejected_as_a_proof`]: a fixture that means to pin a type
-/// position proves nothing if a stray proof position is what actually fired.
+/// The mirror of [`rejected_as_a_proof`]: a fixture that means to pin a type position proves nothing if a stray proof position is what actually fired.
 fn rejected_as_a_type(source: &str) {
     let (system, _io) = MockHost::builder().build();
     let error =
@@ -56,21 +44,14 @@ fn rejected_as_a_type(source: &str) {
     );
 }
 
-/// The negative functor every exploit below is built from. It is *accepted* —
-/// strict positivity asks whether a declaration reaches itself, and `Sink`
-/// never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct`
-/// can express that.
+/// The negative functor every exploit below is built from. It is *accepted* — strict positivity asks whether a declaration reaches itself, and `Sink` never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct` can express that.
 const SINK: &str = r#"
     induct Sink(A : Type) : pub Type
     | sink(f : (A) -> /std/False)
     end
 "#;
 
-// The route no analysis of *value*-level partiality can see. The exploit has
-// no value-level `rec`, no `exit`, and no negative occurrence in any
-// declaration: a lambda, a constructor application, and one application. The
-// knot is tied entirely by `rec Bad : Type`, which `check_positivity` never
-// looks at, because a `rec` is neither an `induct` nor a `struct`.
+// The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`.
 #[test]
 fn a_type_level_rec_cannot_tie_the_negative_knot() {
     rejected(&format!(
@@ -91,9 +72,7 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
     ));
 }
 
-// The same knot behind a projection. A rule keyed on "the `rec` member is
-// itself sort-valued" misses this: `P`'s type is a tuple, and only `P.0` is a
-// type.
+// The same knot behind a projection. A rule keyed on "the `rec` member is itself sort-valued" misses this: `P`'s type is a tuple, and only `P.0` is a type.
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
     rejected(&format!(
@@ -114,11 +93,7 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
     ));
 }
 
-// Why (T) has to be the aggressive reading. Nothing here is a partial type
-// former: `Shape` is structurally recursive and total, and `inf` is an
-// ordinary partial *value* of an ordinary data type. The dangerous type exists
-// only because a total function was applied to a bottom argument, so a rule
-// that looks at what a type-level eliminator scrutinizes does not see it.
+// Why (T) has to be the aggressive reading. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` is an ordinary partial *value* of an ordinary data type. The dangerous type exists only because a total function was applied to a bottom argument, so a rule that looks at what a type-level eliminator scrutinizes does not see it.
 #[test]
 fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
     rejected(&format!(
@@ -150,10 +125,7 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
     ));
 }
 
-// The entrypoint's trailing expression is not a top-level item — lowering
-// leaves it in `Module::body`. An obligation seeded only from `items` sees
-// nothing here. The only items below are `Sink` and `consume`, and neither is
-// partial; the offending `rec` lives entirely inside the final term.
+// The entrypoint's trailing expression is not a top-level item — lowering leaves it in `Module::body`. An obligation seeded only from `items` sees nothing here. The only items below are `Sink` and `consume`, and neither is partial; the offending `rec` lives entirely inside the final term.
 #[test]
 fn the_entrypoint_expression_is_not_a_blind_spot() {
     rejected(&format!(
@@ -170,11 +142,7 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
     ));
 }
 
-// The shape that used to abort the compiler rather than reject the program.
-// Reducing `Bad` rebuilds an arrow whose domain is `Bad`, so elaborating the
-// first *use* overflowed the stack — long before any whole-module gate could
-// run. This is what the local form at `rec` elaboration exists for, and the
-// only claim it makes is that the compiler answers instead of dying.
+// The shape that used to abort the compiler rather than reject the program. Reducing `Bad` rebuilds an arrow whose domain is `Bad`, so elaborating the first *use* overflowed the stack — long before any whole-module gate could run. This is what the local form at `rec` elaboration exists for, and the only claim it makes is that the compiler answers instead of dying.
 #[test]
 fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
     rejected(
@@ -190,9 +158,7 @@ fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
     );
 }
 
-// The same shape as a *local* `rec`. `Item::Rec` and `Subterm::Rec` are
-// separate elaboration paths, and the second one still aborted after the first
-// was fixed.
+// The same shape as a *local* `rec`. `Item::Rec` and `Subterm::Rec` are separate elaboration paths, and the second one still aborted after the first was fixed.
 #[test]
 fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
     rejected(
@@ -207,11 +173,7 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
     );
 }
 
-// The second route (T) cannot see, and the one that needs no `exit` at all.
-// `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing
-// about `Box` or its type mentions a partial definition — and the certificate
-// escapes through an arm binder, so `boom`'s body reaches `forge` without
-// naming a partial type anywhere.
+// The second route (T) cannot see, and the one that needs no `exit` at all. `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing about `Box` or its type mentions a partial definition — and the certificate escapes through an arm binder, so `boom`'s body reaches `forge` without naming a partial type anywhere.
 #[test]
 fn a_partial_carrier_releasing_a_proof_is_rejected() {
     rejected_as_a_proof(
@@ -232,24 +194,11 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
     );
 }
 
-// The tests below cover (V)'s *argument* rule: a proof handed to a
-// `Prop`-declared parameter of a definition that is not itself a proof.
-// Nothing above them catches these — the definition-level rule needs a
-// `Prop`-sorted declared type, and every offender here sits inside a
-// `Nat`-valued function, so no seed reaches it by name.
+// The tests below cover (V)'s *argument* rule: a proof handed to a `Prop`-declared parameter of a definition that is not itself a proof. Nothing above them catches these — the definition-level rule needs a `Prop`-sorted declared type, and every offender here sits inside a `Nat`-valued function, so no seed reaches it by name.
 //
-// Each is keyed to one shape of application *head*, because the rule can only
-// fire where the head's type can be synthesized: it reads the parameter
-// telescope off that type to learn which parameters are propositions. A head
-// shape sort synthesis cannot answer for is a silent hole rather than a
-// rejection, which is why the coverage is enumerated by shape and not by one
-// representative program.
+// Each is keyed to one shape of application *head*, because the rule can only fire where the head's type can be synthesized: it reads the parameter telescope off that type to learn which parameters are propositions. A head shape sort synthesis cannot answer for is a silent hole rather than a rejection, which is why the coverage is enumerated by shape and not by one representative program.
 
-// A universe-polymorphic head. `@A : Type` generalizes the definition, so the
-// call site's head is a universe instance rather than a plain name — the most
-// common shape in the language, and the widest hole of this set: it admitted a
-// one-line helper with no `match`, no data type, and no recursion but the
-// forged proof's own.
+// A universe-polymorphic head. `@A : Type` generalizes the definition, so the call site's head is a universe instance rather than a plain name — the most common shape in the language, and the widest hole of this set: it admitted a one-line helper with no `match`, no data type, and no recursion but the forged proof's own.
 #[test]
 fn a_proof_at_a_polymorphic_head_is_rejected() {
     rejected_as_a_proof(
@@ -263,11 +212,7 @@ fn a_proof_at_a_polymorphic_head_is_rejected() {
     );
 }
 
-// A match arm binder as the head. An arm binder's type lives in the eliminated
-// constructor's telescope rather than in the arm scope, so opening the arm
-// without consulting the declaration leaves the binder untyped — and the
-// scrutinee's own type is a recursive group member wrapping the inductive, not
-// the inductive itself, so naming the declaration takes an unfolding step.
+// A match arm binder as the head. An arm binder's type lives in the eliminated constructor's telescope rather than in the arm scope, so opening the arm without consulting the declaration leaves the binder untyped — and the scrutinee's own type is a recursive group member wrapping the inductive, not the inductive itself, so naming the declaration takes an unfolding step.
 #[test]
 fn a_proof_at_an_arm_binder_head_is_rejected() {
     rejected_as_a_proof(
@@ -288,9 +233,7 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
     );
 }
 
-// A primitive fold binder as the head. `Lst`'s cons arm takes its element type
-// from the carrier rather than from any declaration, so this is a different
-// source of binder types than the inductive arm above and fails independently.
+// A primitive fold binder as the head. `Lst`'s cons arm takes its element type from the carrier rather than from any declaration, so this is a different source of binder types than the inductive arm above and fails independently.
 #[test]
 fn a_proof_at_a_fold_binder_head_is_rejected() {
     rejected_as_a_proof(
@@ -306,9 +249,7 @@ fn a_proof_at_a_fold_binder_head_is_rejected() {
     );
 }
 
-// A nominal structure projection as the head. A structure's field types come
-// from its declaration, instantiated at the head's universes and then at its
-// parameters — two steps a tuple projection needs neither of.
+// A nominal structure projection as the head. A structure's field types come from its declaration, instantiated at the head's universes and then at its parameters — two steps a tuple projection needs neither of.
 #[test]
 fn a_proof_at_a_struct_projection_head_is_rejected() {
     rejected_as_a_proof(
@@ -326,10 +267,7 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
     );
 }
 
-// The same projection route as a user would actually write it: concept
-// dispatch projects a method out of a resolved witness dictionary, so the
-// head of `Sink/drain` is a structure projection reached through resolution
-// rather than through a written `.field`.
+// The same projection route as a user would actually write it: concept dispatch projects a method out of a resolved witness dictionary, so the head of `Sink/drain` is a structure projection reached through resolution rather than through a written `.field`.
 #[test]
 fn a_proof_at_a_concept_method_head_is_rejected() {
     rejected_as_a_proof(
@@ -349,10 +287,7 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
     );
 }
 
-// General recursion is untouched wherever erasure keeps it. `collatz` cannot
-// pass any size-change checker — it recurses on a computed quotient, and
-// whether it terminates at all is an open problem — and it runs anyway,
-// because its result is a `Nat` the program actually consumes.
+// General recursion is untouched wherever erasure keeps it. `collatz` cannot pass any size-change checker — it recurses on a computed quotient, and whether it terminates at all is an open problem — and it runs anyway, because its result is a `Nat` the program actually consumes.
 #[test]
 fn a_partial_definition_stays_usable_in_a_program() {
     let source = r#"
@@ -370,32 +305,13 @@ fn a_partial_definition_stays_usable_in_a_program() {
     assert_eq!(run(source), b"8");
 }
 
-// (T) is seeded two ways, because neither reaches what the other does. The walk
-// finds types where they are *written* — annotations, motives, telescopes, and
-// the body of any definition whose type ends in a sort. It has no case for an
-// application's arguments, so a type handed to a function is written nowhere it
-// looks. The settle records find those, because a term whose own type is a sort
-// is a type wherever it appears.
+// (T) is seeded two ways, because neither reaches what the other does. The walk finds types where they are *written* — annotations, motives, telescopes, and the body of any definition whose type ends in a sort. It has no case for an application's arguments, so a type handed to a function is written nowhere it looks. The settle records find those, because a term whose own type is a sort is a type wherever it appears.
 //
-// The argument form is the one that reaches this gate at all. Written as an
-// annotation, `Shape(inf)` is *forced* while the binder elaborates and the step
-// budget stops it there — fail-closed, but before any whole-module pass runs.
-// Passed as a type argument it is never forced, so elaboration succeeds and only
-// the gate is left. That form was accepted until the settle records were added.
+// The argument form is the one that reaches this gate at all. Written as an annotation, `Shape(inf)` is *forced* while the binder elaborates and the step budget stops it there — fail-closed, but before any whole-module pass runs. Passed as a type argument it is never forced, so elaboration succeeds and only the gate is left. That form was accepted until the settle records were added.
 //
-// Nothing here is `Prop`-typed, so (V) cannot fire and (T) is on its own:
-// `Shape` is total, descending structurally on `F`, and `inf` is an ordinary
-// partial value of a data type.
-// The whole-module gate runs post-zonk — after elaboration has already done the
-// type-level reduction (T) exists to make safe. A type that reaches a partial
-// definition and happens to be *productive* survives elaboration and the gate
-// rejects it. One that is not productive spins until the step budget dies, and
-// the program used to be refused for running out of a resource no amount of
-// would have helped. Refusing the written type up front is what makes both
-// shapes report the same thing, which is the thing that is actually wrong.
+// Nothing here is `Prop`-typed, so (V) cannot fire and (T) is on its own: `Shape` is total, descending structurally on `F`, and `inf` is an ordinary partial value of a data type. The whole-module gate runs post-zonk — after elaboration has already done the type-level reduction (T) exists to make safe. A type that reaches a partial definition and happens to be *productive* survives elaboration and the gate rejects it. One that is not productive spins until the step budget dies, and the program used to be refused for running out of a resource no amount of would have helped. Refusing the written type up front is what makes both shapes report the same thing, which is the thing that is actually wrong.
 //
-// `Shape(inf)` here reduces to itself with no progress; the productive sibling
-// is `a_total_type_function_applied_to_a_partial_value_is_rejected`.
+// `Shape(inf)` here reduces to itself with no progress; the productive sibling is `a_total_type_function_applied_to_a_partial_value_is_rejected`.
 #[test]
 fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
     rejected_as_a_type(&format!(
@@ -410,9 +326,7 @@ fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
     ));
 }
 
-/// A *total* type-level function and a *partial* value of ordinary data type.
-/// `Shape` descends structurally on `F`; nothing here is a partial type former,
-/// which is why only the aggressive reading of (T) rejects the pair at all.
+/// A *total* type-level function and a *partial* value of ordinary data type. `Shape` descends structurally on `F`; nothing here is a partial type former, which is why only the aggressive reading of (T) rejects the pair at all.
 const SHAPE: &str = r#"
     use /std/{Nat};
 
@@ -430,19 +344,11 @@ const SHAPE: &str = r#"
     rec inf : F = F/more(inf);
 "#;
 
-// The three fixtures below probe the *erasure premise*: that everything erasure
-// deletes lies within a term one of the obligations covers.
+// The three fixtures below probe the *erasure premise*: that everything erasure deletes lies within a term one of the obligations covers.
 //
-// Erasure deletes more than types and proofs. Each of these sites drops a whole
-// construct, arguments included, and those arguments are ordinary values —
-// neither a type nor a proof, so nothing seeds them directly. What makes that
-// safe is containment rather than coverage: the *enclosing* term is a proof
-// position, and the reachability closure walks into it. Each fixture therefore
-// hides a partial `Nat` computation inside one deleted construct, and each must
-// be rejected for reaching it.
+// Erasure deletes more than types and proofs. Each of these sites drops a whole construct, arguments included, and those arguments are ordinary values — neither a type nor a proof, so nothing seeds them directly. What makes that safe is containment rather than coverage: the *enclosing* term is a proof position, and the reachability closure walks into it. Each fixture therefore hides a partial `Nat` computation inside one deleted construct, and each must be rejected for reaching it.
 
-// `erase_apply`'s proof-valued callee: the application collapses to the unit
-// constant, discarding every argument unevaluated.
+// `erase_apply`'s proof-valued callee: the application collapses to the unit constant, discarding every argument unevaluated.
 #[test]
 fn a_partial_argument_to_an_erased_call_is_still_reached() {
     let source = r#"
@@ -461,8 +367,7 @@ fn a_partial_argument_to_an_erased_call_is_still_reached() {
     rejected_as_a_proof(source);
 }
 
-// `is_proof_constructor`: a `Prop` family's constructor is the one direct call
-// erasure drops whole, on a predicate that never consults `is_erasable`.
+// `is_proof_constructor`: a `Prop` family's constructor is the one direct call erasure drops whole, on a predicate that never consults `is_erasable`.
 #[test]
 fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
     let source = r#"
@@ -483,8 +388,7 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
     rejected_as_a_proof(source);
 }
 
-// An erasable scrutinee: the elimination reduces to its single live arm and the
-// scrutinee is never emitted.
+// An erasable scrutinee: the elimination reduces to its single live arm and the scrutinee is never emitted.
 #[test]
 fn a_partial_erased_scrutinee_is_still_reached() {
     let source = r#"
@@ -504,13 +408,7 @@ fn a_partial_erased_scrutinee_is_still_reached() {
     rejected_as_a_proof(source);
 }
 
-// (V) is seeded where elaboration *settles* a term, so its coverage argument
-// rests on every `Prop`-typed term in the accepted module having been settled.
-// A metavariable solution is the one way a term reaches the module without
-// that: witness resolution fills the slot rather than elaborating a written
-// argument. Here the witness of a `Prop`-sorted concept — a proof — is partial,
-// and it arrives entirely by resolution. If solutions were outside what the
-// seeding sees, this program would compile.
+// (V) is seeded where elaboration *settles* a term, so its coverage argument rests on every `Prop`-typed term in the accepted module having been settled. A metavariable solution is the one way a term reaches the module without that: witness resolution fills the slot rather than elaborating a written argument. Here the witness of a `Prop`-sorted concept — a proof — is partial, and it arrives entirely by resolution. If solutions were outside what the seeding sees, this program would compile.
 #[test]
 fn a_partial_proof_cannot_arrive_through_witness_resolution() {
     let source = r#"
@@ -531,11 +429,7 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
     rejected_as_a_proof(source);
 }
 
-// The corpus shapes the design is keyed to, exercised through the replay path
-// rather than the prelude build. `BigNat`'s arithmetic rests on `add/raw`,
-// which descends on *either* of two `Bits` depending on the arm — a shape only
-// match refinement can see — and `Fmt/print`'s result type is
-// `format_type_with(parse(s))`, a type-level `rec` over a parsed format.
+// The corpus shapes the design is keyed to, exercised through the replay path rather than the prelude build. `BigNat`'s arithmetic rests on `add/raw`, which descends on *either* of two `Bits` depending on the arm — a shape only match refinement can see — and `Fmt/print`'s result type is `format_type_with(parse(s))`, a type-level `rec` over a parsed format.
 #[test]
 fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
     let source = r#"

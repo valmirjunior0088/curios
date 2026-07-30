@@ -2,8 +2,7 @@
 
 use std::{env, path::PathBuf};
 
-/// Find Cargo's target directory from its
-/// `<target-dir>[/<target>]/<profile>/build/<package-hash>/out` layout.
+/// Find Cargo's target directory from its `<target-dir>[/<target>]/<profile>/build/<package-hash>/out` layout.
 fn cargo_target_dir(out_dir: &std::path::Path, target_triple: &str) -> PathBuf {
     let package_dir = out_dir
         .parent()

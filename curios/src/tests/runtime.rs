@@ -9,11 +9,7 @@ use {
 
 #[test]
 fn nullary_closure_survives_erasure_and_codegen() {
-    // A nullary closure stored in an inductive field and called indirectly via a
-    // `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity
-    // closures survive it, which is what lets the suspension/continuation thunks
-    // drop their dummy unit argument (`() -> T` rather than `({}) -> T`). Output
-    // proves the suspended effect fired on `force`.
+    // A nullary closure stored in an inductive field and called indirectly via a `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). Output proves the suspended effect fired on `force`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -61,13 +57,7 @@ fn end_to_end() {
     assert_eq!(io.output(), b"+42");
 }
 
-// Local binders shadow like-named *module* bindings, and a local name never
-// leaks past its lexical scope. Inside `mod Foo` the module binding is `Foo/go`:
-// an inner `let go` must shadow it (so `shadowed` is 3, not the captured 7),
-// while a `go` that is a sibling of an inner `let go = 3` — reached only after
-// that scope closes — must resolve back to `Foo/go` (so `sibling` is 7, not a
-// leaked, unbound bare `go`). Encoded as 3*10 + 7 = 37, so the unlawful-capture
-// regression reads 77 and a scope leak fails to compile.
+// Local binders shadow like-named *module* bindings, and a local name never leaks past its lexical scope. Inside `mod Foo` the module binding is `Foo/go`: an inner `let go` must shadow it (so `shadowed` is 3, not the captured 7), while a `go` that is a sibling of an inner `let go = 3` — reached only after that scope closes — must resolve back to `Foo/go` (so `sibling` is 7, not a leaked, unbound bare `go`). Encoded as 3*10 + 7 = 37, so the unlawful-capture regression reads 77 and a scope leak fails to compile.
 #[test]
 fn local_binders_shadow_module_bindings_without_leaking() {
     let source = r#"
@@ -89,9 +79,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
     assert_eq!(io.output(), b"37");
 }
 
-// Named fields end to end: a dependent record (the vector's length indexes its
-// type) constructed with written names, consumed through `.label` and `.index`
-// access on the same value — both resolve to the same positional projection.
+// Named fields end to end: a dependent record (the vector's length indexes its type) constructed with written names, consumed through `.label` and `.index` access on the same value — both resolve to the same positional projection.
 #[test]
 fn triangular_sum() {
     let source = r#"
@@ -134,11 +122,7 @@ fn curried_function() {
 
 #[test]
 fn bang_dispatches_through_a_user_monad_witness() {
-    // A user-declared Identity monad: `Box(A)` wraps a value, its witness's
-    // `bind` just applies the continuation. Each `!` desugars to
-    // `/syn/Monad/bind(action, cont)`; the action's `Box(Nat)` type pins
-    // `M := Box` (flex-apply imitation) and resolves `monad_box` — the same
-    // path a std monad takes, exercised end-to-end on a user type.
+    // A user-declared Identity monad: `Box(A)` wraps a value, its witness's `bind` just applies the continuation. Each `!` desugars to `/syn/Monad/bind(action, cont)`; the action's `Box(Nat)` type pins `M := Box` (flex-apply imitation) and resolves `monad_box` — the same path a std monad takes, exercised end-to-end on a user type.
     let source = r#"
         use /std/{Nat, Handle, Str, Monad};
         pub struct Box(A : Type) : pub Type { unbox : A }
@@ -159,12 +143,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
 
 #[test]
 fn bang_std_parse_threads_bangs_left_to_right() {
-    // The real `std/Parse` monad, sequenced with bare `!` — each site resolves
-    // the `Monad(Parse)` witness from the action's type.
-    // Two `any_byte!`s read consecutive bytes; reflecting through `Byte/to_nat`
-    // and using a *non-commutative* `Nat/sub`
-    // pins the evaluation order: on "BA" the first byte is 'B' (66) and the second
-    // 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
+    // The real `std/Parse` monad, sequenced with bare `!` — each site resolves the `Monad(Parse)` witness from the action's type. Two `any_byte!`s read consecutive bytes; reflecting through `Byte/to_nat` and using a *non-commutative* `Nat/sub` pins the evaluation order: on "BA" the first byte is 'B' (66) and the second 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
     let source = r#"
         use /std/{Parse, Byte, Nat, Result, Handle};
 
@@ -190,13 +169,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
 
 #[test]
 fn bang_region_mixes_action_types() {
-    // A single region sequences two actions of *different* payload types: a
-    // `Parse(Bytes)` (`take_while`) and a `Parse(Byte)` (`any_byte`). Each `!`
-    // site elaborates its own `/syn/Monad/bind` application with fresh
-    // implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while
-    // the shared continuation typing forces one monad for the region. On "AB":
-    // `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B'
-    // (66); `Bytes/append("A", 66)` is "AB".
+    // A single region sequences two actions of *different* payload types: a `Parse(Bytes)` (`take_while`) and a `Parse(Byte)` (`any_byte`). Each `!` site elaborates its own `/syn/Monad/bind` application with fresh implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while the shared continuation typing forces one monad for the region. On "AB": `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bytes/append("A", 66)` is "AB".
     let source = r#"
         use /std/{Parse, Byte, Bytes, Bool, Result, Handle, Str};
 
@@ -228,8 +201,7 @@ fn bang_region_mixes_action_types() {
 
 #[test]
 fn folds_constant_arg_through_let_function() {
-    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`
-    // returned through main's bodyless return continuation.
+    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4` returned through main's bodyless return continuation.
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
@@ -275,20 +247,7 @@ fn folds_constant_arg_through_let_function() {
 
 #[test]
 fn fmt_print_partial_evaluation_reduces_residual() {
-    // End-to-end residue guard for the staging stack on
-    // `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The
-    // ersd `evaluate` pass folds the closed prefix — the format-string parse
-    // (Parse combinators and the segment UTF-8 revalidation included) runs at
-    // compile time and `Fmt/print(lit)` reifies as the curried hole-filling
-    // closure over a constant `Fmt` spine. What stays runtime is exactly the
-    // runtime work: specialized `go_with` over the spine, the runtime `Str`
-    // slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by
-    // `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s
-    // digit producer). The single-entry `go_with` spine is then contified into
-    // the entry, so the boundary is pinned by the surviving `Nat/to_str` digit
-    // producer together with the absence of the generic `Fmt/print` driver and
-    // the compile-time `Parse` combinators, without depending on a legacy
-    // backend function-count metric.
+    // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators, without depending on a legacy backend function-count metric.
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
@@ -337,11 +296,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
 
 #[test]
 fn fmt_print_runtime_args_specializes_spine() {
-    // The mixed case: a literal format string with runtime hole arguments.
-    // The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and
-    // `specialize` unrolls `go_with` over it — the ersd-optm module carries
-    // the minted spine items and neither the format-string parser nor the
-    // generic fold survives to codegen.
+    // The mixed case: a literal format string with runtime hole arguments. The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the ersd-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
@@ -392,9 +347,7 @@ fn fmt_print_runtime_args_specializes_spine() {
 
 #[test]
 fn fmt_print_err_formats_to_stderr() {
-    // Same staging as `Fmt/print`, routed through `/std/print_err`. MockIo
-    // captures stdout and stderr concatenated in write order, so the ordering
-    // also shows the stderr write really happened between the stdout ones.
+    // Same staging as `Fmt/print`, routed through `/std/print_err`. MockIo captures stdout and stderr concatenated in write order, so the ordering also shows the stderr write really happened between the stdout ones.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -411,12 +364,7 @@ fn fmt_print_err_formats_to_stderr() {
 
 #[test]
 fn fmt_print_constant_args_collapses_at_ersd() {
-    // The fully-constant case: every input to `Fmt/print` is a literal, so the
-    // ersd `evaluate` pass runs the *entire* program at compile time and
-    // residualizes the one effect boundary — the ersd-optm module's body is a
-    // single `#/std/print(<final bytes>)` call, the `Parse` combinator web
-    // and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write`
-    // plumbing reaches codegen.
+    // The fully-constant case: every input to `Fmt/print` is a literal, so the ersd `evaluate` pass runs the *entire* program at compile time and residualizes the one effect boundary — the ersd-optm module's body is a single `#/std/print(<final bytes>)` call, the `Parse` combinator web and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write` plumbing reaches codegen.
     let source = r#"
         use /std/{Fmt};
 
@@ -444,9 +392,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     .expect("compile succeeded");
 
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
-    // "x = 42, s = hello\n", already formatted, as the residual call's operand.
-    // Dead spine leftovers linger in the entry block (pruning drops items, not
-    // block statements) — the Cont sweep below is where they must be gone.
+    // "x = 42, s = hello\n", already formatted, as the residual call's operand. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
         ersd.contains("$/std/print(x\"78203d2034322c2073203d2068656c6c6f0a\")"),
         "expected the folded print residual, got:\n{ersd}",
@@ -485,9 +431,7 @@ fn diagnostic_uses_source_binder_names() {
     assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
 }
 
-// Two binders sharing a source name (shadowing) stay distinct in the message
-// via a minimal numeric suffix — `n` and `n2` — instead of both reading `n`
-// (axis (a) collision handling).
+// Two binders sharing a source name (shadowing) stay distinct in the message via a minimal numeric suffix — `n` and `n2` — instead of both reading `n` (axis (a) collision handling).
 #[test]
 fn diagnostic_disambiguates_shadowed_binders() {
     let source = r#"
@@ -506,9 +450,7 @@ fn diagnostic_disambiguates_shadowed_binders() {
     assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
 }
 
-// Globals print under their shortest in-scope spelling, not their fully
-// qualified canonical path (axis (b)): `Vec` and `Nat`, never `std/Vec/Vec`
-// or `sys/Nat`.
+// Globals print under their shortest in-scope spelling, not their fully qualified canonical path (axis (b)): `Vec` and `Nat`, never `std/Vec/Vec` or `sys/Nat`.
 #[test]
 fn diagnostic_shortens_global_names() {
     let source = r#"
@@ -533,11 +475,7 @@ fn diagnostic_shortens_global_names() {
     );
 }
 
-// A mismatch report deep-normalizes both sides: the arithmetic in an index
-// position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which,
-// once resolution picks the primitive `Nat` witness, would otherwise surface as
-// the compiler-internal `(sys/witness@N).0(0, 1)`. Normalizing collapses the
-// literal case to its value (`1`), leaving no witness machinery in the message.
+// A mismatch report deep-normalizes both sides: the arithmetic in an index position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which, once resolution picks the primitive `Nat` witness, would otherwise surface as the compiler-internal `(sys/witness@N).0(0, 1)`. Normalizing collapses the literal case to its value (`1`), leaving no witness machinery in the message.
 #[test]
 fn diagnostic_collapses_witness_dispatch_in_index() {
     let source = r#"
@@ -558,9 +496,7 @@ fn diagnostic_collapses_witness_dispatch_in_index() {
     );
 }
 
-// The residual symbolic arithmetic a normalized index keeps is spelled in
-// surface infix form, not the internal `Nat.add`/`Nat.succ` primitive spelling:
-// the `n + m` and `n + 1` the source would have written.
+// The residual symbolic arithmetic a normalized index keeps is spelled in surface infix form, not the internal `Nat.add`/`Nat.succ` primitive spelling: the `n + m` and `n + 1` the source would have written.
 #[test]
 fn diagnostic_spells_index_arithmetic_infix() {
     let source = r#"
@@ -578,8 +514,7 @@ fn diagnostic_spells_index_arithmetic_infix() {
     );
 }
 
-// A struct type is nominal: it never converts with a structural tuple type of
-// the same fields.
+// A struct type is nominal: it never converts with a structural tuple type of the same fields.
 #[test]
 fn random_bin_returns_requested_length() {
     let (system, io) = MockHost::builder().build();
@@ -595,8 +530,7 @@ fn random_bin_returns_requested_length() {
 
 #[test]
 fn nat_of_str_returns_option() {
-    // `123` parses; `12a` (non-digit) and the empty string are `none`, taking
-    // the `unwrap_or` defaults — `123 + 7 + 9`.
+    // `123` parses; `12a` (non-digit) and the empty string are `none`, taking the `unwrap_or` defaults — `123 + 7 + 9`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -634,9 +568,7 @@ fn int_of_str_returns_option() {
 
 #[test]
 fn flt_of_str_returns_option() {
-    // `12.0`, `.5` (empty integer part), and `1e3` parse; `abc` is `none` →
-    // default `+4.0`. Values are truncated to `Nat` for an exact assertion:
-    // `12 + (0.5*2) + 1000 + 4`.
+    // `12.0`, `.5` (empty integer part), and `1e3` parse; `abc` is `none` → default `+4.0`. Values are truncated to `Nat` for an exact assertion: `12 + (0.5*2) + 1000 + 4`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(r#"
         use /std/{Nat, Flt, Str, Option, Handle};
@@ -674,10 +606,7 @@ fn option_result_char_helpers() {
 
 #[test]
 fn clock_diff_of_two_distinct_now_readings() {
-    // Two scripted wall readings 30 s + 400 ns apart. `time/Instant/now`
-    // referenced twice must perform two *distinct* host calls (the
-    // nullary-effect distinctness the struct-head reduction relies on), so the
-    // diff is the gap between them, not zero.
+    // Two scripted wall readings 30 s + 400 ns apart. `time/Instant/now` referenced twice must perform two *distinct* host calls (the nullary-effect distinctness the struct-head reduction relies on), so the diff is the gap between them, not zero.
     let (system, io) = MockHost::builder()
         .wall([(1, 100, 500), (1, 130, 900)])
         .build();
@@ -739,8 +668,7 @@ fn cell_set_overwrites_value() {
 
 #[test]
 fn cell_two_cells_are_distinct() {
-    // Two cells minted with the same value are independent heap objects.
-    // Setting one must not affect the other.
+    // Two cells minted with the same value are independent heap objects. Setting one must not affect the other.
     assert_eq!(
         run(r#"
             use /std/{Cell, Handle, Nat, Str};
@@ -756,10 +684,7 @@ fn cell_two_cells_are_distinct() {
 
 #[test]
 fn match_reads_an_effectful_scrutinee_once() {
-    // Erasure aliases a non-variable scrutinee before projecting: the `k`
-    // binder below is `head - 1` over the *alias*, not a re-erased
-    // `Cell/get(c) - 1` — which would re-read the cell after the arm's
-    // `Cell/set`, making `k` 0 - 1 (monus) = 0 and `x` 1 instead of 5.
+    // Erasure aliases a non-variable scrutinee before projecting: the `k` binder below is `head - 1` over the *alias*, not a re-erased `Cell/get(c) - 1` — which would re-read the cell after the arm's `Cell/set`, making `k` 0 - 1 (monus) = 0 and `x` 1 instead of 5.
     assert_eq!(
         run(r#"
             use /std/{Cell, Handle, Nat, Str};
@@ -779,12 +704,7 @@ fn match_reads_an_effectful_scrutinee_once() {
 
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
-    // The rope representation's whole promise: a naive 100k-step `Bytes/concat`
-    // accumulation loop is O(n) with no optimizer recognition anywhere — each
-    // step is one node allocation, and the single read at the end forces once.
-    // The pre-rope representation copied the accumulator per step (Θ(n²), tens
-    // of minutes at this size); a regression fails on the timeout. The final
-    // slice + print also pins the force → memo → host-write path end to end.
+    // The rope representation's whole promise: a naive 100k-step `Bytes/concat` accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step (Θ(n²), tens of minutes at this size); a regression fails on the timeout. The final slice + print also pins the force → memo → host-write path end to end.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -807,16 +727,7 @@ fn accumulation_loops_are_linear_by_construction() {
 
 #[test]
 fn peel_loops_are_linear_by_construction() {
-    // The window (`view`) shape's whole promise, the consumption-side mirror of
-    // `accumulation_loops_are_linear_by_construction`: a naive head/tail peel
-    // over 100k bytes is O(n) with no optimizer recognition anywhere — the
-    // first read forces once, then every tail is an O(1) collapsed window and
-    // every head an O(1) read-through. The tail escapes through a `Cell` each
-    // step, so no compile-time pass (worker_wrapper's cursor, slice
-    // forwarding) can rescue it: a copying slice would be Θ(n²) and fail on
-    // the timeout. Matching directly on `Cell/get(c)` also leans on erasure's
-    // scrutinee alias — the cell must be read once per match, not once per
-    // projection (the head read lands *after* the `Cell/set` otherwise).
+    // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a `Cell` each step, so no compile-time pass (worker_wrapper's cursor, slice forwarding) can rescue it: a copying slice would be Θ(n²) and fail on the timeout. Matching directly on `Cell/get(c)` also leans on erasure's scrutinee alias — the cell must be read once per match, not once per projection (the head read lands *after* the `Cell/set` otherwise).
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -848,10 +759,7 @@ fn peel_loops_are_linear_by_construction() {
     assert_eq!(io.output(), b"450000");
 }
 
-// A local `rec` nested inside another local `rec`'s body: `go` (inner) is an
-// ordinary term-level construct here — never lambda-lifted, never spliced
-// anywhere — so it just works, elaborated and erased in place exactly where
-// written. Runtime-tainted so codegen cannot const-fold it away.
+// A local `rec` nested inside another local `rec`'s body: `go` (inner) is an ordinary term-level construct here — never lambda-lifted, never spliced anywhere — so it just works, elaborated and erased in place exactly where written. Runtime-tainted so codegen cannot const-fold it away.
 #[test]
 fn nested_local_rec_runs_correctly() {
     let (system, io) = MockHost::builder().build();
@@ -873,11 +781,7 @@ fn nested_local_rec_runs_correctly() {
     assert_eq!(io.output(), b"4");
 }
 
-// A local `rec` nested inside a top-level `rec` member, calling that
-// enclosing member by name: since nothing gets lambda-lifted or spliced as a
-// separate item, there is no forward-reference to worry about — `go` just
-// resolves `f` through ordinary lexical/context scoping, exactly where it's
-// written.
+// A local `rec` nested inside a top-level `rec` member, calling that enclosing member by name: since nothing gets lambda-lifted or spliced as a separate item, there is no forward-reference to worry about — `go` just resolves `f` through ordinary lexical/context scoping, exactly where it's written.
 #[test]
 fn local_rec_calls_enclosing_rec_member() {
     let (system, io) = MockHost::builder().build();
@@ -899,11 +803,7 @@ fn local_rec_calls_enclosing_rec_member() {
     assert_eq!(io.output(), b"0");
 }
 
-// A non-capturing, self-referential value `rec` (`loop : Nat = loop`) that
-// the program never calls: this is exactly the shape that silently
-// miscompiled under lambda-lifting (a self-aliased value slot dropped by the
-// optimizer's copy-propagation) — here it stays a term-level `Rec`, erased in
-// place, and its mere existence has no effect on the rest of the program.
+// A non-capturing, self-referential value `rec` (`loop : Nat = loop`) that the program never calls: this is exactly the shape that silently miscompiled under lambda-lifting (a self-aliased value slot dropped by the optimizer's copy-propagation) — here it stays a term-level `Rec`, erased in place, and its mere existence has no effect on the rest of the program.
 #[test]
 fn self_referential_value_rec_never_forced_compiles_and_runs() {
     let (system, io) = MockHost::builder().build();
@@ -921,11 +821,7 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
     assert_eq!(io.output(), b"5");
 }
 
-// A sibling signature may demand the result shape of a recursive type family
-// while the group is still being checked. Protected slots prevent conversion
-// from solving the knot, but shape-demanding reduction can still unfold a
-// filled slot productively: `val : T(2)` reaches `Nat`. Indexed inductive
-// families lower to this same shape, so the prelude depends on the distinction.
+// A sibling signature may demand the result shape of a recursive type family while the group is still being checked. Protected slots prevent conversion from solving the knot, but shape-demanding reduction can still unfold a filled slot productively: `val : T(2)` reaches `Nat`. Indexed inductive families lower to this same shape, so the prelude depends on the distinction.
 #[test]
 fn recursive_group_signature_reduces_concrete_type_family() {
     let (system, io) = MockHost::builder().build();

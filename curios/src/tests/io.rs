@@ -43,9 +43,7 @@ fn io_read() {
     assert_eq!(io.output(), b"hello\n");
 }
 
-// `Handle/read(h, n)` is the typed blocking read: each call yields a `chunk` of
-// 1..n available bytes (here one injected line per refill, served in `n`-byte
-// slices), and the third read past the data yields `eof`.
+// `Handle/read(h, n)` is the typed blocking read: each call yields a `chunk` of 1..n available bytes (here one injected line per refill, served in `n`-byte slices), and the third read past the data yields `eof`.
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
@@ -135,9 +133,7 @@ fn file_with_write_mode_persists_through_close() {
     assert_eq!(io.file(b"out.txt"), Some(b"written".to_vec()));
 }
 
-// Matching on an effectful scrutinee must evaluate it exactly once — the
-// erased inductive match binds the scrutinee in a `let` and projects from it.
-// Append mode makes a second evaluation visible: it would append twice.
+// Matching on an effectful scrutinee must evaluate it exactly once — the erased inductive match binds the scrutinee in a `let` and projects from it. Append mode makes a second evaluation visible: it would append twice.
 #[test]
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
@@ -239,9 +235,7 @@ fn proc_exit_halts_with_code() {
 
 #[test]
 fn proc_exit_in_local_binding_halts() {
-    // A local binding evaluates under call-by-value even when nothing reads it:
-    // the never-returning body runs. Regression test: erasure used to collapse
-    // such bindings to the unit constant wholesale, silently dropping the exit.
+    // A local binding evaluates under call-by-value even when nothing reads it: the never-returning body runs. Regression test: erasure used to collapse such bindings to the unit constant wholesale, silently dropping the exit.
     let entrypoint = r#"
         use /std/{Nat, Handle, Str};
         let go(n : std/Nat) -> std/Nat =

@@ -19,8 +19,7 @@ fn named_fields_run_end_to_end() {
     assert_eq!(io.output(), b"42");
 }
 
-// A transparent record: build with a pinned head, project by label and by
-// index — both resolve to the same positional projection.
+// A transparent record: build with a pinned head, project by label and by index — both resolve to the same positional projection.
 #[test]
 fn struct_transparent_pair_projects() {
     let source = r#"
@@ -35,8 +34,7 @@ fn struct_transparent_pair_projects() {
     assert_eq!(io.output(), b"7");
 }
 
-// The bare-name head infers the parameters from the fields (and the expected
-// type at the binding).
+// The bare-name head infers the parameters from the fields (and the expected type at the binding).
 #[test]
 fn struct_parameter_inference_at_construction() {
     let source = r#"
@@ -51,8 +49,7 @@ fn struct_parameter_inference_at_construction() {
     assert_eq!(io.output(), b"12");
 }
 
-// A zero-cost newtype: a single positional field, projected with `.0`. It
-// erases to its bare field, so the projection elides at runtime.
+// A zero-cost newtype: a single positional field, projected with `.0`. It erases to its bare field, so the projection elides at runtime.
 #[test]
 fn struct_newtype_projects() {
     let source = r#"
@@ -67,8 +64,7 @@ fn struct_newtype_projects() {
     assert_eq!(io.output(), b"5");
 }
 
-// A dependent field: a later field's type mentions an earlier field (the
-// vector's length indexes its type).
+// A dependent field: a later field's type mentions an earlier field (the vector's length indexes its type).
 #[test]
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
@@ -88,8 +84,7 @@ fn struct_dependent_fields_run_end_to_end() {
     assert_eq!(io.output(), b"42");
 }
 
-// The motivating case: an abstract type — public type, hidden representation —
-// usable only through exported smart constructors/accessors in its module.
+// The motivating case: an abstract type — public type, hidden representation — usable only through exported smart constructors/accessors in its module.
 #[test]
 fn struct_abstract_smart_constructor_round_trips() {
     let source = r#"
@@ -108,8 +103,7 @@ fn struct_abstract_smart_constructor_round_trips() {
     assert_eq!(io.output(), b"42");
 }
 
-// Constructing a private-representation struct from outside its declaring
-// module is rejected (`PrivateRepresentation`).
+// Constructing a private-representation struct from outside its declaring module is rejected (`PrivateRepresentation`).
 #[test]
 fn struct_private_construction_rejected() {
     let source = r#"
@@ -130,8 +124,7 @@ fn struct_private_construction_rejected() {
     );
 }
 
-// Projecting a private-representation struct's field from outside its module is
-// rejected (`PrivateField`), even when the value was obtained legitimately.
+// Projecting a private-representation struct's field from outside its module is rejected (`PrivateField`), even when the value was obtained legitimately.
 #[test]
 fn struct_private_projection_rejected() {
     let source = r#"
@@ -153,9 +146,7 @@ fn struct_private_projection_rejected() {
     );
 }
 
-// Diagnostics name binders with the source names the user wrote, not the
-// `hint#counter` gensyms elaboration opens them under (axis (a)): the inferred
-// function type must read `(n : Nat)`, never `(n#3 : Nat)`.
+// Diagnostics name binders with the source names the user wrote, not the `hint#counter` gensyms elaboration opens them under (axis (a)): the inferred function type must read `(n : Nat)`, never `(n#3 : Nat)`.
 #[test]
 fn struct_is_not_a_tuple() {
     let source = r#"
@@ -197,8 +188,7 @@ fn struct_field_label_out_of_order_rejected() {
     assert!(crate::run_text(source, system).is_err());
 }
 
-// A struct literal whose head names a non-struct binding is rejected as
-// `NotAStructType` (its type is reported), not misreported as unbound.
+// A struct literal whose head names a non-struct binding is rejected as `NotAStructType` (its type is reported), not misreported as unbound.
 #[test]
 fn struct_literal_non_struct_head_rejected() {
     let source = r#"
@@ -213,11 +203,7 @@ fn struct_literal_non_struct_head_rejected() {
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
 
-// A `Prop`-sorted struct whose fields are all propositions is a sub-singleton:
-// every projection lands in `Prop`, so proof irrelevance leaks nothing. It is
-// accepted, and — its content being non-informative — erases away: the program
-// compiles and runs, the projected proof contributing no runtime code while the
-// ordinary `Nat` computation still produces its result.
+// A `Prop`-sorted struct whose fields are all propositions is a sub-singleton: every projection lands in `Prop`, so proof irrelevance leaks nothing. It is accepted, and — its content being non-informative — erases away: the program compiles and runs, the projected proof contributing no runtime code while the ordinary `Nat` computation still produces its result.
 #[test]
 fn prop_struct_with_prop_fields_runs() {
     let source = r#"
@@ -233,10 +219,7 @@ fn prop_struct_with_prop_fields_runs() {
     assert_eq!(io.output(), b"7");
 }
 
-// A `Prop`-sorted struct with an informative (`Type`-sorted) field is rejected
-// at declaration. Projection is an unguarded eliminator, so admitting it under
-// proof irrelevance proves `Eq(b0, b1)` for distinct `b0`, `b1` — and thence
-// `Eq(0, 1)` and `False`. The soundness-critical regression (bare `: Prop`).
+// A `Prop`-sorted struct with an informative (`Type`-sorted) field is rejected at declaration. Projection is an unguarded eliminator, so admitting it under proof irrelevance proves `Eq(b0, b1)` for distinct `b0`, `b1` — and thence `Eq(0, 1)` and `False`. The soundness-critical regression (bare `: Prop`).
 #[test]
 fn prop_struct_with_informative_field_rejected() {
     let source = r#"
@@ -255,10 +238,7 @@ fn prop_struct_with_informative_field_rejected() {
     assert!(error.contains("informative"), "unexpected error: {error}");
 }
 
-// Control: the same record at the default `Type` sort gets no proof
-// irrelevance, so `Eq(b0, b1)` for distinct values is correctly rejected by
-// conversion — confirming the `Prop` sort was the only door to the
-// contradiction, and that closing it leaves ordinary records untouched.
+// Control: the same record at the default `Type` sort gets no proof irrelevance, so `Eq(b0, b1)` for distinct values is correctly rejected by conversion — confirming the `Prop` sort was the only door to the contradiction, and that closing it leaves ordinary records untouched.
 #[test]
 fn type_struct_distinct_values_not_convertible() {
     let source = r#"
@@ -274,10 +254,7 @@ fn type_struct_distinct_values_not_convertible() {
     assert!(crate::run_text(source, system).is_err());
 }
 
-// The function-field sugar, end to end: `label(params) -> T` in a struct
-// declaration and a Σ-type, `label(params) = body` in a struct literal and a
-// tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it —
-// this pins the lowering, not just the grammar.
+// The function-field sugar, end to end: `label(params) -> T` in a struct declaration and a Σ-type, `label(params) = body` in a struct literal and a tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it — this pins the lowering, not just the grammar.
 #[test]
 fn function_field_sugar_runs_end_to_end() {
     let source = r#"
@@ -294,9 +271,7 @@ fn function_field_sugar_runs_end_to_end() {
     assert_eq!(io.output(), b"8");
 }
 
-// A `pub` item's signature may not expose a private sibling: the reference
-// resolves through lexical scope (no publicness walk), so a dedicated
-// interface audit closes the gap.
+// A `pub` item's signature may not expose a private sibling: the reference resolves through lexical scope (no publicness walk), so a dedicated interface audit closes the gap.
 #[test]
 fn pub_signature_exposing_private_sibling_is_rejected() {
     let source = r#"
@@ -317,11 +292,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
     );
 }
 
-// The other privately-resolvable path: an item inside the module's own
-// private child (the head segment resolves lexically, so resolution never
-// checked the child's visibility). `T` reaches only `M`'s subtree while `g`
-// reaches the whole program, so the audit names `T` itself rather than the
-// first private hop on the way to it.
+// The other privately-resolvable path: an item inside the module's own private child (the head segment resolves lexically, so resolution never checked the child's visibility). `T` reaches only `M`'s subtree while `g` reaches the whole program, so the audit names `T` itself rather than the first private hop on the way to it.
 #[test]
 fn pub_signature_exposing_private_child_module_is_rejected() {
     let source = r#"
@@ -345,8 +316,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
     );
 }
 
-// A transparent pub concept's field types are interface (its representation
-// is public), superclass edges included.
+// A transparent pub concept's field types are interface (its representation is public), superclass edges included.
 #[test]
 fn pub_concept_with_private_superclass_is_rejected() {
     let source = r#"
@@ -372,9 +342,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
     );
 }
 
-// A *sealed* pub concept's fields are not interface — a private superclass is
-// a hidden implementation obligation, discharged by resolution without the
-// consumer ever naming it (the sealed-trait-with-private-supertrait idiom).
+// A *sealed* pub concept's fields are not interface — a private superclass is a hidden implementation obligation, discharged by resolution without the consumer ever naming it (the sealed-trait-with-private-supertrait idiom).
 #[test]
 fn sealed_pub_concept_with_private_superclass_is_accepted() {
     let source = r#"
@@ -397,8 +365,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
     assert_eq!(io.output(), b"ok");
 }
 
-// A pub inductive's constructors are its interface: a private payload type is
-// rejected (the `Async`/`Pause` shape).
+// A pub inductive's constructors are its interface: a private payload type is rejected (the `Async`/`Pause` shape).
 #[test]
 fn pub_inductive_with_private_payload_type_is_rejected() {
     let source = r#"
@@ -422,8 +389,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
     );
 }
 
-// An opaque struct's field types are not interface, while an inner-`pub`
-// struct's fields are.
+// An opaque struct's field types are not interface, while an inner-`pub` struct's fields are.
 #[test]
 fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
     let hidden = r#"
@@ -458,8 +424,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
     );
 }
 
-// `T { ..base, f = x }` copies every unwritten field from `base`; a bare
-// spread is the identity copy.
+// `T { ..base, f = x }` copies every unwritten field from `base`; a bare spread is the identity copy.
 #[test]
 fn struct_spread_identity_copy() {
     let source = r#"
@@ -491,8 +456,7 @@ fn struct_spread_single_override() {
     assert_eq!(io.output(), b"13");
 }
 
-// Overrides claim scattered positions (first and third), the gap copies —
-// the order-preserving-subsequence rule with a hole in the middle.
+// Overrides claim scattered positions (first and third), the gap copies — the order-preserving-subsequence rule with a hole in the middle.
 #[test]
 fn struct_spread_multi_override_with_gap() {
     let source = r#"
@@ -508,8 +472,7 @@ fn struct_spread_multi_override_with_gap() {
     assert_eq!(io.output(), b"42");
 }
 
-// A dependent record updates when the override keeps the dependency
-// consistent: `n` and `v : Vec(Nat, n)` replaced together.
+// A dependent record updates when the override keeps the dependency consistent: `n` and `v : Vec(Nat, n)` replaced together.
 #[test]
 fn struct_spread_dependent_override_runs() {
     let source = r#"
@@ -530,8 +493,7 @@ fn struct_spread_dependent_override_runs() {
     assert_eq!(io.output(), b"42");
 }
 
-// Overriding a field that a copied field's type depends on is rejected: the
-// copied `v` still has length 2, but the new telescope demands 3.
+// Overriding a field that a copied field's type depends on is rejected: the copied `v` still has length 2, but the new telescope demands 3.
 #[test]
 fn struct_spread_dependent_field_mismatch_rejected() {
     let source = r#"
@@ -546,9 +508,7 @@ fn struct_spread_dependent_field_mismatch_rejected() {
     assert!(crate::run_text(source, system).is_err());
 }
 
-// The head may re-pin parameters, so an update can change them: the base is a
-// `Pair(Nat, Nat)`, the result a `Pair(Str, Nat)` — the copied `snd` is
-// checked against the new instantiation.
+// The head may re-pin parameters, so an update can change them: the base is a `Pair(Nat, Nat)`, the result a `Pair(Str, Nat)` — the copied `snd` is checked against the new instantiation.
 #[test]
 fn struct_spread_parameter_changing_update() {
     let source = r#"
@@ -564,8 +524,7 @@ fn struct_spread_parameter_changing_update() {
     assert_eq!(io.output(), b"42");
 }
 
-// A bare head with a spread and no annotation: the parameter metavariables
-// are minted inside the base's frame and solved from the copied projections.
+// A bare head with a spread and no annotation: the parameter metavariables are minted inside the base's frame and solved from the copied projections.
 #[test]
 fn struct_spread_bare_head_inference() {
     let source = r#"
@@ -613,8 +572,7 @@ fn struct_spread_unlabeled_override_rejected() {
     assert!(error.contains("labeled"), "unexpected error: {error}");
 }
 
-// Overrides must follow the declared field order — the ordering law holds
-// through a spread.
+// Overrides must follow the declared field order — the ordering law holds through a spread.
 #[test]
 fn struct_spread_out_of_order_override_rejected() {
     let source = r#"
@@ -694,8 +652,7 @@ fn struct_spread_multiple_rejected() {
     assert!(error.contains("at most one"), "unexpected error: {error}");
 }
 
-// The base must be a value of the literal's own struct — a structurally
-// matching tuple does not qualify.
+// The base must be a value of the literal's own struct — a structurally matching tuple does not qualify.
 #[test]
 fn struct_spread_non_struct_base_rejected() {
     let source = r#"
@@ -733,8 +690,7 @@ fn struct_spread_wrong_struct_base_rejected() {
     );
 }
 
-// A spread is construction, so a private-representation struct cannot be
-// spread-copied outside its declaring module either.
+// A spread is construction, so a private-representation struct cannot be spread-copied outside its declaring module either.
 #[test]
 fn struct_spread_private_outside_module_rejected() {
     let source = r#"
@@ -757,9 +713,7 @@ fn struct_spread_private_outside_module_rejected() {
     );
 }
 
-// A private representation is transparent within its declaring module's
-// subtree: a descendant may construct and project it, so an abstraction can be
-// implemented across several files without exporting its representation.
+// A private representation is transparent within its declaring module's subtree: a descendant may construct and project it, so an abstraction can be implemented across several files without exporting its representation.
 #[test]
 fn struct_private_representation_open_in_descendant() {
     let source = r#"
@@ -782,8 +736,7 @@ fn struct_private_representation_open_in_descendant() {
     assert_eq!(io.output(), b"42");
 }
 
-// The relaxation is downward only. A sibling subtree is outside the declaring
-// module, so its representation stays opaque there.
+// The relaxation is downward only. A sibling subtree is outside the declaring module, so its representation stays opaque there.
 #[test]
 fn struct_private_representation_closed_to_siblings() {
     let source = r#"
@@ -810,8 +763,7 @@ fn struct_private_representation_closed_to_siblings() {
     );
 }
 
-// An opaque inductive is eliminable throughout its declaring subtree, matching
-// the struct rule — the whole family of eliminators moves together.
+// An opaque inductive is eliminable throughout its declaring subtree, matching the struct rule — the whole family of eliminators moves together.
 #[test]
 fn opaque_inductive_is_eliminable_in_a_descendant() {
     let source = r#"
@@ -841,9 +793,7 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
     assert_eq!(io.output(), b"42");
 }
 
-// `/std/Async` keeps `Future` and `Waker` as private child modules and
-// re-exports only the two type names, so a program can name a `Future` but
-// cannot reach the scheduler plumbing that drives one.
+// `/std/Async` keeps `Future` and `Waker` as private child modules and re-exports only the two type names, so a program can name a `Future` but cannot reach the scheduler plumbing that drives one.
 #[test]
 fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"

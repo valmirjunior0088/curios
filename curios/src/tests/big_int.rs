@@ -2,10 +2,7 @@ use super::run;
 
 #[test]
 fn bigint_add_crosses_zero_in_both_directions() {
-    // Mixed-sign `add` routes through `pos_sub`, which reads the sign straight
-    // off `cmp`: the same magnitudes flipped land exactly on the other side of
-    // zero, and equal magnitudes land on zero itself — which has its own
-    // constructor, so "-0" cannot even be produced.
+    // Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `cmp`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
     let source = r#"
         use /std/{Handle, Str, Lst, BigInt};
         /std/print(Str/join(",", [
@@ -18,8 +15,7 @@ fn bigint_add_crosses_zero_in_both_directions() {
 
 #[test]
 fn bigint_sub_is_total() {
-    // Unlike `BigNat/sub`, the signed `sub` never truncates: subtracting a
-    // larger value produces the genuine negative difference.
+    // Unlike `BigNat/sub`, the signed `sub` never truncates: subtracting a larger value produces the genuine negative difference.
     let source = r#"
         use /std/{Handle, Str, BigInt};
         /std/print(BigInt/to_str(BigInt/sub(BigInt/of_nat(1), BigInt/of_nat(100000000))))
@@ -29,9 +25,7 @@ fn bigint_sub_is_total() {
 
 #[test]
 fn bigint_mul_multiplies_signs() {
-    // The sign of a product is the product of the signs, and the magnitude
-    // rides `BigNat`'s numeral past any fixed width: (-99999) * (-99999) and
-    // (+99999) * (-99999) differ only in sign.
+    // The sign of a product is the product of the signs, and the magnitude rides `BigNat`'s numeral past any fixed width: (-99999) * (-99999) and (+99999) * (-99999) differ only in sign.
     let source = r#"
         use /std/{Handle, Str, Lst, BigInt};
         /std/print(Str/join(",", [
@@ -44,8 +38,7 @@ fn bigint_mul_multiplies_signs() {
 
 #[test]
 fn bigint_cmp_orders_across_signs() {
-    // `cmp` decides by sign first and only then by magnitude — where the
-    // negative stratum orders REVERSED: -2 < -1 even though 2 > 1.
+    // `cmp` decides by sign first and only then by magnitude — where the negative stratum orders REVERSED: -2 < -1 even though 2 > 1.
     let source = r#"
         use /std/{Handle, Str, BigInt, Order};
         let show(o : Order) -> Str =
@@ -66,10 +59,7 @@ fn bigint_cmp_orders_across_signs() {
 
 #[test]
 fn bigint_of_int_crosses_the_i31_boundary() {
-    // `of_int` decodes a native `Int` sign-and-magnitude: the largest
-    // magnitude whose negation also fits the i31 carrier round-trips through
-    // the numeral in both signs and renders Int-style. (The carrier minimum
-    // itself is out of reach: `Int/abs(-2^30)` has no i31 representation.)
+    // `of_int` decodes a native `Int` sign-and-magnitude: the largest magnitude whose negation also fits the i31 carrier round-trips through the numeral in both signs and renders Int-style. (The carrier minimum itself is out of reach: `Int/abs(-2^30)` has no i31 representation.)
     let source = r#"
         use /std/{Handle, Str, Lst, BigInt};
         /std/print(Str/join(",", [
@@ -82,8 +72,7 @@ fn bigint_of_int_crosses_the_i31_boundary() {
 
 #[test]
 fn bigint_neg_abs_and_parity() {
-    // `neg` is an involution that `abs` collapses, and `is_even`/`div2` read
-    // the magnitude: -101 is odd and halves toward zero to -50.
+    // `neg` is an involution that `abs` collapses, and `is_even`/`div2` read the magnitude: -101 is odd and halves toward zero to -50.
     let source = r#"
         use /std/{Handle, Str, Bool, Lst, BigInt};
         let show(b : Bool) -> Str =
@@ -104,9 +93,7 @@ fn bigint_neg_abs_and_parity() {
 
 #[test]
 fn bigint_operators_dispatch_through_concepts() {
-    // The `/std` facades carry `Add`/`Sub`/`Mul`/`Eql`/`Cmp`/`Show` witnesses
-    // for `BigInt`, so the operator syntax and `show` resolve on it like on
-    // any native numeric type.
+    // The `/std` facades carry `Add`/`Sub`/`Mul`/`Eql`/`Cmp`/`Show` witnesses for `BigInt`, so the operator syntax and `show` resolve on it like on any native numeric type.
     let source = r#"
         use /std/{Handle, Str, Bool, Lst, BigInt, Show};
         let a = BigInt/of_int(-6);

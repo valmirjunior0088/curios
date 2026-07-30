@@ -1,10 +1,6 @@
-//! End-to-end test of the `compile` subcommand's bundler: compile a program to a
-//! native executable, run it, and check its output.
+//! End-to-end test of the `compile` subcommand's bundler: compile a program to a native executable, run it, and check its output.
 //!
-//! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds
-//! its launcher, so the produced executable is self-contained — but the compiler
-//! itself only builds once `make` has generated its target-scoped runtime launcher.
-//! Run it with:
+//! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `make` has generated its target-scoped runtime launcher. Run it with:
 //!
 //! ```sh
 //! make curios/runtime

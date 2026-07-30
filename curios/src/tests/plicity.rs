@@ -1,6 +1,4 @@
-//! End-to-end tests for binder plicity: automatic insertion of omitted hidden
-//! lambda binders (Phase 3), exact checking of written function binders
-//! (Phase 1), and exact checking of constructor-pattern plicity (Phase 2).
+//! End-to-end tests for binder plicity: automatic insertion of omitted hidden lambda binders (Phase 3), exact checking of written function binders (Phase 1), and exact checking of constructor-pattern plicity (Phase 2).
 
 use super::run;
 use crate::run_text;
@@ -14,8 +12,7 @@ fn error(source: &str) -> String {
     }
 }
 
-// A lambda checked against `(@A : Type, x : A) -> A` may omit the implicit
-// binder entirely: elaboration inserts `@A` and binds the sole explicit slot.
+// A lambda checked against `(@A : Type, x : A) -> A` may omit the implicit binder entirely: elaboration inserts `@A` and binds the sole explicit slot.
 #[test]
 fn lambda_inserts_an_omitted_implicit_binder() {
     let source = r#"
@@ -26,8 +23,7 @@ fn lambda_inserts_an_omitted_implicit_binder() {
     assert_eq!(run(source), b"5");
 }
 
-// The same definition may instead write the implicit binder explicitly; both
-// spellings elaborate to the same canonical function.
+// The same definition may instead write the implicit binder explicitly; both spellings elaborate to the same canonical function.
 #[test]
 fn lambda_may_write_the_implicit_binder() {
     let source = r#"
@@ -38,9 +34,7 @@ fn lambda_may_write_the_implicit_binder() {
     assert_eq!(run(source), b"5");
 }
 
-// A lambda checked against a type with both an implicit and a witness binder may
-// omit both. The inserted witness binder still joins witness resolution, so the
-// body resolves `Show(A)` through it.
+// A lambda checked against a type with both an implicit and a witness binder may omit both. The inserted witness binder still joins witness resolution, so the body resolves `Show(A)` through it.
 #[test]
 fn lambda_inserts_an_omitted_witness_binder() {
     let source = r#"
@@ -51,8 +45,7 @@ fn lambda_inserts_an_omitted_witness_binder() {
     assert_eq!(run(source), b"7");
 }
 
-// The witness binder may be written and named with `use`; the body may then
-// reference it directly.
+// The witness binder may be written and named with `use`; the body may then reference it directly.
 #[test]
 fn lambda_may_write_the_witness_binder() {
     let source = r#"
@@ -63,8 +56,7 @@ fn lambda_may_write_the_witness_binder() {
     assert_eq!(run(source), b"7");
 }
 
-// A plain binder can never bind a hidden slot: written against `(@A, x) -> A`,
-// the first plain binder claims the sole explicit slot, so the second is surplus.
+// A plain binder can never bind a hidden slot: written against `(@A, x) -> A`, the first plain binder claims the sole explicit slot, so the second is surplus.
 #[test]
 fn lambda_plain_binder_never_binds_a_hidden_slot() {
     let source = r#"
@@ -76,8 +68,7 @@ fn lambda_plain_binder_never_binds_a_hidden_slot() {
     assert!(error(source).contains("arguments"), "{}", error(source));
 }
 
-// A marked binder that reaches an explicit slot is a plicity mismatch: writing
-// `@x` for a plain parameter is rejected, naming the required spelling.
+// A marked binder that reaches an explicit slot is a plicity mismatch: writing `@x` for a plain parameter is rejected, naming the required spelling.
 #[test]
 fn lambda_marked_binder_on_explicit_slot_is_rejected() {
     let source = r#"
@@ -92,8 +83,7 @@ fn lambda_marked_binder_on_explicit_slot_is_rejected() {
     );
 }
 
-// A constructor pattern must mark an implicit payload slot with `@`. `Vec/cons`
-// declares its length index implicit, so the arm binds it with `@`.
+// A constructor pattern must mark an implicit payload slot with `@`. `Vec/cons` declares its length index implicit, so the arm binds it with `@`.
 #[test]
 fn constructor_pattern_matches_an_implicit_payload() {
     let source = r#"
@@ -107,8 +97,7 @@ fn constructor_pattern_matches_an_implicit_payload() {
     assert_eq!(run(source), b"1");
 }
 
-// Matching an implicit payload with a plain binder is rejected — the pattern
-// must carry `@`.
+// Matching an implicit payload with a plain binder is rejected — the pattern must carry `@`.
 #[test]
 fn constructor_pattern_plain_on_implicit_payload_is_rejected() {
     let source = r#"

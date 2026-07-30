@@ -2,12 +2,7 @@ use {super::run, curios_runtime::MockHost};
 
 #[test]
 fn utf8_slice_proof_aligns_with_byte_walk() {
-    // The corrected `slice_closed` shape: a RELEVANT byte walk (`to_lead_bytes`) and
-    // a MIRRORING proof walk (`to_lead_proof : Valid(to_lead_bytes(s, b))`). The proof
-    // peels the derivation while the byte function reduces in lockstep — which only
-    // works now that the `Bytes` eliminator decodes a *symbolic* cons (the new reduce
-    // rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to
-    // `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
+    // The corrected `slice_closed` shape: a RELEVANT byte walk (`to_lead_bytes`) and a MIRRORING proof walk (`to_lead_proof : Valid(to_lead_bytes(s, b))`). The proof peels the derivation while the byte function reduces in lockstep — which only works now that the `Bytes` eliminator decodes a *symbolic* cons (the new reduce rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
     let source = r#"
         use /std/{Handle, Byte, Bytes, Nat, Bool};
 
@@ -104,16 +99,7 @@ fn str_literal_prints_its_bytes() {
     assert_eq!(io.output(), b"hello");
 }
 
-// A string literal lowers to a right-nested certified UTF-8 derivation —
-// `more(c, st, t, rest)`, one link per byte. The elaboration cache collapses the
-// `Rc`-shared per-byte scan-state chains hanging off each link, but the spine
-// nodes themselves are each unique, so sharing-oblivious elaboration still
-// recursed one native frame per link and overflowed a default 2MB test thread
-// near ~50 bytes. Iterative (defunctionalized) elaboration now walks the spine
-// on an explicit heap frame stack at O(1) native depth per link, so the length
-// a literal can reach is bounded by the reduction budget, not the stack. This
-// 500-byte literal sits an order of magnitude past that old cliff. See
-// curios-elab/README.md.
+// A string literal lowers to a right-nested certified UTF-8 derivation — `more(c, st, t, rest)`, one link per byte. The elaboration cache collapses the `Rc`-shared per-byte scan-state chains hanging off each link, but the spine nodes themselves are each unique, so sharing-oblivious elaboration still recursed one native frame per link and overflowed a default 2MB test thread near ~50 bytes. Iterative (defunctionalized) elaboration now walks the spine on an explicit heap frame stack at O(1) native depth per link, so the length a literal can reach is bounded by the reduction budget, not the stack. This 500-byte literal sits an order of magnitude past that old cliff. See curios-elab/README.md.
 #[test]
 fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff
@@ -158,8 +144,7 @@ fn str_of_bytes_rejects_invalid_utf8() {
     assert_eq!(io.output(), b"rejected");
 }
 
-// A truncated multi-byte sequence (a 2-byte lead with no continuation) fails the
-// continuation-byte check, so `of_bin` returns `none`.
+// A truncated multi-byte sequence (a 2-byte lead with no continuation) fails the continuation-byte check, so `of_bin` returns `none`.
 #[test]
 fn str_of_bytes_rejects_truncated_multibyte() {
     let source = r#"
@@ -175,14 +160,7 @@ fn str_of_bytes_rejects_truncated_multibyte() {
     assert_eq!(io.output(), b"rejected");
 }
 
-// The UTF-8 decode certification lemmas: naming them forces their bodies to
-// elaborate (demand-driven checking). `cont_len` is the one that exercises the
-// comparison intrinsic — `step` only reduces in `cont` state because
-// `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_scalars`/
-// `decode_head` are the cursor-free decode core: `peel_byte` advances the
-// (prop) validity witness one byte without ever large-eliminating it,
-// `count_scalars` is the codepoint count `len` is built on, and `decode_head`
-// reads the head codepoint from the relevant bytes under that witness.
+// The UTF-8 decode certification lemmas: naming them forces their bodies to elaborate (demand-driven checking). `cont_len` is the one that exercises the comparison intrinsic — `step` only reduces in `cont` state because `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_scalars`/ `decode_head` are the cursor-free decode core: `peel_byte` advances the (prop) validity witness one byte without ever large-eliminating it, `count_scalars` is the codepoint count `len` is built on, and `decode_head` reads the head codepoint from the relevant bytes under that witness.
 #[test]
 fn utf8_decode_lemmas_type_check() {
     let source = r#"
@@ -197,9 +175,7 @@ fn utf8_decode_lemmas_type_check() {
     assert_eq!(io.output(), b"ok");
 }
 
-// `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
-// `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
-// codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
+// `Str/len` and `Str/get` count and index by codepoint, not byte. The string is `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
 #[test]
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
@@ -221,9 +197,7 @@ fn str_get_indexes_codepoints_of_every_width() {
     assert_eq!(io.output(), b"3,97,8364,128512");
 }
 
-// `Str/at` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into
-// the `Bytes/at` bound, so it reads each codepoint with no fallback. Indexing `a€😀`
-// at 0, 1, 2 yields U+0061, U+20AC, U+1F600 — same widths as `get`, but total.
+// `Str/at` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into the `Bytes/at` bound, so it reads each codepoint with no fallback. Indexing `a€😀` at 0, 1, 2 yields U+0061, U+20AC, U+1F600 — same widths as `get`, but total.
 #[test]
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
@@ -255,8 +229,7 @@ fn str_at_reads_codepoints_with_the_proof() {
     assert_eq!(io.output(), b"97,8364,128512");
 }
 
-// `Str/slice` cuts at codepoint boundaries, so slicing `[1, 2)` out of `a€😀`
-// yields the whole 3-byte euro sign — never a split sequence.
+// `Str/slice` cuts at codepoint boundaries, so slicing `[1, 2)` out of `a€😀` yields the whole 3-byte euro sign — never a split sequence.
 #[test]
 fn str_slice_cuts_on_codepoint_boundaries() {
     let source = r#"
@@ -272,10 +245,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
     assert_eq!(io.output(), [0xe2, 0x82, 0xac]);
 }
 
-// An interior `Str/slice` over a mixed-width string exercises the single-pass
-// O(n) cut: `drop_n` skips the leading `a` (1 byte) and `take_n` keeps the next
-// three scalars (`é€😀`, of widths 2, 3, 4) as one window — never splitting a
-// sequence. `aé€😀b` sliced `[1, 4)` yields `é€😀`.
+// An interior `Str/slice` over a mixed-width string exercises the single-pass O(n) cut: `drop_n` skips the leading `a` (1 byte) and `take_n` keeps the next three scalars (`é€😀`, of widths 2, 3, 4) as one window — never splitting a sequence. `aé€😀b` sliced `[1, 4)` yields `é€😀`.
 #[test]
 fn str_slice_spans_every_codepoint_width() {
     let source = r#"
@@ -294,9 +264,7 @@ fn str_slice_spans_every_codepoint_width() {
     );
 }
 
-// `Str/trim` is string-typed and strips only the leading/trailing ASCII
-// whitespace, leaving the interior multibyte scalar (`café`, with a 2-byte `é`)
-// intact.
+// `Str/trim` is string-typed and strips only the leading/trailing ASCII whitespace, leaving the interior multibyte scalar (`café`, with a 2-byte `é`) intact.
 #[test]
 fn str_trim_keeps_interior_multibyte() {
     let source = r#"
@@ -312,8 +280,7 @@ fn str_trim_keeps_interior_multibyte() {
     assert_eq!(io.output(), [0x63, 0x61, 0x66, 0xc3, 0xa9]);
 }
 
-// An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`,
-// and the `Nat/min` guard collapses the slice to nothing rather than trapping.
+// An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`, and the `Nat/min` guard collapses the slice to nothing rather than trapping.
 #[test]
 fn str_trim_all_whitespace_is_empty() {
     let source = r#"
@@ -450,20 +417,10 @@ fn character_literals_do_not_coerce_to_numeric_domains() {
     }
 }
 
-// A *non-productive* inner `rec` forced in a type position must degrade to the
-// reduce budget (an error), never hang or panic — the regression guard for
-// inner-`rec` reduction at the type level (a `Subterm::Rec` demanded by an
-// eliminator is now forced, not left stuck).
+// A *non-productive* inner `rec` forced in a type position must degrade to the reduce budget (an error), never hang or panic — the regression guard for inner-`rec` reduction at the type level (a `Subterm::Rec` demanded by an eliminator is now forced, not left stuck).
 #[test]
 fn utf8_inductive_spike() {
-    // DE-RISKING PROBE (Str migration): a state-indexed inductive relation over a
-    // native `Bytes` index, with `cons(c, t)` encoded as `concat(append(x\, c), t)`.
-    // The point is `seq` (the concatenation lemma underlying `concat_closed`): a
-    // 2-case induction on the derivation whose arms close ONLY if the native-Bytes
-    // free-monoid laws hold *definitionally* — `concat(x\, b) ≡ b` (stop arm) and
-    // `concat(concat(single c, t), b) ≡ concat(single c, concat(t, b))` (more arm).
-    // If this typechecks, the inductive-`IsUtf8` approach is viable and the
-    // cons-index inversion limit does not bite the proof path.
+    // DE-RISKING PROBE (Str migration): a state-indexed inductive relation over a native `Bytes` index, with `cons(c, t)` encoded as `concat(append(x\, c), t)`. The point is `seq` (the concatenation lemma underlying `concat_closed`): a 2-case induction on the derivation whose arms close ONLY if the native-Bytes free-monoid laws hold *definitionally* — `concat(x\, b) ≡ b` (stop arm) and `concat(concat(single c, t), b) ≡ concat(single c, concat(t, b))` (more arm). If this typechecks, the inductive-`IsUtf8` approach is viable and the cons-index inversion limit does not bite the proof path.
     let source = r#"
         use /std/{Handle, Str, Nat, Bytes};
 
@@ -500,13 +457,7 @@ fn utf8_inductive_spike() {
 
 #[test]
 fn utf8_construction_spike() {
-    // DE-RISKING PROBE 2 (Str migration), the CONSTRUCTING side: the `of_bin`
-    // checker must BUILD a derivation whose index matches the input `Bytes`, by
-    // native-`Bytes` recursion. That needs the native eliminator's motive to be
-    // DEPENDENT — refining `b` to `cons(h, t)` in the cons arm so the arm can
-    // return `P(cons h t)` from `ih : P(t)`. Probe with the trivial all-accepting
-    // relation `All` built by induction on `b`. If this typechecks, the checker is
-    // expressible (real decision-procedure work, but no missing primitive).
+    // DE-RISKING PROBE 2 (Str migration), the CONSTRUCTING side: the `of_bin` checker must BUILD a derivation whose index matches the input `Bytes`, by native-`Bytes` recursion. That needs the native eliminator's motive to be DEPENDENT — refining `b` to `cons(h, t)` in the cons arm so the arm can return `P(cons h t)` from `ih : P(t)`. Probe with the trivial all-accepting relation `All` built by induction on `b`. If this typechecks, the checker is expressible (real decision-procedure work, but no missing primitive).
     let source = r#"
         use /std/{Handle, Str, Nat, Bytes};
 
@@ -528,13 +479,7 @@ fn utf8_construction_spike() {
 
 #[test]
 fn utf8_concat_closed_holds_for_the_real_automaton() {
-    // INCREMENT A of the Str migration: `concat_closed` against the ACTUAL UTF-8
-    // `Scan`/`classify`/`step` automaton from std/Str.crs (not the spike's stub).
-    // The spike showed `seq` is step-agnostic — it threads `step(c, s)` without
-    // inspecting it — so swapping in the real, range-checking automaton changes
-    // nothing in the proof: both arms still close by the definitional free-monoid
-    // laws (`concat(x\, b) ≡ b`; associativity). This is the lemma that earns the
-    // proof-carrying newtype: `Valid(a) -> Valid(b) -> Valid(concat a b)`.
+    // INCREMENT A of the Str migration: `concat_closed` against the ACTUAL UTF-8 `Scan`/`classify`/`step` automaton from std/Str.crs (not the spike's stub). The spike showed `seq` is step-agnostic — it threads `step(c, s)` without inspecting it — so swapping in the real, range-checking automaton changes nothing in the proof: both arms still close by the definitional free-monoid laws (`concat(x\, b) ≡ b`; associativity). This is the lemma that earns the proof-carrying newtype: `Valid(a) -> Valid(b) -> Valid(concat a b)`.
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes, Bool};
 
@@ -615,15 +560,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
 
 #[test]
 fn utf8_of_bin_checker_decides_and_builds_derivations() {
-    // INCREMENT B of the Str migration: the `of_bin` decision procedure. It must
-    // both DECIDE validity at runtime and BUILD a real `Utf8` derivation in the
-    // `some` case. The native `Bytes` eliminator is a fold (its `ih` is the
-    // fold-of-tail with fixed parameters), but the checker threads a changing
-    // `Scan` state — so we fold `b` into a FUNCTION `(s) -> Option(Utf8(s, b))`
-    // (foldl-as-foldr convoy), letting each step receive its state from the caller.
-    // `of_bin_valid(b) = check(b)(lead)`. The runtime `decide` proves the automaton
-    // actually runs: "hi" (ASCII) is accepted, a lone `x\80` continuation byte is
-    // rejected — output "yesno".
+    // INCREMENT B of the Str migration: the `of_bin` decision procedure. It must both DECIDE validity at runtime and BUILD a real `Utf8` derivation in the `some` case. The native `Bytes` eliminator is a fold (its `ih` is the fold-of-tail with fixed parameters), but the checker threads a changing `Scan` state — so we fold `b` into a FUNCTION `(s) -> Option(Utf8(s, b))` (foldl-as-foldr convoy), letting each step receive its state from the caller. `of_bin_valid(b) = check(b)(lead)`. The runtime `decide` proves the automaton actually runs: "hi" (ASCII) is accepted, a lone `x\80` continuation byte is rejected — output "yesno".
     let source = r#"
         use /std/{Handle, Str, Nat, Bytes, Bool, Option};
 
@@ -717,15 +654,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
 
 #[test]
 fn utf8_decimal_is_ascii_carries_its_proof() {
-    // INCREMENT C of the Str migration: producers (`Nat/to_str`) must yield a
-    // `Valid` Bytes without a bridge. The trick that avoids ALL Nat-comparison
-    // arithmetic: `digit` emits each decimal digit as a CONCRETE byte literal per
-    // branch, so `step(byte, lead)` *reduces* to `lead` and the per-digit proof is
-    // just `refl`. `single` wraps one ASCII byte into a `Valid` via `subst` over
-    // that proof; `decimal` recurses and combines the high digits with the low one
-    // through the already-proven `concat_closed`. The result type — `decimal` returns
-    // a dependent pair `{ b : Bytes, v : Valid(b) }` — IS `decimal_is_ascii`. Runtime
-    // check: `decimal(255).b` renders "255", proving the bytes are real digits.
+    // INCREMENT C of the Str migration: producers (`Nat/to_str`) must yield a `Valid` Bytes without a bridge. The trick that avoids ALL Nat-comparison arithmetic: `digit` emits each decimal digit as a CONCRETE byte literal per branch, so `step(byte, lead)` *reduces* to `lead` and the per-digit proof is just `refl`. `single` wraps one ASCII byte into a `Valid` via `subst` over that proof; `decimal` recurses and combines the high digits with the low one through the already-proven `concat_closed`. The result type — `decimal` returns a dependent pair `{ b : Bytes, v : Valid(b) }` — IS `decimal_is_ascii`. Runtime check: `decimal(255).b` renders "255", proving the bytes are real digits.
     let source = r#"
         use /std/{Handle, Str, Nat, Bytes, Bool, Eq};
 
@@ -842,16 +771,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
 
 #[test]
 fn utf8_slice_closed_peels_codepoints() {
-    // INCREMENT (slice_closed), the hard tail: prove codepoint slicing preserves
-    // validity WITHOUT byte-offset reasoning. Walk the derivation, peeling one
-    // codepoint at a time (a `more`-run from `lead` back to `lead`). The core lemma
-    // `take_to_lead` walks from any state to the next `lead` boundary, returning the
-    // consumed codepoint-fragment (with its derivation `midd : Utf8(s, mid)`) and the
-    // valid remainder `tv : Valid(tail)`. `take1`/`drop1` then split the first
-    // codepoint; iterating them (mechanical) gives `slice`, reassembled via
-    // `concat_closed`. The `bad` state never reaches `lead`, but the arm still
-    // elaborates for a general index (its `stop` prunes; it's just never hit at
-    // runtime on valid input).
+    // INCREMENT (slice_closed), the hard tail: prove codepoint slicing preserves validity WITHOUT byte-offset reasoning. Walk the derivation, peeling one codepoint at a time (a `more`-run from `lead` back to `lead`). The core lemma `take_to_lead` walks from any state to the next `lead` boundary, returning the consumed codepoint-fragment (with its derivation `midd : Utf8(s, mid)`) and the valid remainder `tv : Valid(tail)`. `take1`/`drop1` then split the first codepoint; iterating them (mechanical) gives `slice`, reassembled via `concat_closed`. The `bad` state never reaches `lead`, but the arm still elaborates for a general index (its `stop` prunes; it's just never hit at runtime on valid input).
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes, Bool};
 

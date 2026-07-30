@@ -2,9 +2,7 @@ use curios_runtime::MockHost;
 
 #[test]
 fn match_omitted_motive_infers() {
-    // The same induction as `triangular_sum`, but with the motive omitted. It is
-    // non-dependent (every arm has type `std/Nat`), so the synthesized metavar
-    // motive is solved by the arms — no explicit `: std/Nat` needed.
+    // The same induction as `triangular_sum`, but with the motive omitted. It is non-dependent (every arm has type `std/Nat`), so the synthesized metavar motive is solved by the arms — no explicit `: std/Nat` needed.
     let source = r#"
         let result : std/Nat =
             match 5
@@ -21,13 +19,7 @@ fn match_omitted_motive_infers() {
 
 #[test]
 fn implicit_inductive_type_param_executes() {
-    // A `@`-marked inductive parameter is implicit at the type constructor too:
-    // `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and
-    // the eliminator's motive type-pattern still spells every slot. Running
-    // (not just checking) also guards metavariable spines through the
-    // Π-domain close/reopen round trip: a solved implicit type-arg's solution
-    // names a sibling binder, and without the delayed substitution the two
-    // spellings of the same domain compare as distinct.
+    // A `@`-marked inductive parameter is implicit at the type constructor too: `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and the eliminator's motive type-pattern still spells every slot. Running (not just checking) also guards metavariable spines through the Π-domain close/reopen round trip: a solved implicit type-arg's solution names a sibling binder, and without the delayed substitution the two spellings of the same domain compare as distinct.
     let source = r#"
         use /std/{Nat, Bytes, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
@@ -52,9 +44,7 @@ fn implicit_inductive_type_param_executes() {
 
 #[test]
 fn implicit_inductive_type_param_rejects_explicit_spelling() {
-    // With `@A` implicit, the old explicit spelling queues `Nat` into the
-    // explicit slots — one argument too many, an error rather than a silent
-    // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
+    // With `@A` implicit, the old explicit spelling queues `Nat` into the explicit slots — one argument too many, an error rather than a silent reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
     let source = r#"
         use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
@@ -70,12 +60,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
 
 #[test]
 fn parked_constraints_let_nested_constructor_metas_resolve() {
-    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh
-    // metas as flex–flex pairs embedded under the inductive type. Before the
-    // constraint store (§8) the argument's `expect` failed at quiescence,
-    // seconds before the result-type unification would have pinned
-    // everything. Now the pairs park, the output `expect` solves the domain
-    // metas against the annotation, and the wake retries the parked pairs.
+    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh metas as flex–flex pairs embedded under the inductive type. Before the constraint store (§8) the argument's `expect` failed at quiescence, seconds before the result-type unification would have pinned everything. Now the pairs park, the output `expect` solves the domain metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
         use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
@@ -99,9 +84,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
 
 #[test]
 fn parked_constraints_still_reject_the_unsolvable() {
-    // An undecidable-at-first constraint that never resolves must still fail —
-    // at the item drain, attributed to its origin. `refl` forces both indices
-    // equal; `2` and `3` are not.
+    // An undecidable-at-first constraint that never resolves must still fail — at the item drain, attributed to its origin. `refl` forces both indices equal; `2` and `3` are not.
     let source = r#"
         use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
@@ -117,11 +100,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
 
 #[test]
 fn omitted_motive_infers_over_a_compound_scrutinee() {
-    // The motive hole's scope is opened with the scrutinee — a non-pattern
-    // spine entry when the scrutinee is compound. Occurrence abstraction in
-    // `solve` rewrites the scrutinee's occurrences in the expected type to
-    // the motive binder, so the dependent motive infers where it previously
-    // had to be spelled.
+    // The motive hole's scope is opened with the scrutinee — a non-pattern spine entry when the scrutinee is compound. Occurrence abstraction in `solve` rewrites the scrutinee's occurrences in the expected type to the motive binder, so the dependent motive infers where it previously had to be spelled.
     let source = r#"
         use /std/{Nat, Vec, Handle};
         rec build(n : Nat) -> Vec(Nat, n) =
@@ -144,11 +123,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
 
 #[test]
 fn bare_tuple_continuation_tail_infers() {
-    // The recorded dead-end from the result-directed elaboration work: a bare
-    // tuple in a monadic continuation's tail, its expected type a metavariable
-    // pinned only by the *outer* apply's result unification. The in-apply
-    // postponement defers the tuple, the constraint store parks the flex–flex
-    // codomain pair across the inner apply, and the outer pin wakes both.
+    // The recorded dead-end from the result-directed elaboration work: a bare tuple in a monadic continuation's tail, its expected type a metavariable pinned only by the *outer* apply's result unification. The in-apply postponement defers the tuple, the constraint store parks the flex–flex codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
         use /std/{Parse, Byte, Nat, Bytes, Handle};
         let pairer : Parse({ Byte, Byte }) =
@@ -169,11 +144,7 @@ fn bare_tuple_continuation_tail_infers() {
 
 #[test]
 fn checking_problem_parks_until_an_outer_pin_lands() {
-    // The constraint store's own window: the inner apply's output expect
-    // parks (provisional success), so the postponed tuple re-check meets a
-    // still-unsolved expected type — it now parks as a *checking problem*
-    // behind a placeholder metavariable, and the outer annotation's pin wakes
-    // it. Before ParkedWork::Checking this was a NotATupleType error.
+    // The constraint store's own window: the inner apply's output expect parks (provisional success), so the postponed tuple re-check meets a still-unsolved expected type — it now parks as a *checking problem* behind a placeholder metavariable, and the outer annotation's pin wakes it. Before ParkedWork::Checking this was a NotATupleType error.
     let source = r#"
         use /std/{Nat, Lst, Handle};
         let mk(@A : Type, a : A) -> Lst(A) = [a];
@@ -192,8 +163,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
 
 #[test]
 fn checking_problem_without_a_pin_still_rejects() {
-    // A checking problem whose expected type is never pinned drains as a
-    // cannot-infer at the tuple's own span — parked, not silently accepted.
+    // A checking problem whose expected type is never pinned drains as a cannot-infer at the tuple's own span — parked, not silently accepted.
     let source = r#"
         use /std/{Nat, Handle};
         let swallow(@A : Type, a : A) -> Nat = 0;
@@ -205,10 +175,7 @@ fn checking_problem_without_a_pin_still_rejects() {
     assert!(crate::run_text(source, system).is_err());
 }
 
-// Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is
-// implicit — must insert that implicit when the motive is instantiated. It used
-// to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which
-// panicked `reduce_apply` with "telescope arity mismatch".
+// Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is implicit — must insert that implicit when the motive is instantiated. It used to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panicked `reduce_apply` with "telescope arity mismatch".
 #[test]
 fn subst_motive_inserts_implicit_in_eq() {
     let source = r#"
@@ -225,9 +192,7 @@ fn subst_motive_inserts_implicit_in_eq() {
     assert_eq!(io.output(), b"ok");
 }
 
-// A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in
-// type position — same infinite-spin behavior as a top-level `rec` — so a
-// step budget stops it with an error rather than hanging.
+// A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in type position — same infinite-spin behavior as a top-level `rec` — so a step budget stops it with an error rather than hanging.
 #[test]
 fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
     let source = r#"
@@ -248,10 +213,7 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
     assert!(crate::run_text(source, system).is_err());
 }
 
-// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is
-// inferred from an argument's concrete type — `?M(?A) ≡ Lst(Nat)` commits
-// `?M := (A) => Lst(A)` and `?A := Nat` — where previously only the explicit
-// `apply_m(@Lst, l)` spelling checked.
+// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is inferred from an argument's concrete type — `?M(?A) ≡ Lst(Nat)` commits `?M := (A) => Lst(A)` and `?A := Nat` — where previously only the explicit `apply_m(@Lst, l)` spelling checked.
 #[test]
 fn higher_kinded_implicit_infers_by_imitation() {
     let source = r#"
@@ -267,15 +229,7 @@ fn higher_kinded_implicit_infers_by_imitation() {
     assert_eq!(io.output(), b"2");
 }
 
-// A postponed argument keeps its *raw* surface spelling when `elaborate_apply`
-// opens the rest of the telescope, and that spelling is load-bearing: reducing
-// through it is what lets the result `expect` pin the metavariables the slot is
-// waiting on. But `elaborate_proj` only resolves a label projection on the
-// *checked* form, so beta-reducing a raw lambda body through the result type
-// manufactures `head.label` where the settled spelling is `head.index` — a term
-// `reduce_proj` once declared `unreachable!`. The result `expect` is now
-// two-phase: best-effort through the raw spelling, then authoritative through
-// the settled arguments.
+// A postponed argument keeps its *raw* surface spelling when `elaborate_apply` opens the rest of the telescope, and that spelling is load-bearing: reducing through it is what lets the result `expect` pin the metavariables the slot is waiting on. But `elaborate_proj` only resolves a label projection on the *checked* form, so beta-reducing a raw lambda body through the result type manufactures `head.label` where the settled spelling is `head.index` — a term `reduce_proj` once declared `unreachable!`. The result `expect` is now two-phase: best-effort through the raw spelling, then authoritative through the settled arguments.
 #[test]
 fn postponed_lambda_projecting_by_label_elaborates() {
     let source = r#"
@@ -296,13 +250,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
     assert_eq!(io.output(), b"7");
 }
 
-// Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B
-// probe in `reduce`). A concept-dispatched comparison reduces past the `Cmp`
-// wrapper to a primitive normal form, which is not an application — so before
-// `head_label` covered primitives, `match a <= hi` registered a refinement key
-// the probe could never look up and the arm silently failed to refine, while the
-// equivalent `Nat/lte(a, hi)` spelling worked. Operators must be usable in a
-// proof-carrying position, not just the primitive spelling.
+// Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B probe in `reduce`). A concept-dispatched comparison reduces past the `Cmp` wrapper to a primitive normal form, which is not an application — so before `head_label` covered primitives, `match a <= hi` registered a refinement key the probe could never look up and the arm silently failed to refine, while the equivalent `Nat/lte(a, hi)` spelling worked. Operators must be usable in a proof-carrying position, not just the primitive spelling.
 #[test]
 fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"

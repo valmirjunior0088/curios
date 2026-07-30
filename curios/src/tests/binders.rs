@@ -1,14 +1,8 @@
-//! End-to-end tests for binder *scoping*: a lambda's parameter list is a
-//! dependent telescope, so a later binder's annotation sees the earlier
-//! binders, exactly as a Π type's later domains do. Plicity of those binders is
-//! `plicity.rs`; irrefutable pattern shapes are `aggregates.rs`.
+//! End-to-end tests for binder *scoping*: a lambda's parameter list is a dependent telescope, so a later binder's annotation sees the earlier binders, exactly as a Π type's later domains do. Plicity of those binders is `plicity.rs`; irrefutable pattern shapes are `aggregates.rs`.
 
 use super::run;
 
-// The motivating shape: `q`'s annotation names `s` and `t`, the two binders
-// preceding it. Lowering scopes each annotation over the parameters declared
-// before it, so this resolves against the lambda's own telescope rather than
-// the ambient scope (where `s` and `t` are unbound).
+// The motivating shape: `q`'s annotation names `s` and `t`, the two binders preceding it. Lowering scopes each annotation over the parameters declared before it, so this resolves against the lambda's own telescope rather than the ambient scope (where `s` and `t` are unbound).
 #[test]
 fn lambda_annotation_names_an_earlier_binder() {
     let source = r#"
@@ -24,9 +18,7 @@ fn lambda_annotation_names_an_earlier_binder() {
     assert_eq!(run(source), b"2");
 }
 
-// The same telescope written as a Π type and as the lambda checked against it:
-// both accept the dependency, so an annotated lambda is not a second, weaker
-// grammar for the same thing.
+// The same telescope written as a Π type and as the lambda checked against it: both accept the dependency, so an annotated lambda is not a second, weaker grammar for the same thing.
 #[test]
 fn func_type_and_lambda_accept_the_same_dependent_telescope() {
     let source = r#"
@@ -40,9 +32,7 @@ fn func_type_and_lambda_accept_the_same_dependent_telescope() {
     assert_eq!(run(source), b"7");
 }
 
-// A compound parameter binds no leaf name at the core binder — its leaves are
-// projections off a synthetic binder — so a later annotation naming one of them
-// only resolves if that pattern's field bindings scope over the domain too.
+// A compound parameter binds no leaf name at the core binder — its leaves are projections off a synthetic binder — so a later annotation naming one of them only resolves if that pattern's field bindings scope over the domain too.
 #[test]
 fn lambda_annotation_names_a_tuple_pattern_leaf() {
     let source = r#"
@@ -54,8 +44,7 @@ fn lambda_annotation_names_a_tuple_pattern_leaf() {
     assert_eq!(run(source), b"4");
 }
 
-// The struct-pattern spelling of the same thing: punned fields are ordinary
-// leaf names and must be in scope for a later annotation as well.
+// The struct-pattern spelling of the same thing: punned fields are ordinary leaf names and must be in scope for a later annotation as well.
 #[test]
 fn lambda_annotation_names_a_struct_pattern_leaf() {
     let source = r#"
@@ -71,13 +60,7 @@ fn lambda_annotation_names_a_struct_pattern_leaf() {
     assert_eq!(run(source), b"9");
 }
 
-// The shadowing decision, pinned. A module binding `T : Type = Bool` is in
-// scope, and the lambda's first parameter is also named `T`. Passing this test
-// *is* the pin: the expected domain of `value` is the parameter `T`, which the
-// call instantiates at `Nat`, so an annotation resolving to the module binding
-// would be `Bool` and mismatch. An earlier parameter shadows a like-named
-// module binding inside a later annotation, exactly as it already does inside
-// the body.
+// The shadowing decision, pinned. A module binding `T : Type = Bool` is in scope, and the lambda's first parameter is also named `T`. Passing this test *is* the pin: the expected domain of `value` is the parameter `T`, which the call instantiates at `Nat`, so an annotation resolving to the module binding would be `Bool` and mismatch. An earlier parameter shadows a like-named module binding inside a later annotation, exactly as it already does inside the body.
 #[test]
 fn an_earlier_binder_shadows_a_module_binding_in_a_later_annotation() {
     let source = r#"

@@ -55,11 +55,7 @@ fn bool_eql_executes() {
 
 #[test]
 fn nat_bitwise_ops_execute() {
-    // The first input byte is `A` (65); reading it from the host keeps the
-    // operand opaque to the optimizer, so each op is lowered to its WebAssembly
-    // instruction and executed for real rather than folded at compile time. The
-    // shift stays inside the i31 envelope — an overflowing `shl` traps at the
-    // backend boundary (see the numeric envelope gates).
+    // The first input byte is `A` (65); reading it from the host keeps the operand opaque to the optimizer, so each op is lowered to its WebAssembly instruction and executed for real rather than folded at compile time. The shift stays inside the i31 envelope — an overflowing `shl` traps at the backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
         r#"
@@ -88,12 +84,7 @@ fn nat_bitwise_ops_execute() {
 
 #[test]
 fn int_bitwise_ops_execute() {
-    // `x` is the host byte `A` (65) read as an `Int`, kept opaque to the
-    // optimizer so each op lowers to its WebAssembly instruction. This exercises
-    // the Int-distinctive behaviors: an arithmetic (sign-preserving) `shr` on a
-    // negative operand (-65 >> 1 = -33) and the `xor`-based `not` (-x - 1). The
-    // shift stays inside the signed i31 envelope — an overflowing `shl` traps
-    // at the backend boundary (see the numeric envelope gates).
+    // `x` is the host byte `A` (65) read as an `Int`, kept opaque to the optimizer so each op lowers to its WebAssembly instruction. This exercises the Int-distinctive behaviors: an arithmetic (sign-preserving) `shr` on a negative operand (-65 >> 1 = -33) and the `xor`-based `not` (-x - 1). The shift stays inside the signed i31 envelope — an overflowing `shl` traps at the backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
         r#"
@@ -124,8 +115,7 @@ fn int_bitwise_ops_execute() {
 
 #[test]
 fn infix_nat_arithmetic_respects_precedence_and_associativity() {
-    // `*` binds tighter than `+`; parentheses override; `-` is left-associative.
-    // 2 + 3*4 = 14, (2+3)*4 = 20, 10-3-2 = 5, 17 % 5 = 2.
+    // `*` binds tighter than `+`; parentheses override; `-` is left-associative. 2 + 3*4 = 14, (2+3)*4 = 20, 10-3-2 = 5, 17 % 5 = 2.
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Nat};
@@ -170,8 +160,7 @@ fn infix_resolves_to_int_for_signed_literals() {
 
 #[test]
 fn infix_resolves_against_a_bound_variable_type() {
-    // A bare literal takes the type of the variable it is combined with: here
-    // `x : Int`, so `x + 1` is `Int` addition, not a `Nat`/`Int` mismatch.
+    // A bare literal takes the type of the variable it is combined with: here `x : Int`, so `x + 1` is `Int` addition, not a `Nat`/`Int` mismatch.
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Int};
@@ -184,8 +173,7 @@ fn infix_resolves_against_a_bound_variable_type() {
 
 #[test]
 fn infix_comparison_yields_a_bool_scrutinee() {
-    // A comparison resolves on its operand type and yields `Bool`, usable directly
-    // as a `match` scrutinee. `2 + 2 == 4` is true; `3 < 1` is false.
+    // A comparison resolves on its operand type and yields `Bool`, usable directly as a `match` scrutinee. `2 + 2 == 4` is true; `3 < 1` is false.
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
@@ -225,8 +213,7 @@ fn infix_equality_is_overloaded_for_bool() {
 
 #[test]
 fn infix_mixes_a_float_variable_with_an_integer_literal() {
-    // `x : Flt` pins the operand type, so the bare literal `1` in `x + 1` becomes
-    // a `Flt`; the comparison against the `Flt` literal `4.5` then type-checks.
+    // `x : Flt` pins the operand type, so the bare literal `1` in `x + 1` becomes a `Flt`; the comparison against the `Flt` literal `4.5` then type-checks.
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Flt};
@@ -242,8 +229,7 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
 
 #[test]
 fn infix_undefined_operator_for_type_is_rejected() {
-    // `&&` only has a witness on `Bool`, so `nat && nat` has no `And(Nat)` — a
-    // compile-time error, same as any other operator at an un-witnessed type.
+    // `&&` only has a witness on `Bool`, so `nat && nat` has no `And(Nat)` — a compile-time error, same as any other operator at an un-witnessed type.
     let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Handle, Str};
@@ -257,8 +243,7 @@ fn infix_undefined_operator_for_type_is_rejected() {
 
 #[test]
 fn infix_rem_on_flt_computes_fmod() {
-    // `%` on `Flt` is `fmod` (`FltRem`), expanded to `x - trunc(x/y)*y` at the
-    // cont -> wasm boundary. `5.5 % 2.0 == 1.5`, so the branch is `true`.
+    // `%` on `Flt` is `fmod` (`FltRem`), expanded to `x - trunc(x/y)*y` at the cont -> wasm boundary. `5.5 % 2.0 == 1.5`, so the branch is `true`.
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
@@ -301,8 +286,7 @@ fn infix_mismatched_operand_types_are_rejected() {
 
 // === Concept-dispatched operators (one path, no overload table) =============
 
-// `+` on a user struct resolves the user's `Add` witness — the operator
-// surface is witness-governed.
+// `+` on a user struct resolves the user's `Add` witness — the operator surface is witness-governed.
 #[test]
 fn infix_add_on_a_user_record_resolves_its_witness() {
     assert_eq!(
@@ -320,8 +304,7 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
     );
 }
 
-// In generic code, `x + x` resolves against the local `use Add(A)` premise
-// (resolution step 1) — no extra machinery.
+// In generic code, `x + x` resolves against the local `use Add(A)` premise (resolution step 1) — no extra machinery.
 #[test]
 fn infix_resolves_against_a_local_use_premise() {
     assert_eq!(
@@ -334,8 +317,7 @@ fn infix_resolves_against_a_local_use_premise() {
     );
 }
 
-// `==` on `Str` resolves the std-side `eql_str` witness — impossible under
-// the old per-type overload table.
+// `==` on `Str` resolves the std-side `eql_str` witness — impossible under the old per-type overload table.
 #[test]
 fn infix_equality_works_on_str() {
     assert_eq!(
@@ -347,10 +329,7 @@ fn infix_equality_works_on_str() {
     );
 }
 
-// An operator at a type with no witness is a missing-witness diagnostic —
-// the single operator error vocabulary (`operator ... not defined` survives
-// only for the exotic no-prelude embedding, where the concept itself is
-// absent from the context).
+// An operator at a type with no witness is a missing-witness diagnostic — the single operator error vocabulary (`operator ... not defined` survives only for the exotic no-prelude embedding, where the concept itself is absent from the context).
 #[test]
 fn infix_without_witness_reports_no_witness() {
     let (system, _io) = MockHost::builder().build();
@@ -363,8 +342,7 @@ fn infix_without_witness_reports_no_witness() {
     assert!(error.contains("no witness"), "unexpected error: {error}");
 }
 
-// A literal mixed with a witnessed user type still errors on the literal:
-// `p` pins the operand type to `Point`, and `1` has no `Point` realization.
+// A literal mixed with a witnessed user type still errors on the literal: `p` pins the operand type to `Point`, and `1` has no `Point` realization.
 #[test]
 fn infix_literal_against_a_user_type_is_rejected() {
     let (system, _io) = MockHost::builder().build();
@@ -381,10 +359,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
     assert!(crate::run_text(source, system).is_err());
 }
 
-// Type-level operators: `a + 1` in `Lte`'s constructor indices elaborates to
-// a witness projection that must reduce during conversion checking, and the
-// two spellings (the index's and this call site's) stay convertible across
-// items.
+// Type-level operators: `a + 1` in `Lte`'s constructor indices elaborates to a witness projection that must reduce during conversion checking, and the two spellings (the index's and this call site's) stay convertible across items.
 #[test]
 fn type_level_operator_indices_stay_convertible() {
     assert_eq!(
@@ -400,8 +375,7 @@ fn type_level_operator_indices_stay_convertible() {
     );
 }
 
-// `!=` is the xor-negated equality (no `BoolNot` prim); on `Bytes` both `==`
-// and `!=` newly resolve through the migrated sys witness.
+// `!=` is the xor-negated equality (no `BoolNot` prim); on `Bytes` both `==` and `!=` newly resolve through the migrated sys witness.
 #[test]
 fn infix_equality_works_on_bin() {
     assert_eq!(

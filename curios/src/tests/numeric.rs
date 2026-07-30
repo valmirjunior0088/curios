@@ -1,17 +1,8 @@
-//! The numeric envelope gates: every constant folder computes in exact
-//! `u32`/`i32` (the numeric law), and the i31 backend boundary appears only
-//! as a trap in emitted Wasm — an overflowing computation traps, and a folded
-//! literal the carrier cannot box traps at its materialization point. The
-//! differential half runs each scalar expression twice — fully constant
-//! (folded at compile time) and with a runtime-zero perturbation (executed by
-//! the emitted Wasm) — and demands identical output, pinning the folders and
-//! the backend to one semantics.
+//! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
 use {super::run, curios_runtime::MockHost};
 
-/// Wrap `body` (an expression over the runtime-zero binder `n`, and its
-/// `Int`-carrier twin `i`) in a program that reads `n` from the host so the
-/// optimizer cannot fold it.
+/// Wrap `body` (an expression over the runtime-zero binder `n`, and its `Int`-carrier twin `i`) in a program that reads `n` from the host so the optimizer cannot fold it.
 fn tainted(body: &str) -> String {
     format!(
         r#"
@@ -28,8 +19,7 @@ fn tainted(body: &str) -> String {
     )
 }
 
-/// The same program with `n`/`i` as literal zeros, so the whole expression
-/// folds at compile time.
+/// The same program with `n`/`i` as literal zeros, so the whole expression folds at compile time.
 fn closed(body: &str) -> String {
     format!(
         r#"
@@ -103,10 +93,7 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
 
 #[test]
 fn overflowing_computations_trap_at_the_backend_boundary() {
-    // Each expression is a valid u32/i32 computation whose value leaves the
-    // i31 envelope; the backend refuses to box it and traps instead of
-    // silently truncating (shl formerly truncated, the conversions formerly
-    // wrapped).
+    // Each expression is a valid u32/i32 computation whose value leaves the i31 envelope; the backend refuses to box it and traps instead of silently truncating (shl formerly truncated, the conversions formerly wrapped).
     for body in [
         "Nat/to_str(1073741824 + 1073741824 + n)",
         "Nat/to_str(Nat/mul(46341 + n, 46341))",
@@ -123,18 +110,13 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
 
 #[test]
 fn folded_literal_outside_the_envelope_traps_at_materialization() {
-    // `2^30 + 2^30` folds to the u32 constant `2^31` at compile time; adding
-    // the runtime zero keeps the literal alive to emission, where the i31
-    // carrier cannot box it. Materialization is the backend boundary, so the
-    // program traps at runtime — it must not crash the compiler.
+    // `2^30 + 2^30` folds to the u32 constant `2^31` at compile time; adding the runtime zero keeps the literal alive to emission, where the i31 carrier cannot box it. Materialization is the backend boundary, so the program traps at runtime — it must not crash the compiler.
     runtime_traps("Nat/to_str(1073741824 + 1073741824 + n)");
 }
 
 #[test]
 fn closed_computation_through_the_envelope_folds_in_u32() {
-    // Fully constant programs are complete under the numeric law: partial
-    // evaluation carries the u32 value straight through `to_str`, so no
-    // out-of-envelope literal ever reaches the backend.
+    // Fully constant programs are complete under the numeric law: partial evaluation carries the u32 value straight through `to_str`, so no out-of-envelope literal ever reaches the backend.
     assert_eq!(
         run("use /std/{Handle, Nat}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
@@ -143,9 +125,7 @@ fn closed_computation_through_the_envelope_folds_in_u32() {
 
 #[test]
 fn carrier_bit_operations_compute_at_the_type_level() {
-    // The 32-bit-carrier operations reduce on literals inside the u32/i32
-    // view during conversion, so proofs can compute with them; a value outside
-    // the view stays neutral rather than folding wrongly.
+    // The 32-bit-carrier operations reduce on literals inside the u32/i32 view during conversion, so proofs can compute with them; a value outside the view stays neutral rather than folding wrongly.
     assert_eq!(
         run(r#"
         use /std/{Handle, Nat, Int, Eq};

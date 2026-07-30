@@ -1,7 +1,4 @@
-//! Production-path property gates for the arena vertical:
-//! partial-evaluation collapse of the format machinery, pure computation
-//! folding around ordered host effects, and the worker/wrapper rebase at
-//! stack-breaking depth. Properties, never bytes.
+//! Production-path property gates for the arena vertical: partial-evaluation collapse of the format machinery, pure computation folding around ordered host effects, and the worker/wrapper rebase at stack-breaking depth. Properties, never bytes.
 
 use {
     super::run,
@@ -28,9 +25,7 @@ fn cont_optm(source: &str) -> String {
     printed
 }
 
-/// The partial-evaluation gate: `Fmt/print("literal")` with constant
-/// arguments collapses at the arena level — the emitted Cont carries no
-/// `/std/Fmt/` or `/std/Parse/` machinery, just the residual host call chain.
+/// The partial-evaluation gate: `Fmt/print("literal")` with constant arguments collapses at the arena level — the emitted Cont carries no `/std/Fmt/` or `/std/Parse/` machinery, just the residual host call chain.
 #[test]
 fn arena_fmt_print_constant_args_collapses() {
     let source = r#"/std/Fmt/print("hello world")"#;
@@ -44,8 +39,7 @@ fn arena_fmt_print_constant_args_collapses() {
     );
 }
 
-/// Runtime arguments: the parse of the literal directive spine still runs at
-/// compile time — the residual is the specialized first-order chain.
+/// Runtime arguments: the parse of the literal directive spine still runs at compile time — the residual is the specialized first-order chain.
 #[test]
 fn arena_fmt_print_runtime_args_specializes_spine() {
     let source = r#"
@@ -62,9 +56,7 @@ fn arena_fmt_print_runtime_args_specializes_spine() {
     );
 }
 
-/// Effect hugging: a deep closed computation beside a host effect collapses
-/// to a constant while the effect stays, in order — emergent from ANF plus
-/// the effect contract, no dedicated pass.
+/// Effect hugging: a deep closed computation beside a host effect collapses to a constant while the effect stays, in order — emergent from ANF plus the effect contract, no dedicated pass.
 #[test]
 fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
@@ -89,9 +81,7 @@ fn arena_pure_computation_hugs_a_host_effect() {
     );
 }
 
-/// The worker/wrapper gate: a monoid-deferred recursion (`count(t) + 1`) runs
-/// at a depth where an unrebased recursion overflows the runtime stack — the
-/// rebase threads the deferred addition into a tail accumulator.
+/// The worker/wrapper gate: a monoid-deferred recursion (`count(t) + 1`) runs at a depth where an unrebased recursion overflows the runtime stack — the rebase threads the deferred addition into a tail accumulator.
 #[test]
 fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     let program = |depth: u32| {

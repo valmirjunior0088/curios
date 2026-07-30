@@ -1,19 +1,6 @@
-//! Structural acceptance fixtures (Cont IR v2 §4). Each test compiles a small
-//! `.crs` fixture to the raw, pre-Binaryen wasm module and asserts a structural
-//! property of the emitted code — a clean natural loop for a hot kernel, direct
-//! recursion, the closure ABI only where a call is genuinely unknown — and that
-//! the raw module validates and executes without Binaryen repairing control flow.
+//! Structural acceptance fixtures (Cont IR v2 §4). Each test compiles a small `.crs` fixture to the raw, pre-Binaryen wasm module and asserts a structural property of the emitted code — a clean natural loop for a hot kernel, direct recursion, the closure ABI only where a call is genuinely unknown — and that the raw module validates and executes without Binaryen repairing control flow.
 //!
-//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over
-//! every reachable function, prelude included — optionally suffixed with the source
-//! hint as `$func/<N>$hint`. The index carries identity; the hint is only origin
-//! annotation. Hot kernels are still located by a distinctive literal constant baked
-//! into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent
-//! structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function
-//! used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the
-//! `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an
-//! ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail`
-//! labels and is not a dispatcher.
+//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail` labels and is not a dispatcher.
 
 use {
     curios_pipeline::{Stage, compile_entrypoint},
@@ -25,9 +12,7 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`Lst/len(proc/args())`) so its result is
-// not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep
-// the kernel live.
+// Every fixture takes a runtime taint (`Lst/len(proc/args())`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
 
 const LCG: &str = r#"
     use /std/{Handle, Nat, Lst, proc};
@@ -97,10 +82,7 @@ const FUNCTION_ONLY: &str = r#"
     /std/print(Nat/to_str(down(n, 0)))
     "#;
 
-/// Two mutually recursive functions entered from two arms of a runtime match —
-/// the closest surface shape to an irreducible cycle. Curios has no unstructured
-/// jump, so the structurizer lays this out reducibly (no dispatcher); see
-/// [`mutual_recursion_stays_reducible`].
+/// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
 const MUTUAL_RECURSION: &str = r#"
     use /std/{Handle, Nat, Lst, proc};
     rec ping(n : Nat) -> Nat =
@@ -114,9 +96,7 @@ const MUTUAL_RECURSION: &str = r#"
 
 // -- helpers ----------------------------------------------------------------
 
-/// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module.
-/// The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces;
-/// Binaryen only runs later, in `crate::to_cwasm`.
+/// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module. The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
 fn compile_raw(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
@@ -131,8 +111,7 @@ fn compile_raw(source: &str) -> Module {
     module
 }
 
-/// The raw module's WAT text. Not digit-normalized: literal constants and exact
-/// token counts are load-bearing here.
+/// The raw module's WAT text. Not digit-normalized: literal constants and exact token counts are load-bearing here.
 fn wat(source: &str) -> String {
     compile_raw(source).to_string()
 }
@@ -164,18 +143,13 @@ struct Function<'a> {
 }
 
 impl Function<'_> {
-    /// How many times this function calls itself directly. `call $name` is a
-    /// substring of `return_call $name`, so this counts tail and non-tail self
-    /// calls alike.
+    /// How many times this function calls itself directly. `call $name` is a substring of `return_call $name`, so this counts tail and non-tail self calls alike.
     fn self_calls(&self) -> usize {
         self.body.matches(&format!("call {}", self.name)).count()
     }
 }
 
-/// Split the module WAT into its emitted functions. Each starts at a `  (func `
-/// line (module indent); its text runs to the next one. Module items after the
-/// last function (exports, `$start`) never open a `  (func ` line, so they ride
-/// along on the final entry without introducing calls or refs of their own.
+/// Split the module WAT into its emitted functions. Each starts at a `  (func ` line (module indent); its text runs to the next one. Module items after the last function (exports, `$start`) never open a `  (func ` line, so they ride along on the final entry without introducing calls or refs of their own.
 fn functions(wat: &str) -> Vec<Function<'_>> {
     const MARKER: &str = "\n  (func ";
     let mut starts = Vec::new();
@@ -201,8 +175,7 @@ fn functions(wat: &str) -> Vec<Function<'_>> {
         .collect()
 }
 
-/// The single emitted function whose body contains `needle` (asserting exactly
-/// one does).
+/// The single emitted function whose body contains `needle` (asserting exactly one does).
 fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Function<'a> {
     let mut hits = functions.iter().filter(|f| f.body.contains(needle));
     let found = hits.next().expect("some function contains the needle");
@@ -213,10 +186,7 @@ fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Functio
     found
 }
 
-/// The innermost `loop … end` enclosing the (unique) `needle`: walk backward from
-/// the needle with block/loop/if-vs-`end` nesting to the enclosing `loop ` opener,
-/// then balance forward to its matching `end`. `block`/`loop`/`if` are the only
-/// `end`-terminated openers the emitter produces.
+/// The innermost `loop … end` enclosing the (unique) `needle`: walk backward from the needle with block/loop/if-vs-`end` nesting to the enclosing `loop ` opener, then balance forward to its matching `end`. `block`/`loop`/`if` are the only `end`-terminated openers the emitter produces.
 fn loop_containing<'a>(wat: &'a str, needle: &str) -> &'a str {
     assert_eq!(
         wat.matches(needle).count(),
@@ -285,9 +255,7 @@ fn loop_containing<'a>(wat: &'a str, needle: &str) -> &'a str {
     &wat[start..end]
 }
 
-/// The `<N>` indices following every occurrence of `prefix` (e.g. `"call $func/"`
-/// for directly-called functions, `"ref.func $clsr/"` for materialized closures);
-/// the digit run stops at the optional `$hint` suffix.
+/// The `<N>` indices following every occurrence of `prefix` (e.g. `"call $func/"` for directly-called functions, `"ref.func $clsr/"` for materialized closures); the digit run stops at the optional `$hint` suffix.
 fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     let mut set = BTreeSet::new();
     let mut cursor = 0;
@@ -302,10 +270,7 @@ fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     set
 }
 
-/// Run the raw (Binaryen-free) module: Cranelift-precompile the raw bytes directly
-/// — validation, including control-flow well-formedness, happens here, so a module
-/// Binaryen would have had to repair fails — then execute it and return captured
-/// stdout. `args` seeds `proc/args()`, which drives the taint.
+/// Run the raw (Binaryen-free) module: Cranelift-precompile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args()`, which drives the taint.
 fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
     let cwasm = shared_engine()
@@ -317,8 +282,7 @@ fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     io.output()
 }
 
-/// Run the module through the ordinary Binaryen + Cranelift path, for the same
-/// input — the reference the raw path must agree with.
+/// Run the module through the ordinary Binaryen + Cranelift path, for the same input — the reference the raw path must agree with.
 fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
     let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
@@ -330,13 +294,7 @@ fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
 
 // -- LCG --------------------------------------------------------------------
 
-/// L1: the LCG kernel reaches closure conversion as a single-entry recursive
-/// continuation. Proxy: the user `loop` is contified — the optimized high-CPS
-/// module keeps only `main` and prelude helpers as top-level functions, so the
-/// recursive kernel survives as a local continuation (a recursive `cont` with a
-/// single external entry and its own backedge), not a function. The contification
-/// mechanism is owned by §1's `contify_calls` tests in `curios-cont`; this pins
-/// the end-to-end result.
+/// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main` and prelude helpers as top-level functions, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by §1's `contify_calls` tests in `curios-cont`; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
     let cont = cont_optm_text(LCG);
@@ -350,8 +308,7 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
         .map(str::trim_start)
         .filter(|l| l.starts_with("fun ~f"))
     {
-        // A named function prints `fun ~fN$hint(...)`: the source hint is the run
-        // after the first `$` and before the parameter list.
+        // A named function prints `fun ~fN$hint(...)`: the source hint is the run after the first `$` and before the parameter list.
         let provenance = line
             .split_once('$')
             .and_then(|(_, rest)| rest.split_once('('))
@@ -364,8 +321,7 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
     }
 }
 
-/// L2/L3: the hot kernel is exactly one natural loop with a clean backedge — no
-/// nested loop, and no `$dispatch/` selector driving the iteration.
+/// L2/L3: the hot kernel is exactly one natural loop with a clean backedge — no nested loop, and no `$dispatch/` selector driving the iteration.
 #[test]
 fn lcg_hot_kernel_is_one_natural_loop() {
     let wat = wat(LCG);
@@ -382,9 +338,7 @@ fn lcg_hot_kernel_is_one_natural_loop() {
     );
 }
 
-/// L4: the loop body is direct scalar arithmetic — Nat multiply (`i64.mul`, widened
-/// for its overflow check) and unsigned remainder (`i32.rem_u`) — with no closure
-/// allocation and no indirect (`call_ref`) dispatch.
+/// L4: the loop body is direct scalar arithmetic — Nat multiply (`i64.mul`, widened for its overflow check) and unsigned remainder (`i32.rem_u`) — with no closure allocation and no indirect (`call_ref`) dispatch.
 #[test]
 fn lcg_loop_is_scalar_no_closure_no_indirect() {
     let wat = wat(LCG);
@@ -418,11 +372,7 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
 
 // -- trees ------------------------------------------------------------------
 
-/// T1: build and sum retain direct recursive code. `sum` is the function carrying
-/// the `1000003` modulus; `build` is the other user function with two direct self
-/// calls (the recursive `to_str` prelude helper has one). Both recurse through
-/// direct `call`/`return_call`, and — since the whole module emits no `call_ref`
-/// (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.
+/// T1: build and sum retain direct recursive code. `sum` is the function carrying the `1000003` modulus; `build` is the other user function with two direct self calls (the recursive `to_str` prelude helper has one). Both recurse through direct `call`/`return_call`, and — since the whole module emits no `call_ref` (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.
 #[test]
 fn trees_build_and_sum_stay_direct_recursive() {
     let wat = wat(TREES);
@@ -442,12 +392,7 @@ fn trees_build_and_sum_stay_direct_recursive() {
     );
 }
 
-/// T2: the recursive arithmetic is folded to bare primitive instructions rather
-/// than dispatched through a witness — the invariant `Nat` operation
-/// implementations propagate through the recursive SCC and collapse to `i32`
-/// instructions, with no `call_ref` witness projection left behind. The SCC
-/// known-argument propagation that enables this is owned by §1's specialization
-/// tests in `curios-cont`; this pins its emitted consequence.
+/// T2: the recursive arithmetic is folded to bare primitive instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_ref` witness projection left behind. The SCC known-argument propagation that enables this is owned by §1's specialization tests in `curios-cont`; this pins its emitted consequence.
 #[test]
 fn trees_invariant_arithmetic_propagates_through_scc() {
     let wat = wat(TREES);
@@ -468,8 +413,7 @@ fn trees_invariant_arithmetic_propagates_through_scc() {
     );
 }
 
-/// T3: the hot recursive code performs no indirect calls. The whole trees module
-/// emits no `call_ref` — every call, including the tree recursion, is direct.
+/// T3: the hot recursive code performs no indirect calls. The whole trees module emits no `call_ref` — every call, including the tree recursion, is direct.
 #[test]
 fn trees_hot_arithmetic_has_no_indirect_calls() {
     assert!(
@@ -478,10 +422,7 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
     );
 }
 
-/// T4: ordinary recursive functions create no shells or mutable closure fields.
-/// The trees module allocates only data tuples (`$tpl/…` for the `Tree` nodes) —
-/// no closure (`$clsr/`) or environment (`$envr/`) structs, and no
-/// `struct.new_default` shell.
+/// T4: ordinary recursive functions create no shells or mutable closure fields. The trees module allocates only data tuples (`$tpl/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs, and no `struct.new_default` shell.
 #[test]
 fn trees_ordinary_recursion_has_no_shells() {
     let wat = wat(TREES);
@@ -495,10 +436,7 @@ fn trees_ordinary_recursion_has_no_shells() {
 
 // -- general corpus ---------------------------------------------------------
 
-/// G1: a genuinely unknown higher-order call retains the closure ABI and emits
-/// `call_ref`. `f` is selected at runtime, so it cannot be devirtualized: the
-/// module declares `$clsr/…` closure types, materializes the branches with
-/// `ref.func`, and dispatches through `call_ref`.
+/// G1: a genuinely unknown higher-order call retains the closure ABI and emits `call_ref`. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches with `ref.func`, and dispatches through `call_ref`.
 #[test]
 fn unknown_higher_order_call_uses_closure_abi_and_call_ref() {
     let wat = wat(HIGHER_ORDER);
@@ -509,11 +447,7 @@ fn unknown_higher_order_call_uses_closure_abi_and_call_ref() {
     assert!(wat.contains("$clsr/"), "the closure ABI is retained");
 }
 
-/// G2: direct and escaping uses of the same function coexist. A function used both
-/// directly and as a first-class value is emitted once as `$func/<N>` (the direct
-/// callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so
-/// the set of directly-called `$func/<N>` indices and the set of `ref.func`'d
-/// `$clsr/<N>` indices overlap.
+/// G2: direct and escaping uses of the same function coexist. A function used both directly and as a first-class value is emitted once as `$func/<N>` (the direct callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so the set of directly-called `$func/<N>` indices and the set of `ref.func`'d `$clsr/<N>` indices overlap.
 #[test]
 fn direct_and_escaping_uses_coexist() {
     let wat = wat(DIRECT_ESCAPING);
@@ -527,9 +461,7 @@ fn direct_and_escaping_uses_coexist() {
     );
 }
 
-/// G3: function-only recursion produces no fallback shells. `down` is a plain
-/// recursive function; the module allocates no closure (`$clsr/`) and no
-/// `struct.new_default` shell for it.
+/// G3: function-only recursion produces no fallback shells. `down` is a plain recursive function; the module allocates no closure (`$clsr/`) and no `struct.new_default` shell for it.
 #[test]
 fn function_only_recursion_has_no_fallback_shells() {
     let wat = wat(FUNCTION_ONLY);
@@ -543,10 +475,7 @@ fn function_only_recursion_has_no_fallback_shells() {
     );
 }
 
-/// G4: ordinary corpus cases use no irreducible fallback. None of the ordinary
-/// fixtures — including mutual recursion — emit a `loop $$dispatch/` localized
-/// dispatcher; their constructor-tag matches lower to ordinary `br_table` data
-/// switches over `$case$N` labels, which are not dispatchers.
+/// G4: ordinary corpus cases use no irreducible fallback. None of the ordinary fixtures — including mutual recursion — emit a `loop $$dispatch/` localized dispatcher; their constructor-tag matches lower to ordinary `br_table` data switches over `$case$N` labels, which are not dispatchers.
 #[test]
 fn ordinary_corpus_uses_no_irreducible_fallback() {
     for (label, source) in [
@@ -563,14 +492,7 @@ fn ordinary_corpus_uses_no_irreducible_fallback() {
     }
 }
 
-/// G5: the one-localized-dispatcher guarantee. Curios surface syntax has no
-/// unstructured jump, so even mutual recursion entered from two arms is structured
-/// reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine
-/// irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per
-/// irreducible component) is therefore owned and asserted at the backend-unit level
-/// by `curios-cont`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher`
-/// in `into_wasm::emit_tests`; this test pins the surface-level fact that motivates
-/// that ownership boundary.
+/// G5: the one-localized-dispatcher guarantee. Curios surface syntax has no unstructured jump, so even mutual recursion entered from two arms is structured reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per irreducible component) is therefore owned and asserted at the backend-unit level by `curios-cont`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher` in `into_wasm::emit_tests`; this test pins the surface-level fact that motivates that ownership boundary.
 #[test]
 fn mutual_recursion_stays_reducible() {
     assert!(
@@ -579,10 +501,7 @@ fn mutual_recursion_stays_reducible() {
     );
 }
 
-/// G6: the raw, pre-Binaryen wasm validates and executes without Binaryen repairing
-/// control flow. `run_raw` Cranelift-compiles the raw bytes directly (validation,
-/// including control-flow well-formedness, happens there) and runs them; its output
-/// must match the ordinary Binaryen path for the same input.
+/// G6: the raw, pre-Binaryen wasm validates and executes without Binaryen repairing control flow. `run_raw` Cranelift-compiles the raw bytes directly (validation, including control-flow well-formedness, happens there) and runs them; its output must match the ordinary Binaryen path for the same input.
 #[test]
 fn raw_wasm_validates_and_executes_without_binaryen() {
     for (label, source) in [

@@ -22,8 +22,7 @@ fn net_call_round_trips_a_scripted_endpoint() {
     assert_eq!(io.output(), b"HTTP/1.0 200 OK\r\n\r\nhello");
 }
 
-// Connecting to an endpoint that was never scripted is refused, and the status
-// decodes to `refused()`.
+// Connecting to an endpoint that was never scripted is refused, and the status decodes to `refused()`.
 #[test]
 fn net_call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
@@ -53,8 +52,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
     assert_eq!(io.output(), b"refused");
 }
 
-// A custom `Config` with an optional `Duration` timeout flows through the
-// bracket; `Socket/read` pulls bytes from the socket the body is handed.
+// A custom `Config` with an optional `Duration` timeout flows through the bracket; `Socket/read` pulls bytes from the socket the body is handed.
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
@@ -90,11 +88,7 @@ fn net_with_custom_timeout_config_reads_response() {
     assert_eq!(io.output(), b"PONG");
 }
 
-// Server network IO (Stage A): `serve` binds a listener, pulls the scripted
-// inbound connection, and runs the handler per connection — which reads the
-// request off the socket and writes a response the host captures. The exhausted
-// inbound queue then fails the next `accept`, ending the loop and closing the
-// bracketed listener.
+// Server network IO (Stage A): `serve` binds a listener, pulls the scripted inbound connection, and runs the handler per connection — which reads the request off the socket and writes a response the host captures. The exhausted inbound queue then fails the next `accept`, ending the loop and closing the bracketed listener.
 #[test]
 fn net_serve_handles_a_scripted_inbound_connection() {
     let source = r#"
@@ -122,11 +116,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
 }
 
-// TLS client (Stage A): `Socket/with` with `tls = true` upgrades the connected
-// socket via `start_tls` before the body runs. The mock host serves the
-// scripted endpoint cleartext (no real handshake under test), so the upgrade is
-// a no-op identity and the round-trip still succeeds — exercising the wiring,
-// types, and prim threading end to end through codegen.
+// TLS client (Stage A): `Socket/with` with `tls = true` upgrades the connected socket via `start_tls` before the body runs. The mock host serves the scripted endpoint cleartext (no real handshake under test), so the upgrade is a no-op identity and the round-trip still succeeds — exercising the wiring, types, and prim threading end to end through codegen.
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"
@@ -161,10 +151,7 @@ fn net_with_tls_upgrades_and_reads() {
     assert_eq!(io.output(), b"SECURE-PONG");
 }
 
-// Server TLS termination (Stage A): `serve_tls` builds a config token, then
-// upgrades each accepted connection via `start_tls_server` before the handler
-// runs. The mock host runs cleartext, so the upgrade is a no-op identity and
-// the handler echoes the scripted request the host captures.
+// Server TLS termination (Stage A): `serve_tls` builds a config token, then upgrades each accepted connection via `start_tls_server` before the handler runs. The mock host runs cleartext, so the upgrade is a no-op identity and the handler echoes the scripted request the host captures.
 #[test]
 fn net_serve_tls_handles_a_scripted_inbound_connection() {
     let source = r#"
@@ -192,9 +179,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
     assert_eq!(io.captures(), vec![b"tls: ping".to_vec()]);
 }
 
-// HTTP client (Phase B): `http/perform` renders a `Request`, sends it through
-// `/std/tcp`, and runs the `/std/Parse`-based response parser over the reply —
-// exercising the byte-scanning parser end to end through codegen.
+// HTTP client (Phase B): `http/perform` renders a `Request`, sends it through `/std/tcp`, and runs the `/std/Parse`-based response parser over the reply — exercising the byte-scanning parser end to end through codegen.
 #[test]
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
@@ -220,8 +205,7 @@ fn http_perform_parses_a_scripted_response() {
         end
         "#;
 
-    // The trailing bytes past `Content-Length: 5` must be dropped by the body
-    // framing, leaving the body exactly "hello".
+    // The trailing bytes past `Content-Length: 5` must be dropped by the body framing, leaving the body exactly "hello".
     let (system, io) = MockHost::builder()
         .net([(
             "example.com:80",

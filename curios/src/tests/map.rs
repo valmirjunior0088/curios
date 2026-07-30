@@ -12,9 +12,7 @@ fn map_get_on_empty_is_none() {
 
 #[test]
 fn map_roundtrips_prefix_related_keys() {
-    // "", "a", "ab", "abc", "b" force the trie to branch on the presence-marker
-    // bits: a key that is a proper prefix of another differs from it only at a
-    // marker position, the case a plain per-byte comparison would miss.
+    // "", "a", "ab", "abc", "b" force the trie to branch on the presence-marker bits: a key that is a proper prefix of another differs from it only at a marker position, the case a plain per-byte comparison would miss.
     let source = r#"
         use /std/{Handle, Str, Map, Option};
         let m : Map(Str) =
@@ -27,8 +25,7 @@ fn map_roundtrips_prefix_related_keys() {
 
 #[test]
 fn map_set_replaces_without_growing() {
-    // Setting an existing key must go down the `replace` path: same size, new
-    // value, no duplicate leaf for the key.
+    // Setting an existing key must go down the `replace` path: same size, new value, no duplicate leaf for the key.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
         let m : Map(Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
@@ -41,9 +38,7 @@ fn map_set_replaces_without_growing() {
 
 #[test]
 fn map_del_removes_and_collapses() {
-    // Deleting a present key collapses its parent fork (the sibling is spliced
-    // up), deleting an absent key is the identity, and deleting the last key
-    // returns to the empty map.
+    // Deleting a present key collapses its parent fork (the sibling is spliced up), deleting an absent key is the identity, and deleting the last key returns to the empty map.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
         let m : Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
@@ -61,9 +56,7 @@ fn map_del_removes_and_collapses() {
 
 #[test]
 fn map_iterates_in_lexicographic_key_order() {
-    // Iteration order is a property of the canonical shape, not of insertion
-    // order: the zero side of a fork holds the smaller keys, and the marker
-    // bits sort a prefix before its extensions ("" first, "ab" before "abc").
+    // Iteration order is a property of the canonical shape, not of insertion order: the zero side of a fork holds the smaller keys, and the marker bits sort a prefix before its extensions ("" first, "ab" before "abc").
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option, Lst};
         let m : Map(Nat) =
@@ -76,9 +69,7 @@ fn map_iterates_in_lexicographic_key_order() {
 
 #[test]
 fn map_entries_agree_across_insertion_orders() {
-    // Canonicity, observed through the API: the same entry set reached by two
-    // different insertion histories (including a detour through a later-deleted
-    // key) folds to the same entry sequence.
+    // Canonicity, observed through the API: the same entry set reached by two different insertion histories (including a detour through a later-deleted key) folds to the same entry sequence.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option, Lst};
         let show(m : Map(Nat)) -> Str =
@@ -94,8 +85,7 @@ fn map_entries_agree_across_insertion_orders() {
 
 #[test]
 fn map_nat_keys_encode_injectively() {
-    // The `Key(Nat)` witness must keep 0 (empty encoding), one-byte, boundary
-    // (255/256), and multi-byte keys distinct.
+    // The `Key(Nat)` witness must keep 0 (empty encoding), one-byte, boundary (255/256), and multi-byte keys distinct.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option, Lst};
         let entries : Lst({Nat, Str}) =
@@ -111,8 +101,7 @@ fn map_nat_keys_encode_injectively() {
 
 #[test]
 fn map_holds_many_keys_with_shared_prefixes() {
-    // 300 sequential Nat keys share long big-endian prefixes, exercising deep
-    // shared paths; deleting the even half exercises collapse at scale.
+    // 300 sequential Nat keys share long big-endian prefixes, exercising deep shared paths; deleting the even half exercises collapse at scale.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
         rec build(i : Nat, acc : Map(Str)) -> Map(Str) =

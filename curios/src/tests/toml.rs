@@ -1,12 +1,6 @@
 use super::run;
 
-// Closed decode calls are unrolled by the type-level evaluator, whose Rust
-// stack budget on default test threads caps document size, so closed inputs
-// here stay small. Two rand-derived taints route larger or deliberately
-// runtime-path documents to the emitted wasm instead: `Str/slice` from a
-// runtime-opaque zero for whole small documents, and digit runs repeated a
-// `(opaque + 1) * n` number of times — stuck at compile time because `Nat`
-// multiplication has no definitional laws — for the long binary literals.
+// Closed decode calls are unrolled by the type-level evaluator, whose Rust stack budget on default test threads caps document size, so closed inputs here stay small. Two rand-derived taints route larger or deliberately runtime-path documents to the emitted wasm instead: `Str/slice` from a runtime-opaque zero for whole small documents, and digit runs repeated a `(opaque + 1) * n` number of times — stuck at compile time because `Nat` multiplication has no definitional laws — for the long binary literals.
 
 #[test]
 fn toml_scalar_documents_round_trip_deterministically() {

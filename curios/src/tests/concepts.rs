@@ -8,10 +8,7 @@ fn error(source: &str) -> String {
     }
 }
 
-// The base case: a concept, a witness keyed on a rigid nominal head, and a call
-// through the generated method wrapper. `Show/show(n)` saturates `@A` with a
-// metavar and the `use` slot with a witness goal; solving `A := Nat` from `n`
-// wakes the goal, which the global table resolves to `show_nat`.
+// The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to `show_nat`.
 #[test]
 fn concept_witness_resolves_through_wrapper() {
     let source = r#"
@@ -29,10 +26,7 @@ fn concept_witness_resolves_through_wrapper() {
     assert_eq!(run(source), b"42");
 }
 
-// A premised witness: `show_arr` needs a `Show(A)` to show its elements. The
-// resolver instantiates its telescope — `@A := ?B` with premise goal
-// `Show(?B)` — unifies `Show(Lst(?B)) ≡ Show(Lst(Nat))` to solve `?B := Nat`,
-// then resolves the premise to `show_nat`.
+// A premised witness: `show_arr` needs a `Show(A)` to show its elements. The resolver instantiates its telescope — `@A := ?B` with premise goal `Show(?B)` — unifies `Show(Lst(?B)) ≡ Show(Lst(Nat))` to solve `?B := Nat`, then resolves the premise to `show_nat`.
 #[test]
 fn premised_witness_resolves_recursively() {
     let source = r#"
@@ -54,9 +48,7 @@ fn premised_witness_resolves_recursively() {
     assert_eq!(run(source), b"[123");
 }
 
-// An explicit `use` argument overrides table resolution: a local dictionary
-// value (an ordinary `let` of the concept's record type) is passed at the call
-// site and used instead of the registered `show_nat`.
+// An explicit `use` argument overrides table resolution: a local dictionary value (an ordinary `let` of the concept's record type) is passed at the call site and used instead of the registered `show_nat`.
 #[test]
 fn explicit_use_argument_overrides() {
     let source = r#"
@@ -76,12 +68,7 @@ fn explicit_use_argument_overrides() {
     assert_eq!(run(source), b"(7)");
 }
 
-// A superclass edge resolved by projection: inside `same`, the goal `Eql(A)`
-// has a bound-variable head (no table entry), so it is solved by projecting the
-// local `use Ord(A)` binder's (anonymous) superclass field, keyed by index. The
-// `use Ord(A)` slot itself resolves through the table to `ord_nat`, whose own
-// omitted superclass field resolves to `eql_nat` — no field names a witness
-// anywhere.
+// A superclass edge resolved by projection: inside `same`, the goal `Eql(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ord(A)` binder's (anonymous) superclass field, keyed by index. The `use Ord(A)` slot itself resolves through the table to `ord_nat`, whose own omitted superclass field resolves to `eql_nat` — no field names a witness anywhere.
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
@@ -125,8 +112,7 @@ fn missing_witness_is_an_error() {
     assert!(error(source).contains("witness"));
 }
 
-// The prelude-provided `Show` concept and its witnesses resolve, proving the
-// cached-prelude replay path registers concepts and witnesses.
+// The prelude-provided `Show` concept and its witnesses resolve, proving the cached-prelude replay path registers concepts and witnesses.
 #[test]
 fn prelude_show_resolves() {
     let source = r#"
@@ -151,8 +137,7 @@ fn prelude_eql_resolves() {
     assert_eq!(run(source), b"true");
 }
 
-// The prelude `Ord` concept resolves, and its `Eql` superclass is reachable by
-// projection from an `Ord` in scope.
+// The prelude `Ord` concept resolves, and its `Eql` superclass is reachable by projection from an `Ord` in scope.
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
@@ -165,9 +150,7 @@ fn prelude_ord_superclass_projects() {
     assert_eq!(run(source), b"true");
 }
 
-// Registering two witnesses for the same `(concept, head)` key is a coherence
-// error (global uniqueness) — independent of, and checked alongside, the
-// orphan rule below.
+// Registering two witnesses for the same `(concept, head)` key is a coherence error (global uniqueness) — independent of, and checked alongside, the orphan rule below.
 #[test]
 fn duplicate_witness_is_an_error() {
     let source = r#"
@@ -185,12 +168,7 @@ fn duplicate_witness_is_an_error() {
         /std/print(Show/show(n))
         "#;
 
-    // Both the concept and the declaring module are pinned, not just the word
-    // "witness". Witnesses are anonymous, so the module is the only coordinate
-    // the report can give a reader — and it comes from each definition's
-    // `island`, not from splitting the compiler-minted `witness@N` name.
-    // Matched on the message body: the `while elaborating …` prefix names the
-    // minted `witness@N`, which Phase C of the name-identity work replaces.
+    // Both the concept and the declaring module are pinned, not just the word "witness". Witnesses are anonymous, so the module is the only coordinate the report can give a reader — and it comes from each definition's `island`, not from splitting the compiler-minted `witness@N` name. Matched on the message body: the `while elaborating …` prefix names the minted `witness@N`, which Phase C of the name-identity work replaces.
     assert!(error(source).ends_with(
         "duplicate witness of '/Show' for head 'Nat'\n  \
          one is declared in the entry module, another in the entry module\n  \
@@ -198,9 +176,7 @@ fn duplicate_witness_is_an_error() {
     ));
 }
 
-// The declaring module of a nested-module witness renders as that module,
-// which the entry-module cases above cannot distinguish from a bug that always
-// reports the root.
+// The declaring module of a nested-module witness renders as that module, which the entry-module cases above cannot distinguish from a bug that always reports the root.
 #[test]
 fn duplicate_witness_reports_its_declaring_module() {
     let source = r#"
@@ -228,10 +204,7 @@ fn duplicate_witness_reports_its_declaring_module() {
     ));
 }
 
-// The orphan rule: a witness may be declared only where the concept it
-// witnesses, or a type in its key, is already declared. `Ord` and `Bool` are
-// both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bool)`
-// (not already witnessed anywhere in the standard library) is rejected.
+// The orphan rule: a witness may be declared only where the concept it witnesses, or a type in its key, is already declared. `Ord` and `Bool` are both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bool)` (not already witnessed anywhere in the standard library) is rejected.
 #[test]
 fn orphan_witness_is_rejected() {
     let source = r#"
@@ -249,9 +222,7 @@ fn orphan_witness_is_rejected() {
     ));
 }
 
-// The sanctioned counterpart: a user's own type is legal to `satisfy` a
-// standard-library concept for, since the declaring root (the entry program)
-// owns the key's type even though it doesn't own the concept.
+// The sanctioned counterpart: a user's own type is legal to `satisfy` a standard-library concept for, since the declaring root (the entry program) owns the key's type even though it doesn't own the concept.
 #[test]
 fn witness_for_a_locally_owned_type_is_not_an_orphan() {
     let source = r#"
@@ -267,9 +238,7 @@ fn witness_for_a_locally_owned_type_is_not_an_orphan() {
     assert_eq!(run(source), b"7");
 }
 
-// Multi-parameter concepts key on the tuple of every parameter head: two
-// witnesses may share a first head as long as the full parameter tuple differs,
-// and each resolves once both parameters are pinned.
+// Multi-parameter concepts key on the tuple of every parameter head: two witnesses may share a first head as long as the full parameter tuple differs, and each resolves once both parameters are pinned.
 #[test]
 fn multi_param_witnesses_share_a_first_head() {
     let source = r#"
@@ -291,9 +260,7 @@ fn multi_param_witnesses_share_a_first_head() {
     assert_eq!(run(source), b"false");
 }
 
-// Every concept parameter participates in the witness key, so a goal whose
-// second parameter is never pinned parks and surfaces as an error at the end
-// of the module — no accidental inference from the witness.
+// Every concept parameter participates in the witness key, so a goal whose second parameter is never pinned parks and surfaces as an error at the end of the module — no accidental inference from the witness.
 #[test]
 fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
@@ -312,12 +279,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
     assert!(message.contains("witness") || message.contains("infer"));
 }
 
-// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal
-// on the flex parameter, checking `o : Option(Nat)` against `?M(?A)` fires the
-// flex-apply imitation rule inside the conversion checker, and the committed
-// `?M := Option` wakes the parked goal, which the table resolves to the
-// prelude's `monad_option`. Also covers the cached-prelude replay of a
-// higher-kinded witness.
+// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal on the flex parameter, checking `o : Option(Nat)` against `?M(?A)` fires the flex-apply imitation rule inside the conversion checker, and the committed `?M := Option` wakes the parked goal, which the table resolves to the prelude's `monad_option`. Also covers the cached-prelude replay of a higher-kinded witness.
 #[test]
 fn prelude_monad_resolves_by_imitation() {
     let source = r#"
@@ -342,9 +304,7 @@ fn prelude_monad_arr_binds() {
     assert_eq!(run(source), b"4");
 }
 
-// The monadic sugar: each `e!` desugars to `/syn/Monad/bind(e, cont)`, whose
-// `use` binder resolves the `Monad` witness from the action's type — no
-// header, no imports needed for the dispatch itself.
+// The monadic sugar: each `e!` desugars to `/syn/Monad/bind(e, cont)`, whose `use` binder resolves the `Monad` witness from the action's type — no header, no imports needed for the dispatch itself.
 #[test]
 fn monadic_sugar_binds_through_the_concept() {
     let source = r#"
@@ -359,10 +319,7 @@ fn monadic_sugar_binds_through_the_concept() {
     assert_eq!(run(source), b"42");
 }
 
-// Generic do-notation: `!` inside a function that is generic over the monad.
-// Each site's `Monad(M)` goal (M a bound variable) resolves against the local
-// `use` binder — impossible with a concrete bind function, and the payoff of
-// dispatching `!` through the concept.
+// Generic do-notation: `!` inside a function that is generic over the monad. Each site's `Monad(M)` goal (M a bound variable) resolves against the local `use` binder — impossible with a concrete bind function, and the payoff of dispatching `!` through the concept.
 #[test]
 fn bang_works_in_monad_generic_code() {
     let source = r#"
@@ -380,11 +337,7 @@ fn bang_works_in_monad_generic_code() {
     assert_eq!(run(source), b"422");
 }
 
-// A higher-kinded superclass: inside the generic function the goal
-// `Monad(M)` (M a bound variable) resolves through step 2's superclass
-// projection of the local `use MonadPlus(M)` binder. The witness's own
-// omitted `monad` field resolves through the table to the std `Monad(Option)`
-// witness — a higher-kinded auto-fill.
+// A higher-kinded superclass: inside the generic function the goal `Monad(M)` (M a bound variable) resolves through step 2's superclass projection of the local `use MonadPlus(M)` binder. The witness's own omitted `monad` field resolves through the table to the std `Monad(Option)` witness — a higher-kinded auto-fill.
 #[test]
 fn higher_kinded_superclass_projects() {
     let source = r#"
@@ -405,10 +358,7 @@ fn higher_kinded_superclass_projects() {
     assert_eq!(run(source), b"11");
 }
 
-// `Prim`-headed type constructors (`Lst`, `Cell`) carry their argument inside
-// the `Prim` node; the imitation rule rebuilds the node over the binder
-// (`?M := λT. Lst(T)`), so `Monad/bind` over an `Lst` pins the witness from
-// the action's type like any nominal constructor would.
+// `Prim`-headed type constructors (`Lst`, `Cell`) carry their argument inside the `Prim` node; the imitation rule rebuilds the node over the binder (`?M := λT. Lst(T)`), so `Monad/bind` over an `Lst` pins the witness from the action's type like any nominal constructor would.
 #[test]
 fn monad_over_prim_constructor_resolves_by_imitation() {
     let source = r#"
@@ -421,10 +371,7 @@ fn monad_over_prim_constructor_resolves_by_imitation() {
     assert_eq!(run(source), b"1");
 }
 
-// The syn-homed operator concepts: `Add/add` resolves on a primitive type
-// through the `/std` witness (also proving the cached-prelude replay path
-// registers the syn concepts and std witnesses), on a user struct through a
-// user witness, and in generic code through a local `use Add(A)` premise.
+// The syn-homed operator concepts: `Add/add` resolves on a primitive type through the `/std` witness (also proving the cached-prelude replay path registers the syn concepts and std witnesses), on a user struct through a user witness, and in generic code through a local `use Add(A)` premise.
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
@@ -442,10 +389,7 @@ fn syn_add_concept_resolves_everywhere() {
     assert_eq!(run(source), b"27");
 }
 
-// `Eql` and `Cmp` resolve across primitives with the witnesses now homed beside
-// each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`,
-// `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which
-// keep only the concept re-exports.
+// `Eql` and `Cmp` resolve across primitives with the witnesses now homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
 #[test]
 fn eql_and_cmp_resolve_across_primitives() {
     let source = r#"
@@ -460,12 +404,7 @@ fn eql_and_cmp_resolve_across_primitives() {
     assert_eq!(run(source), b"true");
 }
 
-// An explicit `use <term>` fill in a concept literal overrides table
-// resolution for that field: the flipped equality rides inside the `Ord2`
-// value, while the registered witness is untouched. The superclass field is
-// anonymous, so the override is observed by resolution — with `o` in instance
-// scope, the omitted `Eq2(Nat)` goal projects its superclass (the flipped
-// equality), taking precedence over the global table.
+// An explicit `use <term>` fill in a concept literal overrides table resolution for that field: the flipped equality rides inside the `Ord2` value, while the registered witness is untouched. The superclass field is anonymous, so the override is observed by resolution — with `o` in instance scope, the omitted `Eq2(Nat)` goal projects its superclass (the flipped equality), taking precedence over the global table.
 #[test]
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
@@ -489,8 +428,7 @@ fn use_entry_fills_a_concept_field_explicitly() {
     assert_eq!(run(source), b"false");
 }
 
-// A witness body is a concept literal, so `use <term>` fills its superclass
-// field there too.
+// A witness body is a concept literal, so `use <term>` fills its superclass field there too.
 #[test]
 fn use_entry_fills_a_witness_superclass() {
     let source = r#"
@@ -513,9 +451,7 @@ fn use_entry_fills_a_witness_superclass() {
     assert_eq!(run(source), b"true");
 }
 
-// A superclass field is anonymous, so its concept's former field name is not a
-// label: assigning it is a plain unknown-field error, with no special `use`-field
-// diagnostic (`Eql`'s superclass is reached by resolution, never by name).
+// A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-field error, with no special `use`-field diagnostic (`Eql`'s superclass is reached by resolution, never by name).
 #[test]
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
@@ -539,8 +475,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
     assert!(message.contains("no field"), "got: {message}");
 }
 
-// `use` entries are rejected outside concept literals, and surplus entries
-// are rejected against the concept's `use`-field count.
+// `use` entries are rejected outside concept literals, and surplus entries are rejected against the concept's `use`-field count.
 #[test]
 fn misplaced_use_entries_are_errors() {
     let non_concept = r#"
@@ -573,9 +508,7 @@ fn misplaced_use_entries_are_errors() {
     assert!(error(surplus).contains("'use' entr"));
 }
 
-// An omitted superclass field inside a *premised* witness resolves through
-// the local `use` premise (resolution's local step), not the table: the
-// element equality is the premise's, threaded structurally.
+// An omitted superclass field inside a *premised* witness resolves through the local `use` premise (resolution's local step), not the table: the element equality is the premise's, threaded structurally.
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
@@ -607,10 +540,7 @@ fn omitted_superclass_resolves_from_a_premise() {
     assert_eq!(run(source), b"true");
 }
 
-// A spread in a concept literal *copies* the anonymous superclass field from
-// the base rather than re-resolving it: `o` carries the flipped (always
-// false) equality, and the update must preserve it — table resolution would
-// find the registered `Eq2(Nat)` and answer true.
+// A spread in a concept literal *copies* the anonymous superclass field from the base rather than re-resolving it: `o` carries the flipped (always false) equality, and the update must preserve it — table resolution would find the registered `Eq2(Nat)` and answer true.
 #[test]
 fn concept_literal_spread_copies_superclass() {
     let source = r#"
@@ -635,8 +565,7 @@ fn concept_literal_spread_copies_superclass() {
     assert_eq!(run(source), b"false");
 }
 
-// An explicit `use <term>` entry after the spread still overrides the
-// superclass, while the plain fields copy across.
+// An explicit `use <term>` entry after the spread still overrides the superclass, while the plain fields copy across.
 #[test]
 fn concept_literal_spread_use_override() {
     let source = r#"
@@ -673,9 +602,7 @@ fn concept_literal_spread_use_on_non_concept_rejected() {
     assert!(error(source).contains("not a concept"));
 }
 
-// A `Prop`-sorted concept: the witness is proof content and erases completely,
-// and the method result is consumed in an erased argument slot. The runtime
-// path never sees the concept apparatus.
+// A `Prop`-sorted concept: the witness is proof content and erases completely, and the method result is consumed in an erased argument slot. The runtime path never sees the concept apparatus.
 #[test]
 fn prop_concept_resolves_and_erases() {
     let source = r#"
@@ -693,12 +620,7 @@ fn prop_concept_resolves_and_erases() {
     assert_eq!(run(source), b"3");
 }
 
-// A proof-returning method wrapper demanded by a top-level binding. The
-// wrapper call returns an erased method, so the outer application's callee is
-// proof content rather than a function — `erase_apply` collapses it to the
-// unit constant (value-driven: a direct function reference like
-// `/std/proc/exit` keeps its call). Regression test: this used to survive
-// erasure as an application of an erased callee and panic `into_cont`.
+// A proof-returning method wrapper demanded by a top-level binding. The wrapper call returns an erased method, so the outer application's callee is proof content rather than a function — `erase_apply` collapses it to the unit constant (value-driven: a direct function reference like `/std/proc/exit` keeps its call). Regression test: this used to survive erasure as an application of an erased callee and panic `into_cont`.
 #[test]
 fn prop_method_in_top_level_binding_collapses() {
     let source = r#"
@@ -718,10 +640,7 @@ fn prop_method_in_top_level_binding_collapses() {
     assert_eq!(run(source), b"ok");
 }
 
-// The `Type`-sorted twin: the concept record is kept, but the method's result
-// is still a proposition, so the wrapper application collapses identically.
-// Regression test: this used to reach runtime as a call of an erased unit and
-// trap.
+// The `Type`-sorted twin: the concept record is kept, but the method's result is still a proposition, so the wrapper application collapses identically. Regression test: this used to reach runtime as a call of an erased unit and trap.
 #[test]
 fn type_concept_prop_method_binding_collapses() {
     let source = r#"
@@ -739,10 +658,7 @@ fn type_concept_prop_method_binding_collapses() {
     assert_eq!(run(source), b"ok");
 }
 
-// The laws pattern: a `Prop` concept whose field quantifies over another
-// concept with a `use` parameter (a verified interface). The witness supplies
-// a proof (binding the `use` slot positionally), resolution supplies both
-// witnesses at the call, and everything erases.
+// The laws pattern: a `Prop` concept whose field quantifies over another concept with a `use` parameter (a verified interface). The witness supplies a proof (binding the `use` slot positionally), resolution supplies both witnesses at the call, and everything erases.
 #[test]
 fn prop_laws_concept_resolves() {
     let source = r#"
@@ -760,9 +676,7 @@ fn prop_laws_concept_resolves() {
     assert_eq!(run(source), b"42");
 }
 
-// A sealed concept (`: Type`, no `pub` on the representation) rejects a
-// witness declared outside its module: the satisfy body is a dictionary
-// literal, and construction requires the representation.
+// A sealed concept (`: Type`, no `pub` on the representation) rejects a witness declared outside its module: the satisfy body is a dictionary literal, and construction requires the representation.
 #[test]
 fn sealed_concept_rejects_foreign_satisfy() {
     let source = r#"
@@ -786,9 +700,7 @@ fn sealed_concept_rejects_foreign_satisfy() {
     assert!(error(source).contains("private"));
 }
 
-// A sealed concept also rejects a forged dictionary literal outside its
-// module — the local-override idiom is only available on transparent
-// concepts.
+// A sealed concept also rejects a forged dictionary literal outside its module — the local-override idiom is only available on transparent concepts.
 #[test]
 fn sealed_concept_rejects_foreign_dictionary_literal() {
     let source = r#"
@@ -810,9 +722,7 @@ fn sealed_concept_rejects_foreign_dictionary_literal() {
     assert!(error(source).contains("private"));
 }
 
-// Sealing gates construction only: cross-module `use` parameters, global
-// resolution, and the generated method wrappers (owner-module items) all
-// keep working.
+// Sealing gates construction only: cross-module `use` parameters, global resolution, and the generated method wrappers (owner-module items) all keep working.
 #[test]
 fn sealed_concept_resolves_and_projects_cross_module() {
     let source = r#"
@@ -834,12 +744,7 @@ fn sealed_concept_resolves_and_projects_cross_module() {
     assert_eq!(run(source), b"42");
 }
 
-// A sealed concept with a superclass edge, resolved cross-module: the
-// elaborator discharges the inner goal by projecting the local witness — a
-// machinery-built projection of a private representation spliced into the
-// consumer's body — and erasure re-derives its type with privacy suppressed.
-// Regression test for the suppression bracket: with privacy enforced at
-// erasure this program is spuriously rejected.
+// A sealed concept with a superclass edge, resolved cross-module: the elaborator discharges the inner goal by projecting the local witness — a machinery-built projection of a private representation spliced into the consumer's body — and erasure re-derives its type with privacy suppressed. Regression test for the suppression bracket: with privacy enforced at erasure this program is spuriously rejected.
 #[test]
 fn sealed_concept_superclass_resolves_cross_module() {
     let source = r#"
@@ -868,9 +773,7 @@ fn sealed_concept_superclass_resolves_cross_module() {
     assert_eq!(run(source), b"true");
 }
 
-// A sealed `Prop` concept is an owner-certified marker: only the owner mints
-// witnesses, consumers demand the certificate as an erased premise, and the
-// whole apparatus erases.
+// A sealed `Prop` concept is an owner-certified marker: only the owner mints witnesses, consumers demand the certificate as an erased premise, and the whole apparatus erases.
 #[test]
 fn sealed_prop_concept_certifies() {
     let source = r#"
@@ -892,12 +795,7 @@ fn sealed_prop_concept_certifies() {
     assert_eq!(run(source), b"3");
 }
 
-// A witness declared *after* a value that uses it still resolves: the use-site
-// goal defers on the missing table entry, the later `satisfy` registers it, and
-// the end-of-module sweep discharges the deferred goal. This ordering freedom is
-// what lets a `/std` witness live beside its type — a type module's own value
-// functions may call an operator before the module's trailing witness block, the
-// way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Cmp(Nat)`.
+// A witness declared *after* a value that uses it still resolves: the use-site goal defers on the missing table entry, the later `satisfy` registers it, and the end-of-module sweep discharges the deferred goal. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Cmp(Nat)`.
 #[test]
 fn forward_declared_witness_resolves() {
     let source = r#"
@@ -915,11 +813,7 @@ fn forward_declared_witness_resolves() {
     assert_eq!(run(source), b"true");
 }
 
-// A missing operator witness used in an inductive's constructor *index type*
-// once surfaced as a bare `?m ≡ ?n` metavariable mismatch: the constructor is
-// elaborated twice, and reconciling the two elaborations parks a conversion
-// between their (unsolvable) witness holes. It is now reported as the unresolved
-// witness it is, naming the concept, the key, and the `+` that needed it.
+// A missing operator witness used in an inductive's constructor *index type* once surfaced as a bare `?m ≡ ?n` metavariable mismatch: the constructor is elaborated twice, and reconciling the two elaborations parks a conversion between their (unsolvable) witness holes. It is now reported as the unresolved witness it is, naming the concept, the key, and the `+` that needed it.
 #[test]
 fn missing_witness_in_constructor_index_names_the_concept() {
     let source = r#"
