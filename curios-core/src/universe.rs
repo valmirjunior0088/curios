@@ -384,11 +384,7 @@ impl Hash for UniverseConstraint {
     }
 }
 
-impl UniverseConstraint {
-    pub fn is_tautology(&self) -> bool {
-        self.lower.structurally_leq(&self.upper)
-    }
-}
+impl UniverseConstraint {}
 
 /// A closed, declaration-local residual universe context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -417,9 +413,10 @@ impl UniverseContext {
     }
 
     pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
-        Self::from_constraints(
-            self.parameter_count,
-            self.constraints
+        Self {
+            parameter_count: self.parameter_count,
+            constraints: self
+                .constraints
                 .iter()
                 .map(|constraint| UniverseConstraint {
                     lower: map(&constraint.lower),
@@ -427,13 +424,6 @@ impl UniverseContext {
                     origin: constraint.origin.clone(),
                 })
                 .collect(),
-        )
-    }
-
-    pub fn from_constraints(parameter_count: usize, constraints: Vec<UniverseConstraint>) -> Self {
-        Self {
-            parameter_count,
-            constraints,
         }
     }
 }

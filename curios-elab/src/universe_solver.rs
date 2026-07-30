@@ -550,7 +550,7 @@ impl UniverseSolver {
     ) -> Result<(), UniverseError> {
         constraint.lower = self.zonk(&constraint.lower)?;
         constraint.upper = self.zonk(&constraint.upper)?;
-        if constraint.is_tautology() {
+        if constraint.lower.structurally_leq(&constraint.upper) {
             return Ok(());
         }
         if constraint.lower.atoms.is_empty() && constraint.upper.atoms.is_empty() {
@@ -1005,8 +1005,11 @@ impl UniverseSolver {
         constraints
             .sort_by(|left, right| (&left.lower, &left.upper).cmp(&(&right.lower, &right.upper)));
         constraints.dedup_by(|left, right| left.lower == right.lower && left.upper == right.upper);
-        constraints.retain(|constraint| !constraint.is_tautology());
-        let context = UniverseContext::from_constraints(replacement.len(), constraints);
+        constraints.retain(|constraint| !constraint.lower.structurally_leq(&constraint.upper));
+        let context = UniverseContext {
+            parameter_count: replacement.len(),
+            constraints,
+        };
         universe_context_validate(&context)?;
         Ok((context, replacement))
     }

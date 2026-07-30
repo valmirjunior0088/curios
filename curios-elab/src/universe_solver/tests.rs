@@ -191,7 +191,7 @@ fn incremental_consistency_matches_the_exact_solver() {
                 upper: exact.zonk(&constraint.upper).unwrap(),
                 origin: constraint.origin.clone(),
             };
-            let exact_result = if normalized.is_tautology() {
+            let exact_result = if normalized.lower.structurally_leq(&normalized.upper) {
                 Ok(())
             } else if normalized.lower.atoms.is_empty() && normalized.upper.atoms.is_empty() {
                 if normalized.lower.constant <= normalized.upper.constant {
