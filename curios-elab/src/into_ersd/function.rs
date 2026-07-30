@@ -25,7 +25,7 @@ use {
         emitted, erasure_mask, infer, is_erasable, reduce_with,
     },
     crate::DefinitionKind,
-    crate::Global,
+    curios_core::Global,
 };
 
 impl Lowering {

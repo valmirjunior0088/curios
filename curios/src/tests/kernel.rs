@@ -37,8 +37,9 @@
 
 use {
     curios_cert::KernelError,
+    curios_core::Term,
     curios_elab::{
-        Module, Term, recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached,
+        Module, recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached,
     },
     curios_pipeline::{Stage, compile_entrypoint},
     curios_text::{Entrypoint, RootSource},

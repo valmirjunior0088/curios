@@ -3,7 +3,8 @@
 //! telescope — one walk ([`signature_entries`]) with a labelled and a mask-only
 //! ([`erasure_mask`]) reading.
 
-use crate::{Bound, Context, Error, FuncType, Subterm, Telescope, Term, is_prop, reduce_with};
+use crate::{Context, Error, is_prop, reduce_with};
+use curios_core::{Bound, FuncType, Subterm, Telescope, Term};
 
 /// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven:
 /// a value erases iff it is a *type/prop-as-value* (`type_` reduces to the

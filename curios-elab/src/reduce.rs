@@ -2,10 +2,11 @@
 mod tests;
 
 use {
-    super::{
-        Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductType,
-        Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Reducer, Scope,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
+    super::Context,
+    curios_core::{
+        Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, FuncType, InductType, Layer, Let,
+        Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Reducer, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
         instantiate_universe_levels_scoped, reduce_prim,
     },
     num_traits::ToPrimitive,
@@ -224,7 +225,7 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
     // reflection and erasure removes them. Refinement keys therefore compare
     // the same applied definition across independently fresh scheme instances
     // by its computational spelling, not by inference-local level ids.
-    Ok(super::project_erased_universes(&canonical))
+    Ok(curios_core::project_erased_universes(&canonical))
 }
 
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {

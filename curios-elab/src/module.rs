@@ -1,11 +1,11 @@
 use {
-    super::{
-        Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
-        StructDecl, Term, UniverseContext, UniverseSeed, build_shorten, universe_context_validate,
-        with_short_names,
-    },
+    super::{Concept, universe_context_validate},
     curios_base::{Qualifier, RootId},
     curios_cert::Totality,
+    curios_core::{
+        Atom, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
+        StructDecl, Term, UniverseContext, UniverseSeed, build_shorten, with_short_names,
+    },
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -128,7 +128,7 @@ impl RecItem {
             definitions: self.definitions.clone(),
             group: self
                 .group
-                .map_members(crate::project_erased_universes)
+                .map_members(curios_core::project_erased_universes)
                 .with_universe_context(UniverseContext::empty()),
         }
     }
@@ -137,7 +137,7 @@ impl RecItem {
         Self::try_new(definitions).expect("a recursive group has one valid universe context")
     }
 
-    pub fn try_new(definitions: Vec<Definition>) -> Result<Self, super::UniverseError> {
+    pub fn try_new(definitions: Vec<Definition>) -> Result<Self, curios_core::UniverseError> {
         let universe_context = definitions
             .first()
             .map(|definition| definition.universe_context.clone())
@@ -147,7 +147,7 @@ impl RecItem {
             .iter()
             .all(|definition| definition.universe_context == universe_context)
         {
-            return Err(super::UniverseError::MismatchedRecursiveContexts);
+            return Err(curios_core::UniverseError::MismatchedRecursiveContexts);
         }
         let names = definitions
             .iter()
@@ -510,7 +510,7 @@ mod tests {
         );
         assert!(matches!(
             &*rec.group.member_body(0),
-            super::super::Subterm::RecMember(member)
+            curios_core::Subterm::RecMember(member)
                 if member.index == 0 && member.group == rec.group
         ));
 
@@ -534,7 +534,7 @@ mod tests {
                 definition("right", polymorphic),
             ])
             .unwrap_err(),
-            crate::UniverseError::MismatchedRecursiveContexts,
+            curios_core::UniverseError::MismatchedRecursiveContexts,
         );
     }
 }

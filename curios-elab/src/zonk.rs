@@ -3,14 +3,17 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Definition, DefinitionKind, Error, Free, Func,
-        FuncType, Global, InductDecl, InductParam, InductType, Item, Let, Level, LevelHead, Match,
-        MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext, UniverseError,
-        UniverseInst, UniverseMetaId, UniverseSolver, Variant, Visit,
-        rewrite_universe_levels_scoped, shift_universe_params, universe_context_validate,
+        Context, Definition, DefinitionKind, Error, Item, Module, RecItem, UniverseSolver,
+        universe_context_validate,
     },
     curios_base::Grain,
+    curios_core::{
+        Apply, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductDecl, InductParam,
+        InductType, Let, Level, LevelHead, Match, MetaId, Metavar, MetavarOrigin, Nat, Prim, Proj,
+        Rec, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Variant, Visit,
+        rewrite_universe_levels_scoped, shift_universe_params,
+    },
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -260,7 +263,7 @@ pub(crate) fn validate_bound_universes<B: Bound>(
     }
 
     let owner = owner.to_string();
-    let _: B = super::rewrite_universe_levels_scoped(value, move |depth, level| {
+    let _: B = curios_core::rewrite_universe_levels_scoped(value, move |depth, level| {
         let visible_parameter_count = depth
             .checked_add(parameter_count)
             .ok_or_else(|| format!("{owner}: universe binder depth overflow"))?;
@@ -671,7 +674,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
     let mut metas = BTreeSet::new();
     macro_rules! collect {
         ($value:expr) => {
-            metas.extend(super::universe_metas($value))
+            metas.extend(curios_core::universe_metas($value))
         };
     }
 
@@ -1060,7 +1063,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             bindings: bindings
                 .iter()
                 .map(|binding| {
-                    Ok(super::LetBinding::new(
+                    Ok(curios_core::LetBinding::new(
                         zonk_term(context, binding.type_())?,
                         zonk_term(context, binding.value())?,
                     ))
@@ -1070,11 +1073,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         }),
 
         Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
-            group: super::RecGroup::new(
+            group: curios_core::RecGroup::new(
                 group
                     .iter()
                     .map(|member| {
-                        Ok(super::RecMemberScopes {
+                        Ok(curios_core::RecMemberScopes {
                             type_: member.type_.try_map_body(|t| zonk_term(context, t))?,
                             body: member.body.try_map_body(|b| zonk_term(context, b))?,
                         })
@@ -1085,13 +1088,13 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             tail: tail.try_map_body(|b| zonk_term(context, b))?,
         }),
 
-        Subterm::RecMember(member) => Subterm::RecMember(super::RecMember {
-            group: super::RecGroup::new(
+        Subterm::RecMember(member) => Subterm::RecMember(curios_core::RecMember {
+            group: curios_core::RecGroup::new(
                 member
                     .group
                     .iter()
                     .map(|scopes| {
-                        Ok(super::RecMemberScopes {
+                        Ok(curios_core::RecMemberScopes {
                             type_: scopes.type_.try_map_body(|t| zonk_term(context, t))?,
                             body: scopes.body.try_map_body(|b| zonk_term(context, b))?,
                         })

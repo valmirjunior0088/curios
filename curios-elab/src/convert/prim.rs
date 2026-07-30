@@ -1,7 +1,7 @@
 use {
     super::Convert,
-    crate::{Peel, Prim, ReduceError, Term, peel_bin, peel_lst, peel_nat},
     curios_base::Grain,
+    curios_core::{Peel, Prim, ReduceError, Term, peel_bin, peel_lst, peel_nat},
 };
 
 pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {

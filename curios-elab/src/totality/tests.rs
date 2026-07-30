@@ -1,7 +1,8 @@
 use {
     super::*,
-    crate::{DefinitionKind, Free, Nat, UniverseContext},
+    crate::DefinitionKind,
     curios_base::{Qualifier, RootId},
+    curios_core::{Free, Nat, UniverseContext},
 };
 
 /// A qualified top-level name, from the path a test writes. Fixture-only.

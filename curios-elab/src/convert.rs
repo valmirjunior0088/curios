@@ -5,14 +5,14 @@ use prim::*;
 mod tests;
 
 use {
-    super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Free, Func, FuncType, InductType, Level,
-        Match, Metavar, Prim, Proj, Rec, RecMember, ReduceError, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseInst, Variant, Visit, check,
-        instantiate_universe_levels_scoped, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
-    },
+    super::{Context, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
     curios_base::Plicity,
+    curios_core::{
+        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Level, Match,
+        Metavar, Prim, Proj, Rec, RecMember, ReduceError, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseInst, Variant, Visit, instantiate_universe_levels_scoped,
+    },
     std::collections::{HashMap, HashSet, VecDeque},
 };
 
@@ -2016,7 +2016,8 @@ impl Convert {
             // value. Type expressions still take the structural path below,
             // where their level vectors generate equality constraints.
             if (this.has_universe_data() || that.has_universe_data())
-                && super::project_erased_universes(&this) == super::project_erased_universes(&that)
+                && curios_core::project_erased_universes(&this)
+                    == curios_core::project_erased_universes(&that)
                 && !matches!(&*reduce(context, type_.clone())?, Subterm::Type(_))
             {
                 continue;
@@ -2270,15 +2271,15 @@ impl Convert {
                             context,
                             Rec {
                                 tail: Scope::constant(
-                                    super::Many(this.group.length()),
-                                    Term::var(super::Var::bound(this.index)),
+                                    curios_core::Many(this.group.length()),
+                                    Term::var(curios_core::Var::bound(this.index)),
                                 ),
                                 group: this.group,
                             },
                             Rec {
                                 tail: Scope::constant(
-                                    super::Many(that.group.length()),
-                                    Term::var(super::Var::bound(that.index)),
+                                    curios_core::Many(that.group.length()),
+                                    Term::var(curios_core::Var::bound(that.index)),
                                 ),
                                 group: that.group,
                             },

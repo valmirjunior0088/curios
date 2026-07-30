@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{Global, Level, UniverseContext, instantiate_universe_levels_scoped},
+    curios_core::{Global, Level, UniverseContext, instantiate_universe_levels_scoped},
 };
 
 fn instantiate_struct_decl(

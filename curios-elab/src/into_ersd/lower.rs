@@ -15,10 +15,8 @@ use {
         Binding, Bound, Context, Environment, Error, InductDecl, Item, Let, Module, Subterm,
         Telescope, Term, emitted, prim,
     },
-    crate::{
-        Concept, Definition, Free, Global, InductParam, StructDecl, project_erased_universes,
-        validate_bound_universes, validate_universes,
-    },
+    crate::{Concept, Definition, validate_bound_universes, validate_universes},
+    curios_core::{Free, Global, InductParam, StructDecl, project_erased_universes},
     std::collections::{BTreeMap, BTreeSet},
 };
 

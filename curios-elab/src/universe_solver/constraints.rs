@@ -14,7 +14,7 @@
 //! assignment may edit an older one in place.
 
 use {
-    super::{Level, LevelHead, UniverseConstraint},
+    curios_core::{Level, LevelHead, UniverseConstraint},
     std::collections::{BTreeMap, BTreeSet},
 };
 

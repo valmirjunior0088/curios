@@ -13,9 +13,9 @@ use {
 /// (already-lowered) body. The marks travel to the Core arm; core elaboration
 /// checks them against the constructor's canonical payload plicities.
 type InductCase = (
-    curios_elab::Atom,
-    Vec<(Plicity, curios_elab::Free)>,
-    curios_elab::Term,
+    curios_core::Atom,
+    Vec<(Plicity, curios_core::Free)>,
+    curios_core::Term,
 );
 
 /// One in-progress row of the matrix compiler's recursion (see
@@ -32,7 +32,7 @@ type InductCase = (
 /// recursion for it.
 struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
-    binds: Vec<(super::lowerer::Binder, curios_elab::Term)>,
+    binds: Vec<(super::lowerer::Binder, curios_core::Term)>,
     body: &'t Term,
 }
 
@@ -56,7 +56,7 @@ pub(super) struct MatchCompiler<'l, 'a, 'b> {
     /// require both of their shapes. Constant across one matrix's whole
     /// recursion — a nested match inside a body re-enters through `leaf`, which
     /// builds a fresh `MatchCompiler` with its own (absent) default.
-    default: Option<curios_elab::Term>,
+    default: Option<curios_core::Term>,
 }
 
 impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
@@ -71,7 +71,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// for a headed `| _ =>` catch-all and for `choose` bind-arms.
     pub(super) fn with_default(
         lowerer: &'l Lowerer<'a, 'b>,
-        default: Option<curios_elab::Term>,
+        default: Option<curios_core::Term>,
     ) -> Self {
         Self { lowerer, default }
     }
@@ -80,12 +80,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// [`Self::compile_matrix`]'s `leaf: fn(&Self, &Term)` shape. Also passed
     /// as a bare function pointer from [`Lowerer::subterm`], so it needs to be
     /// visible there too.
-    pub(super) fn term(&self, term: &Term) -> Result<curios_elab::Term, Error> {
+    pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.lowerer.term(term)
     }
 
     /// Leaf shim for the region (bang-hoisting) lowering path.
-    fn region(&self, term: &Term) -> Result<curios_elab::Term, Error> {
+    fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.lowerer.region(term)
     }
 
@@ -97,8 +97,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn match_region(
         &self,
         match_: &Match,
-        binds: &mut Vec<(curios_elab::Free, curios_elab::Term)>,
-    ) -> Result<curios_elab::Term, Error> {
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
         let head = self.collect(&match_.head, binds)?;
         self.compile_matrix_headed(head, &match_.motive, &match_.arms, Self::region)
     }
@@ -111,8 +111,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn choose_region(
         &self,
         choose: &Choose,
-        binds: &mut Vec<(curios_elab::Free, curios_elab::Term)>,
-    ) -> Result<curios_elab::Term, Error> {
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
         self.ladder_region(&choose.arms, &choose.default, binds)
     }
 
@@ -127,8 +127,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         arms: &[ChooseArm],
         default: &Term,
-        binds: &mut Vec<(curios_elab::Free, curios_elab::Term)>,
-    ) -> Result<curios_elab::Term, Error> {
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
         let Some((arm, rest)) = arms.split_first() else {
             return self.collect(default, binds);
         };
@@ -139,7 +139,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             ChooseTest::Cond(condition) => {
                 let head = self.collect(condition, binds)?;
                 let true_case = self.region(&arm.body)?;
-                Ok(curios_elab::Term::bool_match_scoped(
+                Ok(curios_core::Term::bool_match_scoped(
                     head,
                     self.motive_scope(&None)?,
                     rest_wrapped,
@@ -169,11 +169,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn lower_bind_arm(
         &self,
         pattern: &MatchPattern,
-        value: curios_elab::Term,
+        value: curios_core::Term,
         body: &Term,
-        rest: curios_elab::Term,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        rest: curios_core::Term,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         if matches!(pattern, MatchPattern::Binder(_)) {
             return Err(Error::BindArmIrrefutable);
         }
@@ -198,11 +198,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// dispatch point.
     pub(super) fn compile_matrix_headed(
         &self,
-        head: curios_elab::Term,
+        head: curios_core::Term,
         motive: &Option<Term>,
         arms: &[MatrixArm],
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let (arms, default_body) = split_catch_all(arms)?;
         match default_body {
             None => MatchCompiler::new(self.lowerer).compile_matrix(head, motive, arms, leaf),
@@ -220,35 +220,35 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// reaches it. Otherwise the default is emitted directly (a single site).
     fn lower_defaulted_matrix(
         &self,
-        head: curios_elab::Term,
+        head: curios_core::Term,
         motive: &Option<Term>,
         arms: &[MatrixArm],
-        default: curios_elab::Term,
+        default: curios_core::Term,
         share: bool,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         if !share {
             return MatchCompiler::with_default(self.lowerer, Some(default))
                 .compile_matrix(head, motive, arms, leaf);
         }
         let k = self.context.fresh_binder(None);
-        let call = curios_elab::Term::apply(
-            curios_elab::Term::var(curios_elab::Var::free(k.clone())),
-            Vec::<curios_elab::Term>::new(),
+        let call = curios_core::Term::apply(
+            curios_core::Term::var(curios_core::Var::free(k.clone())),
+            Vec::<curios_core::Term>::new(),
         );
         let matrix = MatchCompiler::with_default(self.lowerer, Some(call))
             .compile_matrix(head, motive, arms, leaf)?;
-        let thunk = curios_elab::Term::func(
-            Vec::<(curios_elab::Free, curios_elab::Term)>::new(),
+        let thunk = curios_core::Term::func(
+            Vec::<(curios_core::Free, curios_core::Term)>::new(),
             default,
         );
-        let hole = curios_elab::Term::metavar(self.context.fresh_metavar());
-        Ok(curios_elab::Term::let_(&k, hole, thunk, matrix))
+        let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+        Ok(curios_core::Term::let_(&k, hole, thunk, matrix))
     }
 
     /// Lowers an optional match motive into the core motive slot. A written
     /// motive is an ordinary term, carried un-scoped
-    /// ([`curios_elab::Term::match_motive_written`]) because its arity —
+    /// ([`curios_core::Term::match_motive_written`]) because its arity —
     /// `n_indices + 1` — depends on the eliminated family, which only the
     /// elaborator knows. An omitted motive (`None`) lowers to a fresh
     /// metavariable, so a non-dependent match infers its motive by unifying the
@@ -256,10 +256,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn motive_scope(
         &self,
         motive: &Option<Term>,
-    ) -> Result<curios_elab::Scope<curios_elab::Many>, Error> {
-        Ok(curios_elab::Term::match_motive_written(match motive {
+    ) -> Result<curios_core::Scope<curios_core::Many>, Error> {
+        Ok(curios_core::Term::match_motive_written(match motive {
             Some(motive) => self.term(motive)?,
-            None => curios_elab::Term::metavar(self.context.fresh_metavar()),
+            None => curios_core::Term::metavar(self.context.fresh_metavar()),
         }))
     }
 
@@ -267,22 +267,22 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// `match_region`).
     fn induct_match(
         &self,
-        head: curios_elab::Term,
+        head: curios_core::Term,
         motive: &Option<Term>,
         cases: Vec<InductCase>,
-    ) -> Result<curios_elab::Term, Error> {
+    ) -> Result<curios_core::Term, Error> {
         let motive = self.motive_scope(motive)?;
         // A `| _ =>` catch-all (or bind-arm fallthrough) becomes the core
         // match's default; otherwise the arms enumerate every constructor
         // (core's Rung-C vacuity covers any pruned tag).
         Ok(match &self.default {
-            Some(default) => curios_elab::Term::induct_match_scoped_marked(
+            Some(default) => curios_core::Term::induct_match_scoped_marked(
                 head,
                 motive,
                 cases,
                 Some(default.clone()),
             ),
-            None => curios_elab::Term::induct_match_scoped_marked(head, motive, cases, None),
+            None => curios_core::Term::induct_match_scoped_marked(head, motive, cases, None),
         })
     }
 
@@ -312,11 +312,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// head.
     pub(super) fn compile_matrix(
         &self,
-        head: curios_elab::Term,
+        head: curios_core::Term,
         motive: &Option<Term>,
         arms: &[MatrixArm],
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         if arms.is_empty() {
             return self.induct_match(head, motive, Vec::new());
         }
@@ -353,11 +353,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// recursive call passes `None` (see that method's doc comment).
     fn compile(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
         top_motive: Option<&Option<Term>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         if columns.is_empty() {
             return match rows.len() {
                 1 => self.finish_row(rows.into_iter().next().unwrap(), leaf),
@@ -488,11 +488,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// binding.
     fn compile_ctor(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
         top_motive: Option<&Option<Term>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -545,7 +545,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                         }
                         other => {
                             let synthetic = self.context.fresh_binder(None);
-                            sub_columns.push(curios_elab::Term::var(curios_elab::Var::free(
+                            sub_columns.push(curios_core::Term::var(curios_core::Var::free(
                                 synthetic.clone(),
                             )));
                             sub_patterns.push(other);
@@ -560,7 +560,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 let body = self.bound(&direct_names, || {
                     self.compile(sub_columns, vec![row], None, leaf)
                 })?;
-                cases.push((curios_elab::Atom::from(tag.as_str()), binder_names, body));
+                cases.push((curios_core::Atom::from(tag.as_str()), binder_names, body));
                 continue;
             }
 
@@ -578,20 +578,20 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .collect::<Vec<_>>();
             let mut sub_columns = synthetic
                 .iter()
-                .map(|name| curios_elab::Term::var(curios_elab::Var::free(name.clone())))
+                .map(|name| curios_core::Term::var(curios_core::Var::free(name.clone())))
                 .collect::<Vec<_>>();
             sub_columns.extend(rest.clone());
 
             let body = self.compile(sub_columns, sub_rows, None, leaf)?;
             let marked = plicities.into_iter().zip(synthetic).collect::<Vec<_>>();
-            cases.push((curios_elab::Atom::from(tag.as_str()), marked, body));
+            cases.push((curios_core::Atom::from(tag.as_str()), marked, body));
         }
 
         self.induct_match(scrutinee, top_motive.unwrap_or(&None), cases)
     }
 
     /// Groups rows into `Bool`'s two literal shapes and emits
-    /// [`curios_elab::Term::bool_match`] directly — never `induct_match`
+    /// [`curios_core::Term::bool_match`] directly — never `induct_match`
     /// (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see
     /// this module's own notes on hardcoded-primitive carriers). `Bool`
     /// carries no payload at all, so — unlike [`Self::compile_ctor`] — there
@@ -604,11 +604,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// either.
     fn compile_bool(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
         top_motive: Option<&Option<Term>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -646,7 +646,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             false => self.compile(rest, true_rows, None, leaf)?,
         };
 
-        Ok(curios_elab::Term::bool_match_scoped(
+        Ok(curios_core::Term::bool_match_scoped(
             scrutinee, motive, false_case, true_case,
         ))
     }
@@ -656,11 +656,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// `Nat` match forms, now decided here so both are ordinary matrix leaves:
     ///
     /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural
-    ///   peeling, emitted as [`curios_elab::Term::nat_match`]. A `Lit` leaf
+    ///   peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf
     ///   mixed in is [`Error::MatrixMixedNatDispatch`] — no single core form
     ///   peels a successor *and* dispatches on a value.
     /// - **Dispatch** (no `Succ`): value dispatch over `0`/`Lit(k)` cases,
-    ///   emitted as [`curios_elab::Term::switch`] with the matrix default as
+    ///   emitted as [`curios_core::Term::switch`] with the matrix default as
     ///   its fallthrough. A `switch` over `Nat` is never exhaustive, so the
     ///   default is mandatory (else [`Error::MatrixIncompleteCarrierMatch`]).
     ///   Rows sharing a literal group and recurse together, exactly like
@@ -694,11 +694,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// [`Error::MatrixDuplicateRow`] from [`Self::compile`]'s base case.
     fn compile_nat(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
         top_motive: Option<&Option<Term>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -739,7 +739,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             for (value, group) in groups {
                 cases.push((value, self.compile(rest.clone(), group, None, leaf)?));
             }
-            return Ok(curios_elab::Term::switch_scoped(
+            return Ok(curios_core::Term::switch_scoped(
                 scrutinee, motive, cases, default,
             ));
         }
@@ -777,12 +777,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .map(|(pred_name, ih_name, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&pred_name),
-                        curios_elab::Term::var(curios_elab::Var::free(pred_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(pred_synth.clone())),
                     ));
                     if let Some(ih_name) = ih_name {
                         row.binds.push((
                             self.pattern_binder(&ih_name),
-                            curios_elab::Term::var(curios_elab::Var::free(ih_synth.clone())),
+                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
                         ));
                     }
                     row
@@ -792,7 +792,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (pred_synth, ih_synth, succ_case)
         };
 
-        Ok(curios_elab::Term::nat_match_scoped(
+        Ok(curios_core::Term::nat_match_scoped(
             scrutinee,
             motive,
             zero_case,
@@ -803,7 +803,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Groups rows into `LstNil`/`LstCons` and emits
-    /// [`curios_elab::Term::lst_match`] directly. Structurally identical to
+    /// [`curios_core::Term::lst_match`] directly. Structurally identical to
     /// [`Self::compile_nat`] but with three names (`head`/`tail`/optional
     /// `ih`) instead of two, reusing [`Self::cons_ih_name`] for the
     /// single-row case's `ih` (already handles "written name → bound,
@@ -813,11 +813,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// synthetic `ih` variable the emitted core node itself always needs.
     fn compile_lst(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
         top_motive: Option<&Option<Term>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -882,16 +882,16 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .map(|(head_name, tail_name, ih_name, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&head_name),
-                        curios_elab::Term::var(curios_elab::Var::free(head_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
                     ));
                     row.binds.push((
                         self.pattern_binder(&tail_name),
-                        curios_elab::Term::var(curios_elab::Var::free(tail_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
                     ));
                     if let Some(ih_name) = ih_name {
                         row.binds.push((
                             self.pattern_binder(&ih_name),
-                            curios_elab::Term::var(curios_elab::Var::free(ih_synth.clone())),
+                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
                         ));
                     }
                     row
@@ -901,9 +901,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (head_synth, tail_synth, ih_synth, cons_case)
         };
 
-        Ok(curios_elab::Term::lst_match_scoped(
+        Ok(curios_core::Term::lst_match_scoped(
             scrutinee,
-            curios_elab::Term::metavar(self.context.fresh_metavar()),
+            curios_core::Term::metavar(self.context.fresh_metavar()),
             motive,
             empty_case,
             &head_label,
@@ -914,16 +914,16 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Groups rows into `BinEnd`/`BinByte` and emits
-    /// [`curios_elab::Term::bin_match`] directly — identical to
+    /// [`curios_core::Term::bin_match`] directly — identical to
     /// [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs
     /// for its polymorphic element type (`Bin` has none).
     fn compile_bin(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
         top_motive: Option<&Option<Term>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -1002,16 +1002,16 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .map(|(head_name, tail_name, ih_name, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&head_name),
-                        curios_elab::Term::var(curios_elab::Var::free(head_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
                     ));
                     row.binds.push((
                         self.pattern_binder(&tail_name),
-                        curios_elab::Term::var(curios_elab::Var::free(tail_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
                     ));
                     if let Some(ih_name) = ih_name {
                         row.binds.push((
                             self.pattern_binder(&ih_name),
-                            curios_elab::Term::var(curios_elab::Var::free(ih_synth.clone())),
+                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
                         ));
                     }
                     row
@@ -1021,7 +1021,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (head_synth, tail_synth, ih_synth, cons_case)
         };
 
-        Ok(curios_elab::Term::bin_match_scoped(
+        Ok(curios_core::Term::bin_match_scoped(
             *grain.expect("a Bin group has at least one row"),
             scrutinee,
             motive,
@@ -1034,7 +1034,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Explodes a `Tuple`/`Struct` column into one new leftmost column per
-    /// field, via [`curios_elab::Term::proj`]/[`curios_elab::Term::proj_label`]
+    /// field, via [`curios_core::Term::proj`]/[`curios_core::Term::proj_label`]
     /// on the current (always already-bound) scrutinee variable — this is
     /// the same code path whether the exploded column is the outer head or
     /// several levels deep, and it never needs a core `Match` node at all: a
@@ -1049,10 +1049,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// `let`/lambda site only ever destructures a value once.
     fn compile_fields(
         &self,
-        mut columns: Vec<curios_elab::Term>,
+        mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -1087,8 +1087,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             .into_iter()
             .enumerate()
             .map(|(index, label)| match label {
-                Some(label) => curios_elab::Term::proj_label(scrutinee.clone(), label.to_string()),
-                None => curios_elab::Term::proj(scrutinee.clone(), index),
+                Some(label) => curios_core::Term::proj_label(scrutinee.clone(), label.to_string()),
+                None => curios_core::Term::proj(scrutinee.clone(), index),
             })
             .collect::<Vec<_>>();
         new_columns.extend(rest);
@@ -1105,8 +1105,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     fn finish_row(
         &self,
         row: MatrixRow<'_>,
-        leaf: fn(&Self, &Term) -> Result<curios_elab::Term, Error>,
-    ) -> Result<curios_elab::Term, Error> {
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let names = row
             .binds
             .iter()
@@ -1118,8 +1118,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             .into_iter()
             .rev()
             .fold(body, |tail, ((_, id), value)| {
-                let hole = curios_elab::Term::metavar(self.context.fresh_metavar());
-                curios_elab::Term::let_(&id, hole, value, tail)
+                let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+                curios_core::Term::let_(&id, hole, value, tail)
             }))
     }
 }

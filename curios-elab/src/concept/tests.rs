@@ -15,7 +15,7 @@ fn witness_key_displays_bare_for_arity_one() {
 fn witness_key_displays_as_a_tuple_for_higher_arities() {
     let key = WitnessKey(vec![
         HeadKey::Nat,
-        HeadKey::Nominal(crate::Global::Authored(Qualifier::from([
+        HeadKey::Nominal(curios_core::Global::Authored(Qualifier::from([
             "std", "Str", "Str",
         ]))),
     ]);

@@ -21,6 +21,7 @@ profile = [
 curios-profile = { workspace = true }
 curios-abi = { workspace = true, features = ["archive"] }
 curios-base = { workspace = true, features = ["archive"] }
+curios-core = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
@@ -30,6 +31,7 @@ sha2 = "0.11.0"
 [build-dependencies]
 curios-abi = { workspace = true, features = ["archive"] }
 curios-base = { workspace = true, features = ["archive"] }
+curios-core = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }

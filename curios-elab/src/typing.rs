@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests;
 
-use super::{
-    Apply, Context, Error, Field, Free, Func, Global, Level, Many, MetaId, Mode, Outcome, Prim,
-    PrimHead, Proj, Scope, Sort, Subterm, Telescope, Term, UniverseConstraintKind,
-    UniverseConstraintOrigin, UniverseRole, elaborate,
+use super::{Context, Error, Mode, Outcome, Sort, elaborate};
+use curios_core::{
+    Apply, Field, Free, Func, Global, Level, Many, MetaId, Prim, PrimHead, Proj, Scope, Subterm,
+    Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -327,7 +327,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         )
     });
 
-    let outcome = outcome.map_err(|error: super::ReduceError| {
+    let outcome = outcome.map_err(|error: curios_core::ReduceError| {
         Error::from_reduce(error, || {
             Error::convert_exhausted(goal.this.clone(), goal.that.clone())
         })

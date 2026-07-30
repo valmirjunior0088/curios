@@ -13,7 +13,7 @@
 
 use {
     super::{Context, Error, Lowering, Outcome, Rec, RecMember, Scope, Subterm, Term},
-    crate::Free,
+    curios_core::Free,
 };
 
 /// One classified member of a recursive group, pre-bound for mutual

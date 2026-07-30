@@ -1,4 +1,5 @@
 use crate::*;
+use curios_core::*;
 
 #[test]
 fn display_unbound_variable() {

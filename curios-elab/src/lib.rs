@@ -11,8 +11,6 @@
 /// The core language this stage elaborates into: terms, binders, primitives,
 /// universes, and the nominal registry. Re-exported flat so the elaborator's
 /// modules keep naming them unqualified, as they did when they lived here.
-pub use curios_core::*;
-
 mod universe_solver;
 pub use universe_solver::*;
 

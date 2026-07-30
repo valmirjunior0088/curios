@@ -28,11 +28,12 @@
 //! API and a test surface until the gaps named above are closed.
 
 use {
-    super::{Free, Global, Item, Module, Term, totality::mentioned},
+    super::{Item, Module, totality::mentioned},
     curios_cert::{
         Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
         check_rec_group, check_struct_decl, positivity_vectors,
     },
+    curios_core::{Free, Global, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 

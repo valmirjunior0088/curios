@@ -7,7 +7,7 @@
 
 use {
     super::{BTreeMap, BTreeSet, Bound, Context, Error, Item, Lowering, Module, Outcome},
-    crate::Free,
+    curios_core::Free,
 };
 
 impl Lowering {

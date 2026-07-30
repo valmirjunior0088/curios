@@ -467,6 +467,7 @@ dependencies = [
  "curios-binaryen",
  "curios-cert",
  "curios-cont",
+ "curios-core",
  "curios-elab",
  "curios-ersd",
  "curios-pipeline",
@@ -572,6 +573,7 @@ version = "0.5.0"
 dependencies = [
  "curios-abi",
  "curios-cont",
+ "curios-core",
  "curios-elab",
  "curios-ersd",
  "curios-prelude",
@@ -586,6 +588,7 @@ version = "0.5.0"
 dependencies = [
  "curios-abi",
  "curios-base",
+ "curios-core",
  "curios-elab",
  "curios-ersd",
  "curios-profile",
@@ -624,6 +627,7 @@ dependencies = [
  "curios-abi",
  "curios-base",
  "curios-cert",
+ "curios-core",
  "curios-elab",
  "curios-profile",
  "num-bigint",

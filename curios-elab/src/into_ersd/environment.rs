@@ -11,7 +11,7 @@
 
 use {
     super::BTreeMap,
-    crate::{Free, Global},
+    curios_core::{Free, Global},
 };
 
 /// What a Core name erases to.

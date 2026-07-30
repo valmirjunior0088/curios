@@ -1,9 +1,9 @@
 use {
-    super::{
-        Atom, Erased, Level, Module, Polarity, ReduceError, Term, UniverseConstraintOrigin,
-        UniverseError,
-    },
+    super::{Erased, Module},
     curios_base::{Int, Plicity, Qualifier, Span},
+    curios_core::{
+        Atom, Level, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
+    },
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
@@ -950,11 +950,11 @@ impl Error {
 
         let mut names = BTreeSet::new();
         for term in terms {
-            names.extend(super::display_names(term));
+            names.extend(curios_core::display_names(term));
         }
 
-        let rename = Rc::new(super::build_rename(&names));
-        super::with_pretty_names(rename, || self.render())
+        let rename = Rc::new(curios_core::build_rename(&names));
+        curios_core::with_pretty_names(rename, || self.render())
     }
 
     /// Like [`format`], additionally shortening global names against `module`'s
@@ -962,8 +962,8 @@ impl Error {
     /// are spelled relative to. Used on the core error paths, where the lowered
     /// module is in scope.
     pub fn format_with(&self, module: &Module) -> String {
-        super::with_short_names(
-            Rc::new(super::build_shorten(&module.module_symbols())),
+        curios_core::with_short_names(
+            Rc::new(curios_core::build_shorten(&module.module_symbols())),
             || self.format(),
         )
     }

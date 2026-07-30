@@ -1,17 +1,20 @@
 use {
-    super::{Bound, Context, Error, Mode, check, elaborate},
+    super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl, InductParam, Item,
-        Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
-        check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, finish_deferred_witnesses, is_prop,
+        Concept, Definition, DefinitionKind, Item, Module, RecItem, check_concept_registry,
+        check_positivity, check_proof_totality, check_rec_item_totality, check_type_totality,
+        check_written_type_totality, finish_deferred_witnesses, is_prop,
         record_definition_totality, record_totality, recorded_totality, reduce_with,
         register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_field_telescope,
         zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     curios_cert::{Totality, group_totality},
+    curios_core::{
+        Bound, Free, FuncType, Global, InductDecl, InductParam, Level, SelfReference, StructDecl,
+        Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseMetaId, Visit,
+    },
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -527,12 +530,12 @@ fn finalize_definition(
     let mut interface = context.universe_metas_in(&type_);
     interface.retain(|meta| !determined.contains(meta));
     if let Some(struct_decl) = context.struct_decl(name) {
-        interface.extend(crate::universe_metas(&struct_decl.params));
-        interface.extend(crate::universe_metas(&struct_decl.fields));
+        interface.extend(curios_core::universe_metas(&struct_decl.params));
+        interface.extend(curios_core::universe_metas(&struct_decl.fields));
         interface.extend(struct_decl.result_sort.universe_metas());
     }
     if let Some(concept) = context.concept(name) {
-        interface.extend(crate::universe_metas(&concept.params));
+        interface.extend(curios_core::universe_metas(&concept.params));
     }
     let mut internal = context.universe_metas_in(&body);
     internal.extend(determined);
@@ -544,13 +547,13 @@ fn finalize_definition(
     // and registry entry: nothing captures it, so each occurrence carries the
     // instance itself.
     let free = SelfReference::Free;
-    let type_ = crate::stamp_declaration_instance(
+    let type_ = curios_core::stamp_declaration_instance(
         &context.zonk_universe_levels(&type_)?,
         &owned,
         free,
         &levels,
     );
-    let body = crate::stamp_declaration_instance(
+    let body = curios_core::stamp_declaration_instance(
         &context.zonk_universe_levels(&body)?,
         &owned,
         free,
@@ -562,19 +565,19 @@ fn finalize_definition(
             name,
             StructDecl {
                 universe_context: universe_context.clone(),
-                params: crate::stamp_declaration_instance(
+                params: curios_core::stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.params)?,
                     &owned,
                     free,
                     &levels,
                 ),
-                fields: crate::stamp_declaration_instance(
+                fields: curios_core::stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.fields)?,
                     &owned,
                     free,
                     &levels,
                 ),
-                result_sort: crate::stamp_declaration_instance(
+                result_sort: curios_core::stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.result_sort)?,
                     &owned,
                     free,
@@ -592,7 +595,7 @@ fn finalize_definition(
             name,
             Concept {
                 universe_context: universe_context.clone(),
-                params: crate::stamp_declaration_instance(
+                params: curios_core::stamp_declaration_instance(
                     &context.zonk_universe_levels(&concept.params)?,
                     &owned,
                     free,
@@ -812,11 +815,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .collect::<BTreeSet<_>>();
     for def in &defs {
         if let Some(induct_decl) = context.induct_decl(&def.name) {
-            interface.extend(crate::universe_metas(&induct_decl.params));
-            interface.extend(crate::universe_metas(&induct_decl.indices));
+            interface.extend(curios_core::universe_metas(&induct_decl.params));
+            interface.extend(curios_core::universe_metas(&induct_decl.indices));
             interface.extend(induct_decl.result_sort.universe_metas());
             for constructor in induct_decl.signatures() {
-                interface.extend(crate::universe_metas(&constructor.telescope));
+                interface.extend(curios_core::universe_metas(&constructor.telescope));
             }
         }
     }
@@ -843,7 +846,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         self_reference: SelfReference,
         instance: &[Level],
     ) -> Result<B, Error> {
-        Ok(crate::stamp_declaration_instance(
+        Ok(curios_core::stamp_declaration_instance(
             &context.zonk_universe_levels(value)?,
             owned,
             self_reference,

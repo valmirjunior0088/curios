@@ -27,8 +27,8 @@ use {
         Match, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
         expect_prim_head, infer, is_erasable, reduce_with, refine_head,
     },
-    crate::{Free, Level},
     curios_base::{Grain, PackedBin},
+    curios_core::{Free, Level},
 };
 
 /// The `Lst`/`Bin` carrier a sequence fold eliminates: the carrier-specific
@@ -132,7 +132,7 @@ impl SeqCarrier<'_> {
 struct InductMatch<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
-    name: &'a crate::Global,
+    name: &'a curios_core::Global,
     universes: &'a [Level],
     params: &'a [Term],
     actual_indices: &'a [Term],

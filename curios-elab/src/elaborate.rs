@@ -27,13 +27,16 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Context, ElabProbe, ElaborationStamp, Error, Field, Free, Func, FuncType,
-        ImplicitOrigin, InductType, Infix, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit,
-        ParkedWork, Prim, Proj, Rec, Struct, StructDecl, StructEntry, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Variant, WitnessOrigin, attempt_witness_goal, check,
-        expect, instantiate_universe_levels_scoped, reduce_with, sort_term,
+        Context, ElabProbe, ElaborationStamp, Error, ParkedWork, attempt_witness_goal, check,
+        expect, reduce_with, sort_term,
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
+    curios_core::{
+        Apply, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix, Let, MetaId,
+        Metavar, MetavarOrigin, Nat, NumLit, Prim, Proj, Rec, Struct, StructDecl, StructEntry,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, WitnessOrigin,
+        instantiate_universe_levels_scoped,
+    },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
     std::collections::{BTreeSet, VecDeque},

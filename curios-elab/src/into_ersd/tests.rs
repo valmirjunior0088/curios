@@ -1,3 +1,4 @@
+use curios_core::*;
 use {
     crate::*,
     curios_base::{Plicity, Qualifier, RootId},
@@ -6,8 +7,8 @@ use {
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> crate::Global {
-    crate::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> curios_core::Global {
+    curios_core::Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {
@@ -16,8 +17,8 @@ fn context() -> Context {
 
 /// A top-level definition's identity, from the path a test writes — the same
 /// name [`definition`] declares it under. Fixture-only.
-fn global(path: &str) -> crate::Free {
-    crate::Free::global(Qualifier::from([path]))
+fn global(path: &str) -> curios_core::Free {
+    curios_core::Free::global(Qualifier::from([path]))
 }
 
 fn nat_lit(n: usize) -> Term {
@@ -726,7 +727,7 @@ fn a_variant_match_binds_payload_without_projections() {
         None,
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<crate::Free>::new(), nat_lit(0)),
+            ("none", Vec::<curios_core::Free>::new(), nat_lit(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
@@ -860,7 +861,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     let produce_type = Term::func_type(
         [(
             u.clone(),
-            Term::tuple_type(Vec::<(crate::Free, Term)>::new()),
+            Term::tuple_type(Vec::<(curios_core::Free, Term)>::new()),
         )],
         Term::prim(Prim::NatType),
     );

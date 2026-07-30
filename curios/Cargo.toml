@@ -19,6 +19,7 @@ curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
 curios-cert = { workspace = true }
+curios-core = { workspace = true }
 curios-wasm = { workspace = true }
 curios-cont = { workspace = true }
 curios-ersd = { workspace = true }

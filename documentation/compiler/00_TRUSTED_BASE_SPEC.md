@@ -25,7 +25,7 @@ The completed implementation must compile the existing `/sys`, `/syn`, `/std`, e
 
 ## The trusted base, enumerated
 
-A line is trusted when a bug in it can admit a program. That set is the call closure of the kernel's three entry points — `check_definition`, `check_rec_group`, `check_entrypoint` — and it does not coincide with any crate boundary.
+A line is trusted when a bug in it can admit a program. That set is the call closure of the kernel's three entry points — `check_definition`, `check_rec_group`, `check_entrypoint` — and when this document was written it did not coincide with any crate boundary. **It now does, in the judgment half:** the `curios-cert` split moved the kernel, the `Env`/`Judge` seam, and the shared inversion, positivity, totality, and entailment analyses into their own crate, so every *rule* in the closure is enumerable as `curios-cert`, and what remains shared is the representation half — `curios-core`, `curios-base`, `curios-abi`, `num-bigint` — which `cargo tree -p curios-cert` lists mechanically. The closure-assertion test below remains worth having for the representation half, whose membership is still by import-following; the judgment half no longer needs it.
 
 | Trusted | Lines | Why |
 | --- | --- | --- |
@@ -263,13 +263,13 @@ The discipline this establishes and should be written into the `curios-core` doc
 
 ## Sequencing
 
-1. A1, then A2, then re-run `kernel_disagreements` and record the new counts before planning further.
-2. A3, with the amended principle written into `DESIGN.md` in the same commit.
-3. Measure A4's cost, then A4 in its own commit with the `SCHEMA` bump.
-4. ~~B1~~ done, ahead of A: it was self-contained and it shrinks the surface every later item walks.
-5. C1 after a probe on `/std/Map/get`. C2, C3, C4, C5 in any order.
-6. D throughout, by visibility first.
-7. E last.
+The original ordering, kept for the record: A1–A4, B, C1–C5, D throughout, E last. Where it stands now:
+
+1. **A, B, C — done.** Every relocation and every written-from-scratch item landed; the per-item counts are the Measurements progression below.
+2. **The refusing-direction campaign — done.** 90 → 2 of 1050, the final two classified as recorded conversion incompleteness (the history-scheme divergence witness and the case-equation key residue), which is exactly the acceptance gate this document set for E.
+3. **The `curios-cert` split — done**, in two commits: the judgment crate, then the removal of `curios-elab`'s blanket representation re-export with every consumer wired to its owning crate.
+4. **D — what remains, re-scoped by the split.** D1 (`Flt` opaque at the type level) is next and is a language decision: it is presented to the user as problem/why/why-nothing-else-works before anything is applied. D2 (the printer) needs its embedded decision — whether the faithful printer follows the diagnostic machinery out — taken explicitly. D3's premise changed: the builder clusters can no longer sit *in* the trusted judgments, but they still sit in `curios-core`, which is in `curios-cert`'s dependency closure — so D3 now reads "shrink the shared representation crate", pushed against core's grown consumer set (`curios-cert`, `curios-elab`, `curios-text`, `curios-prelude`, `curios-pipeline`, `curios`) by demote-and-compile. D4 stays deferred as recorded.
+5. **E — last, and its gate condition is already met.** `recheck_module` on the compile path, a refusal failing the compile, with the archive-verdict pattern so the prelude's verdicts ride the archive and only the entry suffix re-checks per compile.
 
 `positivity.rs`, `totality.rs`, `invert.rs`, and `elaborate/match_.rs` are outside the current in-flight naming work, so A does not collide with it. Two conventions that work has settled and this document follows: unit tests live in `foo/tests.rs` beside a `#[cfg(test)] mod tests;` declaration, and the pipeline entry points are `curios-pipeline/src/compile.rs` and `stage.rs`.
 
@@ -312,6 +312,8 @@ After the spine-retry rule (a failing same-shape application comparison — two 
 What remained at 5 split three ways: the lambda-versus-Π motive shapes (`BigNat/eq`, `NonZero/eq`, `Char/eq_of_code`), `/std/Fmt/go_with`'s universe-instance mismatch, and one `Utf8` residue (`decode_head_raw`).
 
 After struct eta (`struct_eta`: a literal against a *neutral* inhabitant, field-wise through projections, `Prop`-sorted fields discharged by irrelevance off the declaration's telescope; the neutral restriction keeps an all-`Prop` or empty struct's vacuous field walk from equating its literal with a non-inhabitant): **5 became 2** — the trio's real shape was `Char{(a).0, scalar} ~ a` after beta, one anchored field plus one irrelevant proof field.
+
+After the `curios-cert` split (the kernel, the `Env`/`Judge` seam, and the shared inversion/positivity/totality/entailment analyses in their own crate; `curios-core` reduced to the representation both checkers build on; the kernel's judgments flattened onto the cert root, the crate name doing the disambiguation the old `kernel::` namespace did; the `entails` family extracted from `universe.rs`; four representation methods promoted `pub` as the shared-by-checkers contract): behavior-identical — **still 2 of 1050**, parity holding, the old 162 `curios-core` tests split 131 cert / 31 core with none lost. And after `curios-elab`'s blanket `pub use curios_core::*` re-export was removed, every consumer names the owning crate: representation from `curios-core`, judgments from `curios-cert`, elaboration from `curios-elab` — with `curios-core` added as a direct dependency of `curios-text`, `curios-prelude`, `curios-pipeline`, and `curios`.
 
 **The final two are classified, not carved, and the acceptance gate is met.** `/std/Fmt/go_with` is the concrete witness of the recorded open question between the two conversion histories: its constraints (`P0 ≤ P1`, `max(1,P0) ≤ max(1,P1)`, `max(1,P1) ≤ max(1,P0)`) are exactly sufficient, because the two `format_type_with` instances' levels only ever surface under `max(1,·)` — but closing the comparison requires recognizing the unfolding rounds as one equi-recursive cycle, which the elaborator's mint-order rename does and the kernel's context-keyed history deliberately does not, since each round's goal sits under a longer context. Weakening the kernel's keying is the exact move the conversion module documents as the unsound direction, so the item stands as the divergence's witness. `/std/Str/utf8/decode_head_raw` is case-equation key-identity residue: the registry key's local spellings differ from the occurrence the reducer probes. Both are recorded conversion incompleteness, so the gate this document set — "zero refusals whose class is not a recorded conversion incompleteness" — holds at **2 of 1050**. A member-wise `rec`-group conversion rule was implemented, measured to move nothing, and reverted under this document's own law that an item that does not move a class count has not been shown to do anything. same-headed index mismatches needing deeper reduction of the shared peel algebra on symbolic spines (`Bytes/at`/`slice` under `Utf8`, `combine`/`trim` under `is_trimmed` — the largest block), the `Eq.{0}`-vs-`Eq.{u}` instance-level cluster (diagnose the elaborator's side before carving: nominal instances at distinct levels are documented *unrelated*, so its acceptance may itself be the defect), and motive-position lambda-versus-Π shapes in the syntactically-compared conversion positions.
 

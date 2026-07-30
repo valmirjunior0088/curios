@@ -254,10 +254,10 @@ pub(super) fn elaborate_variant(
 
     let (elaborated, output) = check_args_against(context, signature, &args)?;
 
-    let output = crate::stamp_declaration_instance(
+    let output = curios_core::stamp_declaration_instance(
         &output,
         &BTreeSet::from([name.clone()]),
-        crate::SelfReference::Free,
+        curios_core::SelfReference::Free,
         &universes,
     );
     let rebuilt = Term::variant_at(

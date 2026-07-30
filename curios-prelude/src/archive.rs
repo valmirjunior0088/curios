@@ -5,7 +5,8 @@
 //! this crate's `OUT_DIR` whenever its inputs change.
 
 use {
-    curios_elab::{ErasedPrelude, Module, Term},
+    curios_core::Term,
+    curios_elab::{ErasedPrelude, Module},
     curios_text::PreparedPrelude,
 };
 

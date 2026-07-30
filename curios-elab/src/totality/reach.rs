@@ -31,10 +31,8 @@
 //! why partiality persists on the definition rather than being recomputed.
 
 use {
-    crate::{
-        Bound, Definition, FuncType, Global, Item, Module, Struct, Subterm, Telescope, Term,
-        Variant,
-    },
+    crate::{Definition, Item, Module},
+    curios_core::{Bound, FuncType, Global, Struct, Subterm, Telescope, Term, Variant},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -251,22 +249,22 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending
             return;
         }
 
-        Subterm::Func(super::super::Func { telescope, .. }) => {
+        Subterm::Func(curios_core::Func { telescope, .. }) => {
             entries(telescope, site, positions);
         }
 
-        Subterm::Match(super::super::Match { motive, .. }) => {
+        Subterm::Match(curios_core::Match { motive, .. }) => {
             push(positions, site, motive.body());
         }
 
-        Subterm::Let(super::super::Let { bindings, .. }) => {
+        Subterm::Let(curios_core::Let { bindings, .. }) => {
             for binding in bindings {
                 push(positions, site, binding.type_());
             }
         }
 
-        Subterm::Rec(super::super::Rec { group, .. })
-        | Subterm::RecMember(super::super::RecMember { group, .. }) => {
+        Subterm::Rec(curios_core::Rec { group, .. })
+        | Subterm::RecMember(curios_core::RecMember { group, .. }) => {
             for member in group.iter() {
                 push(positions, site, member.type_.body());
             }
@@ -280,7 +278,7 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending
         }
 
         // The type formers name their element types.
-        Subterm::Prim(super::super::Prim::LstType(type_) | super::super::Prim::CellType(type_)) => {
+        Subterm::Prim(curios_core::Prim::LstType(type_) | curios_core::Prim::CellType(type_)) => {
             push(positions, site, type_)
         }
 

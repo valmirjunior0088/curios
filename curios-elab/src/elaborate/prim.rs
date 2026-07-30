@@ -1,7 +1,8 @@
 use {
-    super::{Context, Error, ImplicitOrigin, Mode, elaborate, expect},
-    crate::{Prim, Subterm, Term, reduce_with, wire_term},
+    super::{Context, Error, Mode, elaborate, expect},
+    crate::reduce_with,
     curios_base::Grain,
+    curios_core::{ImplicitOrigin, Prim, Subterm, Term, wire_term},
     std::sync::Arc,
 };
 

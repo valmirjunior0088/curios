@@ -10,8 +10,9 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
+    curios_core::{Global, Sharing},
     curios_elab::{
-        Context, Global, Item, Mode, Sharing, elaborate_and_zonk_module, erase_prelude_prefix,
+        Context, Item, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, PreludeModules, prepare_prelude, sys_module},

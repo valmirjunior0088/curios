@@ -1,12 +1,14 @@
+use curios_core::*;
 use {
     crate::*,
     curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
+    curios_core::{Nat, Prim, Subterm, Term},
     std::time::Instant,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> crate::Global {
-    crate::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> curios_core::Global {
+    curios_core::Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {
@@ -106,7 +108,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
         Some(&m),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<crate::Free>::new(), nat(0)),
+            ("none", Vec::<curios_core::Free>::new(), nat(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
@@ -126,7 +128,7 @@ fn reduce_inductive_match_absent_tag_takes_default() {
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
         Term::prim(Prim::NatType),
-        [("none", Vec::<crate::Free>::new(), nat(0))],
+        [("none", Vec::<curios_core::Free>::new(), nat(0))],
         nat(99),
     );
 
@@ -146,7 +148,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
         Some(&m),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<crate::Free>::new(), nat(0)),
+            ("none", Vec::<curios_core::Free>::new(), nat(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
         nat(99),
@@ -904,8 +906,9 @@ fn reduce_flt_to_int_is_exact_or_stuck() {
 }
 
 mod prim {
+    use curios_core::*;
     use {
-        crate::{Context, Nat, Prim, Subterm, Term, reduce},
+        crate::{Context, reduce},
         curios_base::{Grain, PackedBin},
         num_bigint::BigUint,
     };
@@ -1368,9 +1371,9 @@ mod prim {
 /// itself there. Both routes land on the same weak-head normal form, which is
 /// exactly what these assertions pin.
 mod kernel_agreement {
+    use curios_core::*;
     use {
         super::{context, nat, nominal},
-        crate::{Free, Prim, Reducer, Term},
         curios_cert::Kernel,
     };
 

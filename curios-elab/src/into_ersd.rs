@@ -38,10 +38,13 @@
 
 use {
     super::{
-        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductArm,
-        InductDecl, InductType, Item, Let, Many, Match, Module, Nat, Prim, PrimHead, Proj, Rec,
-        RecItem, RecMember, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, Two, Var, Variant, expect_prim_head, infer, reduce_with, refine_head, wire_term,
+        Context, Error, Item, Module, RecItem, expect_prim_head, infer, reduce_with, refine_head,
+    },
+    curios_core::{
+        Apply, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductArm, InductDecl,
+        InductType, Let, Many, Match, Nat, Prim, PrimHead, Proj, Rec, RecMember, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
+        wire_term,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,

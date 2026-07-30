@@ -1,14 +1,16 @@
 use {
     super::{
-        Bound, Concept, DefinitionKind, Error, Free, Global, Goal, HeadKey, HeadTag,
-        ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Subterm,
-        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
-        UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
+        Concept, DefinitionKind, Error, Goal, HeadKey, UniverseMark, UniverseSolver,
+        UniverseStateToken, Witness, WitnessKey,
     },
-    crate::ReduceError,
     curios_base::{Entropy, Qualifier, RootId, Span},
     curios_cert::Totality,
+    curios_core::ReduceError,
+    curios_core::{
+        Bound, Free, Global, HeadTag, ImplicitOrigin, InductDecl, Level, MetaId, Metavar,
+        MetavarOrigin, StructDecl, Subterm, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+    },
     std::{
         cell::Cell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -925,7 +927,7 @@ impl Context {
         let levels = self
             .universes_mut()
             .instantiate(&universe_context, UniverseRole::Generalizable)?;
-        let type_ = super::instantiate_universe_levels_scoped(&type_, &levels)?;
+        let type_ = curios_core::instantiate_universe_levels_scoped(&type_, &levels)?;
         Ok(Some((type_, levels)))
     }
 
@@ -978,7 +980,7 @@ impl Context {
             .instantiate_at(&universe_context, levels)
             .map_err(Error::from)?;
         let type_ =
-            super::instantiate_universe_levels_scoped(&type_, levels).map_err(Error::from)?;
+            curios_core::instantiate_universe_levels_scoped(&type_, levels).map_err(Error::from)?;
         Ok(Some(type_))
     }
 
@@ -995,7 +997,7 @@ impl Context {
             .instantiate(universe_context, UniverseRole::Generalizable)
             .map_err(Error::from)?;
         let value =
-            super::instantiate_universe_levels_scoped(value, &levels).map_err(Error::from)?;
+            curios_core::instantiate_universe_levels_scoped(value, &levels).map_err(Error::from)?;
         Ok((value, levels))
     }
 
@@ -1016,7 +1018,7 @@ impl Context {
         }
         self.universes_mut()
             .instantiate_at(universe_context, levels)?;
-        super::instantiate_universe_levels_scoped(value, levels)
+        curios_core::instantiate_universe_levels_scoped(value, levels)
     }
 
     pub(crate) fn instantiate_induct_decl_at(
@@ -1025,7 +1027,7 @@ impl Context {
         levels: &[Level],
     ) -> Result<InductDecl, UniverseError> {
         fn rewrite<B: Bound>(value: &B, levels: &[Level]) -> Result<B, UniverseError> {
-            super::instantiate_universe_levels_scoped(value, levels)
+            curios_core::instantiate_universe_levels_scoped(value, levels)
         }
 
         #[cfg(feature = "profile")]
@@ -1057,7 +1059,7 @@ impl Context {
         levels: &[Level],
     ) -> Result<StructDecl, UniverseError> {
         fn rewrite<B: Bound>(value: &B, levels: &[Level]) -> Result<B, UniverseError> {
-            super::instantiate_universe_levels_scoped(value, levels)
+            curios_core::instantiate_universe_levels_scoped(value, levels)
         }
 
         #[cfg(feature = "profile")]
@@ -1258,7 +1260,7 @@ impl Context {
         self.refinement_projections
             .last_mut()
             .unwrap()
-            .insert((super::project_erased_universes(&base), index), value);
+            .insert((curios_core::project_erased_universes(&base), index), value);
 
         self.reduction_cache.clear();
         self.elaboration_cache.clear();
@@ -1326,7 +1328,7 @@ impl Context {
             return None;
         }
 
-        let base = super::project_erased_universes(base);
+        let base = curios_core::project_erased_universes(base);
         self.refinement_projections
             .iter()
             .rev()

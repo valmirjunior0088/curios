@@ -17,7 +17,7 @@ use {
     super::*,
     curios_abi::ForeignStore,
     curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind},
-    curios_elab::Bound as _,
+    curios_core::Bound as _,
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -160,7 +160,7 @@ impl PreparedPrelude {
     ///
     /// The rest of a `PreparedPrelude` is resolution metadata and floors — no
     /// terms — so the lowered module is the whole of what there is to share.
-    pub fn shared(self, sharing: &curios_elab::Sharing) -> Self {
+    pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
         Self {
             core: self.core.shared(sharing),
             ..self
@@ -439,7 +439,7 @@ impl Term {
 // Resolve a super concept's head to its qualified core name — the same rule
 // `Lowerer`'s term-reference arm uses, minus the local-binder shadowing (a
 // declaration-site super edge has no enclosing value scope).
-fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_elab::Global, Error> {
+fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_core::Global, Error> {
     let qualifier = if name.is_abs() || !name.is_single() {
         context.resolve_term_name(name)?
     } else {
@@ -448,7 +448,7 @@ fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_elab::G
             None => Qualifier::from([name.head()]),
         }
     };
-    Ok(curios_elab::Global::Authored(qualifier))
+    Ok(curios_core::Global::Authored(qualifier))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -456,10 +456,10 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    induct_decls: &mut BTreeMap<curios_elab::Global, curios_elab::InductDecl>,
-    struct_decls: &mut BTreeMap<curios_elab::Global, curios_elab::StructDecl>,
-    concepts: &mut BTreeMap<curios_elab::Global, curios_elab::Concept>,
-    witnesses: &mut BTreeSet<curios_elab::Global>,
+    induct_decls: &mut BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &mut BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    concepts: &mut BTreeMap<curios_core::Global, curios_elab::Concept>,
+    witnesses: &mut BTreeSet<curios_core::Global>,
     foreigns: &mut ForeignStore,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
@@ -567,7 +567,7 @@ fn process_items(
                 let type_ = lower.term(&let_item.signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_elab::DefinitionKind::Authored,
-                    name: curios_elab::Global::Authored(context.prefixed(&let_item.label)),
+                    name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -586,7 +586,7 @@ fn process_items(
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_elab::DefinitionKind::Authored,
-                    name: curios_elab::Global::Authored(path),
+                    name: curios_core::Global::Authored(path),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -601,7 +601,7 @@ fn process_items(
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
                             kind: curios_elab::DefinitionKind::Authored,
-                            name: curios_elab::Global::Authored(context.prefixed(&let_item.label)),
+                            name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             root: context.root(),
                             type_,
@@ -624,7 +624,7 @@ fn process_items(
                     .iter()
                     .map(|u| {
                         let lower = Lowerer::new(context);
-                        let name = curios_elab::Global::Authored(context.prefixed(&u.label));
+                        let name = curios_core::Global::Authored(context.prefixed(&u.label));
 
                         // Parameters and indices are minted before any of their
                         // types is lowered, and each type sees the binders
@@ -658,7 +658,7 @@ fn process_items(
                         let param_vars = param_binders
                             .iter()
                             .map(|(_, id)| {
-                                curios_elab::Term::var(curios_elab::Var::free(id.clone()))
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
                             })
                             .collect::<Vec<_>>();
 
@@ -680,7 +680,7 @@ fn process_items(
                         let index_vars = index_binders
                             .iter()
                             .map(|(_, id)| {
-                                curios_elab::Term::var(curios_elab::Var::free(id.clone()))
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
                             })
                             .collect::<Vec<_>>();
 
@@ -721,9 +721,9 @@ fn process_items(
                                         .collect::<Result<Vec<_>, Error>>()
                                 })?;
 
-                                let telescope = curios_elab::Telescope::build(
+                                let telescope = curios_core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
-                                    curios_elab::Term::induct_type(
+                                    curios_core::Term::induct_type(
                                         name.clone(),
                                         param_vars.clone(),
                                         target,
@@ -742,8 +742,8 @@ fn process_items(
                                     .collect::<Vec<_>>();
 
                                 Ok((
-                                    curios_elab::Atom::from(c.label.as_str()),
-                                    curios_elab::InductParam {
+                                    curios_core::Atom::from(c.label.as_str()),
+                                    curios_core::InductParam {
                                         telescope,
                                         plicities,
                                     },
@@ -762,13 +762,13 @@ fn process_items(
 
                         induct_decls.insert(
                             name.clone(),
-                            curios_elab::InductDecl {
-                                universe_context: curios_elab::UniverseContext::empty(),
-                                params: curios_elab::Telescope::build(
+                            curios_core::InductDecl {
+                                universe_context: curios_core::UniverseContext::empty(),
+                                params: curios_core::Telescope::build(
                                     param_tys_unmarked.clone(),
                                     (),
                                 ),
-                                indices: curios_elab::Telescope::build(
+                                indices: curios_core::Telescope::build(
                                     param_tys_unmarked
                                         .iter()
                                         .cloned()
@@ -787,7 +787,7 @@ fn process_items(
                         );
 
                         let induct_decl =
-                            curios_elab::Term::induct_type(name.clone(), param_vars, index_vars);
+                            curios_core::Term::induct_type(name.clone(), param_vars, index_vars);
 
                         // The type constructor is flat over params then
                         // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
@@ -808,16 +808,16 @@ fn process_items(
                             (result_sort, induct_decl)
                         } else {
                             (
-                                curios_elab::Term::func_type_marked(
+                                curios_core::Term::func_type_marked(
                                     binder_tys.clone(),
                                     result_sort,
                                 ),
-                                curios_elab::Term::func_marked(binder_tys, induct_decl),
+                                curios_core::Term::func_marked(binder_tys, induct_decl),
                             )
                         };
                         Ok(FlatLet {
                             kind: curios_elab::DefinitionKind::InductiveType,
-                            name: curios_elab::Global::Authored(context.prefixed(&u.label)),
+                            name: curios_core::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
                             root: context.root(),
                             type_,
@@ -911,37 +911,37 @@ fn process_items(
                         // proof/type payload params that `erase_variant` drops
                         // from the tuple — the constructor function's arity and its
                         // injected variant's arity stay in lockstep.
-                        let ctor_type = curios_elab::Term::func_type_marked(
+                        let ctor_type = curios_core::Term::func_type_marked(
                             param_tys.clone(),
                             lower.bound(&binders, || lower.term(&output_type))?,
                         );
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
-                        let args: Vec<curios_elab::Term> = payload_binders
+                        let args: Vec<curios_core::Term> = payload_binders
                             .iter()
                             .map(|(_, id)| {
-                                curios_elab::Term::var(curios_elab::Var::free(id.clone()))
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
                             })
                             .collect();
-                        let inject = curios_elab::Term::variant(
-                            curios_elab::Global::Authored(context.prefixed(&u.label)),
+                        let inject = curios_core::Term::variant(
+                            curios_core::Global::Authored(context.prefixed(&u.label)),
                             param_binders.iter().map(|(_, id)| {
-                                curios_elab::Term::var(curios_elab::Var::free(id.clone()))
+                                curios_core::Term::var(curios_core::Var::free(id.clone()))
                             }),
-                            curios_elab::Atom::from(c.label.as_str()),
+                            curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
                         // The value constructor carries the same calling
                         // convention as `ctor_type`: every inductive parameter
                         // is implicit, each payload keeps its declared mark.
-                        let ctor_body = curios_elab::Term::func_marked(param_tys, inject);
+                        let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             kind: curios_elab::DefinitionKind::InductiveConstructor {
                                 owner: context.prefixed(&u.label),
-                                tag: curios_elab::Atom::from(c.label.as_str()),
+                                tag: curios_core::Atom::from(c.label.as_str()),
                             },
-                            name: curios_elab::Global::Authored(
+                            name: curios_core::Global::Authored(
                                 context.prefixed(&u.label).with(&c.label),
                             ),
                             island: context.island(),
@@ -958,7 +958,7 @@ fn process_items(
             TopItem::Struct(s) => {
                 let lower = Lowerer::new(context);
 
-                let name = curios_elab::Global::Authored(context.prefixed(&s.label));
+                let name = curios_core::Global::Authored(context.prefixed(&s.label));
                 // Declaring module: the type-former's qualifier prefix —
                 // identical to core's per-item `island` — for the
                 // representation-privacy checks.
@@ -981,7 +981,7 @@ fn process_items(
                     .collect::<Vec<_>>();
                 let param_vars = param_binders
                     .iter()
-                    .map(|(_, id)| curios_elab::Term::var(curios_elab::Var::free(id.clone())))
+                    .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                     .collect::<Vec<_>>();
 
                 // Field types, with declared or positional (`_i`) names so a
@@ -1015,10 +1015,10 @@ fn process_items(
 
                 struct_decls.insert(
                     name.clone(),
-                    curios_elab::StructDecl {
-                        universe_context: curios_elab::UniverseContext::empty(),
-                        params: curios_elab::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: curios_elab::Telescope::build(
+                    curios_core::StructDecl {
+                        universe_context: curios_core::UniverseContext::empty(),
+                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
+                        fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
                             (),
                         ),
@@ -1036,19 +1036,19 @@ fn process_items(
                 // body is the `StructType` normal form (the bare node when
                 // parameterless), so `Pair(Nat, Bin)` reduces to
                 // `StructType { Pair, [Nat, Bin] }`. No value constructor.
-                let struct_type = curios_elab::Term::struct_type(name.clone(), param_vars);
+                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
                 } else {
                     (
-                        curios_elab::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_elab::Term::func_marked(param_tys, struct_type),
+                        curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
+                        curios_core::Term::func_marked(param_tys, struct_type),
                     )
                 };
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_elab::DefinitionKind::StructType,
-                    name: curios_elab::Global::Authored(context.prefixed(&s.label)),
+                    name: curios_core::Global::Authored(context.prefixed(&s.label)),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -1061,7 +1061,7 @@ fn process_items(
             // parameter telescope) and one method-wrapper `let` per field, synthed
             // into the concept's own namespace (§4.1).
             TopItem::Concept(concept) => {
-                let name = curios_elab::Global::Authored(context.prefixed(&concept.label));
+                let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                 let module = context.prefixed(&concept.label).without_last();
                 let root = context.root();
 
@@ -1082,7 +1082,7 @@ fn process_items(
                     .collect::<Vec<_>>();
                 let param_vars = param_binders
                     .iter()
-                    .map(|(_, id)| curios_elab::Term::var(curios_elab::Var::free(id.clone())))
+                    .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                     .collect::<Vec<_>>();
 
                 // Superclass fields are anonymous in the surface syntax; mint a
@@ -1126,10 +1126,10 @@ fn process_items(
                 // The record shape drives struct literals and projections.
                 struct_decls.insert(
                     name.clone(),
-                    curios_elab::StructDecl {
-                        universe_context: curios_elab::UniverseContext::empty(),
-                        params: curios_elab::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: curios_elab::Telescope::build(
+                    curios_core::StructDecl {
+                        universe_context: curios_core::UniverseContext::empty(),
+                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
+                        fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
                             (),
                         ),
@@ -1163,8 +1163,8 @@ fn process_items(
                 concepts.insert(
                     name.clone(),
                     curios_elab::Concept {
-                        universe_context: curios_elab::UniverseContext::empty(),
-                        params: curios_elab::Telescope::build(param_tys_unmarked.clone(), ()),
+                        universe_context: curios_core::UniverseContext::empty(),
+                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),
                         supers,
                         root,
@@ -1172,18 +1172,18 @@ fn process_items(
                 );
 
                 // The type-former, exactly like a representation-public struct's.
-                let struct_type = curios_elab::Term::struct_type(name.clone(), param_vars);
+                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
                 } else {
                     (
-                        curios_elab::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_elab::Term::func_marked(param_tys, struct_type),
+                        curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
+                        curios_core::Term::func_marked(param_tys, struct_type),
                     )
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_elab::DefinitionKind::ConceptType,
-                    name: curios_elab::Global::Authored(context.prefixed(&concept.label)),
+                    name: curios_core::Global::Authored(context.prefixed(&concept.label)),
                     island: context.island(),
                     root: context.root(),
                     type_,
@@ -1228,7 +1228,7 @@ fn process_items(
                         kind: curios_elab::DefinitionKind::ConceptMethod {
                             owner: context.prefixed(&concept.label),
                         },
-                        name: curios_elab::Global::Authored(
+                        name: curios_core::Global::Authored(
                             context.prefixed(&concept.label).with(&field.label),
                         ),
                         island: context.island(),
@@ -1245,7 +1245,7 @@ fn process_items(
             // has no name a programmer wrote, and the module a diagnostic
             // reports for it comes from `Definition::island`.
             TopItem::Witness(witness) => {
-                let name = curios_elab::Global::Witness(context.fresh_witness());
+                let name = curios_core::Global::Witness(context.fresh_witness());
 
                 let concept_app = witness_concept_application(&witness.concept, &witness.args);
                 let body: Term = Subterm::StructLit(StructLit {
@@ -1324,10 +1324,10 @@ fn process_items(
 /// registry too.
 fn node_reference_names(
     item: &FlatItem,
-    declared: &[curios_elab::Global],
-    induct_decls: &BTreeMap<curios_elab::Global, curios_elab::InductDecl>,
-    struct_decls: &BTreeMap<curios_elab::Global, curios_elab::StructDecl>,
-) -> HashSet<curios_elab::Global> {
+    declared: &[curios_core::Global],
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+) -> HashSet<curios_core::Global> {
     let mut names = item.free_vars();
     for name in declared {
         if let Some(induct_decl) = induct_decls.get(name) {
@@ -1345,8 +1345,8 @@ fn node_reference_names(
 /// the partition `owner` was restricted to) drop out.
 fn dep_nodes(
     node: usize,
-    names: &HashSet<curios_elab::Global>,
-    owner: &HashMap<curios_elab::Global, usize>,
+    names: &HashSet<curios_core::Global>,
+    owner: &HashMap<curios_core::Global, usize>,
 ) -> HashSet<usize> {
     names
         .iter()
@@ -1356,7 +1356,7 @@ fn dep_nodes(
 }
 
 /// Owner index (declared name → node) over the given nodes only.
-fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_elab::Global, usize> {
+fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global, usize> {
     nodes
         .iter()
         .flat_map(|&n| items[n].names().into_iter().map(move |name| (name, n)))
@@ -1398,9 +1398,9 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
-    induct_decls: &BTreeMap<curios_elab::Global, curios_elab::InductDecl>,
-    struct_decls: &BTreeMap<curios_elab::Global, curios_elab::StructDecl>,
-    rest_owner: &HashMap<curios_elab::Global, usize>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    rest_owner: &HashMap<curios_core::Global, usize>,
 ) -> Vec<usize> {
     let owner = owner_of(items, prelude_nodes);
     let deps = prelude_nodes
@@ -1418,7 +1418,7 @@ fn prelude_permutation(
                      entry program, so this is a bug in the embedded prelude source",
                     declared
                         .first()
-                        .map_or("<anonymous>".to_string(), curios_elab::Global::symbol),
+                        .map_or("<anonymous>".to_string(), curios_core::Global::symbol),
                     name.symbol(),
                 );
             }
@@ -1440,8 +1440,8 @@ fn prelude_permutation(
 
 fn order_flat_items(
     items: Vec<FlatItem>,
-    induct_decls: &BTreeMap<curios_elab::Global, curios_elab::InductDecl>,
-    struct_decls: &BTreeMap<curios_elab::Global, curios_elab::StructDecl>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
 ) -> Vec<FlatItem> {
     let count = items.len();
 
@@ -1499,7 +1499,7 @@ fn order_flat_items(
 /// its telescopes. Binder names (parameters, payload binders) are captured by
 /// `Telescope::build` and never appear here; the index types' references also
 /// live in the type binding's own signature, but are included for robustness.
-fn induct_free_vars(induct_decl: &curios_elab::InductDecl) -> HashSet<curios_elab::Global> {
+fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
     induct_decl
         .params
         .free_vars()
@@ -1520,7 +1520,7 @@ fn induct_free_vars(induct_decl: &curios_elab::InductDecl) -> HashSet<curios_ela
 /// makes a struct's type-former node depend on the (e.g. primitive) types its
 /// fields mention — they live nowhere in the type-former's own body, which is
 /// just the `StructType` normal form.
-fn struct_free_vars(struct_decl: &curios_elab::StructDecl) -> HashSet<curios_elab::Global> {
+fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
     struct_decl
         .params
         .free_vars()
@@ -1532,11 +1532,11 @@ fn struct_free_vars(struct_decl: &curios_elab::StructDecl) -> HashSet<curios_ela
 
 #[derive(Clone)]
 struct AliasEdge {
-    target: curios_elab::Global,
-    dependencies: Option<BTreeSet<curios_elab::Global>>,
+    target: curios_core::Global,
+    dependencies: Option<BTreeSet<curios_core::Global>>,
 }
 
-fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_elab::Global, AliasEdge> {
+fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
     let lets = items.iter().flat_map(|item| match item {
         FlatItem::Let(let_) => std::slice::from_ref(let_),
         FlatItem::Rec(lets) => lets.as_slice(),
@@ -1549,7 +1549,7 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_elab::Global, AliasEdge> {
         let direct = let_.body.direct_type_alias_target(&let_.type_);
         let target = direct
             .or_else(|| let_.body.transparent_alias_target())
-            .and_then(curios_elab::Free::as_global)?
+            .and_then(curios_core::Free::as_global)?
             .clone();
 
         Some((
@@ -1573,11 +1573,11 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_elab::Global, AliasEdge> {
 /// transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal(
     entry: &Entry,
-    aliases: &HashMap<curios_elab::Global, AliasEdge>,
-    induct_decls: &BTreeMap<curios_elab::Global, curios_elab::InductDecl>,
-    struct_decls: &BTreeMap<curios_elab::Global, curios_elab::StructDecl>,
-) -> Option<(curios_elab::Global, Vec<AliasEdge>)> {
-    let mut current = curios_elab::Global::Authored(
+    aliases: &HashMap<curios_core::Global, AliasEdge>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+) -> Option<(curios_core::Global, Vec<AliasEdge>)> {
+    let mut current = curios_core::Global::Authored(
         entry
             .representation
             .as_ref()
@@ -1605,9 +1605,9 @@ fn exposed_nominal(
 /// alias that stands for it, so an exported alias carries its target's audience
 /// even when the target itself is never exported.
 fn alias_sources(
-    aliases: &HashMap<curios_elab::Global, AliasEdge>,
-) -> HashMap<curios_elab::Global, HashSet<curios_elab::Global>> {
-    let mut sources: HashMap<curios_elab::Global, HashSet<curios_elab::Global>> = HashMap::new();
+    aliases: &HashMap<curios_core::Global, AliasEdge>,
+) -> HashMap<curios_core::Global, HashSet<curios_core::Global>> {
+    let mut sources: HashMap<curios_core::Global, HashSet<curios_core::Global>> = HashMap::new();
 
     for (name, edge) in aliases {
         sources
@@ -1618,7 +1618,7 @@ fn alias_sources(
 
     loop {
         let mut changed = false;
-        let pairs: Vec<(curios_elab::Global, Vec<curios_elab::Global>)> = sources
+        let pairs: Vec<(curios_core::Global, Vec<curios_core::Global>)> = sources
             .iter()
             .map(|(target, names)| (target.clone(), names.iter().cloned().collect()))
             .collect();
@@ -1646,8 +1646,8 @@ fn alias_sources(
 /// The top-level definitions among `names`. A binder is nobody's dependency:
 /// it is introduced and discharged inside the very signature being audited.
 fn globals(
-    names: impl IntoIterator<Item = curios_elab::Free>,
-) -> impl Iterator<Item = curios_elab::Global> {
+    names: impl IntoIterator<Item = curios_core::Free>,
+) -> impl Iterator<Item = curios_core::Global> {
     names
         .into_iter()
         .filter_map(|name| name.as_global().cloned())
@@ -1657,8 +1657,8 @@ fn globals(
 /// transparent alias that stands for it.
 fn referent_audience(
     audiences: &Audiences,
-    sources: &HashMap<curios_elab::Global, HashSet<curios_elab::Global>>,
-    referent: &curios_elab::Global,
+    sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
+    referent: &curios_core::Global,
 ) -> Vec<Qualifier> {
     let Some(qualifier) = referent.qualifier() else {
         return Vec::new();
@@ -1683,10 +1683,10 @@ fn referent_audience(
 /// counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: &Audiences,
-    sources: &HashMap<curios_elab::Global, HashSet<curios_elab::Global>>,
+    sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
     exposure: &[Qualifier],
     item: &str,
-    dependencies: impl IntoIterator<Item = curios_elab::Global>,
+    dependencies: impl IntoIterator<Item = curios_core::Global>,
 ) -> Result<(), Error> {
     for referent in dependencies {
         let reach = referent_audience(audiences, sources, &referent);
@@ -1716,8 +1716,8 @@ fn audit_public_exposures(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
     items: &[FlatItem],
-    induct_decls: &BTreeMap<curios_elab::Global, curios_elab::InductDecl>,
-    struct_decls: &BTreeMap<curios_elab::Global, curios_elab::StructDecl>,
+    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
 ) -> Result<(), Error> {
     let aliases = flat_aliases(items);
     let sources = alias_sources(&aliases);
@@ -1834,7 +1834,7 @@ pub fn into_core(
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
-    let universe_role = Cell::new(curios_elab::UniverseRole::Flexible);
+    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
@@ -1928,7 +1928,7 @@ pub fn prepare_prelude(
     let public = interface::resolve_prelude(&roots, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
-    let universe_role = Cell::new(curios_elab::UniverseRole::Flexible);
+    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();
@@ -1989,7 +1989,7 @@ pub fn prepare_prelude(
         witnesses,
         binder_floor: binders.count(),
         type_: None,
-        body: curios_elab::Term::prim(curios_elab::Prim::Nat(curios_elab::Nat::Zero)),
+        body: curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
     };
 
     Ok(PreparedPrelude {
@@ -2029,7 +2029,7 @@ pub fn into_core_with_prelude(
     metavars.seed(prepared.metavariable_floor);
     let universes = Entropy::<usize>::new();
     universes.seed(prepared.universe_floor);
-    let universe_role = Cell::new(curios_elab::UniverseRole::Flexible);
+    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     let universe_seeds = RefCell::new(prepared.core.universe_seeds.clone());
     let universe_allocations = RefCell::new(HashMap::new());
     let binders = Entropy::<usize>::new();

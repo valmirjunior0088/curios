@@ -1,4 +1,4 @@
-use {super::*, crate::Global};
+use {super::*, curios_core::Global};
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node,
 /// so this loops over them — elaborating each binding's type/body, minting its

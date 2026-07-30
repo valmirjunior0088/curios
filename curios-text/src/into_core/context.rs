@@ -10,12 +10,12 @@ use {
 
 #[derive(Clone)]
 pub(super) struct FlatLet {
-    pub name: curios_elab::Global,
+    pub name: curios_core::Global,
     pub kind: curios_elab::DefinitionKind,
     pub island: Qualifier,
     pub root: RootId,
-    pub type_: curios_elab::Term,
-    pub body: curios_elab::Term,
+    pub type_: curios_core::Term,
+    pub body: curios_core::Term,
 }
 
 impl FlatLet {
@@ -25,7 +25,7 @@ impl FlatLet {
             island: self.island,
             name: self.name,
             kind: self.kind,
-            universe_context: curios_elab::UniverseContext::empty(),
+            universe_context: curios_core::UniverseContext::empty(),
             // Lowering cannot know this. `curios_elab::record_totality`
             // computes the definition's totality after elaboration and zonking
             // and writes it back here.
@@ -56,7 +56,7 @@ impl FlatItem {
         !lets.is_empty() && lets.iter().all(|let_| let_.root.kind().is_privileged())
     }
 
-    pub(super) fn names(&self) -> Vec<curios_elab::Global> {
+    pub(super) fn names(&self) -> Vec<curios_core::Global> {
         match self {
             FlatItem::Let(let_) => vec![let_.name.clone()],
             FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.clone()).collect(),
@@ -66,7 +66,7 @@ impl FlatItem {
     /// Every global this item names — the reachability prune's edges (see
     /// [`FlatItem::names`]). Locals are dropped: an item's binders are its own
     /// business, and reachability is a question about definitions.
-    pub(super) fn free_vars(&self) -> HashSet<curios_elab::Global> {
+    pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
             FlatItem::Rec(lets) => lets.as_slice(),
@@ -252,15 +252,15 @@ pub(super) struct Context<'a> {
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
     // Shared, program-global metavariable-id counter. The whole program folds
-    // into one `curios_elab::Term`, so holes in different module bodies (each its own
+    // into one `curios_core::Term`, so holes in different module bodies (each its own
     // `Context` via `nested`) must draw from the same monotonic source. Shared
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
     // `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     universes: &'a Entropy,
-    universe_role: &'a Cell<curios_elab::UniverseRole>,
-    universe_seeds: &'a RefCell<Vec<curios_elab::UniverseSeed>>,
-    universe_allocations: &'a RefCell<HashMap<Span, curios_elab::UniverseMetaId>>,
+    universe_role: &'a Cell<curios_core::UniverseRole>,
+    universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
+    universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
     // Shared counter for every binder identity a lowered term closes over.
     // Threaded (not a process-global atomic) for determinism: two runs over the
     // same source must mint the same identities, or terms that should be equal
@@ -282,9 +282,9 @@ impl<'a> Context<'a> {
         root: RootId,
         metavars: &'a Entropy,
         universes: &'a Entropy,
-        universe_role: &'a Cell<curios_elab::UniverseRole>,
-        universe_seeds: &'a RefCell<Vec<curios_elab::UniverseSeed>>,
-        universe_allocations: &'a RefCell<HashMap<Span, curios_elab::UniverseMetaId>>,
+        universe_role: &'a Cell<curios_core::UniverseRole>,
+        universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
+        universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
         binders: &'a Entropy,
         witnesses: &'a Entropy,
         syntax: &'a SyntaxRegistry,
@@ -350,7 +350,7 @@ impl<'a> Context<'a> {
         self.metavars.fresh()
     }
 
-    pub(super) fn fresh_universe(&self, span: Option<&Span>) -> curios_elab::Level {
+    pub(super) fn fresh_universe(&self, span: Option<&Span>) -> curios_core::Level {
         if let Some(span) = span
             && let Some(id) = self.universe_allocations.borrow().get(span)
         {
@@ -359,39 +359,39 @@ impl<'a> Context<'a> {
                 self.universe_role(),
                 "one written Type was lowered under conflicting universe roles"
             );
-            return curios_elab::Level::meta(*id);
+            return curios_core::Level::meta(*id);
         }
 
         let id = self.universes.fresh();
         let mut seeds = self.universe_seeds.borrow_mut();
         assert_eq!(id, seeds.len(), "universe seeds parallel their dense ids");
-        seeds.push(curios_elab::UniverseSeed {
+        seeds.push(curios_core::UniverseSeed {
             role: self.universe_role(),
             origin: span
                 .cloned()
-                .map(|span| curios_elab::UniverseConstraintOrigin {
+                .map(|span| curios_core::UniverseConstraintOrigin {
                     span: Some(span),
-                    kind: curios_elab::UniverseConstraintKind::WrittenType,
+                    kind: curios_core::UniverseConstraintKind::WrittenType,
                     declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
                     binder: None,
                 }),
         });
-        let id = curios_elab::UniverseMetaId(id);
+        let id = curios_core::UniverseMetaId(id);
         if let Some(span) = span {
             self.universe_allocations
                 .borrow_mut()
                 .insert(span.clone(), id);
         }
-        curios_elab::Level::meta(id)
+        curios_core::Level::meta(id)
     }
 
-    pub(super) fn universe_role(&self) -> curios_elab::UniverseRole {
+    pub(super) fn universe_role(&self) -> curios_core::UniverseRole {
         self.universe_role.get()
     }
 
     pub(super) fn with_universe_role<T>(
         &self,
-        role: curios_elab::UniverseRole,
+        role: curios_core::UniverseRole,
         f: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
         let old = self.universe_role.replace(role);
@@ -402,10 +402,10 @@ impl<'a> Context<'a> {
 
     /// Mint a witness identity. A `satisfy` declaration is anonymous by design,
     /// so it gets an identity rather than a manufactured name — see
-    /// [`curios_elab::Global::Witness`]. The counter is program-global, not
+    /// [`curios_core::Global::Witness`]. The counter is program-global, not
     /// per-module: nothing but the id distinguishes two witnesses.
-    pub(super) fn fresh_witness(&self) -> curios_elab::WitnessId {
-        curios_elab::WitnessId::new(
+    pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
+        curios_core::WitnessId::new(
             u32::try_from(self.witnesses.fresh()).expect("witness space exhausted"),
         )
     }
@@ -417,8 +417,8 @@ impl<'a> Context<'a> {
     /// while elaborating and seeds its counter above
     /// [`PreparedPrelude::binder_floor`](super::PreparedPrelude::binder_floor),
     /// so the two sources share one identity space without colliding.
-    pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_elab::Free {
-        curios_elab::Free::local(
+    pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
+        curios_core::Free::local(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
             hint,
         )

@@ -12,7 +12,7 @@ use constraints::{ConstraintStore, StoreMark};
 mod tests;
 
 use {
-    crate::{
+    curios_core::{
         Level, LevelHead, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseError, UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed,
     },
