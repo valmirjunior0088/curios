@@ -6,38 +6,28 @@
 
 use {
     crate::Judge,
-    curios_core::{Free, InductType, Peel, Subterm, Telescope, Term, Variant, peel_prim},
+    curios_core::{Free, InductType, Peel, Subterm, Telescope, Term, peel_prim},
     std::collections::BTreeSet,
 };
 
 /// The payload binders an index target set *determines* — the singleton rung's side condition, shared by both checkers exactly as the unifier below is: a total function of the targets alone, so a second copy would be a second run rather than a second opinion.
 ///
-/// A binder is determined when matching a value against the target recovers it. That holds when the target is the binder itself, and — recursively — when it is a constructor application and the binder sits in one of its arguments, because constructors are injective and their tags are disjoint.
+/// A binder is determined when matching a value against the target recovers it, which holds when the target *is* the binder and in no other case.
 ///
 /// It does **not** hold for a binder under anything else. `blur(a)` is an arbitrary function of `a`: knowing its value recovers nothing, since `blur` need not be injective and in the case that motivated this rule is the constant zero. Reading occurrence as determination — asking only whether `a` appears anywhere in the target — is the mistake, and it is the difference between a singleton and a proposition with a payload a program can read.
 ///
+/// A constructor application reads like it should qualify, since constructors are injective, and this walk once descended into one. That rung is deliberately gone. It never ran: an elaborated target is stored as an application of the constructor's *function wrapper*, never as a saturated variant, so no declaration ever reached it. And had it run it would have been unsound at a `Prop`-sorted family, where irrelevance denies precisely the injectivity it assumes — `mk(a : Nat) : (Tag/t(a))` would report `a` as recovered although `Tag/t(0)` and `Tag/t(7)` are the same value, which is a payload a program can read out of a proposition and from there a closed inhabitant of `False`. Reinstating it needs the sort condition *and* targets normalized to variant form; until both, its absence is the stricter guard.
+///
 /// Total by construction: a target this cannot decompose contributes nothing, so a shape nobody anticipated yields *fewer* determined binders and a stricter guard, never a looser one.
 pub fn pinned_by_targets(targets: &[Term]) -> Vec<Free> {
-    fn walk(target: &Term, determined: &mut Vec<Free>) {
-        match &**target {
-            Subterm::Var(var) => determined.push(var.unwrap().clone()),
-            // Constructors are injective and their tags disjoint, so matching recovers every argument. Parameters are not walked: they are the family's, fixed before this constructor was reached.
-            Subterm::Variant(Variant { payload, .. }) => {
-                for component in payload {
-                    walk(component, determined);
-                }
-            }
-            // Anything else — an application, a projection, a primitive, a stuck match — determines nothing.
-            _ => {}
-        }
-    }
-
-    let mut determined = Vec::new();
-    for target in targets {
-        walk(target, &mut determined);
-    }
-
-    determined
+    targets
+        .iter()
+        .filter_map(|target| match &**target {
+            Subterm::Var(var) => Some(var.unwrap().clone()),
+            // Anything else — an application, a constructor's included, as well as a projection, a primitive, or a stuck match — determines nothing.
+            _ => None,
+        })
+        .collect()
 }
 
 /// The outcome of inversion: either every index position decomposed (or refused) cleanly, yielding the forced arm-binder solutions, or some position clashed definitely and the arm is unreachable.
