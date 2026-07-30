@@ -1,10 +1,9 @@
 use {
-    crate::{
-        Atom, Free, Global, InductDecl, InductParam, Kernel, KernelError, Level, Prim, Telescope,
-        Term, UniverseContext,
-        kernel::infer::{check, infer},
-    },
+    crate::{Kernel, KernelError, check, infer},
     curios_base::{Plicity, Qualifier, RootId},
+    curios_core::{
+        Atom, Free, Global, InductDecl, InductParam, Level, Prim, Telescope, Term, UniverseContext,
+    },
 };
 
 fn kernel() -> Kernel {
@@ -18,7 +17,7 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(crate::Nat::new(n)))
+    Term::prim(Prim::Nat(curios_core::Nat::new(n)))
 }
 
 fn nat_type() -> Term {
@@ -177,7 +176,7 @@ fn a_tuple_has_the_product_of_its_components_types() {
         Ok(nat_type()),
     );
     assert_eq!(infer(&mut kernel, &Term::proj(pair, 1)), Ok(bool_type()));
-    assert!(matches!(&*type_, crate::Subterm::TupleType(_)));
+    assert!(matches!(&*type_, curios_core::Subterm::TupleType(_)));
 }
 
 #[test]
@@ -444,9 +443,11 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
 /// polymorphic definition was refused.
 #[test]
 fn a_definition_checks_under_its_own_constraints() {
-    use crate::{
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
-        kernel::check_definition,
+    use {
+        crate::check_definition,
+        curios_core::{
+            UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
+        },
     };
 
     let (u, w) = (
@@ -492,7 +493,7 @@ fn a_definition_checks_under_its_own_constraints() {
 /// and admits `{0, 1}`.
 #[test]
 fn an_instance_must_satisfy_its_schemes_constraints() {
-    use crate::{
+    use curios_core::{
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
     };
 
@@ -531,8 +532,8 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
 /// `f = f` has a self-call that decreases on nothing.
 #[test]
 fn a_recursive_proof_that_does_not_descend_is_refused() {
-    use crate::{Global, InductDecl, UniverseContext};
     use curios_base::{Qualifier, RootId};
+    use curios_core::{Global, InductDecl, UniverseContext};
 
     let mut kernel = kernel();
     let name = Global::Authored(Qualifier::from(["False"]));
@@ -697,7 +698,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 fn elaboration_only_syntax_is_refused() {
     let mut kernel = kernel();
 
-    let metavar = Term::metavar(crate::MetaId::from(0usize));
+    let metavar = Term::metavar(curios_core::MetaId::from(0usize));
     assert!(matches!(
         infer(&mut kernel, &metavar),
         Err(KernelError::NotCore(_)),

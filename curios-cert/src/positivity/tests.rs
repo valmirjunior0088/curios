@@ -1,11 +1,12 @@
 use {
     super::{Occurrences, close, positivity_vectors},
-    crate::{
-        Atom, Free, Global, InductDecl, InductParam, Kernel,
+    crate::Kernel,
+    curios_base::{Plicity, Qualifier, RootId},
+    curios_core::{
+        Atom, Free, Global, InductDecl, InductParam,
         Polarity::{self, *},
         Telescope, Term, UniverseContext,
     },
-    curios_base::{Plicity, Qualifier, RootId},
     std::collections::BTreeMap,
 };
 

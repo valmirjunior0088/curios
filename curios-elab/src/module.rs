@@ -1,10 +1,11 @@
 use {
     super::{
         Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
-        StructDecl, Term, Totality, UniverseContext, UniverseSeed, build_shorten,
-        universe_context_validate, with_short_names,
+        StructDecl, Term, UniverseContext, UniverseSeed, build_shorten, universe_context_validate,
+        with_short_names,
     },
     curios_base::{Qualifier, RootId},
+    curios_cert::Totality,
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

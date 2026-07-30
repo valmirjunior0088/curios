@@ -30,8 +30,8 @@ impl Reducer for Context {
 /// Both methods are the wrappers `typing` already had: they exist so a failure
 /// reaches the user as a spanned diagnostic naming the offending term rather
 /// than as a bare `ReduceError`, which is precisely the split
-/// [`Env::Error`](curios_core::Env::Error) formalizes.
-impl curios_core::Env for Context {
+/// [`Env::Error`](curios_cert::Env::Error) formalizes.
+impl curios_cert::Env for Context {
     type Error = crate::Error;
 
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
@@ -59,7 +59,7 @@ impl curios_core::Env for Context {
     }
 }
 
-impl curios_core::Judge for Context {
+impl curios_cert::Judge for Context {
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
         crate::convert_at(self, type_, this, that)
     }

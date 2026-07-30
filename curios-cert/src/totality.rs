@@ -49,10 +49,11 @@
 mod tests;
 
 use {
-    super::{
-        Apply, Bound, Carrier, Cases, Env, Free, FreeMonoid, Func, FuncType, Global, InductArm,
-        Layer, Let, Match, Nat, Prim, Proj, Rec, RecGroup, RecMember, Scope, Struct, Subterm,
-        Telescope, Term, Tuple, Variant,
+    crate::Env,
+    curios_core::{
+        Apply, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, Global, InductArm, Layer,
+        Let, Match, Nat, Prim, Proj, Rec, RecGroup, RecMember, Scope, Struct, Subterm, Telescope,
+        Term, Tuple, Variant,
     },
     num_bigint::BigUint,
     std::collections::{BTreeMap, BTreeSet},
@@ -216,7 +217,7 @@ enum Tag {
     /// equal only when they name the same binders, and a same-named
     /// constructor of a different type would still have to reach the same
     /// binders to be mistaken for one.
-    Variant(super::Atom),
+    Variant(curios_core::Atom),
     /// A nominal structure literal.
     Struct(Global),
     /// An anonymous tuple.
@@ -844,7 +845,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// One fresh binder per position of a scope, carrying the written hints so
     /// a shape reads in the user's own names.
-    fn binders<A: super::Arity>(&mut self, scope: &Scope<A>) -> Vec<Free> {
+    fn binders<A: curios_core::Arity>(&mut self, scope: &Scope<A>) -> Vec<Free> {
         (0..scope.arity())
             .map(|index| self.env.fresh(scope.hint(index)))
             .collect()
@@ -852,7 +853,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Open a runtime-arity scope — a motive, an inductive arm, a `let` tail,
     /// a `rec` tail — against fresh binders.
-    fn open_many(&mut self, scope: &Scope<super::Many>) -> (Vec<Free>, Term) {
+    fn open_many(&mut self, scope: &Scope<curios_core::Many>) -> (Vec<Free>, Term) {
         let binders = self.binders(scope);
         let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = terms.iter().collect::<Vec<_>>();
@@ -861,7 +862,7 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Open the `(pred, ih)` arm of the `Nat` eliminator.
-    fn open_two(&mut self, scope: &Scope<super::Two>) -> (Vec<Free>, Term) {
+    fn open_two(&mut self, scope: &Scope<curios_core::Two>) -> (Vec<Free>, Term) {
         let binders = self.binders(scope);
         let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
         let body = scope.open(&[&terms[0], &terms[1]]);
@@ -869,7 +870,7 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Open the `(head, tail, ih)` arm of the `Bin`/`Lst` eliminators.
-    fn open_three(&mut self, scope: &Scope<super::Three>) -> (Vec<Free>, Term) {
+    fn open_three(&mut self, scope: &Scope<curios_core::Three>) -> (Vec<Free>, Term) {
         let binders = self.binders(scope);
         let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
         let body = scope.open(&[&terms[0], &terms[1], &terms[2]]);
@@ -927,7 +928,7 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Func(Func { telescope, .. })
             | Subterm::FuncType(FuncType { telescope, .. }) => self.telescope_terms(telescope),
 
-            Subterm::TupleType(super::TupleType { telescope }) => {
+            Subterm::TupleType(curios_core::TupleType { telescope }) => {
                 self.telescope_units(telescope);
             }
 
@@ -938,9 +939,9 @@ impl<E: Env> Walk<'_, E> {
             }
 
             Subterm::Proj(Proj { head, .. })
-            | Subterm::UniverseInst(super::UniverseInst { head, .. }) => self.walk(head),
+            | Subterm::UniverseInst(curios_core::UniverseInst { head, .. }) => self.walk(head),
 
-            Subterm::InductType(super::InductType {
+            Subterm::InductType(curios_core::InductType {
                 params, indices, ..
             }) => {
                 for term in params.iter().chain(indices) {
@@ -956,7 +957,7 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
-            Subterm::StructType(super::StructType { params, .. }) => {
+            Subterm::StructType(curios_core::StructType { params, .. }) => {
                 for param in params {
                     self.walk(param);
                 }
@@ -968,7 +969,7 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
-            Subterm::Infix(super::Infix { left, right, .. }) => {
+            Subterm::Infix(curios_core::Infix { left, right, .. }) => {
                 self.walk(left);
                 self.walk(right);
             }
@@ -1069,7 +1070,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// One `Cases::Induct` arm: the scrutinee is that constructor applied to
     /// the arm's own payload binders.
-    fn induct_arm(&mut self, scrutinee: Option<&Free>, tag: &super::Atom, arm: &InductArm) {
+    fn induct_arm(&mut self, scrutinee: Option<&Free>, tag: &curios_core::Atom, arm: &InductArm) {
         let (binders, body) = self.open_many(&arm.body);
         let shape = Shape::Node(
             Tag::Variant(tag.clone()),
@@ -1121,7 +1122,7 @@ impl<E: Env> Walk<'_, E> {
         scrutinee: Option<&Free>,
         carriers: Carriers,
         empty_case: &Term,
-        cons_case: &Scope<super::Three>,
+        cons_case: &Scope<curios_core::Three>,
     ) {
         self.refine(
             scrutinee,
@@ -1183,7 +1184,9 @@ fn flatten(term: &Term) -> (Term, Vec<Term>) {
                 arguments = prefix;
                 head = inner.clone();
             }
-            Subterm::UniverseInst(super::UniverseInst { head: inner, .. }) => head = inner.clone(),
+            Subterm::UniverseInst(curios_core::UniverseInst { head: inner, .. }) => {
+                head = inner.clone()
+            }
             _ => return (head, arguments),
         }
     }

@@ -48,8 +48,9 @@ mod tests;
 use {
     super::{
         Context, Definition, Error, Global, Item, Module, Prim, Rec, RecGroup, RecItem, Subterm,
-        Term, Totality, group_totality, is_prop, yields_a_sort, zonk,
+        Term, is_prop, zonk,
     },
+    curios_cert::{Totality, group_totality, yields_a_sort},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 /// Which half of erasure an obligation guards.

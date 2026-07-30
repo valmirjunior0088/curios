@@ -1370,7 +1370,8 @@ mod prim {
 mod kernel_agreement {
     use {
         super::{context, nat, nominal},
-        crate::{Free, Kernel, Prim, Reducer, Term},
+        crate::{Free, Prim, Reducer, Term},
+        curios_cert::Kernel,
     };
 
     /// A kernel minting above every binder these fixtures use.

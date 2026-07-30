@@ -1,0 +1,21 @@
+[package]
+name = "curios-cert"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios certifier: the independent kernel deciding, from a finished term alone, whether the elaborator's output is well-typed"
+
+[lints]
+workspace = true
+
+[features]
+archive = ["dep:rkyv", "curios-base/archive", "curios-core/archive"]
+profile = ["curios-profile/enabled", "curios-core/profile"]
+
+[dependencies]
+curios-profile = { workspace = true }
+curios-base = { workspace = true }
+curios-core = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+rkyv = { workspace = true, optional = true }

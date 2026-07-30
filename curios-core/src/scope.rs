@@ -1128,7 +1128,7 @@ where
     /// for [`Visit::take_masked_children`]. One visit masks any number of
     /// nodes: the placeholder is built once, and the children are taken
     /// between nodes.
-    pub(crate) fn masking(visit: F, placeholder: Term) -> Self {
+    pub fn masking(visit: F, placeholder: Term) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1284,7 +1284,7 @@ where
 
     /// The children [`Mode::Masking`] stood down, in traversal order, leaving
     /// the visit ready to mask another node.
-    pub(crate) fn take_masked_children(&mut self) -> Vec<Term> {
+    pub fn take_masked_children(&mut self) -> Vec<Term> {
         match &mut self.mode {
             Mode::Masking { children, .. } => mem::take(children),
             _ => Vec::new(),

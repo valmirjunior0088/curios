@@ -7,6 +7,7 @@ members = [
     "curios-cont",
     "curios-ersd",
     "curios-core",
+    "curios-cert",
     "curios-elab",
     "curios-text",
     "curios-prelude",
@@ -39,6 +40,7 @@ curios-wasm = { path = "curios-wasm" }
 curios-cont = { path = "curios-cont" }
 curios-ersd = { path = "curios-ersd" }
 curios-core = { path = "curios-core" }
+curios-cert = { path = "curios-cert" }
 curios-elab = { path = "curios-elab" }
 curios-text = { path = "curios-text" }
 curios-prelude = { path = "curios-prelude" }

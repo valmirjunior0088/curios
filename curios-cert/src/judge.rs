@@ -3,7 +3,7 @@
 //!
 //! # Why some analyses are shared and others are written twice
 //!
-//! [`Reducer`](super::Reducer) already draws this line for primitive folding:
+//! [`Reducer`](curios_core::Reducer) already draws this line for primitive folding:
 //! the arithmetic is algebra over the representation and belongs in this crate,
 //! while how far an operand reduces before a fold sees it is a strategy each
 //! side supplies for itself. The traits here extend that line to whole
@@ -39,14 +39,14 @@
 //! # Errors belong to the driver
 //!
 //! Both traits report through an associated [`Env::Error`] rather than through
-//! [`ReduceError`](super::ReduceError). The kernel's failures are
+//! [`ReduceError`](curios_core::ReduceError). The kernel's failures are
 //! `KernelError`s and the elaborator's are spanned diagnostics that name the
 //! offending term, and a shared analysis should not have to know which. This is
 //! the rule `ReduceError` already states from the other direction — a reducer
 //! reports what the *term* did, and the driver that owns the user-facing
 //! diagnostic decides how to phrase it.
 
-use super::{Free, Global, InductDecl, StructDecl, Term};
+use curios_core::{Free, Global, InductDecl, StructDecl, Term};
 
 /// What a shared analysis may ask of the checker running it, beyond the terms it
 /// was handed.

@@ -29,7 +29,7 @@ impl FlatLet {
             // Lowering cannot know this. `curios_elab::record_totality`
             // computes the definition's totality after elaboration and zonking
             // and writes it back here.
-            totality: curios_elab::Totality::default(),
+            totality: curios_cert::Totality::default(),
             type_: self.type_,
             body: self.body,
         }

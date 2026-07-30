@@ -43,7 +43,7 @@ Browser path:
   → curios-web         expose curios-pipeline through wasm-bindgen
 ```
 
-Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-elab`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`.
+Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-elab`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`. Beside that chain, `curios-core` owns the term representation and `curios-cert` the trusted judgments over it: `curios-elab` depends on both, `curios-cert` on `curios-core`, and neither dependency ever reverses.
 
 ### Ownership map
 
@@ -53,6 +53,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
 | Fixed prelude | `curios-prelude` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive |
+| Term representation | `curios-core` | `Term` and its binder discipline, the primitive roster and folds, universe levels, registry entries, names, and the printer |
+| Trusted certifier | `curios-cert` | The independent kernel, the `Env`/`Judge` seam, and the shared inversion, positivity, totality, and entailment analyses |
 | Type theory | `curios-elab` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
 | Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
@@ -70,6 +72,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/SYNTAX.md` |
 | Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
 | Elaboration, typing, or conversion | `curios-elab/src/` | Text lowering, erasure, diagnostics, and integration tests |
+| Kernel judgments or shared analyses | `curios-cert/src/` | `curios-core`'s representation, `curios-elab/src/recheck.rs`, and `documentation/DESIGN.md`'s perimeter |
 | Concepts or witness resolution | `curios-elab/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
 | Type erasure | `curios-elab/src/into_ersd*` | `curios-ersd` representation and downstream tests |
 | Erased optimization | `curios-ersd/src/optimize/` | `into_cont.rs`, derived analyses, deep-input and specialization tests |

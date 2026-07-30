@@ -1,13 +1,16 @@
 //! The elaborator's driver for the shared strict-positivity analysis.
 //!
-//! The analysis itself lives in `curios-core` (see that module for the rule
+//! The analysis itself lives in `curios-cert` (see that module for the rule
 //! and its rationale) and is run by both checkers; what belongs here is the
 //! driving: which declarations are analyzed (this module's — the whole program
 //! at archive build, the user suffix at a replay), where the vectors are
 //! persisted (the registry entries, riding the prelude archive), and how a
 //! refusal is rendered (a spanned [`Error`] naming the offending part).
 
-use super::{Context, Error, Module, positivity_vectors};
+use {
+    super::{Context, Error, Module},
+    curios_cert::positivity_vectors,
+};
 
 /// Reject every `induct` and `struct` declaration in `module` that is not
 /// strictly positive, and record each surviving declaration's parameter

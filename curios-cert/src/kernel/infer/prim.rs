@@ -13,8 +13,9 @@
 
 use {
     super::{check, infer},
-    crate::{Kernel, KernelError, Prim, Subterm, Term, kernel::Sort, wire_term},
+    crate::{Kernel, KernelError, kernel::Sort},
     curios_base::Grain,
+    curios_core::{Prim, Subterm, Term, wire_term},
 };
 
 fn bool_type() -> Term {
@@ -367,7 +368,7 @@ fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> 
 }
 
 fn kernel_reduce(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
-    use crate::Reducer;
+    use curios_core::Reducer;
 
     Ok(kernel.reduce_forced(term.clone())?)
 }

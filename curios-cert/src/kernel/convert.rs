@@ -68,7 +68,7 @@ mod tests;
 
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
-    crate::{
+    curios_core::{
         Bound, Carrier, Cases, Field, FuncType, InductType, Many, Proj, RecMember, Reducer, Scope,
         Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UniverseInst,
     },

@@ -965,7 +965,7 @@ impl Prim {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 
-    pub(crate) fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
+    pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {

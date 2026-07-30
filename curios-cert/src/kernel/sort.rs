@@ -21,7 +21,7 @@ mod tests;
 
 use {
     super::{Kernel, KernelError, whnf::whnf},
-    crate::{
+    curios_core::{
         Apply, Field, FuncType, InductType, Level, Prim, Proj, RecMember, Reducer, StructType,
         Subterm, Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
     },

@@ -28,13 +28,10 @@
 //! API and a test surface until the gaps named above are closed.
 
 use {
-    super::{
-        Free, Global, Item, Kernel, KernelError, Module, Term,
-        kernel::{
-            check_definition, check_entrypoint, check_induct_decl, check_rec_group,
-            check_struct_decl,
-        },
-        totality::mentioned,
+    super::{Free, Global, Item, Module, Term, totality::mentioned},
+    curios_cert::{
+        Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
+        check_rec_group, check_struct_decl, positivity_vectors,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
 };
@@ -256,7 +253,7 @@ fn verdicts_with(mut kernel: Kernel, module: &Module) -> Vec<Verdict> {
     // the size condition, the clause the item walk cannot supply, because it
     // computes each signature's sort and compares it to nothing.
     if let Err(refusal) =
-        curios_core::positivity_vectors(&mut kernel, &module.induct_decls, &module.struct_decls)
+        positivity_vectors(&mut kernel, &module.induct_decls, &module.struct_decls)
     {
         verdicts.push(Verdict {
             name: Some(refusal.name.clone()),

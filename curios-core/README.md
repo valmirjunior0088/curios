@@ -1,6 +1,6 @@
 # curios-core
 
-The Curios core language: the term representation the elaborator produces, and the independent kernel that decides, from a finished term alone, whether it is well-typed. The crate holds the representation and the rules over it; elaboration convenience lives upstream in `curios-elab`, which depends on this crate and never the reverse, so the kernel cannot consult a metavariable store, a refinement layer, or a cached elaboration — independence is a property of the crate graph. The two-checker architecture is a language-level decision recorded in [DESIGN.md](../documentation/DESIGN.md) ("An independent kernel re-checks what the elaborator accepts"); the migration's live status is tracked by [the working specification](../documentation/compiler/00_TRUSTED_BASE_SPEC.md) and [ROADMAP.md](../documentation/ROADMAP.md); local architecture belongs to the crate rustdoc.
+The Curios core language: the term representation both checkers build on — what a term *is*, with no rule that judges one. The judgments live on either side: `curios-cert` holds the kernel and the shared analyses, `curios-elab` everything that makes the surface language work, and both depend on this crate with neither dependency ever reversing. The two-checker architecture is a cross-cutting decision recorded in [DESIGN.md](../documentation/DESIGN.md) ("An independent kernel re-checks what the elaborator accepts"); local architecture belongs to the crate rustdoc.
 
 ## Design
 

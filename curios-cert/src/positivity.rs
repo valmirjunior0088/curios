@@ -17,8 +17,8 @@
 //!
 //! The pass computes two facts over the same walk (`occurrences`). The
 //! **parameter polarities** — how each type former uses its *i*th parameter —
-//! are what composition consumes, and they persist on [`crate::InductDecl`] and
-//! [`crate::StructDecl`] so the prelude's are computed once at archive-build
+//! are what composition consumes, and they persist on [`curios_core::InductDecl`] and
+//! [`curios_core::StructDecl`] so the prelude's are computed once at archive-build
 //! time rather than re-derived per compilation. The **occurrence relation** —
 //! at what polarity declaration `D` appears inside declaration `E`,
 //! transitively closed — is transient; it exists to answer the acceptance test
@@ -54,8 +54,9 @@
 mod tests;
 
 use {
-    super::{
-        Bound, Env, Free, FuncType, Global, InductDecl, InductType, One, Polarity, Prim, Scope,
+    crate::Env,
+    curios_core::{
+        Bound, Free, FuncType, Global, InductDecl, InductType, One, Polarity, Prim, Scope,
         StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     std::collections::{BTreeMap, BTreeSet},

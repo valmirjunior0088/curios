@@ -47,7 +47,7 @@ use {
         convert::{convert, scoped},
         synth_neutral,
     },
-    crate::{
+    curios_core::{
         Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Proj, Rec, RecMember, Reducer,
         Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Variant,
         instantiate_universe_levels_scoped,
@@ -476,7 +476,7 @@ fn infer_node(
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
-    motive: &crate::Scope<crate::Many>,
+    motive: &curios_core::Scope<curios_core::Many>,
     cases: &Cases,
     scrutinee: &Term,
     scrutinee_type: &Term,
@@ -543,13 +543,18 @@ fn check_cases(
             false_case,
             true_case,
         } => {
-            at(kernel, Term::prim(crate::Prim::Bool(false)), false_case)?;
-            at(kernel, Term::prim(crate::Prim::Bool(true)), true_case)
+            at(
+                kernel,
+                Term::prim(curios_core::Prim::Bool(false)),
+                false_case,
+            )?;
+            at(kernel, Term::prim(curios_core::Prim::Bool(true)), true_case)
         }
 
         Cases::Switch { cases, default } => {
             for (key, body) in cases {
-                let literal = Term::prim(crate::Prim::Nat(crate::Nat::new(*key as usize)));
+                let literal =
+                    Term::prim(curios_core::Prim::Nat(curios_core::Nat::new(*key as usize)));
                 at(kernel, literal, body)?;
             }
 
@@ -581,20 +586,20 @@ fn check_cases(
 /// and run them at another.
 fn check_free_monoid(
     kernel: &mut Kernel,
-    motive: &crate::Scope<crate::Many>,
+    motive: &curios_core::Scope<curios_core::Many>,
     scrutinee: &Term,
     scrutinee_type: &Term,
-    carrier: &crate::Carrier,
+    carrier: &curios_core::Carrier,
     at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
-    use crate::{Carrier, Nat, Prim};
+    use curios_core::{Carrier, Nat, Prim};
 
     // One cons arm: open the binders, assume them at the carrier's types with
     // the induction hypothesis at the tail, and check the body at the motive
     // of the cons value — with the scrutinee standing refined to that value,
     // exactly as in every other arm.
     let cons = |kernel: &mut Kernel,
-                binders: Vec<(&crate::Free, Term)>,
+                binders: Vec<(&curios_core::Free, Term)>,
                 cons_value: Term,
                 body: &Term|
      -> Result<(), KernelError> {
@@ -883,7 +888,7 @@ fn infer_telescope(
 
             Ok(Telescope::Cons(
                 domain,
-                crate::Scope::close(crate::One, &[&binder], inner?),
+                curios_core::Scope::close(curios_core::One, &[&binder], inner?),
             ))
         }
     }
@@ -893,9 +898,9 @@ fn infer_telescope(
 /// instance, so its constructor signatures speak of the right levels.
 fn instantiate_induct_decl(
     kernel: &Kernel,
-    declaration: &crate::InductDecl,
-    levels: &[crate::Level],
-) -> Result<crate::InductDecl, KernelError> {
+    declaration: &curios_core::InductDecl,
+    levels: &[curios_core::Level],
+) -> Result<curios_core::InductDecl, KernelError> {
     kernel.check_instance(&declaration.universe_context, levels)?;
 
     let mut instantiated = declaration.clone();
@@ -907,7 +912,7 @@ fn instantiate_induct_decl(
     for constructor in instantiated.signatures_mut() {
         constructor.telescope = instantiate_universe_levels_scoped(&constructor.telescope, levels)?;
     }
-    instantiated.universe_context = crate::UniverseContext::empty();
+    instantiated.universe_context = curios_core::UniverseContext::empty();
 
     Ok(instantiated)
 }

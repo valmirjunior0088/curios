@@ -20,7 +20,7 @@
 //! representation is not sharing a judgment. Two checkers that disagree about a
 //! term's type while agreeing on what a term *is* still catch each other's
 //! mistakes; two that share the rule that admits a bad program catch nothing.
-//! That line is why [`Reducer`](super::Reducer) exists, and it is why the match
+//! That line is why [`Reducer`](curios_core::Reducer) exists, and it is why the match
 //! dispatch in `whnf` is written out again here rather than lifted from the
 //! elaborator's reducer, which it closely resembles.
 //!
@@ -51,11 +51,12 @@ mod whnf;
 pub use whnf::*;
 
 use {
-    super::{
-        Atom, Env, Free, Global, InductDecl, Judge, Level, LevelHead, ReduceError, Reducer,
-        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, entails,
-    },
+    crate::{Env, Judge, entails},
     curios_base::Entropy,
+    curios_core::{
+        Atom, Free, Global, InductDecl, Level, LevelHead, ReduceError, Reducer, StructDecl, Term,
+        UniverseConstraint, UniverseContext, UniverseError,
+    },
     std::{collections::HashMap, fmt},
 };
 
@@ -120,7 +121,7 @@ pub enum KernelError {
     NotPositive {
         name: Global,
         part: String,
-        polarity: crate::Polarity,
+        polarity: curios_core::Polarity,
     },
     /// A constructor payload, uniform parameter, or field whose level exceeds
     /// the declaring family's result sort — the size condition that keeps an
@@ -261,7 +262,7 @@ pub(crate) struct Replay {
 /// The universe context is not decoration. A definition with universe
 /// parameters is *not* unfoldable through a bare occurrence, because such an
 /// occurrence denotes no particular instance; it reduces only through a
-/// [`UniverseInst`](super::UniverseInst) that says which one.
+/// [`UniverseInst`](curios_core::UniverseInst) that says which one.
 struct Definition {
     type_: Term,
     /// `None` for something with a type and no body — a `foreign` declaration,

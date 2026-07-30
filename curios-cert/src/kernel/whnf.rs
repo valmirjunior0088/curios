@@ -17,7 +17,7 @@
 //!
 //! Two things *are* shared, and both are representation rather than judgment:
 //! the binder discipline that `open`/`release` implement, and
-//! [`reduce_prim`](crate::reduce_prim), which decides what `2 + 2` folds to.
+//! [`reduce_prim`](curios_core::reduce_prim), which decides what `2 + 2` folds to.
 //! Neither can admit an ill-typed program on its own.
 
 #[cfg(test)]
@@ -25,7 +25,7 @@ mod tests;
 
 use {
     super::Kernel,
-    crate::{
+    curios_core::{
         Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat, Proj,
         Rec, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst, Var, Variant,
         instantiate_universe_levels_scoped, reduce_prim,
@@ -450,7 +450,7 @@ fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
 
 /// Open a `rec` group's tail over its members. A pure binder operation: it
 /// mints nothing and unfolds no fixed point.
-fn unfold_rec(rec: Rec) -> Term {
+pub(crate) fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();
 

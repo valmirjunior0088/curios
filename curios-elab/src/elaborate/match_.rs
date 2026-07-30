@@ -1,12 +1,12 @@
 use {
     super::{Context, Error, InductType, Mode, check, elaborate, expect},
     crate::{
-        Atom, Carrier, Cases, Free, InductArm, InductDecl, Invert, Many, Match, MotiveShape, Nat,
-        Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices,
-        check_motive, check_prim_head, invert_indices, is_prop, pinned_by_targets, reduce_with,
-        refine_head,
+        Atom, Carrier, Cases, Free, InductArm, InductDecl, Many, Match, MotiveShape, Nat, Prim,
+        PrimHead, Scope, Subterm, Telescope, Term, Three, Two, check_motive, check_prim_head,
+        is_prop, reduce_with, refine_head,
     },
     curios_base::{Grain, PackedBin},
+    curios_cert::{Invert, case_target_indices, invert_indices, pinned_by_targets},
     std::collections::{BTreeMap, BTreeSet},
 };
 

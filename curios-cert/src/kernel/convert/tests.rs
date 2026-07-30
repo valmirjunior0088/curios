@@ -1,8 +1,8 @@
-use crate::{
-    Free, Global, InductDecl, Kernel, KernelError, MetaId, Prim, Telescope, Term, UniverseContext,
-    kernel::convert::convert,
+use {
+    crate::{Kernel, KernelError, convert},
+    curios_base::{Plicity, Qualifier, RootId},
+    curios_core::{Free, Global, InductDecl, MetaId, Prim, Telescope, Term, UniverseContext},
 };
-use curios_base::{Plicity, Qualifier, RootId};
 
 fn kernel() -> Kernel {
     let mut kernel = Kernel::new(100_000);
@@ -15,7 +15,7 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(crate::Nat::new(n)))
+    Term::prim(Prim::Nat(curios_core::Nat::new(n)))
 }
 
 fn nat_type() -> Term {
@@ -236,9 +236,9 @@ fn plicity_distinguishes_two_function_types() {
     let a = binder(0, "a");
 
     let explicit = Term::func_type([(a.clone(), nat_type())], nat_type());
-    let implicit = Term::from(crate::Subterm::FuncType(crate::FuncType {
+    let implicit = Term::from(curios_core::Subterm::FuncType(curios_core::FuncType {
         telescope: match &*explicit {
-            crate::Subterm::FuncType(func) => func.telescope.clone(),
+            curios_core::Subterm::FuncType(func) => func.telescope.clone(),
             _ => unreachable!("built as a function type"),
         },
         plicities: vec![Plicity::Implicit],
@@ -257,7 +257,11 @@ fn plicity_distinguishes_two_function_types() {
 fn universes_convert_only_at_the_same_level() {
     let mut kernel = kernel();
     let zero = Term::type_ground();
-    let one = Term::type_at(crate::Level::zero().succ().expect("level zero succeeds"));
+    let one = Term::type_at(
+        curios_core::Level::zero()
+            .succ()
+            .expect("level zero succeeds"),
+    );
 
     assert_eq!(convert(&mut kernel, &zero, &zero, &zero), Ok(true));
     assert_eq!(convert(&mut kernel, &zero, &zero, &one), Ok(false));

@@ -16,7 +16,8 @@
 //! borrowing conversion represents.
 
 use {
-    super::{Free, InductType, Judge, Peel, Subterm, Telescope, Term, Variant, peel_prim},
+    crate::Judge,
+    curios_core::{Free, InductType, Peel, Subterm, Telescope, Term, Variant, peel_prim},
     std::collections::BTreeSet,
 };
 

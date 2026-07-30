@@ -2,12 +2,13 @@ use {
     super::{
         Bound, Concept, DefinitionKind, Error, Free, Global, Goal, HeadKey, HeadTag,
         ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Subterm,
-        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
+        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMark, UniverseMetaId, UniverseRole, UniverseSeed, UniverseSolver,
         UniverseStateToken, Witness, WitnessKey, WitnessOrigin,
     },
     crate::ReduceError,
     curios_base::{Entropy, Qualifier, RootId, Span},
+    curios_cert::Totality,
     std::{
         cell::Cell,
         collections::{BTreeMap, BTreeSet, HashMap},

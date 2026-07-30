@@ -1,9 +1,10 @@
 use {
-    crate::{
-        Atom, Free, Global, InductDecl, InductParam, Kernel, KernelError, Many, Prim, Scope,
-        Telescope, Term, UniverseContext, kernel::infer::infer,
-    },
+    crate::{Kernel, KernelError, kernel::infer::infer},
     curios_base::{Plicity, Qualifier, RootId},
+    curios_core::{
+        Atom, Free, Global, InductDecl, InductParam, Many, Prim, Scope, Telescope, Term,
+        UniverseContext,
+    },
 };
 
 fn kernel() -> Kernel {
@@ -17,7 +18,7 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(crate::Nat::new(n)))
+    Term::prim(Prim::Nat(curios_core::Nat::new(n)))
 }
 
 fn nat_type() -> Term {
@@ -130,7 +131,7 @@ fn eliminate(
 
 /// A successor over `tail`, in the successor-floor form reduction keeps.
 fn succ(tail: Term) -> Term {
-    Term::prim(Prim::Nat(crate::Nat::Succ(1u32.into(), tail)))
+    Term::prim(Prim::Nat(curios_core::Nat::Succ(1u32.into(), tail)))
 }
 
 /// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.

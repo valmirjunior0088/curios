@@ -9,13 +9,14 @@ description = "The Curios elaborator: elaboration, typing, conversion, universe 
 workspace = true
 
 [features]
-archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-core/archive", "curios-ersd/archive"]
-profile = ["curios-profile/enabled", "curios-core/profile"]
+archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-cert/archive", "curios-core/archive", "curios-ersd/archive"]
+profile = ["curios-profile/enabled", "curios-cert/profile"]
 
 [dependencies]
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
+curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-ersd = { workspace = true }
 num-bigint = { workspace = true }

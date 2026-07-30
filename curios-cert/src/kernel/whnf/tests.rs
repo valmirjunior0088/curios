@@ -1,9 +1,8 @@
 use {
-    crate::{
-        Apply, Free, Kernel, Nat, Prim, Reducer, Subterm, Term, UniverseContext,
-        kernel::whnf::{unfold_rec, whnf},
-    },
+    super::unfold_rec,
+    crate::{Kernel, whnf},
     curios_base::Qualifier,
+    curios_core::{Apply, Free, Nat, Prim, Reducer, Subterm, Term, UniverseContext},
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted
@@ -83,7 +82,7 @@ fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let f = binder(0, "f");
     kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
 
-    let instance = Term::universe_inst(Term::free_var(&f), vec![crate::Level::zero()]);
+    let instance = Term::universe_inst(Term::free_var(&f), vec![curios_core::Level::zero()]);
     assert_eq!(whnf(&mut kernel, instance), Ok(nat(3)));
 }
 
@@ -140,7 +139,7 @@ fn iota_selects_an_inductive_arm_and_binds_its_payload() {
 
     let term = Term::induct_match(
         Term::variant(
-            crate::Global::Authored(Qualifier::from(["E"])),
+            curios_core::Global::Authored(Qualifier::from(["E"])),
             Vec::<Term>::new(),
             "some",
             [nat(42)],
@@ -260,7 +259,7 @@ fn projection_selects_a_tuple_field() {
 #[test]
 fn projection_skips_a_variants_tag_but_not_a_structs() {
     let mut kernel = kernel();
-    let name = crate::Global::Authored(Qualifier::from(["E"]));
+    let name = curios_core::Global::Authored(Qualifier::from(["E"]));
 
     let variant = Term::proj(
         Term::variant(name.clone(), Vec::<Term>::new(), "some", [nat(42)]),
@@ -377,7 +376,7 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 
     assert_eq!(
         kernel.reduce_forced(term),
-        Err(crate::ReduceError::Exhausted)
+        Err(curios_core::ReduceError::Exhausted)
     );
 }
 
@@ -400,7 +399,7 @@ fn restoring_the_budget_refills_it() {
     );
     assert_eq!(
         whnf(&mut kernel, occurrence.clone()),
-        Err(crate::ReduceError::Exhausted)
+        Err(curios_core::ReduceError::Exhausted)
     );
 
     kernel.restore_budget();

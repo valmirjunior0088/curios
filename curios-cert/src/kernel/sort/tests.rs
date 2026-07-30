@@ -1,7 +1,8 @@
-use crate::{
-    Global, InductDecl, Kernel, Level, Prim, Telescope, Term, UniverseContext, kernel::sort::Sort,
+use {
+    crate::{Kernel, Sort},
+    curios_base::{Plicity, Qualifier, RootId},
+    curios_core::{Global, InductDecl, Level, Prim, Telescope, Term, UniverseContext},
 };
-use curios_base::{Plicity, Qualifier, RootId};
 
 fn kernel() -> Kernel {
     let mut kernel = Kernel::new(100_000);
@@ -82,7 +83,7 @@ fn a_nominal_types_sort_is_the_one_its_declaration_states() {
 fn a_function_into_a_proposition_is_a_proposition() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
-    let binder = crate::Free::local(0, Some("n"));
+    let binder = curios_core::Free::local(0, Some("n"));
 
     let pi = Term::func_type([(binder, Term::prim(Prim::NatType))], proposition);
 
@@ -92,7 +93,7 @@ fn a_function_into_a_proposition_is_a_proposition() {
 #[test]
 fn a_function_into_data_takes_the_join_of_its_parts() {
     let mut kernel = kernel();
-    let binder = crate::Free::local(0, Some("n"));
+    let binder = curios_core::Free::local(0, Some("n"));
 
     let pi = Term::func_type(
         [(binder, Term::prim(Prim::NatType))],
@@ -116,7 +117,7 @@ fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
     ]);
     assert_eq!(Sort::of(&mut kernel, &all_props), Ok(Sort::Prop));
 
-    let unit = Term::tuple_type(Vec::<(crate::Free, Term)>::new());
+    let unit = Term::tuple_type(Vec::<(curios_core::Free, Term)>::new());
     assert_eq!(Sort::of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
 }
 
@@ -153,7 +154,7 @@ fn a_list_of_proofs_is_not_a_proposition() {
 fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
-    let hypothesis = crate::Free::local(0, Some("h"));
+    let hypothesis = curios_core::Free::local(0, Some("h"));
 
     // `h : P`, so `Sort::of(P)` is `Prop` and the *type of h* is `P`.
     kernel.assume(&hypothesis, &Term::prop());
@@ -196,6 +197,6 @@ fn explicit() -> Plicity {
     Plicity::Explicit
 }
 
-fn binder(index: u32, hint: &str) -> crate::Free {
-    crate::Free::local(index, Some(hint))
+fn binder(index: u32, hint: &str) -> curios_core::Free {
+    curios_core::Free::local(index, Some(hint))
 }

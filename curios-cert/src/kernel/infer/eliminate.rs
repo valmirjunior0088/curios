@@ -61,9 +61,12 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        Atom, Bound, Free, InductArm, InductDecl, InductType, Invert, Kernel, KernelError, Many,
-        Reducer, Scope, Subterm, Telescope, Term, Variant, Visit, invert_indices,
-        invert_indices_outer, kernel::Sort, pinned_by_targets,
+        Invert, Kernel, KernelError, invert_indices, invert_indices_outer, kernel::Sort,
+        pinned_by_targets,
+    },
+    curios_core::{
+        Atom, Bound, Free, InductArm, InductDecl, InductType, Many, Reducer, Scope, Subterm,
+        Telescope, Term, Variant, Visit,
     },
 };
 

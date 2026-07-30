@@ -36,9 +36,9 @@
 //! how the next gap gets found.
 
 use {
+    curios_cert::KernelError,
     curios_elab::{
-        KernelError, Module, Term, recheck_module, recheck_module_verdicts,
-        recheck_module_verdicts_uncached,
+        Module, Term, recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached,
     },
     curios_pipeline::{Stage, compile_entrypoint},
     curios_text::{Entrypoint, RootSource},

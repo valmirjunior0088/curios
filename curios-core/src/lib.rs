@@ -1,28 +1,24 @@
-//! The Curios core language: the term representation the elaborator produces, and the kernel that re-checks it.
+//! The Curios core language: the term representation both checkers build on.
 //!
-//! This crate holds **the representation and the rules over it**. It defines
+//! This crate holds **what a term is** and nothing that judges one. It defines
 //! [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`],
 //! [`Telescope`], [`Bound`]), the primitive roster ([`Prim`]) with its
 //! free-monoid spine algebra and its folds ([`reduce_prim`]), algebraic
 //! universe [`Level`]s and the [`UniverseContext`] declarations generalize
 //! into, the nominal registry entries ([`InductDecl`], [`StructDecl`]) and the
-//! [`Polarity`] lattice they carry, compiler names, and the printer — and, on
-//! top of all that, the [`kernel`](Kernel) that decides whether a finished term
-//! is well-typed.
+//! [`Polarity`] lattice they carry, compiler names, and the printer.
 //!
-//! What it deliberately does *not* contain is anything that makes the *surface
-//! language* work: elaboration, unification, zonking, witness resolution, and
-//! erasure all live in `curios-elab`, which depends on this crate. The universe
-//! *solver* stays there too — a [`UniverseContext`] is data, and deciding
-//! whether a constraint set is satisfiable is inference over that data, not a
-//! rule of the theory. The primitive folds are the boundary case, and
-//! [`Reducer`] is where the line is drawn: what `2 + 2` folds to is arithmetic
-//! on the representation and belongs here, while how far an operand reduces
-//! before the fold sees it is a strategy each side supplies for itself.
-//!
-//! That split is the point. This crate is the trusted base, so a rule that can
-//! admit a program belongs on this side of it and everything that merely makes
-//! programs pleasant to write belongs on the far side.
+//! The judgments live on either side of it. `curios-cert` holds the kernel and
+//! the shared analyses — every rule that can admit a program — and
+//! `curios-elab` holds everything that makes the *surface language* work:
+//! elaboration, unification, zonking, witness resolution, erasure, and the
+//! universe *solver*, since a [`UniverseContext`] is data and deciding whether
+//! a constraint set is satisfiable is inference over that data, not a rule of
+//! the theory. Both depend on this crate and never the reverse. The primitive
+//! folds are the boundary case, and [`Reducer`] is where the line is drawn:
+//! what `2 + 2` folds to is arithmetic on the representation and belongs here,
+//! while how far an operand reduces before a fold sees it is a strategy each
+//! checker supplies for itself.
 //!
 //! One module is not trusted and is here only because the representation needs
 //! it: `print` renders terms for diagnostics. Printing cannot admit a bad
@@ -52,27 +48,6 @@ pub use free_monoid::*;
 
 mod reduce;
 pub use reduce::*;
-
-mod judge;
-pub use judge::*;
-
-mod invert;
-pub use invert::*;
-
-mod positivity;
-pub use positivity::*;
-
-mod totality;
-pub use totality::*;
-
-/// The kernel is the one module that is *not* flattened. It names its
-/// judgments `convert`, `infer`, and `Sort` — the same things `curios-elab`
-/// names its own — and flattening both into one namespace would leave every
-/// use site ambiguous. Keeping it a namespace is what lets the two checkers
-/// coexist and be told apart at a glance: `curios_core::kernel::convert` is
-/// the second opinion, and the bare `convert` is the elaborator's.
-pub mod kernel;
-pub use kernel::{Kernel, KernelError};
 
 mod names;
 pub use names::*;
