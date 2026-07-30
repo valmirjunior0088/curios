@@ -52,7 +52,8 @@ pub use whnf::*;
 
 use {
     super::{
-        Free, Global, InductDecl, ReduceError, StructDecl, Term, UniverseContext, UniverseError,
+        Env, Free, Global, InductDecl, Judge, ReduceError, Reducer, StructDecl, Term,
+        UniverseContext, UniverseError,
     },
     curios_base::Entropy,
     std::{collections::HashMap, fmt},
@@ -146,6 +147,31 @@ impl fmt::Display for KernelError {
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }
         }
+    }
+}
+
+/// The kernel's side of the shared-analysis seam.
+///
+/// `assumption` reads the *locals* rather than [`Kernel::type_of`], because a
+/// shared analysis asking what a binder was assumed at means the binder in
+/// scope, not a top-level name that happens to share its spelling. That matches
+/// what the elaborator's `Context::assumption` answers, which is the point of
+/// the seam.
+impl Env for Kernel {
+    type Error = KernelError;
+
+    fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
+        Ok(self.reduce_forced(term.clone())?)
+    }
+
+    fn assumption(&self, name: &Free) -> Option<&Term> {
+        self.local_type(name)
+    }
+}
+
+impl Judge for Kernel {
+    fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
+        convert::convert(self, type_, this, that)
     }
 }
 
