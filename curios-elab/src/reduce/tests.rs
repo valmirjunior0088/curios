@@ -405,20 +405,18 @@ fn reduce_int_eql_returns_true_or_false_bool() {
 }
 
 #[test]
-fn reduce_flt_mul_computes() {
+fn reduce_flt_mul_stays_stuck() {
     let mut context = context();
 
-    assert_eq!(
-        reduce(
-            &mut context,
-            Subterm::Prim(Prim::flt_mul(
-                Subterm::Prim(Prim::Flt(Flt::from_f32(1.5))),
-                Subterm::Prim(Prim::Flt(Flt::from_f32(2.0)))
-            ))
-            .into()
-        ),
-        Ok(Subterm::Prim(Prim::Flt(Flt::from_f32(3.0))).into())
-    );
+    // `Flt` is opaque at the type level: the operation is its own normal form
+    // even over literals, so no IEEE semantics enters definitional equality.
+    // Runtime-faithful folding belongs to `curios-ersd`'s partial evaluator.
+    let product: Term = Subterm::Prim(Prim::flt_mul(
+        Subterm::Prim(Prim::Flt(Flt::from_f32(1.5))),
+        Subterm::Prim(Prim::Flt(Flt::from_f32(2.0))),
+    ))
+    .into();
+    assert_eq!(reduce(&mut context, product.clone()), Ok(product));
 }
 
 #[test]
@@ -883,22 +881,16 @@ fn reduce_int_arithmetic_is_unbounded() {
 }
 
 #[test]
-fn reduce_flt_to_int_is_exact_or_stuck() {
+fn reduce_flt_to_int_stays_stuck() {
     let mut context = context();
 
-    // 2^31 is exactly representable in f32 and folds exactly, well past i31.
-    assert_eq!(
-        reduce(
-            &mut context,
-            Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
-                2147483648.0
-            ))))),
-        ),
-        Ok(Term::prim(Prim::Int(Int::new(1i64 << 31))))
-    );
+    // Opaque at the type level even on an exactly representable value: reading
+    // a float *is* float semantics, and none of it decides conversion.
+    let exact = Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
+        2147483648.0,
+    )))));
+    assert_eq!(reduce(&mut context, exact.clone()), Ok(exact));
 
-    // NaN has no integer part — no value to pretend, so the fold stays stuck
-    // (the runtime's trunc would trap).
     let nan = Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
         f32::NAN,
     )))));

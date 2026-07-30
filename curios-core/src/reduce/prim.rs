@@ -4,7 +4,7 @@ use {
         Nat, Peel, Prim, Subterm, Term, normalize_concat, peel_bin, peel_first_atom,
         peel_first_elem,
     },
-    curios_base::{Flt, Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
+    curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };
@@ -167,21 +167,26 @@ fn reduce_int_division(
     }))
 }
 
-/// `Flt` counterpart of [`reduce_nat_binary`].
+/// `Flt` operations are opaque at the type level: operands reduce, the
+/// operation never folds — `FltAdd(1.0, 1.0)` is its own normal form, so
+/// `Eq(@Flt, 1.0 + 1.0, 2.0)` is deliberately unprovable. IEEE semantics
+/// inside definitional equality is a soundness hazard with no consumer: the
+/// corpus proves nothing about floats, and IEEE equality identifies values
+/// (`0.0`, `-0.0`) that `FltToLeBytes` observes apart — the exact shape the
+/// singleton guard exists to forbid. Runtime-faithful constant folding
+/// belongs downstream in `curios-ersd`'s partial evaluator, which is
+/// untrusted. The rule this instance establishes: a primitive needs a fold
+/// here only if a type or a proof can depend on its value.
 fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
-    fold: impl FnOnce(Flt, Flt) -> Prim,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
-    Ok(Subterm::Prim(match (left.as_flt(), right.as_flt()) {
-        (Some(l), Some(r)) => fold(l, r),
-        _ => rebuild(left, right),
-    }))
+    Ok(Subterm::Prim(rebuild(left, right)))
 }
 
 /// Reduce the operand of a `Nat` unary primitive, then either `fold` the literal or `rebuild`
@@ -217,19 +222,16 @@ fn reduce_int_unary(
     }))
 }
 
-/// `Flt` counterpart of [`reduce_nat_unary`].
+/// [`reduce_flt_binary`]'s unary counterpart: opaque at the type level, the
+/// operand reduces and the operation always rebuilds.
 fn reduce_flt_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
-    fold: impl FnOnce(Flt) -> Prim,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
     let inner = reducer.reduce_forced(inner.clone())?;
 
-    Ok(Subterm::Prim(match inner.as_flt() {
-        Some(value) => fold(value),
-        None => rebuild(inner),
-    }))
+    Ok(Subterm::Prim(rebuild(inner)))
 }
 
 /// The structural outcome of comparing two `Nat`s. The whole comparison family
@@ -887,153 +889,35 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         ),
         Prim::FltType => Ok(Subterm::Prim(Prim::FltType)),
         Prim::Flt(flt) => Ok(Subterm::Prim(Prim::Flt(*flt))),
-        Prim::FltAdd(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left + right),
-            Prim::FltAdd,
-        ),
-        Prim::FltSub(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left - right),
-            Prim::FltSub,
-        ),
-        Prim::FltMul(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left * right),
-            Prim::FltMul,
-        ),
-        Prim::FltDiv(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left / right),
-            Prim::FltDiv,
-        ),
+        Prim::FltAdd(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltAdd),
+        Prim::FltSub(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltSub),
+        Prim::FltMul(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltMul),
+        Prim::FltDiv(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltDiv),
         // `%` on `f32` is C `fmod`: `x - trunc(x / y) * y`, sign of the dividend —
         // the same value the `cont -> wasm` expansion computes.
-        Prim::FltRem(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left % right),
-            Prim::FltRem,
-        ),
-        Prim::FltMin(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left.min(right)),
-            Prim::FltMin,
-        ),
-        Prim::FltMax(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Flt(left.max(right)),
-            Prim::FltMax,
-        ),
-        Prim::FltCopysign(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |l, r| Prim::Flt(l.copysign(r)),
-            Prim::FltCopysign,
-        ),
-        Prim::FltEql(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Bool(left.eql(right)),
-            Prim::FltEql,
-        ),
-        Prim::FltNeq(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Bool(left.neq(right)),
-            Prim::FltNeq,
-        ),
-        Prim::FltLt(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Bool(left.lt(right)),
-            Prim::FltLt,
-        ),
-        Prim::FltGt(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Bool(left.gt(right)),
-            Prim::FltGt,
-        ),
-        Prim::FltLte(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Bool(left.lte(right)),
-            Prim::FltLte,
-        ),
-        Prim::FltGte(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Prim::Bool(left.gte(right)),
-            Prim::FltGte,
-        ),
-        Prim::FltNeg(inner) => {
-            reduce_flt_unary(reducer, inner, |flt| Prim::Flt(-flt), Prim::FltNeg)
+        Prim::FltRem(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltRem),
+        Prim::FltMin(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltMin),
+        Prim::FltMax(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltMax),
+        Prim::FltCopysign(left, right) => {
+            reduce_flt_binary(reducer, left, right, Prim::FltCopysign)
         }
-        Prim::FltAbs(inner) => {
-            reduce_flt_unary(reducer, inner, |flt| Prim::Flt(flt.abs()), Prim::FltAbs)
-        }
-        Prim::FltSqrt(inner) => {
-            reduce_flt_unary(reducer, inner, |flt| Prim::Flt(flt.sqrt()), Prim::FltSqrt)
-        }
-        Prim::FltFloor(inner) => {
-            reduce_flt_unary(reducer, inner, |flt| Prim::Flt(flt.floor()), Prim::FltFloor)
-        }
-        Prim::FltCeil(inner) => {
-            reduce_flt_unary(reducer, inner, |flt| Prim::Flt(flt.ceil()), Prim::FltCeil)
-        }
-        Prim::FltTrunc(inner) => {
-            reduce_flt_unary(reducer, inner, |flt| Prim::Flt(flt.trunc()), Prim::FltTrunc)
-        }
-        Prim::FltNearest(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |flt| Prim::Flt(flt.nearest()),
-            Prim::FltNearest,
-        ),
-        Prim::FltToLeBytes(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| {
-                Prim::Bin(
-                    Grain::X,
-                    PackedBin::from_bytes(v.to_f32().to_le_bytes().to_vec()),
-                )
-            },
-            Prim::FltToLeBytes,
-        ),
-        // Assemble a float from an exact 4-byte literal; anything else —
-        // symbolic, or a wrong-length literal (the runtime trap) — stays stuck.
+        Prim::FltEql(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltEql),
+        Prim::FltNeq(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltNeq),
+        Prim::FltLt(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltLt),
+        Prim::FltGt(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltGt),
+        Prim::FltLte(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltLte),
+        Prim::FltGte(left, right) => reduce_flt_binary(reducer, left, right, Prim::FltGte),
+        Prim::FltNeg(inner) => reduce_flt_unary(reducer, inner, Prim::FltNeg),
+        Prim::FltAbs(inner) => reduce_flt_unary(reducer, inner, Prim::FltAbs),
+        Prim::FltSqrt(inner) => reduce_flt_unary(reducer, inner, Prim::FltSqrt),
+        Prim::FltFloor(inner) => reduce_flt_unary(reducer, inner, Prim::FltFloor),
+        Prim::FltCeil(inner) => reduce_flt_unary(reducer, inner, Prim::FltCeil),
+        Prim::FltTrunc(inner) => reduce_flt_unary(reducer, inner, Prim::FltTrunc),
+        Prim::FltNearest(inner) => reduce_flt_unary(reducer, inner, Prim::FltNearest),
+        Prim::FltToLeBytes(inner) => reduce_flt_unary(reducer, inner, Prim::FltToLeBytes),
         Prim::FltOfLeBytes(inner) => {
             let inner = reducer.reduce_forced(inner.clone())?;
-            Ok(Subterm::Prim(match &*inner {
-                Subterm::Prim(Prim::Bin(Grain::X, bytes)) if bytes.len(Grain::X) == 4 => {
-                    Prim::Flt(Flt::from_f32(f32::from_le_bytes(
-                        bytes.as_bytes().unwrap().try_into().unwrap(),
-                    )))
-                }
-                _ => Prim::FltOfLeBytes(inner),
-            }))
+            Ok(Subterm::Prim(Prim::FltOfLeBytes(inner)))
         }
         Prim::NatToInt(inner) => reduce_nat_unary(
             reducer,
@@ -1049,45 +933,20 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             },
             Prim::NatToInt,
         ),
-        Prim::NatToFlt(inner) => reduce_nat_unary(
-            reducer,
-            inner,
-            |v| {
-                Some(Prim::Flt(Flt::from_f32(
-                    v.to_big_uint()?.to_f64().unwrap_or(0.0) as f32,
-                )))
-            },
-            Prim::NatToFlt,
-        ),
+        // Opaque at the type level, like every `Flt` operation: constructing a
+        // float *is* float semantics.
+        Prim::NatToFlt(inner) => reduce_nat_unary(reducer, inner, |_| None, Prim::NatToFlt),
         Prim::IntToNat(inner) => reduce_int_unary(
             reducer,
             inner,
             |v| Some(Prim::Nat(Nat::new(v.to_i32()? as u32))),
             Prim::IntToNat,
         ),
-        Prim::IntToFlt(inner) => reduce_int_unary(
-            reducer,
-            inner,
-            |v| Some(Prim::Flt(Flt::from_f32(v.to_i32()? as f32))),
-            Prim::IntToFlt,
-        ),
-        Prim::FltToNat(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |flt| Prim::Nat(Nat::new(flt.to_f32() as u32)),
-            Prim::FltToNat,
-        ),
-        // Exact — the type level pretends ℤ, so no finite float is out of
-        // range. A float with no integer part at all (NaN, ±inf) folds to
-        // nothing and the term stays stuck.
+        Prim::IntToFlt(inner) => reduce_int_unary(reducer, inner, |_| None, Prim::IntToFlt),
+        Prim::FltToNat(inner) => reduce_flt_unary(reducer, inner, Prim::FltToNat),
         Prim::FltToInt(inner) => {
             let inner = reducer.reduce_forced(inner.clone())?;
-            Ok(Subterm::Prim(
-                match inner.as_flt().and_then(|v| Int::from_f32_trunc(v.to_f32())) {
-                    Some(int) => Prim::Int(int),
-                    None => Prim::FltToInt(inner),
-                },
-            ))
+            Ok(Subterm::Prim(Prim::FltToInt(inner)))
         }
         Prim::BinType(Grain::X) => Ok(Subterm::Prim(Prim::BinType(Grain::X))),
         Prim::Bin(Grain::X, bytes) => Ok(Subterm::Prim(Prim::Bin(Grain::X, bytes.clone()))),

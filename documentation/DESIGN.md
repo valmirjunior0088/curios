@@ -243,6 +243,14 @@ The conversion checker is also incomplete in several positions — an eliminatio
 
 **Rejected.** Kernel-primitive character and string types.
 
+### Flt is opaque at the type level
+
+**Decision.** No `Flt` operation reduces during type-level reduction, in either checker: `FltAdd(1.0, 1.0)` is its own normal form, operands reduce but the operation never folds, and the same holds for comparisons, conversions in and out of `Flt`, and the bit-level views. Two float *literals* still convert exactly when they are bit-identical. Runtime behavior is untouched — constant folding lives in `curios-ersd`'s partial evaluator, which is untrusted and runtime-faithful, and the erased program computes floats exactly as before.
+
+**Rationale.** IEEE semantics inside definitional equality is a soundness hazard with no consumer. The corpus proves nothing about floats — `/std/Flt` is a facade and every float use is codec work — while the hazard is concrete: IEEE equality identifies `0.0` with `-0.0`, which `FltToLeBytes` observes apart, and a type-level "equal" pair that a total function distinguishes is the exact shape of the singleton-guard forgery. NaN's non-reflexive equality is the same hazard from another side. Making the family opaque removes all sixty-four fold arms and `curios-base`'s float arithmetic from the trusted call closure at the cost of one fact: `refl : Eq(@Flt, 1.0 + 1.0, 2.0)` is unprovable, whose measured corpus cost is zero. The discipline it establishes, recorded on the fold table itself: a primitive needs a kernel fold only if a type or a proof can depend on its value; everything else is constant folding and belongs downstream.
+
+**Rejected.** Bit-strict type-level float equality, which makes the same expression compute differently at type level and runtime — a new unsoundness vector rather than a removed one. Proving the folds correct, which is sixty-four arms of IEEE metatheory for zero consumers. Keeping only the "safe" arms, which draws an unprincipled line and is the restrict-instead-of-remove shape this project's soundness fixes forbid. `Int`'s status is deliberately undecided until its `BigInt` uses are traced for proof positions — a separate investigation, not a rider on this one.
+
 ### A motive is a term, not a grammar
 
 **Decision.** A match motive is a single construct: a term checked against the eliminator's motive type, `(ī : Ī(p̄)) -> I(p̄, ī) -> Sort`. It binds one name per index and then the scrutinee. Parameters are never abstracted, and the eliminated family is never written.

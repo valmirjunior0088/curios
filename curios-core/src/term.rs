@@ -7,7 +7,7 @@ use {
         Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
         instantiate_universe_levels_scoped, print_term,
     },
-    curios_base::{Flt, Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
+    curios_base::{Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
@@ -2789,13 +2789,6 @@ impl Subterm {
     pub(crate) fn as_int(&self) -> Option<Int> {
         match self {
             Subterm::Prim(Prim::Int(value)) => Some(value.clone()),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn as_flt(&self) -> Option<Flt> {
-        match self {
-            Subterm::Prim(Prim::Flt(value)) => Some(*value),
             _ => None,
         }
     }
