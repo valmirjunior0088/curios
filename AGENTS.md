@@ -111,7 +111,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - Place unit tests beside their implementation: `foo.rs` declares `#[cfg(test)] mod tests;` and the tests live in `foo/tests.rs`. A small test module may stay inline as `#[cfg(test)] mod tests { … }` in the file it covers. Put programs that cross compiler stages in `curios/src/tests/`; codegen tests live in `curios/src/tests/codegen/`.
 - Name per-carrier helpers, fields, and emitted functions type-first, operation-last (`bin_force`, `lst_slice`), never operation-first (`force_bin`).
 - When changing one stage, check the next representation or consumer explicitly. Parsing changes usually affect printing and lowering; core changes usually affect erasure; IR changes usually affect the next lowering and its tests.
-- Use `//!` for module purpose and invariants, and `///` for public API contracts. Do not duplicate detailed subsystem documentation in this file.
+- Use `//!` for module purpose and invariants, and `///` for public API contracts. Do not duplicate detailed subsystem documentation in this file. Write every comment — `//`, `///`, `//!` — as one line per paragraph or list item, matching the Markdown rule below; do not hardwrap. Add a comment only where the WHY is non-obvious — an invariant, a rejected alternative, a measured tradeoff — and never write one that only restates what the code already says.
 - Use stock rustfmt and Clippy settings. There is no repository-specific `rustfmt.toml` or `clippy.toml`.
 
 ## Writing Curios
