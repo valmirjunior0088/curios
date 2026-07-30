@@ -358,7 +358,7 @@ impl Term {
         }
     }
 
-    /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the primitive standing in for one where the normal form is a `Prim` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
+    /// Build the structural `Bin` eliminator ([`Carrier::Bin`]) over an already-built motive scope: an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
     pub fn bin_match_scoped<H, EC, CC>(
         grain: Grain,
@@ -453,6 +453,7 @@ impl Term {
         }))
     }
 
+    /// [`Term::lst_match`] over an already-built motive scope.
     #[allow(clippy::too_many_arguments)]
     pub fn lst_match_scoped<H, EL, EC, CC>(
         head: H,
@@ -572,6 +573,7 @@ impl Term {
         }))
     }
 
+    /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the primitive standing in for one where the normal form is a `Prim` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
@@ -1117,41 +1119,6 @@ impl Term {
         )
     }
 
-    /// [`Term::lst_match`] over an already-built motive scope.
-    #[allow(clippy::too_many_arguments)]
-    /// Build the structural `Bin` eliminator ([`Carrier::Bin`]): an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
-    #[allow(clippy::too_many_arguments)]
-    pub fn bin_match<H, M, EC, CC>(
-        grain: Grain,
-        head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        empty_case: EC,
-        head_binder: &Free,
-        tail_binder: &Free,
-        ih_binder: &Free,
-        cons_case: CC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        EC: Into<Term>,
-        CC: Into<Term>,
-    {
-        Self::bin_match_scoped(
-            grain,
-            head,
-            Self::motive_scope(motive_binder, motive.into()),
-            empty_case,
-            head_binder,
-            tail_binder,
-            ih_binder,
-            cons_case,
-        )
-    }
-
-    /// [`Term::bin_match`] over an already-built motive scope.
-    #[allow(clippy::too_many_arguments)]
     /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
     pub fn switch<H, M, I, B, D>(
         head: H,
@@ -1956,7 +1923,7 @@ impl LetBinding {
         &self.value
     }
 
-    pub fn into_parts(self) -> (Term, Term) {
+    fn into_parts(self) -> (Term, Term) {
         (self.type_, self.value)
     }
 }

@@ -735,7 +735,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `BinEnd`/`BinByte` and emits [`curios_core::Term::bin_match`] directly — identical to [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs for its polymorphic element type (`Bin` has none).
+    /// Groups rows into `BinEnd`/`BinByte` and emits [`curios_core::Term::bin_match_scoped`] directly — identical to [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs for its polymorphic element type (`Bin` has none).
     fn compile_bin(
         &self,
         mut columns: Vec<curios_core::Term>,
