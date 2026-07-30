@@ -17,11 +17,7 @@ pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
 }
 
-// A Σ-type / struct-declaration field: an optional label and the field type,
-// or the signature sugar `label(params) -> type` — kept as written in the AST
-// node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and
-// `struct` decls. The sugared catch spans through `->`, so a positional field
-// that merely starts with an application (`f(x)`) backtracks cleanly.
+// A Σ-type / struct-declaration field: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
 pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
     catch(
         parse_identifier()
@@ -70,14 +66,10 @@ pub(super) fn parse_tuple_type<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A parsed labeled-field prefix: the label and, for the definition sugar, the
-// written lambda-parameter list.
+// A parsed labeled-field prefix: the label and, for the definition sugar, the written lambda-parameter list.
 type TupleFieldPrefix = (String, Option<Vec<(Plicity, String, Option<Term>)>>);
 
-// The committing prefix of a labeled tuple/struct-literal field: `label =` or
-// the definition sugar `label(params) =`. The caller wraps it in `catch`, so a
-// positional field that merely starts with an identifier or an application
-// backtracks cleanly.
+// The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. The caller wraps it in `catch`, so a positional field that merely starts with an identifier or an application backtracks cleanly.
 pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
     parse_identifier()
         .and(
@@ -93,9 +85,7 @@ pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
         .map(|(label, func_params): (&str, _)| (label.to_string(), func_params))
 }
 
-// A tuple-literal / struct-literal field: `label = value`, the definition
-// sugar `label(params) = value` — kept as written in the AST node
-// (`func_params`); `into_core` undoes the sugar — or a positional value.
+// A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) = value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
 pub(super) fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
     catch(parse_tuple_field_prefix())
         .and(lazy(parse_term))
@@ -112,10 +102,7 @@ pub(super) fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
 }
 
 pub(super) fn parse_tuple<'a>() -> Parser<'a, Term> {
-    // Two committing prefixes distinguish a tuple literal from a parenthesized
-    // term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named
-    // first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already
-    // disambiguates, so the one-element form needs no trailing comma).
+    // Two committing prefixes distinguish a tuple literal from a parenthesized term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already disambiguates, so the one-element form needs no trailing comma).
     catch(
         parse_literal("(")
             .and_keep(parse_tuple_field())
@@ -139,11 +126,7 @@ pub(super) fn parse_tuple<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-// A struct-literal entry: a `..base` spread (no term begins with `..` — a
-// leading-dot float has a single dot — so the prefix commits), a `use <term>`
-// fill for a concept's `use`-marked field (mirroring the call-site argument
-// form — `use` is reserved, so it can never begin a field label or value), or
-// a plain field. Spread position and multiplicity are core elaboration's job.
+// A struct-literal entry: a `..base` spread (no term begins with `..` — a leading-dot float has a single dot — so the prefix commits), a `use <term>` fill for a concept's `use`-marked field (mirroring the call-site argument form — `use` is reserved, so it can never begin a field label or value), or a plain field. Spread position and multiplicity are core elaboration's job.
 pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
     catch(parse_literal(".."))
         .and_keep(lazy(parse_term))
@@ -154,13 +137,7 @@ pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
         .or(parse_tuple_field().map(StructLitEntry::Field))
 }
 
-// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` inside
-// the `catch` is the commit point — it distinguishes the literal from a bare
-// name / name-application (no brace) and from a Σ-type `{ x : A }` (no head
-// name), so there is no grammar conflict. Plain entries reuse the tuple-value
-// grammar (`= value` or positional) and `use <term>` fills a concept's
-// `use`-marked field; the head's arguments are plain terms (`@`-pinning is not
-// the struct idiom — the head type pins instead).
+// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` inside the `catch` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are plain terms (`@`-pinning is not the struct idiom — the head type pins instead).
 pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
     catch(
         parse_name()
@@ -193,7 +170,4 @@ pub(super) fn parse_plicity<'a>() -> Parser<'a, Plicity> {
         .or(pure(Plicity::Explicit))
 }
 
-// A `use` Π-binder: `use term`. Always anonymous — it binds nothing nameable
-// (`_`) but joins the instance scope; an instance is reached by resolution,
-// never by name. `use` is a reserved word, so there is no ambiguity with an
-// ordinary binder name.
+// A `use` Π-binder: `use term`. Always anonymous — it binds nothing nameable (`_`) but joins the instance scope; an instance is reached by resolution, never by name. `use` is a reserved word, so there is no ambiguity with an ordinary binder name.

@@ -19,9 +19,7 @@ pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// One of the six wire shapes, by its own closed grammar — not an ordinary
-// Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bin`/`Handle`
-// are literal keywords here, and `Lst(T)` recurses on the same grammar.
+// One of the six wire shapes, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bin`/`Handle` are literal keywords here, and `Lst(T)` recurses on the same grammar.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     parse_identifier().flat_map(|name| match name {
         "Nat" => pure(WireType::Nat),
@@ -39,11 +37,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     })
 }
 
-// `(T, T, ...) -> T` (a foreign function) or a bare `T` (a zero-argument
-// foreign, like `host_ops`'s `io_clock_wall`). Params carry no surface label —
-// `a0`, `a1`, … name them positionally; the single result is unnamed (`_`),
-// since a `foreign` declaration has no surface syntax for a named record
-// result the way `/sys/Handle`'s Rust-side rows do.
+// `(T, T, ...) -> T` (a foreign function) or a bare `T` (a zero-argument foreign, like `host_ops`'s `io_clock_wall`). Params carry no surface label — `a0`, `a1`, … name them positionally; the single result is unnamed (`_`), since a `foreign` declaration has no surface syntax for a named record result the way `/sys/Handle`'s Rust-side rows do.
 pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     catch(
         parse_literal("(")
@@ -66,9 +60,7 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     }))
 }
 
-// `foreign name : T;` — a name and a wire signature with no body, bound to a
-// host-provided implementation at link time. Mirrors `parse_top_let`, but ends
-// after the signature instead of parsing `= body`.
+// `foreign name : T;` — a name and a wire signature with no body, bound to a host-provided implementation at link time. Mirrors `parse_top_let`, but ends after the signature instead of parsing `= body`.
 pub(super) fn parse_top_foreign<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("foreign"))).flat_map(|(vis_pub, ())| {
         parse_identifier()
@@ -132,10 +124,7 @@ pub(super) fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// Like `parse_name`, but additionally accepts an empty absolute path. The
-// leading `/` is only consumed when followed by an identifier — so for
-// `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for
-// `parse_use_group` to consume as its separator.
+// Like `parse_name`, but additionally accepts an empty absolute path. The leading `/` is only consumed when followed by an identifier — so for `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for `parse_use_group` to consume as its separator.
 pub(super) fn parse_use_path<'a>() -> Parser<'a, Name> {
     spanned(
         catch(take_exact("/").and_keep(parse_identifier()).and(many0(|| {
@@ -220,10 +209,7 @@ pub(super) fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// A payload binder: `@m : Nat` (named, implicit at the constructor function),
-// `m : Nat` (named), or a bare type (positional). Plicity's `@` (on the name)
-// requires a name — a positional binder has nothing for a later type or the
-// target to mention.
+// A payload binder: `@m : Nat` (named, implicit at the constructor function), `m : Nat` (named), or a bare type (positional). Plicity's `@` (on the name) requires a name — a positional binder has nothing for a later type or the target to mention.
 pub(super) fn parse_induct_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
     catch(
         parse_plicity()
@@ -255,8 +241,7 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
                 }))
                 .and_drop(parse_literal(")")),
         )
-        // The case target: `: (index-exprs)` — the terminal with its
-        // mandatory part (the inductive name and the parameters) elided.
+        // The case target: `: (index-exprs)` — the terminal with its mandatory part (the inductive name and the parameters) elided.
         .and(
             catch(parse_literal(":"))
                 .and_keep(parse_literal("("))
@@ -274,10 +259,7 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
         )
 }
 
-// An inductive parameter: `name : type`, or `@name : type` to make it implicit at
-// the type-constructor function (it is implicit at the value constructors
-// either way — the mark's only job is the type constructor, where unmarked
-// parameters are written out).
+// An inductive parameter: `name : type`, or `@name : type` to make it implicit at the type-constructor function (it is implicit at the value constructors either way — the mark's only job is the type constructor, where unmarked parameters are written out).
 pub(super) fn parse_induct_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
     parse_plicity()
         .and(parse_identifier())
@@ -286,9 +268,7 @@ pub(super) fn parse_induct_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
         .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, name.to_string(), ty))
 }
 
-// A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is
-// documentary (and a dependency hook for later entries) — never in scope in
-// the cases — so it is optional and never takes `@`.
+// A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional and never takes `@`.
 pub(super) fn parse_induct_index<'a>() -> Parser<'a, (Option<String>, Term)> {
     catch(parse_identifier().and_drop(parse_literal(":")))
         .and(lazy(parse_term))
@@ -296,21 +276,15 @@ pub(super) fn parse_induct_index<'a>() -> Parser<'a, (Option<String>, Term)> {
         .or(lazy(parse_term).map(|ty| (None, ty)))
 }
 
-/// A parsed inductive head arity: the index telescope (each binder optionally
-/// named) and the sort it lands in.
+/// A parsed inductive head arity: the index telescope (each binder optionally named) and the sort it lands in.
 type InductArity = (Vec<(Option<String>, Term)>, bool, Term);
 
-/// A declaration-local result sort, with an independent representation
-/// visibility marker. This parser is deliberately not used for ordinary sort
-/// positions: `pub Type` and `pub Prop` are not terms.
+/// A declaration-local result sort, with an independent representation visibility marker. This parser is deliberately not used for ordinary sort positions: `pub Type` and `pub Prop` are not terms.
 fn parse_representation_sort<'a>() -> Parser<'a, (bool, Term)> {
     parse_pub().and(parse_sort())
 }
 
-// The head's arity after the `:` — either an index telescope landing in a sort,
-// `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index
-// telescope must state where it lands (`-> Sort`), and a sortless head is a
-// parse error, never an implicit `Type`.
+// The head's arity after the `:` — either an index telescope landing in a sort, `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index telescope must state where it lands (`-> Sort`), and a sortless head is a parse error, never an implicit `Type`.
 pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
     catch(
         parse_literal("(")
@@ -332,14 +306,12 @@ pub(super) fn parse_top_induct_body<'a>(vis_pub: bool) -> Parser<'a, TopInduct> 
             )
             .or(pure(vec![])),
         )
-        // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is
-        // required — there is no implicit `Type`.
+        // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is required — there is no implicit `Type`.
         .and(parse_literal(":").and_keep(parse_induct_arity()))
         .and(many0(parse_top_induct_case))
         .flat_map(
             move |(((label, params), (indices, rep_pub, result_sort)), cases)| {
-                // Targets are required on every case iff the head declares
-                // indices, with arity equal to the index telescope's.
+                // Targets are required on every case iff the head declares indices, with arity equal to the index telescope's.
                 for case in &cases {
                     match (&case.target, indices.len()) {
                         (None, 0) => {}
@@ -395,11 +367,7 @@ pub(super) fn parse_top_induct<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-/// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an
-/// inductive head is always one of these two — the only universes — so the sort
-/// position parses this targeted form rather than a generic `lazy(parse_term)`.
-/// A generic term parser is both too loose and, for a struct, greedily eats the
-/// `{` opening the field block.
+/// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an inductive head is always one of these two — the only universes — so the sort position parses this targeted form rather than a generic `lazy(parse_term)`. A generic term parser is both too loose and, for a struct, greedily eats the `{` opening the field block.
 pub(super) fn parse_sort<'a>() -> Parser<'a, Term> {
     parse_prop().or(parse_type())
 }
@@ -435,11 +403,7 @@ pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// A concept field: `use? label : term`, or the signature sugar
-// `label(params) -> term` — kept as written in the AST node (`func_params`);
-// `into_core` undoes the sugar (mirroring top-level `let`'s function sugar). A
-// `use`-prefixed field is a superclass edge — its type must be a concept
-// application, checked at lowering.
+// A concept field: `use? label : term`, or the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar). A `use`-prefixed field is a superclass edge — its type must be a concept application, checked at lowering.
 pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
     let super_field = catch(parse_keyword("use"))
         .and_keep(lazy(parse_term))
@@ -487,8 +451,7 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
                 )
                 .or(pure(vec![])),
             )
-            // The representation sort: `: pub Type`, `: Type`, `: pub Prop`,
-            // or `: Prop` after the parameters. Required, like a struct's.
+            // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
             .and(parse_literal(":").and_keep(parse_representation_sort()))
             .and_drop(parse_literal("{"))
             .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
@@ -506,9 +469,7 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// A witness field: `label = term`, or the definition sugar
-// `label(params) = term` — the tuple-field grammar with the label mandatory,
-// kept as written in the AST node (`func_params`); `into_core` undoes the sugar.
+// A witness field: `label = term`, or the definition sugar `label(params) = term` — the tuple-field grammar with the label mandatory, kept as written in the AST node (`func_params`); `into_core` undoes the sugar.
 pub(super) fn parse_witness_field<'a>() -> Parser<'a, WitnessField> {
     catch(parse_tuple_field_prefix())
         .and(lazy(parse_term))
@@ -519,8 +480,7 @@ pub(super) fn parse_witness_field<'a>() -> Parser<'a, WitnessField> {
         })
 }
 
-// A witness-body entry: a `use <term>` fill for one of the concept's
-// `use`-marked fields, or an implementation field.
+// A witness-body entry: a `use <term>` fill for one of the concept's `use`-marked fields, or an implementation field.
 pub(super) fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
     catch(parse_keyword("use"))
         .and_keep(lazy(parse_term))
@@ -528,11 +488,7 @@ pub(super) fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
         .or(parse_witness_field().map(WitnessEntry::Field))
 }
 
-// A witness declaration is anonymous: `satisfy Concept(args) { … }`, or
-// `satisfy (params) => Concept(args) { … }` with a nonempty telescope. The
-// keyword is the commit point — nothing else at item position begins with
-// `satisfy`. The separator makes the parameterized form's terminal concept
-// application explicit; an empty telescope must use the bare form instead.
+// A witness declaration is anonymous: `satisfy Concept(args) { … }`, or `satisfy (params) => Concept(args) { … }` with a nonempty telescope. The keyword is the commit point — nothing else at item position begins with `satisfy`. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead.
 pub(super) fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
     catch(parse_keyword("satisfy")).flat_map(|()| {
         catch(

@@ -4,10 +4,7 @@ use curios_base::Qualifier;
 
 /// One compiler-known `/syn` name, stated as its module segments.
 ///
-/// Segments rather than a path string, because lowering needs the *identity*,
-/// and building one from `"/syn/Monad/bind"` would mean splitting a spelling —
-/// the coupling `curios-elab`'s name vocabulary exists to remove. The registry
-/// is the site that knows the structure, so the registry states it.
+/// Segments rather than a path string, because lowering needs the *identity*, and building one from `"/syn/Monad/bind"` would mean splitting a spelling — the coupling `curios-elab`'s name vocabulary exists to remove. The registry is the site that knows the structure, so the registry states it.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxName {
     segments: &'static [&'static str],
@@ -23,9 +20,7 @@ impl SyntaxName {
         Qualifier::from(self.segments.iter().copied())
     }
 
-    /// The flattened spelling, for the nominal registries `curios-elab` still
-    /// keys by `String`, and for diagnostics. Rendering, not parsing: it goes
-    /// out and never back in. Retired with those keys.
+    /// The flattened spelling, for the nominal registries `curios-elab` still keys by `String`, and for diagnostics. Rendering, not parsing: it goes out and never back in. Retired with those keys.
     pub fn symbol(self) -> String {
         self.qualifier().join()
     }
@@ -38,9 +33,7 @@ impl SyntaxName {
 
 /// The compiler-known `/syn` names used by surface desugaring.
 ///
-/// Fields are private so `curios-text` owns the shape of the lowering contract,
-/// while the crate that owns the corresponding source declarations chooses the
-/// canonical value.
+/// Fields are private so `curios-text` owns the shape of the lowering contract, while the crate that owns the corresponding source declarations chooses the canonical value.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
     monad: MonadSyntax,

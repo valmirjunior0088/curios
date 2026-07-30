@@ -8,54 +8,27 @@ use {
     std::{collections::BTreeMap, mem},
 };
 
-/// One elaborated arm of a single-level core inductive match: the constructor
-/// tag, its payload binders (each with its written plicity mark), and the
-/// (already-lowered) body. The marks travel to the Core arm; core elaboration
-/// checks them against the constructor's canonical payload plicities.
+/// One elaborated arm of a single-level core inductive match: the constructor tag, its payload binders (each with its written plicity mark), and the (already-lowered) body. The marks travel to the Core arm; core elaboration checks them against the constructor's canonical payload plicities.
 type InductCase = (
     curios_core::Atom,
     Vec<(Plicity, curios_core::Free)>,
     curios_core::Term,
 );
 
-/// One in-progress row of the matrix compiler's recursion (see
-/// [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to
-/// right, one per not-yet-retired column, borrowed from the original
-/// [`MatrixArm`]), the `let` bindings accumulated so far from retired
-/// all-[`MatchPattern::Binder`] columns — applied at the leaf, outermost
-/// first, matching [`Lowerer::lower_pattern_fields`]'s "first field's let ends
-/// up outermost" convention — and the row's own (still-surface) body. A
-/// name already bound directly by an enclosing core binder (see
-/// [`MatchCompiler::compile_ctor`]'s single-row fast path) needs no entry here at
-/// all — [`Lowerer::scoped`] is called inline, right where that binder's name
-/// is decided, instead of threading a second bookkeeping list through the
-/// recursion for it.
+/// One in-progress row of the matrix compiler's recursion (see [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to right, one per not-yet-retired column, borrowed from the original [`MatrixArm`]), the `let` bindings accumulated so far from retired all-[`MatchPattern::Binder`] columns — applied at the leaf, outermost first, matching [`Lowerer::lower_pattern_fields`]'s "first field's let ends up outermost" convention — and the row's own (still-surface) body. A name already bound directly by an enclosing core binder (see [`MatchCompiler::compile_ctor`]'s single-row fast path) needs no entry here at all — [`Lowerer::scoped`] is called inline, right where that binder's name is decided, instead of threading a second bookkeeping list through the recursion for it.
 struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
     binds: Vec<(super::lowerer::Binder, curios_core::Term)>,
     body: &'t Term,
 }
 
-/// One row grouped under a constructor tag in [`MatchCompiler::compile_ctor`]:
-/// its still-borrowed, plicity-marked argument patterns and the row itself.
+/// One row grouped under a constructor tag in [`MatchCompiler::compile_ctor`]: its still-borrowed, plicity-marked argument patterns and the row itself.
 type VariantRow<'t> = (&'t [(Plicity, MatchPattern)], MatrixRow<'t>);
 
-/// One unit of match-matrix compilation: borrows the [`Lowerer`] doing the
-/// surrounding term lowering (for name resolution, scoping, and recursing back
-/// into [`Lowerer::term`]/[`Lowerer::region`] at each leaf) so the matrix
-/// recursion's own bookkeeping (columns, rows, motive threading) stays
-/// separate from term lowering itself — mirroring `into_cont::Work` borrowing
-/// its `Lowerer` counterpart there.
+/// One unit of match-matrix compilation: borrows the [`Lowerer`] doing the surrounding term lowering (for name resolution, scoping, and recursing back into [`Lowerer::term`]/[`Lowerer::region`] at each leaf) so the matrix recursion's own bookkeeping (columns, rows, motive threading) stays separate from term lowering itself — mirroring `into_cont::Work` borrowing its `Lowerer` counterpart there.
 pub(super) struct MatchCompiler<'l, 'a, 'b> {
     lowerer: &'l Lowerer<'a, 'b>,
-    /// The fallthrough arm for constructors/cases no row covers, already
-    /// lowered — a headed match's `| _ =>` catch-all, or a `choose` bind-arm's
-    /// rest-of-ladder (see [`Lowerer::lower_bind_arm`]). `None` means
-    /// full enumeration: `compile_ctor` emits a plain `induct_match` (leaning
-    /// on core's Rung-C vacuity for any pruned tag) and the hardcoded carriers
-    /// require both of their shapes. Constant across one matrix's whole
-    /// recursion — a nested match inside a body re-enters through `leaf`, which
-    /// builds a fresh `MatchCompiler` with its own (absent) default.
+    /// The fallthrough arm for constructors/cases no row covers, already lowered — a headed match's `| _ =>` catch-all, or a `choose` bind-arm's rest-of-ladder (see [`Lowerer::lower_bind_arm`]). `None` means full enumeration: `compile_ctor` emits a plain `induct_match` (leaning on core's Rung-C vacuity for any pruned tag) and the hardcoded carriers require both of their shapes. Constant across one matrix's whole recursion — a nested match inside a body re-enters through `leaf`, which builds a fresh `MatchCompiler` with its own (absent) default.
     default: Option<curios_core::Term>,
 }
 
@@ -67,8 +40,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// A [`MatchCompiler`] whose uncovered-case fallthrough is `default`. Used
-    /// for a headed `| _ =>` catch-all and for `choose` bind-arms.
+    /// A [`MatchCompiler`] whose uncovered-case fallthrough is `default`. Used for a headed `| _ =>` catch-all and for `choose` bind-arms.
     pub(super) fn with_default(
         lowerer: &'l Lowerer<'a, 'b>,
         default: Option<curios_core::Term>,
@@ -76,10 +48,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         Self { lowerer, default }
     }
 
-    /// Leaf shim for the plain (non-region) lowering path — matches
-    /// [`Self::compile_matrix`]'s `leaf: fn(&Self, &Term)` shape. Also passed
-    /// as a bare function pointer from [`Lowerer::subterm`], so it needs to be
-    /// visible there too.
+    /// Leaf shim for the plain (non-region) lowering path — matches [`Self::compile_matrix`]'s `leaf: fn(&Self, &Term)` shape. Also passed as a bare function pointer from [`Lowerer::subterm`], so it needs to be visible there too.
     pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.lowerer.term(term)
     }
@@ -89,11 +58,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.lowerer.region(term)
     }
 
-    /// Desugars a `match` inside a region: the scrutinee's bangs are collected
-    /// into `binds` (hoisted out — the scrutinee runs unconditionally), while
-    /// each arm is desugared as its own region (branch-local effects). This
-    /// mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect`
-    /// on the head and `region` on arm bodies.
+    /// Desugars a `match` inside a region: the scrutinee's bangs are collected into `binds` (hoisted out — the scrutinee runs unconditionally), while each arm is desugared as its own region (branch-local effects). This mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect` on the head and `region` on arm bodies.
     pub(super) fn match_region(
         &self,
         match_: &Match,
@@ -103,11 +68,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.compile_matrix_headed(head, &match_.motive, &match_.arms, Self::region)
     }
 
-    /// Desugars a `choose` inside a region: the head arm's test mirrors the
-    /// `subterm` path's right-fold, but only the *first* condition runs
-    /// unconditionally, so only its bangs hoist into `binds`. Every deeper
-    /// condition evaluates just when its predecessor is false, so each lowers
-    /// as its own sub-region inside that false branch (see [`Self::ladder_region`]).
+    /// Desugars a `choose` inside a region: the head arm's test mirrors the `subterm` path's right-fold, but only the *first* condition runs unconditionally, so only its bangs hoist into `binds`. Every deeper condition evaluates just when its predecessor is false, so each lowers as its own sub-region inside that false branch (see [`Self::ladder_region`]).
     pub(super) fn choose_region(
         &self,
         choose: &Choose,
@@ -116,13 +77,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.ladder_region(&choose.arms, &choose.default, binds)
     }
 
-    /// Lowers a `choose`'s arms inside a region. The head arm's test (a
-    /// condition or a bind scrutinee) collects its bangs into `binds` (the
-    /// caller's region — it runs unconditionally at this level); its body is its
-    /// own region; the rest of the ladder — reached only when this test fails —
-    /// is lowered as a *fresh* region so deeper tests' bangs stay branch-local.
-    /// With no arms left, the ladder is just its default, run unconditionally in
-    /// the current region.
+    /// Lowers a `choose`'s arms inside a region. The head arm's test (a condition or a bind scrutinee) collects its bangs into `binds` (the caller's region — it runs unconditionally at this level); its body is its own region; the rest of the ladder — reached only when this test fails — is lowered as a *fresh* region so deeper tests' bangs stay branch-local. With no arms left, the ladder is just its default, run unconditionally in the current region.
     fn ladder_region(
         &self,
         arms: &[ChooseArm],
@@ -159,13 +114,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Lowers a `choose` bind arm `| pattern = value => body` — with
-    /// `value` and `rest` (the fallthrough) already lowered — as a single-row
-    /// matrix over `value` whose fallthrough for every unmatched shape is `rest`
-    /// (via [`Self::default`]). A refutable pattern only: a bare-binder LHS is
-    /// irrefutable (a plain `let`) and rejected. When the pattern is refutable
-    /// at more than one point, `rest` is shared through a nullary thunk (see
-    /// [`Self::lower_defaulted_matrix`]).
+    /// Lowers a `choose` bind arm `| pattern = value => body` — with `value` and `rest` (the fallthrough) already lowered — as a single-row matrix over `value` whose fallthrough for every unmatched shape is `rest` (via [`Self::default`]). A refutable pattern only: a bare-binder LHS is irrefutable (a plain `let`) and rejected. When the pattern is refutable at more than one point, `rest` is shared through a nullary thunk (see [`Self::lower_defaulted_matrix`]).
     pub(super) fn lower_bind_arm(
         &self,
         pattern: &MatchPattern,
@@ -191,11 +140,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         )
     }
 
-    /// Lowers a headed match after splitting off a `| _ =>` catch-all: with no
-    /// catch-all it is the plain full-enumeration matrix; with one the arms plus
-    /// the (already-`leaf`-lowered) catch-all become a defaulted matrix, shared
-    /// through a thunk when a nested arm would emit the default at more than one
-    /// dispatch point.
+    /// Lowers a headed match after splitting off a `| _ =>` catch-all: with no catch-all it is the plain full-enumeration matrix; with one the arms plus the (already-`leaf`-lowered) catch-all become a defaulted matrix, shared through a thunk when a nested arm would emit the default at more than one dispatch point.
     pub(super) fn compile_matrix_headed(
         &self,
         head: curios_core::Term,
@@ -213,11 +158,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Compiles `arms` against `head` with `default` as the uncovered-case
-    /// fallthrough. When `share`, `default` is bound once as a nullary by-name
-    /// thunk `k = () => default` and every fallthrough site calls `k()` — no
-    /// duplication, and (by-name) `default`'s effects run only if a branch
-    /// reaches it. Otherwise the default is emitted directly (a single site).
+    /// Compiles `arms` against `head` with `default` as the uncovered-case fallthrough. When `share`, `default` is bound once as a nullary by-name thunk `k = () => default` and every fallthrough site calls `k()` — no duplication, and (by-name) `default`'s effects run only if a branch reaches it. Otherwise the default is emitted directly (a single site).
     fn lower_defaulted_matrix(
         &self,
         head: curios_core::Term,
@@ -246,13 +187,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         Ok(curios_core::Term::let_(&k, hole, thunk, matrix))
     }
 
-    /// Lowers an optional match motive into the core motive slot. A written
-    /// motive is an ordinary term, carried un-scoped
-    /// ([`curios_core::Term::match_motive_written`]) because its arity —
-    /// `n_indices + 1` — depends on the eliminated family, which only the
-    /// elaborator knows. An omitted motive (`None`) lowers to a fresh
-    /// metavariable, so a non-dependent match infers its motive by unifying the
-    /// arms against that metavariable.
+    /// Lowers an optional match motive into the core motive slot. A written motive is an ordinary term, carried un-scoped ([`curios_core::Term::match_motive_written`]) because its arity — `n_indices + 1` — depends on the eliminated family, which only the elaborator knows. An omitted motive (`None`) lowers to a fresh metavariable, so a non-dependent match infers its motive by unifying the arms against that metavariable.
     pub(super) fn motive_scope(
         &self,
         motive: &Option<Term>,
@@ -263,8 +198,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }))
     }
 
-    /// Builds the core inductive match for both lowering paths (`subterm` and
-    /// `match_region`).
+    /// Builds the core inductive match for both lowering paths (`subterm` and `match_region`).
     fn induct_match(
         &self,
         head: curios_core::Term,
@@ -272,9 +206,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         cases: Vec<InductCase>,
     ) -> Result<curios_core::Term, Error> {
         let motive = self.motive_scope(motive)?;
-        // A `| _ =>` catch-all (or bind-arm fallthrough) becomes the core
-        // match's default; otherwise the arms enumerate every constructor
-        // (core's Rung-C vacuity covers any pruned tag).
+        // A `| _ =>` catch-all (or bind-arm fallthrough) becomes the core match's default; otherwise the arms enumerate every constructor (core's Rung-C vacuity covers any pruned tag).
         Ok(match &self.default {
             Some(default) => curios_core::Term::induct_match_scoped_marked(
                 head,
@@ -286,30 +218,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         })
     }
 
-    /// The entry point for a match whose arm patterns may nest across
-    /// constructors, tuples, and structs (see [`MatchPattern`]) — compiled
-    /// down into the single-level core forms above, exactly what a person
-    /// would get from hand-nesting matches today (proven end to end by
-    /// `BigNat.crs`'s style of code). `leaf` is the per-body lowering —
-    /// [`Self::term`] on the plain path, [`Self::region`] on the region path
-    /// — so both share this compiler, mirroring every other `Match` arm's
-    /// `term`/`region` split.
+    /// The entry point for a match whose arm patterns may nest across constructors, tuples, and structs (see [`MatchPattern`]) — compiled down into the single-level core forms above, exactly what a person would get from hand-nesting matches today (proven end to end by `BigNat.crs`'s style of code). `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this compiler, mirroring every other `Match` arm's `term`/`region` split.
     ///
-    /// Zero arms (a vacuous elimination, e.g. of `False`) needs no
-    /// recursion at all — there is nothing to infer a dispatch kind from, so
-    /// it goes straight to [`Self::induct_match`] exactly as today.
+    /// Zero arms (a vacuous elimination, e.g. of `False`) needs no recursion at all — there is nothing to infer a dispatch kind from, so it goes straight to [`Self::induct_match`] exactly as today.
     ///
-    /// A written motive is only meaningful when the head itself dispatches on
-    /// one carrier directly — every arm's *top-level* pattern being the same
-    /// dispatchable shape — since that is the only case where a core `Match`
-    /// node exists for the *original* scrutinee to attach the motive to. A
-    /// tuple/struct-headed or plain-binder match never builds one; it just
-    /// projects, and the motive would be silently discarded. Every deeper/inner
-    /// split the recursion synthesizes needs no motive at all: an absent motive
-    /// lowers to a fresh metavariable ([`Self::motive_scope`]'s `None` case),
-    /// which core elaboration unifies against whatever expected type flows in
-    /// from the enclosing checking context — no currying needed for a single
-    /// head.
+    /// A written motive is only meaningful when the head itself dispatches on one carrier directly — every arm's *top-level* pattern being the same dispatchable shape — since that is the only case where a core `Match` node exists for the *original* scrutinee to attach the motive to. A tuple/struct-headed or plain-binder match never builds one; it just projects, and the motive would be silently discarded. Every deeper/inner split the recursion synthesizes needs no motive at all: an absent motive lowers to a fresh metavariable ([`Self::motive_scope`]'s `None` case), which core elaboration unifies against whatever expected type flows in from the enclosing checking context — no currying needed for a single head.
     pub(super) fn compile_matrix(
         &self,
         head: curios_core::Term,
@@ -341,16 +254,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.compile(vec![head], rows, Some(motive), leaf)
     }
 
-    /// The recursive step: classifies column 0 across every row and either
-    /// retires it (every row a plain binder — never splits), explodes it
-    /// (every row a tuple/struct — exactly one shape, so this is projection,
-    /// not dispatch, via [`Self::compile_fields`]), or groups by constructor
-    /// tag and recurses per group (via [`Self::compile_ctor`]). Mixing a
-    /// plain binder with a concrete shape in the same column is the "Path A"
-    /// full-enumeration boundary this grammar doesn't support (no
-    /// wildcard/catch-all) — a hard error, not a panic. `top_motive` is
-    /// `Some` only on [`Self::compile_matrix`]'s own initial call; every
-    /// recursive call passes `None` (see that method's doc comment).
+    /// The recursive step: classifies column 0 across every row and either retires it (every row a plain binder — never splits), explodes it (every row a tuple/struct — exactly one shape, so this is projection, not dispatch, via [`Self::compile_fields`]), or groups by constructor tag and recurses per group (via [`Self::compile_ctor`]). Mixing a plain binder with a concrete shape in the same column is the "Path A" full-enumeration boundary this grammar doesn't support (no wildcard/catch-all) — a hard error, not a panic. `top_motive` is `Some` only on [`Self::compile_matrix`]'s own initial call; every recursive call passes `None` (see that method's doc comment).
     fn compile(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -419,11 +323,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 }
                 self.compile_fields(columns, rows, leaf)
             }
-            // The four hardcoded-carrier leaves. `Nat`/`Lst`/`Bin` each nest
-            // their own two-case sub-pattern (`NatPattern::{Zero,Succ}` and
-            // friends), so matching the outer variant alone already treats
-            // both sub-cases as one shape here — no separate classifier
-            // needed (see `is_dispatchable`'s doc comment).
+            // The four hardcoded-carrier leaves. `Nat`/`Lst`/`Bin` each nest their own two-case sub-pattern (`NatPattern::{Zero,Succ}` and friends), so matching the outer variant alone already treats both sub-cases as one shape here — no separate classifier needed (see `is_dispatchable`'s doc comment).
             MatchPattern::Bool(_) => {
                 if rows
                     .iter()
@@ -464,28 +364,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Groups rows by their column-0 constructor tag (distinct tags freely
-    /// coexist — that's the whole grouping mechanism; two rows sharing a tag
-    /// recurse together, further split by their own sub-patterns). Two rows
-    /// that end up identical in every column (including a literal repeated
-    /// tag with no further distinguishing sub-pattern) are caught by
-    /// [`Self::compile`]'s leaf case, not here.
+    /// Groups rows by their column-0 constructor tag (distinct tags freely coexist — that's the whole grouping mechanism; two rows sharing a tag recurse together, further split by their own sub-patterns). Two rows that end up identical in every column (including a literal repeated tag with no further distinguishing sub-pattern) are caught by [`Self::compile`]'s leaf case, not here.
     ///
-    /// A tag with exactly one row needs no synthetic binder at all for a
-    /// plain-binder slot: its own written name (wildcard-safe via
-    /// [`Self::pattern_binder_name`]) becomes the core arm's own binder
-    /// directly, exactly matching today's flat lowering — this is the
-    /// overwhelmingly common case (every constructor tag appears once). A
-    /// slot needing further decomposition (a nested sub-pattern), or a slot
-    /// in a group with more than one row (which may need to rebind it
-    /// differently per row), still gets a fresh synthetic column, handled by
-    /// the general recursion. This distinction matters beyond style: minting
-    /// a synthetic name for a slot that didn't need one, then immediately
-    /// `let`-renaming it back to the written name, produces a core binder
-    /// whose only label is that gensym — which the erasure pass's hint-based
-    /// fresh-naming (`Context::fresh`) then chains into another gensym,
-    /// compounding across nested lets until a reference outruns its own
-    /// binding.
+    /// A tag with exactly one row needs no synthetic binder at all for a plain-binder slot: its own written name (wildcard-safe via [`Self::pattern_binder_name`]) becomes the core arm's own binder directly, exactly matching today's flat lowering — this is the overwhelmingly common case (every constructor tag appears once). A slot needing further decomposition (a nested sub-pattern), or a slot in a group with more than one row (which may need to rebind it differently per row), still gets a fresh synthetic column, handled by the general recursion. This distinction matters beyond style: minting a synthetic name for a slot that didn't need one, then immediately `let`-renaming it back to the written name, produces a core binder whose only label is that gensym — which the erasure pass's hint-based fresh-naming (`Context::fresh`) then chains into another gensym, compounding across nested lets until a reference outruns its own binding.
     fn compile_ctor(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -509,9 +390,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let mut cases = Vec::with_capacity(groups.len());
         for (tag, mut group) in groups {
-            // Rows merging under one constructor must agree structurally on
-            // arity *and* on the written plicity of each payload slot — a
-            // source-shape check independent of constructor typing.
+            // Rows merging under one constructor must agree structurally on arity *and* on the written plicity of each payload slot — a source-shape check independent of constructor typing.
             let plicities = group[0]
                 .0
                 .iter()
@@ -525,11 +404,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 return Err(Error::MatrixInconsistentShape);
             }
 
-            // The single-row fast path: a plain-binder slot's own name
-            // becomes the core arm's binder directly, with `self.scoped`
-            // called right here — exactly where the name is decided —
-            // rather than deferred through `MatrixRow`. Only a slot needing
-            // further decomposition still gets a fresh synthetic column.
+            // The single-row fast path: a plain-binder slot's own name becomes the core arm's binder directly, with `self.scoped` called right here — exactly where the name is decided — rather than deferred through `MatrixRow`. Only a slot needing further decomposition still gets a fresh synthetic column.
             if group.len() == 1 {
                 let (args, mut row) = group.pop().unwrap();
                 let mut binder_names = Vec::with_capacity(arity);
@@ -590,18 +465,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.induct_match(scrutinee, top_motive.unwrap_or(&None), cases)
     }
 
-    /// Groups rows into `Bool`'s two literal shapes and emits
-    /// [`curios_core::Term::bool_match`] directly — never `induct_match`
-    /// (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see
-    /// this module's own notes on hardcoded-primitive carriers). `Bool`
-    /// carries no payload at all, so — unlike [`Self::compile_ctor`] — there
-    /// is no single-row/multi-row naming discipline needed here.
+    /// Groups rows into `Bool`'s two literal shapes and emits [`curios_core::Term::bool_match`] directly — never `induct_match` (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see this module's own notes on hardcoded-primitive carriers). `Bool` carries no payload at all, so — unlike [`Self::compile_ctor`] — there is no single-row/multi-row naming discipline needed here.
     ///
-    /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to
-    /// `induct_match`'s Rung-C vacuity inversion), `Cases::Bool` has no
-    /// core-side exhaustiveness escape hatch (`elaborate_bool_match`) — both
-    /// groups must be present here, checked eagerly before recursing on
-    /// either.
+    /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to `induct_match`'s Rung-C vacuity inversion), `Cases::Bool` has no core-side exhaustiveness escape hatch (`elaborate_bool_match`) — both groups must be present here, checked eagerly before recursing on either.
     fn compile_bool(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -624,8 +490,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        // With a fallthrough default, a missing group's arm is the default
-        // (see [`Self::default`]); without one, both shapes are still required.
+        // With a fallthrough default, a missing group's arm is the default (see [`Self::default`]); without one, both shapes are still required.
         if (false_rows.is_empty() || true_rows.is_empty()) && self.default.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bool" });
         }
@@ -651,47 +516,16 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Compiles a `Nat` column in one of two modes, chosen by its leaves —
-    /// the induction/dispatch split the surface once drew with two separate
-    /// `Nat` match forms, now decided here so both are ordinary matrix leaves:
+    /// Compiles a `Nat` column in one of two modes, chosen by its leaves — the induction/dispatch split the surface once drew with two separate `Nat` match forms, now decided here so both are ordinary matrix leaves:
     ///
-    /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural
-    ///   peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf
-    ///   mixed in is [`Error::MatrixMixedNatDispatch`] — no single core form
-    ///   peels a successor *and* dispatches on a value.
-    /// - **Dispatch** (no `Succ`): value dispatch over `0`/`Lit(k)` cases,
-    ///   emitted as [`curios_core::Term::switch`] with the matrix default as
-    ///   its fallthrough. A `switch` over `Nat` is never exhaustive, so the
-    ///   default is mandatory (else [`Error::MatrixIncompleteCarrierMatch`]).
-    ///   Rows sharing a literal group and recurse together, exactly like
-    ///   [`Self::compile_ctor`]'s tags.
+    /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf mixed in is [`Error::MatrixMixedNatDispatch`] — no single core form peels a successor *and* dispatches on a value.
+    /// - **Dispatch** (no `Succ`): value dispatch over `0`/`Lit(k)` cases, emitted as [`curios_core::Term::switch`] with the matrix default as its fallthrough. A `switch` over `Nat` is never exhaustive, so the default is mandatory (else [`Error::MatrixIncompleteCarrierMatch`]). Rows sharing a literal group and recurse together, exactly like [`Self::compile_ctor`]'s tags.
     ///
-    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming
-    /// discipline exactly, for the same reason: `curios-elab`'s erasure pass
-    /// reads a `Nat` succ arm's stored binder labels as naming hints too
-    /// (`erase_nat_match`, the same `Context::fresh` hint-compounding
-    /// mechanism `erase_induct_match` has) — unconditionally minting a
-    /// synthetic name here would resurrect the exact regression class
-    /// `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of
-    /// exactly one row therefore reuses that row's own written
-    /// `pred_label`/`ih_label` directly (the optional `ih` through
-    /// [`Self::cons_ih_name`], like [`Self::compile_lst`]); only a group
-    /// with more than one row mints synthetic names, and — as in
-    /// [`Self::compile_lst`] — a multi-row member that omitted `; ih` gets
-    /// no ih bind pushed.
+    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming discipline exactly, for the same reason: `curios-elab`'s erasure pass reads a `Nat` succ arm's stored binder labels as naming hints too (`erase_nat_match`, the same `Context::fresh` hint-compounding mechanism `erase_induct_match` has) — unconditionally minting a synthetic name here would resurrect the exact regression class `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of exactly one row therefore reuses that row's own written `pred_label`/`ih_label` directly (the optional `ih` through [`Self::cons_ih_name`], like [`Self::compile_lst`]); only a group with more than one row mints synthetic names, and — as in [`Self::compile_lst`] — a multi-row member that omitted `; ih` gets no ih bind pushed.
     ///
-    /// `pred`/`ih` are always plain binder names, never a further
-    /// sub-pattern (deep peeling stays out of scope), so — unlike a
-    /// constructor argument slot — the multi-row case never needs a new
-    /// column for them at all: each row's own written name is just bound to
-    /// one shared synthetic variable via `row.binds`, exactly like
-    /// [`Self::compile`]'s own all-`Binder`-column-retirement path.
+    /// `pred`/`ih` are always plain binder names, never a further sub-pattern (deep peeling stays out of scope), so — unlike a constructor argument slot — the multi-row case never needs a new column for them at all: each row's own written name is just bound to one shared synthetic variable via `row.binds`, exactly like [`Self::compile`]'s own all-`Binder`-column-retirement path.
     ///
-    /// Both groups must be present — `Cases::FreeMonoid` has no vacuity
-    /// escape hatch either (same point as [`Self::compile_bool`]'s doc
-    /// comment). Checking this eagerly, before recursing on either group,
-    /// also avoids indexing into an empty `rows` slice or a misleading
-    /// [`Error::MatrixDuplicateRow`] from [`Self::compile`]'s base case.
+    /// Both groups must be present — `Cases::FreeMonoid` has no vacuity escape hatch either (same point as [`Self::compile_bool`]'s doc comment). Checking this eagerly, before recursing on either group, also avoids indexing into an empty `rows` slice or a misleading [`Error::MatrixDuplicateRow`] from [`Self::compile`]'s base case.
     fn compile_nat(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -719,11 +553,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
 
-        // Dispatch mode: no successor peeling, so `0`/`Lit(k)` are `switch`
-        // cases and the matrix default is the mandatory fallthrough (a `switch`
-        // over `Nat` is never exhaustive). Rows sharing a literal group and
-        // recurse together — a genuinely duplicated row falls to
-        // [`Self::compile`]'s leaf case, not silent last-wins.
+        // Dispatch mode: no successor peeling, so `0`/`Lit(k)` are `switch` cases and the matrix default is the mandatory fallthrough (a `switch` over `Nat` is never exhaustive). Rows sharing a literal group and recurse together — a genuinely duplicated row falls to [`Self::compile`]'s leaf case, not silent last-wins.
         if succ_rows.is_empty() {
             let Some(default) = self.default.clone() else {
                 return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
@@ -744,8 +574,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             ));
         }
 
-        // Induction mode: `0`/`n+1; ih`. A literal case here mixes value
-        // dispatch with successor peeling — no core form does both.
+        // Induction mode: `0`/`n+1; ih`. A literal case here mixes value dispatch with successor peeling — no core form does both.
         if !lit_rows.is_empty() {
             return Err(Error::MatrixMixedNatDispatch);
         }
@@ -802,15 +631,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `LstNil`/`LstCons` and emits
-    /// [`curios_core::Term::lst_match`] directly. Structurally identical to
-    /// [`Self::compile_nat`] but with three names (`head`/`tail`/optional
-    /// `ih`) instead of two, reusing [`Self::cons_ih_name`] for the
-    /// single-row case's `ih` (already handles "written name → bound,
-    /// omitted → fresh" correctly). In the multi-row case, a row whose own
-    /// `ih_label` was `None` never references any ih name, so no bind is
-    /// pushed for it — only rows that wrote `; ih` get one, sharing the one
-    /// synthetic `ih` variable the emitted core node itself always needs.
+    /// Groups rows into `LstNil`/`LstCons` and emits [`curios_core::Term::lst_match`] directly. Structurally identical to [`Self::compile_nat`] but with three names (`head`/`tail`/optional `ih`) instead of two, reusing [`Self::cons_ih_name`] for the single-row case's `ih` (already handles "written name → bound, omitted → fresh" correctly). In the multi-row case, a row whose own `ih_label` was `None` never references any ih name, so no bind is pushed for it — only rows that wrote `; ih` get one, sharing the one synthetic `ih` variable the emitted core node itself always needs.
     fn compile_lst(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -913,10 +734,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `BinEnd`/`BinByte` and emits
-    /// [`curios_core::Term::bin_match`] directly — identical to
-    /// [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs
-    /// for its polymorphic element type (`Bin` has none).
+    /// Groups rows into `BinEnd`/`BinByte` and emits [`curios_core::Term::bin_match`] directly — identical to [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs for its polymorphic element type (`Bin` has none).
     fn compile_bin(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -1033,20 +851,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Explodes a `Tuple`/`Struct` column into one new leftmost column per
-    /// field, via [`curios_core::Term::proj`]/[`curios_core::Term::proj_label`]
-    /// on the current (always already-bound) scrutinee variable — this is
-    /// the same code path whether the exploded column is the outer head or
-    /// several levels deep, and it never needs a core `Match` node at all: a
-    /// tuple/struct value has exactly one shape, so "matching" one is just
-    /// sequential projection, exactly like a hand-written `p.0`/`p.label`.
-    /// Struct privacy is inherited automatically and unmodified, since
-    /// `proj_label` is the same function `elaborate_proj` already checks it
-    /// against. Every row's field list was already validated (by
-    /// [`Self::compile`]) to share this column's arity/head; here they're
-    /// further checked to agree, position by position, on whether each field
-    /// is labeled — an irrefutable `Pattern` never needed this, since a
-    /// `let`/lambda site only ever destructures a value once.
+    /// Explodes a `Tuple`/`Struct` column into one new leftmost column per field, via [`curios_core::Term::proj`]/[`curios_core::Term::proj_label`] on the current (always already-bound) scrutinee variable — this is the same code path whether the exploded column is the outer head or several levels deep, and it never needs a core `Match` node at all: a tuple/struct value has exactly one shape, so "matching" one is just sequential projection, exactly like a hand-written `p.0`/`p.label`. Struct privacy is inherited automatically and unmodified, since `proj_label` is the same function `elaborate_proj` already checks it against. Every row's field list was already validated (by [`Self::compile`]) to share this column's arity/head; here they're further checked to agree, position by position, on whether each field is labeled — an irrefutable `Pattern` never needed this, since a `let`/lambda site only ever destructures a value once.
     fn compile_fields(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -1096,12 +901,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.compile(new_columns, new_rows, None, leaf)
     }
 
-    /// The leaf of the matrix compiler's recursion: exactly one row remains
-    /// once every column is consumed. Lowers the row's body under every
-    /// accumulated binder name (so a reference resolves to the binder rather
-    /// than a like-named module binding, exactly like [`Self::scoped`]'s
-    /// other callers), then wraps it in the accumulated `let`s, outermost
-    /// first.
+    /// The leaf of the matrix compiler's recursion: exactly one row remains once every column is consumed. Lowers the row's body under every accumulated binder name (so a reference resolves to the binder rather than a like-named module binding, exactly like [`Self::scoped`]'s other callers), then wraps it in the accumulated `let`s, outermost first.
     fn finish_row(
         &self,
         row: MatrixRow<'_>,
@@ -1124,12 +924,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 }
 
-/// How many distinct dispatch points a bind pattern is refutable at — one per
-/// constructor/carrier shape it constrains, summed across nested arguments.
-/// Drives fallthrough-sharing: >1 point means the rest-of-ladder would be
-/// emitted at more than one core default site, so it is shared through a thunk
-/// rather than duplicated. Irrefutable binders and exhaustive tuple/struct
-/// shells contribute none of their own.
+/// How many distinct dispatch points a bind pattern is refutable at — one per constructor/carrier shape it constrains, summed across nested arguments. Drives fallthrough-sharing: >1 point means the rest-of-ladder would be emitted at more than one core default site, so it is shared through a thunk rather than duplicated. Irrefutable binders and exhaustive tuple/struct shells contribute none of their own.
 fn refutation_count(pattern: &MatchPattern) -> usize {
     match pattern {
         MatchPattern::Binder(_) => 0,
@@ -1146,17 +941,7 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
     }
 }
 
-/// Splits a headed match's arms into its concrete arms and an optional
-/// `| _ =>` catch-all body. A final top-level bare `_` after *dispatching* arms
-/// (a constructor tag or any of the four hardcoded-carrier leaves —
-/// [`MatchPattern::is_dispatchable`]) is the catch-all: its body becomes the
-/// core match's default (a `Cases::Induct` default, or a `Nat`/`Bool`
-/// carrier's fallthrough — this is what makes a `Nat` literal dispatch's
-/// mandatory `_` legal). A *named* final binder in that position is a mistake
-/// ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a
-/// catch-all — it stays the all-binder retirement path (a `let`) — and neither
-/// is a `_` after tuple/struct arms, which project exhaustively and need no
-/// default.
+/// Splits a headed match's arms into its concrete arms and an optional `| _ =>` catch-all body. A final top-level bare `_` after *dispatching* arms (a constructor tag or any of the four hardcoded-carrier leaves — [`MatchPattern::is_dispatchable`]) is the catch-all: its body becomes the core match's default (a `Cases::Induct` default, or a `Nat`/`Bool` carrier's fallthrough — this is what makes a `Nat` literal dispatch's mandatory `_` legal). A *named* final binder in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a catch-all — it stays the all-binder retirement path (a `let`) — and neither is a `_` after tuple/struct arms, which project exhaustively and need no default.
 fn split_catch_all(arms: &[MatrixArm]) -> Result<(&[MatrixArm], Option<&Term>), Error> {
     match arms.split_last() {
         Some((last, init))
@@ -1172,10 +957,7 @@ fn split_catch_all(arms: &[MatrixArm]) -> Result<(&[MatrixArm], Option<&Term>), 
     }
 }
 
-/// Whether every constructor arm is *flat* — each argument a plain binder, no
-/// nested shape. A flat set emits the catch-all default at exactly one dispatch
-/// point (the head), so it needs no thunk; any nesting propagates the default
-/// into a payload sub-match, a second site worth sharing.
+/// Whether every constructor arm is *flat* — each argument a plain binder, no nested shape. A flat set emits the catch-all default at exactly one dispatch point (the head), so it needs no thunk; any nesting propagates the default into a payload sub-match, a second site worth sharing.
 fn arms_all_flat(arms: &[MatrixArm]) -> bool {
     arms.iter().all(|arm| match &arm.pattern {
         MatchPattern::Variant { args, .. } => args

@@ -46,10 +46,7 @@ impl Name {
     }
 
     pub(crate) fn join(&self) -> String {
-        // A `Name` is a *surface* reference printed back as written: an absolute
-        // reference keeps `Qualifier::join`'s leading `/`; a relative one strips it.
-        // (Canonical core identities go through `Qualifier::join` directly and are
-        // always absolute — this `is_abs`-respecting form is only for surface text.)
+        // A `Name` is a *surface* reference printed back as written: an absolute reference keeps `Qualifier::join`'s leading `/`; a relative one strips it. (Canonical core identities go through `Qualifier::join` directly and are always absolute — this `is_abs`-respecting form is only for surface text.)
         match self.is_abs {
             true => self.qualifier.join(),
             false => self.qualifier.join().trim_start_matches('/').to_string(),

@@ -36,9 +36,7 @@ fn syntax() -> &'static SyntaxRegistry {
     &SYNTAX
 }
 
-/// A top-level definition's identity, from the path a test writes. Fixture-only
-/// — production code carries the `Qualifier` from resolution instead of
-/// recovering it from a spelling.
+/// A top-level definition's identity, from the path a test writes. Fixture-only — production code carries the `Qualifier` from resolution instead of recovering it from a spelling.
 fn global(path: &str) -> curios_core::Free {
     curios_core::Free::global(Qualifier::from(path.trim_start_matches('/').split('/')))
 }
@@ -140,8 +138,7 @@ fn run_err(src: &str) -> String {
     .to_string()
 }
 
-// Lower against the real prelude (so `sys` and `std` are served and rooted),
-// returning only success/error — the lens for the internal-root gate.
+// Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     let mut modules = PreludeModules::new();
     modules.insert_root("sys", RootId::Sys, crate::sys_module(&host_ops()));
@@ -327,13 +324,7 @@ fn inductive_constructor_ownership_is_explicit() {
     );
 }
 
-/// `id` is applied at two different levels in one block, which a local
-/// universe scheme once served. Cumulativity carries it instead: `Prop : Type
-/// 0` and `Type 0 : Type 1`, so a single monomorphic `A : Type 1` accepts
-/// both, and the level order is linear so a sup always exists. The binding
-/// therefore carries no scheme of its own — universe polymorphism belongs to
-/// declarations, which are frozen into the prelude archive and re-instantiated
-/// by later programs.
+/// `id` is applied at two different levels in one block, which a local universe scheme once served. Cumulativity carries it instead: `Prop : Type 0` and `Type 0 : Type 1`, so a single monomorphic `A : Type 1` accepts both, and the level order is linear so a sup always exists. The binding therefore carries no scheme of its own — universe polymorphism belongs to declarations, which are frozen into the prelude archive and re-instantiated by later programs.
 #[test]
 fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
     let module = elaborate_source(
@@ -355,8 +346,7 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
     assert_eq!(let_.bindings.len(), 1);
 }
 
-/// The same, one indirection further: `alias` has no annotation at all, so its
-/// type is inferred from `id` and then used at both levels.
+/// The same, one indirection further: `alias` has no annotation at all, so its type is inferred from `id` and then used at both levels.
 #[test]
 fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
     let module = elaborate_source(
@@ -386,8 +376,7 @@ fn universe_parameters(module: &curios_elab::Module, name: &str) -> usize {
             curios_elab::Item::Let(definition) if definition.name.symbol() == name => {
                 Some(definition.universe_context.parameter_count)
             }
-            // An inductive and its constructors are one recursive group, so a
-            // lookup restricted to `Let` would miss every one of them.
+            // An inductive and its constructors are one recursive group, so a lookup restricted to `Let` would miss every one of them.
             curios_elab::Item::Rec(rec) => rec
                 .definitions()
                 .iter()
@@ -398,19 +387,14 @@ fn universe_parameters(module: &curios_elab::Module, name: &str) -> usize {
         .unwrap_or_else(|| panic!("{name} is declared"))
 }
 
-/// A level a caller supplies stays a parameter: `@A : Type` puts the level in
-/// an argument position, so each occurrence chooses it.
+/// A level a caller supplies stays a parameter: `@A : Type` puts the level in an argument position, so each occurrence chooses it.
 #[test]
 fn a_level_in_argument_position_stays_a_parameter() {
     let module = elaborate_source("pub let pick(@A : Type, x : A) -> A = x; pick");
     assert_eq!(universe_parameters(&module, "/pick"), 1);
 }
 
-/// A level occurring *only* in the result is determined, not chosen: no
-/// occurrence of `Holds` can supply it, so generalizing would mint a parameter
-/// every use site has to instantiate for nothing. Minimizing it instead is what
-/// keeps a literal's per-byte constructor applications from each minting fresh
-/// levels — see `result_sort_only_metas`.
+/// A level occurring *only* in the result is determined, not chosen: no occurrence of `Holds` can supply it, so generalizing would mint a parameter every use site has to instantiate for nothing. Minimizing it instead is what keeps a literal's per-byte constructor applications from each minting fresh levels — see `result_sort_only_metas`.
 #[test]
 fn a_level_only_in_the_result_is_minimized_away() {
     let module = elaborate_source(
@@ -422,11 +406,7 @@ fn a_level_only_in_the_result_is_minimized_away() {
     assert_eq!(universe_parameters(&module, "/Holds"), 0);
 }
 
-/// A generated method wrapper belongs to *its concept's* universe context, not
-/// to one generalized from its own signature. The wrapper's type names only the
-/// levels its own field needs, yet it also carries `use w : C(…)` applied at all
-/// of the concept's; a level outside the wrapper's own generalized set would
-/// then have nothing to denote it.
+/// A generated method wrapper belongs to *its concept's* universe context, not to one generalized from its own signature. The wrapper's type names only the levels its own field needs, yet it also carries `use w : C(…)` applied at all of the concept's; a level outside the wrapper's own generalized set would then have nothing to denote it.
 #[test]
 fn a_concept_method_wrapper_shares_its_concept_universe_context() {
     let module = elaborate_source("pub concept C(A : Type) : pub Type { f(A) -> A, } C");
@@ -434,9 +414,7 @@ fn a_concept_method_wrapper_shares_its_concept_universe_context() {
     assert_eq!(universe_parameters(&module, "/C/f"), 1);
 }
 
-/// The same rule where the concept's levels genuinely exceed any one wrapper's:
-/// `pure` names a strict subset of `M`'s and `bind` a different subset, so
-/// generalizing either alone comes out short.
+/// The same rule where the concept's levels genuinely exceed any one wrapper's: `pure` names a strict subset of `M`'s and `bind` a different subset, so generalizing either alone comes out short.
 #[test]
 fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
     let module = elaborate_source(
@@ -445,8 +423,7 @@ fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
              bind(@A : Type, @B : Type, action : F(A), next : (A) -> F(B)) -> F(B),
          } M",
     );
-    // Five, against `pure`'s own two and `bind`'s one: the point of the test is
-    // lost if the concept ever stops outrunning its wrappers.
+    // Five, against `pure`'s own two and `bind`'s one: the point of the test is lost if the concept ever stops outrunning its wrappers.
     assert_eq!(universe_parameters(&module, "/M"), 5);
     assert_eq!(universe_parameters(&module, "/M/pure"), 5);
     assert_eq!(universe_parameters(&module, "/M/bind"), 5);
@@ -718,11 +695,9 @@ fn chained_pub_use_re_exports_transitively() {
     );
 }
 
-// --- Module-interface redesign (SPEC.md) acceptance cases ---
+// --- Module-interface redesign acceptance cases ---
 
-// A re-exports x from B; B re-exports x from C; C declares x. A is declared
-// before its providers. The phase-3 fixed point must resolve A/x to /C/x
-// regardless of declaration order.
+// A re-exports x from B; B re-exports x from C; C declares x. A is declared before its providers. The phase-3 fixed point must resolve A/x to /C/x regardless of declaration order.
 #[test]
 fn chained_re_export_resolves_out_of_order() {
     assert_eq!(
@@ -747,9 +722,7 @@ fn chained_re_export_resolves_out_of_order() {
     );
 }
 
-// A direct `pub let x` and a `pub use` that also yields x are two distinct
-// sources for the same export slot: a conflict, even though one of them is the
-// module's own declaration.
+// A direct `pub let x` and a `pub use` that also yields x are two distinct sources for the same export slot: a conflict, even though one of them is the module's own declaration.
 #[test]
 fn rejects_direct_and_re_export_of_same_label() {
     assert!(
@@ -792,8 +765,7 @@ fn rejects_two_globs_exposing_same_label() {
     );
 }
 
-// A re-exports module M from B; a later path /A/M/x must traverse A's
-// re-exported M into /B/M and resolve x there.
+// A re-exports module M from B; a later path /A/M/x must traverse A's re-exported M into /B/M and resolve x there.
 #[test]
 fn deep_facade_traversal_through_re_exported_module() {
     assert_eq!(
@@ -818,9 +790,7 @@ fn deep_facade_traversal_through_re_exported_module() {
     );
 }
 
-// A module may re-export names out of its own private child via a relative path:
-// being inside the module, its privacy does not apply to itself. This is the
-// facade-over-private-impl pattern.
+// A module may re-export names out of its own private child via a relative path: being inside the module, its privacy does not apply to itself. This is the facade-over-private-impl pattern.
 #[test]
 fn re_exports_from_own_private_child() {
     assert_eq!(
@@ -843,8 +813,7 @@ fn re_exports_from_own_private_child() {
     );
 }
 
-// The relaxation is scoped to a module's *own* child: re-exporting through
-// another module's private child is still forbidden.
+// The relaxation is scoped to a module's *own* child: re-exporting through another module's private child is still forbidden.
 #[test]
 fn rejects_re_export_through_other_modules_private_child() {
     assert!(
@@ -865,8 +834,7 @@ fn rejects_re_export_through_other_modules_private_child() {
     );
 }
 
-// An inductive's constructor module is a first-class interface member built in phase
-// 2, so its cases re-export by name and by glob through the fixed point.
+// An inductive's constructor module is a first-class interface member built in phase 2, so its cases re-export by name and by glob through the fixed point.
 #[test]
 fn re_exports_inductive_constructor_by_name() {
     let term = run(r#"
@@ -883,9 +851,7 @@ fn re_exports_inductive_constructor_by_name() {
         A
     "#);
 
-    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug`
-    // shows its segments, deliberately, so that `/Foo/bar` and a single
-    // segment spelled `Foo/bar` never look alike in a dump.
+    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug` shows its segments, deliberately, so that `/Foo/bar` and a single segment spelled `Foo/bar` never look alike in a dump.
     assert!(
         format!("{term}").contains("Foo/U/A"),
         "unexpected term: {term}"
@@ -908,9 +874,7 @@ fn re_exports_inductive_constructors_by_glob() {
         A
     "#);
 
-    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug`
-    // shows its segments, deliberately, so that `/Foo/bar` and a single
-    // segment spelled `Foo/bar` never look alike in a dump.
+    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug` shows its segments, deliberately, so that `/Foo/bar` and a single segment spelled `Foo/bar` never look alike in a dump.
     assert!(
         format!("{term}").contains("Foo/U/A"),
         "unexpected term: {term}"
@@ -1008,9 +972,7 @@ fn private_inductive_with_public_representation_can_export_constructor_facade() 
         A
     "#);
 
-    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug`
-    // shows its segments, deliberately, so that `/Foo/bar` and a single
-    // segment spelled `Foo/bar` never look alike in a dump.
+    // Asserted on the printed term, not on `Debug`: a qualifier's `Debug` shows its segments, deliberately, so that `/Foo/bar` and a single segment spelled `Foo/bar` never look alike in a dump.
     assert!(
         format!("{term}").contains("Foo/U/A"),
         "unexpected term: {term}"
@@ -1293,8 +1255,7 @@ fn direct_representation_exposure_accepts_a_separately_exposed_dependency() {
     "#);
 }
 
-// A re-exports x from B; B re-exports x from A; nobody declares x. Following the
-// chain returns to the start without a concrete target → cyclic, not missing.
+// A re-exports x from B; B re-exports x from A; nobody declares x. Following the chain returns to the start without a concrete target → cyclic, not missing.
 #[test]
 fn rejects_cyclic_re_export_with_no_concrete_target() {
     assert!(
@@ -1313,8 +1274,7 @@ fn rejects_cyclic_re_export_with_no_concrete_target() {
     );
 }
 
-// Two public declarations of the same label in the same namespace conflict at
-// phase 2, before any elaboration.
+// Two public declarations of the same label in the same namespace conflict at phase 2, before any elaboration.
 #[test]
 fn rejects_duplicate_public_declaration() {
     assert!(
@@ -1329,9 +1289,7 @@ fn rejects_duplicate_public_declaration() {
     );
 }
 
-// Phase 5: A.f references B.g and B.h references A.e, with e and g independent —
-// no cycle, but no contiguous source order binds both references. The reorder
-// must produce a valid binding order, leaving the lowered term with no free name.
+// Phase 5: A.f references B.g and B.h references A.e, with e and g independent — no cycle, but no contiguous source order binds both references. The reorder must produce a valid binding order, leaving the lowered term with no free name.
 #[test]
 fn orders_acyclic_bidirectional_value_graph() {
     assert!(
@@ -1351,8 +1309,7 @@ fn orders_acyclic_bidirectional_value_graph() {
     );
 }
 
-// A dependency through a type annotation is as much a binding-order constraint as
-// one through a value: `f : T` declared before `T` must still order `T` first.
+// A dependency through a type annotation is as much a binding-order constraint as one through a value: `f : T` declared before `T` must still order `T` first.
 #[test]
 fn orders_dependency_through_type_annotation() {
     assert!(
@@ -1366,9 +1323,7 @@ fn orders_dependency_through_type_annotation() {
     );
 }
 
-// A genuine non-atomic value cycle cannot be ordered; phase 5 emits it anyway and
-// leaves one reference as a free name, which core rejects as unbound. There is
-// nothing to repair — cross-declaration value recursion is unexpressible.
+// A genuine non-atomic value cycle cannot be ordered; phase 5 emits it anyway and leaves one reference as a free name, which core rejects as unbound. There is nothing to repair — cross-declaration value recursion is unexpressible.
 #[test]
 fn genuine_value_cycle_leaves_unbound_name() {
     assert!(
@@ -1386,9 +1341,7 @@ fn genuine_value_cycle_leaves_unbound_name() {
     );
 }
 
-// `sys` is the trusted primitive substrate, reachable only from the standard
-// library. A user entrypoint that names it — through a `use` or a bare term
-// reference — is rejected at resolution; the `/std` wrappers are the door.
+// `sys` is the trusted primitive substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.
 #[test]
 fn rejects_sys_use_from_user_code() {
     let error = lower_with_prelude("use /sys/{Nat}; Nat/add(1, 2)").unwrap_err();
@@ -1407,9 +1360,7 @@ fn rejects_sys_reference_in_term_from_user_code() {
     );
 }
 
-// The guard rides the *resolved* qualifier, not the spelling, so a relative
-// reference is rejected exactly as the absolute one is — the leading `/` is not
-// the boundary.
+// The guard rides the *resolved* qualifier, not the spelling, so a relative reference is rejected exactly as the absolute one is — the leading `/` is not the boundary.
 #[test]
 fn rejects_relative_sys_reference_in_term() {
     let error = lower_with_prelude("sys/Nat/add(1, 2)").unwrap_err();
@@ -1437,8 +1388,7 @@ fn rejects_relative_sys_glob() {
     );
 }
 
-// The interface (`pub use`) phase guards too: a user module cannot launder `sys`
-// into its own public surface.
+// The interface (`pub use`) phase guards too: a user module cannot launder `sys` into its own public surface.
 #[test]
 fn rejects_sys_pub_use_reexport_from_user_code() {
     let error = lower_with_prelude("pub mod Foo\n    pub use /sys/{Nat};\nend\nType").unwrap_err();
@@ -1448,15 +1398,13 @@ fn rejects_sys_pub_use_reexport_from_user_code() {
     );
 }
 
-// The same primitive reached through its `/std` wrapper resolves: `std` is
-// privileged to reference `sys`, and re-exports it.
+// The same primitive reached through its `/std` wrapper resolves: `std` is privileged to reference `sys`, and re-exports it.
 #[test]
 fn allows_sys_reference_through_std_wrapper() {
     assert!(lower_with_prelude("use /std/{Nat}; Nat/add(1, 2)").is_ok());
 }
 
-// A user program cannot declare its own top-level `std`, `pub` or not — it
-// would collide with the embedded standard library mounted at the same name.
+// A user program cannot declare its own top-level `std`, `pub` or not — it would collide with the embedded standard library mounted at the same name.
 #[test]
 fn rejects_user_pub_mod_std_colliding_with_prelude_std() {
     let error =
@@ -1464,19 +1412,14 @@ fn rejects_user_pub_mod_std_colliding_with_prelude_std() {
     assert!(error.contains("std"), "unexpected error: {error}");
 }
 
-// The private case is the actual regression this guard closes: before
-// `ModuleInfo::insert_child`'s collision check was made unconditional, a
-// private redeclaration of a reserved name didn't trip the pub-only guard and
-// silently overwrote the prelude's `std` registration instead of erroring.
+// The private case is the actual regression this guard closes: before `ModuleInfo::insert_child`'s collision check was made unconditional, a private redeclaration of a reserved name didn't trip the pub-only guard and silently overwrote the prelude's `std` registration instead of erroring.
 #[test]
 fn rejects_user_private_mod_std_colliding_with_prelude_std() {
     let error = lower_with_prelude("mod std\n    let x : Type = Type;\nend\nType").unwrap_err();
     assert!(error.contains("std"), "unexpected error: {error}");
 }
 
-// Without a prelude attached, `has_embedded_roots()` is false, so the fixed
-// sys/syn/std machinery never runs at all — the user's own `mod std` is just
-// an ordinary, unreserved entry-rooted module, not a collision.
+// Without a prelude attached, `has_embedded_roots()` is false, so the fixed sys/syn/std machinery never runs at all — the user's own `mod std` is just an ordinary, unreserved entry-rooted module, not a collision.
 #[test]
 fn user_own_mod_std_without_prelude_is_not_a_collision() {
     run("mod std\n    pub let x : Type = Type;\nend\nuse std/{x};\nx");
@@ -1502,9 +1445,7 @@ fn rejects_private_module_from_outside_its_declaring_subtree() {
     );
 }
 
-// A private declaration written at the root belongs to the root's subtree,
-// which is the whole program — so a sibling module may name it. The boundary
-// is the declaring module, and the root declares no boundary above itself.
+// A private declaration written at the root belongs to the root's subtree, which is the whole program — so a sibling module may name it. The boundary is the declaring module, and the root declares no boundary above itself.
 #[test]
 fn allows_a_private_root_module_from_a_sibling() {
     run(r#"
@@ -1987,8 +1928,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
 
 #[test]
 fn goal_lowers_to_marked_metavar() {
-    // A written `?` lowers to the same fresh metavariable a desugared hole
-    // does, but marked `MetavarOrigin::Goal` so zonk reports it.
+    // A written `?` lowers to the same fresh metavariable a desugared hole does, but marked `MetavarOrigin::Goal` so zonk reports it.
     assert_eq!(run("?"), curios_core::Term::goal(0));
 }
 
@@ -2004,16 +1944,11 @@ fn distinct_goals_get_distinct_ids() {
 
 #[test]
 fn bang_desugars_through_syn_monad_bind() {
-    // Every value body is a region root: `x!` hoists to it and sequences
-    // through the `/syn/Monad/bind` wrapper applied to the action and the
-    // continuation over a gensym'd binder. The witness slot and implicits are
-    // inserted during core elaboration.
+    // Every value body is a region root: `x!` hoists to it and sequences through the `/syn/Monad/bind` wrapper applied to the action and the continuation over a gensym'd binder. The witness slot and implicits are inserted during core elaboration.
     let expected = curios_core::Term::apply(
         curios_core::Term::var(curios_core::Var::free(global("/syn/Monad/bind"))),
         [
-            // `x` resolves to nothing, so it lowers to a binder identity that
-            // core will report as unbound — never to a global that a same-named
-            // root-level definition could satisfy.
+            // `x` resolves to nothing, so it lowers to a binder identity that core will report as unbound — never to a global that a same-named root-level definition could satisfy.
             curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
                 0,
                 Some("x"),
@@ -2032,9 +1967,7 @@ fn bang_desugars_through_syn_monad_bind() {
 
 #[test]
 fn choose_lowers_to_nested_bool_matches() {
-    // `choose | p => a | q => b | _ => ? end` right-folds into two nested
-    // `Bool` matches: the first condition's false branch holds the second,
-    // whose own false branch is the `_` default (a plain hole here).
+    // `choose | p => a | q => b | _ => ? end` right-folds into two nested `Bool` matches: the first condition's false branch holds the second, whose own false branch is the `_` default (a plain hole here).
     let term = run("choose | p => a | q => b | _ => ? end");
 
     let curios_core::Subterm::Match(outer) = &*term else {
@@ -2061,8 +1994,7 @@ fn choose_lowers_to_nested_bool_matches() {
 
 #[test]
 fn bind_arm_bare_binder_is_rejected() {
-    // `| x = n =>` binds irrefutably — always fires, so the rest of the ladder
-    // is dead. Rejected in favor of a `let`.
+    // `| x = n =>` binds irrefutably — always fires, so the rest of the ladder is dead. Rejected in favor of a `let`.
     let error = run_err("choose | x = n => x | _ => 0 end");
     assert!(
         error.contains("refutable") && error.contains("let"),
@@ -2082,9 +2014,7 @@ fn named_catch_all_is_rejected() {
 
 #[test]
 fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
-    // A `_` *nested* inside a constructor payload (not a final top-level arm)
-    // still mixes a binder with a concrete shape in the same column — the
-    // pre-existing full-enumeration boundary, not a catch-all.
+    // A `_` *nested* inside a constructor payload (not a final top-level arm) still mixes a binder with a concrete shape in the same column — the pre-existing full-enumeration boundary, not a catch-all.
     let error = run_err("match m | some(some(x)) => x | some(_) => 0 | none() => 1 end");
     assert!(
         error.contains("disagree on shape"),
@@ -2094,10 +2024,7 @@ fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
 
 #[test]
 fn nested_nat_literal_lowers_to_switch() {
-    // A literal `5` inside a constructor payload, with a `_` fallthrough, is
-    // value dispatch — it lowers through `compile_nat`'s switch mode to a
-    // `Cases::Switch`, not the `Nat` eliminator. (`wrap`/`b` need not resolve:
-    // lowering precedes name resolution.)
+    // A literal `5` inside a constructor payload, with a `_` fallthrough, is value dispatch — it lowers through `compile_nat`'s switch mode to a `Cases::Switch`, not the `Nat` eliminator. (`wrap`/`b` need not resolve: lowering precedes name resolution.)
     let term = run("match b | wrap(5) => 1 | _ => 0 end");
     assert!(
         format!("{term:?}").contains("Switch"),
@@ -2107,8 +2034,7 @@ fn nested_nat_literal_lowers_to_switch() {
 
 #[test]
 fn nat_literal_mixed_with_succ_is_rejected() {
-    // A literal case and a `n + 1; ih` successor arm in the same `Nat` column
-    // select incompatible core forms (a value `switch` vs. the eliminator).
+    // A literal case and a `n + 1; ih` successor arm in the same `Nat` column select incompatible core forms (a value `switch` vs. the eliminator).
     let error = run_err("match b | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end");
     assert!(
         error.contains("mixes successor-peeling"),
@@ -2118,15 +2044,13 @@ fn nat_literal_mixed_with_succ_is_rejected() {
 
 #[test]
 fn bang_in_a_type_is_rejected() {
-    // Types have no region to hoist an action to, so a `!` in an annotation is
-    // rejected during desugaring.
+    // Types have no region to hoist an action to, so a `!` in an annotation is rejected during desugaring.
     assert!(run_err("let a : e! = x; a").contains("not allowed inside a type"));
 }
 
 #[test]
 fn foreign_declaration_populates_the_store() {
-    // No loader/prelude needed at all: a `foreign` signature is parsed
-    // directly into `WireType`s, not resolved as ordinary names.
+    // No loader/prelude needed at all: a `foreign` signature is parsed directly into `WireType`s, not resolved as ordinary names.
     let (_, _, _, foreigns) = super::into_core(
         &"foreign frobnicate : (Nat, Bin) -> Nat; 0"
             .parse::<Entrypoint>()
@@ -2165,19 +2089,14 @@ fn foreign_declaration_zero_arg_populates_the_store() {
 
 #[test]
 fn foreign_declaration_call_lowers() {
-    // Declaring and calling a foreign function lowers end to end (`run`
-    // panics on failure) — the `Prim::Foreign` body `foreign_signature`
-    // builds is well typed against the same wire-typed signature the call
-    // site checks against.
+    // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Prim::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
     let _ = run(r#"
         foreign frobnicate : (Nat, Bin) -> Nat;
         frobnicate(5, x\00\01)
     "#);
 }
 
-// Caught during discovery now (`ModuleInfo::insert_binding`'s collision guard
-// is unconditional, not pub-only), before `Context::insert_binding`'s later
-// scope-conflict check would otherwise see it.
+// Caught during discovery now (`ModuleInfo::insert_binding`'s collision guard is unconditional, not pub-only), before `Context::insert_binding`'s later scope-conflict check would otherwise see it.
 #[test]
 fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
     assert!(
@@ -2188,10 +2107,7 @@ fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
 
 #[test]
 fn foreign_declarations_across_modules_get_distinct_import_names() {
-    // Two `foreign` declarations in different modules coexist: the wasm
-    // import name is the declaration's fully qualified name, so the shared
-    // label never collides on the wire — each module's row registers under
-    // its own name.
+    // Two `foreign` declarations in different modules coexist: the wasm import name is the declaration's fully qualified name, so the shared label never collides on the wire — each module's row registers under its own name.
     let (_, _, _, foreigns) = super::into_core(
         &r#"
         mod A
@@ -2215,8 +2131,7 @@ fn foreign_declarations_across_modules_get_distinct_import_names() {
 
 // === Subtree visibility ======================================================
 
-// A declaration written without `pub` in `M` is visible within `M`'s subtree,
-// so a descendant may name its ancestor's private binding.
+// A declaration written without `pub` in `M` is visible within `M`'s subtree, so a descendant may name its ancestor's private binding.
 #[test]
 fn descendant_reads_its_ancestors_private_binding() {
     run(r#"
@@ -2231,8 +2146,7 @@ fn descendant_reads_its_ancestors_private_binding() {
     "#);
 }
 
-// The relaxation is downward only: a sibling is outside the declaring module's
-// subtree, so it stays shut out.
+// The relaxation is downward only: a sibling is outside the declaring module's subtree, so it stays shut out.
 #[test]
 fn sibling_cannot_read_a_siblings_private_binding() {
     assert!(
@@ -2254,8 +2168,7 @@ fn sibling_cannot_read_a_siblings_private_binding() {
     );
 }
 
-// Nor upward: a parent may traverse its own private child, but not read that
-// child's private bindings.
+// Nor upward: a parent may traverse its own private child, but not read that child's private bindings.
 #[test]
 fn parent_cannot_read_its_childs_private_binding() {
     assert!(
@@ -2274,8 +2187,7 @@ fn parent_cannot_read_its_childs_private_binding() {
     );
 }
 
-// `pub` inside a private module means "wherever this module is visible", which
-// is its declaring module's subtree — not the world.
+// `pub` inside a private module means "wherever this module is visible", which is its declaring module's subtree — not the world.
 #[test]
 fn pub_inside_a_private_module_reaches_the_subtree_only() {
     run(r#"
@@ -2309,9 +2221,7 @@ fn pub_inside_a_private_module_reaches_the_subtree_only() {
     );
 }
 
-// A glob imports the exported surface, never a subtree-private declaration:
-// reaching one always requires naming it. The reference is left as a bare name
-// for core to reject, rather than silently resolving to `/Owner/helper`.
+// A glob imports the exported surface, never a subtree-private declaration: reaching one always requires naming it. The reference is left as a bare name for core to reject, rather than silently resolving to `/Owner/helper`.
 #[test]
 fn glob_does_not_import_subtree_private_bindings() {
     let term = run(r#"
@@ -2325,21 +2235,13 @@ fn glob_does_not_import_subtree_private_bindings() {
         Type
     "#);
 
-    // The reference is left for core to reject. What it must *not* be is any
-    // global: `/Owner/helper` would mean the glob leaked a private binding, and
-    // a root-level `/helper` would silently capture an entry-module definition
-    // of the same name. A binder identity can be neither.
-    // The reference is left for core to reject. What it must *not* be is any
-    // global: `/Owner/helper` would mean the glob leaked a private binding, and
-    // a root-level `/helper` would silently capture an entry-module definition
-    // of the same name. A binder identity can be neither.
+    // The reference is left for core to reject. What it must *not* be is any global: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither. The reference is left for core to reject. What it must *not* be is any global: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither.
     let dumped = format!("{term:?}");
     assert!(
         dumped.contains("Local(Mint { index: 0, hint: Some(\"helper\") })"),
         "unexpected term: {dumped}"
     );
-    // `/Owner/helper` occurs exactly once — as the binder the declaration
-    // introduces. A second occurrence would be the reference resolving to it.
+    // `/Owner/helper` occurs exactly once — as the binder the declaration introduces. A second occurrence would be the reference resolving to it.
     assert_eq!(
         dumped
             .matches("Authored(Qualifier([\"Owner\", \"helper\"]))")
@@ -2351,9 +2253,7 @@ fn glob_does_not_import_subtree_private_bindings() {
 
 // === Interface audit =========================================================
 
-// The facade pattern: a module re-exports a name out of its own private child
-// and then uses it in a public signature. The audit follows the re-export, so
-// the name is as visible as the facade makes it.
+// The facade pattern: a module re-exports a name out of its own private child and then uses it in a public signature. The audit follows the re-export, so the name is as visible as the facade makes it.
 #[test]
 fn facade_may_name_what_it_re_exports_in_a_public_signature() {
     run(r#"
@@ -2368,8 +2268,7 @@ fn facade_may_name_what_it_re_exports_in_a_public_signature() {
     "#);
 }
 
-// Without the re-export the same signature is rejected: `Helper` reaches only
-// `Facade`'s subtree, while `build` reaches the whole program.
+// Without the re-export the same signature is rejected: `Helper` reaches only `Facade`'s subtree, while `build` reaches the whole program.
 #[test]
 fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
     assert!(
@@ -2389,9 +2288,7 @@ fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
     );
 }
 
-// `/std/Async/block_on` pins an unannotated local binding through a *type
-// alias* — `let Slot : Type = Cell(Option(Job));` — whose bare written `Type`
-// mints a generalizable level while its value sits at one fixed level.
+// `/std/Async/block_on` pins an unannotated local binding through a *type alias* — `let Slot : Type = Cell(Option(Job));` — whose bare written `Type` mints a generalizable level while its value sits at one fixed level.
 #[test]
 fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
     let module = elaborate_source(

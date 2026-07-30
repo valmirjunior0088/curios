@@ -18,10 +18,7 @@ pub(super) fn parse_rec<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A `use` binder in function-definition sugar (`let`/`rec`/`satisfy` telescopes):
-// `use term`. Always anonymous — there is no source binder position at all
-// (lowering mints a fresh name directly) and joins the instance scope; an
-// instance is reached by resolution, never by name.
+// A `use` binder in function-definition sugar (`let`/`rec`/`satisfy` telescopes): `use term`. Always anonymous — there is no source binder position at all (lowering mints a fresh name directly) and joins the instance scope; an instance is reached by resolution, never by name.
 pub(super) fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     catch(parse_keyword("use"))
         .and_keep(lazy(parse_term))
@@ -46,8 +43,7 @@ pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
         ))
 }
 
-// The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the
-// type-required and the local (type-optional) signature parsers.
+// The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
 pub(super) fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
     catch(
         parse_literal("(")
@@ -89,29 +85,19 @@ pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
         .map(|(type_, body)| LetSignature::Name { type_, body })
 }
 
-// Parses the part of a `let`/`rec` binding after its name where a type is
-// **required**: the function sugar, or the `: T = body` form. Used for top-level
-// `let` and every `rec` binding, whose types cannot be inferred.
+// Parses the part of a `let`/`rec` binding after its name where a type is **required**: the function sugar, or the `: T = body` form. Used for top-level `let` and every `rec` binding, whose types cannot be inferred.
 pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature().or(parse_required_name_signature())
 }
 
-// Like `parse_let_signature`, but the plain form's type annotation may be
-// omitted. Used only by local `let`, where the body's type can be inferred.
+// Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.
 pub(super) fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature().or(parse_optional_name_signature())
 }
 
-// `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` /
-// `let f(p : T, …) -> R = …; tail`. The binder accepts a tuple/struct pattern
-// (see `Pattern`), desugaring at lowering into a fresh binder plus a
-// projection-`let` chain.
+// `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
 //
-// `many1` parses the whole run of `let` headers in a loop, then the tail once,
-// and they become a single flat `Let` block — one node for the whole run, not a
-// right-nested chain — so nothing downstream (clone, lowering) recurses once per
-// binding. The leading `mark` on the first header and the trailing `mark` after
-// the tail span the block.
+// `many1` parses the whole run of `let` headers in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first header and the trailing `mark` after the tail span the block.
 pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
     many1(|| {
         mark().and(
@@ -135,9 +121,7 @@ pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
     })
 }
 
-// A glued `.index`/`.label` projection, consuming no whitespace — usable both
-// as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`])
-// and inside the tight `Bin`-literal spread operand.
+// A glued `.index`/`.label` projection, consuming no whitespace — usable both as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`]) and inside the tight `Bin`-literal spread operand.
 pub(super) fn parse_proj_suffix_raw<'a>() -> Parser<'a, Field> {
     catch(
         take_exact(".").and_keep(
@@ -159,9 +143,7 @@ pub(super) enum Suffix {
     Bang,
 }
 
-// A call-site argument's plicity: `use <term>` fills a witness slot, `@<term>`
-// an implicit slot, a plain term an explicit slot. `use` is reserved, so it can
-// never begin a plain-argument term.
+// A call-site argument's plicity: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. `use` is reserved, so it can never begin a plain-argument term.
 pub(super) fn parse_apply_argument<'a>() -> Parser<'a, (Plicity, Term)> {
     catch(parse_keyword("use"))
         .map(|()| Plicity::Witness)
@@ -178,8 +160,7 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
             }))
             .and_drop(parse_literal(")"))
             .map(Suffix::Apply))
-        // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be
-        // eaten here as a bang, stranding the `=`.
+        // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be eaten here as a bang, stranding the `=`.
         .or(catch(
             take_exact("!")
                 .and_drop(not_ahead("="))
@@ -188,10 +169,7 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
         .map(|()| Suffix::Bang))
 }
 
-// [`parse_suffix`] in glued form for the tight positions: no whitespace is
-// consumed after a suffix, so the caller can see whether the next characters
-// touch. A call's argument list is self-delimiting, so its interior stays
-// whitespace-friendly — only the closing `)` is matched raw.
+// [`parse_suffix`] in glued form for the tight positions: no whitespace is consumed after a suffix, so the caller can see whether the next characters touch. A call's argument list is self-delimiting, so its interior stays whitespace-friendly — only the closing `)` is matched raw.
 pub(super) fn parse_suffix_raw<'a>() -> Parser<'a, Suffix> {
     parse_proj_suffix_raw()
         .map(Suffix::Proj)
@@ -226,17 +204,11 @@ pub(super) fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
 }
 
 pub(super) fn parse_goal<'a>() -> Parser<'a, Term> {
-    // `?` is not an identifier character, so a plain literal suffices — no
-    // token-aware matching needed. (`_` remains the match wildcard binder.)
-    // A written `?` is a *goal* — reported at zonk — never a silent
-    // `Subterm::Hole`, which only desugars mint.
+    // `?` is not an identifier character, so a plain literal suffices — no token-aware matching needed. (`_` remains the match wildcard binder.) A written `?` is a *goal* — reported at zonk — never a silent `Subterm::Hole`, which only desugars mint.
     catch(parse_literal("?")).map(|()| Subterm::Goal.into())
 }
 
-// Grammar keys for the packrat cache (see `parser::memoize`). Only the
-// nonterminals that overlapping alternatives re-probe at the same offset are
-// memoized; that is enough to keep parsing linear. `patterns.rs` mints its own
-// keys (`MEMO_PATTERN`/`MEMO_MATCH_PATTERN`) for the same reason.
+// Grammar keys for the packrat cache (see `parser::memoize`). Only the nonterminals that overlapping alternatives re-probe at the same offset are memoized; that is enough to keep parsing linear. `patterns.rs` mints its own keys (`MEMO_PATTERN`/`MEMO_MATCH_PATTERN`) for the same reason.
 const MEMO_TERM: u32 = 0;
 const MEMO_ATOMIC_TERM: u32 = 1;
 
@@ -262,8 +234,7 @@ pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     )
 }
 
-// The fixed set of overloaded infix operators, recognised by maximal munch
-// (two-character symbols before their one-character prefixes).
+// The fixed set of overloaded infix operators, recognised by maximal munch (two-character symbols before their one-character prefixes).
 pub(super) fn parse_num_op<'a>() -> Parser<'a, NumOp> {
     fn symbol<'a>(text: &'static str, op: NumOp) -> Parser<'a, NumOp> {
         catch(take_exact(text)).map(move |()| op)
@@ -295,9 +266,7 @@ pub(super) fn op_precedence(op: NumOp) -> u8 {
     }
 }
 
-// At least one whitespace character (then any further whitespace/comments). The
-// trailing-space requirement is what distinguishes the operator `-` in `a - 42`
-// from the glued sign of the literal `-42`.
+// At least one whitespace character (then any further whitespace/comments). The trailing-space requirement is what distinguishes the operator `-` in `a - 42` from the glued sign of the literal `-42`.
 pub(super) fn require_space<'a>() -> Parser<'a, ()> {
     take_while(|char| char.is_whitespace())
         .flat_map(|spaces| match spaces.is_empty() {
@@ -316,10 +285,7 @@ pub(super) fn parse_infix_op<'a>() -> Parser<'a, NumOp> {
     )
 }
 
-// Precedence-climbing over applied atoms: parse a left operand, then fold in
-// every following operator whose precedence is at least `min_prec`. The right
-// operand of an operator at precedence `p` is parsed at `p + 1`
-// (left-associativity).
+// Precedence-climbing over applied atoms: parse a left operand, then fold in every following operator whose precedence is at least `min_prec`. The right operand of an operator at precedence `p` is parsed at `p + 1` (left-associativity).
 pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> Parser<'a, Term> {
     parse_atomic_term().flat_map(move |left| parse_infix_rest(left, min_prec))
 }
@@ -331,8 +297,7 @@ pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term>
         let precedence = op_precedence(op);
 
         if precedence < min_prec {
-            // Binds looser than the caller's level: backtrack, leaving the
-            // operator for an enclosing `parse_infix_rest` to consume.
+            // Binds looser than the caller's level: backtrack, leaving the operator for an enclosing `parse_infix_rest` to consume.
             return fail("operator below current precedence level");
         }
 

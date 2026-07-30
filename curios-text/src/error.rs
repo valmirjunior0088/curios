@@ -18,14 +18,11 @@ pub enum Error {
     PrivateChildModule {
         segment: String,
     },
-    /// A `pub use` in an inductive's declaring module attempted to expose the
-    /// constructors of a representation-private inductive.
+    /// A `pub use` in an inductive's declaring module attempted to expose the constructors of a representation-private inductive.
     OpaqueConstructorsCannotBeReExported {
         induct_decl: String,
     },
-    /// A root module reachable only from the standard library (e.g. `sys`) was
-    /// referenced from user code. Such modules are the trusted primitive
-    /// substrate; user code reaches them through their `/std` wrappers.
+    /// A root module reachable only from the standard library (e.g. `sys`) was referenced from user code. Such modules are the trusted primitive substrate; user code reaches them through their `/std` wrappers.
     InternalRootModule {
         segment: String,
     },
@@ -62,69 +59,34 @@ pub enum Error {
     CyclicReExport {
         label: String,
     },
-    /// A `use`-marked concept field's type is not a concept application (a path,
-    /// optionally applied). Only such a type names a superclass edge. Superclass
-    /// fields are anonymous, so the enclosing concept identifies the offender.
+    /// A `use`-marked concept field's type is not a concept application (a path, optionally applied). Only such a type names a superclass edge. Superclass fields are anonymous, so the enclosing concept identifies the offender.
     MalformedSuperField {
         concept: String,
     },
-    /// A `pub` item's declared signature references an item that is not itself
-    /// publicly reachable. Cross-module references are vetted during
-    /// resolution; this closes the two privately-resolvable paths (the item's
-    /// own module and its own private child modules).
+    /// A `pub` item's declared signature references an item that is not itself publicly reachable. Cross-module references are vetted during resolution; this closes the two privately-resolvable paths (the item's own module and its own private child modules).
     PrivateItemInPublicInterface {
         item: String,
         referent: String,
     },
-    /// A postfix `!` was reached through a *type* lowering (an annotation, a
-    /// motive, a Π/Σ component): types have no region to hoist the action to.
+    /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
-    /// A motive was written on a match whose head does not dispatch on a
-    /// single tag or literal shape directly — every arm matches a
-    /// tuple/struct, is a plain binder, or arms disagree on which carrier
-    /// (`Ctor`/`Bool`/`Nat`/`Lst`/`Bin`) they dispatch on. Such a head
-    /// explodes into projections and builds no core `Match` node for the
-    /// motive to attach to, so the motive would be silently discarded.
+    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/`Lst`/`Bin`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
-    /// Two match-arm rows write incompatible shapes for the same column —
-    /// mixing a plain binder with a concrete constructor/tuple/struct shape
-    /// (a "Path A" full-enumeration violation: no wildcard/catch-all is
-    /// allowed alongside a concrete case), or two concrete shapes that
-    /// disagree (a tuple/struct of different arity or field labels, a
-    /// struct with a different head name, or the same constructor tag
-    /// applied with a different number of arguments).
+    /// Two match-arm rows write incompatible shapes for the same column — mixing a plain binder with a concrete constructor/tuple/struct shape (a "Path A" full-enumeration violation: no wildcard/catch-all is allowed alongside a concrete case), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
     MatrixInconsistentShape,
-    /// Two match-arm rows specify the exact same pattern in every column —
-    /// including a flat, single-column match with a literally repeated
-    /// constructor tag. Every arm must be reachable and distinct; "Path A"
-    /// gives arms no priority order to break the tie with.
+    /// Two match-arm rows specify the exact same pattern in every column — including a flat, single-column match with a literally repeated constructor tag. Every arm must be reachable and distinct; "Path A" gives arms no priority order to break the tie with.
     MatrixDuplicateRow,
-    /// A nested `Bool`/`Nat`/`Lst`/`Bin` leaf-pattern column split without
-    /// both of its required cases present. Unlike an ordinary constructor
-    /// tag (whose omission the matrix compiler defers entirely to
-    /// `induct_match`'s vacuity inversion), these four hardcoded
-    /// carriers have no core-side exhaustiveness mechanism — the matrix
-    /// compiler must enforce completeness itself.
+    /// A nested `Bool`/`Nat`/`Lst`/`Bin` leaf-pattern column split without both of its required cases present. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these four hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself.
     MatrixIncompleteCarrierMatch {
         carrier: &'static str,
     },
-    /// A `Nat` match-arm column mixes successor-peeling (`n + 1; ih`) with
-    /// literal dispatch (`5`, `0x90`). A literal case peels no successor, so the
-    /// two select incompatible core forms (the `Nat` eliminator vs. a value
-    /// `switch`) and cannot share one column — write one or the other.
+    /// A `Nat` match-arm column mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`, `0x90`). A literal case peels no successor, so the two select incompatible core forms (the `Nat` eliminator vs. a value `switch`) and cannot share one column — write one or the other.
     MatrixMixedNatDispatch,
-    /// A binary-pattern column mixes bit and byte grains. A single scrutinee
-    /// has one binary type, so every row in the column must use the same prefix.
+    /// A binary-pattern column mixes bit and byte grains. A single scrutinee has one binary type, so every row in the column must use the same prefix.
     MatrixMixedBinGrain,
-    /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare
-    /// binder — irrefutable, so it always fires and the rest of the ladder is
-    /// dead. A bind is for *refutable* matching; use a `let` for an
-    /// unconditional binding.
+    /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare binder — irrefutable, so it always fires and the rest of the ladder is dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindArmIrrefutable,
-    /// A headed match ended in a *named* catch-all (`| x =>`) among concrete
-    /// constructor arms. Only a bare `| _ =>` is a catch-all default; a named
-    /// binder there is almost certainly a mistake (a misspelled constructor, or
-    /// a binder that silently swallows every remaining case).
+    /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
     MatchNamedCatchAll,
     ModuleLoadFailed {
         label: String,

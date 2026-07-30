@@ -25,11 +25,7 @@ use {
     },
 };
 
-// Reject a reference that *resolves into* an internal root (`sys`) when the
-// consuming module lies outside the privileged roots. `resolved` is the segments
-// of the qualifier the reference resolved to — not the raw spelled path — so
-// absolute and relative spellings are guarded identically. A non-internal target
-// or a privileged consumer passes through.
+// Reject a reference that *resolves into* an internal root (`sys`) when the consuming module lies outside the privileged roots. `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A non-internal target or a privileged consumer passes through.
 fn guard_internal_root(
     table: &HashMap<Qualifier, ModuleInfo>,
     consumer: &Qualifier,
@@ -52,16 +48,14 @@ fn guard_internal_root(
     }
 }
 
-// Whether `label` names an internal root: discoverable so the standard library
-// can resolve it by absolute path, but unreachable from user code.
+// Whether `label` names an internal root: discoverable so the standard library can resolve it by absolute path, but unreachable from user code.
 fn is_internal_root(table: &HashMap<Qualifier, ModuleInfo>, label: &str) -> bool {
     table
         .get(&Qualifier::from([label]))
         .is_some_and(|info| info.root.kind() == RootKind::Internal)
 }
 
-// Whether `consumer` is rooted in a privileged root (the standard library or an
-// internal root itself), and so may reference internal roots.
+// Whether `consumer` is rooted in a privileged root (the standard library or an internal root itself), and so may reference internal roots.
 fn privileged(table: &HashMap<Qualifier, ModuleInfo>, consumer: &Qualifier) -> bool {
     table
         .get(consumer)
@@ -73,9 +67,7 @@ struct Resolved {
     table: HashMap<Qualifier, ModuleInfo>,
 }
 
-/// Build-time source set for the fixed compilation roots. The prelude owner
-/// supplies already parsed modules keyed by canonical qualifier; `curios-text`
-/// retains no embedded `/syn` or `/std` source table.
+/// Build-time source set for the fixed compilation roots. The prelude owner supplies already parsed modules keyed by canonical qualifier; `curios-text` retains no embedded `/syn` or `/std` source table.
 pub struct PreludeModules {
     roots: Vec<(String, RootId)>,
     modules: BTreeMap<Qualifier, Module>,
@@ -154,12 +146,9 @@ impl PreparedPrelude {
         &self.core
     }
 
-    /// This prepared prelude with its lowered module hash-consed against
-    /// `sharing`. Pass the same table used for the elaborated module so equal
-    /// structures collapse across the two snapshots, not merely within each.
+    /// This prepared prelude with its lowered module hash-consed against `sharing`. Pass the same table used for the elaborated module so equal structures collapse across the two snapshots, not merely within each.
     ///
-    /// The rest of a `PreparedPrelude` is resolution metadata and floors — no
-    /// terms — so the lowered module is the whole of what there is to share.
+    /// The rest of a `PreparedPrelude` is resolution metadata and floors — no terms — so the lowered module is the whole of what there is to share.
     pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
         Self {
             core: self.core.shared(sharing),
@@ -175,10 +164,7 @@ impl PreparedPrelude {
         self.binder_floor
     }
 
-    /// One past the highest witness identity the fixed prelude minted. Entry
-    /// lowering resumes strictly above it: a replayed witness's identity was
-    /// fixed in an earlier compiler run, and a fresh mint that aliased one
-    /// would silently rebind a coherence-table entry.
+    /// One past the highest witness identity the fixed prelude minted. Entry lowering resumes strictly above it: a replayed witness's identity was fixed in an earlier compiler run, and a fresh mint that aliased one would silently rebind a coherence-table entry.
     pub fn witness_floor(&self) -> usize {
         self.witness_floor
     }
@@ -203,13 +189,7 @@ impl Resolved {
         Ok(resolved)
     }
 
-    // No synthesized `mod sys;`-style declarations here: the entry program's
-    // own `ModuleInfo` is built directly from its own raw items, then
-    // sys/syn/std are registered as its children *explicitly* — a deliberate
-    // fact, not something recovered later by pattern-matching a qualifier's
-    // leading string segment. `insert_child` (hardened to reject any
-    // collision, not just pub/pub) is what catches a user's own `mod std`
-    // colliding with this registration, in either direction.
+    // No synthesized `mod sys;`-style declarations here: the entry program's own `ModuleInfo` is built directly from its own raw items, then sys/syn/std are registered as its children *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with this registration, in either direction.
     fn resolve(
         &mut self,
         entrypoint: &Entrypoint,
@@ -232,12 +212,7 @@ impl Resolved {
         )
     }
 
-    // `mod` declarations only name children, so the module graph is a tree: every
-    // qualifier is reached exactly once and no cycles are possible. Hence the walk
-    // needs neither a visited-set nor a cache hit-check — just load each file
-    // module once and recurse. `root` is inherited unchanged through the whole
-    // recursion — set once by the caller (`resolve`, at one of the four real
-    // roots), never re-derived from `prefix`'s string content here.
+    // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse. `root` is inherited unchanged through the whole recursion — set once by the caller (`resolve`, at one of the four real roots), never re-derived from `prefix`'s string content here.
     fn discover(
         &mut self,
         items: &[TopItem],
@@ -250,10 +225,7 @@ impl Resolved {
         self.discover_children(items, prefix, loader, root)
     }
 
-    // The child-recursion half of `discover`, split out so `resolve` can build
-    // the entry root's `ModuleInfo` itself (with sys/syn/std pre-registered as
-    // children) and recurse into its children without a second, unconditional
-    // `scan_module_info` call clobbering that registration.
+    // The child-recursion half of `discover`, split out so `resolve` can build the entry root's `ModuleInfo` itself (with sys/syn/std pre-registered as children) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
     fn discover_children(
         &mut self,
         items: &[TopItem],
@@ -355,21 +327,16 @@ fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error
                     info.insert_binding(u.label.clone(), u.vis_pub)?;
                 }
             }
-            // A struct declares one binding (the type-former), like a `let` —
-            // there are no value constructors and no nested namespace, so no
-            // child module.
+            // A struct declares one binding (the type-former), like a `let` — there are no value constructors and no nested namespace, so no child module.
             TopItem::Struct(s) => info.insert_binding(s.label.clone(), s.vis_pub)?,
-            // A concept declares the type-former binding *and* a nested namespace
-            // (its method wrappers), like an inductive.
+            // A concept declares the type-former binding *and* a nested namespace (its method wrappers), like an inductive.
             TopItem::Concept(c) => {
                 info.insert_child(c.label.clone(), c.vis_pub)?;
                 info.insert_binding(c.label.clone(), c.vis_pub)?;
             }
-            // A witness is anonymous: it declares no binding and occupies no
-            // lexical scope — its backing definition gets a compiler name.
+            // A witness is anonymous: it declares no binding and occupies no lexical scope — its backing definition gets a compiler name.
             TopItem::Witness(_) => {}
-            // A `foreign` declaration is an ordinary binding, like a `let` —
-            // it has no body of its own, but it is called the same way.
+            // A `foreign` declaration is an ordinary binding, like a `let` — it has no body of its own, but it is called the same way.
             TopItem::Foreign(f) => info.insert_binding(f.label.clone(), f.vis_pub)?,
             _ => {}
         }
@@ -378,9 +345,7 @@ fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error
     Ok(info)
 }
 
-// The surface concept application `C(p₁, …)` for a method wrapper's `use w`
-// binder: the concept name applied to its parameters, each carrying the
-// parameter's declared plicity so the application matches the type-former.
+// The surface concept application `C(p₁, …)` for a method wrapper's `use w` binder: the concept name applied to its parameters, each carrying the parameter's declared plicity so the application matches the type-former.
 fn concept_application(label: &str, params: &[(Plicity, String, Term)]) -> Term {
     let head: Term = Subterm::Name(Name::from(vec![label.to_string()])).into();
     if params.is_empty() {
@@ -402,9 +367,7 @@ fn concept_application(label: &str, params: &[(Plicity, String, Term)]) -> Term 
     .into()
 }
 
-// The surface concept application `C(args)` for a witness's declared type: the
-// witnessed concept applied to the annotation's arguments (as written, so
-// explicit).
+// The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments (as written, so explicit).
 fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
     if args.is_empty() {
@@ -422,11 +385,7 @@ fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
 }
 
 impl Term {
-    // The head name of a concept-application term (a path, optionally applied) —
-    // used to read the super concept off a `use`-marked field's type. `None` if
-    // the type is not shaped like a concept application. This is into_core-specific
-    // vocabulary (concept applications are a `into_core` pass concept), so it lives
-    // here rather than on `Term`'s own `impl` in `term.rs`.
+    // The head name of a concept-application term (a path, optionally applied) — used to read the super concept off a `use`-marked field's type. `None` if the type is not shaped like a concept application. This is into_core-specific vocabulary (concept applications are a `into_core` pass concept), so it lives here rather than on `Term`'s own `impl` in `term.rs`.
     fn concept_app_head(&self) -> Option<Name> {
         match self.as_subterm() {
             Subterm::Name(name) => Some(name.clone()),
@@ -436,9 +395,7 @@ impl Term {
     }
 }
 
-// Resolve a super concept's head to its qualified core name — the same rule
-// `Lowerer`'s term-reference arm uses, minus the local-binder shadowing (a
-// declaration-site super edge has no enclosing value scope).
+// Resolve a super concept's head to its qualified core name — the same rule `Lowerer`'s term-reference arm uses, minus the local-binder shadowing (a declaration-site super edge has no enclosing value scope).
 fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_core::Global, Error> {
     let qualifier = if name.is_abs() || !name.is_single() {
         context.resolve_term_name(name)?
@@ -480,13 +437,11 @@ fn process_items(
                     context.insert_binding(u.label.clone(), context.prefixed(&u.label))?;
                 }
             }
-            // The type-former binding only — like a `let` (no constructor
-            // namespace).
+            // The type-former binding only — like a `let` (no constructor namespace).
             TopItem::Struct(s) => {
                 context.insert_binding(s.label.clone(), context.prefixed(&s.label))?
             }
-            // A concept declares its type-former binding and a nested namespace
-            // for the method wrappers, like an inductive.
+            // A concept declares its type-former binding and a nested namespace for the method wrappers, like an inductive.
             TopItem::Concept(c) => {
                 context.insert_scope(c.label.clone(), context.prefixed(&c.label))?;
                 context.insert_binding(c.label.clone(), context.prefixed(&c.label))?;
@@ -518,8 +473,7 @@ fn process_items(
                 }
                 None => {
                     let path = context.prefixed(&mod_item.label);
-                    // Discovery is exhaustive over this same tree, so every
-                    // file-backed module is already cached under this qualifier.
+                    // Discovery is exhaustive over this same tree, so every file-backed module is already cached under this qualifier.
                     let module = modules.get(&path).expect("module loaded during discovery");
 
                     process_items(
@@ -536,9 +490,7 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
-                // The lexical import effect of `use`/`pub use`: source-ordered,
-                // point-of-use scoping. The interface (export) effect of `pub use`
-                // is precomputed in the phase-3 fixed point, not here.
+                // The lexical import effect of `use`/`pub use`: source-ordered, point-of-use scoping. The interface (export) effect of `pub use` is precomputed in the phase-3 fixed point, not here.
                 match &use_item.group {
                     UseGroup::Named(items) => {
                         for item in items {
@@ -575,10 +527,7 @@ fn process_items(
                 }));
             }
             TopItem::Foreign(f) => {
-                // All FFI-specific bookkeeping (the `ForeignFunction`, its
-                // registration, and `host_fn`'s wire-typed signature shape)
-                // stays inside `prelude`; from here a `foreign` declaration
-                // lowers exactly like an ordinary `TopItem::Let`.
+                // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `prelude`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
                 let path = context.prefixed(&f.label);
                 let signature = foreign_signature(f, foreigns, path.join());
 
@@ -613,23 +562,14 @@ fn process_items(
                 flat_items.push(FlatItem::Rec(items));
             }
             TopItem::Induct(group) => {
-                // Step 1: type bindings as one rec group. An inductive's type
-                // binding wraps a primitive `InductType` normal form in a
-                // `Func` over its type parameters and indices (so
-                // `Result(Nat, Bin)` beta-reduces to `InductType { Result,
-                // [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin],
-                // [3] }`), and its shape is recorded in the inductive
-                // registry.
+                // Step 1: type bindings as one rec group. An inductive's type binding wraps a primitive `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Nat, Bin)` beta-reduces to `InductType { Result, [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
                 let type_flat_items = group
                     .iter()
                     .map(|u| {
                         let lower = Lowerer::new(context);
                         let name = curios_core::Global::Authored(context.prefixed(&u.label));
 
-                        // Parameters and indices are minted before any of their
-                        // types is lowered, and each type sees the binders
-                        // before it — a later index type naming an earlier
-                        // parameter must mean *that* binder.
+                        // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
                         let head_binders =
                             lower.mint(u.params.iter().map(|(_, n, _)| n.clone()).chain(
                                 u.indices.iter().enumerate().map(|(i, (n, _))| {
@@ -647,9 +587,7 @@ fn process_items(
                                 Ok((*p, param_binders[i].1.clone(), ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
-                        // The registry and the `InductType` normal form are
-                        // positional; plicity matters only on the generated
-                        // type-constructor function.
+                        // The registry and the `InductType` normal form are positional; plicity matters only on the generated type-constructor function.
                         let param_tys_unmarked = param_tys
                             .iter()
                             .map(|(_, n, t)| (n.clone(), t.clone()))
@@ -662,9 +600,7 @@ fn process_items(
                             })
                             .collect::<Vec<_>>();
 
-                        // The head's index telescope. Unnamed entries got a
-                        // positional placeholder above — the name only matters
-                        // for dependency capture among the index types.
+                        // The head's index telescope. Unnamed entries got a positional placeholder above — the name only matters for dependency capture among the index types.
                         let index_tys = u
                             .indices
                             .iter()
@@ -684,14 +620,7 @@ fn process_items(
                             })
                             .collect::<Vec<_>>();
 
-                        // Registry entry: the parameter telescope plus each
-                        // constructor's full signature `(params..., payload...)
-                        // -> InductType { name, params, indices }`, where the
-                        // terminal's indices are that *case's* target
-                        // expressions over its payload binders.
-                        // `Telescope::build` captures the parameter and
-                        // payload labels in the payload types and the
-                        // terminal, mirroring `func_type`.
+                        // Registry entry: the parameter telescope plus each constructor's full signature `(params..., payload...) -> InductType { name, params, indices }`, where the terminal's indices are that *case's* target expressions over its payload binders. `Telescope::build` captures the parameter and payload labels in the payload types and the terminal, mirroring `func_type`.
                         let constructors = u
                             .cases
                             .iter()
@@ -730,10 +659,7 @@ fn process_items(
                                     ),
                                 );
 
-                                // The value constructor's calling convention:
-                                // every leading declaration parameter is
-                                // implicit, each payload keeps its declared
-                                // mark — the same source `ctor_type` uses.
+                                // The value constructor's calling convention: every leading declaration parameter is implicit, each payload keeps its declared mark — the same source `ctor_type` uses.
                                 let plicities = u
                                     .params
                                     .iter()
@@ -749,15 +675,10 @@ fn process_items(
                                     },
                                 ))
                             })
-                            // Collected in written order: a constructor's
-                            // position here is the runtime tag `erase` gives it
-                            // (`InductDecl::constructors`), so the sequence is
-                            // the declaration's, not a collation of its labels.
+                            // Collected in written order: a constructor's position here is the runtime tag `erase` gives it (`InductDecl::constructors`), so the sequence is the declaration's, not a collation of its labels.
                             .collect::<Result<Vec<_>, Error>>()?;
 
-                        // The declared result sort (`Type`/`Prop`) — closed, so
-                        // it lowers in the base context. It is both the registry
-                        // entry's sort and the type-constructor's codomain.
+                        // The declared result sort (`Type`/`Prop`) — closed, so it lowers in the base context. It is both the registry entry's sort and the type-constructor's codomain.
                         let result_sort = lower.term(&u.result_sort)?;
 
                         induct_decls.insert(
@@ -780,8 +701,7 @@ fn process_items(
                                 module: context.island(),
                                 root: context.root(),
                                 rep_public: u.rep_pub,
-                                // Positivity has not run yet: `curios-elab` computes each declaration's
-                                // parameter polarities after elaboration and writes them back here.
+                                // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                                 polarities: Vec::new(),
                             },
                         );
@@ -789,11 +709,7 @@ fn process_items(
                         let induct_decl =
                             curios_core::Term::induct_type(name.clone(), param_vars, index_vars);
 
-                        // The type constructor is flat over params then
-                        // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
-                        // sites never distinguish the two. Parameters keep
-                        // their declared marks (`@` makes one implicit at use
-                        // sites); indices are always explicit.
+                        // The type constructor is flat over params then indices: `Vec : (T : Type, n : Nat) -> Type`. Use sites never distinguish the two. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
                         let binder_tys: Vec<_> = param_tys
                             .iter()
                             .cloned()
@@ -828,30 +744,22 @@ fn process_items(
 
                 flat_items.push(FlatItem::Rec(type_flat_items));
 
-                // Step 2: constructor bindings. Each is a function whose body
-                // injects the variant as a tagged tuple.
+                // Step 2: constructor bindings. Each is a function whose body injects the variant as a tagged tuple.
                 for u in group {
                     for c in &u.cases {
                         let lower = Lowerer::new(context);
 
-                        // Per-case payload binder names: the declared name, or
-                        // a positional placeholder.
+                        // Per-case payload binder names: the declared name, or a positional placeholder.
                         let payload_name = |i: usize, n: &Option<String>| {
                             n.clone().unwrap_or_else(|| format!("_{i}"))
                         };
 
-                        // Output type term `T`, `T(A, ...)`, or — indexed —
-                        // the case's full terminal `T(A, ..., target...)`,
-                        // elaborated as a name ref applied to the parameters
-                        // and the target's index expressions.
+                        // Output type term `T`, `T(A, ...)`, or — indexed — the case's full terminal `T(A, ..., target...)`, elaborated as a name ref applied to the parameters and the target's index expressions.
                         let output_args: Vec<(Plicity, Term)> = u
                             .params
                             .iter()
                             .map(|(p, n, _)| {
-                                // Each argument's mark must match its binder
-                                // on the type constructor (the two-queue
-                                // rule): an `@`-marked parameter is filled
-                                // from the implicit queue.
+                                // Each argument's mark must match its binder on the type constructor (the two-queue rule): an `@`-marked parameter is filled from the implicit queue.
                                 (*p, Subterm::Name(Name::from(vec![n.clone()])).into())
                             })
                             .chain(
@@ -871,12 +779,7 @@ fn process_items(
                             .into()
                         };
 
-                        // Constructor type: (params..., _0 : T_0, ...) -> T.
-                        // Every inductive parameter is implicit at the value
-                        // constructor — `Result/success(42)` infers them, the
-                        // call-site `@` supplies one positionally — while the
-                        // payload binders keep their declared marks (`@m`
-                        // makes one implicit; the default is explicit).
+                        // Constructor type: (params..., _0 : T_0, ...) -> T. Every inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
                         let binders = lower.mint(
                             u.params.iter().map(|(_, n, _)| n.clone()).chain(
                                 c.payload
@@ -907,16 +810,12 @@ fn process_items(
                             .collect::<Result<Vec<_>, Error>>()?;
                         let payload_binders = &binders[u.params.len()..];
                         let param_binders = &binders[..u.params.len()];
-                        // Erasure is sort-driven: `erase_func` drops the same
-                        // proof/type payload params that `erase_variant` drops
-                        // from the tuple — the constructor function's arity and its
-                        // injected variant's arity stay in lockstep.
+                        // Erasure is sort-driven: `erase_func` drops the same proof/type payload params that `erase_variant` drops from the tuple — the constructor function's arity and its injected variant's arity stay in lockstep.
                         let ctor_type = curios_core::Term::func_type_marked(
                             param_tys.clone(),
                             lower.bound(&binders, || lower.term(&output_type))?,
                         );
-                        // Constructor body: (params..., _0, ...) => the variant's
-                        // injection, a primitive `Variant` normal form.
+                        // Constructor body: (params..., _0, ...) => the variant's injection, a primitive `Variant` normal form.
                         let args: Vec<curios_core::Term> = payload_binders
                             .iter()
                             .map(|(_, id)| {
@@ -931,9 +830,7 @@ fn process_items(
                             curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
-                        // The value constructor carries the same calling
-                        // convention as `ctor_type`: every inductive parameter
-                        // is implicit, each payload keeps its declared mark.
+                        // The value constructor carries the same calling convention as `ctor_type`: every inductive parameter is implicit, each payload keeps its declared mark.
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
@@ -952,16 +849,12 @@ fn process_items(
                     }
                 }
             }
-            // A struct lowers to a single type-former `let` plus a registry
-            // entry — no value-constructor binding (the literal elaborates
-            // directly) and no indices.
+            // A struct lowers to a single type-former `let` plus a registry entry — no value-constructor binding (the literal elaborates directly) and no indices.
             TopItem::Struct(s) => {
                 let lower = Lowerer::new(context);
 
                 let name = curios_core::Global::Authored(context.prefixed(&s.label));
-                // Declaring module: the type-former's qualifier prefix —
-                // identical to core's per-item `island` — for the
-                // representation-privacy checks.
+                // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                 let module = context.prefixed(&s.label).without_last();
                 let root = context.root();
 
@@ -984,9 +877,7 @@ fn process_items(
                     .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                     .collect::<Vec<_>>();
 
-                // Field types, with declared or positional (`_i`) names so a
-                // later field type can depend on an earlier field. The
-                // signature sugar `f(params) -> T` is undone here.
+                // Field types, with declared or positional (`_i`) names so a later field type can depend on an earlier field. The signature sugar `f(params) -> T` is undone here.
                 let field_binders = lower.mint(
                     s.fields
                         .iter()
@@ -1006,11 +897,7 @@ fn process_items(
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                // Registry entry: the parameter telescope, and the full field
-                // telescope (parameter binders first — field types may mention
-                // them — then field binders), as in `Inductive::indices`.
-                // The declared result sort (`Type`/`Prop`) — closed; both the
-                // registry entry's sort and the type-former's codomain.
+                // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; both the registry entry's sort and the type-former's codomain.
                 let result_sort = lower.term(&s.result_sort)?;
 
                 struct_decls.insert(
@@ -1026,16 +913,12 @@ fn process_items(
                         module,
                         root,
                         rep_public: s.rep_pub,
-                        // Positivity has not run yet: `curios-elab` computes each declaration's
-                        // parameter polarities after elaboration and writes them back here.
+                        // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                         polarities: Vec::new(),
                     },
                 );
 
-                // The type-former: `Pair : (A : Type, B : Type) -> Type` whose
-                // body is the `StructType` normal form (the bare node when
-                // parameterless), so `Pair(Nat, Bin)` reduces to
-                // `StructType { Pair, [Nat, Bin] }`. No value constructor.
+                // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bin)` reduces to `StructType { Pair, [Nat, Bin] }`. No value constructor.
                 let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
@@ -1055,11 +938,7 @@ fn process_items(
                     body,
                 }));
             }
-            // A concept lowers to a representation-public nominal `StructDecl`
-            // and its type-former `let` —
-            // plus a concept-registry entry (field labels, superclass edges, the
-            // parameter telescope) and one method-wrapper `let` per field, synthed
-            // into the concept's own namespace (§4.1).
+            // A concept lowers to a representation-public nominal `StructDecl` and its type-former `let` — plus a concept-registry entry (field labels, superclass edges, the parameter telescope) and one method-wrapper `let` per field, synthed into the concept's own namespace.
             TopItem::Concept(concept) => {
                 let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                 let module = context.prefixed(&concept.label).without_last();
@@ -1085,11 +964,7 @@ fn process_items(
                     .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                     .collect::<Vec<_>>();
 
-                // Superclass fields are anonymous in the surface syntax; mint a
-                // unique internal label per super so the record telescope and the
-                // registry's field list stay well-formed. The name is never
-                // surfaced — a superclass is reached by resolution, keyed by
-                // index, and never projected or wrapped by name.
+                // Superclass fields are anonymous in the surface syntax; mint a unique internal label per super so the record telescope and the registry's field list stay well-formed. The name is never surfaced — a superclass is reached by resolution, keyed by index, and never projected or wrapped by name.
                 let field_labels = concept
                     .fields
                     .iter()
@@ -1103,10 +978,7 @@ fn process_items(
                     })
                     .collect::<Vec<_>>();
 
-                // Field types, lowered under the parameter scope (a method field's
-                // label is the binder for later fields; a super field's minted
-                // label is inert). The signature sugar `f(params) -> T` is undone
-                // here.
+                // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a super field's minted label is inert). The signature sugar `f(params) -> T` is undone here.
                 let field_binders = lower.mint(field_labels.iter().cloned());
                 let mut field_scope = param_binders.clone();
                 let field_tys = concept
@@ -1137,14 +1009,12 @@ fn process_items(
                         module,
                         root,
                         rep_public: concept.rep_pub,
-                        // Positivity has not run yet: `curios-elab` computes each declaration's
-                        // parameter polarities after elaboration and writes them back here.
+                        // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                         polarities: Vec::new(),
                     },
                 );
 
-                // Superclass edges: each `use`-marked field names a super concept
-                // by its (resolved, qualified) head.
+                // Superclass edges: each `use`-marked field names a super concept by its (resolved, qualified) head.
                 let supers = concept
                     .fields
                     .iter()
@@ -1190,12 +1060,7 @@ fn process_items(
                     body,
                 }));
 
-                // Method wrappers: for each *method* field `f : F`,
-                //   pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
-                // Built as surface AST and lowered through `Lowerer`, so binder
-                // scoping and de-Bruijn capture are handled uniformly. Superclass
-                // fields are anonymous and get no wrapper: an instance of the
-                // outer concept already yields the inner one by resolution.
+                // Method wrappers: for each *method* field `f : F`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f; Built as surface AST and lowered through `Lowerer`, so binder scoping and de-Bruijn capture are handled uniformly. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
                 let concept_app = concept_application(&concept.label, &concept.params);
                 for field in concept.fields.iter().filter(|field| !field.is_super) {
                     let mut params = concept
@@ -1238,12 +1103,7 @@ fn process_items(
                     }));
                 }
             }
-            // A witness desugars to an anonymous top-level definition
-            //   satisfy (tele) -> C(args) = C(args) { f = e, … };
-            // and marks it for registration in the program-wide witness table.
-            // It gets an *identity*, not a manufactured name: a `satisfy` block
-            // has no name a programmer wrote, and the module a diagnostic
-            // reports for it comes from `Definition::island`.
+            // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C(args) { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`.
             TopItem::Witness(witness) => {
                 let name = curios_core::Global::Witness(context.fresh_witness());
 
@@ -1296,32 +1156,10 @@ fn process_items(
     Ok(())
 }
 
-// Phase 5: reorder declarations so each one's value dependencies come before it
-// (outer in the fold), since a cyclic name graph means source order is no longer
-// a valid binding order. A stable Kahn pass keeps independent declarations in
-// source order; a genuine value cycle leaves nodes unorderable, which are emitted
-// in source order and rejected downstream as unbound names — there is nothing to
-// repair, as cross-declaration value recursion is unexpressible by construction.
+// Phase 5: reorder declarations so each one's value dependencies come before it (outer in the fold), since a cyclic name graph means source order is no longer a valid binding order. A stable Kahn pass keeps independent declarations in source order; a genuine value cycle leaves nodes unorderable, which are emitted in source order and rejected downstream as unbound names — there is nothing to repair, as cross-declaration value recursion is unexpressible by construction.
 //
-// The embedded, fixed prelude is every item under a privileged root
-// (`sys`/`syn`/`std` — see `RootKind::is_privileged`), classified structurally
-// rather than off a hardcoded name list. `std` and `syn` genuinely
-// cross-reference each other in both directions (e.g. `/syn/Str`'s `classify`
-// calls `/std/Nat`'s `in_range`, while `/std/Nat` itself uses `/syn/Str`'s
-// `Scan`/`Utf8`), so the three privileged roots are topologically sorted
-// together as *one* graph — there is no valid fixed sys/syn/std emission
-// order to split them into independently. `sys` is not a distinct partition
-// here as a result: it is always internally consistent with `syn`/`std`
-// because all three are elaborated as one prelude block.
-/// The full set of names one node's declaration references: its own free
-/// vars, plus (for a declared inductive/struct) its registry entry's free
-/// vars. An inductive's declaration is wider than its items: the registry
-/// entry's constructor payload and target types are elaborated alongside the
-/// type-binding group (`curios_elab::elaborate_module_rec` rebuilds the
-/// registry telescopes there), so a node declaring a registered name
-/// references everything its registry entry does — those names live nowhere
-/// in the type binding's own `type_`/`body`. Struct field types live in the
-/// registry too.
+// The embedded, fixed prelude is every item under a privileged root (`sys`/`syn`/`std` — see `RootKind::is_privileged`), classified structurally rather than off a hardcoded name list. `std` and `syn` genuinely cross-reference each other in both directions (e.g. `/syn/Str`'s `classify` calls `/std/Nat`'s `in_range`, while `/std/Nat` itself uses `/syn/Str`'s `Scan`/`Utf8`), so the three privileged roots are topologically sorted together as *one* graph — there is no valid fixed sys/syn/std emission order to split them into independently. `sys` is not a distinct partition here as a result: it is always internally consistent with `syn`/`std` because all three are elaborated as one prelude block.
+/// The full set of names one node's declaration references: its own free vars, plus (for a declared inductive/struct) its registry entry's free vars. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
 fn node_reference_names(
     item: &FlatItem,
     declared: &[curios_core::Global],
@@ -1340,9 +1178,7 @@ fn node_reference_names(
     names
 }
 
-/// The nodes a node depends on: those `owner` maps its referenced names to.
-/// Self-edges and names `owner` does not map (primitives, or items outside
-/// the partition `owner` was restricted to) drop out.
+/// The nodes a node depends on: those `owner` maps its referenced names to. Self-edges and names `owner` does not map (primitives, or items outside the partition `owner` was restricted to) drop out.
 fn dep_nodes(
     node: usize,
     names: &HashSet<curios_core::Global>,
@@ -1363,9 +1199,7 @@ fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global,
         .collect()
 }
 
-/// Topologically order `nodes` (assumed ascending, for the lowest-index
-/// tiebreak) under `deps` restricted to that set: lowest-index node whose deps
-/// are all emitted; on a cycle, the lowest remaining one breaks the deadlock.
+/// Topologically order `nodes` (assumed ascending, for the lowest-index tiebreak) under `deps` restricted to that set: lowest-index node whose deps are all emitted; on a cycle, the lowest remaining one breaks the deadlock.
 fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> Vec<usize> {
     let mut emitted = HashSet::with_capacity(nodes.len());
     let mut order = Vec::with_capacity(nodes.len());
@@ -1385,16 +1219,9 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
     order
 }
 
-/// The prelude's topological order as positions *relative to* `prelude_nodes`
-/// (ascending), so the whole fixed-root block can be emitted before user code.
+/// The prelude's topological order as positions *relative to* `prelude_nodes` (ascending), so the whole fixed-root block can be emitted before user code.
 ///
-/// Also the one place the cross-root backward-reference invariant is checked:
-/// a privileged declaration referencing a name `rest_owner` maps (i.e. a name
-/// only the entry program declares) can never resolve, since the prelude is
-/// always emitted first. This can only mean a bug in the embedded `sys`/
-/// `syn`/`std` source itself — never anything a user's own program can
-/// trigger — so it panics rather than surfacing as a normal `Error`.
-/// This runs only while constructing the build-scoped prepared prelude.
+/// Also the one place the cross-root backward-reference invariant is checked: a privileged declaration referencing a name `rest_owner` maps (i.e. a name only the entry program declares) can never resolve, since the prelude is always emitted first. This can only mean a bug in the embedded `sys`/ `syn`/`std` source itself — never anything a user's own program can trigger — so it panics rather than surfacing as a normal `Error`. This runs only while constructing the build-scoped prepared prelude.
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
@@ -1471,10 +1298,7 @@ fn order_flat_items(
         order.extend(permutation.into_iter().map(|rel| prelude_nodes[rel]));
     }
 
-    // Everything else (user code, plus any non-prelude library a custom loader
-    // serves): topologically ordered among itself, after the whole prelude. Its
-    // dependencies on prelude items are already satisfied by the prefix above,
-    // so the owner map (and thus the dep edges) need only cover `rest`.
+    // Everything else (user code, plus any non-prelude library a custom loader serves): topologically ordered among itself, after the whole prelude. Its dependencies on prelude items are already satisfied by the prefix above, so the owner map (and thus the dep edges) need only cover `rest`.
     let rest_deps = rest
         .iter()
         .map(|&n| {
@@ -1495,10 +1319,7 @@ fn order_flat_items(
         .collect()
 }
 
-/// The external references of an inductive registry entry: every free var of
-/// its telescopes. Binder names (parameters, payload binders) are captured by
-/// `Telescope::build` and never appear here; the index types' references also
-/// live in the type binding's own signature, but are included for robustness.
+/// The external references of an inductive registry entry: every free var of its telescopes. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.
 fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
     induct_decl
         .params
@@ -1515,11 +1336,7 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_cor
         .collect()
 }
 
-/// The external references of a struct registry entry: every free var of its
-/// parameter and field telescopes. Like `induct_free_vars`, this is what
-/// makes a struct's type-former node depend on the (e.g. primitive) types its
-/// fields mention — they live nowhere in the type-former's own body, which is
-/// just the `StructType` normal form.
+/// The external references of a struct registry entry: every free var of its parameter and field telescopes. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. primitive) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
 fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
     struct_decl
         .params
@@ -1543,9 +1360,7 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
     });
 
     lets.filter_map(|let_| {
-        // An alias target is a top-level definition. A body that is a bare
-        // *local* is not an alias — a discriminant test now, where it used to be
-        // a leading-`/` test on the spelling.
+        // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test now, where it used to be a leading-`/` test on the spelling.
         let direct = let_.body.direct_type_alias_target(&let_.type_);
         let target = direct
             .or_else(|| let_.body.transparent_alias_target())
@@ -1569,8 +1384,7 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
     .collect()
 }
 
-/// Follow a directly attached representation provenance or a chain of bare,
-/// transparent type aliases to the underlying nominal registry entry.
+/// Follow a directly attached representation provenance or a chain of bare, transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal(
     entry: &Entry,
     aliases: &HashMap<curios_core::Global, AliasEdge>,
@@ -1600,10 +1414,7 @@ fn exposed_nominal(
     }
 }
 
-/// Invert the alias map to its transitive closure: for each canonical name, the
-/// bare transparent aliases that reach it. A name is as visible as the widest
-/// alias that stands for it, so an exported alias carries its target's audience
-/// even when the target itself is never exported.
+/// Invert the alias map to its transitive closure: for each canonical name, the bare transparent aliases that reach it. A name is as visible as the widest alias that stands for it, so an exported alias carries its target's audience even when the target itself is never exported.
 fn alias_sources(
     aliases: &HashMap<curios_core::Global, AliasEdge>,
 ) -> HashMap<curios_core::Global, HashSet<curios_core::Global>> {
@@ -1643,8 +1454,7 @@ fn alias_sources(
     sources
 }
 
-/// The top-level definitions among `names`. A binder is nobody's dependency:
-/// it is introduced and discharged inside the very signature being audited.
+/// The top-level definitions among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being audited.
 fn globals(
     names: impl IntoIterator<Item = curios_core::Free>,
 ) -> impl Iterator<Item = curios_core::Global> {
@@ -1653,8 +1463,7 @@ fn globals(
         .filter_map(|name| name.as_global().cloned())
 }
 
-/// Everyone who can see `referent`, whether by its own name or through a
-/// transparent alias that stands for it.
+/// Everyone who can see `referent`, whether by its own name or through a transparent alias that stands for it.
 fn referent_audience(
     audiences: &Audiences,
     sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
@@ -1665,8 +1474,7 @@ fn referent_audience(
     };
     let mut audience = audiences.binding(qualifier);
 
-    // A hop is matched by identity, and its qualifier is read off the name
-    // rather than split back out of a rendering.
+    // A hop is matched by identity, and its qualifier is read off the name rather than split back out of a rendering.
     for alias in sources.get(referent).into_iter().flatten() {
         let Some(qualifier) = alias.qualifier() else {
             continue;
@@ -1677,10 +1485,7 @@ fn referent_audience(
     audience
 }
 
-/// Every consumer of `item` — an item exposed to `exposure` — must be able to
-/// see everything `item`'s signature names. Checked against audiences rather
-/// than the declaration path, so an item re-exported out of a private module
-/// counts as visible exactly where the re-export puts it.
+/// Every consumer of `item` — an item exposed to `exposure` — must be able to see everything `item`'s signature names. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: &Audiences,
     sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
@@ -1701,17 +1506,9 @@ fn audit_dependencies(
     Ok(())
 }
 
-/// Audit every declared signature and every exposed representation against the
-/// audience of the item carrying it. This runs after lowering because registry
-/// telescopes contain the complete signatures and transparent aliases have
-/// become canonical free-variable references. Re-export entries retain their
-/// representation provenance through the fixed point, so no `pub use` can
-/// upgrade an opaque declaration.
+/// Audit every declared signature and every exposed representation against the audience of the item carrying it. This runs after lowering because registry telescopes contain the complete signatures and transparent aliases have become canonical free-variable references. Re-export entries retain their representation provenance through the fixed point, so no `pub use` can upgrade an opaque declaration.
 ///
-/// The declared type of every definition is audited here rather than during
-/// lowering: only the converged interface graph knows where a name ends up
-/// visible, so a signature naming an item re-exported out of a private child is
-/// accepted, while one naming something its own consumers cannot reach is not.
+/// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 fn audit_public_exposures(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
@@ -1727,17 +1524,9 @@ fn audit_public_exposures(
         FlatItem::Let(let_) => std::slice::from_ref(let_),
         FlatItem::Rec(lets) => lets.as_slice(),
     }) {
-        // Only definitions the source actually wrote. A member synthesized into
-        // a nested namespace — an inductive's constructor, a concept's method
-        // wrapper — sits below its declaring module rather than in it, and its
-        // signature is the declaration's business, not an interface the author
-        // wrote: a constructor facade may legitimately hand out values of a
-        // type the consumer cannot name.
+        // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and its signature is the declaration's business, not an interface the author wrote: a constructor facade may legitimately hand out values of a type the consumer cannot name.
         //
-        // A witness has no authored path at all, which is the same answer
-        // arrived at structurally: "who can see this by its name" is not a
-        // question an anonymous declaration has. Its reach is the coherence
-        // table's, governed by the orphan rule at registration.
+        // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence table's, governed by the orphan rule at registration.
         let Some(path) = let_.name.qualifier() else {
             continue;
         };
@@ -1820,10 +1609,7 @@ fn audit_public_exposures(
     Ok(())
 }
 
-/// Lower an [`Entrypoint`] to a [`curios_elab::Module`]. Also returns how many
-/// metavariable ids were minted for the module's holes: the floor
-/// `elaborate_module` needs so the ids it mints for implicit-argument
-/// insertion never collide with these.
+/// Lower an [`Entrypoint`] to a [`curios_elab::Module`]. Also returns how many metavariable ids were minted for the module's holes: the floor `elaborate_module` needs so the ids it mints for implicit-argument insertion never collide with these.
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -1857,14 +1643,10 @@ pub fn into_core(
     let mut flat_items = Vec::new();
     let mut induct_decls = BTreeMap::new();
     let mut struct_decls = BTreeMap::new();
-    // Concept resolution metadata and witness registration markers, populated as
-    // `concept`/`witness` items lower.
+    // Concept resolution metadata and witness registration markers, populated as `concept`/`witness` items lower.
     let mut concepts = BTreeMap::new();
     let mut witnesses = BTreeSet::new();
-    // `foreign` declarations found anywhere in this compilation's module graph
-    // (discovery above is already exhaustive over it) — separate from, and
-    // never merged with, the built-in `host_ops()` store the caller's prelude
-    // loader was built from.
+    // `foreign` declarations found anywhere in this compilation's module graph (discovery above is already exhaustive over it) — separate from, and never merged with, the built-in `host_ops()` store the caller's prelude loader was built from.
     let mut foreigns = ForeignStore::new();
 
     process_items(
@@ -1889,12 +1671,7 @@ pub fn into_core(
 
     audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
 
-    // Emit the program as a flat list of named top-level definitions rather than
-    // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references
-    // (and the references in the entrypoint `body` and its `type_` annotation) stay
-    // free `Var`s keyed by the definition's joined name; the core passes `define`
-    // each one into the `Context`, so both the body and its annotation reduce
-    // through those definitions and agree — no shared binder scope required.
+    // Emit the program as a flat list of named top-level definitions rather than folding it into one N-deep nested `let`/`rec` term. Cross-references (and the references in the entrypoint `body` and its `type_` annotation) stay free `Var`s keyed by the definition's joined name; the core passes `define` each one into the `Context`, so both the body and its annotation reduce through those definitions and agree — no shared binder scope required.
     let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)

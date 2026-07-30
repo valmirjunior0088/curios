@@ -16,12 +16,7 @@ use {
     num_traits::One,
 };
 
-/// A `Bin` spread operand under the TIGHT grammar: a suffix chain —
-/// projections, calls, `!` — bottoming out at a `Name` re-parses
-/// unparenthesized, but only printed GLUED (`hdr.bytes`, `f(x)`, `read()!`):
-/// `print_term`'s `(head).field` projection and `(term)!` bang forms would
-/// end the literal at their `)`. Anything else is wrapped in parens, matching
-/// the `\..(term)` operand form.
+/// A `Bin` spread operand under the TIGHT grammar: a suffix chain — projections, calls, `!` — bottoming out at a `Name` re-parses unparenthesized, but only printed GLUED (`hdr.bytes`, `f(x)`, `read()!`): `print_term`'s `(head).field` projection and `(term)!` bang forms would end the literal at their `)`. Anything else is wrapped in parens, matching the `\..(term)` operand form.
 fn print_bin_spread_operand(term: Term) -> Printer {
     fn is_bare(term: &Term) -> bool {
         match term.as_subterm() {
@@ -73,9 +68,7 @@ fn print_plicity(plicity: Plicity) -> Printer {
     }
 }
 
-/// Prints a match's optional motive — ` : ` and the written term (ordinarily a
-/// lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in
-/// the source.
+/// Prints a match's optional motive — ` : ` and the written term (ordinarily a lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in the source.
 fn print_motive(motive: Option<Term>) -> Printer {
     match motive {
         Some(motive) => flat([pure(" : "), print_term(motive)]),
@@ -111,9 +104,7 @@ fn print_func_type_param(param: FuncTypeParam) -> Printer {
     flat([print_plicity(param.plicity), body])
 }
 
-/// One function-sugar binder (a `let`/`rec`/`satisfy` telescope parameter). A
-/// `use` binder is anonymous — `use type`, no label; otherwise the plicity
-/// prefixes the name (`@x` = implicit).
+/// One function-sugar binder (a `let`/`rec`/`satisfy` telescope parameter). A `use` binder is anonymous — `use type`, no label; otherwise the plicity prefixes the name (`@x` = implicit).
 fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
     if param.plicity == Plicity::Witness {
         flat([pure("use "), print_term(param.type_)])
@@ -136,9 +127,7 @@ fn print_func_param((plicity, name, annotation): (Plicity, String, Option<Term>)
     flat([print_plicity(plicity), bound])
 }
 
-/// A tuple-literal / struct-literal field: positional, `label = value`, or the
-/// definition sugar `label(params) = value` re-sugared from the retained
-/// parameter list.
+/// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
 fn print_tuple_field(field: TupleField) -> Printer {
     match (field.label, field.func_params) {
         (Some(label), Some(params)) => flat([
@@ -153,8 +142,7 @@ fn print_tuple_field(field: TupleField) -> Printer {
     }
 }
 
-/// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a
-/// plain field.
+/// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a plain field.
 fn print_struct_entry(entry: StructLitEntry) -> Printer {
     match entry {
         StructLitEntry::Field(field) => print_tuple_field(field),
@@ -163,12 +151,7 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer {
     }
 }
 
-/// A tuple-pattern / struct-pattern field: positional or `label = pattern` —
-/// the literal mirror of `print_tuple_field`, with `Term` replaced by
-/// `Pattern` (no definition-sugar form; a pattern field is never a function).
-/// The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin`
-/// fold's cons arm — `None` prints nothing at all (a plain case-split),
-/// matching how it was written.
+/// A tuple-pattern / struct-pattern field: positional or `label = pattern` — the literal mirror of `print_tuple_field`, with `Term` replaced by `Pattern` (no definition-sugar form; a pattern field is never a function). The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin` fold's cons arm — `None` prints nothing at all (a plain case-split), matching how it was written.
 fn print_cons_ih(ih_label: Option<String>) -> Printer {
     match ih_label {
         Some(ih_label) => flat([pure("; "), pure(ih_label)]),
@@ -183,21 +166,16 @@ fn print_pattern_field(field: PatternField) -> Printer {
     }
 }
 
-/// A binder pattern: a plain name, a tuple pattern, or a struct pattern —
-/// the literal mirror of the `Tuple`/`StructLit` term-printing arms below,
-/// with `Term` replaced by `Pattern`.
+/// A binder pattern: a plain name, a tuple pattern, or a struct pattern — the literal mirror of the `Tuple`/`StructLit` term-printing arms below, with `Term` replaced by `Pattern`.
 fn print_pattern(pattern: Pattern) -> Printer {
     match pattern {
         Pattern::Binder(Some(name)) => pure(name),
-        // Only a function-sugar `use` parameter (`Plicity::Witness`) has no
-        // source binder at all — and that path never calls `print_pattern`
-        // (see `print_func_sugar_param`), so this is unreachable.
+        // Only a function-sugar `use` parameter (`Plicity::Witness`) has no source binder at all — and that path never calls `print_pattern` (see `print_func_sugar_param`), so this is unreachable.
         Pattern::Binder(None) => unreachable!("an anonymous binder has no pattern to print"),
         Pattern::Tuple(fields) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
-                // A labeled one-element tuple pattern needs no trailing comma
-                // — the `=` already disambiguates it from a grouped pattern.
+                // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.
                 let trailer = if field.label.is_some() { ")" } else { ",)" };
                 flat([pure("("), print_pattern_field(field), pure(trailer)])
             } else {
@@ -224,11 +202,7 @@ fn print_match_pattern_field(field: MatchPatternField) -> Printer {
     }
 }
 
-/// A match-arm pattern: a plain binder, an inductive constructor tag applied
-/// to sub-patterns, a tuple pattern, or a struct pattern — the refutable
-/// counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Ctor`
-/// stays positional (constructors have no field labels); `Tuple`/`Struct`
-/// mirror `print_pattern`'s own field-printing exactly.
+/// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Ctor` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror `print_pattern`'s own field-printing exactly.
 fn print_match_pattern(pattern: MatchPattern) -> Printer {
     match pattern {
         MatchPattern::Binder(name) => pure(name),
@@ -246,8 +220,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         MatchPattern::Tuple(fields) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
-                // A labeled one-element tuple pattern needs no trailing comma
-                // — the `=` already disambiguates it from a grouped pattern.
+                // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.
                 let trailer = if field.label.is_some() { ")" } else { ",)" };
                 flat([pure("("), print_match_pattern_field(field), pure(trailer)])
             } else {
@@ -314,11 +287,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
     }
 }
 
-/// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and
-/// its optional domain annotation — the pattern-accepting counterpart of
-/// `print_func_param`, forked for the same reason `parse_func_pattern_param` is
-/// (see `parse.rs`). A lambda's `use` binder is named (`use show`), so the mark
-/// precedes the pattern rather than an anonymous domain type.
+/// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation — the pattern-accepting counterpart of `print_func_param`, forked for the same reason `parse_func_pattern_param` is (see `parse.rs`). A lambda's `use` binder is named (`use show`), so the mark precedes the pattern rather than an anonymous domain type.
 fn print_func_pattern_param(param: FuncParam) -> Printer {
     let FuncParam {
         plicity,
@@ -339,8 +308,7 @@ fn print_labeled((label, ty): (Option<String>, Term)) -> Printer {
     }
 }
 
-/// A Σ-type / struct field: positional, `label : type`, or the signature sugar
-/// `label(params) -> type` re-sugared from the retained parameter list.
+/// A Σ-type / struct field: positional, `label : type`, or the signature sugar `label(params) -> type` re-sugared from the retained parameter list.
 fn print_field(param: TupleTypeParam) -> Printer {
     match (param.label, param.func_params) {
         (Some(label), Some(params)) => flat([
@@ -610,8 +578,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
         Subterm::Prop => pure("Prop"),
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::Name(name) => pure(name.join()),
-        // Both spell `?`: the written/desugared distinction matters to zonk's
-        // reporting, not to how the term reads.
+        // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
         Subterm::Syn(Syn::Char(character)) => {
             let escaped = match character {
@@ -670,8 +637,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
         Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
-                // A labeled one-element tuple needs no trailing comma — the
-                // `=` already disambiguates it from a parenthesized term.
+                // A labeled one-element tuple needs no trailing comma — the `=` already disambiguates it from a parenthesized term.
                 let trailer = if field.label.is_some() { ")" } else { ",)" };
                 flat([pure("("), print_tuple_field(field), pure(trailer)])
             } else {
@@ -880,9 +846,7 @@ fn print_wire_type(type_: WireType) -> Printer {
     }
 }
 
-// `parse_wire_signature` only ever produces exactly one, unnamed (`_`)
-// result — `foreign` has no surface syntax for `/sys/Handle`'s named-record
-// results — so the sole result is always present.
+// `parse_wire_signature` only ever produces exactly one, unnamed (`_`) result — `foreign` has no surface syntax for `/sys/Handle`'s named-record results — so the sole result is always present.
 fn print_wire_signature(signature: WireSignature) -> Printer {
     let WireSignature { params, results } = signature;
     let output = results
@@ -969,8 +933,7 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
 fn print_top_induct_case(case: TopCase) -> Printer {
     let payload = sep_flat(
         case.payload.into_iter().map(|param| {
-            // Plicity prefixes the name (`@x` = implicit) — shared with
-            // `print_field`.
+            // Plicity prefixes the name (`@x` = implicit) — shared with `print_field`.
             flat([
                 print_plicity(param.plicity),
                 print_field(TupleTypeParam {
@@ -1022,10 +985,7 @@ fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
     ])
 }
 
-/// The head's arity after the name: the (mandatory) result sort, preceded by an
-/// index telescope when the inductive is indexed. `: Sort` for a plain type,
-/// `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity`
-/// accepts, so a printed declaration round-trips.
+/// The head's arity after the name: the (mandatory) result sort, preceded by an index telescope when the inductive is indexed. `: Sort` for a plain type, `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity` accepts, so a printed declaration round-trips.
 fn print_top_induct_arity(
     indices: Vec<(Option<String>, Term)>,
     rep_pub: bool,
@@ -1107,8 +1067,7 @@ fn print_concept_field(field: ConceptField) -> Printer {
     if field.is_super {
         return flat([pure("use "), print_term(field.type_)]);
     }
-    // The signature sugar `label(params) -> type` re-sugars from the retained
-    // parameter list (never set on a super field).
+    // The signature sugar `label(params) -> type` re-sugars from the retained parameter list (never set on a super field).
     match field.func_params {
         Some(params) => flat([
             pure(field.label),
@@ -1175,9 +1134,7 @@ fn print_top_witness(item: TopWitness) -> Printer {
     ])
 }
 
-/// A witness-body entry: a `use <term>` fill or an implementation field —
-/// `label = value`, or the definition sugar `label(params) = value` re-sugared
-/// from the retained parameter list.
+/// A witness-body entry: a `use <term>` fill or an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
 fn print_witness_entry(entry: WitnessEntry) -> Printer {
     let field = match entry {
         WitnessEntry::Use(term) => return flat([pure("use "), print_term(term)]),

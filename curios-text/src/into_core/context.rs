@@ -26,9 +26,7 @@ impl FlatLet {
             name: self.name,
             kind: self.kind,
             universe_context: curios_core::UniverseContext::empty(),
-            // Lowering cannot know this. `curios_elab::record_totality`
-            // computes the definition's totality after elaboration and zonking
-            // and writes it back here.
+            // Lowering cannot know this. `curios_elab::record_totality` computes the definition's totality after elaboration and zonking and writes it back here.
             totality: curios_cert::Totality::default(),
             type_: self.type_,
             body: self.body,
@@ -43,10 +41,7 @@ pub(super) enum FlatItem {
 }
 
 impl FlatItem {
-    /// Whether this flat item belongs to the fixed embedded prelude — every
-    /// let in it is declared under a privileged root
-    /// (`RootId::of_segment(..).kind()`). Checked on the *structured*
-    /// qualifier's root segment, before names are flattened to strings.
+    /// Whether this flat item belongs to the fixed embedded prelude — every let in it is declared under a privileged root (`RootId::of_segment(..).kind()`). Checked on the *structured* qualifier's root segment, before names are flattened to strings.
     pub(super) fn in_prelude(&self) -> bool {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
@@ -63,9 +58,7 @@ impl FlatItem {
         }
     }
 
-    /// Every global this item names — the reachability prune's edges (see
-    /// [`FlatItem::names`]). Locals are dropped: an item's binders are its own
-    /// business, and reachability is a question about definitions.
+    /// Every global this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.
     pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
@@ -74,11 +67,7 @@ impl FlatItem {
 
         lets.iter()
             .flat_map(|let_| {
-                // Construction head names (`Struct`/`Variant`/type-former normal
-                // forms) are reachability edges too — a body that *builds* a
-                // struct (the string-literal meta-emitter's `/syn/Str/Str`) must
-                // keep its backing type-former and field-type definitions alive
-                // even though no `Var` names them. See `Subterm::construction_names`.
+                // Construction head names (`Struct`/`Variant`/type-former normal forms) are reachability edges too — a body that *builds* a struct (the string-literal meta-emitter's `/syn/Str/Str`) must keep its backing type-former and field-type definitions alive even though no `Var` names them. See `Subterm::construction_names`.
                 let_.type_
                     .free_vars()
                     .into_iter()
@@ -100,10 +89,7 @@ impl FlatItem {
     }
 }
 
-// The direct interface of a module: every declared label (public *and* private)
-// in each namespace, with its visibility. This is the per-module body view used
-// for lexical scope during elaboration, and to tell private from absent when a
-// public lookup misses.
+// The direct interface of a module: every declared label (public *and* private) in each namespace, with its visibility. This is the per-module body view used for lexical scope during elaboration, and to tell private from absent when a public lookup misses.
 #[derive(Clone, Copy)]
 #[cfg_attr(
     feature = "archive",
@@ -197,9 +183,7 @@ impl ModuleInfo {
         self.bindings.get(label).copied()
     }
 
-    /// Every declared child module with its own visibility bit, for the
-    /// audience fixed point — which needs the private ones too, since they are
-    /// visible within this module's subtree.
+    /// Every declared child module with its own visibility bit, for the audience fixed point — which needs the private ones too, since they are visible within this module's subtree.
     pub(super) fn children(&self) -> impl Iterator<Item = (&str, bool)> {
         self.children
             .iter()
@@ -236,40 +220,24 @@ pub(super) struct UseResolved {
     binding: Option<Qualifier>,
 }
 
-// The per-body elaboration context. `table`/`public` are frozen interface views,
-// shared read-only across all nested contexts. `qualifiers`/`bindings` are the
-// lexical scope of the module body being elaborated, populated source-ordered by
-// declarations and `use` imports.
+// The per-body elaboration context. `table`/`public` are frozen interface views, shared read-only across all nested contexts. `qualifiers`/`bindings` are the lexical scope of the module body being elaborated, populated source-ordered by declarations and `use` imports.
 pub(super) struct Context<'a> {
     prefix: Qualifier,
-    // The root this module's own subtree belongs to — set explicitly once,
-    // where a root is mounted (`Context::new`/`nested_root`), and inherited
-    // unchanged by ordinary nesting (`nested`). Never re-derived from
-    // `prefix`'s string content past that point.
+    // The root this module's own subtree belongs to — set explicitly once, where a root is mounted (`Context::new`/`nested_root`), and inherited unchanged by ordinary nesting (`nested`). Never re-derived from `prefix`'s string content past that point.
     root: RootId,
     table: &'a HashMap<Qualifier, ModuleInfo>,
     public: &'a HashMap<Qualifier, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
-    // Shared, program-global metavariable-id counter. The whole program folds
-    // into one `curios_core::Term`, so holes in different module bodies (each its own
-    // `Context` via `nested`) must draw from the same monotonic source. Shared
-    // by reference (like `table`/`public`) and `Cell`-backed so it survives
-    // `Lowerer`'s immutable `&Context` borrow.
+    // Shared, program-global metavariable-id counter. The whole program folds into one `curios_core::Term`, so holes in different module bodies (each its own `Context` via `nested`) must draw from the same monotonic source. Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     universes: &'a Entropy,
     universe_role: &'a Cell<curios_core::UniverseRole>,
     universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
     universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
-    // Shared counter for every binder identity a lowered term closes over.
-    // Threaded (not a process-global atomic) for determinism: two runs over the
-    // same source must mint the same identities, or terms that should be equal
-    // would differ.
+    // Shared counter for every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
     binders: &'a Entropy,
-    // Program-global witness identities. A `satisfy` declaration is anonymous,
-    // so its identity is an id rather than a name — and the id must be unique
-    // across the whole program, not per module, because nothing else
-    // distinguishes two of them.
+    // Program-global witness identities. A `satisfy` declaration is anonymous, so its identity is an id rather than a name — and the id must be unique across the whole program, not per module, because nothing else distinguishes two of them.
     witnesses: &'a Entropy,
     syntax: &'a SyntaxRegistry,
 }
@@ -326,12 +294,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Like `nested`, but for descending into one of the fixed roots
-    /// (`sys`/`syn`/`std`) mounted under the entry program: `root` overrides
-    /// rather than inherits, since the fixed root's own subtree belongs to a
-    /// different root than its mounting context. Used only at the three
-    /// `into_core::FIXED_ROOTS` mount points — every deeper `nested` call
-    /// within that subtree inherits the overridden root unchanged.
+    /// Like `nested`, but for descending into one of the fixed roots (`sys`/`syn`/`std`) mounted under the entry program: `root` overrides rather than inherits, since the fixed root's own subtree belongs to a different root than its mounting context. Used only at the three `into_core::FIXED_ROOTS` mount points — every deeper `nested` call within that subtree inherits the overridden root unchanged.
     pub(super) fn nested_root(&self, label: &str, root: RootId) -> Context<'a> {
         Context {
             root,
@@ -339,8 +302,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// The `RootId` this module itself belongs to — the value every `FlatLet`
-    /// declared directly in this module's body stamps as its own root.
+    /// The `RootId` this module itself belongs to — the value every `FlatLet` declared directly in this module's body stamps as its own root.
     pub(super) fn root(&self) -> RootId {
         self.root
     }
@@ -400,10 +362,7 @@ impl<'a> Context<'a> {
         result
     }
 
-    /// Mint a witness identity. A `satisfy` declaration is anonymous by design,
-    /// so it gets an identity rather than a manufactured name — see
-    /// [`curios_core::Global::Witness`]. The counter is program-global, not
-    /// per-module: nothing but the id distinguishes two witnesses.
+    /// Mint a witness identity. A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The counter is program-global, not per-module: nothing but the id distinguishes two witnesses.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
         curios_core::WitnessId::new(
             u32::try_from(self.witnesses.fresh()).expect("witness space exhausted"),
@@ -412,11 +371,7 @@ impl<'a> Context<'a> {
 
     /// Mint a binder identity, rendering as `hint`.
     ///
-    /// Every binder a lowered term closes over comes from here, including the
-    /// continuation binders `!` desugaring introduces. `curios-elab` mints more
-    /// while elaborating and seeds its counter above
-    /// [`PreparedPrelude::binder_floor`](super::PreparedPrelude::binder_floor),
-    /// so the two sources share one identity space without colliding.
+    /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and seeds its counter above [`PreparedPrelude::binder_floor`](super::PreparedPrelude::binder_floor), so the two sources share one identity space without colliding.
     pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
         curios_core::Free::local(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
@@ -459,9 +414,7 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    // Walk from `start` through `segments` as child modules visible to this
-    // module, following each entry's re-export target. A failing segment is
-    // classified against the direct table: present-but-private vs. absent.
+    // Walk from `start` through `segments` as child modules visible to this module, following each entry's re-export target. A failing segment is classified against the direct table: present-but-private vs. absent.
     fn walk_children(&self, start: Qualifier, segments: &[String]) -> Result<Qualifier, Error> {
         let mut current = start;
 
@@ -496,11 +449,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    // Resolve the module named by `name`'s first `upto` segments: from the module
-    // root (absolute) or the lexically-bound head qualifier (relative — the head
-    // is consumed as the start, so the walk runs over `segments[1..upto]`). Guards
-    // the *resolved* module, so a relative spelling is rejected exactly as the
-    // absolute one is.
+    // Resolve the module named by `name`'s first `upto` segments: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`). Guards the *resolved* module, so a relative spelling is rejected exactly as the absolute one is.
     fn resolve_module_prefix(&self, name: &Name, upto: usize) -> Result<Qualifier, Error> {
         let segments = name.qualifier().segments();
 
@@ -530,8 +479,7 @@ impl<'a> Context<'a> {
         Ok((parent, name.last().to_string()))
     }
 
-    // Import the module child `label` out of `parent`, registering it as a
-    // qualifier in the current lexical scope.
+    // Import the module child `label` out of `parent`, registering it as a qualifier in the current lexical scope.
     fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
         match super::interface::visible_child(self.public, self.table, &self.prefix, parent, label)
         {
@@ -553,8 +501,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    // Import the binding `label` out of `parent`, registering it in the current
-    // lexical scope.
+    // Import the binding `label` out of `parent`, registering it in the current lexical scope.
     fn import_binding_label(
         &mut self,
         parent: &Qualifier,
@@ -585,8 +532,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    // Import both the module and binding slots of `label` — used by glob and the
-    // `Both` group item. Either or both may be absent.
+    // Import both the module and binding slots of `label` — used by glob and the `Both` group item. Either or both may be absent.
     fn import_dual_label(&mut self, parent: &Qualifier, label: &str) -> Result<UseResolved, Error> {
         let module =
             super::interface::visible_child(self.public, self.table, &self.prefix, parent, label);
@@ -672,8 +618,7 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    // A glob `use a/b/*` names a module directly and imports every public child
-    // and binding it exposes (including its re-exports), each under its own label.
+    // A glob `use a/b/*` names a module directly and imports every public child and binding it exposes (including its re-exports), each under its own label.
     pub(super) fn resolve_glob(
         &mut self,
         name: &Name,
@@ -708,8 +653,7 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    // Resolve a qualified/absolute term reference to its canonical binding
-    // target, reading the frozen public interfaces.
+    // Resolve a qualified/absolute term reference to its canonical binding target, reading the frozen public interfaces.
     pub(super) fn resolve_term_name(&self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;

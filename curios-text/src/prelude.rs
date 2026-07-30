@@ -9,11 +9,7 @@ use {
     std::sync::Arc,
 };
 
-// The `sys` module is the home of every primitive type and operation. It is
-// built directly as `text` AST (never parsed) and prepended to every parsed
-// `Entrypoint`, so primitives participate in the module system like any other
-// binding. Bodies bake the `text::Prim::*` nodes in directly, so the prelude
-// needs no internal name resolution.
+// The `sys` module is the home of every primitive type and operation. It is built directly as `text` AST (never parsed) and prepended to every parsed `Entrypoint`, so primitives participate in the module system like any other binding. Bodies bake the `text::Prim::*` nodes in directly, so the prelude needs no internal name resolution.
 
 fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
@@ -31,9 +27,7 @@ fn byte() -> Term {
     prim(Prim::ByteType)
 }
 
-// A `Nat` literal value term, built exactly as the parser builds one: `0` is
-// bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
-// codes (`status`, `poll`, and `mode`) into the `/sys/Handle` constant mirror.
+// A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `poll`, and `mode`) into the `/sys/Handle` constant mirror.
 fn nat_lit(n: u32) -> Term {
     match n {
         0 => prim(Prim::Nat(Nat::Zero)),
@@ -86,8 +80,7 @@ fn lst_of(elem: Term) -> Term {
     prim(Prim::LstType(elem))
 }
 
-// A single-argument function type `(domain) -> output`, for higher-order
-// primitives (the `f` of `Lst/map`).
+// A single-argument function type `(domain) -> output`, for higher-order primitives (the `f` of `Lst/map`).
 fn fn_of(domain: Term, output: Term) -> Term {
     Subterm::FuncType(FuncType {
         params: vec![FuncTypeParam {
@@ -128,8 +121,7 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     })
 }
 
-// `pub use Label/{let Label}` — the facade re-export that hoists a submodule's
-// own type binding up to the library root, so `/sys/{Label}` names the type.
+// `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
 fn pub_use(label: &str) -> TopItem {
     TopItem::Use(TopUse {
         vis_pub: true,
@@ -138,8 +130,7 @@ fn pub_use(label: &str) -> TopItem {
     })
 }
 
-// A primitive module's items: its type declaration first, then its operations,
-// so the type lives *inside* its module and the root facade re-exports it.
+// A primitive module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
 fn with_type(type_decl: TopItem, mut ops: Vec<TopItem>) -> Vec<TopItem> {
     let mut items = vec![type_decl];
     items.append(&mut ops);
@@ -192,8 +183,7 @@ fn fn_marked(
     }
 }
 
-/// The surface type a host-boundary [`WireType`] denotes — the prelude's
-/// reading of the signature, mirrored by `core::wire_term` after lowering.
+/// The surface type a host-boundary [`WireType`] denotes — the prelude's reading of the signature, mirrored by `core::wire_term` after lowering.
 fn wire_type(type_: &WireType) -> Term {
     match type_ {
         WireType::Nat => nat(),
@@ -205,12 +195,7 @@ fn wire_type(type_: &WireType) -> Term {
     }
 }
 
-/// A host-function declaration generated from a foreign-store row: parameter
-/// names/types and the result shape (unit, bare type, named record) come off
-/// the `WireSignature`, and the body bakes the generic `Foreign` prim applied
-/// to the parameter names. Used both for `/sys/Handle`'s rows (always `pub`) and,
-/// via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub`
-/// follows what they wrote).
+/// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` prim applied to the parameter names. Used both for `/sys/Handle`'s rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
 fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     let signature = &function.signature;
 
@@ -245,17 +230,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     )
 }
 
-/// Handle one user-written `foreign` declaration: register its
-/// [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store,
-/// and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type
-/// bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core`
-/// only ever deals with the same `LetSignature` it already knows how to lower
-/// for a plain `TopItem::Let`. `name` is the declaration's fully qualified
-/// name (leading `/`, the caller's current position while walking the module
-/// tree), which becomes the wasm import string under the `ffi` namespace.
-/// Qualified names are unique per compilation (a same-scope duplicate is a
-/// binding conflict long before lowering reaches this point), so `register`'s
-/// duplicate panic stays what it is everywhere else: a construction bug.
+/// Handle one user-written `foreign` declaration: register its [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store, and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core` only ever deals with the same `LetSignature` it already knows how to lower for a plain `TopItem::Let`. `name` is the declaration's fully qualified name (leading `/`, the caller's current position while walking the module tree), which becomes the wasm import string under the `ffi` namespace. Qualified names are unique per compilation (a same-scope duplicate is a binding conflict long before lowering reaches this point), so `register`'s duplicate panic stays what it is everywhere else: a construction bug.
 pub(crate) fn foreign_signature(
     declaration: &TopForeign,
     foreigns: &mut ForeignStore,
@@ -336,11 +311,7 @@ fn byte_ops() -> Vec<TopItem> {
     ]
 }
 
-// `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as
-// `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact
-// boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single
-// bit, so all four are primitives rather than `match` definitions. `not` has no
-// machine instruction; `/std/Bool` defines it as `xor(b, true)`.
+// `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single bit, so all four are primitives rather than `match` definitions. `not` has no machine instruction; `/std/Bool` defines it as `xor(b, true)`.
 fn bool_ops() -> Vec<TopItem> {
     vec![
         binary("and", bool_(), bool_(), Prim::BoolAnd),
@@ -363,9 +334,7 @@ fn int_ops() -> Vec<TopItem> {
         binary("gt", int(), bool_(), Prim::IntGt),
         binary("lte", int(), bool_(), Prim::IntLte),
         binary("gte", int(), bool_(), Prim::IntGte),
-        // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit
-        // ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is
-        // arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
+        // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
         binary("and", int(), int(), Prim::IntAnd),
         binary("or", int(), int(), Prim::IntOr),
         binary("xor", int(), int(), Prim::IntXor),
@@ -556,9 +525,7 @@ fn cell_ops() -> Vec<TopItem> {
     ]
 }
 
-// The values and operations of the `/sys/Handle` type: the three standard
-// streams and handle identity. The host operations that mint and consume
-// handles live flat at the `/sys` root (see `host_operations`), not here.
+// The values and operations of the `/sys/Handle` type: the three standard streams and handle identity. The host operations that mint and consume handles live flat at the `/sys` root (see `host_operations`), not here.
 fn handle_ops() -> Vec<TopItem> {
     vec![
         pub_let("stdin", handle(), prim(Prim::Handle(stdio::STDIN))),
@@ -573,37 +540,23 @@ fn handle_ops() -> Vec<TopItem> {
     ]
 }
 
-// The host operations, `exit`, and the wire-code mirror, all emitted flat at
-// the `/sys` root: every store-described op (in declaration order), then
-// `exit`, then the `Status`/`Poll`/`Mode` code modules. Operations are
-// lowercase and the code modules capitalized, so the `poll` op and the `Poll`
-// module coexist without clashing.
+// The host operations, `exit`, and the wire-code mirror, all emitted flat at the `/sys` root: every store-described op (in declaration order), then `exit`, then the `Status`/`Poll`/`Mode` code modules. Operations are lowercase and the code modules capitalized, so the `poll` op and the `Poll` module coexist without clashing.
 fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
-    // Every store-described host op, in store (= declaration) order. Each is a
-    // *function*, including the 0-arity clocks/args: a value binding would
-    // force-reduce its effectful prim body at definition (the bare prelude is
-    // lowered whole, so a top-level value `let` lands in `main`) and trip the
-    // host-effect-at-type-level guard, while under the function abstraction the
-    // prim stays unevaluated until called.
+    // Every store-described host op, in store (= declaration) order. Each is a *function*, including the 0-arity clocks/args: a value binding would force-reduce its effectful prim body at definition (the bare prelude is lowered whole, so a top-level value `let` lands in `main`) and trip the host-effect-at-type-level guard, while under the function abstraction the prim stays unevaluated until called.
     let mut ops = foreigns
         .iter()
         .map(|function| TopItem::Let(host_fn(function, true)))
         .collect::<Vec<_>>();
 
     ops.extend([
-        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather
-        // than the caller's choice, because a non-returning term is unsound
-        // exactly when it inhabits a type nothing total inhabits — and `{}` is
-        // inhabited by `()`, so there is nothing to forge.
+        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge.
         pub_fn_marked(
             "exit",
             vec![(Plicity::Explicit, "n", nat())],
             unit(),
             prim(Prim::Exit(name("n"))),
         ),
-        // The wire-code mirror: the guest counterpart of ABI wire codes, so the
-        // standard library compares against named constants the host derives
-        // from the same source.
+        // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
         pub_mod(
             "Status",
             vec![
@@ -643,12 +596,7 @@ fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
     ops
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host
-/// function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`) holds
-/// its type and operations and hoists the type to the `/sys` root; the host
-/// operations, `exit`, and the `Status`/`Poll`/`Mode` code modules sit flat at
-/// the root. Exposed for the build-time prelude artifact builder; production
-/// compilation never lowers it at runtime.
+/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`) holds its type and operations and hoists the type to the `/sys` root; the host operations, `exit`, and the `Status`/`Poll`/`Mode` code modules sit flat at the root. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore) -> Module {
     let mut items = vec![
         pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),

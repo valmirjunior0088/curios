@@ -67,11 +67,7 @@ pub struct TopLet {
     pub signature: LetSignature,
 }
 
-/// A `foreign` declaration: a name and a wire signature, bound to a
-/// host-provided implementation at link time rather than a Curios definition.
-/// `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bin) -> Nat`)
-/// — a closed grammar of the six wire shapes, not an ordinary Curios type —
-/// so there is no name resolution to do and no `= body` form.
+/// A `foreign` declaration: a name and a wire signature, bound to a host-provided implementation at link time rather than a Curios definition. `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bin) -> Nat`) — a closed grammar of the six wire shapes, not an ordinary Curios type — so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
     pub vis_pub: bool,
@@ -79,11 +75,7 @@ pub struct TopForeign {
     pub signature: WireSignature,
 }
 
-/// One payload binder of an `induct` case. The name is optional (`success(A)`
-/// stays positional); it is required when a later payload type or the case
-/// target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit
-/// at the value-constructor function — `cons(@m : Nat, …)`, `m` recoverable from
-/// a later payload's type). Erasure is sort-driven, so no per-field mark is kept.
+/// One payload binder of an `induct` case. The name is optional (`success(A)` stays positional); it is required when a later payload type or the case target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit at the value-constructor function — `cons(@m : Nat, …)`, `m` recoverable from a later payload's type). Erasure is sort-driven, so no per-field mark is kept.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CasePayloadParam {
     pub plicity: Plicity,
@@ -96,9 +88,7 @@ pub struct CasePayloadParam {
 pub struct TopCase {
     pub label: String,
     pub payload: Vec<CasePayloadParam>,
-    /// The parenthesized index expressions after the payload — the case's
-    /// terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to
-    /// `: (Nat/succ(m))`. Present iff the inductive head declares indices.
+    /// The parenthesized index expressions after the payload — the case's terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to `: (Nat/succ(m))`. Present iff the inductive head declares indices.
     pub target: Option<Vec<Term>>,
 }
 
@@ -106,66 +96,42 @@ pub struct TopCase {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct {
     pub vis_pub: bool,
-    /// Whether construction and elimination are available outside the exact
-    /// declaring module. Written as `pub` immediately before the result sort.
+    /// Whether construction and elimination are available outside the exact declaring module. Written as `pub` immediately before the result sort.
     pub rep_pub: bool,
     pub label: String,
-    /// Inductive parameters are *implicit* on every value constructor regardless
-    /// of any mark (the desugar applies those marks), with the call-site `@`
-    /// available to supply one positionally when wanted. On the
-    /// type-constructor function a parameter is *explicit* by default (types
-    /// are written out); a declaration-site `@` makes it implicit there too
-    /// (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the
-    /// indices, so types are written `Eq(x, y)`).
+    /// Inductive parameters are *implicit* on every value constructor regardless of any mark (the desugar applies those marks), with the call-site `@` available to supply one positionally when wanted. On the type-constructor function a parameter is *explicit* by default (types are written out); a declaration-site `@` makes it implicit there too (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the indices, so types are written `Eq(x, y)`).
     pub params: Vec<(Plicity, String, Term)>,
-    /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names
-    /// are optional and documentary — needed only when a later index's type
-    /// depends on an earlier one; they are *not* in scope in the cases.
+    /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names are optional and documentary — needed only when a later index's type depends on an earlier one; they are *not* in scope in the cases.
     pub indices: Vec<(Option<String>, Term)>,
-    /// The arity's result sort — `Type` or `Prop`. Written after the index
-    /// telescope (`: (n : Nat) -> Prop`) or in its place when there are no
-    /// indices (`: Prop`); defaults to `Type` when omitted.
+    /// The arity's result sort — `Type` or `Prop`. Written after the index telescope (`: (n : Nat) -> Prop`) or in its place when there are no indices (`: Prop`); defaults to `Type` when omitted.
     pub result_sort: Term,
     pub cases: Vec<TopCase>,
 }
 
-/// A `struct` declaration: a nominal record. `vis_pub` is the outer `pub` (the
-/// type-former's visibility); `rep_pub` is the declaration-local `pub` before
-/// the result sort (representation exported wherever the type name is visible).
-/// The two markers are orthogonal; every combination is legal. `params` are
-/// written exactly like an inductive's; `fields` reuse the Σ-type field grammar
-/// (label optional, like tuple-type fields).
+/// A `struct` declaration: a nominal record. `vis_pub` is the outer `pub` (the type-former's visibility); `rep_pub` is the declaration-local `pub` before the result sort (representation exported wherever the type name is visible). The two markers are orthogonal; every combination is legal. `params` are written exactly like an inductive's; `fields` reuse the Σ-type field grammar (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct {
     pub vis_pub: bool,
     pub rep_pub: bool,
     pub label: String,
     pub params: Vec<(Plicity, String, Term)>,
-    /// The result sort — `Type` or `Prop`, written `: Sort` after the
-    /// parameters; defaults to `Type` when omitted.
+    /// The result sort — `Type` or `Prop`, written `: Sort` after the parameters; defaults to `Type` when omitted.
     pub result_sort: Term,
     pub fields: Vec<TupleTypeParam>,
 }
 
-/// One field of a `concept` declaration. `is_super` marks a `use`-prefixed
-/// field, whose type must elaborate to a concept application (a superclass
-/// edge, §4.1).
+/// One field of a `concept` declaration. `is_super` marks a `use`-prefixed field, whose type must elaborate to a concept application (a superclass edge, §4.1).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConceptField {
     pub is_super: bool,
     pub label: String,
-    /// `Some` for the signature sugar `label(params) -> type_` — the written
-    /// parameter list, kept verbatim so the printer round-trips it. `into_core`
-    /// undoes the sugar, lowering the field as `label : (params) -> type_`
-    /// (see `ConceptField::desugared_type`). Never set on a super field.
+    /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a super field.
     pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
 }
 
 impl ConceptField {
-    /// The field's type with the signature sugar undone: the written type when
-    /// the field is plain, the Π-type `(params) -> type_` when it was written
-    /// `label(params) -> type_`.
+    /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
     pub(crate) fn desugared_type(&self) -> Term {
         match &self.func_params {
             Some(params) => Subterm::FuncType(FuncType {
@@ -178,16 +144,11 @@ impl ConceptField {
     }
 }
 
-/// A `concept` declaration: a record-shaped interface. It lowers to a
-/// representation-public nominal structure plus a concept-registry entry and,
-/// into its own namespace, one method-wrapper `let` per field (§4.1).
+/// A `concept` declaration: a record-shaped interface. It lowers to a representation-public nominal structure plus a concept-registry entry and, into its own namespace, one method-wrapper `let` per field (§4.1).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept {
     pub vis_pub: bool,
-    /// Representation visibility, independent from `vis_pub` (the name's):
-    /// `: pub Type` is transparent, `: Type` is sealed — witnesses and
-    /// dictionary literals only in the declaring module, exactly like a
-    /// private-representation struct.
+    /// Representation visibility, independent from `vis_pub` (the name's): `: pub Type` is transparent, `: Type` is sealed — witnesses and dictionary literals only in the declaring module, exactly like a private-representation struct.
     pub rep_pub: bool,
     pub label: String,
     pub params: Vec<(Plicity, String, Term)>,
@@ -195,11 +156,7 @@ pub struct TopConcept {
     pub fields: Vec<ConceptField>,
 }
 
-/// One implementation field of a `witness` declaration: `label = value`, or
-/// the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar
-/// with the label mandatory. The sugar is kept verbatim (the printer
-/// round-trips it); `into_core` undoes it when it builds the desugared
-/// struct literal.
+/// One implementation field of a `witness` declaration: `label = value`, or the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar with the label mandatory. The sugar is kept verbatim (the printer round-trips it); `into_core` undoes it when it builds the desugared struct literal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
     pub label: String,
@@ -207,26 +164,14 @@ pub struct WitnessField {
     pub value: Term,
 }
 
-/// One entry of a witness body: an implementation field, or a `use <term>`
-/// fill for one of the concept's `use`-marked (superclass) field positions —
-/// the same entry forms a concept struct literal admits.
+/// One entry of a witness body: an implementation field, or a `use <term>` fill for one of the concept's `use`-marked (superclass) field positions — the same entry forms a concept struct literal admits.
 #[derive(Debug, Clone, PartialEq)]
 pub enum WitnessEntry {
     Field(WitnessField),
     Use(Term),
 }
 
-/// A `witness` declaration: a registered inhabitant of a concept. Witnesses
-/// are anonymous — they are only ever reached through resolution (or an
-/// explicit `use <term>` carrying an ordinary value), so there is no name and
-/// no `pub`. The declaration desugars to a compiler-named top-level definition
-/// `let witness@N(tele) -> C(args) = C(args) { … }` (§4.3) registered in the
-/// program-wide witness table; diagnostics identify it by concept, key, and
-/// declaring module. Surface syntax writes a nonempty telescope as
-/// `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use`
-/// parameters (explicit binders are rejected at lowering). `concept`/`args`
-/// are the witnessed concept application, reused verbatim as the
-/// struct-literal head.
+/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C(args) { … }` (§4.3) registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application, reused verbatim as the struct-literal head.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopWitness {
     pub params: Vec<FuncSugarParam>,
@@ -266,10 +211,7 @@ impl Module {
         )
     }
 
-    /// Read and parse a standalone module while retaining its source path for
-    /// diagnostics. The prelude artifact builder uses this for `/syn` and
-    /// `/std`; ordinary compilation reaches file-backed modules through
-    /// [`RootSource`](crate::RootSource).
+    /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/syn` and `/std`; ordinary compilation reaches file-backed modules through [`RootSource`](crate::RootSource).
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {

@@ -4,23 +4,18 @@ use {
     std::path::PathBuf,
 };
 
-/// Optional filesystem source for the entry program's own file-backed modules.
-/// Fixed `/sys`, `/syn`, and `/std` content is build-scoped state owned by
-/// `curios-prelude`, not a runtime source mounted through this loader.
+/// Optional filesystem source for the entry program's own file-backed modules. Fixed `/sys`, `/syn`, and `/std` content is build-scoped state owned by `curios-prelude`, not a runtime source mounted through this loader.
 pub struct RootSource {
     entry_base: Option<PathBuf>,
 }
 
 impl RootSource {
-    /// No further modules resolve — every `mod` declaration in the program
-    /// must carry an inline body. Used by tests exercising resolution logic
-    /// in isolation, and by embedders (`curios-web`) with no filesystem.
+    /// No further modules resolve — every `mod` declaration in the program must carry an inline body. Used by tests exercising resolution logic in isolation, and by embedders (`curios-web`) with no filesystem.
     pub fn none() -> RootSource {
         RootSource { entry_base: None }
     }
 
-    /// Disk-backed modules rooted at a directory: qualifier `a/b/c` reads
-    /// `base/a/b/c.crs`.
+    /// Disk-backed modules rooted at a directory: qualifier `a/b/c` reads `base/a/b/c.crs`.
     pub fn file_system(base: impl Into<PathBuf>) -> RootSource {
         RootSource {
             entry_base: Some(base.into()),

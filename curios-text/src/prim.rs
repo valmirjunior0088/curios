@@ -5,25 +5,17 @@ use {
     std::sync::Arc,
 };
 
-/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a
-/// `..`-spread whose term contributes a whole `Lst` run. Lowering groups
-/// consecutive elements into literal chunks and splices the spreads with the
-/// n-ary `Lst/concat`; a spread-free literal lowers to a plain `Lst` exactly
-/// as before.
+/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `Lst` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `Lst/concat`; a spread-free literal lowers to a plain `Lst` exactly as before.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LstEntry {
     Elem(Term),
     Spread(Term),
 }
 
-/// One segment of a `Bytes` literal `x\00\..bytes\01` — a run of literal bytes,
-/// or a `\..`-spread whose term contributes a whole `Bytes` run. The literal is
-/// a single whitespace-free lexical unit; a spread operand is a glued name
-/// path (projections included) or a parenthesized term.
+/// One segment of a `Bytes` literal `x\00\..bytes\01` — a run of literal bytes, or a `\..`-spread whose term contributes a whole `Bytes` run. The literal is a single whitespace-free lexical unit; a spread operand is a glued name path (projections included) or a parenthesized term.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinSegment {
-    /// A run of literal bytes. Invariant (maintained by the parser): never
-    /// empty, and never adjacent to another `Bytes` run.
+    /// A run of literal bytes. Invariant (maintained by the parser): never empty, and never adjacent to another `Bytes` run.
     Bytes(Vec<u8>),
     Spread(Term),
 }
@@ -143,8 +135,7 @@ pub enum Prim {
     HandleType,
     Handle(u32),
     HandleEql(Term, Term),
-    // A store-described host call; the prelude bakes it into the `/sys/Handle`
-    // declaration whose parameters the argument terms name.
+    // A store-described host call; the prelude bakes it into the `/sys/Handle` declaration whose parameters the argument terms name.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     Exit(Term),
     CellType(Term),

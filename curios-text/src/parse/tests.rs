@@ -61,8 +61,7 @@ fn num_lit(magnitude: u32, signed: bool, negative: bool) -> Term {
 
 #[test]
 fn parse_integer_literals_are_polymorphic_num_lits() {
-    // Integer literals are polymorphic `NumLit`s; the sign is optional and only
-    // records whether `Nat` is still a candidate. Decimals stay monomorphic `Flt`.
+    // Integer literals are polymorphic `NumLit`s; the sign is optional and only records whether `Nat` is still a candidate. Decimals stay monomorphic `Flt`.
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
     assert_eq!("+42".parse::<Term>().unwrap(), num_lit(42, true, false));
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, true, true));
@@ -99,8 +98,7 @@ fn parse_prim() {
 
 #[test]
 fn parse_infix_precedence_and_associativity() {
-    // `a + b * c` → `a + (b * c)` (× binds tighter); `a - b - c` → `(a - b) - c`
-    // (left-associative); comparison binds looser than arithmetic.
+    // `a + b * c` → `a + (b * c)` (× binds tighter); `a - b - c` → `(a - b) - c` (left-associative); comparison binds looser than arithmetic.
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
     let infix = |op, left, right| -> Term { Subterm::Infix(Infix { op, left, right }).into() };
 
@@ -144,8 +142,7 @@ fn parse_infix_requires_spaces_and_disambiguates_signs() {
         })
         .into()
     );
-    // No space ⇒ the operator is not recognised, leaving a trailing token: a
-    // parse error rather than a silent reinterpretation.
+    // No space ⇒ the operator is not recognised, leaving a trailing token: a parse error rather than a silent reinterpretation.
     assert!("a-42".parse::<Term>().is_err());
     assert!("a +42".parse::<Term>().is_err());
     // `!=` is the not-equal operator, not a postfix bang followed by `=`.
@@ -835,8 +832,7 @@ fn parse_implicit_marks_on_let_shorthand_and_inductive_params() {
         other => panic!("expected a func let, got {other:?}"),
     }
 
-    // An inductive parameter may carry `@`, making it implicit at the type
-    // constructor (it is implicit at the value constructors either way).
+    // An inductive parameter may carry `@`, making it implicit at the type constructor (it is implicit at the value constructors either way).
     let m = "induct Result(@A : Type, E : Type) : Type\n| success(A)\nend"
         .parse::<Module>()
         .unwrap();
@@ -917,8 +913,7 @@ fn parse_inductive_match_multi_binder() {
 
 #[test]
 fn parse_match_omitted_motive() {
-    // Dropping the `: motive` clause entirely yields `motive: None`; the
-    // elaborator later lowers it to a fresh metavariable (sugar for `: _`).
+    // Dropping the `: motive` clause entirely yields `motive: None`; the elaborator later lowers it to a fresh metavariable (sugar for `: _`).
     assert_eq!(
         "match x | foo(y) => y end".parse::<Term>().unwrap(),
         Subterm::Match(Match {
@@ -948,9 +943,7 @@ fn omitted_motive_round_trips() {
 
 #[test]
 fn at_on_a_binder_type_is_a_parse_error() {
-    // Erasure is sort-driven now: the erasure axis is retired, so `@` on a
-    // binder's *type* (the old erased marker) no longer parses. `@` on a *name*
-    // is plicity and still parses; the two positions never collide.
+    // Erasure is sort-driven now: the erasure axis is retired, so `@` on a binder's *type* (the old erased marker) no longer parses. `@` on a *name* is plicity and still parses; the two positions never collide.
     let implicit = "(@n : Nat) -> Nat".parse::<Term>().unwrap();
     match &*implicit {
         Subterm::FuncType(ft) => assert_eq!(ft.params[0].plicity, Plicity::Implicit),
@@ -977,8 +970,7 @@ fn at_on_a_binder_type_is_a_parse_error() {
 
 #[test]
 fn parse_goal() {
-    // A written `?` is a goal — reported at zonk — never a silent
-    // `Subterm::Hole`, which only desugars mint.
+    // A written `?` is a goal — reported at zonk — never a silent `Subterm::Hole`, which only desugars mint.
     assert_eq!("?".parse::<Term>().unwrap(), Subterm::Goal.into());
 }
 
@@ -1004,8 +996,7 @@ fn underscore_prefixed_name_is_not_a_hole() {
 
 #[test]
 fn parse_local_let_without_type() {
-    // A local `let x = e` omits the type; it parses to `Name { type_: None }`,
-    // and the core elaborator infers the body's type.
+    // A local `let x = e` omits the type; it parses to `Name { type_: None }`, and the core elaborator infers the body's type.
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
@@ -1098,15 +1089,13 @@ fn parse_func_without_annotation_still_works() {
 
 #[test]
 fn top_level_let_requires_a_type() {
-    // The optional-type form is local-only: a module-level `let` without a type
-    // is a parse error.
+    // The optional-type form is local-only: a module-level `let` without a type is a parse error.
     assert!("let x = Type;".parse::<Module>().is_err());
 }
 
 #[test]
 fn rec_binding_requires_a_type() {
-    // `rec` types cannot be inferred from their (mutually recursive) bodies, so a
-    // typeless `rec` binding is a parse error — both at the top level and locally.
+    // `rec` types cannot be inferred from their (mutually recursive) bodies, so a typeless `rec` binding is a parse error — both at the top level and locally.
     assert!("rec f = Type;".parse::<Module>().is_err());
     assert!("rec f = Type; f".parse::<Term>().is_err());
 }
@@ -1117,9 +1106,7 @@ fn name(label: &str) -> Term {
 
 #[test]
 fn let_bang_is_no_longer_grammar() {
-    // The `let ! = <bind>;` header is gone: `!` sequences through the `Monad`
-    // concept without one. `!` is not a binder identifier, so the old form is a
-    // parse error rather than a `let`.
+    // The `let ! = <bind>;` header is gone: `!` sequences through the `Monad` concept without one. `!` is not a binder identifier, so the old form is a parse error rather than a `let`.
     assert!("let ! = bind; body".parse::<Term>().is_err());
 }
 
@@ -1167,8 +1154,7 @@ fn parse_bang_in_let_binding() {
 
 #[test]
 fn parse_bang_in_match_scrutinee_and_arm() {
-    // A `!` in the scrutinee and a `!` inside an arm are distinct `Bang` nodes;
-    // the elaborator hoists them into different regions.
+    // A `!` in the scrutinee and a `!` inside an arm are distinct `Bang` nodes; the elaborator hoists them into different regions.
     let term = "match x! | foo(z) => y! end".parse::<Term>().unwrap();
     match term.into_subterm() {
         Subterm::Match(m) => {
@@ -1238,8 +1224,7 @@ fn bang_round_trips() {
 
 #[test]
 fn parse_struct_visibility_spellings() {
-    // The two orthogonal markers: the outer `pub` (`vis_pub`) exports the type,
-    // while the declaration-local `pub` (`rep_pub`) exports its representation.
+    // The two orthogonal markers: the outer `pub` (`vis_pub`) exports the type, while the declaration-local `pub` (`rep_pub`) exports its representation.
     for (source, vis_pub, rep_pub) in [
         ("struct Foo : Type { x : Type } u", false, false),
         ("struct Foo : pub Type { x : Type } u", false, true),
@@ -1305,8 +1290,7 @@ fn record_is_an_identifier_and_legacy_declarations_are_not_grammar() {
 
 #[test]
 fn representation_pub_is_declaration_local() {
-    // Concepts take the representation marker like structs and inductives;
-    // ordinary sort positions still reject it — `pub Type` is not a term.
+    // Concepts take the representation marker like structs and inductives; ordinary sort positions still reject it — `pub Type` is not a term.
     "pub concept C : pub Type {} c"
         .parse::<Entrypoint>()
         .expect("a concept takes a representation sort");
@@ -1354,9 +1338,7 @@ fn parse_struct_literal_disambiguates_from_tuple_type() {
 
 #[test]
 fn struct_round_trips() {
-    // Declarations (all four visibility spellings, parameterized and
-    // parameterless) and literals (inferred / pinned / hole-pinned head, named
-    // and positional fields) survive a print → re-parse cycle unchanged.
+    // Declarations (all four visibility spellings, parameterized and parameterless) and literals (inferred / pinned / hole-pinned head, named and positional fields) survive a print → re-parse cycle unchanged.
     for source in [
         "struct Foo : Type { x : Type } u",
         "struct Foo : pub Type { x : Type } u",
@@ -1394,10 +1376,7 @@ fn struct_round_trips() {
 
 #[test]
 fn parse_function_field_sugar_in_types() {
-    // The signature sugar `label(params) -> T` is admitted by every Σ-type-
-    // shaped field list — tuple types and struct declarations — and is
-    // kept as written: the AST node carries the parameter list (`func_params`)
-    // and the output type; `into_core` undoes the sugar.
+    // The signature sugar `label(params) -> T` is admitted by every Σ-type-shaped field list — tuple types and struct declarations — and is kept as written: the AST node carries the parameter list (`func_params`) and the output type; `into_core` undoes the sugar.
     let term = "{ len(s : Str) -> Nat, x : Nat }".parse::<Term>().unwrap();
     let Subterm::TupleType(TupleType { fields }) = term.as_subterm() else {
         panic!("expected a tuple type");
@@ -1426,10 +1405,7 @@ fn parse_function_field_sugar_in_types() {
 
 #[test]
 fn parse_function_field_sugar_in_values() {
-    // The definition sugar `label(params) = body` is admitted by every
-    // tuple-shaped field list — tuple literals and struct literals — and is
-    // kept as written: the AST node carries the parameter list (`func_params`)
-    // and the body; `into_core` undoes the sugar.
+    // The definition sugar `label(params) = body` is admitted by every tuple-shaped field list — tuple literals and struct literals — and is kept as written: the AST node carries the parameter list (`func_params`) and the body; `into_core` undoes the sugar.
     let term = "(bump(x) = f(x), 3)".parse::<Term>().unwrap();
     let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
         panic!("expected a tuple literal");
@@ -1470,8 +1446,7 @@ fn parse_function_field_sugar_in_values() {
 
 #[test]
 fn positional_fields_that_start_like_the_sugar_backtrack() {
-    // A positional application field is not the sugar: without `->` / `=` the
-    // sugared alternative backtracks and the field re-parses as a term.
+    // A positional application field is not the sugar: without `->` / `=` the sugared alternative backtracks and the field re-parses as a term.
     let term = "{ Lst(Nat), Nat }".parse::<Term>().unwrap();
     let Subterm::TupleType(TupleType { fields }) = term.as_subterm() else {
         panic!("expected a tuple type");
@@ -1491,9 +1466,7 @@ fn positional_fields_that_start_like_the_sugar_backtrack() {
 
 #[test]
 fn function_field_sugar_round_trips() {
-    // The retained sugar survives print → re-parse unchanged in every
-    // position: Σ-types, struct declarations, tuple literals (incl. the
-    // one-element form), struct literals, concepts, and witnesses.
+    // The retained sugar survives print → re-parse unchanged in every position: Σ-types, struct declarations, tuple literals (incl. the one-element form), struct literals, concepts, and witnesses.
     for source in [
         "{ len(s : Str) -> Nat, x : Nat }",
         "(bump(x) = f(x), 3)",
@@ -1525,10 +1498,7 @@ fn function_field_sugar_round_trips() {
 
 #[test]
 fn pattern_binders_round_trip() {
-    // Tuple/struct destructuring patterns at `let`, lambda-parameter, and
-    // function-definition-sugar-parameter position: plain names still
-    // round-trip unchanged, and compound patterns (nested, field-punned, or
-    // mixed with plain-name parameters) survive print → re-parse.
+    // Tuple/struct destructuring patterns at `let`, lambda-parameter, and function-definition-sugar-parameter position: plain names still round-trip unchanged, and compound patterns (nested, field-punned, or mixed with plain-name parameters) survive print → re-parse.
     for source in [
         "let x = pair; x",                        // plain name, unchanged
         "let (x, y) = pair; x",                   // tuple pattern
@@ -1540,9 +1510,7 @@ fn pattern_binders_round_trip() {
         "(Point { x, y } : Point) => x",          // struct-pattern lambda param
         "((x, y) : Point, z : Nat) => x",         // mixed pattern/plain-name params
         "let f((x, y) : Point) -> Nat = x; f(p)", // tuple-pattern func-sugar param
-        // Function-definition-sugar parameters always require an explicit
-        // `: T` annotation (unlike lambda parameters); a struct pattern's
-        // head name is descriptive only, never load-bearing as a type.
+        // Function-definition-sugar parameters always require an explicit `: T` annotation (unlike lambda parameters); a struct pattern's head name is descriptive only, never load-bearing as a type.
         "let f((x, y) : Point, Point { z, w = ww } : Point) -> Nat = x + y + z + ww; f(p, q)",
     ] {
         let term = source.parse::<Term>().unwrap();
@@ -1556,8 +1524,7 @@ fn pattern_binders_round_trip() {
 
 #[test]
 fn use_entries_are_struct_literal_only() {
-    // A `use <term>` entry parses in a struct literal (a concept literal by
-    // intent — non-concept heads are rejected at elaboration, not parse)...
+    // A `use <term>` entry parses in a struct literal (a concept literal by intent — non-concept heads are rejected at elaboration, not parse)...
     let term = "Ord(Nat) { use my_eql, cmp = f }".parse::<Term>().unwrap();
     let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
         panic!("expected a struct literal");
@@ -1565,8 +1532,7 @@ fn use_entries_are_struct_literal_only() {
     assert!(matches!(entries[0], StructLitEntry::Use(_)));
     assert!(matches!(entries[1], StructLitEntry::Field(_)));
 
-    // ...but not in a tuple literal: `use` is reserved, so the tuple parser
-    // cannot take it as a field, and the term fails to parse.
+    // ...but not in a tuple literal: `use` is reserved, so the tuple parser cannot take it as a field, and the term fails to parse.
     assert!("(use my_eql, 2)".parse::<Term>().is_err());
 }
 
@@ -1590,16 +1556,14 @@ fn spread_entries_are_struct_literal_only() {
     assert_eq!(params.len(), 2);
     assert!(matches!(entries[0], StructLitEntry::Spread(_)));
 
-    // A misplaced spread still parses — position and multiplicity are
-    // rejected at elaboration, not parse (like non-concept `use` entries).
+    // A misplaced spread still parses — position and multiplicity are rejected at elaboration, not parse (like non-concept `use` entries).
     let term = "Pair { fst = a, ..p }".parse::<Term>().unwrap();
     let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
         panic!("expected a struct literal");
     };
     assert!(matches!(entries[1], StructLitEntry::Spread(_)));
 
-    // No tuple spread: `..` is not a term prefix, so the tuple parser
-    // cannot take it as a field, and the term fails to parse.
+    // No tuple spread: `..` is not a term prefix, so the tuple parser cannot take it as a field, and the term fails to parse.
     assert!("(..p, 2)".parse::<Term>().is_err());
 }
 
@@ -1696,9 +1660,7 @@ fn bin_literal_spread_segments() {
     };
     assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
 
-    // A call is atomic: its argument list is self-delimiting, so it glues
-    // without parens — interior whitespace included — and the literal
-    // continues at the raw closing paren. A glued `!` binds to the operand.
+    // A call is atomic: its argument list is self-delimiting, so it glues without parens — interior whitespace included — and the literal continues at the raw closing paren. A glued `!` binds to the operand.
     let term = r"x\..f( x , y )\01".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
@@ -1715,8 +1677,7 @@ fn bin_literal_spread_segments() {
         matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Bang(_)))
     );
 
-    // A parenthesized operand takes a full term (interior whitespace is
-    // invisible), for the non-atomic shapes — and admits glued suffixes.
+    // A parenthesized operand takes a full term (interior whitespace is invisible), for the non-atomic shapes — and admits glued suffixes.
     let term = r"x\..( f(x) )\01".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
@@ -1736,9 +1697,7 @@ fn bin_literal_spread_segments() {
         Subterm::Prim(Prim::Bin(Grain::B, vec![])).into()
     );
 
-    // TIGHT: the literal is one whitespace-free lexical unit. A spaced byte
-    // after an operand is not part of the literal (and strands as trailing
-    // junk here), and the operand itself must be glued to the `\..`.
+    // TIGHT: the literal is one whitespace-free lexical unit. A spaced byte after an operand is not part of the literal (and strands as trailing junk here), and the operand itself must be glued to the `\..`.
     assert!(r"x\..xs \01".parse::<Term>().is_err());
     assert!(r"x\.. xs".parse::<Term>().is_err());
     // A reserved keyword is not a name, glued or otherwise.
@@ -1747,8 +1706,7 @@ fn bin_literal_spread_segments() {
 
 #[test]
 fn list_bits_and_bytes_spreads_round_trip() {
-    // String equality pins the printer's canonical tight, glued forms for both
-    // grains, including their distinct empty literals.
+    // String equality pins the printer's canonical tight, glued forms for both grains, including their distinct empty literals.
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
@@ -1777,9 +1735,7 @@ fn list_bits_and_bytes_spreads_round_trip() {
 
 #[test]
 fn field_lists_admit_a_trailing_comma() {
-    // Every brace/paren field list — Σ-types, struct declarations,
-    // tuple literals, struct literals, concepts, witnesses — admits (and
-    // drops) one trailing comma after its last field.
+    // Every brace/paren field list — Σ-types, struct declarations, tuple literals, struct literals, concepts, witnesses — admits (and drops) one trailing comma after its last field.
     for (with, without) in [
         ("{ x : Nat, y : Nat, }", "{ x : Nat, y : Nat }"),
         ("(a, b,)", "(a, b)"),
@@ -1817,8 +1773,7 @@ fn field_lists_admit_a_trailing_comma() {
         );
     }
 
-    // A one-element positional tuple's comma stays significant, and a lone or
-    // doubled comma stays rejected.
+    // A one-element positional tuple's comma stays significant, and a lone or doubled comma stays rejected.
     assert!(matches!(
         "(x,)".parse::<Term>().unwrap().as_subterm(),
         Subterm::Tuple(_)
@@ -1829,8 +1784,7 @@ fn field_lists_admit_a_trailing_comma() {
 
 #[test]
 fn inductive_match_round_trips() {
-    // Constructor-arm rows survive print → re-parse: distinct tags, a nullary
-    // `nil()`, and a wildcard payload binder.
+    // Constructor-arm rows survive print → re-parse: distinct tags, a nullary `nil()`, and a wildcard payload binder.
     for source in [
         "match xs | cons(x, xs) => x | nil() => y end",
         "match xs | cons(x, _) => x | nil() => y end",
@@ -1847,38 +1801,30 @@ fn inductive_match_round_trips() {
 
 #[test]
 fn matrix_match_round_trips() {
-    // Nested/tuple/struct match-arm patterns — the matrix pattern compiler's
-    // grammar — survive print → re-parse, including the spec's own
-    // motivating example (a single tupled head).
+    // Nested/tuple/struct match-arm patterns — the matrix pattern compiler's grammar — survive print → re-parse, including the spec's own motivating example (a single tupled head).
     for source in [
         // A constructor nested inside another constructor's payload.
         "match x | some(some(y)) => y | some(none()) => y | none() => y end",
         // A tuple sub-pattern nested inside a constructor's payload.
         "match x | some((a, b)) => a | none() => a end",
-        // A struct sub-pattern nested inside a constructor's payload,
-        // including field-punning.
+        // A struct sub-pattern nested inside a constructor's payload, including field-punning.
         "match x | some(Point { a, b }) => a | none() => a end",
         // A mixed row: one argument concrete, the other a plain binder.
         "match x | pair(some(a), b) => a | pair(none(), b) => b end",
-        // A tuple value as the match target directly (no constructor tag at
-        // all), and a struct value likewise — the "structs/tuples as match
-        // targets" feature.
+        // A tuple value as the match target directly (no constructor tag at all), and a struct value likewise — the "structs/tuples as match targets" feature.
         "match p | (a, b) => a end",
         "match p | Point { a, b } => a end",
-        // The spec's own motivating example: a single tupled head, four
-        // fully-enumerated rows over two independent `Option`-shaped columns.
+        // The spec's own motivating example: a single tupled head, four fully-enumerated rows over two independent `Option`-shaped columns.
         "match p : R\n\
          | (some(x), some(y)) => f(x, y)\n\
          | (some(x), none()) => g(x)\n\
          | (none(), some(y)) => h(y)\n\
          | (none(), none()) => d\n\
          end",
-        // Nat literal leaves nested inside a constructor payload, with and
-        // without the optional induction hypothesis.
+        // Nat literal leaves nested inside a constructor payload, with and without the optional induction hypothesis.
         "match o | some(0) => y | some(n + 1; ih) => y | none() => y end",
         "match o | some(0) => y | some(n + 1) => n | none() => y end",
-        // Lst literal leaves nested inside a tuple field, with and without
-        // the optional induction hypothesis.
+        // Lst literal leaves nested inside a tuple field, with and without the optional induction hypothesis.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
         "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
         // Bits and Bytes literal leaves nested inside a constructor payload.
@@ -1886,15 +1832,11 @@ fn matrix_match_round_trips() {
         r#"match o | some(b\h\..t; ih) => y | some(b\) => y | none() => y end"#,
         // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
-        // The four hardcoded carriers as *headed* matches — no longer separate
-        // surface variants, just matrices over that carrier's own leaves. Each
-        // must survive print → re-parse identically to prove the collapse
-        // preserves their surface syntax.
+        // The four hardcoded carriers as *headed* matches — no longer separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
         "match b | false => x | true => y end",
         "match n | 0 => a | m + 1; ih => b end",
         "match n | 0 => a | m + 1 => b end",
-        // Nat literal dispatch (the old `NatMatch::Dispatch`): literal cases and
-        // the mandatory `| _ =>` default.
+        // Nat literal dispatch (the old `NatMatch::Dispatch`): literal cases and the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t]; ih => c end",
         r#"match a | x\ => b | x\h\..t; ih => c end"#,
@@ -1909,10 +1851,7 @@ fn matrix_match_round_trips() {
     }
 }
 
-// The motive is an ordinary term, so every spelling it can take must survive
-// print → re-parse with arms following it. There is no motive grammar and no
-// backtracking: a motive term always terminates at the first `|`, because `|`
-// is not an infix operator.
+// The motive is an ordinary term, so every spelling it can take must survive print → re-parse with arms following it. There is no motive grammar and no backtracking: a motive term always terminates at the first `|`, because `|` is not an infix operator.
 #[test]
 fn match_motive_spellings_round_trip() {
     for source in [
@@ -1924,8 +1863,7 @@ fn match_motive_spellings_round_trip() {
         "match v : (_, _) => Nat\n| nil() => a\n| cons(m, x, xs) => b\nend",
         // A motive naming a top-level family, eta-expanded by elaboration.
         "match p : discriminates_eq\n| refl(z) => e\nend",
-        // A motive whose body is itself a Π type — the shape that made the old
-        // constant rung undecidable by shape.
+        // A motive whose body is itself a Π type — the shape that made the old constant rung undecidable by shape.
         "match b : (_) => (Nat) -> Nat\n| true => f\n| false => g\nend",
         // A motive on each hardcoded carrier, whose arity is 1 throughout.
         "match n : (m) => P(m)\n| 0 => a\n| p + 1; ih => b\nend",
@@ -1942,10 +1880,7 @@ fn match_motive_spellings_round_trip() {
     }
 }
 
-// `choose`: no head term, `Bool` condition arms, and a mandatory `| _ =>`
-// default. A bare `_` condition parses as the default (not a `Name` condition
-// arm) — the `flat_map` guard in `parse_cond_arm` sees it and lets `many0`
-// stop.
+// `choose`: no head term, `Bool` condition arms, and a mandatory `| _ =>` default. A bare `_` condition parses as the default (not a `Name` condition arm) — the `flat_map` guard in `parse_cond_arm` sees it and lets `many0` stop.
 #[test]
 fn parse_choose() {
     assert_eq!(
@@ -1983,8 +1918,7 @@ fn parse_choose_default_only() {
     );
 }
 
-// A condition whose head merely *begins* with `_` (`_ready`) is an ordinary
-// condition, not the default — the guard rejects only a lone `_`.
+// A condition whose head merely *begins* with `_` (`_ready`) is an ordinary condition, not the default — the guard rejects only a lone `_`.
 #[test]
 fn parse_choose_leading_underscore_condition() {
     assert_eq!(
@@ -1999,8 +1933,7 @@ fn parse_choose_leading_underscore_condition() {
     );
 }
 
-// A bind arm `| pattern = value =>` parses as a `ChooseTest::Bind`; a
-// condition arm sharing a `|` with it stays a `Cond`.
+// A bind arm `| pattern = value =>` parses as a `ChooseTest::Bind`; a condition arm sharing a `|` with it stays a `Cond`.
 #[test]
 fn parse_choose_bind_arm() {
     assert_eq!(
@@ -2047,12 +1980,7 @@ fn choose_round_trips() {
     }
 }
 
-// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors
-// `parse_infix_requires_spaces_and_disambiguates_signs`'s own operator
-// spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at
-// all — it falls through to a plain `Binder("n")`, leaving `+1; ih` as
-// trailing garbage the arm grammar rejects, a parse error rather than a
-// silent reinterpretation.
+// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors `parse_infix_requires_spaces_and_disambiguates_signs`'s own operator spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at all — it falls through to a plain `Binder("n")`, leaving `+1; ih` as trailing garbage the arm grammar rejects, a parse error rather than a silent reinterpretation.
 #[test]
 fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
     assert!(
@@ -2069,9 +1997,7 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
 
 #[test]
 fn parse_concept_item() {
-    // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Order`
-    // (kept as written — `func_params` carries the parameter list; `into_core`
-    // undoes the sugar), and a plain `name : T` field.
+    // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Order` (kept as written — `func_params` carries the parameter list; `into_core` undoes the sugar), and a plain `name : T` field.
     let source = "\
         concept Ord(A : Type) : Type { \
             use Eql(A), \
@@ -2089,14 +2015,12 @@ fn parse_concept_item() {
     // `: Type` without `pub` is a sealed (private-representation) concept.
     assert!(!concept.rep_pub);
 
-    // The `use` field is a superclass edge — anonymous, so its label is empty
-    // (lowering mints an internal `_superN`).
+    // The `use` field is a superclass edge — anonymous, so its label is empty (lowering mints an internal `_superN`).
     assert!(concept.fields[0].is_super);
     assert_eq!(concept.fields[0].label, "");
     assert_eq!(concept.fields[0].func_params, None);
 
-    // The sugar field keeps its written parameter list; the annotation slot
-    // holds the output type, and only `desugared_type` builds the Π-type.
+    // The sugar field keeps its written parameter list; the annotation slot holds the output type, and only `desugared_type` builds the Π-type.
     assert!(!concept.fields[1].is_super);
     assert_eq!(concept.fields[1].label, "cmp");
     let params = concept.fields[1].func_params.as_ref().unwrap();
@@ -2133,8 +2057,7 @@ fn out_stays_a_valid_parameter_name() {
 
 #[test]
 fn concept_representation_sort_carries_visibility() {
-    // `: pub Type` marks the representation transparent; the marker is
-    // independent from the name's `pub`.
+    // `: pub Type` marks the representation transparent; the marker is independent from the name's `pub`.
     let source = "concept Show(A : Type) : pub Type { show : A } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
@@ -2152,9 +2075,7 @@ fn concept_out_marker_is_rejected() {
 
 #[test]
 fn parse_witness_item() {
-    // A premised witness: an `@` binder, a `use` premise, an explicit
-    // `use <term>` fill for the concept's superclass field, and the definition
-    // sugar (`cmp(a, b) = ...`).
+    // A premised witness: an `@` binder, a `use` premise, an explicit `use <term>` fill for the concept's superclass field, and the definition sugar (`cmp(a, b) = ...`).
     let source = "\
         satisfy (@A : Type, use Ord(A)) => Ord(Lst(A)) { \
             use eql_lst, \
@@ -2173,10 +2094,7 @@ fn parse_witness_item() {
     assert_eq!(witness.params[0].plicity, Plicity::Implicit);
     assert_eq!(witness.params[1].plicity, Plicity::Witness);
 
-    // The definition-sugar field keeps its written parameter list; the value
-    // slot holds the body, and only the struct-literal lowering builds the
-    // lambda (via `TupleField::desugared_value`). The `use eql_lst` entry fills
-    // the concept's `use`-marked field without naming it.
+    // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The `use eql_lst` entry fills the concept's `use`-marked field without naming it.
     assert_eq!(witness.entries.len(), 2);
     let WitnessEntry::Use(fill) = &witness.entries[0] else {
         panic!("expected a use fill");
@@ -2229,8 +2147,7 @@ fn parse_use_argument_form() {
 
 #[test]
 fn concept_witness_use_round_trip() {
-    // Concept/witness declarations and `use` binders/arguments survive a
-    // print → re-parse cycle unchanged.
+    // Concept/witness declarations and `use` binders/arguments survive a print → re-parse cycle unchanged.
     for source in [
         "concept Show(A : Type) : Type { show : A } u",
         "pub concept Show(A : Type) : pub Type { show : A } u",
@@ -2272,9 +2189,7 @@ fn witness_telescope_requires_nonempty_separator_form() {
     }
 }
 
-// Every comma-separated list admits one optional trailing comma: the trailed
-// spelling parses to exactly the tree of the untrailed spelling. One pair per
-// list-owning production.
+// Every comma-separated list admits one optional trailing comma: the trailed spelling parses to exactly the tree of the untrailed spelling. One pair per list-owning production.
 #[test]
 fn trailing_comma_accepted_in_every_comma_list() {
     for (trailed, plain) in [
@@ -2290,8 +2205,7 @@ fn trailing_comma_accepted_in_every_comma_list() {
         // List literals, with and without spreads.
         ("[1, 2,]", "[1, 2]"),
         ("[head, ..tail,]", "[head, ..tail]"),
-        // Tuple literals already admitted the trailing comma; pinned here for
-        // completeness alongside the newly-uniform lists.
+        // Tuple literals already admitted the trailing comma; pinned here for completeness alongside the newly-uniform lists.
         ("(1, true,)", "(1, true)"),
         // Tuple types (field lists were already trailing; pinned).
         ("{Nat, Bool,}", "{Nat, Bool}"),
@@ -2376,8 +2290,7 @@ fn trailing_comma_accepted_in_top_level_comma_lists() {
     }
 }
 
-// A separator alone is not a list: the trailing comma is admitted only after
-// at least one item, and a lone comma still fails.
+// A separator alone is not a list: the trailing comma is admitted only after at least one item, and a lone comma still fails.
 #[test]
 fn lone_comma_is_not_an_empty_list() {
     assert!("f(,)".parse::<Term>().is_err());

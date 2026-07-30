@@ -12,10 +12,7 @@ pub(super) fn parse_prop<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A polymorphic integer literal: an optional sign glued to a magnitude
-// (decimal, `0x`, or `0b`). Its concrete type (`Nat`/`Int`/`Flt`) is chosen by
-// elaboration — a written sign rules out `Nat`. The sign must touch the digits;
-// `- 42` (spaced) is the subtraction operator, not a negative literal.
+// A polymorphic integer literal: an optional sign glued to a magnitude (decimal, `0x`, or `0b`). Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`. The sign must touch the digits; `- 42` (spaced) is the subtraction operator, not a negative literal.
 pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
     catch(
         catch(take_exact("-"))
@@ -190,15 +187,7 @@ pub(super) fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A `Bin` spread operand under the TIGHT rule: it must end without consuming
-// any whitespace, so the segment loop can require the next segment to begin
-// immediately with `\` (`\..xs \01` ends the literal at `xs`). The operand is
-// an atomic term in glued form: a name path or a parenthesized term, followed
-// by glued suffixes — projections, calls, `!` (`\..hdr.bytes`, `\..f(x)`,
-// `\..read()!`). Self-delimiting parts (a call's argument list, the parens
-// form) admit interior whitespace freely; only the operand's edges are tight,
-// with every closing delimiter matched raw. Anything else — an infix chain, a
-// lambda — takes the parenthesized form.
+// A `Bin` spread operand under the TIGHT rule: it must end without consuming any whitespace, so the segment loop can require the next segment to begin immediately with `\` (`\..xs \01` ends the literal at `xs`). The operand is an atomic term in glued form: a name path or a parenthesized term, followed by glued suffixes — projections, calls, `!` (`\..hdr.bytes`, `\..f(x)`, `\..read()!`). Self-delimiting parts (a call's argument list, the parens form) admit interior whitespace freely; only the operand's edges are tight, with every closing delimiter matched raw. Anything else — an infix chain, a lambda — takes the parenthesized form.
 pub(super) fn parse_bin_spread_operand<'a>() -> Parser<'a, Term> {
     with_span(
         parse_name_raw()
@@ -212,8 +201,7 @@ pub(super) fn parse_bin_spread_operand<'a>() -> Parser<'a, Term> {
     )
 }
 
-// One segment of a `Bits`/`Bytes` literal: a literal atom, or a `\..` spread. Adjacent
-// bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
+// One segment of a `Bits`/`Bytes` literal: a literal atom, or a `\..` spread. Adjacent bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
 pub(super) enum RawBinSegment {
     Byte(u8),
     Spread(Term),
@@ -222,9 +210,7 @@ pub(super) enum RawBinSegment {
 pub(super) fn parse_bin_segment<'a>() -> Parser<'a, RawBinSegment> {
     catch(parse_hex_byte())
         .map(RawBinSegment::Byte)
-        // Committed after `\..`: an operand failure is fatal (no inner
-        // `catch`), so the error points at the segment rather than at
-        // whatever the surrounding grammar makes of the leftovers.
+        // Committed after `\..`: an operand failure is fatal (no inner `catch`), so the error points at the segment rather than at whatever the surrounding grammar makes of the leftovers.
         .or(catch(take_exact("\\..")).and_keep(
             parse_bin_spread_operand()
                 .map_err("Expected a glued name or parenthesized term after '\\..'")
@@ -259,9 +245,7 @@ pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> 
     segments
 }
 
-// A `Bits`/`Bytes` literal: a prefixed empty form, or one-or-more glued atom
-// and `\..operand` segments. One whitespace-free lexical unit: after a spread
-// operand the literal continues only when the very next character is `\`.
+// A `Bits`/`Bytes` literal: a prefixed empty form, or one-or-more glued atom and `\..operand` segments. One whitespace-free lexical unit: after a spread operand the literal continues only when the very next character is `\`.
 pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     let empty_bits =
         catch(take_exact("b\\").and_drop(parse_whitespace())).map(|()| (Grain::B, Vec::new()));
@@ -282,9 +266,7 @@ pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// One entry of an `Lst` literal: a `..` spread contributing a whole list, or
-// a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so
-// spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
+// One entry of an `Lst` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
 pub(super) fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
     catch(parse_literal(".."))
         .and_keep(lazy(parse_term))
@@ -292,10 +274,7 @@ pub(super) fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
         .or(lazy(parse_term).map(LstEntry::Elem))
 }
 
-// An `Lst` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native
-// contiguous-sequence sibling of the packed binary literals. Builds a `Prim::Lst`
-// directly (the element type is an implicit the literal cannot name; core
-// elaboration infers it); spreads splice in place, any position and count.
+// An `Lst` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native contiguous-sequence sibling of the packed binary literals. Builds a `Prim::Lst` directly (the element type is an implicit the literal cannot name; core elaboration infers it); spreads splice in place, any position and count.
 pub(super) fn parse_lst_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0_trailing(parse_lst_entry, || parse_literal(",")))
@@ -311,6 +290,4 @@ pub(super) fn parse_bool_prim<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// Primitive types and operations are no longer surface syntax — they live in the
-// `sys` module (see `prelude.rs`) and parse as ordinary names. Only genuine
-// literals (and the boolean keywords) remain here.
+// Primitive types and operations are no longer surface syntax — they live in the `sys` module (see `prelude.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) remain here.
