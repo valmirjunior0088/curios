@@ -1,4 +1,5 @@
 use super::*;
+use curios_core::{SelfReference, stamp_declaration_instance};
 
 pub(super) fn elaborate_tuple_type(
     context: &mut Context,
@@ -232,10 +233,10 @@ pub(super) fn elaborate_variant(
 
     let (elaborated, output) = check_args_against(context, signature, &args)?;
 
-    let output = curios_core::stamp_declaration_instance(
+    let output = stamp_declaration_instance(
         &output,
         &BTreeSet::from([name.clone()]),
-        curios_core::SelfReference::Free,
+        SelfReference::Free,
         &universes,
     );
     let rebuilt = Term::variant_at(

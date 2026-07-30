@@ -6,8 +6,8 @@ use {
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> curios_core::Global {
-    curios_core::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {
@@ -106,14 +106,14 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
         Term::free_var(&scrutinee),
         Some(&scrutinee),
         nat(),
-        Vec::<(Atom, Vec<curios_core::Free>, Term)>::new(),
+        Vec::<(Atom, Vec<Free>, Term)>::new(),
     );
     let named = Term::induct_match(
         Term::free_var(&scrutinee),
         Some(&scrutinee),
         nat(),
         [
-            ("none", Vec::<curios_core::Free>::new(), nat_lit(0)),
+            ("none", Vec::<Free>::new(), nat_lit(0)),
             ("some", vec![payload], nat_lit(1)),
         ],
     );
@@ -121,7 +121,7 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
         Term::free_var(&scrutinee),
         Some(&scrutinee),
         nat(),
-        [("none", Vec::<curios_core::Free>::new(), nat_lit(0))],
+        [("none", Vec::<Free>::new(), nat_lit(0))],
         nat_lit(1),
     );
 
@@ -318,7 +318,7 @@ fn inductive_match_default_relaxes_coverage() {
         Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some(&motive),
         nat(),
-        [("none", Vec::<curios_core::Free>::new(), nat_lit(0))],
+        [("none", Vec::<Free>::new(), nat_lit(0))],
         nat_lit(99),
     );
 
@@ -337,7 +337,7 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
         Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some(&motive),
         nat(),
-        [("none", Vec::<curios_core::Free>::new(), nat_lit(0))],
+        [("none", Vec::<Free>::new(), nat_lit(0))],
     );
 
     assert!(elaborate(&mut context, &term, Mode::Infer).is_err());

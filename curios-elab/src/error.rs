@@ -3,6 +3,7 @@ use {
     curios_base::{Int, Plicity, Qualifier, Span},
     curios_core::{
         Atom, Level, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
+        build_rename, build_shorten, display_names, with_pretty_names, with_short_names,
     },
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
@@ -857,19 +858,18 @@ impl Error {
 
         let mut names = BTreeSet::new();
         for term in terms {
-            names.extend(curios_core::display_names(term));
+            names.extend(display_names(term));
         }
 
-        let rename = Rc::new(curios_core::build_rename(&names));
-        curios_core::with_pretty_names(rename, || self.render())
+        let rename = Rc::new(build_rename(&names));
+        with_pretty_names(rename, || self.render())
     }
 
     /// Like [`format`], additionally shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Used on the core error paths, where the lowered module is in scope.
     pub fn format_with(&self, module: &Module) -> String {
-        curios_core::with_short_names(
-            Rc::new(curios_core::build_shorten(&module.module_symbols())),
-            || self.format(),
-        )
+        with_short_names(Rc::new(build_shorten(&module.module_symbols())), || {
+            self.format()
+        })
     }
 
     fn render(&self) -> String {

@@ -12,7 +12,10 @@
 
 use {
     crate::{Definition, Item, Module},
-    curios_core::{Bound, FuncType, Global, Struct, Subterm, Telescope, Term, Variant},
+    curios_core::{
+        Bound, Func, FuncType, Global, Let, Match, Prim, Rec, RecMember, Struct, Subterm,
+        Telescope, Term, Variant,
+    },
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -202,22 +205,21 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending
             return;
         }
 
-        Subterm::Func(curios_core::Func { telescope, .. }) => {
+        Subterm::Func(Func { telescope, .. }) => {
             entries(telescope, site, positions);
         }
 
-        Subterm::Match(curios_core::Match { motive, .. }) => {
+        Subterm::Match(Match { motive, .. }) => {
             push(positions, site, motive.body());
         }
 
-        Subterm::Let(curios_core::Let { bindings, .. }) => {
+        Subterm::Let(Let { bindings, .. }) => {
             for binding in bindings {
                 push(positions, site, binding.type_());
             }
         }
 
-        Subterm::Rec(curios_core::Rec { group, .. })
-        | Subterm::RecMember(curios_core::RecMember { group, .. }) => {
+        Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
             for member in group.iter() {
                 push(positions, site, member.type_.body());
             }
@@ -231,9 +233,7 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>, pending
         }
 
         // The type formers name their element types.
-        Subterm::Prim(curios_core::Prim::LstType(type_) | curios_core::Prim::CellType(type_)) => {
-            push(positions, site, type_)
-        }
+        Subterm::Prim(Prim::LstType(type_) | Prim::CellType(type_)) => push(positions, site, type_),
 
         _ => {}
     }

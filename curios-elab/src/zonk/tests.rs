@@ -90,7 +90,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
         Term::free_var(&scrutinee),
         Some(&motive),
         nat(),
-        [("none", Vec::<curios_core::Free>::new(), nat_lit(0))],
+        [("none", Vec::<Free>::new(), nat_lit(0))],
         Term::metavar(0),
     );
 
@@ -98,7 +98,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
         Term::free_var(&scrutinee),
         Some(&motive),
         nat(),
-        [("none", Vec::<curios_core::Free>::new(), nat_lit(0))],
+        [("none", Vec::<Free>::new(), nat_lit(0))],
         nat_lit(7),
     );
 

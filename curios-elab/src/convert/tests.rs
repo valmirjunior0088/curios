@@ -6,8 +6,8 @@ use {
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> curios_core::Global {
-    curios_core::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {
@@ -140,7 +140,7 @@ fn convert_inductive_match_compares_cases_and_motive() {
             Some(motive_label),
             Term::prim(Prim::NatType),
             [
-                ("none", Vec::<curios_core::Free>::new(), nat(0)),
+                ("none", Vec::<Free>::new(), nat(0)),
                 ("some", vec![binder.clone()], Term::free_var(&binder)),
             ],
         )
@@ -154,7 +154,7 @@ fn convert_inductive_match_compares_cases_and_motive() {
         Some(&m),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<curios_core::Free>::new(), nat(1)),
+            ("none", Vec::<Free>::new(), nat(1)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
@@ -173,7 +173,7 @@ fn convert_inductive_match_compares_default() {
             Term::free_var(&r),
             Some(&m),
             Term::prim(Prim::NatType),
-            [("none", Vec::<curios_core::Free>::new(), nat(0))],
+            [("none", Vec::<Free>::new(), nat(0))],
             nat(d),
         )
     };
@@ -195,7 +195,7 @@ fn convert_inductive_match_compares_default() {
         Term::free_var(&r),
         Some(&m),
         Term::prim(Prim::NatType),
-        [("none", Vec::<curios_core::Free>::new(), nat(0))],
+        [("none", Vec::<Free>::new(), nat(0))],
     );
     assert_eq!(conv(&mut context, &with_default(9), &bare), Ok(false));
 }
@@ -263,7 +263,7 @@ fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> T
             Some(&motive),
             Term::prim(Prim::NatType),
             [
-                ("none", Vec::<curios_core::Free>::new(), nat(none_value)),
+                ("none", Vec::<Free>::new(), nat(none_value)),
                 (
                     "some",
                     vec![payload.clone()],
@@ -293,7 +293,7 @@ fn convert_folded_recursive_call_against_its_unfolding() {
         Some(&m),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<curios_core::Free>::new(), nat(0)),
+            ("none", Vec::<Free>::new(), nat(0)),
             (
                 "some",
                 vec![p.clone()],
@@ -429,7 +429,7 @@ fn convert_growing_recursive_unfolding_spends_the_budget() {
                 [
                     (
                         "none",
-                        Vec::<curios_core::Free>::new(),
+                        Vec::<Free>::new(),
                         Term::apply(
                             Term::free_var(head),
                             [Term::apply(Term::free_var(&s), [Term::free_var(&x)])],

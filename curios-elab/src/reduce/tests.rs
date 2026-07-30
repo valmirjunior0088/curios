@@ -8,8 +8,8 @@ use {
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> curios_core::Global {
-    curios_core::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {
@@ -107,7 +107,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
         Some(&m),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<curios_core::Free>::new(), nat(0)),
+            ("none", Vec::<Free>::new(), nat(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
@@ -125,7 +125,7 @@ fn reduce_inductive_match_absent_tag_takes_default() {
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
         Term::prim(Prim::NatType),
-        [("none", Vec::<curios_core::Free>::new(), nat(0))],
+        [("none", Vec::<Free>::new(), nat(0))],
         nat(99),
     );
 
@@ -144,7 +144,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
         Some(&m),
         Term::prim(Prim::NatType),
         [
-            ("none", Vec::<curios_core::Free>::new(), nat(0)),
+            ("none", Vec::<Free>::new(), nat(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
         nat(99),

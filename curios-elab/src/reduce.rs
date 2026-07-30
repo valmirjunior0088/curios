@@ -4,10 +4,11 @@ mod tests;
 use {
     super::Context,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, FuncType, InductType, Layer, Let,
-        Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Reducer, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant,
-        instantiate_universe_levels_scoped, reduce_prim,
+        Apply, Bound, Carrier, Cases, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl,
+        InductType, Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError,
+        Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        UniverseInst, Var, Variant, instantiate_universe_levels_scoped, project_erased_universes,
+        reduce_prim,
     },
     num_traits::ToPrimitive,
 };
@@ -33,23 +34,23 @@ impl curios_cert::Env for Context {
         crate::reduce_with(self, term)
     }
 
-    fn assumption(&self, name: &curios_core::Free) -> Option<&Term> {
+    fn assumption(&self, name: &Free) -> Option<&Term> {
         Context::assumption(self, name)
     }
 
-    fn fresh(&mut self, hint: Option<&str>) -> curios_core::Free {
+    fn fresh(&mut self, hint: Option<&str>) -> Free {
         Context::fresh(self, hint)
     }
 
-    fn unfold(&self, name: &curios_core::Free) -> Option<&Term> {
+    fn unfold(&self, name: &Free) -> Option<&Term> {
         self.definition_body(name)
     }
 
-    fn induct_decl(&self, name: &curios_core::Global) -> Option<&curios_core::InductDecl> {
+    fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         Context::induct_decl(self, name)
     }
 
-    fn struct_decl(&self, name: &curios_core::Global) -> Option<&curios_core::StructDecl> {
+    fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         Context::struct_decl(self, name)
     }
 }
@@ -186,7 +187,7 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
         _ => Ok(term.clone()),
     }?;
     // Universe arguments cannot affect computation: Curios has no universe reflection and erasure removes them. Refinement keys therefore compare the same applied definition across independently fresh scheme instances by its computational spelling, not by inference-local level ids.
-    Ok(curios_core::project_erased_universes(&canonical))
+    Ok(project_erased_universes(&canonical))
 }
 
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {

@@ -13,7 +13,7 @@ use {
     curios_core::{
         Bound, Free, FuncType, Global, InductDecl, InductParam, Level, SelfReference, StructDecl,
         Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, Visit,
+        UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
     std::{
         cell::RefCell,
@@ -437,12 +437,12 @@ fn finalize_definition(
     let mut interface = context.universe_metas_in(&type_);
     interface.retain(|meta| !determined.contains(meta));
     if let Some(struct_decl) = context.struct_decl(name) {
-        interface.extend(curios_core::universe_metas(&struct_decl.params));
-        interface.extend(curios_core::universe_metas(&struct_decl.fields));
+        interface.extend(universe_metas(&struct_decl.params));
+        interface.extend(universe_metas(&struct_decl.fields));
         interface.extend(struct_decl.result_sort.universe_metas());
     }
     if let Some(concept) = context.concept(name) {
-        interface.extend(curios_core::universe_metas(&concept.params));
+        interface.extend(universe_metas(&concept.params));
     }
     let mut internal = context.universe_metas_in(&body);
     internal.extend(determined);
@@ -452,37 +452,33 @@ fn finalize_definition(
     let owned = BTreeSet::from([name.clone()]);
     // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself.
     let free = SelfReference::Free;
-    let type_ = curios_core::stamp_declaration_instance(
+    let type_ = stamp_declaration_instance(
         &context.zonk_universe_levels(&type_)?,
         &owned,
         free,
         &levels,
     );
-    let body = curios_core::stamp_declaration_instance(
-        &context.zonk_universe_levels(&body)?,
-        &owned,
-        free,
-        &levels,
-    );
+    let body =
+        stamp_declaration_instance(&context.zonk_universe_levels(&body)?, &owned, free, &levels);
 
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
         context.update_struct(
             name,
             StructDecl {
                 universe_context: universe_context.clone(),
-                params: curios_core::stamp_declaration_instance(
+                params: stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.params)?,
                     &owned,
                     free,
                     &levels,
                 ),
-                fields: curios_core::stamp_declaration_instance(
+                fields: stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.fields)?,
                     &owned,
                     free,
                     &levels,
                 ),
-                result_sort: curios_core::stamp_declaration_instance(
+                result_sort: stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.result_sort)?,
                     &owned,
                     free,
@@ -500,7 +496,7 @@ fn finalize_definition(
             name,
             Concept {
                 universe_context: universe_context.clone(),
-                params: curios_core::stamp_declaration_instance(
+                params: stamp_declaration_instance(
                     &context.zonk_universe_levels(&concept.params)?,
                     &owned,
                     free,
@@ -690,11 +686,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .collect::<BTreeSet<_>>();
     for def in &defs {
         if let Some(induct_decl) = context.induct_decl(&def.name) {
-            interface.extend(curios_core::universe_metas(&induct_decl.params));
-            interface.extend(curios_core::universe_metas(&induct_decl.indices));
+            interface.extend(universe_metas(&induct_decl.params));
+            interface.extend(universe_metas(&induct_decl.indices));
             interface.extend(induct_decl.result_sort.universe_metas());
             for constructor in induct_decl.signatures() {
-                interface.extend(curios_core::universe_metas(&constructor.telescope));
+                interface.extend(universe_metas(&constructor.telescope));
             }
         }
     }
@@ -717,7 +713,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         self_reference: SelfReference,
         instance: &[Level],
     ) -> Result<B, Error> {
-        Ok(curios_core::stamp_declaration_instance(
+        Ok(stamp_declaration_instance(
             &context.zonk_universe_levels(value)?,
             owned,
             self_reference,

@@ -1,6 +1,7 @@
 use {
     super::{HeadKey, WitnessKey},
     curios_base::{Grain, Qualifier},
+    curios_core::Global,
 };
 
 // Arity one displays bare, so single-parameter diagnostics keep today's spelling ("for head 'Nat'", never "for head '(Nat)'").
@@ -14,9 +15,7 @@ fn witness_key_displays_bare_for_arity_one() {
 fn witness_key_displays_as_a_tuple_for_higher_arities() {
     let key = WitnessKey(vec![
         HeadKey::Nat,
-        HeadKey::Nominal(curios_core::Global::Authored(Qualifier::from([
-            "std", "Str", "Str",
-        ]))),
+        HeadKey::Nominal(Global::Authored(Qualifier::from(["std", "Str", "Str"]))),
     ]);
     assert_eq!(key.to_string(), "(Nat, /std/Str/Str)");
 }

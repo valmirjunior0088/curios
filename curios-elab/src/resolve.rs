@@ -11,8 +11,8 @@ use {
     },
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType, Subterm, Telescope, Term,
-        UniverseContext, WitnessOrigin,
+        Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType, Subterm,
+        Telescope, Term, UniverseContext, WitnessOrigin,
     },
     std::collections::{BTreeSet, HashSet},
 };
@@ -293,7 +293,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             .map(|(type_, _)| type_)
             .ok_or_else(|| Error::unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
-            let curios_core::Field::Index(index) = proj.field else {
+            let Field::Index(index) = proj.field else {
                 unreachable!("step-2 projections are built positionally");
             };
             let head_type = node_type(context, &proj.head)?;

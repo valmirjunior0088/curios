@@ -7,7 +7,7 @@ mod tests;
 
 use {
     curios_base::{Grain, Qualifier, RootId},
-    curios_core::{Global, Subterm, Telescope, Term, UniverseContext},
+    curios_core::{Global, Prim, Sharing, Subterm, Telescope, Term, UniverseContext},
     std::fmt,
 };
 
@@ -31,7 +31,7 @@ pub struct Concept {
 
 impl Concept {
     /// This concept with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
-    pub(crate) fn shared(&self, sharing: &curios_core::Sharing) -> Self {
+    pub(crate) fn shared(&self, sharing: &Sharing) -> Self {
         Self {
             universe_context: self.universe_context.clone(),
             params: sharing.share(&self.params),
@@ -135,7 +135,7 @@ impl HeadKey {
     }
 
     /// The key of a primitive type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
-    fn of_prim(prim: &curios_core::Prim) -> Option<HeadKey> {
+    fn of_prim(prim: &Prim) -> Option<HeadKey> {
         use curios_core::Prim;
         match prim {
             Prim::NatType => Some(HeadKey::Nat),

@@ -3,8 +3,9 @@ mod tests;
 
 use super::{Context, Error, Mode, Outcome, Sort, elaborate};
 use curios_core::{
-    Apply, Field, Free, Func, Global, Level, Many, MetaId, Prim, PrimHead, Proj, Scope, Subterm,
-    Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole,
+    Apply, Field, Free, Func, Global, Level, Many, MetaId, Prim, PrimHead, Proj, ReduceError,
+    Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+    UniverseRole,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering.
@@ -275,7 +276,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         )
     });
 
-    let outcome = outcome.map_err(|error: curios_core::ReduceError| {
+    let outcome = outcome.map_err(|error: ReduceError| {
         Error::from_reduce(error, || {
             Error::convert_exhausted(goal.this.clone(), goal.that.clone())
         })
