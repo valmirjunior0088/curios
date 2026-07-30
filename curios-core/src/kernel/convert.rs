@@ -68,8 +68,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, sort::sort_of},
     crate::{
-        Bound, FuncType, InductType, Metavar, Proj, RecMember, Reducer, Struct, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, UniverseInst,
+        Bound, FuncType, InductType, Proj, RecMember, Reducer, Struct, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, UniverseInst,
     },
     std::collections::HashSet,
 };
@@ -280,14 +280,17 @@ fn structural(
 
         (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
 
-        // A metavariable is opaque here. The kernel checks finished terms, in
-        // which none should occur at all; treating one as a neutral rather than
-        // panicking keeps `convert` total, and refusing it belongs at the
-        // boundary where a term enters the kernel.
-        (
-            Subterm::Metavar(Metavar { id: left, .. }),
-            Subterm::Metavar(Metavar { id: right, .. }),
-        ) => Ok(left == right),
+        // A metavariable is elaboration-only syntax, and refusing it *here* is
+        // what makes the exclusion the kernel's own rather than an inherited
+        // guarantee of `zonk_module`'s traversal. `whnf` still treats one as a
+        // stuck neutral — a reduction stance, not an admission: the only ways a
+        // term is admitted are `infer` and this comparison, and both refuse.
+        // The syntactic fast path in `compare` does admit a metavariable
+        // against *itself*, and soundly: reflexivity decides nothing about the
+        // unknown, which is exactly what this arm exists to prevent.
+        (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => {
+            Err(KernelError::NotCore(this.clone()))
+        }
 
         // Plicity is part of a function type's identity: `(A) -> A` and
         // `(@A) -> A` have different calling conventions, and conflating them

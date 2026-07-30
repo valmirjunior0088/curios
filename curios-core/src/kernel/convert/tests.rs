@@ -1,5 +1,5 @@
 use crate::{
-    Free, Global, InductDecl, Kernel, Prim, Telescope, Term, UniverseContext,
+    Free, Global, InductDecl, Kernel, KernelError, MetaId, Prim, Telescope, Term, UniverseContext,
     kernel::convert::convert,
 };
 use curios_base::{Plicity, Qualifier, RootId};
@@ -380,4 +380,25 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
         ),
         Ok(false),
     );
+}
+
+/// A metavariable is elaboration-only syntax, and conversion refuses it rather
+/// than comparing ids — the exclusion is the kernel's own, not an inherited
+/// guarantee of the zonk traversal. Reflexivity is the one admitted case (the
+/// syntactic fast path, sound because it decides nothing about the unknown);
+/// any comparison that would have to *look* at a metavariable refuses.
+#[test]
+fn a_metavariable_does_not_convert_with_anything_else() {
+    let mut kernel = kernel();
+    let left = Term::metavar(MetaId::from(0usize));
+    let right = Term::metavar(MetaId::from(1usize));
+
+    assert!(matches!(
+        convert(&mut kernel, &Term::type_ground(), &left, &right),
+        Err(KernelError::NotCore(_)),
+    ));
+    assert!(matches!(
+        convert(&mut kernel, &Term::type_ground(), &left, &nat(0)),
+        Err(KernelError::NotCore(_)),
+    ));
 }
