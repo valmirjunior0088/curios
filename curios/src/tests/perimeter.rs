@@ -171,9 +171,8 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
 //
 // Verified against the built compiler: this source compiles (`curios compile` exits 0, and `recheck_module_suffix` on the compile path certifies `let /bad : False = boom(coerce(only()))`), and running it traps at the `unreachable` the vacuous elimination emitted, which is the runtime witness that the impossibility claim was false. Ignored because the rule that refuses it does not exist yet: a clash may only be concluded at a position whose type distinguishes its inhabitants, and both checkers reach the shared walk through a `Judge` seam that today exposes no sort.
 //
-// The expected refusal is a coverage one: with the clash retracted, `only` is an ordinary reachable constructor and an elimination with no arm for it is missing a case.
+// The refusal is the coverage rule's: with the clash retracted, `only` is an ordinary reachable constructor, and an elimination with no arm for it is missing one it cannot prove absent.
 #[test]
-#[ignore = "open unsoundness: index inversion clashes on `Prop`-valued indices that conversion identifies"]
 fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
     let source = r#"
         use /std/{False};
@@ -197,12 +196,14 @@ fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
 
         /std/print("FORGED")
         "#;
-    rejected_by(source, "missing match case");
+    rejected_by(
+        source,
+        "is not provably impossible at the scrutinee's indices",
+    );
 }
 
 // The same disagreement through coverage rather than vacuity, which is why the fix belongs in the shared walk and not at one of its callers: here the elimination has an arm, and it is the *omitted* one that inversion wrongly excuses. `Ind/right()` inhabits `Ind(Two/a())` by the same conversion, so the match falls through every arm it enumerated.
 #[test]
-#[ignore = "open unsoundness: index inversion clashes on `Prop`-valued indices that conversion identifies"]
 fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
     let source = r#"
         use /std/{Nat};
@@ -226,7 +227,10 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
 
         /std/print(Nat/to_str(f(coerce(Ind/right()))))
         "#;
-    rejected_by(source, "missing match case");
+    rejected_by(
+        source,
+        "is not provably impossible at the scrutinee's indices",
+    );
 }
 
 // The lower end of that discrimination: drop `a` from the index target and the guard fires. Without this, a fix could "close" the hole above by rejecting every indexed proposition and nothing here would notice.

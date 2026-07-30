@@ -206,6 +206,15 @@ fn unify_index<J: Judge>(
             if a.name != t.name {
                 return Ok(Step::Refuse);
             }
+            // Injectivity and tag disjointness are claims about values a program can tell apart, and a proposition's inhabitants are not: proof irrelevance makes every one of them definitionally equal. Deciding this position by either claim contradicts conversion — `Two/a()` against `Two/b()` reads as a clash while conversion calls them the same value, and `Tag/t(a)` against `Tag/t(7)` manufactures the *relevant* equation `a := 7` from a premise that `Tag/t(0)` satisfies equally. Both are inconsistent, and each was a closed inhabitant of `False`: the first through a vacuous elimination, the second through the singleton rung of the large-elimination guard. So the position is satisfied — the two sides really are equal — and it yields nothing: no clash, no equations. That is strictly the refusing direction, since an arm that was excused as impossible becomes mandatory and a binder forced only here stays unsolved.
+            //
+            // Only a variant can reach this: a `Prim` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
+            if judge
+                .induct_decl(&a.name)
+                .is_some_and(|declaration| matches!(&*declaration.result_sort, Subterm::Prop))
+            {
+                return Ok(Step::Ok);
+            }
             if a.tag != t.tag {
                 return Ok(Step::Clash);
             }
