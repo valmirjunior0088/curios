@@ -43,8 +43,7 @@ fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
 
 #[test]
 fn foreign_declaration_produces_a_wasm_import() {
-    // Must actually call `frobnicate` — an unreferenced declaration is
-    // pruned by `curios_ersd::optimize` before codegen ever sees it.
+    // Must actually call `frobnicate` — an unreferenced declaration is pruned by `curios_ersd::optimize` before codegen ever sees it.
     let module = compile(
         r#"
             foreign frobnicate : (Nat, Bin) -> Nat;
@@ -66,8 +65,7 @@ fn foreign_declaration_produces_a_wasm_import() {
 
 #[test]
 fn sys_and_foreign_calls_import_under_separate_namespaces() {
-    // Must actually call both — an unreferenced declaration is pruned before
-    // codegen ever sees it (see the note above).
+    // Must actually call both — an unreferenced declaration is pruned before codegen ever sees it (see the note above).
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
@@ -115,12 +113,7 @@ fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
 
 #[test]
 fn let_bound_tuple_with_an_effectful_field_lowers() {
-    // A `let` bound to a tuple one of whose fields is an opaque foreign call:
-    // the field cannot be lowered in a pure-name position, so the binding must
-    // take the CPS join-block path in `into_cont`. Head-only purity
-    // classification used to route the whole `let` through `lower_pure_name`
-    // and panic the compiler on the field's host primitive. End-to-end guard
-    // for `is_pure_term`.
+    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`. Head-only purity classification used to route the whole `let` through `lower_pure_name` and panic the compiler on the field's host primitive. End-to-end guard for `is_pure_term`.
     let source = r#"
         foreign frobnicate : (Nat) -> Nat;
         let t = (frobnicate(5), 2);
@@ -132,11 +125,7 @@ fn let_bound_tuple_with_an_effectful_field_lowers() {
 
 #[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
-    // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
-    // still pulls in the whole std/std prelude. Assembling and traversing the
-    // old N-deep nested term overflowed the stack during construction and in
-    // every pass; the flat `curios_elab::Module`/`curios_ersd::Module` representation lowers
-    // it end-to-end to wasm without overflow.
+    // The exact case that used to overflow: a meta-free entrypoint (no holes) that still pulls in the whole std/std prelude. Assembling and traversing the old N-deep nested term overflowed the stack during construction and in every pass; the flat `curios_elab::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         id(/std/Nat, 5)
@@ -147,9 +136,7 @@ fn meta_free_prelude_program_compiles_without_overflow() {
 
 #[test]
 fn solved_goal_reports_its_solution() {
-    // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5`
-    // (§14, `id ? x`) — but a written goal never compiles: the module still
-    // elaborates fully, then zonk reports what it determined.
+    // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5` (§14, `id ? x`) — but a written goal never compiles: the module still elaborates fully, then zonk reports what it determined.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         id(?, 5)
@@ -167,9 +154,7 @@ fn solved_goal_reports_its_solution() {
 
 #[test]
 fn goal_pinned_through_the_expected_type_reports_the_pin() {
-    // `id ? true` checked against `/std/Bool`: the turnaround pins the type
-    // argument `?` to `Bool` through the expected type (§14, a type-level pin),
-    // and the goal report names that solution.
+    // `id ? true` checked against `/std/Bool`: the turnaround pins the type argument `?` to `Bool` through the expected type (§14, a type-level pin), and the goal report names that solution.
     let source = r#"
         use /std/{Bool};
         let id(A : Type, a : A) -> A = a;
@@ -187,8 +172,7 @@ fn goal_pinned_through_the_expected_type_reports_the_pin() {
 
 #[test]
 fn unconstrained_goal_reports_undetermined() {
-    // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the goal
-    // report shows its type but no solution (§14).
+    // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the goal report shows its type but no solution (§14).
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;
@@ -205,8 +189,7 @@ fn unconstrained_goal_reports_undetermined() {
 
 #[test]
 fn goal_report_includes_the_local_scope() {
-    // The goal sits under `x`'s binder, so the Γ frozen at its birth — just
-    // that binder — appears in the report.
+    // The goal sits under `x`'s binder, so the Γ frozen at its birth — just that binder — appears in the report.
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = ?;
@@ -221,10 +204,7 @@ fn goal_report_includes_the_local_scope() {
 
 #[test]
 fn goal_in_synthesis_position_reports_a_meta_type() {
-    // A bare `?` with nothing to check against: a fresh metavariable stands
-    // in as its type, so the goal still reaches zonk's report (instead of
-    // dying with `CannotInfer` during elaboration) and shows the
-    // undetermined stand-in.
+    // A bare `?` with nothing to check against: a fresh metavariable stands in as its type, so the goal still reaches zonk's report (instead of dying with `CannotInfer` during elaboration) and shows the undetermined stand-in.
     let error = compile("?", None).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
@@ -235,12 +215,7 @@ fn goal_in_synthesis_position_reports_a_meta_type() {
 
 #[test]
 fn omitted_motive_mentioning_a_type_param_lowers() {
-    // `pick` is polymorphic in `A`, and the `match c` omits its motive. The
-    // motive metavar is solved to `A` — a binder local to `pick`'s telescope.
-    // zonk must realign that solution to the enclosing binders when it splices
-    // it back in; otherwise `A` dangles as a free var after the module is
-    // re-closed and `erase` rejects it with `unbound variable`. Guards the
-    // zonk binder-realignment fix.
+    // `pick` is polymorphic in `A`, and the `match c` omits its motive. The motive metavar is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards the zonk binder-realignment fix.
     let source = r#"
         use /std/{Bool};
         let pick(A : Type, a : A, b : A, c : Bool) -> A =
@@ -256,14 +231,7 @@ fn omitted_motive_mentioning_a_type_param_lowers() {
 
 #[test]
 fn projection_through_a_stuck_inductive_payload_lowers() {
-    // `Fmt/print`'s return type is `format_type_with({}, parse(s))`, so
-    // erasing `print` evaluates `parse(s)` at compile time with a *symbolic*
-    // `s`. The `Parse` combinator's result is a `Result` inductive whose
-    // discriminant is therefore stuck, and the inlined `success` payload is
-    // reached by a projection. `erase` must lower that projection through the
-    // neutral payload `match` (every variant carries the field at the same
-    // index) instead of demanding a literal `TupleType`. Guards
-    // `projectable_at`; without it this panics `erase: projected a non-tuple`.
+    // `Fmt/print`'s return type is `format_type_with({}, parse(s))`, so erasing `print` evaluates `parse(s)` at compile time with a *symbolic* `s`. The `Parse` combinator's result is a `Result` inductive whose discriminant is therefore stuck, and the inlined `success` payload is reached by a projection. `erase` must lower that projection through the neutral payload `match` (every variant carries the field at the same index) instead of demanding a literal `TupleType`. Guards `projectable_at`; without it this panics `erase: projected a non-tuple`.
     let source = r#"
         use /std/{Fmt, Bytes};
         Fmt/print("% is %")
@@ -274,15 +242,7 @@ fn projection_through_a_stuck_inductive_payload_lowers() {
 
 #[test]
 fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
-    // `Result/success((a, a))` checked against a known `Result(...)`. The
-    // tuple is an introduction form whose parameter type is the inserted
-    // implicit `?A`, so it can't be checked until `?A` is known. Elaboration postpones it,
-    // unifies the result against the expected `Result` — solving `?A` (the
-    // success type, which the tuple's own result witnesses) and the *phantom*
-    // `?E` (the failure type, carried only by the expected type) — then re-checks
-    // the tuple. Guards the result-directed argument order in `elaborate_apply`;
-    // without it this fails "introduced a tuple where the expected type is not a
-    // tuple type".
+    // `Result/success((a, a))` checked against a known `Result(...)`. The tuple is an introduction form whose parameter type is the inserted implicit `?A`, so it can't be checked until `?A` is known. Elaboration postpones it, unifies the result against the expected `Result` — solving `?A` (the success type, which the tuple's own result witnesses) and the *phantom* `?E` (the failure type, carried only by the expected type) — then re-checks the tuple. Guards the result-directed argument order in `elaborate_apply`; without it this fails "introduced a tuple where the expected type is not a tuple type".
     let source = r#"
         use /std/{Result};
         use /std/{Nat};
@@ -293,9 +253,7 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
 
     assert!(compile(source, None).is_ok());
 
-    // In infer position nothing pins the holes, so the postponed tuple is
-    // re-checked against a still-unsolved metavar and rejected — graceful
-    // degradation, no new acceptance of un-annotated constructors.
+    // In infer position nothing pins the holes, so the postponed tuple is re-checked against a still-unsolved metavar and rejected — graceful degradation, no new acceptance of un-annotated constructors.
     let unpinned = r#"
         use /std/{Result};
         Result/success((1, 1))
@@ -306,10 +264,7 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
 
 #[test]
 fn inductive_match_arm_arity_is_checked_statically() {
-    // Each arm's binder count is checked against the
-    // constructor's registry telescope at elaboration time. Under the
-    // legacy tagged-tuple desugar this mismatch was silent (the extra
-    // binder became an out-of-range payload projection).
+    // Each arm's binder count is checked against the constructor's registry telescope at elaboration time. Under the legacy tagged-tuple desugar this mismatch was silent (the extra binder became an out-of-range payload projection).
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
@@ -331,9 +286,7 @@ fn inductive_match_arm_arity_is_checked_statically() {
 
 #[test]
 fn implicit_arguments_can_all_be_supplied_explicitly() {
-    // Every implicit slot can be overridden positionally with a call-site
-    // `@` — including an inductive constructor's parameters, which are implicit
-    // by default — and the fully-supplied call compiles end-to-end.
+    // Every implicit slot can be overridden positionally with a call-site `@` — including an inductive constructor's parameters, which are implicit by default — and the fully-supplied call compiles end-to-end.
     let source = r#"
         use /std/{Nat};
         induct Opt(A : Type) : Type
@@ -352,9 +305,7 @@ fn implicit_arguments_can_all_be_supplied_explicitly() {
 
 #[test]
 fn implicit_argument_is_inserted_and_inferred() {
-    // The INDUCTIVES.md promise realized: an `@`-marked inductive parameter
-    // makes the constructor's type argument implicit, so the call site
-    // writes no holes at all.
+    // An `@`-marked inductive parameter makes the constructor's type argument implicit, so the call site writes no holes at all.
     let source = r#"
         use /std/{Nat};
         induct Opt(A : Type) : Type
@@ -372,8 +323,7 @@ fn implicit_argument_is_inserted_and_inferred() {
 
 #[test]
 fn interleaved_implicit_with_partial_override() {
-    // `T` is overridden positionally with `@`, `U` (interleaved after an
-    // explicit binder) is inferred from `y`.
+    // `T` is overridden positionally with `@`, `U` (interleaved after an explicit binder) is inferred from `y`.
     let source = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
@@ -385,9 +335,7 @@ fn interleaved_implicit_with_partial_override() {
 
 #[test]
 fn implicit_argument_queues_are_order_insensitive() {
-    // The two queues are matched independently: an `@`-argument fills the
-    // first unfilled implicit binder no matter where it sits among the
-    // plain arguments.
+    // The two queues are matched independently: an `@`-argument fills the first unfilled implicit binder no matter where it sits among the plain arguments.
     let at_first = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
@@ -405,9 +353,7 @@ fn implicit_argument_queues_are_order_insensitive() {
 
 #[test]
 fn trailing_implicit_is_pinned_by_the_expected_type() {
-    // The proof-argument shape: the implicit trails every explicit binder
-    // and is mentioned only in the result type, so nothing but the
-    // result-directed turnaround can pin it.
+    // The proof-argument shape: the implicit trails every explicit binder and is mentioned only in the result type, so nothing but the result-directed turnaround can pin it.
     let source = r#"
         use /std/{Nat};
         induct Opt(A : Type) : Type
@@ -427,11 +373,7 @@ fn trailing_implicit_is_pinned_by_the_expected_type() {
 
 #[test]
 fn all_implicit_telescope_saturates_and_retargets() {
-    // The curried `bind` shape: `(@A, @B) -> (M A, A -> M B) -> M B`.
-    // Applying it directly to plain arguments saturates the all-implicit
-    // telescope with fresh metavariables and re-targets the arguments at
-    // the next telescope — both through a direct call and the `!` sugar
-    // (which sequences through the user's `Monad(Id)` witness).
+    // The curried `bind` shape: `(@A, @B) -> (M A, A -> M B) -> M B`. Applying it directly to plain arguments saturates the all-implicit telescope with fresh metavariables and re-targets the arguments at the next telescope — both through a direct call and the `!` sugar (which sequences through the user's `Monad(Id)` witness).
     let source = r#"
         use /std/{Nat, Monad};
         induct Id(A : Type) : Type
@@ -467,8 +409,7 @@ fn all_implicit_telescope_saturates_and_retargets() {
 
 #[test]
 fn uninferred_implicit_names_the_binder_and_function() {
-    // Nothing mentions `T` outside the binder itself, so unification can
-    // never pin it; the report must name the hole, not a bare metavar id.
+    // Nothing mentions `T` outside the binder itself, so unification can never pin it; the report must name the hole, not a bare metavar id.
     let source = r#"
         use /std/{Nat};
         let cast(x : Nat, @T : Type) -> Nat = x;
@@ -501,8 +442,7 @@ fn surplus_implicit_arguments_are_rejected() {
 
 #[test]
 fn non_pub_inductive_constructors_are_usable_in_the_declaring_module() {
-    // Constructors are exactly as visible as their inductive: a non-`pub`
-    // inductive is module-local but fully usable where it is declared.
+    // Constructors are exactly as visible as their inductive: a non-`pub` inductive is module-local but fully usable where it is declared.
     let source = r#"
         use /std/{Nat};
         induct Opt : Type
@@ -520,8 +460,7 @@ fn non_pub_inductive_constructors_are_usable_in_the_declaring_module() {
 
 #[test]
 fn non_pub_inductive_constructors_stay_private_across_modules() {
-    // The same inductive declared inside a submodule is not reachable from
-    // the parent: the inductive's own visibility still gates the outside.
+    // The same inductive declared inside a submodule is not reachable from the parent: the inductive's own visibility still gates the outside.
     let source = r#"
         pub mod m
             induct Secret : Type
@@ -536,9 +475,7 @@ fn non_pub_inductive_constructors_stay_private_across_modules() {
 
 #[test]
 fn inductive_match_on_a_non_inductive_scrutinee_is_rejected_directly() {
-    // With the legacy fallback gone, matching inductive
-    // constructors on a non-inductive value reports the real problem instead
-    // of a downstream projection error.
+    // With the legacy fallback gone, matching inductive constructors on a non-inductive value reports the real problem instead of a downstream projection error.
     let source = r#"
         use /std/{Nat};
         match 7 : (_) => Nat
@@ -556,10 +493,7 @@ fn inductive_match_on_a_non_inductive_scrutinee_is_rejected_directly() {
 
 #[test]
 fn new_style_inductive_match_lowers_end_to_end() {
-    // The same program with correct arities compiles through to wasm: the
-    // `Result` declaration takes the primitive-inductive path (InductiveType /
-    // Variant / InductiveMatch) and erases back to the legacy tagged-tuple
-    // runtime shape.
+    // The same program with correct arities compiles through to wasm: the `Result` declaration takes the primitive-inductive path (InductiveType / Variant / InductiveMatch) and erases back to the legacy tagged-tuple runtime shape.
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
@@ -576,12 +510,7 @@ fn new_style_inductive_match_lowers_end_to_end() {
 
 #[test]
 fn indexed_inductive_declares_constructs_and_matches() {
-    // Phase 1 of INDICES.md, end to end: an indexed `Vec` declares (head
-    // index telescope, named/`@` payload binders, per-case targets),
-    // constructs with `@T`/`@m` inferred — `Nat/succ(?m)` unifies against the
-    // annotation's `2` — and matches under a constant motive (Rung 0:
-    // arms are typed from the constructor telescopes; indices ride
-    // along), lowering through to wasm.
+    // Indexed inductives, end to end: an indexed `Vec` declares (head index telescope, named/`@` payload binders, per-case targets), constructs with `@T`/`@m` inferred — `Nat/succ(?m)` unifies against the annotation's `2` — and matches under a constant motive (Rung 0: arms are typed from the constructor telescopes; indices ride along), lowering through to wasm.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -602,11 +531,7 @@ fn indexed_inductive_declares_constructs_and_matches() {
 
 #[test]
 fn indexed_inductive_without_params_and_unnamed_index_lowers() {
-    // The head's index names are optional (`: (Nat)`), and an inductive can be
-    // indexed without being parameterized. Targets are arbitrary index
-    // expressions — here distinct literals — and conversion compares them
-    // pointwise: `Tag(7)` accepts `Tag/b` and the match dispatches on the
-    // tag as ever.
+    // The head's index names are optional (`: (Nat)`), and an inductive can be indexed without being parameterized. Targets are arbitrary index expressions — here distinct literals — and conversion compares them pointwise: `Tag(7)` accepts `Tag/b` and the match dispatches on the tag as ever.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Tag : (Nat) -> Type
@@ -625,11 +550,7 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
 
 #[test]
 fn indexed_inductive_motive_binds_the_index() {
-    // The motive `(k, v) => Vec(T, Nat/add(k, m))` binds the length index
-    // ahead of the scrutinee; each arm checks against
-    // the motive at that case's target index (`0` for nil, `Nat/succ(j)` for
-    // cons), and the whole match at the scrutinee's actual index. The cons
-    // arm converges via `Nat/add`'s definitional successor peeling.
+    // The motive `(k, v) => Vec(T, Nat/add(k, m))` binds the length index ahead of the scrutinee; each arm checks against the motive at that case's target index (`0` for nil, `Nat/succ(j)` for cons), and the whole match at the scrutinee's actual index. The cons arm converges via `Nat/add`'s definitional successor peeling.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -652,9 +573,7 @@ fn indexed_inductive_motive_binds_the_index() {
 
 #[test]
 fn motive_binder_count_is_checked_against_the_index_telescope() {
-    // A motive binds the scrutinee's indices and then the scrutinee — two
-    // names for a one-index `Vec`. Binding too few or too many is reported as
-    // itself, at the motive, rather than as a domain mismatch downstream.
+    // A motive binds the scrutinee's indices and then the scrutinee — two names for a one-index `Vec`. Binding too few or too many is reported as itself, at the motive, rather than as a domain mismatch downstream.
     let inductive_decl = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -695,9 +614,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         "unexpected error: {error}"
     );
 
-    // Parameters are not motive binders at all, so the family a written
-    // scrutinee-binder annotation names is checked by ordinary conversion:
-    // annotating at the wrong parameter is a plain type mismatch.
+    // Parameters are not motive binders at all, so the family a written scrutinee-binder annotation names is checked by ordinary conversion: annotating at the wrong parameter is a plain type mismatch.
     let wrong_annotation = format!(
         r#"{inductive_decl}
         let f(@n : Nat, v : Vec(Nat, n)) -> Nat =
@@ -714,14 +631,10 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
 
 #[test]
 fn index_refinement_learns_inside_the_arm() {
-    // Rung B: a scrutinee index that is a stable key is refined to the
-    // case's target inside the arm. Three faces of it:
-    // - `subst` casts `Vec(Bytes, n)` to `Vec(Bytes, m)` through an
-    //   `Eq(Nat, n, m)` under a *constant* motive — the equality is
-    //   learned (`n := z`, `m := z`), not eliminated;
+    // Rung B: a scrutinee index that is a stable key is refined to the case's target inside the arm. Three faces of it:
+    // - `subst` casts `Vec(Bytes, n)` to `Vec(Bytes, m)` through an `Eq(Nat, n, m)` under a *constant* motive — the equality is learned (`n := z`, `m := z`), not eliminated;
     // - `sym` is J-style elimination from the pattern motive alone;
-    // - `f`'s nil arm uses a hypothesis demanding `Vec(T, 0)` — legal
-    //   because the arm refines `n := 0`.
+    // - `f`'s nil arm uses a hypothesis demanding `Vec(T, 0)` — legal because the arm refines `n := 0`.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -757,9 +670,7 @@ fn index_refinement_learns_inside_the_arm() {
 
 #[test]
 fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
-    // An inductive may declare zero cases — `False`. Its eliminator is a match
-    // with zero arms: every omission is vacuously justified, so the match
-    // checks at any motive and lowers through erasure and codegen.
+    // An inductive may declare zero cases — `False`. Its eliminator is a match with zero arms: every omission is vacuously justified, so the match checks at any motive and lowers through erasure and codegen.
     let source = r#"
         induct False : Type
         end
@@ -774,12 +685,7 @@ fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
 
 #[test]
 fn inversion_prunes_impossible_arms_and_solves_binders() {
-    // Rung C: at `Vec(T, Nat/succ(n))` the nil arm's target `0` clashes
-    // definitely with the successor spine, so the arm is omitted —
-    // checker-verified, no `impossible` keyword — and erase fills its
-    // dispatch slot with an unreachable body. In the cons arm the
-    // unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is
-    // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
+    // Rung C: at `Vec(T, Nat/succ(n))` the nil arm's target `0` clashes definitely with the successor spine, so the arm is omitted — checker-verified, no `impossible` keyword — and erase fills its dispatch slot with an unreachable body. In the cons arm the unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -804,9 +710,7 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
 
 #[test]
 fn impossible_inductive_arm_lowers_to_unreachable() {
-    // The element is a lambda parameter so the scrutinee stays runtime —
-    // a fully-constant vector would be folded whole by ersd's `evaluate`
-    // pass, and the pruned arm would never reach the lowering this pins.
+    // The element is a lambda parameter so the scrutinee stays runtime — a fully-constant vector would be folded whole by ersd's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -834,8 +738,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
 
 #[test]
 fn omission_requires_a_definite_clash() {
-    // An opaque index proves nothing: omitting nil at `Vec(T, n)` is
-    // rejected with the explanation as the error.
+    // An opaque index proves nothing: omitting nil at `Vec(T, n)` is rejected with the explanation as the error.
     let opaque = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -854,11 +757,7 @@ fn omission_requires_a_definite_clash() {
         "unexpected error: {error}"
     );
 
-    // The non-linear refusal — no K through the back door: `same`'s
-    // target `(z, z)` constrains two positions with one binder, which
-    // the unifier refuses, so the arm stays mandatory even at the
-    // plainly-uninhabited `Foo(3, 4)`. The flip side: `diff`'s target
-    // `(0, 1)` clashes against literals `(5, 5)` and prunes.
+    // The non-linear refusal — no K through the back door: `same`'s target `(z, z)` constrains two positions with one binder, which the unifier refuses, so the arm stays mandatory even at the plainly-uninhabited `Foo(3, 4)`. The flip side: `diff`'s target `(0, 1)` clashes against literals `(5, 5)` and prunes.
     let nonlinear = r#"
         use /std/{Nat, Bytes};
         induct Foo : (x : Nat, y : Nat) -> Type
@@ -894,9 +793,7 @@ fn omission_requires_a_definite_clash() {
 
 #[test]
 fn indexed_inductive_index_mismatch_is_rejected() {
-    // A two-element vector annotated at length 3: the per-case target
-    // `Nat/succ(m)` propagates through conversion until the index clash
-    // surfaces as an ordinary type mismatch.
+    // A two-element vector annotated at length 3: the per-case target `Nat/succ(m)` propagates through conversion until the index clash surfaces as an ordinary type mismatch.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -914,9 +811,7 @@ fn indexed_inductive_index_mismatch_is_rejected() {
 
 #[test]
 fn indexed_inductive_targets_are_required_and_arity_checked() {
-    // A case of an indexed inductive without its `: (...)` target is a parse
-    // error, as is a target whose arity differs from the head's index
-    // telescope, or a target on an unindexed inductive.
+    // A case of an indexed inductive without its `: (...)` target is a parse error, as is a target whose arity differs from the head's index telescope, or a target on an unindexed inductive.
     let missing = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -961,15 +856,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
 
 #[test]
 fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
-    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the
-    // lambda's domain *and* `xs`'s element type, but `xs : Lst(?A)` is checked
-    // after the lambda. Elaboration must postpone the lambda (its domain is an
-    // unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`,
-    // then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`;
-    // without it this fails "projected from a non-tuple". Checked at the
-    // type-check level — the inference is the point, not lowering. (`with` is
-    // local: the std maps take their collection first, which would pin `?A`
-    // before the lambda and vacate the scenario.)
+    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the lambda's domain *and* `xs`'s element type, but `xs : Lst(?A)` is checked after the lambda. Elaboration must postpone the lambda (its domain is an unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`, then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`; without it this fails "projected from a non-tuple". Checked at the type-check level — the inference is the point, not lowering. (`with` is local: the std maps take their collection first, which would pin `?A` before the lambda and vacate the scenario.)
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
@@ -985,13 +872,7 @@ fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
 
 #[test]
 fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
-    // `pick([], Lst/concat)`: the inserted implicit `?A` is the empty array's
-    // type *and* `combine`'s domain. The empty-array literal `[]` borrows its
-    // element type from the expected (check-only intro), so against the bare
-    // metavar `?A` it cannot elaborate. Elaboration must postpone it until the
-    // sibling `Lst/concat` grounds `?A := Lst(?T)`, then re-check — at which
-    // point the `Lst(Nat)` result pins `?T`. Exercises the array arm of
-    // `blocked_on_metavar`; without it this fails "type mismatch" eagerly.
+    // `pick([], Lst/concat)`: the inserted implicit `?A` is the empty array's type *and* `combine`'s domain. The empty-array literal `[]` borrows its element type from the expected (check-only intro), so against the bare metavar `?A` it cannot elaborate. Elaboration must postpone it until the sibling `Lst/concat` grounds `?A := Lst(?T)`, then re-check — at which point the `Lst(Nat)` result pins `?T`. Exercises the array arm of `blocked_on_metavar`; without it this fails "type mismatch" eagerly.
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
@@ -1004,9 +885,7 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
 
     assert!(typecheck(source).is_ok());
 
-    // With no sibling to ground the element type and no result type to pin it,
-    // the postponed `[]` re-checks against a bare metavar and is rejected —
-    // graceful degradation, no new acceptance.
+    // With no sibling to ground the element type and no result type to pin it, the postponed `[]` re-checks against a bare metavar and is rejected — graceful degradation, no new acceptance.
     let unpinned = r#"
         use /std/{Lst};
         let id(@A : Type, x : A) -> A = x;
@@ -1019,14 +898,7 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
 
 #[test]
 fn continuation_postpones_until_the_result_type_pins_its_codomain() {
-    // A `!` region whose tail is `Parse/pure((x, x))` — a *bare tuple*,
-    // checkable only against a known tuple type. The expected type reaches
-    // the tail solely through each bind's result metavar `?B`, which the turnaround
-    // solves *after* the continuation is checked. Elaboration must postpone the
-    // continuation lambda (its codomain `M(?B)` carries a result metavar) until
-    // `expect` grounds `?B` against the concrete `Parse({ Byte, Byte })`, then re-check
-    // it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails
-    // "introduced a tuple where the expected type is not a tuple type".
+    // A `!` region whose tail is `Parse/pure((x, x))` — a *bare tuple*, checkable only against a known tuple type. The expected type reaches the tail solely through each bind's result metavar `?B`, which the turnaround solves *after* the continuation is checked. Elaboration must postpone the continuation lambda (its codomain `M(?B)` carries a result metavar) until `expect` grounds `?B` against the concrete `Parse({ Byte, Byte })`, then re-check it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails "introduced a tuple where the expected type is not a tuple type".
     let source = r#"
         use /std/{Parse};
         use /std/{Byte};
@@ -1038,9 +910,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
 
     assert!(typecheck(source).is_ok());
 
-    // The `expected_ground` gate: with no concrete result type to pin `?B`, the
-    // codomain stays a metavar, the continuation is *not* postponed, and the bare
-    // tuple is rejected — graceful degradation, no new acceptance.
+    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance.
     let unpinned = r#"
         use /std/{Parse};
         let x = Parse/any_byte!;
@@ -1052,13 +922,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
 
 #[test]
 fn closure_returning_a_bare_projection_lowers() {
-    // A closure whose body *is* a tuple projection (`(pair) => pair.0`), handed to
-    // a higher-order function over an empty array, never constructs a tuple
-    // anywhere in the module — yet lowering must still emit the arity-1 tuple type
-    // the projection reads through. The wasm `Table` sizes its tuple types from the
-    // max arity it sees; scanning only tuple *constructions* missed this
-    // projection-only arity and panicked "`Table` lacks tuple type for arity `1`".
-    // Guards folding projection (`index + 1`) and prealloc arities into that scan.
+    // A closure whose body *is* a tuple projection (`(pair) => pair.0`), handed to a higher-order function over an empty array, never constructs a tuple anywhere in the module — yet lowering must still emit the arity-1 tuple type the projection reads through. The wasm `Table` sizes its tuple types from the max arity it sees; scanning only tuple *constructions* missed this projection-only arity and panicked "`Table` lacks tuple type for arity `1`". Guards folding projection (`index + 1`) and prealloc arities into that scan.
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
@@ -1070,12 +934,7 @@ fn closure_returning_a_bare_projection_lowers() {
 
 #[test]
 fn bare_polymorphic_function_inserts_implicits_in_value_position() {
-    // Passing a bare `Lst/concat : (@T, Lst T, Lst T) -> Lst T` where an
-    // explicit `(Lst Nat, Lst Nat) -> Lst Nat` is expected: the check
-    // turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and
-    // eta-expands over the explicit binders, so no hand-written
-    // `(l, r) => concat(l, r)` wrapper is needed. Lowers end-to-end — the
-    // eta-expansion is an ordinary closure over a saturated call.
+    // Passing a bare `Lst/concat : (@T, Lst T, Lst T) -> Lst T` where an explicit `(Lst Nat, Lst Nat) -> Lst Nat` is expected: the check turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and eta-expands over the explicit binders, so no hand-written `(l, r) => concat(l, r)` wrapper is needed. Lowers end-to-end — the eta-expansion is an ordinary closure over a saturated call.
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
@@ -1089,11 +948,7 @@ fn bare_polymorphic_function_inserts_implicits_in_value_position() {
 
 #[test]
 fn polymorphic_value_assignment_keeps_its_implicit() {
-    // The guard arm: when the *expected* type also leads with an implicit
-    // binder, implicit-eta must not fire — the polymorphic function is assigned
-    // as-is, implicit intact, and stays applicable at a chosen instance. Without
-    // the expected-not-implicit gate this would wrongly eta-expand and fail to
-    // convert against the implicit-leading annotation.
+    // The guard arm: when the *expected* type also leads with an implicit binder, implicit-eta must not fire — the polymorphic function is assigned as-is, implicit intact, and stays applicable at a chosen instance. Without the expected-not-implicit gate this would wrongly eta-expand and fail to convert against the implicit-leading annotation.
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
@@ -1106,8 +961,7 @@ fn polymorphic_value_assignment_keeps_its_implicit() {
 
 #[test]
 fn typeless_let_infers_a_literal_body() {
-    // A local `let` with no type annotation infers the body's type (`Nat`
-    // here) and lowers end-to-end.
+    // A local `let` with no type annotation infers the body's type (`Nat` here) and lowers end-to-end.
     let source = r#"
         let n = 5;
         n
@@ -1118,10 +972,7 @@ fn typeless_let_infers_a_literal_body() {
 
 #[test]
 fn typeless_let_binds_an_annotated_closure() {
-    // The composite feature: a typeless local `let` binds an annotated
-    // closure. The closure's type is synthesized from its annotation
-    // (Infer-mode `elaborate_func`), the let's type is inferred from it, and
-    // `f(5)` checks and lowers all the way to wasm.
+    // The composite feature: a typeless local `let` binds an annotated closure. The closure's type is synthesized from its annotation (Infer-mode `elaborate_func`), the let's type is inferred from it, and `f(5)` checks and lowers all the way to wasm.
     let source = r#"
         use /std/{Nat};
         let f = (x : Nat) => x;
@@ -1133,8 +984,7 @@ fn typeless_let_binds_an_annotated_closure() {
 
 #[test]
 fn closure_annotation_must_match_the_expected_domain() {
-    // In checking position the param annotation is verified against the
-    // expected function type's domain — a wrong annotation is a type mismatch.
+    // In checking position the param annotation is verified against the expected function type's domain — a wrong annotation is a type mismatch.
     let source = r#"
         use /std/{Nat, Bool};
         let f : (Nat) -> Nat = (x : Bool) => x;
@@ -1148,8 +998,7 @@ fn closure_annotation_must_match_the_expected_domain() {
 
 #[test]
 fn bare_typeless_let_closure_cannot_be_inferred() {
-    // Without an annotation there is nothing to infer the domain from, so a
-    // typeless `let` binding a bare closure is a `cannot`-infer error.
+    // Without an annotation there is nothing to infer the domain from, so a typeless `let` binding a bare closure is a `cannot`-infer error.
     let source = r#"
         let f = (x) => x;
         f
@@ -1175,8 +1024,7 @@ fn typecheck(source: &str) -> Result<(), String> {
 
 #[test]
 fn typecheck_accepts_a_well_typed_program() {
-    // The fast path stops after `elaborate → zonk`; a well-typed program passes
-    // without running erase/cont/optimize/wasm.
+    // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cont/optimize/wasm.
     assert!(
         typecheck("/std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(0)))")
             .is_ok()
@@ -1185,8 +1033,7 @@ fn typecheck_accepts_a_well_typed_program() {
 
 #[test]
 fn typecheck_rejects_a_goal() {
-    // `zonk` is included in the fast path, so a written goal is still
-    // reported — type-checking is fully validated even though lowering is skipped.
+    // `zonk` is included in the fast path, so a written goal is still reported — type-checking is fully validated even though lowering is skipped.
     let error = typecheck(
         r#"
         use /std/{Nat};
@@ -1203,8 +1050,7 @@ fn typecheck_rejects_a_goal() {
 
 #[test]
 fn proj_by_label_resolves_to_its_position() {
-    // `.label` is elaboration-time sugar for the positional projection,
-    // so both spellings typecheck identically.
+    // `.label` is elaboration-time sugar for the positional projection, so both spellings typecheck identically.
     let source = r#"
         use /std/{Nat, Bytes, Handle};
         let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
@@ -1248,8 +1094,7 @@ fn duplicate_tuple_label_is_rejected() {
 
 #[test]
 fn tuple_labels_are_part_of_type_identity() {
-    // Same positional types, different label order: not convertible —
-    // this is what makes `.label` re-indexing impossible.
+    // Same positional types, different label order: not convertible — this is what makes `.label` re-indexing impossible.
     let reordered = r#"
         use /std/{Nat};
         let p : { width : Nat, height : Nat } = (640, 480);
@@ -1270,8 +1115,7 @@ fn tuple_labels_are_part_of_type_identity() {
 
 #[test]
 fn named_construction_checks_against_the_labels() {
-    // Written names must match the expected type's labels positionally;
-    // bare fields are always accepted.
+    // Written names must match the expected type's labels positionally; bare fields are always accepted.
     let source = r#"
         use /std/{Nat, Bytes};
         let r : { status : Nat, payload : Bytes } = (status = 0, payload = /std/Str/to_bytes("ok"));
@@ -1301,8 +1145,7 @@ fn named_construction_checks_against_the_labels() {
 
 #[test]
 fn dependent_record_projects_by_label() {
-    // Labels bind dependently: a later field's type mentions an earlier
-    // label, and label projection re-types through the dependency.
+    // Labels bind dependently: a later field's type mentions an earlier label, and label projection re-types through the dependency.
     let source = r#"
         let p : { T : Type, x : T } = (T = /std/Nat, x = 3);
         let v : p.T = p.x;
@@ -1314,14 +1157,7 @@ fn dependent_record_projects_by_label() {
 
 #[test]
 fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
-    // The inductive registry used to keep `into_core`'s *lowered* payload and
-    // index types, so a type relying on implicit-argument insertion —
-    // `Eq(0, 1)` against `Eq`'s 3-ary type constructor — survived
-    // under-applied and panicked the `Telescope::open` arity assert the
-    // first time reduction met the registry copy. The registry telescopes
-    // are now rebuilt during `elaborate_module` (indices while the inductive
-    // group's signatures are assumed, constructors once its bodies are
-    // defined), so the payload elaborates like any other type.
+    // The inductive registry used to keep `into_core`'s *lowered* payload and index types, so a type relying on implicit-argument insertion — `Eq(0, 1)` against `Eq`'s 3-ary type constructor — survived under-applied and panicked the `Telescope::open` arity assert the first time reduction met the registry copy. The registry telescopes are now rebuilt during `elaborate_module` (indices while the inductive group's signatures are assumed, constructors once its bodies are defined), so the payload elaborates like any other type.
     let payload = r#"
         induct Eq(@A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
@@ -1333,9 +1169,7 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
     "#;
     assert!(typecheck(payload).is_ok());
 
-    // Index types take the same path — and previously panicked even
-    // earlier, while the type-constructor binding itself elaborated
-    // (its body's `InductiveType` node checks against the index telescope).
+    // Index types take the same path — and previously panicked even earlier, while the type-constructor binding itself elaborated (its body's `InductiveType` node checks against the index telescope).
     let index = r#"
         induct Eq(@A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
@@ -1347,9 +1181,7 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
     "#;
     assert!(typecheck(index).is_ok());
 
-    // End to end: construct and eliminate through the rebuilt registry —
-    // the match arm's binder is typed from the rebuilt payload type, and
-    // the whole program lowers to wasm.
+    // End to end: construct and eliminate through the rebuilt registry — the match arm's binder is typed from the rebuilt payload type, and the whole program lowers to wasm.
     let through = r#"
         use /std/{Nat};
         induct Eq(@A : Type) : (x : A, y : A) -> Type
@@ -1368,9 +1200,7 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
 
 #[test]
 fn dead_user_definition_is_still_typechecked() {
-    // A user-authored top-level binding the body never references is still
-    // type-checked (every item is, before any reachability is considered), so
-    // its error is reported. (`write` returns its `Nat` status, `Bytes` mismatches.)
+    // A user-authored top-level binding the body never references is still type-checked (every item is, before any reachability is considered), so its error is reported. (`write` returns its `Nat` status, `Bytes` mismatches.)
     let error = typecheck(
         r#"
         let dead : /std/Bytes = /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes("x"));
@@ -1382,8 +1212,7 @@ fn dead_user_definition_is_still_typechecked() {
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
 
-/// Elaborate `source` to its meta-free Core module and erase it through the
-/// arena path, prelude erased fresh — the Phase-2 erasure vertical.
+/// Elaborate `source` to its meta-free Core module and erase it through the arena path, prelude erased fresh — the Phase-2 erasure vertical.
 fn erase_to_ir(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
@@ -1399,9 +1228,7 @@ fn erase_to_ir(source: &str) -> curios_ersd::Module {
 
 #[test]
 fn arena_erasure_covers_the_fixed_prelude() {
-    // The entrypoint pulls in string formatting, so the erased module carries
-    // the whole fixed prelude — every construct the corpus uses — through the
-    // arena path, fresh, into one verified module.
+    // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — through the arena path, fresh, into one verified module.
     let module = erase_to_ir(r#"/std/Fmt/print("hello")"#);
     assert!(
         module.functions().len() > 100,
@@ -1420,9 +1247,7 @@ fn arena_erasure_is_deterministic_across_compiles() {
 
 #[test]
 fn arena_erasure_stores_no_captures_for_the_prelude() {
-    // Functions carry no capture lists anywhere in the erased prelude; free
-    // values are derived on demand. The analysis on the full module is the
-    // witness that derivation covers every function.
+    // Functions carry no capture lists anywhere in the erased prelude; free values are derived on demand. The analysis on the full module is the witness that derivation covers every function.
     let module = erase_to_ir("/std/Nat/to_str(7)");
     let analysis = Analysis::analyze(&module);
     let counted = module.function_ids().count();
@@ -1434,10 +1259,7 @@ fn arena_erasure_stores_no_captures_for_the_prelude() {
 
 #[test]
 fn arena_erasure_handles_deep_input_on_the_default_stack() {
-    // A wide flat block (the shape whose N-deep nesting once overflowed the
-    // legacy pipeline); erasure, verification, and printing all stay on the
-    // default test-thread stack. Sized so quadratic *elaboration* cost —
-    // shared by both paths and out of erasure's scope — stays testable.
+    // A wide flat block (the shape whose N-deep nesting once overflowed the legacy pipeline); erasure, verification, and printing all stay on the default test-thread stack. Sized so quadratic *elaboration* cost — shared by both paths and out of erasure's scope — stays testable.
     let mut source = String::new();
     for index in 0..500 {
         source.push_str(&format!("let x{index} = {index} + 1;\n"));

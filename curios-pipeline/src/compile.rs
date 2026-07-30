@@ -1,6 +1,4 @@
-//! The stage sequence itself: [`compile_entrypoint`] and the two halves it is
-//! assembled from — the type-checking prologue and the lowering back half —
-//! each observing every [`Stage`] it produces before moving past it.
+//! The stage sequence itself: [`compile_entrypoint`] and the two halves it is assembled from — the type-checking prologue and the lowering back half — each observing every [`Stage`] it produces before moving past it.
 
 use {
     super::Stage,
@@ -13,21 +11,9 @@ use {
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},
 };
 
-/// The type-checking prologue of [`compile_entrypoint`] (and the tests'
-/// typecheck-only path): lower to core, elaborate (checking against the
-/// entrypoint's type when it carries one, else synthesizing), then zonk
-/// metavariable solutions in so the module is meta-free — the `elaborate → zonk`
-/// half of the `elaborate → zonk → erase` data flow (§9). Elaboration is
-/// authoritative: it returns a rebuilt module (lambda domains solved, binders
-/// re-closed), and it is *that* module — not the lowered one — that zonk makes
-/// meta-free. `zonk` is also where an unsolved hole is rejected, so a program that
-/// merely *type-checks* is fully validated by the time this returns. Elaboration
-/// and zonking share one context (the solutions live in its `MetaStore`); the
-/// returned module is self-contained, so the caller's `erase` runs over a fresh one.
+/// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow (§9). Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
 ///
-/// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call:
-/// prepared Text state is merged with the user graph, then the archived Core
-/// prefix is replayed and only the user suffix is type-checked.
+/// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prefix is replayed and only the user suffix is type-checked.
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
     entrypoint: &Entrypoint,
@@ -71,9 +57,7 @@ where
     Ok((module, core_type, user_foreigns))
 }
 
-/// The back half of [`compile_entrypoint`]: from a verified erased module
-/// through optimization, the lowering into Cont, Cont optimization, and wasm
-/// emission, observing every stage in order.
+/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
 fn lower_from_ersd<O>(mut ersd_module: curios_ersd::Module, observe: &mut O) -> curios_wasm::Module
 where
     O: FnMut(Stage<'_>),
@@ -81,9 +65,7 @@ where
     curios_profile::profile!("lower_from_ersd");
     observe(Stage::Ersd(&ersd_module));
 
-    // Shrink before lowering: drop the items the program neither reaches nor
-    // runs for effect, so Cont's whole-module fixpoint sees only the live
-    // slice (see `curios_ersd::optimize_ir`).
+    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_ersd::optimize_ir`).
     optimize_ir(&mut ersd_module);
 
     observe(Stage::ErsdOptm(&ersd_module));
@@ -106,10 +88,7 @@ where
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
-/// Production runs the arena erased representation: the archived prelude
-/// prefix is restored and replayed, only the user suffix erases, the arena
-/// transformations shrink and rebase the module, and the lowering into Cont
-/// makes every encoding decision once (see `curios_ersd::lower_to_cont`).
+/// Production runs the arena erased representation: the archived prelude prefix is restored and replayed, only the user suffix erases, the arena transformations shrink and rebase the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 pub fn compile_entrypoint<O>(
     budget: u64,
     entrypoint: &Entrypoint,
