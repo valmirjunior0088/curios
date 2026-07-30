@@ -69,8 +69,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
     crate::{
-        Bound, Carrier, Cases, FuncType, InductType, Many, Proj, RecMember, Reducer, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UniverseInst,
+        Bound, Carrier, Cases, Field, FuncType, InductType, Many, Proj, RecMember, Reducer, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UniverseInst,
     },
     std::collections::HashSet,
 };
@@ -442,6 +442,15 @@ fn structural(
             && compare_each(kernel, history, left_params, right_params)?
             && compare_each(kernel, history, left_fields, right_fields)?),
 
+        // Eta at a nominal struct, against a neutral inhabitant only — see
+        // `struct_eta` for the rule and the restriction.
+        (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Var(_) | Subterm::Proj(_)) => {
+            struct_eta(kernel, history, literal, that)
+        }
+        (_, Subterm::Struct(literal)) if matches!(&**this, Subterm::Var(_) | Subterm::Proj(_)) => {
+            struct_eta(kernel, history, literal, this)
+        }
+
         (
             Subterm::UniverseInst(UniverseInst {
                 head: left,
@@ -492,6 +501,45 @@ fn structural(
         // definitional unfolding `force` withheld and compare what results.
         _ => unfolded_retry(kernel, history, this, that),
     }
+}
+
+/// Eta at a nominal struct, untyped: a literal against a *neutral* inhabitant,
+/// projected field-wise. A `Prop`-sorted field converts by irrelevance without
+/// being compared — the declaration's field telescope says which those are —
+/// and the neutral restriction is what keeps an all-`Prop` or empty struct's
+/// vacuous field walk from equating its literal with an arbitrary term that
+/// merely appeared in the same untyped position.
+fn struct_eta(
+    kernel: &mut Kernel,
+    history: &mut History,
+    literal: &Struct,
+    other: &Term,
+) -> Result<bool, KernelError> {
+    let Some(declaration) = kernel.struct_decl(&literal.name) else {
+        return Ok(false);
+    };
+
+    let mut telescope = declaration.fields_at(&literal.params);
+    for (index, field) in literal.fields.iter().enumerate() {
+        let Telescope::Cons(type_, rest) = telescope else {
+            return Ok(false);
+        };
+        telescope = rest.open(&[field]);
+
+        if Sort::of(kernel, &type_)?.is_prop() {
+            continue;
+        }
+
+        let projection = Term::from(Subterm::Proj(Proj {
+            head: other.clone(),
+            field: Field::Index(index),
+        }));
+        if !ground(kernel, history, field, &projection)? {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 /// The last chance before a structural refusal: grant each side the one
