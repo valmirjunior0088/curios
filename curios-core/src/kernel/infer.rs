@@ -349,8 +349,9 @@ fn infer_node(
         // carries nothing to extract.
         Subterm::Match(m) => {
             let scrutinee_type = infer(kernel, &m.head)?;
-            let family = match Term::unwrap_or_clone(kernel.reduce_forced(scrutinee_type)?) {
-                Subterm::InductType(family) => Some(family),
+            let scrutinee_type = kernel.reduce_forced(scrutinee_type)?;
+            let family = match &*scrutinee_type {
+                Subterm::InductType(family) => Some(family.clone()),
                 _ => None,
             };
             let indices = family
@@ -365,7 +366,14 @@ fn infer_node(
                 });
             }
 
-            check_cases(kernel, family.as_ref(), &m.motive, &m.cases, &m.head)?;
+            check_cases(
+                kernel,
+                family.as_ref(),
+                &m.motive,
+                &m.cases,
+                &m.head,
+                &scrutinee_type,
+            )?;
 
             let mut arguments = indices;
             arguments.push(m.head.clone());
@@ -455,23 +463,23 @@ fn infer_node(
 
 /// Check an elimination's arms against its motive.
 ///
-/// A nominal elimination is the one that can be unsound, and it is verified in
-/// full. The primitive carriers are checked where the arm's case is a value the
-/// motive can be opened at: `Bool` has two such cases, and a `Switch`'s
-/// enumerated cases are literals — and a variable scrutinee *is* that value
-/// within the arm, so the arm is checked with the equation substituted, the
-/// zero-index instance of the specialization `eliminate` gives nominal arms.
-/// What is *not* yet checked is a `Switch`'s default and the free-monoid
-/// carriers' arms, whose binders would have to be typed against the carrier's
-/// own successor structure. Those arms are typed by their bodies but not
-/// verified against the motive — a hole, and a narrower one than the whole of
-/// elimination was.
+/// A nominal elimination is verified in full, each arm at its own
+/// constructor's index targets. The primitive carriers are verified at their
+/// case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its
+/// default at the scrutinee's own instance, the only one it has), and the
+/// free-monoid carriers' identity and cons arms — the typing face of the fact
+/// `uncons` computes with and `close` traverses by, that every carrier value
+/// is the identity or one generator over a shorter value. A variable
+/// scrutinee *is* the case's value within an arm, so every arm is checked with
+/// that equation substituted, the zero-index instance of the specialization
+/// `eliminate` gives nominal arms.
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
     motive: &crate::Scope<crate::Many>,
     cases: &Cases,
     scrutinee: &Term,
+    scrutinee_type: &Term,
 ) -> Result<(), KernelError> {
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
         let expected = motive.open(&[&value]);
@@ -541,10 +549,193 @@ fn check_cases(
             check(kernel, default, &expected)
         }
 
-        // The free-monoid carriers bind a peeled generator, a tail, and an
-        // induction hypothesis, and checking their arms means typing those
-        // binders against the carrier's own structure. Not yet written.
-        Cases::FreeMonoid { .. } => Ok(()),
+        Cases::FreeMonoid { carrier } => {
+            check_free_monoid(kernel, motive, scrutinee, scrutinee_type, carrier, &at)
+        }
+    }
+}
+
+/// The free-monoid arm rule: the identity arm inhabits the motive at the
+/// carrier's empty value, and the cons arm — under a peeled generator, a tail,
+/// and an induction hypothesis at that tail — inhabits it at one generator
+/// prepended to the tail. The case values are spelled exactly as elaboration
+/// spelled them (`pred + 1`, the singleton-concat for `Lst`, the
+/// append-to-empty singleton for `Bin`, whose packed literals cannot hold a
+/// symbolic atom), and conversion's free-monoid peel is what makes those
+/// spellings and reduction's forms one normal form.
+///
+/// The carrier's own element type must agree with the scrutinee's: the arms
+/// are typed against the carrier's copy, and a value flowing through the match
+/// carries the scrutinee's, so a disagreement would type the arms at one type
+/// and run them at another.
+fn check_free_monoid(
+    kernel: &mut Kernel,
+    motive: &crate::Scope<crate::Many>,
+    scrutinee: &Term,
+    scrutinee_type: &Term,
+    carrier: &crate::Carrier,
+    at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), KernelError>,
+) -> Result<(), KernelError> {
+    use crate::{Carrier, Nat, Prim};
+
+    // One cons arm: open the binders, assume them at the carrier's types with
+    // the induction hypothesis at the tail, and check the body at the motive
+    // of the cons value — with the scrutinee standing refined to that value,
+    // exactly as in every other arm.
+    let cons = |kernel: &mut Kernel,
+                binders: Vec<(&crate::Free, Term)>,
+                cons_value: Term,
+                body: &Term|
+     -> Result<(), KernelError> {
+        let mark = kernel.mark();
+        for (binder, type_) in &binders {
+            kernel.assume(binder, type_);
+        }
+
+        let expected = motive.open(&[&cons_value]);
+        let solutions = match &**scrutinee {
+            Subterm::Var(var)
+                if var.as_bound().is_none() && kernel.local_type(var.unwrap()).is_some() =>
+            {
+                vec![(var.unwrap().clone(), cons_value.clone())]
+            }
+            _ => Vec::new(),
+        };
+
+        eliminate::shadow(kernel, &solutions);
+        let outcome = check(
+            kernel,
+            &eliminate::substitute(body, &solutions),
+            &eliminate::substitute(&expected, &solutions),
+        );
+        kernel.retract(mark);
+
+        outcome
+    };
+
+    match carrier {
+        Carrier::Nat {
+            empty_case,
+            cons_case,
+        } => {
+            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::NatType)) {
+                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+            }
+
+            at(kernel, Term::prim(Prim::Nat(Nat::new(0usize))), empty_case)?;
+
+            let pred = kernel.fresh(cons_case.first_hint());
+            let ih = kernel.fresh(cons_case.second_hint());
+            let pred_occurrence = Term::free_var(&pred);
+            let succ_value = Term::prim(Prim::nat_add(
+                pred_occurrence.clone(),
+                Term::prim(Prim::Nat(Nat::new(1usize))),
+            ));
+            let body = cons_case.open(&[&pred_occurrence, &Term::free_var(&ih)]);
+
+            cons(
+                kernel,
+                vec![
+                    (&pred, Term::prim(Prim::NatType)),
+                    (&ih, motive.open(&[&pred_occurrence])),
+                ],
+                succ_value,
+                &body,
+            )
+        }
+
+        Carrier::Lst {
+            elem,
+            empty_case,
+            cons_case,
+        } => {
+            let Subterm::Prim(Prim::LstType(scrutinee_elem)) = &**scrutinee_type else {
+                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+            };
+            if !convert(kernel, &Term::type_ground(), elem, scrutinee_elem)? {
+                return Err(KernelError::Mismatch {
+                    inferred: Box::new(elem.clone()),
+                    expected: Box::new(scrutinee_elem.clone()),
+                });
+            }
+
+            at(
+                kernel,
+                Term::prim(Prim::Lst(elem.clone(), Vec::new())),
+                empty_case,
+            )?;
+
+            let head = kernel.fresh(cons_case.first_hint());
+            let tail = kernel.fresh(cons_case.second_hint());
+            let ih = kernel.fresh(cons_case.third_hint());
+            let tail_occurrence = Term::free_var(&tail);
+            let cons_value = Term::prim(Prim::LstConcat(
+                elem.clone(),
+                vec![
+                    Term::prim(Prim::Lst(elem.clone(), vec![Term::free_var(&head)])),
+                    tail_occurrence.clone(),
+                ],
+            ));
+            let body = cons_case.open(&[
+                &Term::free_var(&head),
+                &tail_occurrence,
+                &Term::free_var(&ih),
+            ]);
+
+            cons(
+                kernel,
+                vec![
+                    (&head, elem.clone()),
+                    (&tail, Term::prim(Prim::LstType(elem.clone()))),
+                    (&ih, motive.open(&[&tail_occurrence])),
+                ],
+                cons_value,
+                &body,
+            )
+        }
+
+        Carrier::Bin {
+            grain,
+            empty_case,
+            cons_case,
+        } => {
+            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::BinType(found)) if found == grain) {
+                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+            }
+
+            let empty = Term::prim(Prim::Bin(*grain, curios_base::PackedBin::empty()));
+            at(kernel, empty.clone(), empty_case)?;
+
+            let atom_type = Term::prim(match grain {
+                curios_base::Grain::X => Prim::ByteType,
+                curios_base::Grain::B => Prim::BoolType,
+            });
+            let head = kernel.fresh(cons_case.first_hint());
+            let tail = kernel.fresh(cons_case.second_hint());
+            let ih = kernel.fresh(cons_case.third_hint());
+            let tail_occurrence = Term::free_var(&tail);
+            let singleton = Term::prim(Prim::BinAppend(*grain, empty, Term::free_var(&head)));
+            let cons_value = Term::prim(Prim::BinConcat(
+                *grain,
+                vec![singleton, tail_occurrence.clone()],
+            ));
+            let body = cons_case.open(&[
+                &Term::free_var(&head),
+                &tail_occurrence,
+                &Term::free_var(&ih),
+            ]);
+
+            cons(
+                kernel,
+                vec![
+                    (&head, atom_type),
+                    (&tail, Term::prim(Prim::BinType(*grain))),
+                    (&ih, motive.open(&[&tail_occurrence])),
+                ],
+                cons_value,
+                &body,
+            )
+        }
     }
 }
 

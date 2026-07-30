@@ -602,6 +602,95 @@ fn a_recursive_value_needs_no_descent() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
+/// A free-monoid cons arm is checked under its binders — the peeled generator,
+/// the tail, and the induction hypothesis at that tail — against the motive at
+/// one generator over the tail. The hypothesis really is usable at the tail's
+/// instance, and a body of the wrong type at the case's instance is refused.
+#[test]
+fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let motive = binder(1, "m");
+    let pred = binder(2, "pred");
+    let ih = binder(3, "ih");
+    kernel.assume(&n, &nat_type());
+
+    // Motive `(m) => Nat`: the zero arm at `Nat`, the succ arm's ih at `Nat`,
+    // and using the ih is exactly inhabiting the motive at the tail.
+    let counts = Term::nat_match(
+        Term::free_var(&n),
+        Some(&motive),
+        nat_type(),
+        nat(0),
+        &pred,
+        &ih,
+        Term::free_var(&ih),
+    );
+    assert_eq!(infer(&mut kernel, &counts), Ok(nat_type()));
+
+    // A succ arm that produces a Bool where the motive demands a Nat.
+    let wrong = Term::nat_match(
+        Term::free_var(&n),
+        Some(&motive),
+        nat_type(),
+        nat(0),
+        &pred,
+        &ih,
+        Term::prim(Prim::Bool(true)),
+    );
+    assert!(matches!(
+        infer(&mut kernel, &wrong),
+        Err(KernelError::Mismatch { .. }),
+    ));
+
+    // A zero arm of the wrong type is refused too — the identity case is a
+    // case like any other.
+    let wrong_zero = Term::nat_match(
+        Term::free_var(&n),
+        Some(&motive),
+        nat_type(),
+        Term::prim(Prim::Bool(true)),
+        &pred,
+        &ih,
+        Term::free_var(&ih),
+    );
+    assert!(matches!(
+        infer(&mut kernel, &wrong_zero),
+        Err(KernelError::Mismatch { .. }),
+    ));
+}
+
+/// The carrier's element type must agree with the scrutinee's: the arms are
+/// typed against the carrier's copy, and the values flowing through the match
+/// carry the scrutinee's.
+#[test]
+fn a_free_monoid_carrier_must_match_its_scrutinee() {
+    let mut kernel = kernel();
+    let xs = binder(0, "xs");
+    let motive = binder(1, "m");
+    let head = binder(2, "head");
+    let tail = binder(3, "tail");
+    let ih = binder(4, "ih");
+    kernel.assume(&xs, &Term::prim(Prim::LstType(nat_type())));
+
+    // Carrier claims Bool elements over a Nat-list scrutinee.
+    let mismatched = Term::lst_match(
+        Term::free_var(&xs),
+        bool_type(),
+        Some(&motive),
+        nat_type(),
+        nat(0),
+        &head,
+        &tail,
+        &ih,
+        Term::free_var(&ih),
+    );
+    assert!(matches!(
+        infer(&mut kernel, &mismatched),
+        Err(KernelError::Mismatch { .. }),
+    ));
+}
+
 /// Elaboration-only syntax reaching the kernel means a term was handed over
 /// before elaboration finished with it.
 #[test]

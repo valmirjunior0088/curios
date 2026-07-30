@@ -96,7 +96,7 @@ Ranked by directness. This is the soundness statement, and it is the reason the 
 
 | | Route | Cite | Fixture |
 | --- | --- | --- | --- |
-| 1 | A `Switch`'s default and the free-monoid carriers' arms are typed by their bodies and never verified against the motive | `infer.rs` `check_cases` | the one *acceptance*-direction hole |
+| — | *(none — every route in the original table is closed)* | | |
 
 **The `rec` route closed at A4, and positivity at A3** — both entries preserved below the table in their landed form. What the kernel still takes on faith is narrower than either: see A4's residue note.
 
@@ -239,7 +239,9 @@ The sophistication of these analyses is corpus-forced, not discretionary, and ca
 
 **C4 — Make the elaboration-only exclusion the kernel's own. Landed, with one deliberate narrowing.** `convert` refuses a metavariable in any comparison that would have to look at one — including two with *equal* ids, previously accepted as convertible. Two admitted stances are recorded in place rather than changed: `compare`'s syntactic fast path passes a metavariable against itself, soundly, because reflexivity decides nothing about the unknown; and `whnf` keeps treating one as a stuck neutral, because reduction is not an admission point — the only ways a term is admitted are `infer` and conversion, and both refuse. The earlier instruction to change `whnf`'s arm is withdrawn: it would need a new `ReduceError` variant in the shared vocabulary to express a refusal reduction cannot act on. `KernelError::NotCore` stays an error rather than an assertion: the input contract is `&Module`, not "a zonked `&Module`", and that assumption has been violated in practice — `curios/src/tests/kernel.rs` records the period during which the tests read `Stage::Core` and fed an un-typechecked module to the kernel. A refusal is what made that diagnosable; an `unreachable!` would have aborted.
 
-**C5 — The `Switch` default and the free-monoid carriers' arms.** The one acceptance-direction hole.
+**C5 — The free-monoid carriers' arms. Landed — and it reopened the refusing frontier.** The rule is the typing face of the fact `uncons` computes with and `close` traverses by: the identity arm inhabits the motive at the carrier's empty value, and the cons arm — under the peeled generator, the tail, and an induction hypothesis at that tail — inhabits it at one generator over the tail, with the case values spelled exactly as elaboration spells them and the scrutinee substituted to the case value as in every other arm. The carrier's element type must agree with the scrutinee's. (The `Switch` default was never actually a hole — it is checked at the scrutinee's own instance, the only one it has; the docs listing it were the overhang.)
+
+Measured: **21 became 52**, zero cleared — thirty-one newly *visible* disagreements, all in the `BigNat`/`Eq` fold-proof corpus, at positions the kernel had never compared before. Two apparent classes in the tally: `Eq.{0}` vs `Eq.{u}` level mismatches at motive instances, and same-headed `is_trimmed`/`combine` forms that likely stall on the syntactically-compared conversion positions. Undiagnosed, deliberately: the inventory exists so these are counted before any is designed for. The walk also slowed to ~278s — the arm checks drive conversion through large stuck folds — likewise unprofiled and recorded as open.
 
 ### D — Cut what cannot admit a program
 
@@ -278,6 +280,8 @@ Re-taken from the worktree, not estimated. Re-run the inventory after every item
 Crate sizes: `curios-core` 17,497 (15,065 non-test), `curios-elab` 31,702, `curios-base` 2,839, `curios-abi` 952.
 
 Kernel refusals: **90 of 1050 items**, identical across the `trivial`, `arithmetic`, and `literal` fixtures and across debug and release. By class: 25 bare universe-parameter mismatch, 16 `Unclassified` (all empty `Lst`), 13 zero-level-in-instance, 36 other.
+
+After the free-monoid arm rule: **52 of 1050** — 31 newly visible refusals in the `BigNat`/`Eq` fold proofs, zero cleared, at ~278s. Both the classes and the cost are the next diagnosis targets.
 
 After the closure fix and the kernel memos: **still 21 of 1050**, bit-identical memoized and uncached, at **15.3s** — under the pre-gate baseline.
 
