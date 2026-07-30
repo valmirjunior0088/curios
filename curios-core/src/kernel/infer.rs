@@ -405,10 +405,25 @@ fn infer_node(
             let members = group.members();
             let refs = members.iter().collect::<Vec<_>>();
 
+            let mut erased_member: Option<Term> = None;
             for index in 0..group.length() {
                 let type_ = group.member_type(index);
-                sort_of(kernel, &type_)?;
+                let sort = sort_of(kernel, &type_)?;
                 check(kernel, &group.member_body(index), &type_)?;
+
+                // As in `check_rec_group`: a proof-typed or type-yielding
+                // member is deleted by erasure, so its recursion must descend.
+                if erased_member.is_none() && (sort.is_prop() || crate::yields_a_sort(&type_)) {
+                    erased_member = Some(type_);
+                }
+            }
+
+            if let Some(type_) = erased_member
+                && crate::group_totality(kernel, group) != crate::Totality::Total
+            {
+                return Err(KernelError::NotDescending {
+                    type_: Box::new(type_),
+                });
             }
 
             let tail = tail.open(&refs);

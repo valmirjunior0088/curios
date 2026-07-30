@@ -520,6 +520,82 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
     ));
 }
 
+/// The two-line route to `False`: a recursive proof assumed at its own type.
+/// Erasure deletes proofs, so a proof-typed `rec` member must descend — and
+/// `f = f` has a self-call that decreases on nothing.
+#[test]
+fn a_recursive_proof_that_does_not_descend_is_refused() {
+    use crate::{Global, InductDecl, UniverseContext};
+    use curios_base::{Qualifier, RootId};
+
+    let mut kernel = kernel();
+    let name = Global::Authored(Qualifier::from(["False"]));
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            params: Telescope::done(()),
+            indices: Telescope::done(()),
+            constructors: Vec::new(),
+            result_sort: Term::prop(),
+            module: Qualifier::from(["False"]),
+            root: RootId::Entry,
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+    let false_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
+
+    let f = binder(0, "f");
+    let term = Term::rec(
+        [(f.clone(), false_, Term::free_var(&f))],
+        Term::free_var(&f),
+    );
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::NotDescending { .. }),
+    ));
+}
+
+/// The type-level twin — `rec Bad : Type = Bad` — is the equi-recursive route:
+/// a type-yielding member must descend for the same reason.
+#[test]
+fn a_recursive_type_that_does_not_descend_is_refused() {
+    let mut kernel = kernel();
+    let bad = binder(0, "Bad");
+    let term = Term::rec(
+        [(bad.clone(), Term::type_ground(), Term::free_var(&bad))],
+        Term::free_var(&bad),
+    );
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::NotDescending { .. }),
+    ));
+}
+
+/// A *value* recursion that does not descend is not an error: `rec` is general
+/// recursion by design, and a program that loops is only a program that loops.
+#[test]
+fn a_recursive_value_needs_no_descent() {
+    let mut kernel = kernel();
+    let f = binder(0, "f");
+    let n = binder(1, "n");
+
+    let signature = Term::func_type([(n.clone(), nat_type())], nat_type());
+    let body = Term::func(
+        [(n.clone(), nat_type())],
+        Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
+    );
+    let term = Term::rec(
+        [(f.clone(), signature, body)],
+        Term::apply(Term::free_var(&f), [nat(1)]),
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
 /// Elaboration-only syntax reaching the kernel means a term was handed over
 /// before elaboration finished with it.
 #[test]

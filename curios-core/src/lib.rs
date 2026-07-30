@@ -62,6 +62,9 @@ pub use invert::*;
 mod positivity;
 pub use positivity::*;
 
+mod totality;
+pub use totality::*;
+
 /// The kernel is the one module that is *not* flattened. It names its
 /// judgments `convert`, `infer`, and `Sort` — the same things `curios-elab`
 /// names its own — and flattening both into one namespace would leave every

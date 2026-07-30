@@ -9,7 +9,7 @@ use {
     curios_text::PreparedPrelude,
 };
 
-pub(crate) const SCHEMA: u32 = 19;
+pub(crate) const SCHEMA: u32 = 20;
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[rkyv(

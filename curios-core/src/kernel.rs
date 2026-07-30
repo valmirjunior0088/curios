@@ -105,6 +105,14 @@ pub enum KernelError {
     /// be legitimately absent only when its index targets cannot equal the
     /// actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
+    /// A recursive member that is a proof or a type, in a group whose
+    /// recursion does not descend. Assuming such a member at its declared type
+    /// is what certifies `rec f : False = f` — erasure deletes proofs and
+    /// types wholesale, so a non-descending one proves anything. A
+    /// non-descending *value* recursion is not an error: `rec` is general
+    /// recursion by design, and a program that loops is only a program that
+    /// loops.
+    NotDescending { type_: Box<Term> },
     /// A declaration that is not strictly positive: `part` of `name` reaches
     /// back to `name` at a non-accepting polarity. Without this gate,
     /// `induct Bad | c(f : (Bad) -> False) end` inhabits `False` in four lines
@@ -173,6 +181,10 @@ impl fmt::Display for KernelError {
             KernelError::MissingArm { family, tag } => write!(
                 formatter,
                 "no arm for `{tag}` of `{family}`, and its case is not impossible",
+            ),
+            KernelError::NotDescending { type_ } => write!(
+                formatter,
+                "a recursive proof or type at `{type_}` does not descend",
             ),
             KernelError::NotPositive {
                 name,

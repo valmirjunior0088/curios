@@ -25,8 +25,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, Sort, infer::check, sort::sort_of},
     crate::{
-        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term,
-        UniverseContext,
+        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
+        UniverseContext, group_totality, yields_a_sort,
     },
 };
 
@@ -85,11 +85,27 @@ pub fn check_rec_group(
         });
     }
 
+    let mut erased_member: Option<Term> = None;
     for index in 0..group.length() {
         let type_ = group.member_type(index);
 
-        sort_of(kernel, &type_)?;
+        let sort = sort_of(kernel, &type_)?;
         check(kernel, &group.member_body(index), &type_)?;
+
+        // A proof-typed or type-yielding member is deleted by erasure, so its
+        // recursion must descend: assuming it at its declared type otherwise
+        // certifies `rec f : False = f`.
+        if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
+            erased_member = Some(type_);
+        }
+    }
+
+    if let Some(type_) = erased_member
+        && group_totality(kernel, group) != Totality::Total
+    {
+        return Err(KernelError::NotDescending {
+            type_: Box::new(type_),
+        });
     }
 
     for (index, name) in names.iter().enumerate() {
