@@ -41,6 +41,9 @@ pub use names::*;
 mod term;
 pub use term::*;
 
+mod walk;
+pub use walk::*;
+
 mod inductive;
 pub use inductive::*;
 

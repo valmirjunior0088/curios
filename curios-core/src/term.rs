@@ -10,8 +10,8 @@ use frees::*;
 
 use {
     super::{
-        Atom, Bound, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Telescope, Three,
-        Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
+        Atom, Bound, Enter, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Telescope,
+        Three, Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
         instantiate_universe_levels_scoped, print_term,
     },
     curios_base::{Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
@@ -21,7 +21,7 @@ use {
         fmt,
         hash::{Hash, Hasher},
         mem,
-        ops::Deref,
+        ops::{ControlFlow, Deref},
         rc::Rc,
     },
 };
@@ -89,31 +89,18 @@ impl fmt::Debug for Node {
 }
 
 impl Term {
-    /// Fill a memoized cell on every node of this term's subtree, bottom-up, on an explicit stack instead of the native one — so a data-shaped spine of any depth memoizes without recursing per link. `is_filled` reports whether a node's target cell is set (a filled node — and its whole subtree — is skipped, so shared chains are walked once); `fill` computes one node's cell after all its children are filled, reading theirs in O(children). The walk rides `any_child_term` over owned clones: cloning a `Term` bumps the shared `Rc<Node>`, so filling a clone's cell fills it for every occurrence of that node, and `Rc::as_ptr` dedups by node.
-    fn fill_post_order(&self, is_filled: impl Fn(&Node) -> bool, mut fill: impl FnMut(&Node)) {
-        if is_filled(&self.inner) {
-            return;
-        }
-        let mut seen: HashSet<*const Node> = HashSet::new();
-        let mut stack: Vec<(Term, bool)> = vec![(self.clone(), false)];
-        while let Some((node, expanded)) = stack.pop() {
-            if expanded {
-                fill(&node.inner);
-            } else if !is_filled(&node.inner) && seen.insert(Rc::as_ptr(&node.inner)) {
-                stack.push((node.clone(), true));
-                node.inner.subterm.any_child_term(&mut |child| {
-                    stack.push((child.clone(), false));
-                    false
-                });
-            }
-        }
-    }
-
-    /// Fill the eager scalar derivations together in one post-order pass. They combine from the children's caches in O(children), and are almost always wanted together, so one shared walk beats independent traversals.
+    /// Fill the eager scalar derivations together in one post-order [`Term::walk`]. They combine from the children's caches in O(children), and are almost always wanted together, so one shared walk beats independent traversals. Cloning a `Term` bumps the shared `Rc<Node>`, so filling through the walk's clones fills every occurrence; the filled bit is the walk's own memo, and a shared node's later occurrence can only pop after the exit that filled it — every frame between them belongs to its own subtree — so a `Skip`ped node is always already filled.
     fn warm_scalars(&self) {
-        self.fill_post_order(
-            |node| node.scalars.is_filled(),
-            |node| node.scalars.fill(Scalars::of(&node.subterm)),
+        self.walk(
+            &mut (),
+            |_, term| {
+                if term.inner.scalars.is_filled() {
+                    Enter::Skip(())
+                } else {
+                    Enter::Descend
+                }
+            },
+            |_, term, _| term.inner.scalars.fill(Scalars::of(&term.inner.subterm)),
         );
     }
 
@@ -161,59 +148,49 @@ impl Term {
 
     /// Whether any universe metavariable in this subtree satisfies `pred`.
     ///
-    /// The walk is iterative and pointer-deduplicated, matching the scalar cache fill: cache eligibility calls this on data-shaped terms and must not put their depth back onto the native stack.
+    /// The walk is iterative ([`Term::try_walk`]) and pointer-deduplicated, matching the scalar cache fill: cache eligibility calls this on data-shaped terms and must not put their depth back onto the native stack.
     pub fn any_universe_meta(&self, mut pred: impl FnMut(UniverseMetaId) -> bool) -> bool {
         let mut seen: HashSet<*const Node> = HashSet::new();
-        let mut pending = vec![self.clone()];
-        while let Some(term) = pending.pop() {
-            if !seen.insert(Rc::as_ptr(&term.inner)) {
-                continue;
-            }
-            if !term.has_universe_meta() {
-                continue;
-            }
-            if term.inner.subterm.any_direct_universe_meta(&mut pred) {
-                return true;
-            }
-            term.inner.subterm.any_child_term(&mut |child| {
-                pending.push(child.clone());
-                false
-            });
-        }
-        false
+        self.try_walk(
+            &mut seen,
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) || !term.has_universe_meta() {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+                if term.inner.subterm.any_direct_universe_meta(&mut pred) {
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue(Enter::Descend)
+            },
+            |_, _, _| (),
+        )
+        .is_break()
     }
 
-    /// Extend the two dependency sets in one explicit walk without rebuilding the term or warming its unrelated scalar caches. Declaration universe closure uses both sets together: direct level metas join the closure, while term metas lead to their result, telescope, and solved body in the context store.
+    /// Extend the two dependency sets in one explicit walk without rebuilding the term or warming its unrelated scalar caches. Declaration universe closure uses both sets together: direct level metas join the closure, while term metas lead to their result, telescope, and solved body in the context store. A metavariable's children are its spine entries, whose bare `Var`s carry nothing but dedup for free.
     pub fn collect_universe_dependencies(
         &self,
         universes: &mut BTreeSet<UniverseMetaId>,
         term_metas: &mut BTreeSet<MetaId>,
     ) {
         let mut seen: HashSet<*const Node> = HashSet::new();
-        let mut pending = vec![self.clone()];
-        while let Some(term) = pending.pop() {
-            if !seen.insert(Rc::as_ptr(&term.inner)) {
-                continue;
-            }
-            term.inner.subterm.any_direct_universe_meta(&mut |meta| {
-                universes.insert(meta);
-                false
-            });
-            if let Subterm::Metavar(Metavar { id, spine, .. }) = &term.inner.subterm {
-                term_metas.insert(*id);
-                pending.extend(
-                    spine
-                        .iter()
-                        .filter(|entry| !matches!(&***entry, Subterm::Var(_)))
-                        .cloned(),
-                );
-                continue;
-            }
-            term.inner.subterm.any_child_term(&mut |child| {
-                pending.push(child.clone());
-                false
-            });
-        }
+        self.walk(
+            &mut seen,
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) {
+                    return Enter::Skip(());
+                }
+                term.inner.subterm.any_direct_universe_meta(&mut |meta| {
+                    universes.insert(meta);
+                    false
+                });
+                if let Subterm::Metavar(Metavar { id, .. }) = &term.inner.subterm {
+                    term_metas.insert(*id);
+                }
+                Enter::Descend
+            },
+            |_, _, _| (),
+        );
     }
 
     /// Rewrite this node, if it is an occurrence of one of `names`, to denote the declaration instance `levels`. Returns `None` for every other node, leaving it to ordinary traversal.
@@ -1499,11 +1476,22 @@ impl Term {
 }
 
 impl Term {
-    /// Fill the memoized free-variable set bottom-up on an explicit stack: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion.
+    /// Fill the memoized free-variable set bottom-up on a post-order [`Term::walk`]: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion. The filled bit is the walk's memo, exactly as in [`Term::warm_scalars`].
     fn warm_frees(&self) {
-        self.fill_post_order(
-            |node| node.frees.is_filled(),
-            |node| node.frees.fill(node.subterm.free_vars_from_children()),
+        self.walk(
+            &mut (),
+            |_, term| {
+                if term.inner.frees.is_filled() {
+                    Enter::Skip(())
+                } else {
+                    Enter::Descend
+                }
+            },
+            |_, term, _| {
+                term.inner
+                    .frees
+                    .fill(term.inner.subterm.free_vars_from_children())
+            },
         );
     }
 
