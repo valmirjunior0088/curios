@@ -1,3 +1,6 @@
+mod caches;
+pub(crate) use caches::*;
+
 use {
     super::{
         Error, Goal, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
@@ -142,27 +145,6 @@ pub(crate) struct ParkedGoal {
     pub watching: BTreeSet<MetaId>,
 }
 
-/// Key of one memoized `elaborate` call in `Context::get_or_init_elaborated`: the lowered term, the `Check` expected type (`None` for `Infer`), and whether an island's representation-privacy checks were live. Validity under suppressed privacy is directional — an entry that passed strict checks would be valid under suppression, but not the reverse — so checked and suppressed runs each answer only their own partition.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct ElaborationKey {
-    term: Term,
-    expected: Option<Term>,
-    privacy_checked: bool,
-}
-
-/// Outcome of [`Context::probe_elaborated`] — the read half of the elaboration cache, torn out of [`Context::get_or_init_elaborated`]'s bracket so the iterative `elaborate` driver can probe at a frame push and record at the matching pop (the reduction cache's `cached_reduced`/`reduce` split, one level up). `Hit` carries the memoized, un-span-stamped `(rebuilt, type)`; `Miss` carries the state snapshot the caller threads back into [`Context::record_elaborated`] as its purity witness; `Uncacheable` marks a term the groundness gate excludes — the caller elaborates it but records nothing.
-pub(crate) enum ElabProbe {
-    Hit((Term, Term)),
-    Miss(ElaborationStamp),
-    Uncacheable,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ElaborationStamp {
-    terms: Entropy,
-    universes: Entropy,
-}
-
 /// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
@@ -171,9 +153,8 @@ pub struct Context {
     budget: u64,
     /// Steps left in the current declaration's budget. `Cell` because the conversion queue spends through a shared borrow.
     remaining: Cell<u64>,
-    reduction_cache: HashMap<Term, Term>,
-    // Memoized `elaborate` results for ground, local-free subterms (see `ElaborationKey`), holding the un-span-stamped (rebuilt, type) pair. The elaboration-level analogue of `reduction_cache`: without it, elaboration tree-walks the DAG-shaped terms the lowerer emits (string-literal UTF-8 derivations share every state chain by `Rc`) in quadratic time and linear extra stack. See `Context::get_or_init_elaborated` for the exact gates and clear sites.
-    elaboration_cache: HashMap<ElaborationKey, (Term, Term)>,
+    // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
+    caches: Caches,
     assumptions: Vec<HashMap<Free, Term>>,
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
     definitions: Vec<HashMap<Free, DefEntry>>,
@@ -197,10 +178,6 @@ pub struct Context {
     // One tick per mutation of `local` (assume, frame exit, reassume) — an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads. Invalidates `identity_cache`, which shares the frozen telescope and identity spine between every meta born under an unchanged Γ.
     locals_stamp: Entropy,
     identity_cache: Option<(usize, SharedTelescope, SharedSpine)>,
-    // One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
-    mutation_stamp: Entropy,
-    // Monotonic universe-solver writes are tracked separately. Cache entries may survive them only when their keys and results contain no transitively unresolved universe meta; rollback/finalization clears the cache at the non-monotonic boundaries.
-    universe_mutation_stamp: Entropy,
     metas: MetaStore,
     universe_solver: UniverseSolver,
     // The next metavariable id this context may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with its `metavar_floor` argument so core-minted ids sit strictly above `into_core`'s.
@@ -244,8 +221,7 @@ impl Context {
             fresh_names: Entropy::<usize>::new(),
             budget,
             remaining: Cell::new(budget),
-            reduction_cache: HashMap::new(),
-            elaboration_cache: HashMap::new(),
+            caches: Caches::new(),
             assumptions: vec![HashMap::new()],
             assumption_universes: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
@@ -273,8 +249,6 @@ impl Context {
             suppress_parking: false,
             locals_stamp: Entropy::new(),
             identity_cache: None,
-            mutation_stamp: Entropy::new(),
-            universe_mutation_stamp: Entropy::new(),
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
             totality: BTreeMap::new(),
@@ -375,7 +349,7 @@ impl Context {
         if term.has_universe_meta() {
             return None;
         }
-        self.reduction_cache.get(term).cloned()
+        self.caches.reduction_get(term)
     }
 
     /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately).
@@ -386,7 +360,7 @@ impl Context {
             && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
         if cacheable {
-            self.reduction_cache.insert(term, result.clone());
+            self.caches.reduction_insert(term, result.clone());
         }
     }
 
@@ -428,21 +402,16 @@ impl Context {
         // Locally-nameless discipline: every scope is opened before descent, so a term in elaboration position carries no loose bound indices — which is what makes it keyable without any binder context.
         debug_assert!(term.closed(), "elaboration-cache key has loose indices");
 
-        let key = ElaborationKey {
-            term: term.clone(),
-            expected: expected.cloned(),
-            privacy_checked: self.island.is_some(),
-        };
-        match self.elaboration_cache.get(&key) {
-            Some((rebuilt, type_)) => ElabProbe::Hit((rebuilt.clone(), type_.clone())),
-            None => ElabProbe::Miss(ElaborationStamp {
-                terms: self.mutation_stamp.clone(),
-                universes: self.universe_mutation_stamp.clone(),
-            }),
+        match self
+            .caches
+            .elaboration_get(term, expected, self.island.is_some())
+        {
+            Some(hit) => ElabProbe::Hit(hit),
+            None => ElabProbe::Miss(self.caches.stamps()),
         }
     }
 
-    /// Write half of the elaboration cache, paired with a [`probe_elaborated`] `Miss`. Rebuilds the same key (spans excluded from `Term` equality, so the un-restamped result the caller passes keys identically to the probe) and defers to [`insert_elaborated`]'s purity/groundness condition against the snapshotted `stamp`.
+    /// Write half of the elaboration cache, paired with a [`probe_elaborated`] `Miss`. Keys the same way the probe did (spans excluded from `Term` equality, so the un-restamped result the caller passes keys identically) and defers to [`insert_elaborated`]'s purity/groundness condition against the snapshotted `stamp`.
     ///
     /// [`probe_elaborated`]: Context::probe_elaborated [`insert_elaborated`]: Context::insert_elaborated
     pub(crate) fn record_elaborated(
@@ -452,24 +421,21 @@ impl Context {
         stamp: ElaborationStamp,
         result: &(Term, Term),
     ) {
-        let key = ElaborationKey {
-            term: term.clone(),
-            expected: expected.cloned(),
-            privacy_checked: self.island.is_some(),
-        };
-        self.insert_elaborated(key, &stamp, result);
+        self.insert_elaborated(term, expected, &stamp, result);
     }
 
     /// Insert-side tail of [`Context::get_or_init_elaborated`], kept out of the caller's frame deliberately: `elaborate` recurses natively once per term level with `get_or_init_elaborated` on the stack, so the insert path's locals must not ride along on every level.
     #[inline(never)]
     fn insert_elaborated(
         &mut self,
-        key: ElaborationKey,
+        term: &Term,
+        expected: Option<&Term>,
         stamp: &ElaborationStamp,
         result: &(Term, Term),
     ) {
-        if self.elaboration_cacheable(stamp, key.expected.as_ref(), result) {
-            self.elaboration_cache.insert(key, result.clone());
+        if self.elaboration_cacheable(stamp, expected, result) {
+            self.caches
+                .elaboration_insert(term, expected, self.island.is_some(), result);
         }
     }
 
@@ -486,8 +452,7 @@ impl Context {
             !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
         };
         let settled = |t: &Term| t.free_vars().iter().all(|name| self.is_defined(name));
-        self.mutation_stamp == stamp.terms
-            && self.universe_mutation_stamp == stamp.universes
+        self.caches.stamps_unchanged(stamp)
             && ground(&result.0)
             && ground(&result.1)
             && settled(&result.0)
@@ -527,17 +492,12 @@ impl Context {
         self.witness_scope
             .truncate(self.witness_marks.pop().unwrap());
 
-        if !refinements.is_empty()
-            || !refinement_projections.is_empty()
-            || !refinement_scrutinees.is_empty()
-        {
-            // A dropped refinement can have influenced any entry — refinement keys can be `#`-free stuck applications of globals — so both caches clear wholesale (refinement frames are rare).
-            self.reduction_cache.clear();
-            self.elaboration_cache.clear();
-        } else if !definitions.is_empty() {
-            // The reduction cache clears wholesale: `reduce_let` defines under the written binder labels, so frame locals need not be `#`-minted, and a frame value can be consumed into a reduct that no longer names its definition (a chained definition folds it in), leaving nothing for a selective retain to key on. The elaboration cache is exempt: terms in elaboration position name only `/`-qualified globals and `#`-minted locals, so no entry can reference a written frame label.
-            self.reduction_cache.clear();
-        }
+        self.caches.invalidate_frame_exit(
+            !refinements.is_empty()
+                || !refinement_projections.is_empty()
+                || !refinement_scrutinees.is_empty(),
+            !definitions.is_empty(),
+        );
     }
 
     pub(crate) fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -551,7 +511,7 @@ impl Context {
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
         self.local.push((name.clone(), type_.clone()));
 
         self.assumptions
@@ -578,9 +538,7 @@ impl Context {
     /// Replace the type of an existing assumption in place — the innermost binding of `label`. Used by the `rec` elaborators: a group's signatures must be assumed (lowered) before they can be elaborated, since members reference each other, and are then upgraded here to their rebuilt forms — implicit insertion makes the two no longer interchangeable, and a lowered type must never leak into later reduction. Panics if `label` has no prior assumption — every caller is expected to have `assume`d it earlier in the same scope (a construction bug otherwise, not a user-facing case).
     pub(crate) fn reassume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();
-        self.mutation_stamp.fresh();
-        // A top-level `rec` group's names are qualified (`#`-free), so an entry elaborated between the group's lowered `assume` and this upgrade could embed the lowered signature; the upgrade makes the two non-interchangeable (see below), so such entries must not survive it.
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_reassumption();
 
         let entry = self
             .local
@@ -845,9 +803,7 @@ impl Context {
                 "assumption scheme frames",
             );
         }
-        self.mutation_stamp.fresh();
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_redefinition();
     }
 
     /// Whether `label` currently has a definition entry in some frame — the settled-globals gate for [`Context::elaboration_cacheable`]. A name defined here will only ever be *re*defined (which clears both caches wholesale), never freshly defined, so an elaboration entry naming it is safe to keep across a later fresh `define`.
@@ -873,12 +829,9 @@ impl Context {
             .iter()
             .any(|frame| frame.contains_key(&name));
         if redefinition {
-            self.mutation_stamp.fresh();
-            self.reduction_cache.clear();
-            self.elaboration_cache.clear();
+            self.caches.invalidate_for_redefinition();
         } else {
-            self.reduction_cache
-                .retain(|_, reduct| !reduct.mentions_free(&name));
+            self.caches.retain_reductions_without(&name);
         }
 
         self.definitions.last_mut().unwrap().insert(name, entry);
@@ -933,26 +886,20 @@ impl Context {
 
     /// Register a counterfactual match-arm refinement of a variable. Unlike `define`, this lives in a suppressible store so re-validation can ignore it. Clears the reduction cache, as the variable now reduces differently.
     pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
-        self.mutation_stamp.fresh();
+        self.caches.invalidate_for_refinement();
         self.refinements
             .last_mut()
             .unwrap()
             .insert(name.clone(), term.clone());
-
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
     }
 
     /// Register a counterfactual refinement of a projection (`refine_head` on a `Proj` scrutinee).
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
-        self.mutation_stamp.fresh();
+        self.caches.invalidate_for_refinement();
         self.refinement_projections
             .last_mut()
             .unwrap()
             .insert((project_erased_universes(&base), index), value);
-
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
     }
 
     /// What `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Context::var_reduct_at`] would silently mean something else inside a match arm.
@@ -1013,14 +960,11 @@ impl Context {
 
     /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the canonical form (head verbatim, arguments in WHNF); `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form.
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, value: Term) {
-        self.mutation_stamp.fresh();
+        self.caches.invalidate_for_refinement();
         self.refinement_scrutinees
             .last_mut()
             .unwrap()
             .insert(canonical, value);
-
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
     }
 
     /// Whether any scrutinee refinement is registered (regardless of suppression). The cheap outer gate for the reducer probe — skipped on the common refinement-free reduction without hashing anything.
@@ -1081,8 +1025,7 @@ impl Context {
         let previous = self.suppress_refinements;
 
         if self.any_refinements_registered() {
-            self.reduction_cache.clear();
-            self.elaboration_cache.clear();
+            self.caches.invalidate_suppression_boundary();
         }
 
         self.suppress_refinements = true;
@@ -1090,8 +1033,7 @@ impl Context {
         self.suppress_refinements = previous;
 
         if self.any_refinements_registered() {
-            self.reduction_cache.clear();
-            self.elaboration_cache.clear();
+            self.caches.invalidate_suppression_boundary();
         }
 
         result
@@ -1232,7 +1174,7 @@ impl Context {
         match self.witness_table.get(&(concept.clone(), key.clone())) {
             Some(existing) => Some(existing.module.clone()),
             None => {
-                self.mutation_stamp.fresh();
+                self.caches.note_write();
                 self.witness_table.insert((concept, key), witness);
                 None
             }
@@ -1252,12 +1194,12 @@ impl Context {
             .unwrap_or_else(|| panic!("witness '{name}' was not registered"));
         witness.universe_context = universe_context;
         witness.signature = signature;
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
     }
 
     /// Defer a witness goal whose key is rigid but has no table entry yet — retried after later items register witnesses, reported only at the end of the module.
     pub(crate) fn defer_witness(&mut self, goal: ParkedGoal) {
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
         self.deferred_witnesses.push(goal);
     }
 
@@ -1273,8 +1215,8 @@ impl Context {
 
     /// Set the current module before elaborating an item (see `elaborate_module_suffix`).
     pub(crate) fn set_island(&mut self, island: Qualifier) {
-        // Representation-privacy checks are island-relative, so an entry elaborated under one item's island must not answer for another's. Every item boundary also lands a `define_entry` clear, but this one keeps the cache's soundness independent of that ordering.
-        self.elaboration_cache.clear();
+        // Every item boundary also lands a `define_entry` clear, but this one keeps the cache's soundness independent of that ordering.
+        self.caches.invalidate_for_island_change();
         self.island = Some(island);
     }
 
@@ -1296,7 +1238,7 @@ impl Context {
         telescope: impl Into<SharedTelescope>,
         result: Term,
     ) {
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
         if id.0 >= self.metas.entries.len() {
             self.metas.entries.resize_with(id.0 + 1, || None);
         }
@@ -1311,7 +1253,7 @@ impl Context {
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
     pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetaId, Term) {
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         if id.0 >= self.metas.entries.len() {
@@ -1474,7 +1416,7 @@ impl Context {
 
     /// Commit a metavariable's solution. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.) Records the id as newly solved — the wake signal for parked constraints — and journals it for [`Context::rollback_solutions`].
     pub(crate) fn solve_metavar(&mut self, id: MetaId, term: Term) {
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
         if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
             entry.solution = Some(term);
             self.newly_solved.push(id);
@@ -1505,12 +1447,8 @@ impl Context {
         }
 
         self.universe_solver.rollback(mark.universe);
-        self.mutation_stamp.fresh();
-        self.universe_mutation_stamp.fresh();
         self.newly_solved.retain(|id| !unwound.contains(id));
-        self.reduction_cache.clear();
-        // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_rollback();
     }
 
     pub(crate) fn universes(&self) -> &UniverseSolver {
@@ -1522,7 +1460,7 @@ impl Context {
         let before = self.universe_solver.state_token();
         UniverseMutation {
             solver: &mut self.universe_solver,
-            stamp: &self.universe_mutation_stamp,
+            stamp: self.caches.universe_stamp(),
             before,
         }
     }
@@ -1531,7 +1469,7 @@ impl Context {
         let before = self.universe_solver.state_token();
         self.universes_mut().clear_constraints();
         if self.universe_solver.state_token() != before {
-            self.elaboration_cache.clear();
+            self.caches.invalidate_for_universe_transaction();
         }
     }
 
@@ -1561,7 +1499,7 @@ impl Context {
             "the universe floor must equal the lowering seed table length"
         );
         self.universe_solver.seed(seeds);
-        self.universe_mutation_stamp.fresh();
+        self.caches.note_universe_write();
     }
 
     pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
@@ -1575,8 +1513,7 @@ impl Context {
             .iter()
             .map(|term| super::zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_universe_rewrite();
         Ok(terms)
     }
 
@@ -1589,8 +1526,7 @@ impl Context {
             .universes_mut()
             .finalize(interface, internal)
             .map_err(Error::from)?;
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_universe_rewrite();
         Ok(universe_context)
     }
 
@@ -1603,8 +1539,7 @@ impl Context {
         self.universes_mut()
             .finalize_at_instance(metas, instance, parameter_count)
             .map_err(Error::from)?;
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_universe_rewrite();
         Ok(())
     }
 
@@ -1617,8 +1552,7 @@ impl Context {
         self.universes_mut()
             .close_instance(minted, instance, determined)
             .map_err(Error::from)?;
-        self.reduction_cache.clear();
-        self.elaboration_cache.clear();
+        self.caches.invalidate_for_universe_rewrite();
         Ok(())
     }
 
@@ -1683,7 +1617,7 @@ impl Context {
 
     /// Re-park work that is still blocked after a retry, keeping its originally frozen frame. The watch set is recomputed from the work's current unsolved metavariables.
     pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
-        self.mutation_stamp.fresh();
+        self.caches.note_write();
         let watching = match &work {
             ParkedWork::Conversion(goal) => goal
                 .this
