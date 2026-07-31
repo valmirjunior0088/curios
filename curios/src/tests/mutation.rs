@@ -172,3 +172,93 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         "the subjects stopped exercising the property: only {mutated} pairs were swapped",
     );
 }
+
+/// Programs that differ only in an index, so a body grafted from one into the other is well formed and wrong in exactly one respect.
+///
+/// The two classes above substitute something obviously foreign — a sort, or an unrelated declaration's type. A checker could refuse both while tracking nothing finer than the shape of a term. These pairs remove that escape: the grafted body is a genuine, well-typed vector, built from the same constructors at the same element type, and the *only* thing wrong with it is its length. Refusing it requires the indices to be carried through the constructor telescope and compared, which is the whole of what a dependent checker is for.
+const GRAFTS: &[(&str, &str, &str)] = &[
+    (
+        "a vector of the wrong length",
+        r#"
+        use /std/{Nat, Vec};
+        let subject : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
+        /std/print("donor")
+        "#,
+        r#"
+        use /std/{Nat, Vec};
+        let subject : Vec(Nat, 3) = Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil())));
+        /std/print("host")
+        "#,
+    ),
+    (
+        "an equation between the wrong pair",
+        r#"
+        use /std/{Nat, Eq};
+        let subject : Eq(1, 1) = Eq/refl();
+        /std/print("donor")
+        "#,
+        r#"
+        use /std/{Nat, Eq};
+        let subject : Eq(2, 2) = Eq/refl();
+        /std/print("host")
+        "#,
+    ),
+];
+
+/// Elaborate `source` and return its module with the index its user items start at.
+fn elaborated(description: &str, source: &str) -> (Module, usize) {
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
+    let (module, checked_from, _) = curios_pipeline::typecheck_reporting(
+        crate::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        RootSource::none(),
+    )
+    .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
+
+    (module, checked_from)
+}
+
+/// A body grafted from a program that differs only in an index must be refused by the host.
+#[test]
+fn a_body_grafted_across_an_index_is_refused() {
+    for (description, donor_source, host_source) in GRAFTS {
+        let (donor, _) = elaborated(description, donor_source);
+        let (host, checked_from) = elaborated(description, host_source);
+
+        let donated = donor
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Let(definition) if definition.name.to_string().ends_with("subject") => {
+                    Some(definition.body.clone())
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{description}: the donor declares `subject`"));
+
+        assert!(
+            recheck_module_suffix(&host, crate::DEFAULT_STEP_BUDGET, checked_from).is_empty(),
+            "{description}: the host must be accepted before anything is grafted into it",
+        );
+
+        let mut grafted: Module = host.clone();
+        let target = grafted
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                Item::Let(definition) if definition.name.to_string().ends_with("subject") => {
+                    Some(definition)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{description}: the host declares `subject`"));
+        target.body = donated;
+
+        assert!(
+            !recheck_module_suffix(&grafted, crate::DEFAULT_STEP_BUDGET, checked_from).is_empty(),
+            "{description}: the kernel accepted a body whose index disagrees with its declaration",
+        );
+    }
+}
