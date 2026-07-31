@@ -864,30 +864,72 @@ impl<B: Bound> Hash for Telescope<B> {
     }
 }
 
+/// All three derivations walk the spine in a loop rather than one native frame per parameter.
+///
+/// A telescope's length is its written arity, and "written depth is a bound the default stack tolerates" is the assumption this file already retired for `Let`/`Rec` spines — [`Visit::enter_scope`]/[`Visit::leave_scope`] exist for exactly this shape. The spine is the sibling that kept the recursion, which is invisible in authored signatures and unbounded in generated ones.
 impl<B: Bound> Bound for Telescope<B> {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        match self {
-            Telescope::Cons(ty, rest) => {
-                Telescope::Cons(visit.visit_subterm(ty), visit.visit_scope(rest))
+        // Each entry type is visited under the binders declared *before* it, so a link's own binders are entered after its type and retracted in the reverse order on the way back up — which is the bracket `visit_scope` used to keep on the native stack.
+        let mut entries = Vec::new();
+        let mut current = self;
+        let body = loop {
+            match current {
+                Telescope::Cons(ty, rest) => {
+                    entries.push((visit.visit_subterm(ty), rest.names.clone(), rest.arity()));
+                    visit.enter_scope(rest.arity());
+                    current = rest.body();
+                }
+                Telescope::Done(body) => break body.traverse(visit),
             }
-            Telescope::Done(body) => Telescope::Done(body.traverse(visit).into()),
-        }
+        };
+
+        entries
+            .into_iter()
+            .rev()
+            .fold(Telescope::Done(body.into()), |rest, (ty, names, arity)| {
+                visit.leave_scope(arity);
+                Telescope::Cons(
+                    ty,
+                    Scope {
+                        arity: One,
+                        names,
+                        body: Box::new(rest),
+                    },
+                )
+            })
     }
 
+    /// `saturating_sub` is monotone, so it distributes over `max` — which is what lets the nested `max(ty.reach(), rest.reach())` be flattened into one pass that discounts each entry by the binders standing before it.
     fn reach(&self) -> usize {
-        match self {
-            Telescope::Cons(ty, rest) => ty.reach().max(rest.reach()),
-            Telescope::Done(body) => body.reach(),
+        let (mut reach, mut depth) = (0, 0);
+        let mut current = self;
+        loop {
+            match current {
+                Telescope::Cons(ty, rest) => {
+                    reach = reach.max(ty.reach().saturating_sub(depth));
+                    depth += rest.arity();
+                    current = rest.body();
+                }
+                Telescope::Done(body) => {
+                    return reach.max(body.reach().saturating_sub(depth));
+                }
+            }
         }
     }
 
     fn has_metavar(&self) -> bool {
-        match self {
-            Telescope::Cons(ty, rest) => ty.has_metavar() || Bound::has_metavar(rest.body()),
-            Telescope::Done(body) => body.has_metavar(),
+        let mut current = self;
+        loop {
+            match current {
+                Telescope::Cons(ty, rest) => match ty.has_metavar() {
+                    true => return true,
+                    false => current = rest.body(),
+                },
+                Telescope::Done(body) => return body.has_metavar(),
+            }
         }
     }
 }
