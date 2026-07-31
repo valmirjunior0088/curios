@@ -354,6 +354,54 @@ const TYPE_REACHING_PARTIAL: &str = r#"
     /std/print("FORGED")
     "#;
 
+/// The induction hypothesis of a `Nat` fold, at the wrong instance.
+///
+/// In the successor arm the hypothesis is the motive at the *predecessor*, and the goal is the motive at the successor. Handing the hypothesis back directly proves `Eq(k + 1, 0)` from `Eq(k, 0)`, so a rule that typed the hypothesis at the scrutinee rather than at the peeled index would make every predicate provable by induction.
+const INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE: &str = r#"
+    use /std/{Nat, Eq};
+    let bogus(n : Nat) -> Eq(n, 0) =
+        match n : (m) => Eq(m, 0)
+        | 0 => Eq/refl()
+        | k + 1; ih => ih
+        end;
+    /std/print("FORGED")
+    "#;
+
+/// A natural-number dispatch whose default is checked at a case's instance rather than the scrutinee's.
+///
+/// The default binds nothing and refines no index, so it must be checked at the scrutinee's own value: its goal here is `Eq(n, 0)` for an arbitrary `n`, which `Eq/refl()` cannot inhabit. Were it checked at the `0` arm's instance — the shape a refinement leak would produce — reflexivity would discharge it and every natural would equal zero.
+const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
+    use /std/{Nat, Eq};
+    let bogus(n : Nat) -> Eq(n, 0) =
+        match n : (m) => Eq(m, 0)
+        | 0 => Eq/refl()
+        | _ => Eq/refl()
+        end;
+    /std/print("FORGED")
+    "#;
+
+/// Saturating subtraction is not a descent.
+///
+/// Note which rule fires on each side: the elaborator refuses through the reach obligation — the definition is a proof position reaching something not known to terminate — while the kernel refuses through its own local gate, a recursive member at a proposition whose group does not descend. Two rules, two crates, one program; that is what the second opinion is supposed to look like.
+///
+/// `n - 1` is `0` at `0`, so `bogus(0)` calls itself forever. The declared result is a proposition, which obliges the group to descend, and the size-change engine decides that — an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and since erasure deletes the proof, `False` follows immediately.
+const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
+    use /std/{Nat, False};
+    rec bogus(n : Nat) -> False = bogus(n - 1);
+    let bad : False = bogus(0);
+    /std/print("FORGED")
+    "#;
+
+/// Permuting the arguments is not a descent either.
+///
+/// The classic size-change subtlety: every call maps a parameter to a parameter, so each call matrix is full of `Same` entries and none is `Less`. Composing a swap with itself returns the identity, so no cycle carries a strict decrease and the group cannot be total — an engine reading "the argument came from a parameter" as progress would certify a recursion that runs forever.
+const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
+    use /std/{Nat, False};
+    rec bogus(a : Nat, b : Nat) -> False = bogus(b, a);
+    let bad : False = bogus(0, 1);
+    /std/print("FORGED")
+    "#;
+
 /// A program both checkers must accept, so a harness that refused everything would fail here.
 const A_SOUND_PROGRAM: &str = r#"
     use /std/{Nat};
@@ -527,6 +575,30 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         TYPE_REACHING_PARTIAL,
         Expect::Refuses("not known to terminate"),
         Expect::Refuses("not known to terminate"),
+    ),
+    (
+        "induction_hypothesis_at_the_scrutinee",
+        INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE,
+        Expect::Refuses("type mismatch"),
+        Expect::NotAsked,
+    ),
+    (
+        "dispatch_default_at_a_case",
+        DISPATCH_DEFAULT_AT_A_CASE,
+        Expect::Refuses("type mismatch"),
+        Expect::NotAsked,
+    ),
+    (
+        "saturating_subtraction_is_not_descent",
+        SATURATING_SUBTRACTION_IS_NOT_DESCENT,
+        Expect::Refuses("not known to terminate"),
+        Expect::Refuses("does not descend"),
+    ),
+    (
+        "permuting_arguments_is_not_descent",
+        PERMUTING_ARGUMENTS_IS_NOT_DESCENT,
+        Expect::Refuses("not known to terminate"),
+        Expect::Refuses("does not descend"),
     ),
     (
         "sound_program",
