@@ -318,6 +318,19 @@ const PARTIAL_IN_FIELD: &str = r#"
     /std/print("FORGED")
     "#;
 
+/// A diverging proof in a position the judgment *infers* rather than checks — a match scrutinee — inside a definition whose own type is relevant, so the body is not a proof position either.
+///
+/// The elaborator records every settled node with the type it settled at, checked or inferred alike, so it has always caught this. The kernel recorded only checked positions, and nothing here is one: the elimination conjured a `Nat` from a proof that never terminates. This row read `elab=refuses, cert=accepts` until the kernel began seeding inferred positions too — the quadrant this matrix exists to make visible.
+const INFERRED_PROOF_POSITION: &str = r#"
+    use /std/{Nat, False};
+    struct Box : pub Type { p : False }
+    rec loop(n : Nat) -> Box = loop(n);
+    let conjured : Nat =
+        match loop(0).p : (_) => Nat
+        end;
+    /std/print(Nat/to_str(conjured))
+    "#;
+
 /// A program both checkers must accept, so a harness that refused everything would fail here.
 const A_SOUND_PROGRAM: &str = r#"
     use /std/{Nat};
@@ -471,6 +484,12 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "partial_in_field",
         PARTIAL_IN_FIELD,
+        Expect::Refuses("not known to terminate"),
+        Expect::Refuses("not known to terminate"),
+    ),
+    (
+        "inferred_proof_position",
+        INFERRED_PROOF_POSITION,
         Expect::Refuses("not known to terminate"),
         Expect::Refuses("not known to terminate"),
     ),

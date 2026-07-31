@@ -58,9 +58,12 @@ type Obligation = (Term, Term);
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     let mut deferred = Vec::new();
     let inferred = infer_node(kernel, term, &mut deferred)?;
+    // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions left a diverging proof in a scrutinee unseeded, and the elimination conjured a relevant value from it.
+    kernel.record_checked(term, &inferred);
 
     while let Some((term, expected)) = deferred.pop() {
         let actual = infer_node(kernel, &term, &mut deferred)?;
+        kernel.record_checked(&term, &actual);
 
         if !subsumes(kernel, &actual, &expected)? {
             return Err(KernelError::Mismatch {
