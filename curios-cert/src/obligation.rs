@@ -14,7 +14,9 @@
 
 use {
     super::{Kernel, KernelError, Sort, group_totality},
-    curios_core::{Bound, Free, Global, Item, Module, Prim, Rec, Reducer, Subterm, Term, Totality},
+    curios_core::{
+        Bound, Enter, Free, Global, Item, Module, Prim, Rec, Reducer, Subterm, Term, Totality,
+    },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
@@ -36,47 +38,27 @@ impl std::fmt::Display for Erased {
 
 /// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or a `Prim::Exit`.
 ///
-/// Post-order over the term's DAG, memoized across the whole module — definitions share subterms heavily, and a node settled for one is settled for all.
-// Safety: the memo is keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
+/// Post-order over the term's DAG on the shared [`Term::walk`] driver. The memo is structural and caller-owned, carried across the whole module rather than per walk — definitions share subterms heavily, and a node settled for one is settled for all.
+// Safety: the memo is keyed on `Term`, whose interior scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
 #[allow(clippy::mutable_key_type)]
 fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
-    let mut pending = vec![(term.clone(), false)];
-
-    while let Some((node, combining)) = pending.pop() {
-        if memo.contains_key(&node) {
-            continue;
-        }
-
-        if !combining {
-            pending.push((node.clone(), true));
-            let subterm: &Subterm = &node;
-            subterm.any_child_term(&mut |child| {
-                if !memo.contains_key(child) {
-                    pending.push((child.clone(), false));
-                }
-                false
-            });
-            continue;
-        }
-
-        let mut partial = matches!(&*node, Subterm::Prim(Prim::Exit(..)));
-        if let Subterm::Rec(Rec { group, .. }) = &*node {
-            let group = group.clone();
-            partial = partial || group_totality(kernel, &group) == Totality::Partial;
-        }
-        if !partial {
-            let subterm: &Subterm = &node;
-            subterm.any_child_term(&mut |child| {
-                let child_partial = memo.get(child).copied().unwrap_or(false);
-                partial = partial || child_partial;
-                child_partial
-            });
-        }
-
-        memo.insert(node, partial);
-    }
-
-    memo.get(term).copied().unwrap_or(false)
+    let mut state = (kernel, memo);
+    term.walk(
+        &mut state,
+        |state, term| match state.1.get(term) {
+            Some(&partial) => Enter::Skip(partial),
+            None => Enter::Descend,
+        },
+        |state, term, mut children| {
+            let mut partial = matches!(&**term, Subterm::Prim(Prim::Exit(..)));
+            if let Subterm::Rec(Rec { group, .. }) = &**term {
+                partial = partial || group_totality(state.0, group) == Totality::Partial;
+            }
+            let partial = partial || children.any(|child| child);
+            state.1.insert(term.clone(), partial);
+            partial
+        },
+    )
 }
 
 /// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
