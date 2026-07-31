@@ -64,6 +64,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Runtime | `curios-runtime` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
 | Native product | `curios` | Public compile/run helpers, CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling |
 | Browser product | `curios-web` | wasm-bindgen compiler exports and JavaScript execution harness |
+| Profiling | `curios-profile` | The workspace's only `tracing` dependency: `profile!`/`profile_span!` span macros and the `capture` aggregate-timing subscriber, gated per-crate on a `profile` feature |
 
 ## Change routing
 
@@ -85,6 +86,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Standard or syntax library | `curios-prelude/std/`, `curios-prelude/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
 | Prelude archive or replay | `curios-prelude/build.rs`, `curios-prelude/src/` | Text preparation, Core elaboration/erasure replay APIs, pipeline integration, and archive validation tests |
 | Browser compiler or harness | `curios-web/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
+| Profiling instrumentation | `curios-profile/src/lib.rs` | Each consumer crate's `profile` feature fan-out, and `make curios/profile` |
 | Binaryen version, build, or FFI | `curios-binaryen/` | Shared cache behavior, native compiler linkage, and optimize round-trip tests |
 
 ## Architectural invariants

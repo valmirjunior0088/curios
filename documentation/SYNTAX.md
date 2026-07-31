@@ -84,7 +84,7 @@ A character literal contains one Unicode scalar value or one supported escape an
 '\''
 ```
 
-Character escapes are `\n`, `\t`, `\r`, `\\`, and `\'`.
+Character escapes are `\n`, `\t`, `\r`, `\\`, and `\'`. An unrecognized escape in a character literal is a parse error.
 
 A string literal has type `Str`.
 
@@ -93,7 +93,7 @@ A string literal has type `Str`.
 "first\nsecond"
 ```
 
-String escapes are `\n`, `\t`, `\r`, `\\`, and `\"`.
+String escapes are `\n`, `\t`, `\r`, `\\`, and `\"`. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`. This is unlike a character literal, where an unrecognized escape is a parse error.
 
 `Str` stores certified UTF-8 bytes. Its logical length, indexing, slicing, folding, and search operations count Unicode scalar values (`Char`), not bytes or grapheme clusters.
 
