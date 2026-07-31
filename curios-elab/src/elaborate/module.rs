@@ -1053,7 +1053,7 @@ fn finalize_and_check(
     mut module: Module,
     body_type: Term,
     inherited: &BTreeMap<Global, Totality>,
-) -> Result<(Module, Term), Error> {
+) -> Result<(Module, Term, Vec<Error>), Error> {
     curios_profile::profile!("finalize_and_check");
     let mut entry_terms = vec![module.body.clone()];
     let has_annotation = module.type_.is_some();
@@ -1077,10 +1077,26 @@ fn finalize_and_check(
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
     check_positivity(context, &mut module)?;
     record_totality(context, &mut module, inherited);
-    check_type_totality(context, &module, inherited)?;
-    check_proof_totality(context, &module, inherited)?;
 
-    Ok((module, body_type))
+    // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
+    let obligations = [
+        check_type_totality(context, &module, inherited),
+        check_proof_totality(context, &module, inherited),
+    ]
+    .into_iter()
+    .filter_map(Result::err)
+    .collect();
+
+    Ok((module, body_type, obligations))
+}
+
+/// The first erasure-obligation verdict, as an error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report.
+fn raise(outcome: (Module, Term, Vec<Error>)) -> Result<(Module, Term), Error> {
+    let (module, body_type, obligations) = outcome;
+    match obligations.into_iter().next() {
+        Some(error) => Err(error),
+        None => Ok((module, body_type)),
+    }
 }
 
 /// Elaborate a whole [`Module`] with no cached prefix, then zonk and check it.
@@ -1097,7 +1113,12 @@ pub fn elaborate_and_zonk_module(
     let (module, body_type) =
         elaborate_module_suffix(context, None, module, metavar_floor, universe_floor, mode)?;
     // Nothing is inherited: `module` is the whole program, so every name it mentions it also defines.
-    finalize_and_check(context, module, body_type, &BTreeMap::new())
+    raise(finalize_and_check(
+        context,
+        module,
+        body_type,
+        &BTreeMap::new(),
+    )?)
 }
 
 /// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already elaborated, reusing the cached result instead of re-type-checking it.
@@ -1115,6 +1136,29 @@ pub fn elaborate_and_zonk_with_prelude(
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
+    let (module, body_type, obligations) = elaborate_and_zonk_with_prelude_reporting(
+        context,
+        prelude,
+        module,
+        metavar_floor,
+        universe_floor,
+        mode,
+    )?;
+
+    raise((module, body_type, obligations))
+}
+
+/// [`elaborate_and_zonk_with_prelude`] with the erasure obligations *reported* rather than raised.
+///
+/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no module, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_with_prelude`].
+pub fn elaborate_and_zonk_with_prelude_reporting(
+    context: &mut Context,
+    prelude: &Module,
+    module: &Module,
+    metavar_floor: usize,
+    universe_floor: usize,
+    mode: Mode,
+) -> Result<(Module, Term, Vec<Error>), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     let (suffix, body_type) = elaborate_module_suffix(
         context,
@@ -1126,7 +1170,8 @@ pub fn elaborate_and_zonk_with_prelude(
     )?;
     // The prelude's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
     let inherited = recorded_totality(prelude);
-    let (suffix, body_type) = finalize_and_check(context, suffix, body_type, &inherited)?;
+    let (suffix, body_type, obligations) =
+        finalize_and_check(context, suffix, body_type, &inherited)?;
 
     let mut items = prelude.items.clone();
     items.extend(suffix.items);
@@ -1151,5 +1196,5 @@ pub fn elaborate_and_zonk_with_prelude(
         body: suffix.body,
     };
 
-    Ok((module, body_type))
+    Ok((module, body_type, obligations))
 }

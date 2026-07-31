@@ -6,11 +6,58 @@ use {
     curios_cert::recheck_module_suffix,
     curios_cont::{into_wasm, optimize},
     curios_core::Term,
-    curios_elab::{Context, Mode, elaborate_and_zonk_with_prelude, erase_module_with_prelude},
+    curios_elab::{
+        Context, Mode, elaborate_and_zonk_with_prelude, elaborate_and_zonk_with_prelude_reporting,
+        erase_module_with_prelude,
+    },
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},
 };
+
+/// Lower and type-check `entrypoint`, reporting the erasure obligations rather than raising them.
+///
+/// The elaborated module comes back even when this stage's own (T)/(V) verdicts refuse it, which is what lets one fixture be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the kernel to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. Nothing else about type-checking is relaxed; every other error still short-circuits.
+///
+/// The verdicts are rendered against the lowered module, so they read as they would on the compile path. The returned index is where the archived prelude prefix ends, so a caller can put the suffix to the kernel exactly as `compile_entrypoint` does rather than re-walking the standard library.
+pub fn typecheck_reporting(
+    budget: u64,
+    entrypoint: &Entrypoint,
+    loader: RootSource,
+) -> Result<(curios_core::Module, usize, Vec<String>), String> {
+    let (lowered, metavars, universe_floor, _foreigns) = with_prelude(|prelude| {
+        into_core_with_prelude(entrypoint, &loader, prelude.prepared(), &SYNTAX)
+    })
+    .map_err(|error| error.format())?;
+
+    let core_mode = match &lowered.type_ {
+        Some(type_) => Mode::Check(type_.clone()),
+        None => Mode::Infer,
+    };
+
+    let (module, _core_type, obligations) = with_prelude(|prelude| {
+        let mut context = Context::new(budget);
+
+        elaborate_and_zonk_with_prelude_reporting(
+            &mut context,
+            prelude.core(),
+            &lowered,
+            metavars,
+            universe_floor,
+            core_mode,
+        )
+    })
+    .map_err(|error| error.format_with(&lowered))?;
+
+    let obligations = obligations
+        .into_iter()
+        .map(|error| error.format_with(&lowered))
+        .collect();
+
+    let checked_from = with_prelude(|prelude| prelude.core().items.len());
+
+    Ok((module, checked_from, obligations))
+}
 
 /// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
 ///
