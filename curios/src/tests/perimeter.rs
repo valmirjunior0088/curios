@@ -402,6 +402,25 @@ const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
     /std/print("FORGED")
     "#;
 
+/// Two distinct recursions are not the same function.
+///
+/// Neither descends, so both are legal values, and both fold to themselves — which is the shape that puts conversion's recurrence rule to work: comparing them unfolds each once, arrives at the same goal, and a history that treated "already assumed" as "proved" would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq(0, 1)`.
+const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
+    use /std/{Nat, Eq};
+    rec f(n : Nat) -> Nat =
+        match n
+        | 0 => 0
+        | k + 1; _ => f(k)
+        end;
+    rec g(n : Nat) -> Nat =
+        match n
+        | 0 => 1
+        | k + 1; _ => g(k)
+        end;
+    let same : Eq(f, g) = Eq/refl();
+    /std/print("FORGED")
+    "#;
+
 /// A program both checkers must accept, so a harness that refused everything would fail here.
 const A_SOUND_PROGRAM: &str = r#"
     use /std/{Nat};
@@ -599,6 +618,12 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         PERMUTING_ARGUMENTS_IS_NOT_DESCENT,
         Expect::Refuses("not known to terminate"),
         Expect::Refuses("does not descend"),
+    ),
+    (
+        "distinct_recursions_are_not_equal",
+        DISTINCT_RECURSIONS_ARE_NOT_EQUAL,
+        Expect::Refuses("type mismatch"),
+        Expect::NotAsked,
     ),
     (
         "sound_program",

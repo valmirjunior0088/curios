@@ -117,6 +117,26 @@ mod tests {
         assert!(entails(&[leq(&u, &w), leq(&v, &w)], &joined, &w));
         assert!(!entails(&[leq(&u, &w)], &joined, &w));
     }
+    /// A hypothesis may be shifted, never *tightened*. `u ≤ v` says nothing about `u + 1 ≤ v`, and reading it as if it did would let an instance claim a bound one level below the one it holds — which is a level gained for free, and the direction the hierarchy exists to forbid.
+    #[test]
+    fn a_hypothesis_does_not_gain_an_offset() {
+        let (u, v) = (param(0), param(1));
+        let raised = u.succ().expect("level has a successor");
+
+        assert!(!entails(&[leq(&u, &v)], &raised, &v));
+    }
+
+    /// A parameter ranges over every natural, so nothing bounds it from below. `3 ≤ u` must fail at `u`'s own offset and hold only once the upper side carries the constant itself.
+    #[test]
+    fn a_constant_is_not_bounded_by_a_bare_parameter() {
+        let u = param(0);
+        let three = Level::constant(3);
+        let raised = u.checked_add(3).expect("level admits the offset");
+
+        assert!(!entails(&[], &three, &u));
+        assert!(entails(&[], &three, &raised));
+    }
+
     #[test]
     fn cyclic_hypotheses_terminate_and_refuse_the_unrelated() {
         let (u, v, w) = (param(0), param(1), param(2));
