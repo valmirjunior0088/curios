@@ -1,6 +1,9 @@
 mod caches;
 pub(crate) use caches::*;
 
+mod frames;
+pub(crate) use frames::*;
+
 mod program;
 pub(crate) use program::*;
 
@@ -17,11 +20,11 @@ use {
         Bound, Concept, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl, Level,
         MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped, project_erased_universes,
+        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     std::{
         cell::Cell,
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet},
         mem,
         ops::{Deref, DerefMut},
         rc::Rc,
@@ -74,28 +77,7 @@ pub(crate) struct SolutionMark {
     universe: UniverseMark,
 }
 
-/// One definition: the definiens, plus the [`DefinitionKind`] of the module item that introduced it. Every `DefEntry` — whether a plain `let`/`rec` member or mid-window rec-group registration — is treated uniformly; there is no `recursive` marker distinguishing them.
-///
-/// `kind` is `None` for a genuine *local* binding — a `let` binder, an opened match scrutinee, a lambda parameter — which no module item declared. It is carried rather than re-derived: the kind is elaboration metadata `into_core` attached where the item was generated, and splitting the definition's name apart to recover it would misread an ordinary definition that merely happens to sit under a generated namespace (see [`DefinitionKind`]'s own docs).
-#[derive(Debug, Clone)]
-pub(crate) struct DefEntry {
-    term: Term,
-    kind: Option<DefinitionKind>,
-}
-
-/// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry must run under the same equalities its origin saw — including the arm-local refinements — while solution re-validation independently suppresses them, keeping committed solutions refinement-free.
-#[derive(Debug, Clone)]
-pub(crate) struct FrozenFrame {
-    assumptions: Vec<(Free, Term)>,
-    definitions: Vec<(Free, DefEntry)>,
-    refinements: Vec<(Free, Term)>,
-    refinement_projections: Vec<((Term, usize), Term)>,
-    refinement_scrutinees: Vec<(Term, Term)>,
-    /// The `use`-plicity binders in scope at park time (a subset of `assumptions`, in the same binding order). Witness resolution scans these; a retry must see the same instance scope its origin saw.
-    witness_binders: Vec<(Free, Term)>,
-}
-
-/// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
+/// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: the *frame-scoped* lexical state ([`Frames`]), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program ([`Solutions`], [`Program`]), which frames never touch. The [`Caches`] police both with their write stamps, and this façade is where the two halves coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
     fresh_names: Entropy,
@@ -105,29 +87,13 @@ pub struct Context {
     remaining: Cell<u64>,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
     caches: Caches,
-    assumptions: Vec<HashMap<Free, Term>>,
-    assumption_universes: Vec<HashMap<Free, UniverseContext>>,
-    definitions: Vec<HashMap<Free, DefEntry>>,
-    // Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
-    refinements: Vec<HashMap<Free, Term>>,
-    refinement_projections: Vec<HashMap<(Term, usize), Term>>,
-    // Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently (`classify(Bin/at(cons(c,t),0,_))`, `Nat/in_range(c, lo', hi')`) still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
-    refinement_scrutinees: Vec<HashMap<Term, Term>>,
-    suppress_refinements: bool,
-    // The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
-    local: Vec<(Free, Term)>,
-    local_marks: Vec<usize>,
-    // One tick per mutation of `local` (assume, frame exit, reassume) — an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads. Invalidates `identity_cache`, which shares the frozen telescope and identity spine between every meta born under an unchanged Γ.
-    locals_stamp: Entropy,
-    identity_cache: Option<(usize, SharedTelescope, SharedSpine)>,
+    // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
+    frames: Frames,
     // The unification state — metavariable records, the solve journal, and parked/deferred work; flat and frame-independent. See [`Solutions`].
     solutions: Solutions,
     universe_solver: UniverseSolver,
     // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
     program: Program,
-    // The `use`-plicity binders currently in scope, in binding order (a subset of `local`), with frame boundaries in `witness_marks` — resolution's step-1/2 search space, scanned innermost-first.
-    witness_scope: Vec<(Free, Term)>,
-    witness_marks: Vec<usize>,
     // The module whose item is currently being elaborated — the qualifier prefix of that item's name (a fresh context starts at the root, the empty qualifier). Set by `elaborate_module_suffix` per item; read by the representation-privacy checks. `None` arises only through `with_suppressed_privacy` and means there is no surface use site to judge from, which suppresses the checks structurally: privacy is a property of *surface elaboration*, and machinery that re-derives types from already-elaborated terms — erasure, the metavariable oracle — walks compiler-built projections (witness splices, eta-expansions) that must not be re-adjudicated. A machinery path that forgets its bracket fails loudly (a spurious privacy error), never silently.
     island: Option<Qualifier>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
@@ -151,23 +117,11 @@ impl Context {
             budget,
             remaining: Cell::new(budget),
             caches: Caches::new(),
-            assumptions: vec![HashMap::new()],
-            assumption_universes: vec![HashMap::new()],
-            definitions: vec![HashMap::new()],
-            refinements: vec![HashMap::new()],
-            refinement_projections: vec![HashMap::new()],
-            refinement_scrutinees: vec![HashMap::new()],
-            suppress_refinements: false,
-            local: Vec::new(),
-            local_marks: Vec::new(),
+            frames: Frames::new(),
             solutions: Solutions::new(),
             universe_solver: UniverseSolver::new(0),
             program: Program::new(),
-            witness_scope: Vec::new(),
-            witness_marks: Vec::new(),
             island: Some(Qualifier::empty()),
-            locals_stamp: Entropy::new(),
-            identity_cache: None,
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
         }
@@ -377,36 +331,13 @@ impl Context {
     }
 
     fn enter_frame(&mut self) {
-        self.assumptions.push(HashMap::new());
-        self.assumption_universes.push(HashMap::new());
-        self.definitions.push(HashMap::new());
-        self.refinements.push(HashMap::new());
-        self.refinement_projections.push(HashMap::new());
-        self.refinement_scrutinees.push(HashMap::new());
-        self.local_marks.push(self.local.len());
-        self.witness_marks.push(self.witness_scope.len());
+        self.frames.enter();
     }
 
-    // Safety: the popped refinement frames are keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling.
-    #[allow(clippy::mutable_key_type)]
     fn leave_frame(&mut self) {
-        self.locals_stamp.fresh();
-        self.assumptions.pop().unwrap();
-        self.assumption_universes.pop().unwrap();
-        let definitions = self.definitions.pop().unwrap();
-        let refinements = self.refinements.pop().unwrap();
-        let refinement_projections = self.refinement_projections.pop().unwrap();
-        let refinement_scrutinees = self.refinement_scrutinees.pop().unwrap();
-        self.local.truncate(self.local_marks.pop().unwrap());
-        self.witness_scope
-            .truncate(self.witness_marks.pop().unwrap());
-
-        self.caches.invalidate_frame_exit(
-            !refinements.is_empty()
-                || !refinement_projections.is_empty()
-                || !refinement_scrutinees.is_empty(),
-            !definitions.is_empty(),
-        );
+        let (dropped_refinements, dropped_definitions) = self.frames.leave();
+        self.caches
+            .invalidate_frame_exit(dropped_refinements, dropped_definitions);
     }
 
     pub(crate) fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -417,62 +348,30 @@ impl Context {
         result
     }
 
-    /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
+    /// [`Frames::assume`], stamping the write.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
-        self.locals_stamp.fresh();
         self.caches.note_write();
-        self.local.push((name.clone(), type_.clone()));
-
-        self.assumptions
-            .last_mut()
-            .unwrap()
-            .insert(name.clone(), type_.clone());
-        self.assumption_universes
-            .last_mut()
-            .unwrap()
-            .insert(name.clone(), UniverseContext::empty());
+        self.frames.assume(name, type_);
     }
 
     /// Assume `label : type_` as a `use`-plicity binder: an ordinary assumption that additionally joins the witness scope, where resolution finds it (innermost-first).
     pub(crate) fn assume_witness(&mut self, name: &Free, type_: &Term) {
         self.assume(name, type_);
-        self.witness_scope.push((name.clone(), type_.clone()));
+        self.frames.push_witness_binder(name, type_);
     }
 
-    /// The `use`-plicity binders in scope, in binding order (innermost last).
     pub(crate) fn witness_scope(&self) -> &[(Free, Term)] {
-        &self.witness_scope
+        self.frames.witness_scope()
     }
 
-    /// Replace the type of an existing assumption in place — the innermost binding of `label`. Used by the `rec` elaborators: a group's signatures must be assumed (lowered) before they can be elaborated, since members reference each other, and are then upgraded here to their rebuilt forms — implicit insertion makes the two no longer interchangeable, and a lowered type must never leak into later reduction. Panics if `label` has no prior assumption — every caller is expected to have `assume`d it earlier in the same scope (a construction bug otherwise, not a user-facing case).
+    /// [`Frames::reassume`], invalidating the elaboration cache — an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature.
     pub(crate) fn reassume(&mut self, name: &Free, type_: &Term) {
-        self.locals_stamp.fresh();
         self.caches.invalidate_for_reassumption();
-
-        let entry = self
-            .local
-            .iter_mut()
-            .rev()
-            .find(|(bound, _)| bound == name)
-            .unwrap_or_else(|| panic!("reassume: '{name}' has no local binding to replace"));
-        entry.1 = type_.clone();
-
-        let assumptions = self
-            .assumptions
-            .iter_mut()
-            .rev()
-            .find(|assumptions| assumptions.contains_key(name))
-            .unwrap_or_else(|| {
-                panic!("reassume: '{name}' has no assumption-frame entry to replace")
-            });
-        assumptions.insert(name.clone(), type_.clone());
+        self.frames.reassume(name, type_);
     }
 
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
-        self.assumptions
-            .iter()
-            .rev()
-            .find_map(|assumptions| assumptions.get(name))
+        self.frames.assumption(name)
     }
 
     /// Collect universe metas reachable through a term and through any solved term metavariables it names. Declaration finalization runs before the final term-zonk pass, so a level occurring only in a solved hole must still join the declaration's universe closure. Recursive slots may point back to themselves; `seen` keeps this analysis finite.
@@ -510,11 +409,8 @@ impl Context {
             return Ok(None);
         };
         let universe_context = self
-            .assumption_universes
-            .iter()
-            .rev()
-            .find_map(|contexts| contexts.get(name))
-            .cloned()
+            .frames
+            .assumption_universe_context(name)
             .unwrap_or_default();
         if universe_context.parameter_count == 0 {
             return Ok(Some((type_, Vec::new())));
@@ -542,31 +438,21 @@ impl Context {
         let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
         };
-        let found = self
-            .assumption_universes
-            .iter()
-            .rev()
-            .find_map(|contexts| contexts.get(name))
-            .cloned();
+        let found = self.frames.assumption_universe_context(name);
         #[cfg(feature = "profile")]
         if found
             .as_ref()
             .is_none_or(|context| context.parameter_count != levels.len())
         {
+            let (frames, holders) = self.frames.assumption_universe_holders(name);
             curios_profile::tracing::debug!(
                 target: "curios_elab::universe",
                 %name,
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
                 got = levels.len(),
-                frames = self.assumption_universes.len(),
-                holders = ?self
-                    .assumption_universes
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, contexts)| contexts.contains_key(name))
-                    .map(|(index, contexts)| (index, contexts[name].parameter_count))
-                    .collect::<Vec<_>>(),
+                frames,
+                ?holders,
                 "assumption instance arity mismatch",
             );
         }
@@ -675,56 +561,23 @@ impl Context {
         Ok(instantiated)
     }
 
+    /// [`Frames::set_assumption_universe_context`], with the redefinition cache protocol — a scheme rewritten in place makes cached entries through the old scheme unsound.
     pub(crate) fn set_assumption_universe_context(
         &mut self,
         name: &Free,
         universe_context: UniverseContext,
     ) {
-        let contexts = self
-            .assumption_universes
-            .iter_mut()
-            .rev()
-            .find(|contexts| contexts.contains_key(name))
-            .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
-        #[cfg(feature = "profile")]
-        curios_profile::tracing::debug!(
-            target: "curios_elab::universe",
-            %name,
-            params = universe_context.parameter_count,
-            was = contexts[name].parameter_count,
-            "assumption scheme written",
-        );
-        contexts.insert(name.clone(), universe_context);
-        #[cfg(feature = "profile")]
-        {
-            let holders = self
-                .assumption_universes
-                .iter()
-                .enumerate()
-                .filter(|(_, contexts)| contexts.contains_key(name))
-                .map(|(index, contexts)| (index, contexts[name].parameter_count))
-                .collect::<Vec<_>>();
-            curios_profile::tracing::debug!(
-                target: "curios_elab::universe",
-                %name,
-                frames = self.assumption_universes.len(),
-                ?holders,
-                "assumption scheme frames",
-            );
-        }
+        self.frames
+            .set_assumption_universe_context(name, universe_context);
         self.caches.invalidate_for_redefinition();
     }
 
-    /// Whether `label` currently has a definition entry in some frame — the settled-globals gate for [`Context::elaboration_cacheable`]. A name defined here will only ever be *re*defined (which clears both caches wholesale), never freshly defined, so an elaboration entry naming it is safe to keep across a later fresh `define`.
     fn is_defined(&self, name: &Free) -> bool {
-        self.definitions
-            .iter()
-            .any(|frame| frame.contains_key(name))
+        self.frames.is_defined(name)
     }
 
-    /// The local assumption context in binding order (outermost first). The dependent-match generalizer (`elaborate_match`) walks this to find the hypotheses whose type depends on a scrutinee index being abstracted: they must ride into the motive as Π-binders, or the synthesized motive is ill-typed. Binding order matters — a hypothesis's type can only mention earlier binders, so the telescope it yields is already well-ordered.
     pub(crate) fn locals(&self) -> &[(Free, Term)] {
-        &self.local
+        self.frames.locals()
     }
 
     fn define_entry(&mut self, name: Free, entry: DefEntry) {
@@ -733,28 +586,18 @@ impl Context {
         // The elaboration cache survives the same fresh definition with no retain at all: its insert gate (`elaboration_cacheable`) already refused every entry naming a not-yet-defined global, so the fresh name appears in no surviving entry. A minted `let` binder — which `reduce_let` leaks and the frame elaborators mint — is excluded from caching outright (`has_local_free`), and a global is only ever referenced once defined; so not clearing lets a deep spine memoize once across those definitions instead of re-elaborating its shared subterms after each.
         //
         // A *redefinition* voids both arguments — `reduce_let` and the frame elaborators define under labels that can rebind or shadow, and the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the label — so there both caches clear wholesale.
-        let redefinition = self
-            .definitions
-            .iter()
-            .any(|frame| frame.contains_key(&name));
-        if redefinition {
+        if self.frames.is_defined(&name) {
             self.caches.invalidate_for_redefinition();
         } else {
             self.caches.retain_reductions_without(&name);
         }
 
-        self.definitions.last_mut().unwrap().insert(name, entry);
+        self.frames.define(name, entry);
     }
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
     pub(crate) fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
-        self.define_entry(
-            name.clone(),
-            DefEntry {
-                term: term.clone(),
-                kind: kind.cloned(),
-            },
-        );
+        self.define_entry(name.clone(), DefEntry::new(term.clone(), kind.cloned()));
     }
 
     pub(crate) fn define_assuming(
@@ -780,168 +623,81 @@ impl Context {
         self.set_assumption_universe_context(name, universe_context);
     }
 
-    /// The [`DefinitionKind`] of the module item that defined `label`, or `None` for a local binding or an undefined name.
-    ///
-    /// The structural replacement for splitting a definition's qualified name into a family and a case and looking the family up in a registry: the kind was known where the definition was generated, so it is read back rather than re-derived from the name's spelling.
     pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
-        self.definitions
-            .iter()
-            .rev()
-            .find_map(|definitions| definitions.get(name))
-            .and_then(|entry| entry.kind.as_ref())
+        self.frames.definition_kind(name)
     }
 
-    // === Refinements ========================================================
+    // === Refinements (see [`Frames`]) =======================================
 
-    /// Register a counterfactual match-arm refinement of a variable. Unlike `define`, this lives in a suppressible store so re-validation can ignore it. Clears the reduction cache, as the variable now reduces differently.
+    /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently.
     pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
         self.caches.invalidate_for_refinement();
-        self.refinements
-            .last_mut()
-            .unwrap()
-            .insert(name.clone(), term.clone());
+        self.frames.refine(name, term);
     }
 
-    /// Register a counterfactual refinement of a projection (`refine_head` on a `Proj` scrutinee).
+    /// [`Frames::refine_projection`], with the refinement cache protocol.
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
         self.caches.invalidate_for_refinement();
-        self.refinement_projections
-            .last_mut()
-            .unwrap()
-            .insert((project_erased_universes(&base), index), value);
+        self.frames.refine_projection(base, index, value);
     }
 
-    /// What `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Context::var_reduct_at`] would silently mean something else inside a match arm.
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
-        self.definitions
-            .iter()
-            .rev()
-            .find_map(|definitions| definitions.get(name))
-            .map(|entry| &entry.term)
+        self.frames.definition_body(name)
     }
 
-    /// The reduct of a variable: its definition, or — unless refinements are suppressed — its counterfactual refinement. A name never appears in both stores (definitions name `let`/`rec` binders; refinements name assumed scrutinee heads), so the order between them is immaterial.
-    fn raw_var_reduct(&self, name: &Free) -> Option<&Term> {
-        if !self.suppress_refinements
-            && let Some(term) = self.refinements.iter().rev().find_map(|r| r.get(name))
-        {
-            return Some(term);
-        }
-
-        self.definitions
-            .iter()
-            .rev()
-            .find_map(|definitions| definitions.get(name))
-            .map(|entry| &entry.term)
-    }
-
-    /// Reduce a bare variable only when its definition is monomorphic.
-    ///
-    /// A polymorphic definition's stored body is scoped by its universe context: its parameter levels are not meaningful at an occurrence until elaboration has rebuilt that occurrence as a [`UniverseInst`]. Letting a raw variable unfold would leak those bound parameters into the ambient solver. The explicit-instance reducer uses [`Self::var_reduct_at`] after it has the occurrence's level arguments.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
-        let is_polymorphic = self
-            .assumption_universes
-            .iter()
-            .rev()
-            .find_map(|contexts| contexts.get(name))
-            .is_some_and(|context| context.parameter_count != 0);
-        (!is_polymorphic)
-            .then(|| self.raw_var_reduct(name))
-            .flatten()
+        self.frames.var_reduct(name)
     }
 
     pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
-        self.raw_var_reduct(name)
+        self.frames.var_reduct_at(name)
     }
 
-    /// The reduct of a projection: its counterfactual match-arm refinement, unless refinements are suppressed (re-validation).
     pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
-        if self.suppress_refinements {
-            return None;
-        }
-
-        let base = project_erased_universes(base);
-        self.refinement_projections
-            .iter()
-            .rev()
-            .find_map(|p| p.get(&(base.clone(), index)))
+        self.frames.proj_reduct(base, index)
     }
 
-    /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the canonical form (head verbatim, arguments in WHNF); `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form.
+    /// [`Frames::refine_scrutinee`], with the refinement cache protocol.
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, value: Term) {
         self.caches.invalidate_for_refinement();
-        self.refinement_scrutinees
-            .last_mut()
-            .unwrap()
-            .insert(canonical, value);
+        self.frames.refine_scrutinee(canonical, value);
     }
 
-    /// Whether any scrutinee refinement is registered (regardless of suppression). The cheap outer gate for the reducer probe — skipped on the common refinement-free reduction without hashing anything.
     pub(crate) fn has_scrutinee_refinements(&self) -> bool {
-        !self.refinement_scrutinees.iter().all(|f| f.is_empty())
+        self.frames.has_scrutinee_refinements()
     }
 
-    /// Whether some registered scrutinee key shares `head` as its applied-head symbol. The second gate, past [`Term::head_key`]: only a head that is actually refined justifies canonicalizing the candidate's arguments.
     pub(crate) fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
-        self.refinement_scrutinees
-            .iter()
-            .any(|f| f.keys().any(|k| k.head_key() == Some(head)))
+        self.frames.scrutinee_head_refined(head)
     }
 
-    /// The reduct of a canonical stuck scrutinee: its refinement value, unless suppressed (re-validation).
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
-        if self.suppress_refinements {
-            return None;
-        }
-
-        self.refinement_scrutinees
-            .iter()
-            .rev()
-            .find_map(|f| f.get(canonical))
+        self.frames.scrutinee_reduct(canonical)
     }
 
-    /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so `solve_refinement_free`'s committed (refinement-free) spelling stays a term the live refinement can still fire on.
     pub(crate) fn is_scrutinee_key(&self, canonical: &Term) -> bool {
-        self.refinement_scrutinees
-            .iter()
-            .any(|f| f.contains_key(canonical))
+        self.frames.is_scrutinee_key(canonical)
     }
 
     pub(crate) fn refinements_suppressed(&self) -> bool {
-        self.suppress_refinements
+        self.frames.refinements_suppressed()
     }
 
-    /// Whether any counterfactual refinement is currently registered (and not already suppressed) — the gate for the refinement-free candidate re-reduction in `Convert::solve_refinement_free`, so the common refinement-free path pays nothing.
     pub(crate) fn has_refinements(&self) -> bool {
-        !self.suppress_refinements && self.any_refinements_registered()
-    }
-
-    /// Whether any counterfactual refinement of any kind is registered in any frame, *regardless* of suppression. The cache-contamination gate for [`Context::with_suppressed_refinements`]: only a registered refinement can make a suppressed reduct differ from the live one. (`has_refinements` is this plus "not already suppressed".)
-    fn any_refinements_registered(&self) -> bool {
-        self.refinements.iter().any(|frame| !frame.is_empty())
-            || self
-                .refinement_projections
-                .iter()
-                .any(|frame| !frame.is_empty())
-            || self
-                .refinement_scrutinees
-                .iter()
-                .any(|frame| !frame.is_empty())
+        self.frames.has_refinements()
     }
 
     /// Run `f` with refinements suppressed (re-validation). Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the flag is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.suppress_refinements;
-
-        if self.any_refinements_registered() {
+        if self.frames.any_refinements_registered() {
             self.caches.invalidate_suppression_boundary();
         }
 
-        self.suppress_refinements = true;
+        let previous = self.frames.set_refinements_suppressed(true);
         let result = f(self);
-        self.suppress_refinements = previous;
+        self.frames.set_refinements_suppressed(previous);
 
-        if self.any_refinements_registered() {
+        if self.frames.any_refinements_registered() {
             self.caches.invalidate_suppression_boundary();
         }
 
@@ -1111,43 +867,12 @@ impl Context {
         self.solve_metavar(id, term);
     }
 
-    /// The boundary between the top-level (base-frame) entries of `local` and the genuine local binders above them. Top-level definitions are `assume`d into `local` at the base level (never inside a frame), so the outermost frame mark is exactly the count of top-level entries; with no frame open, everything in `local` is top-level. A metavariable's Γ is only the binders past this point (see [`Context::identity_snapshot`]).
-    fn base_locals(&self) -> usize {
-        self.local_marks
-            .first()
-            .copied()
-            .unwrap_or(self.local.len())
-    }
-
-    /// Whether `name` is bound at the top level (the persistent base frame) — a global definition, always in scope. The metavariable solver admits such names in a solution even though they are not in the metavariable's Γ/spine (which holds only local binders): a solution may freely mention a global constant without that constant being a context binder.
     pub(crate) fn is_top_level(&self, name: &Free) -> bool {
-        self.assumptions
-            .first()
-            .is_some_and(|frame| frame.contains_key(name))
+        self.frames.is_top_level(name)
     }
 
-    /// The frozen telescope and identity spine for the *current* Γ, shared: rebuilt only when `local` has changed since the last birth, so minting a metavariable is O(1) amortized instead of O(|Γ|) per mint — the difference between linear and quadratic elaboration over a module.
-    ///
-    /// Γ is the *local* binders only — `local` past `Context::base_locals`. Top-level definitions are excluded so an item's elaboration is independent of how much else is in scope: a metavariable born deep in a proof carries just its enclosing binders, not the whole prelude, keeping the contextual solve's spine a small pattern (and the prelude cacheable). Globals a solution mentions are admitted by the solver's scope check via [`Context::is_top_level`] instead.
     pub(crate) fn identity_snapshot(&mut self) -> (SharedTelescope, SharedSpine) {
-        if let Some((stamp, telescope, spine)) = &self.identity_cache
-            && *stamp == self.locals_stamp.count()
-        {
-            return (telescope.clone(), spine.clone());
-        }
-
-        let telescope = Rc::new(self.local[self.base_locals()..].to_vec());
-
-        let spine = Rc::new(
-            telescope
-                .iter()
-                .map(|(name, _)| Term::free_var(name))
-                .collect::<Vec<_>>(),
-        );
-
-        self.identity_cache = Some((self.locals_stamp.count(), telescope.clone(), spine.clone()));
-
-        (telescope, spine)
+        self.frames.identity_snapshot()
     }
 
     /// Raise the minting floor: every id `fresh_metavar` hands out will be `>= floor`. Called by `elaborate_module_suffix` with its `metavar_floor` argument (the count `into_core` minted) before any item is elaborated.
@@ -1348,25 +1073,8 @@ impl Context {
 
     // === Parked constraints ============================================
 
-    /// Freeze the live local frame (the way `fresh_metavar` freezes Γ): the base frame persists for the whole elaboration, so only the local frames — which pop before a retry can happen — are captured.
     pub(crate) fn freeze_frame(&self) -> FrozenFrame {
-        fn flatten_frames<K: Clone, V: Clone>(frames: &[HashMap<K, V>]) -> Vec<(K, V)> {
-            frames
-                .iter()
-                .skip(1)
-                .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
-                .collect()
-        }
-
-        FrozenFrame {
-            // Past `base_locals`, exactly as `identity_snapshot` slices Γ. The whole of `local` would also carry the top-level binders, and `restore_frame` re-`assume`s whatever it is given — which stamps each restored name with an *empty* universe context in the new frame. A polymorphic global would then be shadowed by a monomorphic copy of itself, and instantiating it at its real levels fails the arity check against the wrong scheme.
-            assumptions: self.local[self.base_locals()..].to_vec(),
-            definitions: flatten_frames(&self.definitions),
-            refinements: flatten_frames(&self.refinements),
-            refinement_projections: flatten_frames(&self.refinement_projections),
-            refinement_scrutinees: flatten_frames(&self.refinement_scrutinees),
-            witness_binders: self.witness_scope.clone(),
-        }
+        self.frames.freeze()
     }
 
     /// Reapply a frozen frame inside a fresh `with_frame`, restoring the equalities the parked problem's origin saw.
@@ -1392,7 +1100,7 @@ impl Context {
         }
 
         // The witness binders were already re-assumed by the loop above (they are a subset of `assumptions`); only the scope membership is restored here. The enclosing frame's mark truncates it on exit.
-        self.witness_scope.extend(frame.witness_binders.clone());
+        self.frames.extend_witness_scope(&frame.witness_binders);
     }
 
     /// Park blocked work: freeze the live local frame around it and record which unsolved metavariables could unblock it.
