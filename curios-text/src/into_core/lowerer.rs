@@ -1,4 +1,4 @@
-use curios_elab::{PrimBuilders as _, TermBuilders as _};
+use curios_elab::{PrimBuilders, TermBuilders};
 use {
     super::{Context, MatchCompiler},
     crate::{

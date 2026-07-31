@@ -1,4 +1,4 @@
-use crate::TermBuilders as _;
+use crate::TermBuilders;
 use {
     super::*,
     curios_core::{Global, Level, UniverseContext, instantiate_universe_levels_scoped},

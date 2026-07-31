@@ -4,7 +4,7 @@ use super::super::{
 };
 use curios_abi::{WireType, host_ops};
 use curios_base::{Qualifier, RootId};
-use curios_elab::TermBuilders as _;
+use curios_elab::TermBuilders;
 use std::{
     fs,
     path::{Path, PathBuf},

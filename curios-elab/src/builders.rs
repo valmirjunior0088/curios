@@ -1,6 +1,6 @@
 //! Construction conveniences for the core representation, owned by the stage that exists to make building terms pleasant.
 //!
-//! Extension traits keep every call site spelling what it always spelled — `Prim::flt_add(…)`, `Term::struct_at(…)` — under an anonymous trait import (`use curios_elab::PrimBuilders as _;`). The representation crate keeps only the constructors its own fold table and the certifier name; everything that exists purely so a lowering or an elaborator reads well lives here.
+//! Extension traits keep every call site spelling what it always spelled — `Prim::flt_add(…)`, `Term::struct_at(…)` — under a plain trait import (`use curios_elab::PrimBuilders;`). The representation crate keeps only the constructors its own fold table and the certifier name; everything that exists purely so a lowering or an elaborator reads well lives here.
 
 use {
     curios_base::NumOp,

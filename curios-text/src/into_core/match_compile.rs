@@ -1,4 +1,4 @@
-use curios_elab::TermBuilders as _;
+use curios_elab::TermBuilders;
 use {
     super::Lowerer,
     crate::{

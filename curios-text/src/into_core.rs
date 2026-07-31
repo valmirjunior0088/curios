@@ -1,6 +1,6 @@
 mod context;
 use context::*;
-use curios_elab::TermBuilders as _;
+use curios_elab::TermBuilders;
 
 mod lowerer;
 use lowerer::*;
@@ -18,7 +18,7 @@ use {
     super::*,
     curios_abi::ForeignStore,
     curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind},
-    curios_core::Bound as _,
+    curios_core::Bound,
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

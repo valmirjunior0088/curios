@@ -14,9 +14,7 @@
 
 use {
     super::{Kernel, KernelError, Sort, group_totality},
-    curios_core::{
-        Bound as _, Free, Global, Item, Module, Prim, Rec, Reducer as _, Subterm, Term, Totality,
-    },
+    curios_core::{Bound, Free, Global, Item, Module, Prim, Rec, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 

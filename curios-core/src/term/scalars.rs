@@ -65,7 +65,7 @@ impl ScalarCache {
     pub(crate) fn get(&self) -> Option<Scalars> {
         let packed = self.packed.get();
         (packed & FILLED != 0).then(|| Scalars {
-            reach: (packed >> REACH_SHIFT & (1 << REACH_BITS) - 1) as usize,
+            reach: ((packed >> REACH_SHIFT) & ((1 << REACH_BITS) - 1)) as usize,
             has_local_free: packed & HAS_LOCAL_FREE != 0,
             has_metavar: packed & HAS_METAVAR != 0,
             has_universe_meta: packed & HAS_UNIVERSE_META != 0,
