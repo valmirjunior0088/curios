@@ -236,6 +236,8 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
             }
         }
 
+        // Classifying reduces each distinct type to ask whether it is a sort, and that spends budget. Restoring first keeps the item's own spending from deciding whether its positions can be classified at all — `erased_half` declines to constrain a position it cannot reduce, so an inherited exhaustion would quietly drop positions rather than refuse them.
+        kernel.restore_budget();
         let drained = kernel.take_checked();
         positions.push((
             item_name,
@@ -247,6 +249,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
         verdicts.push(Verdict { name: None, error });
     }
 
+    kernel.restore_budget();
     let drained = kernel.take_checked();
     positions.push((
         None,

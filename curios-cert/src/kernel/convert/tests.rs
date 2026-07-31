@@ -383,3 +383,37 @@ fn a_metavariable_does_not_convert_with_anything_else() {
         Err(KernelError::NotCore(_)),
     ));
 }
+
+/// Conversion keeps the constant function apart from the identity even when the binder floor claims every name is available.
+///
+/// A positive control for capture-avoidance rather than a demonstration of capture. `recheck` seeds the floor from `Module::binder_floor`, a number the elaborator writes and nothing in this crate checks, and eta at a function type opens a binder that would alias a free local if that number were wrong — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y`. Seeding at zero and colliding deliberately with what the kernel mints next does *not* produce that, so the trust is unverified rather than known-broken: what defends it has not been established, only that this route does not reach it.
+#[test]
+fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
+    let colliding = {
+        let mut scout = Kernel::new(100_000);
+        scout.set_local_floor(0);
+        scout.fresh(Some("y"))
+    };
+
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(0);
+
+    let nat = Term::prim(Prim::NatType);
+    kernel.assume(&colliding, &nat);
+
+    let parameter = Free::local(9_000, Some("x"));
+    let constant = Term::func(
+        [(parameter.clone(), nat.clone())],
+        Term::free_var(&colliding),
+    );
+    let identity = Term::func(
+        [(parameter.clone(), nat.clone())],
+        Term::free_var(&parameter),
+    );
+    let function = Term::func_type([(parameter, nat.clone())], nat);
+
+    assert!(
+        !convert(&mut kernel, &function, &constant, &identity).expect("the comparison completes"),
+        "the constant function and the identity are not convertible",
+    );
+}
