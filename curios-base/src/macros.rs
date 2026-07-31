@@ -96,6 +96,18 @@ macro_rules! id {
             }
         }
 
+        impl $crate::ArenaId for $name {
+            fn from_index(index: usize) -> Self {
+                Self(u32::try_from(index).unwrap_or_else(|_| {
+                    panic!(concat!(stringify!($name), " identity space exhausted"))
+                }))
+            }
+
+            fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, concat!($prefix, "{}"), self.0)
@@ -118,6 +130,18 @@ macro_rules! id {
         impl $name {
             /// The identity's raw arena index.
             pub fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+
+        impl $crate::ArenaId for $name {
+            fn from_index(index: usize) -> Self {
+                Self(u32::try_from(index).unwrap_or_else(|_| {
+                    panic!(concat!(stringify!($name), " identity space exhausted"))
+                }))
+            }
+
+            fn index(self) -> usize {
                 self.0 as usize
             }
         }

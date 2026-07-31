@@ -2,6 +2,9 @@
 
 mod macros;
 
+mod arena;
+pub use arena::*;
+
 #[cfg(feature = "archive")]
 mod archive;
 #[cfg(feature = "archive")]
