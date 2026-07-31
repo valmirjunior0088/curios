@@ -307,3 +307,47 @@ fn accepting_polarities_are_closed_under_join() {
         }
     }
 }
+
+/// A declaration's carried polarity vector is not evidence.
+///
+/// `InductDecl::polarities` is computed by `curios-elab` after elaboration and rides the prelude archive, so believing it would make this crate's positivity check a restatement of the other's. Here the vector *lies* — it claims the parameter is used strictly while the constructor stores a function out of it, which is the negative occurrence Cantor forbids — and the analysis must reach its own verdict from the telescopes regardless.
+#[test]
+fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        false_name.clone(),
+        InductDecl {
+            constructors: Vec::new(),
+            ..single_payload(&false_name, Term::type_ground(), Term::prop())
+        },
+    );
+    inducts.insert(
+        bad_name.clone(),
+        InductDecl {
+            // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
+            polarities: vec![Polarity::Strict],
+            ..single_payload(
+                &bad_name,
+                Term::func_type([(Free::local(0, Some("f")), bad_type)], false_type),
+                Term::type_ground(),
+            )
+        },
+    );
+
+    for (name, entry) in &inducts {
+        kernel.declare_induct(name, entry);
+    }
+
+    assert!(
+        positivity_vectors(&mut kernel, &inducts, &BTreeMap::new()).is_err(),
+        "the carried vector was believed instead of recomputed",
+    );
+}
