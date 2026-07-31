@@ -14,6 +14,7 @@ use {
         StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_abi::ForeignFunction,
+    curios_base::Arena,
     std::{collections::HashMap, sync::Arc},
 };
 
@@ -41,11 +42,11 @@ pub struct ValueDef {
     )
 )]
 pub struct Module {
-    values: Vec<Option<ValueDef>>,
-    functions: Vec<Option<Function>>,
-    blocks: Vec<Option<Block>>,
-    statements: Vec<Option<Statement>>,
-    rec_groups: Vec<Option<RecGroup>>,
+    values: Arena<ValueId, ValueDef>,
+    functions: Arena<FunctionId, Function>,
+    blocks: Arena<BlockId, Block>,
+    statements: Arena<StatementId, Statement>,
+    rec_groups: Arena<RecGroupId, RecGroup>,
     constants: Vec<Constant>,
     products: Vec<ProductSchema>,
     families: Vec<VariantFamily>,
@@ -74,23 +75,23 @@ impl Module {
     }
 
     pub fn values(&self) -> &[Option<ValueDef>] {
-        &self.values
+        self.values.slots()
     }
 
     pub fn functions(&self) -> &[Option<Function>] {
-        &self.functions
+        self.functions.slots()
     }
 
     pub fn blocks(&self) -> &[Option<Block>] {
-        &self.blocks
+        self.blocks.slots()
     }
 
     pub fn statements(&self) -> &[Option<Statement>] {
-        &self.statements
+        self.statements.slots()
     }
 
     pub fn rec_groups(&self) -> &[Option<RecGroup>] {
-        &self.rec_groups
+        self.rec_groups.slots()
     }
 
     pub fn constants(&self) -> &[Constant] {
@@ -115,31 +116,27 @@ impl Module {
 
     /// The live function identities, in identity order — the external handle surface for consumers that hold a module but cannot mint identities.
     pub fn function_ids(&self) -> impl Iterator<Item = FunctionId> + '_ {
-        self.functions
-            .iter()
-            .enumerate()
-            .filter(|(_, slot)| slot.is_some())
-            .map(|(index, _)| FunctionId(index as u32))
+        self.functions.live_ids()
     }
 
     pub fn value(&self, id: ValueId) -> Option<&ValueDef> {
-        self.values.get(id.index()).and_then(Option::as_ref)
+        self.values.get(id)
     }
 
     pub fn function(&self, id: FunctionId) -> Option<&Function> {
-        self.functions.get(id.index()).and_then(Option::as_ref)
+        self.functions.get(id)
     }
 
     pub fn block(&self, id: BlockId) -> Option<&Block> {
-        self.blocks.get(id.index()).and_then(Option::as_ref)
+        self.blocks.get(id)
     }
 
     pub fn statement(&self, id: StatementId) -> Option<&Statement> {
-        self.statements.get(id.index()).and_then(Option::as_ref)
+        self.statements.get(id)
     }
 
     pub fn rec_group(&self, id: RecGroupId) -> Option<&RecGroup> {
-        self.rec_groups.get(id.index()).and_then(Option::as_ref)
+        self.rec_groups.get(id)
     }
 
     pub fn constant(&self, id: ConstantId) -> Option<&Constant> {
@@ -163,43 +160,28 @@ impl Module {
     }
 
     pub(crate) fn add_value(&mut self, debug_name: Option<String>) -> ValueId {
-        let id = ValueId(u32::try_from(self.values.len()).expect("value arena exhausted"));
-        self.values.push(Some(ValueDef { debug_name }));
-        id
+        self.values.mint(ValueDef { debug_name })
     }
 
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. A reserved slot is `None` until [`define_function`](Self::define_function) fills it; finalization requires every reservation to have been defined.
     pub(crate) fn reserve_function(&mut self) -> FunctionId {
-        let id = FunctionId(u32::try_from(self.functions.len()).expect("function arena exhausted"));
-        self.functions.push(None);
-        id
+        self.functions.reserve()
     }
 
     pub(crate) fn define_function(&mut self, id: FunctionId, function: Function) {
-        let slot = &mut self.functions[id.index()];
-        debug_assert!(slot.is_none(), "function {id} defined twice");
-        *slot = Some(function);
+        self.functions.define(id, function);
     }
 
     pub(crate) fn add_block(&mut self, block: Block) -> BlockId {
-        let id = BlockId(u32::try_from(self.blocks.len()).expect("block arena exhausted"));
-        self.blocks.push(Some(block));
-        id
+        self.blocks.mint(block)
     }
 
     pub(crate) fn add_statement(&mut self, statement: Statement) -> StatementId {
-        let id =
-            StatementId(u32::try_from(self.statements.len()).expect("statement arena exhausted"));
-        self.statements.push(Some(statement));
-        id
+        self.statements.mint(statement)
     }
 
     pub(crate) fn add_rec_group(&mut self, group: RecGroup) -> RecGroupId {
-        let id = RecGroupId(
-            u32::try_from(self.rec_groups.len()).expect("recursive-group arena exhausted"),
-        );
-        self.rec_groups.push(Some(group));
-        id
+        self.rec_groups.mint(group)
     }
 
     /// Rebuild the skipped interning index from the constants arena — the restore path's counterpart to the `archive` skip above.
@@ -245,90 +227,58 @@ impl Module {
 
     /// Rewrite one live statement in place — partial evaluation's install primitive (a folded call becomes an alias or a residual).
     pub(crate) fn set_statement(&mut self, id: StatementId, statement: Statement) {
-        let slot = &mut self.statements[id.index()];
-        debug_assert!(slot.is_some(), "statement {id} is live");
-        *slot = Some(statement);
+        self.statements.set(id, statement);
     }
 
     /// Replace one live block's statement list — the splice primitive for materialized reifications and taken match arms.
     pub(crate) fn set_block_statements(&mut self, id: BlockId, statements: Vec<StatementId>) {
-        let slot = self.blocks[id.index()]
-            .as_mut()
-            .expect("a spliced block is live");
-        slot.statements = statements;
+        let block = self.blocks.get_mut(id).expect("a spliced block is live");
+        block.statements = statements;
     }
 
     /// Replace one live block's terminator — the monoid rebase redirects a leaf tail block's return through the threaded accumulator.
     pub(crate) fn set_block_terminator(&mut self, id: BlockId, terminator: Terminator) {
-        let slot = self.blocks[id.index()]
-            .as_mut()
-            .expect("a rewritten block is live");
-        slot.terminator = terminator;
+        let block = self.blocks.get_mut(id).expect("a rewritten block is live");
+        block.terminator = terminator;
     }
 
     /// Redefine one live function — the spine specializer's parameter-drop edit on a freshly minted copy.
     pub(crate) fn set_function(&mut self, id: FunctionId, function: Function) {
-        let slot = &mut self.functions[id.index()];
-        debug_assert!(slot.is_some(), "function {id} is live");
-        *slot = Some(function);
+        self.functions.set(id, function);
     }
 
     /// Mint a block identity whose definition follows — the deep copy reserves the whole region before rewriting references into it.
     pub(crate) fn reserve_block(&mut self) -> BlockId {
-        let id = BlockId(u32::try_from(self.blocks.len()).expect("block arena exhausted"));
-        self.blocks.push(None);
-        id
+        self.blocks.reserve()
     }
 
     pub(crate) fn define_block(&mut self, id: BlockId, block: Block) {
-        let slot = &mut self.blocks[id.index()];
-        debug_assert!(slot.is_none(), "block {id} defined twice");
-        *slot = Some(block);
+        self.blocks.define(id, block);
     }
 
     /// Tombstone every function outside `keep`. Identities are never reused.
     pub(crate) fn retain_functions(&mut self, keep: &std::collections::BTreeSet<FunctionId>) {
-        for (index, slot) in self.functions.iter_mut().enumerate() {
-            if slot.is_some() && !keep.contains(&FunctionId(index as u32)) {
-                *slot = None;
-            }
-        }
+        self.functions.retain(keep);
     }
 
     /// Tombstone every block outside `keep`.
     pub(crate) fn retain_blocks(&mut self, keep: &std::collections::BTreeSet<BlockId>) {
-        for (index, slot) in self.blocks.iter_mut().enumerate() {
-            if slot.is_some() && !keep.contains(&BlockId(index as u32)) {
-                *slot = None;
-            }
-        }
+        self.blocks.retain(keep);
     }
 
     /// Tombstone every statement outside `keep`.
     pub(crate) fn retain_statements(&mut self, keep: &std::collections::BTreeSet<StatementId>) {
-        for (index, slot) in self.statements.iter_mut().enumerate() {
-            if slot.is_some() && !keep.contains(&StatementId(index as u32)) {
-                *slot = None;
-            }
-        }
+        self.statements.retain(keep);
     }
 
     /// Tombstone every value outside `keep`.
     pub(crate) fn retain_values(&mut self, keep: &std::collections::BTreeSet<ValueId>) {
-        for (index, slot) in self.values.iter_mut().enumerate() {
-            if slot.is_some() && !keep.contains(&ValueId(index as u32)) {
-                *slot = None;
-            }
-        }
+        self.values.retain(keep);
     }
 
     /// Tombstone every recursive group outside `keep`.
     pub(crate) fn retain_rec_groups(&mut self, keep: &std::collections::BTreeSet<RecGroupId>) {
-        for (index, slot) in self.rec_groups.iter_mut().enumerate() {
-            if slot.is_some() && !keep.contains(&RecGroupId(index as u32)) {
-                *slot = None;
-            }
-        }
+        self.rec_groups.retain(keep);
     }
 
     /// Register the next constructor of `family`, in declaration order; its position in the family is its discriminant. The cross-links are correct by construction.
