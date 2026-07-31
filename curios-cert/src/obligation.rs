@@ -14,7 +14,9 @@
 
 use {
     super::{Kernel, KernelError, Sort, group_totality},
-    curios_core::{Global, Item, Module, Prim, Rec, Reducer as _, Subterm, Term, Totality},
+    curios_core::{
+        Bound as _, Free, Global, Item, Module, Prim, Rec, Reducer as _, Subterm, Term, Totality,
+    },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
@@ -194,4 +196,56 @@ pub(crate) fn erased_half(
     }
 
     Ok(Sort::of(kernel, type_)?.is_prop().then_some(Erased::Proof))
+}
+
+/// One above the highest local binder index any of `module`'s terms mentions — the lowest floor at which a binder this crate mints cannot alias one already in the program.
+///
+/// Derived rather than believed. [`Module::binder_floor`] carries the elaborator's answer, and nothing checks it, while the kernel's capture-avoidance depends on it: eta and telescope comparison both open binders of their own, and one that aliases a free local already in a term silently identifies two terms that differ. Since a floor is a *bound* rather than a verdict, the caller takes the maximum of the two — widening is always safe, so a gap in this walk degrades to the carried value rather than to something worse, and no refusal is needed.
+///
+/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace.
+pub fn derived_binder_floor(module: &Module) -> usize {
+    let mut highest: Option<u32> = None;
+    let mut consider = |free_vars: BTreeSet<Free>| {
+        for free in free_vars {
+            if let Some(index) = free.local_index() {
+                highest = Some(highest.map_or(index, |seen: u32| seen.max(index)));
+            }
+        }
+    };
+
+    for item in &module.items {
+        for definition in match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        } {
+            consider(definition.type_.free_vars());
+            consider(definition.body.free_vars());
+        }
+    }
+
+    for declaration in module.induct_decls.values() {
+        consider(declaration.params.free_vars());
+        consider(declaration.indices.free_vars());
+        consider(declaration.result_sort.free_vars());
+        for (_, constructor) in &declaration.constructors {
+            consider(constructor.telescope.free_vars());
+        }
+    }
+
+    for declaration in module.struct_decls.values() {
+        consider(declaration.params.free_vars());
+        consider(declaration.fields.free_vars());
+        consider(declaration.result_sort.free_vars());
+    }
+
+    for concept in module.concepts.values() {
+        consider(concept.params.free_vars());
+    }
+
+    if let Some(type_) = &module.type_ {
+        consider(type_.free_vars());
+    }
+    consider(module.body.free_vars());
+
+    highest.map_or(0, |index| index as usize + 1)
 }

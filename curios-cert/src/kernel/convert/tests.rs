@@ -386,7 +386,7 @@ fn a_metavariable_does_not_convert_with_anything_else() {
 
 /// Conversion keeps the constant function apart from the identity even when the binder floor claims every name is available.
 ///
-/// A positive control for capture-avoidance rather than a demonstration of capture. `recheck` seeds the floor from `Module::binder_floor`, a number the elaborator writes and nothing in this crate checks, and eta at a function type opens a binder that would alias a free local if that number were wrong — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y`. Seeding at zero and colliding deliberately with what the kernel mints next does *not* produce that, so the trust is unverified rather than known-broken: what defends it has not been established, only that this route does not reach it.
+/// A positive control for capture-avoidance. Eta at a function type opens a binder that would alias a free local if the floor were wrong — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y` — so seeding at zero and colliding deliberately with what the kernel mints next is the sharpest form of the question. It does not produce a capture, and the route that would have made it reachable is now closed at the source: `recheck` derives the floor from the module's own terms rather than reading `Module::binder_floor`, which nothing checks.
 #[test]
 fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
     let colliding = {
