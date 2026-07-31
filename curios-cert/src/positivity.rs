@@ -42,6 +42,7 @@ pub fn positivity_vectors<E: Env>(
     env: &mut E,
     inducts: &BTreeMap<Global, InductDecl>,
     structs: &BTreeMap<Global, StructDecl>,
+    coverage: Coverage,
 ) -> Result<BTreeMap<Global, Vec<Polarity>>, NotPositive> {
     curios_profile::profile!("positivity_vectors");
     if inducts.is_empty() && structs.is_empty() {
@@ -59,7 +60,7 @@ pub fn positivity_vectors<E: Env>(
         split.insert(name.clone(), Split::of(env, inducts, structs, name));
     }
 
-    let (vectors, closed) = fixpoint(env, &split);
+    let (vectors, closed) = fixpoint(env, &split, coverage);
 
     for name in &names {
         let diagonal = closed
@@ -72,7 +73,7 @@ pub fn positivity_vectors<E: Env>(
         }
     }
 
-    Ok(vectors.0)
+    Ok(vectors.computed)
 }
 
 /// One walkable piece of a declaration: a constructor payload binder, a struct field, or an index binder's type — named so a rejection can point at it.
@@ -187,13 +188,18 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Targ
 /// The two fixpoints, run together over the whole declaration set to stability, then the occurrence relation closed transitively.
 ///
 /// Whole-set rather than declaration-by-declaration because a single ordered pass gets the wrong answer twice over. `Node(V)` mentions itself, so its own vector is an input to computing it; and in the mutual pair `A(X) | a(B(X))` / `B(X) | b(f : (X) -> Nat)`, `A` only learns that it is negative in `X` on the round after `B` does. Seeding at `Unused` and joining upward computes the least fixpoint, which is the right one: an inductive declaration *is* the least fixpoint of its own unfolding.
-fn fixpoint<E: Env>(env: &mut E, split: &BTreeMap<Global, Split>) -> (Vectors, Occurrences) {
-    let mut vectors = Vectors(
-        split
+fn fixpoint<E: Env>(
+    env: &mut E,
+    split: &BTreeMap<Global, Split>,
+    coverage: Coverage,
+) -> (Vectors, Occurrences) {
+    let mut vectors = Vectors {
+        computed: split
             .iter()
             .map(|(name, entry)| (name.clone(), vec![Polarity::Unused; entry.params.len()]))
             .collect(),
-    );
+        coverage,
+    };
     let mut direct: Occurrences = BTreeMap::new();
 
     loop {
@@ -215,8 +221,8 @@ fn fixpoint<E: Env>(env: &mut E, split: &BTreeMap<Global, Split>) -> (Vectors, O
                 }
             }
 
-            if vectors.0.get(name) != Some(&vector) {
-                vectors.0.insert(name.clone(), vector);
+            if vectors.computed.get(name) != Some(&vector) {
+                vectors.computed.insert(name.clone(), vector);
                 changed = true;
             }
             if direct.get(name) != Some(&edges) {
@@ -337,14 +343,31 @@ type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
 /// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
 ///
-/// A name absent from the map is outside the set under analysis — a replayed prelude declaration, when the elaborator drives — and answers from the driver's registry, whose vector was computed when that declaration was. Either way an unknown lookup is [`Polarity::Mixed`], never `Unused`.
-#[derive(Debug, Default)]
-struct Vectors(BTreeMap<Global, Vec<Polarity>>);
+/// Whether the declarations handed to the analysis are every declaration the program has, or only a suffix of them.
+///
+/// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator at a replay, holding the user suffix while the prelude prefix was analyzed when it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, which is the same one an unknown name has always taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Coverage {
+    /// Every declaration the program has.
+    Complete,
+    /// A suffix, with the earlier declarations analyzed elsewhere.
+    Partial,
+}
+
+/// A name absent from the map is outside the set under analysis. What that means depends on [`Coverage`]; either way an unknown lookup is [`Polarity::Mixed`], never `Unused`.
+#[derive(Debug)]
+struct Vectors {
+    computed: BTreeMap<Global, Vec<Polarity>>,
+    coverage: Coverage,
+}
 
 impl Vectors {
     fn at<E: Env>(&self, env: &E, name: &Global, index: usize) -> Polarity {
-        if let Some(vector) = self.0.get(name) {
+        if let Some(vector) = self.computed.get(name) {
             return vector.get(index).copied().unwrap_or(Polarity::Mixed);
+        }
+        if self.coverage == Coverage::Complete {
+            return Polarity::Mixed;
         }
         env.induct_decl(name)
             .map(|declaration| declaration.polarity(index))

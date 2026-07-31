@@ -1,4 +1,5 @@
 use {
+    super::Coverage,
     super::{Occurrences, close, positivity_vectors},
     crate::Kernel,
     curios_base::{Plicity, Qualifier, RootId},
@@ -65,7 +66,7 @@ fn a_negative_self_occurrence_is_refused() {
         kernel.declare_induct(name, entry);
     }
 
-    let refusal = positivity_vectors(&mut kernel, &inducts, &BTreeMap::new())
+    let refusal = positivity_vectors(&mut kernel, &inducts, &BTreeMap::new(), Coverage::Complete)
         .expect_err("a negative self-occurrence must be refused");
     assert_eq!(refusal.name, bad_name);
 }
@@ -87,7 +88,7 @@ fn a_strict_self_occurrence_is_admitted() {
         kernel.declare_induct(entry_name, entry);
     }
 
-    let vectors = positivity_vectors(&mut kernel, &inducts, &BTreeMap::new())
+    let vectors = positivity_vectors(&mut kernel, &inducts, &BTreeMap::new(), Coverage::Complete)
         .expect("a strictly positive declaration is admitted");
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
 }
@@ -347,7 +348,7 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
     }
 
     assert!(
-        positivity_vectors(&mut kernel, &inducts, &BTreeMap::new()).is_err(),
+        positivity_vectors(&mut kernel, &inducts, &BTreeMap::new(), Coverage::Complete).is_err(),
         "the carried vector was believed instead of recomputed",
     );
 }

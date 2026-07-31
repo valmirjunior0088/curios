@@ -13,16 +13,21 @@ use {
 /// Runs on zonked Core, so the telescopes the analysis reads are final and meta-free. `module` is exactly the declaration set to analyze; anything the walk reaches outside it is a replayed prelude declaration, whose vector was computed once at archive-build time and answers from this context's registry — sound because prelude items cannot mention user code, so no cycle crosses the boundary.
 pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<(), Error> {
     curios_profile::profile!("check_positivity");
-    let vectors = positivity_vectors(context, &module.induct_decls, &module.struct_decls).map_err(
-        |refusal| {
-            Error::not_strictly_positive(
-                refusal.name.symbol(),
-                refusal.part,
-                refusal.type_,
-                refusal.polarity,
-            )
-        },
-    )?;
+    let vectors = positivity_vectors(
+        context,
+        &module.induct_decls,
+        &module.struct_decls,
+        // At a replay this is the user suffix; the prelude prefix was analyzed when it was elaborated, and its vectors ride the archive.
+        curios_cert::Coverage::Partial,
+    )
+    .map_err(|refusal| {
+        Error::not_strictly_positive(
+            refusal.name.symbol(),
+            refusal.part,
+            refusal.type_,
+            refusal.polarity,
+        )
+    })?;
 
     for (name, vector) in vectors {
         if let Some(declaration) = module.induct_decls.get_mut(&name) {

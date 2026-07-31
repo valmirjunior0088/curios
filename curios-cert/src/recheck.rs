@@ -14,9 +14,9 @@
 
 use {
     super::{
-        Erased, Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
-        check_positions, check_rec_group, check_struct_decl, derived_binder_floor,
-        partial_definitions, positivity_vectors,
+        Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
+        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
+        derived_binder_floor, partial_definitions, positivity_vectors,
     },
     curios_core::{Definition, Free, Global, Item, Module, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -277,9 +277,12 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     }
 
     // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the whole spliced program — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
-    if let Err(refusal) =
-        positivity_vectors(&mut kernel, &module.induct_decls, &module.struct_decls)
-    {
+    if let Err(refusal) = positivity_vectors(
+        &mut kernel,
+        &module.induct_decls,
+        &module.struct_decls,
+        Coverage::Complete,
+    ) {
         verdicts.push(Verdict {
             name: Some(refusal.name.clone()),
             error: KernelError::NotPositive {
