@@ -163,14 +163,14 @@ impl Module {
     }
 
     pub(crate) fn add_value(&mut self, debug_name: Option<String>) -> ValueId {
-        let id = ValueId(self.values.len() as u32);
+        let id = ValueId(u32::try_from(self.values.len()).expect("value arena exhausted"));
         self.values.push(Some(ValueDef { debug_name }));
         id
     }
 
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. A reserved slot is `None` until [`define_function`](Self::define_function) fills it; finalization requires every reservation to have been defined.
     pub(crate) fn reserve_function(&mut self) -> FunctionId {
-        let id = FunctionId(self.functions.len() as u32);
+        let id = FunctionId(u32::try_from(self.functions.len()).expect("function arena exhausted"));
         self.functions.push(None);
         id
     }
@@ -182,19 +182,22 @@ impl Module {
     }
 
     pub(crate) fn add_block(&mut self, block: Block) -> BlockId {
-        let id = BlockId(self.blocks.len() as u32);
+        let id = BlockId(u32::try_from(self.blocks.len()).expect("block arena exhausted"));
         self.blocks.push(Some(block));
         id
     }
 
     pub(crate) fn add_statement(&mut self, statement: Statement) -> StatementId {
-        let id = StatementId(self.statements.len() as u32);
+        let id =
+            StatementId(u32::try_from(self.statements.len()).expect("statement arena exhausted"));
         self.statements.push(Some(statement));
         id
     }
 
     pub(crate) fn add_rec_group(&mut self, group: RecGroup) -> RecGroupId {
-        let id = RecGroupId(self.rec_groups.len() as u32);
+        let id = RecGroupId(
+            u32::try_from(self.rec_groups.len()).expect("recursive-group arena exhausted"),
+        );
         self.rec_groups.push(Some(group));
         id
     }
@@ -214,20 +217,20 @@ impl Module {
         if let Some(&id) = self.constant_index.get(&constant) {
             return id;
         }
-        let id = ConstantId(self.constants.len() as u32);
+        let id = ConstantId(u32::try_from(self.constants.len()).expect("constant arena exhausted"));
         self.constants.push(constant.clone());
         self.constant_index.insert(constant, id);
         id
     }
 
     pub(crate) fn add_product(&mut self, schema: ProductSchema) -> ProductId {
-        let id = ProductId(self.products.len() as u32);
+        let id = ProductId(u32::try_from(self.products.len()).expect("product arena exhausted"));
         self.products.push(schema);
         id
     }
 
     pub(crate) fn add_family(&mut self, debug_name: Option<String>) -> FamilyId {
-        let id = FamilyId(self.families.len() as u32);
+        let id = FamilyId(u32::try_from(self.families.len()).expect("family arena exhausted"));
         self.families.push(VariantFamily {
             debug_name,
             constructors: Vec::new(),
@@ -272,7 +275,7 @@ impl Module {
 
     /// Mint a block identity whose definition follows — the deep copy reserves the whole region before rewriting references into it.
     pub(crate) fn reserve_block(&mut self) -> BlockId {
-        let id = BlockId(self.blocks.len() as u32);
+        let id = BlockId(u32::try_from(self.blocks.len()).expect("block arena exhausted"));
         self.blocks.push(None);
         id
     }
@@ -335,7 +338,9 @@ impl Module {
         debug_name: Option<String>,
         fields: Vec<Option<String>>,
     ) -> ConstructorId {
-        let id = ConstructorId(self.constructors.len() as u32);
+        let id = ConstructorId(
+            u32::try_from(self.constructors.len()).expect("constructor arena exhausted"),
+        );
         self.constructors.push(Constructor {
             debug_name,
             family,
@@ -350,7 +355,7 @@ impl Module {
         if let Some(index) = self.foreigns.iter().position(|row| **row == *foreign) {
             return ForeignId(index as u32);
         }
-        let id = ForeignId(self.foreigns.len() as u32);
+        let id = ForeignId(u32::try_from(self.foreigns.len()).expect("foreign arena exhausted"));
         self.foreigns.push(foreign);
         id
     }

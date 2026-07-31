@@ -458,7 +458,7 @@ impl CpsModule {
     }
 
     pub fn reserve_node(&mut self) -> CpsNodeId {
-        let id = CpsNodeId(self.nodes.len() as u32);
+        let id = CpsNodeId(u32::try_from(self.nodes.len()).expect("node arena exhausted"));
         self.nodes.push(None);
         id
     }
@@ -479,13 +479,13 @@ impl CpsModule {
     }
 
     pub fn add_value(&mut self, debug_name: Option<String>) -> CpsValueId {
-        let id = CpsValueId(self.values.len() as u32);
+        let id = CpsValueId(u32::try_from(self.values.len()).expect("value arena exhausted"));
         self.values.push(Some(CpsValueDef { debug_name }));
         id
     }
 
     pub fn reserve_function(&mut self) -> CpsFunId {
-        let id = CpsFunId(self.functions.len() as u32);
+        let id = CpsFunId(u32::try_from(self.functions.len()).expect("function arena exhausted"));
         self.functions.push(None);
         id
     }
@@ -500,13 +500,15 @@ impl CpsModule {
     }
 
     pub fn add_function(&mut self, function: CpsFunction) -> CpsFunId {
-        let id = CpsFunId(self.functions.len() as u32);
+        let id = CpsFunId(u32::try_from(self.functions.len()).expect("function arena exhausted"));
         self.functions.push(Some(function));
         id
     }
 
     pub fn reserve_continuation(&mut self) -> CpsContId {
-        let id = CpsContId(self.continuations.len() as u32);
+        let id = CpsContId(
+            u32::try_from(self.continuations.len()).expect("continuation arena exhausted"),
+        );
         self.continuations.push(None);
         id
     }
@@ -521,7 +523,9 @@ impl CpsModule {
     }
 
     pub fn add_continuation(&mut self, continuation: CpsContinuation) -> CpsContId {
-        let id = CpsContId(self.continuations.len() as u32);
+        let id = CpsContId(
+            u32::try_from(self.continuations.len()).expect("continuation arena exhausted"),
+        );
         self.continuations.push(Some(continuation));
         id
     }
