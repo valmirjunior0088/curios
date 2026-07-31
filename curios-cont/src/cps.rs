@@ -4,7 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_base::{Grain, PackedBin, id},
+    curios_base::{Arena, Grain, PackedBin, id},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -389,10 +389,10 @@ impl std::error::Error for CpsVerifyError {}
 /// The production Cont representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
 #[derive(Debug, Clone, Default)]
 pub struct CpsModule {
-    nodes: Vec<Option<CpsNode>>,
-    values: Vec<Option<CpsValueDef>>,
-    functions: Vec<Option<CpsFunction>>,
-    continuations: Vec<Option<CpsContinuation>>,
+    nodes: Arena<CpsNodeId, CpsNode>,
+    values: Arena<CpsValueId, CpsValueDef>,
+    functions: Arena<CpsFunId, CpsFunction>,
+    continuations: Arena<CpsContId, CpsContinuation>,
     entry: Option<CpsFunId>,
 }
 
@@ -410,37 +410,37 @@ impl CpsModule {
     }
 
     pub fn nodes(&self) -> &[Option<CpsNode>] {
-        &self.nodes
+        self.nodes.slots()
     }
 
     pub fn values(&self) -> &[Option<CpsValueDef>] {
-        &self.values
+        self.values.slots()
     }
 
     pub fn functions(&self) -> &[Option<CpsFunction>] {
-        &self.functions
+        self.functions.slots()
     }
 
     pub fn continuations(&self) -> &[Option<CpsContinuation>] {
-        &self.continuations
+        self.continuations.slots()
     }
 
     pub fn node(&self, id: CpsNodeId) -> Option<&CpsNode> {
-        self.nodes.get(id.index()).and_then(Option::as_ref)
+        self.nodes.get(id)
     }
 
     pub fn function(&self, id: CpsFunId) -> Option<&CpsFunction> {
-        self.functions.get(id.index()).and_then(Option::as_ref)
+        self.functions.get(id)
     }
 
     pub fn continuation(&self, id: CpsContId) -> Option<&CpsContinuation> {
-        self.continuations.get(id.index()).and_then(Option::as_ref)
+        self.continuations.get(id)
     }
 
     /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetPrim` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
     pub(crate) fn value_use_counts(&self) -> BTreeMap<CpsValueId, usize> {
         let mut counts = BTreeMap::new();
-        for node in self.nodes.iter().flatten() {
+        for (_, node) in self.nodes.iter_live() {
             for atom in atoms(node) {
                 if let CpsAtom::Value(value) = atom {
                     *counts.entry(*value).or_insert(0) += 1;
@@ -458,9 +458,7 @@ impl CpsModule {
     }
 
     pub fn reserve_node(&mut self) -> CpsNodeId {
-        let id = CpsNodeId(u32::try_from(self.nodes.len()).expect("node arena exhausted"));
-        self.nodes.push(None);
-        id
+        self.nodes.reserve()
     }
 
     pub fn add_node(&mut self, node: CpsNode) -> CpsNodeId {
@@ -470,72 +468,43 @@ impl CpsModule {
     }
 
     pub fn define_node(&mut self, id: CpsNodeId, node: CpsNode) {
-        let slot = self
-            .nodes
-            .get_mut(id.index())
-            .unwrap_or_else(|| panic!("unknown node {id}"));
-        assert!(slot.is_none(), "node {id} is already defined");
-        *slot = Some(node);
+        self.nodes.define(id, node);
     }
 
     pub fn add_value(&mut self, debug_name: Option<String>) -> CpsValueId {
-        let id = CpsValueId(u32::try_from(self.values.len()).expect("value arena exhausted"));
-        self.values.push(Some(CpsValueDef { debug_name }));
-        id
+        self.values.mint(CpsValueDef { debug_name })
     }
 
     pub fn reserve_function(&mut self) -> CpsFunId {
-        let id = CpsFunId(u32::try_from(self.functions.len()).expect("function arena exhausted"));
-        self.functions.push(None);
-        id
+        self.functions.reserve()
     }
 
     pub fn define_function(&mut self, id: CpsFunId, function: CpsFunction) {
-        let slot = self
-            .functions
-            .get_mut(id.index())
-            .unwrap_or_else(|| panic!("unknown function {id}"));
-        assert!(slot.is_none(), "function {id} is already defined");
-        *slot = Some(function);
+        self.functions.define(id, function);
     }
 
     pub fn add_function(&mut self, function: CpsFunction) -> CpsFunId {
-        let id = CpsFunId(u32::try_from(self.functions.len()).expect("function arena exhausted"));
-        self.functions.push(Some(function));
-        id
+        self.functions.mint(function)
     }
 
     pub fn reserve_continuation(&mut self) -> CpsContId {
-        let id = CpsContId(
-            u32::try_from(self.continuations.len()).expect("continuation arena exhausted"),
-        );
-        self.continuations.push(None);
-        id
+        self.continuations.reserve()
     }
 
     pub fn define_continuation(&mut self, id: CpsContId, continuation: CpsContinuation) {
-        let slot = self
-            .continuations
-            .get_mut(id.index())
-            .unwrap_or_else(|| panic!("unknown continuation {id}"));
-        assert!(slot.is_none(), "continuation {id} is already defined");
-        *slot = Some(continuation);
+        self.continuations.define(id, continuation);
     }
 
     pub fn add_continuation(&mut self, continuation: CpsContinuation) -> CpsContId {
-        let id = CpsContId(
-            u32::try_from(self.continuations.len()).expect("continuation arena exhausted"),
-        );
-        self.continuations.push(Some(continuation));
-        id
+        self.continuations.mint(continuation)
     }
 
     pub fn remove_node(&mut self, id: CpsNodeId) -> Option<CpsNode> {
-        self.nodes.get_mut(id.index())?.take()
+        self.nodes.remove(id)
     }
 
     pub fn replace_atom(&mut self, from: CpsUseTarget, replacement: CpsAtom) {
-        for node in self.nodes.iter_mut().flatten() {
+        for (_, node) in self.nodes.iter_live_mut() {
             visit_atoms_mut(node, &mut |atom| {
                 let matches = match (&from, &*atom) {
                     (CpsUseTarget::Value(a), CpsAtom::Value(b)) => a == b,
@@ -552,15 +521,15 @@ impl CpsModule {
     pub fn tombstones(&self) -> (usize, usize, usize, usize) {
         let return_continuations = self
             .functions
-            .iter()
-            .flatten()
-            .map(|function| function.return_cont)
+            .iter_live()
+            .map(|(_, function)| function.return_cont)
             .collect::<BTreeSet<_>>();
         (
-            self.nodes.iter().filter(|slot| slot.is_none()).count(),
-            self.values.iter().filter(|slot| slot.is_none()).count(),
-            self.functions.iter().filter(|slot| slot.is_none()).count(),
+            self.nodes.tombstone_count(),
+            self.values.tombstone_count(),
+            self.functions.tombstone_count(),
             self.continuations
+                .slots()
                 .iter()
                 .enumerate()
                 .filter(|(index, slot)| {
@@ -577,9 +546,7 @@ impl CpsModule {
         self.require_fun(entry, "entry")?;
 
         let mut returns = BTreeMap::<CpsContId, CpsFunId>::new();
-        for (index, function) in self.functions.iter().enumerate() {
-            let Some(function) = function else { continue };
-            let id = CpsFunId(index as u32);
+        for (id, function) in self.functions.iter_live() {
             if function.return_cont.index() >= self.continuations.len() {
                 return Err(CpsVerifyError(format!(
                     "{id} return continuation {} was not minted by this module",
@@ -604,7 +571,7 @@ impl CpsModule {
             }
         }
 
-        for continuation in self.continuations.iter().flatten() {
+        for (_, continuation) in self.continuations.iter_live() {
             self.require_node(continuation.body, "continuation body")?;
             for &param in &continuation.params {
                 self.require_value(param, "continuation parameter")?;
@@ -613,10 +580,9 @@ impl CpsModule {
 
         let mut node_owners = BTreeMap::<CpsNodeId, CpsFunId>::new();
         let mut bound_continuations = BTreeSet::<CpsContId>::new();
-        for (index, function) in self.functions.iter().enumerate() {
-            let Some(function) = function else { continue };
+        for (id, function) in self.functions.iter_live() {
             self.verify_function_body(
-                CpsFunId(index as u32),
+                id,
                 function,
                 &returns,
                 &mut node_owners,
@@ -625,12 +591,7 @@ impl CpsModule {
         }
         self.verify_lexical_scopes(entry)?;
 
-        let live_nodes = self
-            .nodes
-            .iter()
-            .enumerate()
-            .filter_map(|(index, node)| node.as_ref().map(|_| CpsNodeId(index as u32)))
-            .collect::<BTreeSet<_>>();
+        let live_nodes = self.nodes.live_ids().collect::<BTreeSet<_>>();
         let owned_nodes = node_owners.keys().copied().collect::<BTreeSet<_>>();
         if live_nodes != owned_nodes {
             return Err(CpsVerifyError(
@@ -638,14 +599,7 @@ impl CpsModule {
             ));
         }
 
-        let live_continuations = self
-            .continuations
-            .iter()
-            .enumerate()
-            .filter_map(|(index, continuation)| {
-                continuation.as_ref().map(|_| CpsContId(index as u32))
-            })
-            .collect::<BTreeSet<_>>();
+        let live_continuations = self.continuations.live_ids().collect::<BTreeSet<_>>();
         if live_continuations != bound_continuations {
             return Err(CpsVerifyError(
                 "local-continuation arena and lexical LetCont bindings disagree".into(),
@@ -832,23 +786,13 @@ impl CpsModule {
             }
         }
 
-        let live_functions = self
-            .functions
-            .iter()
-            .enumerate()
-            .filter_map(|(index, function)| function.as_ref().map(|_| CpsFunId(index as u32)))
-            .collect::<BTreeSet<_>>();
+        let live_functions = self.functions.live_ids().collect::<BTreeSet<_>>();
         if live_functions != bound_functions {
             return Err(CpsVerifyError(
                 "function arena and lexical function bindings disagree".into(),
             ));
         }
-        let live_values = self
-            .values
-            .iter()
-            .enumerate()
-            .filter_map(|(index, value)| value.as_ref().map(|_| CpsValueId(index as u32)))
-            .collect::<BTreeSet<_>>();
+        let live_values = self.values.live_ids().collect::<BTreeSet<_>>();
         if live_values != bound_values {
             return Err(CpsVerifyError(
                 "value arena and lexical value bindings disagree".into(),
@@ -1182,8 +1126,7 @@ impl CpsModule {
 
     fn require_value(&self, id: CpsValueId, what: &str) -> Result<(), CpsVerifyError> {
         self.values
-            .get(id.index())
-            .and_then(Option::as_ref)
+            .get(id)
             .map(|_| ())
             .ok_or_else(|| CpsVerifyError(format!("{what} references missing {id}")))
     }
@@ -1293,9 +1236,7 @@ impl fmt::Display for CpsModule {
             self.entry
                 .map_or_else(|| "<none>".into(), |id| id.to_string())
         )?;
-        for (index, function) in self.functions.iter().enumerate() {
-            let Some(function) = function else { continue };
-            let id = CpsFunId(index as u32);
+        for (id, function) in self.functions.iter_live() {
             write!(f, "fun {id}")?;
             if let Some(name) = &function.debug_name {
                 write!(f, "${name}")?;
@@ -1304,18 +1245,13 @@ impl fmt::Display for CpsModule {
             params(self, f, &function.params)?;
             writeln!(f, ") -> {} = {}", function.return_cont, function.body)?;
         }
-        for (index, continuation) in self.continuations.iter().enumerate() {
-            let Some(continuation) = continuation else {
-                continue;
-            };
-            let id = CpsContId(index as u32);
+        for (id, continuation) in self.continuations.iter_live() {
             write!(f, "cont {id}(")?;
             params(self, f, &continuation.params)?;
             writeln!(f, ") = {}", continuation.body)?;
         }
-        for (index, node) in self.nodes.iter().enumerate() {
-            let Some(node) = node else { continue };
-            writeln!(f, "{} = {}", CpsNodeId(index as u32), CpsDisplayNode(node))?;
+        for (id, node) in self.nodes.iter_live() {
+            writeln!(f, "{id} = {}", CpsDisplayNode(node))?;
         }
         Ok(())
     }
@@ -1414,8 +1350,8 @@ impl fmt::Display for CpsDisplayNode<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpsAtom, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode, CpsNodeId,
-        CpsPrimOp, CpsUseTarget, CpsValueExpr, CpsValueId,
+        CpsAtom, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral, CpsModule, CpsNode,
+        CpsNodeId, CpsPrimOp, CpsUseTarget, CpsValueExpr, CpsValueId,
     };
 
     fn minimal_module() -> CpsModule {
@@ -1459,8 +1395,9 @@ mod tests {
             .unwrap();
         let replacement = module.add_value(Some("replacement".into()));
         let entry = module.entry().unwrap();
-        module.functions[entry.index()]
-            .as_mut()
+        module
+            .functions
+            .get_mut(entry)
             .unwrap()
             .params
             .push(replacement);
@@ -1512,7 +1449,7 @@ mod tests {
             next,
         });
         let bad = CpsNodeId((module.nodes.len() - 1) as u32);
-        module.functions[0].as_mut().unwrap().body = bad;
+        module.functions.get_mut(CpsFunId(0)).unwrap().body = bad;
         assert!(
             module
                 .verify()
@@ -1587,10 +1524,13 @@ mod tests {
         );
         let entry = module.entry().unwrap();
         let entry_body = module.function(entry).unwrap().body;
-        module.nodes[entry_body.index()] = Some(CpsNode::ApplyCont(CpsEdge {
-            target: second_return,
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
-        }));
+        module.nodes.set(
+            entry_body,
+            CpsNode::ApplyCont(CpsEdge {
+                target: second_return,
+                args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            }),
+        );
         assert!(
             module
                 .verify()
@@ -1606,10 +1546,13 @@ mod tests {
         let undefined = module.reserve_continuation();
         let entry = module.entry().unwrap();
         let entry_body = module.function(entry).unwrap().body;
-        module.nodes[entry_body.index()] = Some(CpsNode::ApplyCont(CpsEdge {
-            target: undefined,
-            args: vec![],
-        }));
+        module.nodes.set(
+            entry_body,
+            CpsNode::ApplyCont(CpsEdge {
+                target: undefined,
+                args: vec![],
+            }),
+        );
         assert!(
             module
                 .verify()

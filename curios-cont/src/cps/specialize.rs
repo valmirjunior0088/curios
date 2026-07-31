@@ -58,7 +58,7 @@ pub(super) fn scc_invariant_knowns(
     }
 
     let mut constraints: Vec<(CpsFunId, Vec<CpsAtom>)> = Vec::new();
-    for node in module.nodes.iter().flatten() {
+    for (_, node) in module.nodes.iter_live() {
         if let CpsNode::ApplyFun {
             callee: CpsCallee::Known(callee),
             args,
@@ -214,14 +214,13 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
             continue;
         };
         let clone_entry = clones[&entry];
-        if let Some(CpsNode::LetFun { functions, .. }) = module.nodes[intro.index()].as_mut() {
+        if let Some(CpsNode::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
             functions.extend(clones.values().copied());
         }
         for (node_id, callee, args) in &external {
             if *callee == entry
                 && *args == context_args
-                && let Some(CpsNode::ApplyFun { callee, .. }) =
-                    module.nodes[node_id.index()].as_mut()
+                && let Some(CpsNode::ApplyFun { callee, .. }) = module.nodes.get_mut(*node_id)
             {
                 *callee = CpsCallee::Known(clone_entry);
             }
@@ -243,7 +242,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
 
     // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a known tagged tuple that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
     let mut chosen: Option<(CpsFunId, usize, u32, usize)> = None;
-    'search: for node in module.nodes.iter().flatten() {
+    'search: for (_, node) in module.nodes.iter_live() {
         let CpsNode::ApplyFun {
             callee: CpsCallee::Known(callee),
             args,
@@ -298,7 +297,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
 
     // Peel: the clone recurses into the general function, not itself, so a recursive call that does not carry the matched constructor stays valid.
     for node_id in function_nodes(module, clone) {
-        let node = module.nodes[node_id.index()].as_mut().unwrap();
+        let node = module.nodes.get_mut(node_id).unwrap();
         if let CpsNode::ApplyFun {
             callee: CpsCallee::Known(target),
             ..
@@ -333,12 +332,12 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         next: clone_body,
     });
     params.splice(index..=index, field_params);
-    let clone_function = module.functions[clone.index()].as_mut().unwrap();
+    let clone_function = module.functions.get_mut(clone).unwrap();
     clone_function.params = params;
     clone_function.body = entry;
 
     // Introduce the clone in the callee's lexical scope.
-    if let Some(CpsNode::LetFun { functions, .. }) = module.nodes[intro.index()].as_mut() {
+    if let Some(CpsNode::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
         functions.push(clone);
     }
 
@@ -369,7 +368,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
             callee: target,
             args,
             ..
-        }) = module.nodes[node_id].as_mut()
+        }) = module.nodes.get_mut(CpsNodeId(node_id as u32))
         else {
             unreachable!()
         };
@@ -383,7 +382,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
 /// The `LetValue`-bound tagged tuples: values whose defining expression is a tuple whose first field is a `Nat` literal tag. These are the constructor call patterns branch specialization can bake into a callee.
 pub(super) fn tagged_tuple_values(module: &CpsModule) -> BTreeMap<CpsValueId, (u32, Vec<CpsAtom>)> {
     let mut result = BTreeMap::new();
-    for node in module.nodes.iter().flatten() {
+    for (_, node) in module.nodes.iter_live() {
         if let CpsNode::LetValue {
             result: value,
             value: CpsValueExpr::Tuple(fields),
@@ -416,7 +415,7 @@ pub(super) fn deconstructs_param(
 /// The literal results of `LetValue` bindings, used to resolve caller values already known to be constant.
 pub(super) fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
     let mut literals = BTreeMap::new();
-    for node in module.nodes.iter().flatten() {
+    for (_, node) in module.nodes.iter_live() {
         if let CpsNode::LetValue {
             result,
             value: CpsValueExpr::Literal(literal),
@@ -433,11 +432,11 @@ pub(super) fn introducing_letfun(
     module: &CpsModule,
     members: &BTreeSet<CpsFunId>,
 ) -> Option<CpsNodeId> {
-    for (index, node) in module.nodes.iter().enumerate() {
-        if let Some(CpsNode::LetFun { functions, .. }) = node {
+    for (id, node) in module.nodes.iter_live() {
+        if let CpsNode::LetFun { functions, .. } = node {
             let introduced: BTreeSet<CpsFunId> = functions.iter().copied().collect();
             if members.is_subset(&introduced) {
-                return Some(CpsNodeId(index as u32));
+                return Some(id);
             }
         }
     }
@@ -496,7 +495,7 @@ pub(super) fn clone_scc(
         owned.extend(cont.params.iter().copied());
     }
     for old in owned {
-        let definition = module.values[old.index()].as_ref().unwrap().clone();
+        let definition = module.values.get(old).unwrap().clone();
         let fresh = module.add_value(definition.debug_name);
         values.insert(old, fresh);
     }
@@ -664,10 +663,10 @@ pub(super) fn clone_scc(
     }
 
     for (id, node) in cloned_nodes {
-        module.nodes[id.index()] = Some(node);
+        module.nodes.define(id, node);
     }
     for (id, cont) in cloned_conts {
-        module.continuations[id.index()] = Some(cont);
+        module.continuations.define(id, cont);
     }
     for (id, function) in cloned_functions {
         module.define_function(id, function);

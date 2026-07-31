@@ -11,9 +11,7 @@ pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
     let analysis = analyze_calls(module);
     let mut selected = None;
 
-    for (index, function) in module.functions.iter().enumerate() {
-        let Some(function) = function else { continue };
-        let callee = CpsFunId(index as u32);
+    for (callee, function) in module.functions.iter_live() {
         if Some(callee) == module.entry || analysis.escaping.contains(&callee) {
             continue;
         }
@@ -93,7 +91,7 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     let return_body = module.reserve_node();
     let loop_scope = module.reserve_node();
     for node_id in function_nodes(module, callee) {
-        let node = module.nodes[node_id.index()].as_mut().unwrap();
+        let node = module.nodes.get_mut(node_id).unwrap();
         match node {
             CpsNode::ApplyFun {
                 callee: CpsCallee::Known(target),
@@ -133,34 +131,52 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     }
 
     let initial = module.reserve_node();
-    module.nodes[initial.index()] = Some(CpsNode::ApplyCont(CpsEdge {
-        target: loop_cont,
-        args,
-    }));
-    module.nodes[return_body.index()] = Some(CpsNode::ApplyCont(CpsEdge {
-        target: return_to,
-        args: vec![CpsAtom::Value(return_value)],
-    }));
-    module.continuations[return_bridge.index()] = Some(CpsContinuation {
-        debug_name: Some("contified return".into()),
-        params: vec![return_value],
-        body: return_body,
-    });
-    module.nodes[loop_scope.index()] = Some(CpsNode::LetCont {
-        continuations: vec![return_bridge],
-        body: function.body,
-    });
-    module.continuations[loop_cont.index()] = Some(CpsContinuation {
-        debug_name: function.debug_name,
-        params: function.params,
-        body: loop_scope,
-    });
-    module.nodes[call.index()] = Some(CpsNode::LetCont {
-        continuations: vec![loop_cont],
-        body: initial,
-    });
-    module.functions[callee.index()] = None;
-    for node in module.nodes.iter_mut().flatten() {
+    module.nodes.define(
+        initial,
+        CpsNode::ApplyCont(CpsEdge {
+            target: loop_cont,
+            args,
+        }),
+    );
+    module.nodes.define(
+        return_body,
+        CpsNode::ApplyCont(CpsEdge {
+            target: return_to,
+            args: vec![CpsAtom::Value(return_value)],
+        }),
+    );
+    module.continuations.define(
+        return_bridge,
+        CpsContinuation {
+            debug_name: Some("contified return".into()),
+            params: vec![return_value],
+            body: return_body,
+        },
+    );
+    module.nodes.define(
+        loop_scope,
+        CpsNode::LetCont {
+            continuations: vec![return_bridge],
+            body: function.body,
+        },
+    );
+    module.continuations.define(
+        loop_cont,
+        CpsContinuation {
+            debug_name: function.debug_name,
+            params: function.params,
+            body: loop_scope,
+        },
+    );
+    module.nodes.set(
+        call,
+        CpsNode::LetCont {
+            continuations: vec![loop_cont],
+            body: initial,
+        },
+    );
+    module.functions.remove(callee);
+    for (_, node) in module.nodes.iter_live_mut() {
         match node {
             CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. } => {
                 functions.retain(|function| *function != callee);

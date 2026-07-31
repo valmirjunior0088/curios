@@ -97,17 +97,12 @@ pub(super) fn analyze_sccs(call_graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) 
 }
 pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
     let mut analysis = CallAnalysis::default();
-    for (index, function) in module.functions.iter().enumerate() {
-        if function.is_some() {
-            let function = CpsFunId(index as u32);
-            analysis.call_sites.entry(function).or_default();
-            analysis.call_graph.entry(function).or_default();
-        }
+    for (function, _) in module.functions.iter_live() {
+        analysis.call_sites.entry(function).or_default();
+        analysis.call_graph.entry(function).or_default();
     }
 
-    for (owner_index, function) in module.functions.iter().enumerate() {
-        let Some(_) = function else { continue };
-        let owner = CpsFunId(owner_index as u32);
+    for owner in module.functions.live_ids().collect::<Vec<_>>() {
         for node_id in function_nodes(module, owner) {
             analysis.node_owners.insert(node_id, owner);
             let node = module.node(node_id).unwrap();
@@ -245,7 +240,7 @@ pub(super) fn available_values(module: &CpsModule, function: CpsFunId) -> BTreeS
 pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
     let mut known = BTreeMap::new();
 
-    for node in module.nodes.iter().flatten() {
+    for (_, node) in module.nodes.iter_live() {
         if let CpsNode::LetValue {
             result,
             value: CpsValueExpr::Literal(literal),
@@ -260,16 +255,11 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
     let recursive_functions = &analysis.recursive;
 
     let mut function_inputs = BTreeMap::<CpsFunId, Vec<Knowledge>>::new();
-    for (index, function) in module.functions.iter().enumerate() {
-        if let Some(function) = function {
-            function_inputs.insert(
-                CpsFunId(index as u32),
-                vec![Knowledge::Unknown; function.params.len()],
-            );
-        }
+    for (function, definition) in module.functions.iter_live() {
+        function_inputs.insert(function, vec![Knowledge::Unknown; definition.params.len()]);
     }
 
-    for node in module.nodes.iter().flatten() {
+    for (_, node) in module.nodes.iter_live() {
         if let CpsNode::ApplyFun {
             callee: CpsCallee::Known(function),
             args,

@@ -110,6 +110,14 @@ impl<I: ArenaId, T> Arena<I, T> {
             .filter_map(|(index, slot)| slot.as_ref().map(|value| (I::from_index(index), value)))
     }
 
+    /// The live entries with mutable access, in identity order.
+    pub fn iter_live_mut(&mut self) -> impl Iterator<Item = (I, &mut T)> {
+        self.slots
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(index, slot)| slot.as_mut().map(|value| (I::from_index(index), value)))
+    }
+
     /// The live identities, in identity order — the external handle surface for consumers that hold a module but cannot mint.
     pub fn live_ids(&self) -> impl Iterator<Item = I> + '_ {
         self.iter_live().map(|(id, _)| id)

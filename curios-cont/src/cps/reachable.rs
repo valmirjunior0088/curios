@@ -72,27 +72,16 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
     }
 
     let old = (
-        module.functions.iter().flatten().count(),
-        module.continuations.iter().flatten().count(),
-        module.nodes.iter().flatten().count(),
-        module.values.iter().flatten().count(),
+        module.functions.live_count(),
+        module.continuations.live_count(),
+        module.nodes.live_count(),
+        module.values.live_count(),
     );
-    for (index, function) in module.functions.iter_mut().enumerate() {
-        if !functions.contains(&CpsFunId(index as u32)) {
-            *function = None;
-        }
-    }
-    for (index, continuation) in module.continuations.iter_mut().enumerate() {
-        if !continuations.contains(&CpsContId(index as u32)) {
-            *continuation = None;
-        }
-    }
-    for (index, node) in module.nodes.iter_mut().enumerate() {
-        if !nodes.contains(&CpsNodeId(index as u32)) {
-            *node = None;
-            continue;
-        }
-        match node.as_mut().unwrap() {
+    module.functions.retain(&functions);
+    module.continuations.retain(&continuations);
+    module.nodes.retain(&nodes);
+    for (_, node) in module.nodes.iter_live_mut() {
+        match node {
             CpsNode::LetFun {
                 functions: members, ..
             }
@@ -107,13 +96,13 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
         }
     }
     let mut values = BTreeSet::new();
-    for function in module.functions.iter().flatten() {
+    for (_, function) in module.functions.iter_live() {
         values.extend(function.params.iter().copied());
     }
-    for continuation in module.continuations.iter().flatten() {
+    for (_, continuation) in module.continuations.iter_live() {
         values.extend(continuation.params.iter().copied());
     }
-    for node in module.nodes.iter().flatten() {
+    for (_, node) in module.nodes.iter_live() {
         match node {
             CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } => {
                 values.insert(*result);
@@ -125,15 +114,11 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
             _ => {}
         }
     }
-    for (index, value) in module.values.iter_mut().enumerate() {
-        if !values.contains(&CpsValueId(index as u32)) {
-            *value = None;
-        }
-    }
+    module.values.retain(&values);
     old != (
-        module.functions.iter().flatten().count(),
-        module.continuations.iter().flatten().count(),
-        module.nodes.iter().flatten().count(),
-        module.values.iter().flatten().count(),
+        module.functions.live_count(),
+        module.continuations.live_count(),
+        module.nodes.live_count(),
+        module.values.live_count(),
     )
 }

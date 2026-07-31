@@ -72,6 +72,7 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     for _ in 0..10_000 {
         let recursive_values = module
             .nodes
+            .slots()
             .iter()
             .flatten()
             .filter_map(|node| match node {
@@ -128,17 +129,11 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
 fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, Vec<CpsNodeId>> {
     let mut transfers: BTreeMap<CpsContId, Vec<CpsNodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
-    for (index, node) in module.nodes.iter().enumerate() {
-        let Some(node) = node.as_ref() else {
-            continue;
-        };
+    for (id, node) in module.nodes.iter_live() {
         targets.clear();
         collect_control_targets(node, &mut targets);
         for &target in &targets {
-            transfers
-                .entry(target)
-                .or_default()
-                .push(CpsNodeId(index as u32));
+            transfers.entry(target).or_default().push(id);
         }
     }
     transfers
@@ -220,8 +215,8 @@ pub(super) fn inline_continuation(
         return false;
     }
 
-    for node in &substitution_nodes {
-        let node = module.nodes[node.index()].as_mut().unwrap();
+    for &node in &substitution_nodes {
+        let node = module.nodes.get_mut(node).unwrap();
         visit_atoms_mut(node, &mut |atom| {
             if let CpsAtom::Value(value) = atom
                 && let Some(replacement) = substitutions.get(value)
@@ -241,11 +236,11 @@ pub(super) fn inline_continuation(
         }
     }
 
-    let body = module.nodes[definition.body.index()].take().unwrap();
-    module.nodes[call.index()] = Some(body);
-    module.continuations[continuation.index()] = None;
+    let body = module.nodes.remove(definition.body).unwrap();
+    module.nodes.set(call, body);
+    module.continuations.remove(continuation);
     for param in definition.params {
-        module.values[param.index()] = None;
+        module.values.remove(param);
     }
     true
 }
@@ -289,7 +284,7 @@ pub(super) fn inline_call(
 
     for node in nodes.values() {
         if let CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } = node {
-            let definition = module.values[result.index()].as_ref().unwrap().clone();
+            let definition = module.values.get(*result).unwrap().clone();
             let fresh = module.add_value(definition.debug_name);
             values.insert(*result, CpsAtom::Value(fresh));
         }
@@ -304,7 +299,7 @@ pub(super) fn inline_call(
         let fresh = module.reserve_continuation();
         continuations.insert(id, fresh);
         for &param in &continuation.params {
-            let definition = module.values[param.index()].as_ref().unwrap().clone();
+            let definition = module.values.get(param).unwrap().clone();
             let fresh = module.add_value(definition.debug_name);
             values.insert(param, CpsAtom::Value(fresh));
         }
@@ -441,18 +436,26 @@ pub(super) fn inline_call(
     }
 
     for (&old, continuation) in &continuation_defs {
-        module.continuations[continuations[&old].index()] = Some(CpsContinuation {
-            debug_name: continuation.debug_name.clone(),
-            params: continuation
-                .params
-                .iter()
-                .map(|id| map_value(*id))
-                .collect(),
-            body: node_map[&continuation.body],
-        });
+        module.continuations.define(
+            continuations[&old],
+            CpsContinuation {
+                debug_name: continuation.debug_name.clone(),
+                params: continuation
+                    .params
+                    .iter()
+                    .map(|id| map_value(*id))
+                    .collect(),
+                body: node_map[&continuation.body],
+            },
+        );
     }
+    // The callee's body clone lands on the live call node (`node_map` seeds `function.body -> call`); every other clone fills a slot reserved above.
     for (id, node) in cloned_nodes {
-        module.nodes[id.index()] = Some(node);
+        if id == call {
+            module.nodes.set(id, node);
+        } else {
+            module.nodes.define(id, node);
+        }
     }
     true
 }

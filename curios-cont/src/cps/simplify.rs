@@ -7,13 +7,13 @@ use {
 /// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has severed the function-to-value dependency. `RecInit` additionally binds its computed values so escaping closures may forward-reference them and emits a fallback shell for each escaping member that captures one; when no member still captures a computed value, that binding and those shells are unnecessary and the node is an ordinary recursive function group. The stronger "captures nothing computed" test (rather than merely "escapes nothing") also keeps every computed value in lexical scope after the rewrite.
 pub(super) fn dissolve_rec_init(module: &mut CpsModule) -> bool {
     let mut selected = None;
-    for (index, node) in module.nodes.iter().enumerate() {
-        let Some(CpsNode::RecInit {
+    for (id, node) in module.nodes.iter_live() {
+        let CpsNode::RecInit {
             functions,
             values,
             body,
             ..
-        }) = node
+        } = node
         else {
             continue;
         };
@@ -22,19 +22,19 @@ pub(super) fn dissolve_rec_init(module: &mut CpsModule) -> bool {
             .iter()
             .any(|function| !free_values(module, *function).is_disjoint(&computed));
         if !captures {
-            selected = Some((CpsNodeId(index as u32), functions.clone(), *body));
+            selected = Some((id, functions.clone(), *body));
             break;
         }
     }
     let Some((node, functions, body)) = selected else {
         return false;
     };
-    module.nodes[node.index()] = Some(CpsNode::LetFun { functions, body });
+    module.nodes.set(node, CpsNode::LetFun { functions, body });
     true
 }
 pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId, CpsAtom>) -> bool {
     let mut changed = false;
-    for node in module.nodes.iter_mut().flatten() {
+    for (_, node) in module.nodes.iter_live_mut() {
         visit_atoms_mut(node, &mut |atom| {
             if let CpsAtom::Value(value) = atom
                 && let Some(replacement) = known.get(value)
@@ -67,18 +67,13 @@ pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId,
 pub(super) fn forward_continuations(module: &mut CpsModule) -> bool {
     let forwarding = module
         .continuations
-        .iter()
-        .enumerate()
-        .filter_map(|(index, continuation)| {
-            let continuation = continuation.as_ref()?;
+        .iter_live()
+        .filter_map(|(id, continuation)| {
             let CpsNode::ApplyCont(edge) = module.node(continuation.body)? else {
                 return None;
             };
             module.continuation(edge.target)?;
-            Some((
-                CpsContId(index as u32),
-                (continuation.params.clone(), edge.clone()),
-            ))
+            Some((id, (continuation.params.clone(), edge.clone())))
         })
         .collect::<BTreeMap<_, _>>();
     if forwarding.is_empty() {
@@ -112,7 +107,7 @@ pub(super) fn forward_continuations(module: &mut CpsModule) -> bool {
     };
 
     let mut changed = false;
-    for node in module.nodes.iter_mut().flatten() {
+    for (_, node) in module.nodes.iter_live_mut() {
         match node {
             CpsNode::ApplyCont(edge) => {
                 thread_edge(edge, &forwarding, &mut changed);
@@ -189,8 +184,7 @@ pub(super) fn retarget(
 }
 pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
     let mut changed = false;
-    for slot in &mut module.nodes {
-        let Some(node) = slot else { continue };
+    for (_, node) in module.nodes.iter_live_mut() {
         match node {
             CpsNode::LetPrim {
                 result,
@@ -227,6 +221,7 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     loop {
         let aggregates = module
             .nodes
+            .slots()
             .iter()
             .flatten()
             .filter_map(|node| match node {
@@ -238,13 +233,13 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
                 _ => None,
             })
             .collect::<BTreeMap<_, _>>();
-        let selected = module.nodes.iter().enumerate().find_map(|(index, node)| {
+        let selected = module.nodes.iter_live().find_map(|(id, node)| {
             let CpsNode::LetPrim {
                 result,
                 op: CpsPrimOp::TplGet(field),
                 args,
                 next,
-            } = node.as_ref()?
+            } = node
             else {
                 return None;
             };
@@ -252,7 +247,7 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
                 return None;
             };
             let replacement = aggregates.get(tuple)?.get(*field)?.clone();
-            Some((CpsNodeId(index as u32), *result, *next, replacement))
+            Some((id, *result, *next, replacement))
         });
         let Some((node, result, next, replacement)) = selected else {
             break;
@@ -260,8 +255,8 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
 
         rewrite_atoms(module, &BTreeMap::from([(result, replacement)]));
         rewire_node(module, node, next);
-        module.nodes[node.index()] = None;
-        module.values[result.index()] = None;
+        module.nodes.remove(node);
+        module.values.remove(result);
         changed = true;
     }
     changed
@@ -273,26 +268,23 @@ pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
         let counts = module.value_use_counts();
         let mut redirect = BTreeMap::<CpsNodeId, CpsNodeId>::new();
         let mut dead_values = Vec::<CpsValueId>::new();
-        for (index, node) in module.nodes.iter().enumerate() {
-            let id = CpsNodeId(index as u32);
-            let removal = match node.as_ref() {
-                Some(CpsNode::LetValue { result, next, .. })
+        for (id, node) in module.nodes.iter_live() {
+            let removal = match node {
+                CpsNode::LetValue { result, next, .. }
                     if counts.get(result).copied().unwrap_or(0) == 0 =>
                 {
                     Some((*next, Some(*result)))
                 }
-                Some(CpsNode::LetPrim {
+                CpsNode::LetPrim {
                     result, op, next, ..
-                }) if op.is_total() && counts.get(result).copied().unwrap_or(0) == 0 => {
+                } if op.is_total() && counts.get(result).copied().unwrap_or(0) == 0 => {
                     Some((*next, Some(*result)))
                 }
-                Some(CpsNode::LetFun { functions, body }) if functions.is_empty() => {
-                    Some((*body, None))
-                }
-                Some(CpsNode::LetCont {
+                CpsNode::LetFun { functions, body } if functions.is_empty() => Some((*body, None)),
+                CpsNode::LetCont {
                     continuations,
                     body,
-                }) if continuations.is_empty() => Some((*body, None)),
+                } if continuations.is_empty() => Some((*body, None)),
                 _ => None,
             };
             if let Some((successor, value)) = removal {
@@ -307,10 +299,10 @@ pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
         }
         splice_dead_nodes(module, &redirect);
         for &node in redirect.keys() {
-            module.nodes[node.index()] = None;
+            module.nodes.remove(node);
         }
         for value in dead_values {
-            module.values[value.index()] = None;
+            module.values.remove(value);
         }
         changed = true;
     }
@@ -319,13 +311,13 @@ pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
 
 /// Redirect every control edge that targets a spliced-out node to the first surviving node in its chain. `redirect` maps each removed node to its immediate successor; following the chain skips runs of consecutive removed nodes, so the result is the same as rewiring one node at a time.
 fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsNodeId>) {
-    for function in module.functions.iter_mut().flatten() {
+    for (_, function) in module.functions.iter_live_mut() {
         function.body = resolve_redirect(redirect, function.body);
     }
-    for continuation in module.continuations.iter_mut().flatten() {
+    for (_, continuation) in module.continuations.iter_live_mut() {
         continuation.body = resolve_redirect(redirect, continuation.body);
     }
-    for node in module.nodes.iter_mut().flatten() {
+    for (_, node) in module.nodes.iter_live_mut() {
         match node {
             CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => {
                 *next = resolve_redirect(redirect, *next);
@@ -356,17 +348,17 @@ fn resolve_redirect(redirect: &BTreeMap<CpsNodeId, CpsNodeId>, mut id: CpsNodeId
     id
 }
 pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId) {
-    for function in module.functions.iter_mut().flatten() {
+    for (_, function) in module.functions.iter_live_mut() {
         if function.body == from {
             function.body = to;
         }
     }
-    for continuation in module.continuations.iter_mut().flatten() {
+    for (_, continuation) in module.continuations.iter_live_mut() {
         if continuation.body == from {
             continuation.body = to;
         }
     }
-    for node in module.nodes.iter_mut().flatten() {
+    for (_, node) in module.nodes.iter_live_mut() {
         match node {
             CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => {
                 if *next == from {
@@ -402,6 +394,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
     // Precompute the continuations used as a return target in one pass, rather than rescanning every node for each continuation.
     let return_targets = module
         .nodes
+        .slots()
         .iter()
         .flatten()
         .filter_map(|node| match node {
@@ -413,11 +406,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         })
         .collect::<BTreeSet<_>>();
     let mut continuation = None;
-    for (index, definition) in module.continuations.iter().enumerate() {
-        let Some(definition) = definition else {
-            continue;
-        };
-        let id = CpsContId(index as u32);
+    for (id, definition) in module.continuations.iter_live() {
         if return_targets.contains(&id) {
             continue;
         }
@@ -436,13 +425,10 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
     }
     if let Some((continuation, dead)) = continuation {
         let removed = remove_parameter_indices(
-            &mut module.continuations[continuation.index()]
-                .as_mut()
-                .unwrap()
-                .params,
+            &mut module.continuations.get_mut(continuation).unwrap().params,
             &dead,
         );
-        for node in module.nodes.iter_mut().flatten() {
+        for (_, node) in module.nodes.iter_live_mut() {
             match node {
                 CpsNode::ApplyCont(edge) if edge.target == continuation => {
                     remove_parameter_indices(&mut edge.args, &dead);
@@ -458,13 +444,14 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             }
         }
         for value in removed {
-            module.values[value.index()] = None;
+            module.values.remove(value);
         }
         return true;
     }
 
     let escaping = module
         .nodes
+        .slots()
         .iter()
         .flatten()
         .flat_map(atoms)
@@ -474,11 +461,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         })
         .collect::<BTreeSet<_>>();
     let mut function = None;
-    for (index, definition) in module.functions.iter().enumerate() {
-        let Some(definition) = definition else {
-            continue;
-        };
-        let id = CpsFunId(index as u32);
+    for (id, definition) in module.functions.iter_live() {
         if escaping.contains(&id) {
             continue;
         }
@@ -499,10 +482,10 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         return false;
     };
     let removed = remove_parameter_indices(
-        &mut module.functions[function.index()].as_mut().unwrap().params,
+        &mut module.functions.get_mut(function).unwrap().params,
         &dead,
     );
-    for node in module.nodes.iter_mut().flatten() {
+    for (_, node) in module.nodes.iter_live_mut() {
         if let CpsNode::ApplyFun {
             callee: CpsCallee::Known(callee),
             args,
@@ -514,7 +497,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         }
     }
     for value in removed {
-        module.values[value.index()] = None;
+        module.values.remove(value);
     }
     true
 }

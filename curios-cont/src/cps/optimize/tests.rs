@@ -1003,7 +1003,7 @@ fn optimization_specializes_away_the_polymorphic_indirect_call() {
     optimize(&mut module);
     module.verify().unwrap();
     assert!(
-        module.nodes.iter().flatten().all(|node| !matches!(
+        module.nodes().iter().flatten().all(|node| !matches!(
             node,
             CpsNode::ApplyFun {
                 callee: CpsCallee::Closure(_),
