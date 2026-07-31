@@ -36,10 +36,12 @@ Curios includes:
 
 - Dependent function and tuple types
 - Indexed inductive types
+- A cumulative universe hierarchy with levels inferred rather than written
 - A proof-irrelevant `Prop` universe
 - Erased arguments and zero-cost type-level information
 - Concepts and witnesses for ad-hoc polymorphism
 - Pattern matching with exhaustiveness checking
+- An independent kernel that re-checks every compilation from the finished terms alone <br> *(still being refined, and a second opinion rather than a proof of soundness)*
 - A standard library for collections, formatting, IO, networking, tasks, and JSON
 - A complete lowering pipeline from source to WebAssembly
 

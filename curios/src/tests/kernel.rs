@@ -1,16 +1,18 @@
 //! The independent kernel, run over modules this compiler has already accepted.
 //!
-//! These are the only tests that ask the second opinion about *real* elaborated output rather than a hand-built fixture, so they are where a disagreement between the two checkers actually shows up. A failure here is a question, not a verdict: the kernel is incomplete in known places (coverage is unverified, free-monoid elimination arms are unchecked, several conversion positions compare syntactically), and each of those refuses valid programs. See `curios-elab/src/recheck.rs`.
+//! These are the only tests that ask the second opinion about *real* elaborated output rather than a hand-built fixture, so they are where a disagreement between the two checkers actually shows up. A failure here is a question, not a verdict: the kernel is incomplete in known places (coverage is unverified, free-monoid elimination arms are unchecked, several conversion positions compare syntactically), and each of those refuses valid programs. See `curios-cert/src/recheck.rs`.
 //!
-//! # What these found, and what the previous note got wrong
+//! What these assert is stronger than what a compilation already does. `compile_entrypoint` runs `recheck_module_suffix`, judging the user's items while the archived prelude prefix is defined on the archive's word; `recheck` here runs `recheck_module` over the whole elaborated module, so every prelude item is re-derived rather than read from a verdict recorded when the archive was built.
+//!
+//! # What these found, and what the previous notes got wrong
 //!
 //! This note used to record that the kernel was blocked on unsolved universe metavariables surviving into zonked Core, and that grounding them was the next thing standing between this and a working second opinion. Both were wrong, and how they were wrong is the part worth keeping: these tests read `Stage::Core`, which the pipeline emits *before* elaboration. The metavariables were the lowering's own universe seeds, and the module the kernel kept refusing had never been type-checked at all. A zonked module's levels are ground — `validate_universes` rejects a term-level metavariable, and always did.
 //!
 //! The lesson is the one this effort keeps relearning: the diagnosis was derived by reading the refusal and reasoning about which pass must have let it through, and it named a mechanism that was working correctly. Printing the module settled it in one command.
 //!
-//! Reading `Stage::CoreElab`, the kernel now walks the prelude and stops at index inversion. `/std/Nat/Lte/trans` scrutinizes two `Lte` proofs: one arm refines `b` to `b2 + 1`, the other to `b3 + 1`, and the recursive call needs `b2 ≡ b3`, which follows only by inverting successor. That is what `curios-elab/src/invert.rs` does and the kernel has no equivalent of, so the refusal is a gap in the kernel rather than a defect in what it was handed.
+//! Reading `Stage::CoreElab`, the walk then stopped at index inversion. `/std/Nat/Lte/trans` scrutinizes two `Lte` proofs: one arm refines `b` to `b2 + 1`, the other to `b3 + 1`, and the recursive call needs `b2 ≡ b3`, which follows only by inverting successor — which the elaborator could do and the kernel had no equivalent of, making the refusal a gap in the kernel rather than a defect in what it was handed. It closed by making inversion an analysis both checkers reach through the `Env`/`Judge` seam (`curios-cert/src/invert.rs`) instead of an elaborator-only one, which is also why it bought no second opinion about inversion itself: a shared analysis is a place the two checkers *cannot* disagree (see DESIGN.md, "An independent kernel re-checks what the elaborator accepts").
 //!
-//! These stay ignored as the record of where the walk stops. Running them is how the next gap gets found.
+//! So these assert rather than record. The next gap in the kernel arrives as a failure here.
 
 use {
     curios_cert::KernelError,
@@ -149,7 +151,6 @@ fn kernel_memo_parity() {
 
 /// The smallest thing that is still a whole program: the kernel walks every prelude item ahead of the entrypoint, so even this exercises the module driver over the real standard library.
 #[test]
-#[ignore = "blocked: the kernel has no index inversion (see the module note)"]
 fn a_trivial_program_rechecks() {
     let outcome = recheck("()");
 
@@ -157,7 +158,6 @@ fn a_trivial_program_rechecks() {
 }
 
 #[test]
-#[ignore = "blocked: the kernel has no index inversion (see the module note)"]
 fn arithmetic_rechecks() {
     let outcome = recheck(
         r#"
