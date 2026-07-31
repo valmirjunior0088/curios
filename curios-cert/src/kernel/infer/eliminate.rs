@@ -52,10 +52,10 @@ pub(super) fn check_induct_arms(
         check_arm(kernel, declaration, family, motive, scrutinee, tag, arm)?;
     }
 
-    // A catch-all binds nothing and stands for the scrutinee itself, so it is checked at the scrutinee's own indices rather than at any case's.
+    // A catch-all binds nothing and stands for the scrutinee itself, so it is checked at the scrutinee's own indices *and at the scrutinee* — the one arm with no case value of its own, and therefore the one whose instance can only come from the term being eliminated. That is the instance `infer` reads the elimination's type off, so any other one proves something other than what the elimination hands its caller.
     if let Some(default) = default {
         let mut arguments = family.indices.clone();
-        arguments.push(scrutinee_of(family));
+        arguments.push(scrutinee.clone());
         let refs = arguments.iter().collect::<Vec<_>>();
 
         check(kernel, default, &motive.open(&refs))?;
@@ -308,11 +308,6 @@ fn open_payload<T>(
     };
 
     body(kernel, &binders, &payload, &constructed)
-}
-
-/// The scrutinee a catch-all arm stands for: the family applied to its own parameters and indices, as a neutral.
-fn scrutinee_of(family: &InductType) -> Term {
-    Subterm::InductType(family.clone()).into()
 }
 
 /// Refuse eliminating a proposition into a relevant result unless the proposition is empty or a singleton.

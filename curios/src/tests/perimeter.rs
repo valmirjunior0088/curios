@@ -221,6 +221,24 @@ const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
         ()
         "#;
 
+const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
+        use /std/{Nat, Eq};
+
+        induct Three : pub Type
+        | a()
+        | b()
+        | c()
+        end
+
+        let same(t : Three) -> Eq(t, t) =
+            match t : (q) => Eq(q, q)
+            | a() => Eq/refl()
+            | _ => Eq/refl()
+            end;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 // The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
 #[test]
 fn a_multi_constructor_proposition_cannot_be_eliminated_into_data() {
@@ -343,6 +361,16 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
 #[test]
 fn a_proposition_may_not_carry_a_type_field() {
     rejected_by(A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD, "is informative");
+}
+
+// The arm rule at its one arm with no case value of its own. A `| _ =>` catch-all binds nothing and refines no index, so the only instance it can be checked at is the scrutinee's — which is the instance the elimination then hands its caller.
+//
+// This is the two-checker matrix's own quadrant rather than a route to `False`: the elaborator checks the catch-all at the actual scrutinee and the kernel opened the motive's scrutinee binder at the family *type* `/Three`, so this program elaborated and was then refused with `/Three` standing in both term positions of the `Eq`. That direction fails closed — nothing well-typed inhabits an expectation with a type substituted for a value — but the certifier's own judgment is the one that matters, and it established nothing about the scrutinee for any catch-all it accepted. No prelude catch-all has a scrutinee-dependent motive, so the disagreement count stayed at zero and the rule was never asked.
+//
+// The instance is pinned where the rule lives, in `curios_cert::kernel::infer::eliminate::tests`: `a_catch_all_sees_its_own_scrutinee` with its control `a_catch_all_at_another_value_of_the_family_is_refused`, which asserts the expectation itself so that not checking the catch-all cannot pass for closing the hole.
+#[test]
+fn a_catch_all_is_checked_at_its_scrutinee() {
+    assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");
 }
 
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so before the erasure obligations moved into `curios-cert` these were the class the trusted base took entirely on the elaborator's word.
@@ -658,6 +686,13 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD,
         Expect::Refuses("is informative"),
         Expect::NotAsked,
+    ),
+    // Both must accept: the catch-all's instance is a rule they are supposed to decide the same way, and this row is where they were caught deciding it differently.
+    (
+        "catch_all_at_its_scrutinee",
+        A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE,
+        Expect::Accepts,
+        Expect::Accepts,
     ),
     (
         "partial_direct",

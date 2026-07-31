@@ -132,6 +132,29 @@ fn succ(tail: Term) -> Term {
     Term::prim(Prim::Nat(curios_core::Nat::Succ(1u32.into(), tail)))
 }
 
+/// An opaque `P : (n : Nat, x : family(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index.
+///
+/// [`opaque_family`] below can only witness the index half of a motive, and a catch-all refines no index — so nothing built from it can tell the scrutinee instances apart.
+fn scrutinee_family(kernel: &mut Kernel, name: Free, family: &Global) -> Term {
+    let index = binder(92, "n");
+    kernel.declare(
+        &name,
+        &Term::func_type(
+            [
+                (index.clone(), nat_type()),
+                (
+                    binder(93, "x"),
+                    Term::induct_type(family.clone(), Vec::<Term>::new(), [Term::free_var(&index)]),
+                ),
+            ],
+            Term::type_ground(),
+        ),
+        &UniverseContext::default(),
+    );
+
+    Term::free_var(&name)
+}
+
 /// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.
 fn opaque_family(kernel: &mut Kernel, name: Free) -> Term {
     kernel.declare(
@@ -361,6 +384,130 @@ fn a_catch_all_covers_absent_arms() {
     );
 
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
+/// A catch-all is checked at the motive's *scrutinee* instance — the instance the elimination is then given.
+///
+/// Every other arm has a case value of its own to be checked at, and a catch-all is the one arm that does not: it binds nothing and refines no index, so the only value it can stand for is the scrutinee. `infer` reads the elimination's type off `motive.open([indices, head])`, so an arm checked at any other instance proves something other than what the elimination hands its caller.
+///
+/// While the hole was open the scrutinee binder was opened at the family *type* `Ix(b)` instead — a type substituted where a value of that type belongs — so this hypothesis at `P(b, subject)` was refused against an expectation of `P(b, Ix(b))`. That direction fails closed, because nothing well-typed inhabits the expectation it manufactures; the direction that does not is the certifier's, which established nothing whatever about the scrutinee for any catch-all it accepted. Reachable from source: `match t : (q) => Eq(q, q) | a() => Eq/refl() | _ => Eq/refl() end` compiled, elaborated, and was then refused by the kernel with `/Three` standing in both term positions of the `Eq`. It is inert across the fixed prelude — every catch-all there has a motive that ignores its scrutinee — which is why a rule graded *probed* had never been asked this question.
+///
+/// [`a_catch_all_at_another_value_of_the_family_is_refused`] is the paired control: closing this by not checking the catch-all at all would satisfy the test above and nothing else.
+#[test]
+fn a_catch_all_sees_its_own_scrutinee() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let payload = binder(1, "p");
+    let subject = binder(50, "subject");
+    let hypothesis = binder(3, "w");
+
+    kernel.assume(&b, &nat_type());
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![
+            nullary("z", nat(0)),
+            carrying(
+                "s",
+                payload.clone(),
+                nat_type(),
+                succ(Term::free_var(&payload)),
+            ),
+        ],
+    );
+    let p = scrutinee_family(&mut kernel, binder(2, "P"), &family);
+
+    kernel.assume(
+        &subject,
+        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]),
+    );
+    let at_the_scrutinee = Term::apply(p.clone(), [Term::free_var(&b), Term::free_var(&subject)]);
+    kernel.assume(&hypothesis, &at_the_scrutinee);
+
+    let term = Term::induct_match_scoped_marked(
+        Term::free_var(&subject),
+        Scope::close(
+            Many(2),
+            &[&binder(51, "i"), &binder(52, "s")],
+            Term::apply(
+                p,
+                [
+                    Term::free_var(&binder(51, "i")),
+                    Term::free_var(&binder(52, "s")),
+                ],
+            ),
+        ),
+        Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
+        Some(Term::free_var(&hypothesis)),
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(at_the_scrutinee));
+}
+
+/// The control for [`a_catch_all_sees_its_own_scrutinee`]: a catch-all body at *another* inhabitant of the family is refused, and refused against the scrutinee's instance.
+///
+/// `other` sits at the same type as `subject` and is a different variable, so `P(b, other)` and `P(b, subject)` are distinct types with nothing to convert them. Asserting the expectation rather than merely the refusal is what makes this a control: a kernel that stopped checking the catch-all would accept this, and one that checked it at some other instance would name that instance here.
+#[test]
+fn a_catch_all_at_another_value_of_the_family_is_refused() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let payload = binder(1, "p");
+    let subject = binder(50, "subject");
+    let other = binder(53, "other");
+    let hypothesis = binder(3, "w");
+
+    kernel.assume(&b, &nat_type());
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![
+            nullary("z", nat(0)),
+            carrying(
+                "s",
+                payload.clone(),
+                nat_type(),
+                succ(Term::free_var(&payload)),
+            ),
+        ],
+    );
+    let p = scrutinee_family(&mut kernel, binder(2, "P"), &family);
+
+    let family_at_b = Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]);
+    kernel.assume(&subject, &family_at_b);
+    kernel.assume(&other, &family_at_b);
+    kernel.assume(
+        &hypothesis,
+        &Term::apply(p.clone(), [Term::free_var(&b), Term::free_var(&other)]),
+    );
+
+    let term = Term::induct_match_scoped_marked(
+        Term::free_var(&subject),
+        Scope::close(
+            Many(2),
+            &[&binder(51, "i"), &binder(52, "s")],
+            Term::apply(
+                p.clone(),
+                [
+                    Term::free_var(&binder(51, "i")),
+                    Term::free_var(&binder(52, "s")),
+                ],
+            ),
+        ),
+        Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
+        Some(Term::free_var(&hypothesis)),
+    );
+
+    let Err(KernelError::Mismatch { expected, .. }) = infer(&mut kernel, &term) else {
+        panic!("expected the catch-all to be refused at the scrutinee's instance");
+    };
+    assert_eq!(
+        *expected,
+        Term::apply(p, [Term::free_var(&b), Term::free_var(&subject)]),
+    );
 }
 
 /// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted. Without this, `Eq/subst` is unstatable.
