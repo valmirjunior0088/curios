@@ -109,3 +109,66 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         "the subjects stopped exercising the property: only {mutated} items were mutated",
     );
 }
+
+/// The same property from the other side: keep each body and give it another item's declared type.
+///
+/// Body substitution asks whether the kernel notices a term that cannot inhabit its type; this asks whether it notices a *type* nothing in place inhabits. The two fail differently — the first is caught where the body is checked, the second can also surface downstream, where a consumer of the retyped definition stops fitting — and a checker that tracked only one of them would pass the earlier test and fail this one.
+///
+/// Pairs whose declared types are structurally identical are skipped: swapping those is not a mutation at all.
+#[test]
+fn every_type_replaced_by_another_item_s_is_refused() {
+    let mut mutated = 0;
+
+    for (description, source) in SUBJECTS {
+        let entrypoint = source
+            .parse::<Entrypoint>()
+            .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
+        let (module, checked_from, _) = curios_pipeline::typecheck_reporting(
+            crate::DEFAULT_STEP_BUDGET,
+            &entrypoint,
+            RootSource::none(),
+        )
+        .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
+
+        let declared = module
+            .items
+            .iter()
+            .enumerate()
+            .skip(checked_from)
+            .filter_map(|(index, item)| match item {
+                Item::Let(definition) => Some((index, definition.type_.clone())),
+                Item::Rec(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        for (index, _) in &declared {
+            for (other, replacement) in &declared {
+                let Item::Let(definition) = &module.items[*index] else {
+                    unreachable!("the index came from a `let`");
+                };
+                if other == index || definition.type_ == *replacement {
+                    continue;
+                }
+
+                let mut mutant: Module = module.clone();
+                let Item::Let(target) = &mut mutant.items[*index] else {
+                    unreachable!("the item was a `let` a moment ago");
+                };
+                target.type_ = replacement.clone();
+
+                assert!(
+                    !recheck_module_suffix(&mutant, crate::DEFAULT_STEP_BUDGET, checked_from)
+                        .is_empty(),
+                    "{description}: the kernel accepted `{}` redeclared at `{replacement}`",
+                    definition.name,
+                );
+                mutated += 1;
+            }
+        }
+    }
+
+    assert!(
+        mutated >= 12,
+        "the subjects stopped exercising the property: only {mutated} pairs were swapped",
+    );
+}
