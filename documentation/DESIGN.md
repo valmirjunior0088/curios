@@ -113,7 +113,7 @@ The perimeter has two halves, and they differ in how coverage is obtained. The *
 | Whole-module pass | Assumes | Status |
 | --- | --- | --- |
 | `zonk_module` | No unsolved metavariable survives, so nothing downstream can later be solved to a partial or negatively-occurring term | auditable only |
-| `validate_universes` (inside `zonk_module`) | The accumulated level constraints are satisfiable | auditable only |
+| `validate_universes` (inside `zonk_module`) | The accumulated level constraints are satisfiable | **probed** differentially: each definition's context put to the kernel's independent `closed`/`satisfiable` and required to agree. Its `validate_bound_universes` half remains auditable only |
 | `check_positivity` | Every `induct`/`struct` declaration is strictly positive modulo polarity | **probed** |
 | `record_totality` + (T) | Nothing reachable from a type position is partial | **probed** (four routes) |
 | (V) | Nothing at a `Prop`-sorted type is partial | **probed** (two routes) |

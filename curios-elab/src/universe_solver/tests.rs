@@ -530,3 +530,131 @@ fn level_parameter_names_stay_alphabetic_past_the_sixth() {
         );
     }
 }
+
+/// The two checkers decide universe-context validity separately, and this is where that decision is held to account.
+///
+/// `curios-cert/src/satisfy.rs` records the reason for the duplication: a transcription would inherit whatever the original gets wrong and agree for that reason, so the kernel's decision is written from the constraint semantics instead, and "a disagreement is a signal". A signal nothing can observe is not one. [`universe_context_validate`] runs during elaboration, so a context it rejects never becomes part of a module, and the kernel's `closed`/`satisfiable` are asked only about contexts this function has already passed — for every program in the corpus. Comparing them therefore has to be done directly, which is what this does, and it is the obligation that argument incurs rather than an extra precaution.
+///
+/// The direction that matters is the *kernel* being the more permissive of the two: it assumes an item's constraints while checking it, so a set it wrongly calls satisfiable is a hypothesis set from which every level relation follows, and `check_instance` stops discharging anything. The elaborator being the more permissive one is ordinary incompleteness and surfaces as a refusal. Neither is observable from a program, which is why the assertion is equality rather than an implication.
+///
+/// The final two assertions are the control: a table whose contexts were all valid, or all invalid, would pass this while comparing nothing.
+#[test]
+fn both_checkers_decide_universe_context_validity_alike() {
+    let leq = |lower: Level, upper: Level| UniverseConstraint {
+        lower,
+        upper,
+        origin: origin("differential"),
+    };
+    let param = |index: usize| Level::param(UniverseParam(index));
+
+    let contexts: Vec<(&str, UniverseContext)> = vec![
+        ("empty", UniverseContext::empty()),
+        (
+            "one bound",
+            UniverseContext {
+                parameter_count: 2,
+                constraints: vec![leq(param(0), param(1))],
+            },
+        ),
+        // Mutually bounded parameters are legal and satisfiable: they force equality, not a contradiction.
+        (
+            "cyclic but satisfiable",
+            UniverseContext {
+                parameter_count: 2,
+                constraints: vec![leq(param(0), param(1)), leq(param(1), param(0))],
+            },
+        ),
+        (
+            "direct positive cycle",
+            UniverseContext {
+                parameter_count: 1,
+                constraints: vec![leq(param(0).succ().expect("successor"), param(0))],
+            },
+        ),
+        (
+            "long positive cycle",
+            UniverseContext {
+                parameter_count: 3,
+                constraints: vec![
+                    leq(param(0).succ().expect("successor"), param(1)),
+                    leq(param(1), param(2)),
+                    leq(param(2), param(0)),
+                ],
+            },
+        ),
+        // A right-hand maximum is what makes the kernel's decision a search: nothing local says which alternative bounds the left side.
+        (
+            "right-hand maximum",
+            UniverseContext {
+                parameter_count: 2,
+                constraints: vec![leq(
+                    Level::max([Level::constant(1), param(0)]),
+                    Level::max([Level::constant(1), param(1)]),
+                )],
+            },
+        ),
+        (
+            "constant bounds that cross",
+            UniverseContext {
+                parameter_count: 1,
+                constraints: vec![
+                    leq(Level::constant(3), param(0)),
+                    leq(param(0).succ().expect("successor"), Level::constant(2)),
+                ],
+            },
+        ),
+        (
+            "offsets that shift",
+            UniverseContext {
+                parameter_count: 2,
+                constraints: vec![leq(
+                    param(0).checked_add(2).expect("offset"),
+                    param(1).checked_add(5).expect("offset"),
+                )],
+            },
+        ),
+        // Not a stronger hypothesis but a meaningless one: instantiation has nothing to substitute for `P3`.
+        (
+            "escaping parameter",
+            UniverseContext {
+                parameter_count: 1,
+                constraints: vec![leq(param(3), param(0))],
+            },
+        ),
+        // Elaboration residue a zonked module cannot contain.
+        (
+            "metavariable residue",
+            UniverseContext {
+                parameter_count: 1,
+                constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
+            },
+        ),
+    ];
+
+    let mut verdicts = Vec::new();
+    for (label, context) in &contexts {
+        let elaborator = universe_context_validate(context).is_ok();
+        let kernel = curios_cert::closed(context) && curios_cert::satisfiable(&context.constraints);
+
+        assert_eq!(
+            elaborator,
+            kernel,
+            "the two checkers disagree about `{label}`: the elaborator says {}, the kernel says {}",
+            match elaborator {
+                true => "valid",
+                false => "invalid",
+            },
+            match kernel {
+                true => "valid",
+                false => "invalid",
+            },
+        );
+        verdicts.push(elaborator);
+    }
+
+    assert!(verdicts.contains(&true), "no context in the table is valid");
+    assert!(
+        verdicts.contains(&false),
+        "no context in the table is invalid",
+    );
+}
