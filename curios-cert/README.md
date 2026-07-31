@@ -1,6 +1,6 @@
 # curios-cert
 
-The Curios certifier: every rule that can admit a program, as one crate — the kernel deciding, from a finished term alone, whether the elaborator's output is well-typed, and the analyses both checkers share (index inversion and the singleton determination walk, strict positivity, size-change totality, the level entailment oracle). `curios-core` owns what a term *is*; this crate owns what one *means*. The two-checker decision and its rationale are cross-cutting and stay in [DESIGN.md](../documentation/DESIGN.md) ("An independent kernel re-checks what the elaborator accepts"); the migration's live status belongs to [the working specification](../documentation/compiler/00_TRUSTED_BASE_SPEC.md) and [ROADMAP.md](../documentation/ROADMAP.md); local architecture belongs to the crate rustdoc.
+The Curios certifier: every rule that can admit a program, as one crate — the kernel deciding, from a finished term alone, whether the elaborator's output is well-typed, and the analyses both checkers share (index inversion and the singleton determination walk, strict positivity, size-change totality, the level entailment oracle). `curios-core` owns what a term *is*; this crate owns what one *means*. The two-checker decision and its rationale are cross-cutting and stay in [DESIGN.md](../documentation/DESIGN.md) ("An independent kernel re-checks what the elaborator accepts"); what the kernel covers at any moment belongs to [ROADMAP.md](../documentation/ROADMAP.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 
@@ -15,6 +15,12 @@ The Curios certifier: every rule that can admit a program, as one crate — the 
 ### The judgments flatten onto the root
 
 **Decision.** The crate is a flat module space: `curios_cert::Kernel`, `curios_cert::convert`, `curios_cert::check_definition`. In `curios-core` the kernel kept a `kernel::` namespace because its judgments name the same things the elaborator names its own; here the crate name is the disambiguator, and `curios_cert::convert` against the elaborator's bare `convert` reads exactly as the second opinion it is.
+
+### Incompleteness is the safe direction
+
+**Decision.** A rule that refuses too much produces a disagreement between the two checkers, which is a signal; a rule that accepts too much is silent. Every judgment in this crate is written to that asymmetry: where a check cannot yet decide something, it refuses rather than guesses.
+
+**Rationale.** The two-checker split only catches a systematic mistake if a wrong rule shows up as a disagreement. An overly permissive rule hides in the corpus passing, exactly like the single-checker baseline this crate exists to improve on; an overly strict one is visible the moment a real program hits it.
 
 ### The kernel memoizes its own evaluation, transparently
 
