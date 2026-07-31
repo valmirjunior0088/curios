@@ -86,7 +86,6 @@ The resulting CLI is `target/release/curios`.
 - [Language reference](documentation/SYNTAX.md)
 - [Development roadmap](documentation/ROADMAP.md)
 - [Cross-cutting design decisions](documentation/DESIGN.md) — decisions scoped to one crate live in that crate's `README.md`
-- [Compiler architecture and contributor guide](AGENTS.md)
 - [Benchmark methodology and results](benchmarks/README.md)
 
 ## Contributing

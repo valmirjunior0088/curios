@@ -1,6 +1,6 @@
 # curios-web
 
-The Curios ↔ JavaScript boundary: wasm-bindgen exports of the pure compile pipeline plus the browser run harness. Build steps and the exact-version `wasm-bindgen-cli` requirement belong to [AGENTS.md](../AGENTS.md) and the crate rustdoc.
+The Curios ↔ JavaScript boundary: wasm-bindgen exports of the pure compile pipeline plus the browser run harness. Build steps and the exact-version `wasm-bindgen-cli` requirement belong to the crate rustdoc.
 
 ## Design
 

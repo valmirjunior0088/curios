@@ -229,7 +229,7 @@ The likely implementation surface is:
 - `curios-text` lowering tests and `curios/src/tests/matching.rs`: semantic equivalence and cross-stage execution.
 - `documentation/SYNTAX.md`, `documentation/ROADMAP.md`, and affected module rustdocs: durable documentation once the feature lands.
 
-Before implementation, re-read `SYNTAX.md`, the `curios-text` module documentation, and the current versions of every target file, as required by `AGENTS.md`; the specification describes responsibilities and invariants rather than freezing their present internal APIs.
+Before implementation, re-read `SYNTAX.md`, the `curios-text` module documentation, and the current versions of every target file; the specification describes responsibilities and invariants rather than freezing their present internal APIs.
 
 ## Diagnostics
 
@@ -292,7 +292,7 @@ cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features
 ```
 
-Because `curios-text` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
+Because `curios-text` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and its matching `wasm-bindgen --target web` step.
 
 ## Retirement criteria
 

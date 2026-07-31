@@ -90,7 +90,7 @@ fn class(error: &KernelError) -> String {
 ///
 /// `infer` now defers the child obligations of an application, a constructor, and a record onto a stack rather than descending into them, so depth is bounded by written nesting. Both profiles complete, and both report the same verdicts — which is the check that this was a restructuring rather than a change of rule.
 ///
-/// The measurement that found it is worth keeping: a backtrace at depth 300 showed the stack was 300 `infer` and 298 `check` frames and *nothing else*, which retired an earlier diagnosis naming four functions that were never on it. Stack size is not something to hide behind either — see the rule about `RUST_MIN_STACK` in `AGENTS.md`.
+/// The measurement that found it is worth keeping: a backtrace at depth 300 showed the stack was 300 `infer` and 298 `check` frames and *nothing else*, which retired an earlier diagnosis naming four functions that were never on it. Stack size is not something to hide behind either: raising `RUST_MIN_STACK` would have concealed this rather than fixed it.
 ///
 /// An abort rather than a tally is a finding, not noise: nothing here is wrapped in a catch, because a kernel that aborts is a kernel to fix.
 #[test]

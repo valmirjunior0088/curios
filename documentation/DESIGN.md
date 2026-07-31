@@ -1,6 +1,6 @@
 # Design
 
-This document owns only the cross-cutting Curios design decisions — those that span the language or several crates: what was decided, why, and what was rejected. An entry is amended only when its decision is superseded. A decision scoped to one crate is documented in that crate's `README.md`, not here. What the language *is* belongs to [SYNTAX.md](SYNTAX.md), what exists or is pending belongs to [ROADMAP.md](ROADMAP.md), local architecture belongs to crate and module rustdoc, and contributor rules belong to [AGENTS.md](../AGENTS.md) — link there, do not restate here.
+This document owns only the cross-cutting Curios design decisions — those that span the language or several crates: what was decided, why, and what was rejected. An entry is amended only when its decision is superseded. A decision scoped to one crate is documented in that crate's `README.md`, not here. What the language *is* belongs to [SYNTAX.md](SYNTAX.md), what exists or is pending belongs to [ROADMAP.md](ROADMAP.md), and local architecture belongs to crate and module rustdoc — link there, do not restate here.
 
 ## Objectives
 

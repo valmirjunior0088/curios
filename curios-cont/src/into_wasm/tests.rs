@@ -691,7 +691,7 @@ fn list_map_calls_the_map_helper() {
     assert_contains(&wat(&list_map()), "call $lst/map");
 }
 
-/// A long left-leaning chain of appends, each over the previous result — the compile-time analogue of the deleted deep-rope fixtures. Lowering must stay on the default test-thread stack (iterative, per `AGENTS.md`), so the only assertion that matters is that `into_wasm` returns at all.
+/// A long left-leaning chain of appends, each over the previous result — the compile-time analogue of the deleted deep-rope fixtures. Lowering must stay on the default test-thread stack (iterative, never widened), so the only assertion that matters is that `into_wasm` returns at all.
 fn deep_bin_chain(depth: usize) -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();

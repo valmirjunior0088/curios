@@ -256,7 +256,7 @@ The likely implementation surface is:
 
 No erased IR, continuation IR, wasm, ABI, or runtime changes are expected.
 
-Before implementation, re-read the listed core module documentation and the current versions of every target file, as required by `AGENTS.md`; the specification describes responsibilities and invariants rather than freezing their present internal APIs.
+Before implementation, re-read the listed core module documentation and the current versions of every target file; the specification describes responsibilities and invariants rather than freezing their present internal APIs.
 
 ## Suggested implementation sequence
 
@@ -321,7 +321,7 @@ cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features
 ```
 
-Because `curios-elab` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
+Because `curios-elab` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and its matching `wasm-bindgen --target web` step.
 
 ## Retirement criteria
 

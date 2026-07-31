@@ -1,4 +1,4 @@
-//! The Curios ↔ JavaScript boundary, for a browser build (`cargo build` + `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's Known build constraints): a wasm-bindgen export of the pure compile pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
+//! The Curios ↔ JavaScript boundary, for a browser build (`cargo build` + `wasm-bindgen-cli --target web` — no `wasm-pack`, and the installed CLI version must match the `wasm-bindgen` crate version exactly): a wasm-bindgen export of the pure compile pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
 
 mod abi;
 use abi::*;

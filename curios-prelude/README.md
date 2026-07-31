@@ -1,6 +1,6 @@
 # curios-prelude
 
-Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` prelude: the authored `.crs` sources, the canonical registry of compiler-emitted `/syn` names, and the build script that compiles them into the rkyv image production compilation replays. The archive and replay APIs belong to the crate rustdoc; the registration rules for new modules belong to [AGENTS.md](../AGENTS.md).
+Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` prelude: the authored `.crs` sources, the canonical registry of compiler-emitted `/syn` names, and the build script that compiles them into the rkyv image production compilation replays. The archive and replay APIs belong to the crate rustdoc; every source module must be registered in its Curios index.
 
 ## Design
 
