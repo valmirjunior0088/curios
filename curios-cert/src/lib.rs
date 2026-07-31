@@ -6,6 +6,9 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so consumers use `curios_cert::Kernel` and `curios_cert::convert`. The crate name itself is what keeps the two checkers tellable apart — the judgments here name the same things the elaborator names its own, and `curios_cert::convert` versus the elaborator's bare `convert` reads exactly as the second opinion it is.
 
+mod satisfy;
+pub use satisfy::*;
+
 mod entail;
 pub use entail::*;
 

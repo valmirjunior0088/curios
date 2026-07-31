@@ -85,6 +85,8 @@ pub enum KernelError {
     },
     /// A field of a `Prop`-sorted structure that is neither a proof nor a type. Irrelevance identifies every inhabitant of a proposition, while projection reads a field back out without meeting any elimination guard, so an informative field hands two convertible values to the same projection.
     Informative { field: Box<Term> },
+    /// A declaration whose own universe constraints have no solution. The kernel *assumes* an item's constraints while checking it, so an unsatisfiable set is a hypothesis set from which everything follows: level questions stop being answered by the hierarchy and start being answered by the contradiction.
+    UnsatisfiableUniverses,
     /// A universe instance whose stated levels do not satisfy the scheme's constraint set. The scheme declared `lower ≤ upper` over its parameters; at this instance's levels, under the hypotheses of the item being checked, the inequality does not hold — which is the route back to the paradox the hierarchy exists to exclude.
     UniverseInstance { lower: Level, upper: Level },
 }
@@ -140,6 +142,10 @@ impl fmt::Display for KernelError {
             KernelError::NotDescending { type_ } => write!(
                 formatter,
                 "a recursive proof or type at `{type_}` does not descend",
+            ),
+            KernelError::UnsatisfiableUniverses => write!(
+                formatter,
+                "this declaration's universe constraints have no solution",
             ),
             KernelError::Informative { field } => write!(
                 formatter,

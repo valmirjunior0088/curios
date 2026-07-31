@@ -16,7 +16,7 @@ use {
     super::{
         Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        derived_binder_floor, partial_definitions, positivity_vectors,
+        derived_binder_floor, partial_definitions, positivity_vectors, satisfiable,
     },
     curios_core::{Definition, Free, Global, Item, Module, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -146,6 +146,37 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     //
     // The mark is derived here rather than taken from `Module::binder_floor`, which nothing checks. The two are combined by maximum because a floor is a bound and not a verdict: widening can never refuse a module that was fine, so a position this walk fails to reach degrades to the carried value instead of to a capture.
     kernel.set_local_floor(module.binder_floor.max(derived_binder_floor(module)));
+
+    // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
+    for (name, declaration) in &module.induct_decls {
+        if !satisfiable(&declaration.universe_context.constraints) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error: KernelError::UnsatisfiableUniverses,
+            });
+        }
+    }
+    for (name, declaration) in &module.struct_decls {
+        if !satisfiable(&declaration.universe_context.constraints) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error: KernelError::UnsatisfiableUniverses,
+            });
+        }
+    }
+    for item in &module.items {
+        for definition in match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        } {
+            if !satisfiable(&definition.universe_context.constraints) {
+                verdicts.push(Verdict {
+                    name: Some(definition.name.clone()),
+                    error: KernelError::UnsatisfiableUniverses,
+                });
+            }
+        }
+    }
 
     // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later.
     for (name, declaration) in &module.induct_decls {
