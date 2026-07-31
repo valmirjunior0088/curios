@@ -13,8 +13,8 @@
 //! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`] rather than being recomputed. That field is not taken on faith: the full walk that runs when the archive is built recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
 
 use {
-    super::{Kernel, KernelError, group_totality},
-    curios_core::{Global, Item, Module, Prim, Rec, Subterm, Term, Totality},
+    super::{Kernel, KernelError, Sort, group_totality},
+    curios_core::{Global, Item, Module, Prim, Rec, Reducer as _, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
@@ -179,4 +179,19 @@ pub fn check_positions(
     }
 
     Ok(())
+}
+
+/// The erased half a term judged at `type_` belongs to, or `None` when the type is relevant and the obligations have nothing to say about it.
+///
+/// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
+pub(crate) fn erased_half(
+    kernel: &mut Kernel,
+    type_: &Term,
+) -> Result<Option<Erased>, KernelError> {
+    let reduced = kernel.reduce_forced(type_.clone())?;
+    if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) {
+        return Ok(Some(Erased::Type));
+    }
+
+    Ok(Sort::of(kernel, type_)?.is_prop().then_some(Erased::Proof))
 }

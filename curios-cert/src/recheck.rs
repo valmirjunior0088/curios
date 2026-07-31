@@ -14,11 +14,11 @@
 
 use {
     super::{
-        Erased, Kernel, KernelError, Sort, check_definition, check_entrypoint, check_induct_decl,
+        Erased, Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
         check_positions, check_rec_group, check_struct_decl, partial_definitions,
         positivity_vectors,
     },
-    curios_core::{Definition, Free, Global, Item, Module, Reducer as _, Subterm, Term},
+    curios_core::{Definition, Free, Global, Item, Module, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -141,7 +141,6 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     let mut verdicts = Vec::new();
     // What each item's check recorded, kept per item so a refusal names the item it came from. Classified as it drains rather than retained whole: only the positions the obligations are about survive, and sort-hood is asked once per distinct type.
     let mut positions: Vec<ItemPositions> = Vec::new();
-    let mut erasure_memo: HashMap<Term, Option<Erased>> = HashMap::new();
 
     // Binder identities are one space shared across the lowerer, the elaborator, and the archived prelude. Seeding above the module's high-water mark is what keeps a binder the kernel mints — while comparing under a telescope, or eta-contracting — from aliasing one already in a term, which would be a capture.
     kernel.set_local_floor(module.binder_floor);
@@ -236,25 +235,25 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
             }
         }
 
-        // Classifying reduces each distinct type to ask whether it is a sort, and that spends budget. Restoring first keeps the item's own spending from deciding whether its positions can be classified at all — `erased_half` declines to constrain a position it cannot reduce, so an inherited exhaustion would quietly drop positions rather than refuse them.
-        kernel.restore_budget();
-        let drained = kernel.take_checked();
-        positions.push((
-            item_name,
-            classify_positions(&mut kernel, drained, &mut erasure_memo),
-        ));
+        let (drained, failure) = kernel.take_checked();
+        positions.push((item_name.clone(), drained));
+        if let Some(error) = failure {
+            verdicts.push(Verdict {
+                name: item_name,
+                error,
+            });
+        }
     }
 
     if let Err(error) = check_entrypoint(&mut kernel, &module.body, module.type_.as_ref()) {
         verdicts.push(Verdict { name: None, error });
     }
 
-    kernel.restore_budget();
-    let drained = kernel.take_checked();
-    positions.push((
-        None,
-        classify_positions(&mut kernel, drained, &mut erasure_memo),
-    ));
+    let (drained, failure) = kernel.take_checked();
+    positions.push((None, drained));
+    if let Some(error) = failure {
+        verdicts.push(Verdict { name: None, error });
+    }
 
     // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
     let (partial, disagreements) = partial_definitions(&mut kernel, module, checked_from);
@@ -306,43 +305,4 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     }
 
     verdicts
-}
-
-/// Which erased half each recorded position belongs to, or `None` for a term the obligations do not reach.
-///
-/// A term checked against a *sort* is itself a type; a term checked against a `Prop`-sorted type is a proof. Memoized by type, because a module checks vastly more terms than it has distinct types and hash-consing keeps that set small.
-#[allow(clippy::mutable_key_type)]
-fn classify_positions(
-    kernel: &mut Kernel,
-    checked: Vec<(Term, Term)>,
-    memo: &mut HashMap<Term, Option<Erased>>,
-) -> Vec<(Term, Erased)> {
-    let mut positions = Vec::new();
-
-    for (term, type_) in checked {
-        let erased = match memo.get(&type_) {
-            Some(erased) => *erased,
-            None => {
-                let erased = erased_half(kernel, &type_);
-                memo.insert(type_.clone(), erased);
-                erased
-            }
-        };
-        if let Some(erased) = erased {
-            positions.push((term, erased));
-        }
-    }
-
-    positions
-}
-
-/// The erased half a term checked against `type_` belongs to. A reduction or sorting failure yields `None`: the item walk reports the real error, and a position this cannot classify is one the obligations decline to constrain.
-fn erased_half(kernel: &mut Kernel, type_: &Term) -> Option<Erased> {
-    match kernel.reduce_forced(type_.clone()) {
-        Ok(reduced) if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) => Some(Erased::Type),
-        Ok(_) => Sort::of(kernel, type_)
-            .ok()
-            .and_then(|sort| sort.is_prop().then_some(Erased::Proof)),
-        Err(_) => None,
-    }
 }

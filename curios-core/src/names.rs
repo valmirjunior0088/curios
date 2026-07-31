@@ -158,6 +158,13 @@ impl Free {
     }
 
     /// The binder this names, if it names one.
+    /// The raw counter behind a locally minted name, or `None` for a global.
+    ///
+    /// What a binder floor must exceed. `Entropy::seed` only ever raises its counter, so a checker that mints binders of its own can derive a safe floor from the names a module already contains rather than taking one on trust.
+    pub fn local_index(&self) -> Option<u32> {
+        self.as_local().map(|mint| mint.index)
+    }
+
     pub(crate) fn as_local(&self) -> Option<&Mint> {
         match self {
             Free::Local(mint) => Some(mint),

@@ -673,7 +673,7 @@ fn check_free_monoid(
 
 /// Verify that `term` has type `expected`.
 pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), KernelError> {
-    // Seed for the erasure obligations. Recorded before the rules below dispatch, so a position counts however it is checked, and classified later — deciding sort-hood here would reduce every expectation at every check site to answer a question that is asked once per *distinct* type.
+    // Seed for the erasure obligations, recorded before the rules below dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. A memo keyed on the type keeps that to one question per distinct type.
     kernel.record_checked(term, expected);
 
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.

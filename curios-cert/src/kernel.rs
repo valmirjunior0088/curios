@@ -27,6 +27,7 @@ pub use whnf::*;
 
 use {
     crate::{Env, Judge, entails},
+    crate::{Erased, erased_half},
     curios_base::Entropy,
     curios_core::{
         Atom, Free, Global, InductDecl, Level, LevelHead, ReduceError, Reducer, StructDecl, Term,
@@ -265,8 +266,16 @@ pub struct Kernel {
     refinements: Vec<(Term, Term)>,
     /// The constraint set of the item being checked — its own declared hypotheses, assumed while its parameters are held abstract. A generic definition is valid exactly when it checks *under* its constraints, so the level judgments below consult these; discarding them was the route by which a correct polymorphic definition was refused.
     assumed: Vec<UniverseConstraint>,
-    /// Every term this walk has checked, with the type it was checked against — the seed for obligations (T) and (V), taken from the kernel's own typing rather than from another crate's record. Drained per item by [`Kernel::take_checked`].
-    checked: Vec<(Term, Term)>,
+    /// The erased positions this walk has recorded — the seed for obligations (T) and (V), taken from the kernel's own typing rather than from another crate's record. Drained per item by [`Kernel::take_checked`].
+    ///
+    /// Classified *when recorded*, not afterwards. A position's type routinely mentions the binders the item opened, and those are retracted the moment the item's check returns, so a later pass cannot ask for their sorts at all — it can only fail, and failing quietly is how positions across a tenth of the fixed prelude came to be silently unconstrained.
+    checked: Vec<(Term, Erased)>,
+    /// Sort-hood per distinct type, so classifying at every record site costs one question per type rather than one per position. Keyed on terms whose binders are the item's own, which is what makes an entry meaningful only within the item that made it — cleared with the drain.
+    erasure_memo: HashMap<Term, Option<Erased>>,
+    /// The first classification that could not be decided, surfaced with the drain. Deciding asks for a sort, which cannot be reported from a recording site that returns nothing.
+    erasure_failure: Option<KernelError>,
+    /// Re-entrancy guard. Deciding a position's erased half types terms of its own, and those must not be recorded as positions in turn.
+    classifying: bool,
     definitions: HashMap<Free, Definition>,
     inducts: HashMap<Global, InductDecl>,
     structs: HashMap<Global, StructDecl>,
@@ -287,6 +296,9 @@ impl Kernel {
             refinements: Vec::new(),
             assumed: Vec::new(),
             checked: Vec::new(),
+            erasure_memo: HashMap::new(),
+            erasure_failure: None,
+            classifying: false,
             definitions: HashMap::new(),
             inducts: HashMap::new(),
             structs: HashMap::new(),
@@ -611,14 +623,48 @@ impl Kernel {
     }
 
     /// Restore the full budget for a new judgment.
-    /// Record a term and the type it was checked against. Obligations (T) and (V) read this: a term checked against a `Prop`-sorted type is a proof, and one checked against a sort is a type.
+    /// Record `term` as an erased position if the type it was judged at makes it one: a term at a `Prop`-sorted type is a proof, and one at a sort is a type.
+    ///
+    /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
-        self.checked.push((term.clone(), type_.clone()));
+        if self.classifying {
+            return;
+        }
+
+        let erased = match self.erasure_memo.get(type_) {
+            Some(erased) => *erased,
+            None => {
+                self.classifying = true;
+                let outcome = erased_half(self, type_);
+                self.classifying = false;
+
+                let erased = match outcome {
+                    Ok(erased) => erased,
+                    Err(error) => {
+                        self.erasure_failure.get_or_insert(error);
+                        None
+                    }
+                };
+                self.erasure_memo.insert(type_.clone(), erased);
+                erased
+            }
+        };
+
+        if let Some(erased) = erased {
+            self.checked.push((term.clone(), erased));
+        }
     }
 
-    /// Take what this item's check recorded, leaving the record empty for the next one.
-    pub fn take_checked(&mut self) -> Vec<(Term, Term)> {
-        std::mem::take(&mut self.checked)
+    /// Take this item's recorded positions and any classification that could not be decided, leaving both empty for the next item.
+    ///
+    /// The memo goes with them: its keys mention the item's own binders, so an entry means nothing once they are retracted.
+    pub fn take_checked(&mut self) -> (Vec<(Term, Erased)>, Option<KernelError>) {
+        self.erasure_memo.clear();
+
+        (
+            std::mem::take(&mut self.checked),
+            self.erasure_failure.take(),
+        )
     }
 
     pub fn restore_budget(&mut self) {
