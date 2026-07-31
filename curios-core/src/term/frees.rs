@@ -23,7 +23,18 @@ impl FreeCache {
     }
 
     /// Memoize the node's set — once; the post-order fill visits each node exactly once.
-    pub(crate) fn fill(&self, frees: Rc<BTreeSet<Free>>) {
+    ///
+    /// An empty set is normalized to one canonical shared `Rc`: most nodes on a closed data spine have no free variables, and giving each its own allocation would make the empty answer the cache's dominant residency cost. Thread-local because `Rc` is `!Send`.
+    pub(crate) fn fill(&self, frees: BTreeSet<Free>) {
+        thread_local! {
+            static EMPTY: Rc<BTreeSet<Free>> = Rc::new(BTreeSet::new());
+        }
+
+        let frees = if frees.is_empty() {
+            EMPTY.with(Rc::clone)
+        } else {
+            Rc::new(frees)
+        };
         let filled = self.frees.set(frees);
         debug_assert!(filled.is_ok(), "a free-variable cache fills at most once");
     }
@@ -34,5 +45,31 @@ impl FreeCache {
             .get()
             .expect("a free-variable cache is warmed before it is probed")
             .contains(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_fills_share_one_canonical_set() {
+        let first = FreeCache::default();
+        let second = FreeCache::default();
+        first.fill(BTreeSet::new());
+        second.fill(BTreeSet::new());
+
+        assert!(Rc::ptr_eq(first.get().unwrap(), second.get().unwrap()));
+    }
+
+    #[test]
+    fn nonempty_fills_keep_their_own_set() {
+        let name = Free::local(0, Some("x"));
+        let cache = FreeCache::default();
+        cache.fill(BTreeSet::from([name.clone()]));
+
+        assert!(cache.is_filled());
+        assert!(cache.contains(&name));
+        assert_eq!(cache.get().unwrap().len(), 1);
     }
 }

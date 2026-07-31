@@ -1503,10 +1503,7 @@ impl Term {
     fn warm_frees(&self) {
         self.fill_post_order(
             |node| node.frees.is_filled(),
-            |node| {
-                node.frees
-                    .fill(Rc::new(node.subterm.free_vars_from_children()))
-            },
+            |node| node.frees.fill(node.subterm.free_vars_from_children()),
         );
     }
 
