@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests;
 
+// Deliberately not re-exported: the packed cache is [`Node`]'s private business.
+mod scalars;
+use scalars::*;
+
 use {
     super::{
         Atom, Bound, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Telescope, Three,
@@ -11,7 +15,7 @@ use {
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
-        collections::{BTreeMap, BTreeSet, HashSet, hash_map::DefaultHasher},
+        collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
         hash::{Hash, Hasher},
         mem,
@@ -50,40 +54,26 @@ pub struct Term {
     inner: Rc<Node>,
 }
 
-/// A [`Subterm`] together with its memoized, span-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The cells are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled cells in O(children).
+/// A [`Subterm`] together with its memoized, span-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The caches are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled caches in O(children).
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 struct Node {
+    /// The eager derivations — hash, `reach`, and the containment flags — packed behind one filled bit; see [`ScalarCache`].
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    hash: OnceCell<u64>,
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    reach: OnceCell<usize>,
+    scalars: ScalarCache,
     /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     free_vars: OnceCell<Rc<BTreeSet<Free>>>,
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    has_local_free: OnceCell<bool>,
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    has_metavar: OnceCell<bool>,
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    has_universe_meta: OnceCell<bool>,
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    has_universe_data: OnceCell<bool>,
     subterm: Subterm,
 }
 
 impl Node {
     fn new(subterm: Subterm) -> Self {
         Node {
-            hash: OnceCell::new(),
-            reach: OnceCell::new(),
+            scalars: ScalarCache::default(),
             free_vars: OnceCell::new(),
-            has_local_free: OnceCell::new(),
-            has_metavar: OnceCell::new(),
-            has_universe_meta: OnceCell::new(),
-            has_universe_data: OnceCell::new(),
             subterm,
         }
     }
@@ -117,83 +107,50 @@ impl Term {
         }
     }
 
-    /// Fill the cheap scalar cells together in one post-order pass. They combine from the children's cells in O(children), and are almost always wanted together, so one shared walk beats independent traversals. `reach` is the fill marker.
+    /// Fill the eager scalar derivations together in one post-order pass. They combine from the children's caches in O(children), and are almost always wanted together, so one shared walk beats independent traversals.
     fn warm_scalars(&self) {
         self.fill_post_order(
-            |node| node.reach.get().is_some(),
-            |node| {
-                node.reach.get_or_init(|| node.subterm.reach());
-                node.has_local_free
-                    .get_or_init(|| node.subterm.has_local_free());
-                node.has_metavar.get_or_init(|| node.subterm.has_metavar());
-                node.has_universe_meta
-                    .get_or_init(|| node.subterm.has_universe_meta());
-                node.has_universe_data
-                    .get_or_init(|| node.subterm.has_universe_data());
-                node.hash.get_or_init(|| {
-                    let mut hasher = DefaultHasher::new();
-                    node.subterm.hash(&mut hasher);
-                    hasher.finish()
-                });
-            },
+            |node| node.scalars.is_filled(),
+            |node| node.scalars.fill(Scalars::of(&node.subterm)),
         );
     }
 
-    fn get_or_init_hash(&self) -> u64 {
-        if self.inner.hash.get().is_none() {
-            self.warm_scalars();
+    /// This node's memoized scalars, warming the whole subtree on first demand.
+    fn scalars(&self) -> Scalars {
+        if let Some(scalars) = self.inner.scalars.get() {
+            return scalars;
         }
-        *self.inner.hash.get().expect("warm_scalars fills hash")
+        self.warm_scalars();
+        self.inner
+            .scalars
+            .get()
+            .expect("warm_scalars fills the scalar cache")
     }
 
-    /// Whether any *free* variable in this term carries an elaborator-minted label — one containing `#`, which cannot occur in a written identifier (`Context::fresh` always embeds it; witness-table names share the convention, deliberately counted here so the elaboration memo stays conservative). Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached cells, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
+    fn get_or_init_hash(&self) -> u64 {
+        self.scalars().hash
+    }
+
+    /// Whether any *free* variable in this term carries an elaborator-minted label — one containing `#`, which cannot occur in a written identifier (`Context::fresh` always embeds it; witness-table names share the convention, deliberately counted here so the elaboration memo stays conservative). Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
-        if self.inner.has_local_free.get().is_none() {
-            self.warm_scalars();
-        }
-        *self
-            .inner
-            .has_local_free
-            .get()
-            .expect("warm_scalars fills has_local_free")
+        self.scalars().has_local_free
     }
 
     /// Whether any `Metavar` node occurs in this term. Cached per node like [`has_local_free`](Self::has_local_free) and for the same reason: the elaboration cache's O(1)-per-call gate.
     pub(crate) fn has_metavar(&self) -> bool {
-        if self.inner.has_metavar.get().is_none() {
-            self.warm_scalars();
-        }
-        *self
-            .inner
-            .has_metavar
-            .get()
-            .expect("warm_scalars fills has_metavar")
+        self.scalars().has_metavar
     }
 
     /// Whether this term contains an unresolved universe metavariable in a `Type` level, universe instantiation, or nominal universe vector.
     pub fn has_universe_meta(&self) -> bool {
-        if self.inner.has_universe_meta.get().is_none() {
-            self.warm_scalars();
-        }
-        *self
-            .inner
-            .has_universe_meta
-            .get()
-            .expect("warm_scalars fills has_universe_meta")
+        self.scalars().has_universe_meta
     }
 
     /// Whether universe erasure or validation must inspect this subtree.
     ///
     /// Cached and filled on the explicit post-order stack like the other scalar derivations, so universe-only passes can structurally share a deep universe-free data spine without consuming one native frame per node.
     pub fn has_universe_data(&self) -> bool {
-        if self.inner.has_universe_data.get().is_none() {
-            self.warm_scalars();
-        }
-        *self
-            .inner
-            .has_universe_data
-            .get()
-            .expect("warm_scalars fills has_universe_data")
+        self.scalars().has_universe_data
     }
 
     pub fn universe_metas(&self) -> BTreeSet<UniverseMetaId> {
@@ -1356,10 +1313,7 @@ impl Bound for Term {
     }
 
     fn reach(&self) -> usize {
-        if self.inner.reach.get().is_none() {
-            self.warm_scalars();
-        }
-        *self.inner.reach.get().expect("warm_scalars fills reach")
+        self.scalars().reach
     }
 
     fn has_metavar(&self) -> bool {
