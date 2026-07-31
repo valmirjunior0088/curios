@@ -24,7 +24,8 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        Invert, Kernel, KernelError, Sort, invert_indices, invert_indices_outer, pinned_by_targets,
+        Invert, Kernel, KernelError, Sort, carries_information, invert_indices,
+        invert_indices_outer, pinned_by_targets,
     },
     curios_core::{
         Atom, Bound, Free, InductArm, InductDecl, InductType, Many, Reducer, Scope, Subterm,
@@ -396,18 +397,4 @@ fn guard_large_elimination(
         }
         _ => Err(KernelError::LargeElimination(family.name.clone())),
     }
-}
-
-/// Whether a value of this type can be distinguished from another of the same type — the question "does eliminating it leak anything".
-///
-/// A proof does not: irrelevance makes any two interchangeable. A type does not either: erasure deletes it. Anything else does.
-fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
-    if Sort::of(kernel, type_)?.is_prop() {
-        return Ok(false);
-    }
-
-    Ok(!matches!(
-        &*kernel.reduce_forced(type_.clone())?,
-        Subterm::Type(_) | Subterm::Prop
-    ))
 }

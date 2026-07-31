@@ -1,8 +1,9 @@
 use {
-    crate::{Kernel, KernelError, check_induct_decl},
+    crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Level, Telescope, Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Level, Polarity, StructDecl, Telescope, Term,
+        UniverseContext,
     },
 };
 
@@ -103,4 +104,54 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
     kernel.declare_induct(&name, &declaration);
 
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
+}
+
+/// A `Prop`-sorted structure carrying a `Nat`, which is the shape `Prop` non-informativeness exists to forbid.
+///
+/// Irrelevance identifies every inhabitant of a proposition, and a structure's payload is read back by *projection*, which is not an elimination and so meets no large-elimination guard: an informative field hands two convertible values to the same projection, and `Eq` plus congruence turns that into `False`.
+///
+/// This crate used to leave the rule entirely to `curios-elab` — `check_struct_decl` ran only the size condition, which returns immediately for a result sort that is not `Type`. The two-checker matrix records the consequence: `informative_prop_field` reaches the elaborator and the kernel is never asked, so nothing here backed the rule up. `invert.rs`'s irrelevance guard cites this very property as its reason for leaving structures undecomposed, which is what made the omission load-bearing rather than academic.
+#[test]
+fn a_proposition_may_not_carry_an_informative_field() {
+    let mut kernel = kernel();
+    let declaration = proposition_with_field(&mut kernel, Term::prim(curios_core::Prim::NatType));
+
+    assert!(matches!(
+        check_struct_decl(&mut kernel, &declaration),
+        Err(KernelError::Informative { .. })
+    ));
+}
+
+/// The other end of the discrimination: a proposition whose field is *itself* a proposition carries nothing a program can read, and must stay legal — a rule that refused every `Prop` structure would be indistinguishable from one that refused this.
+#[test]
+fn a_proposition_may_carry_a_proof() {
+    let mut kernel = kernel();
+    let declaration = proposition_with_field(&mut kernel, Term::prop());
+
+    assert!(check_struct_decl(&mut kernel, &declaration).is_ok());
+}
+
+/// A `Prop`-sorted structure with one field of `field_type` and no parameters, registered and returned for checking.
+fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
+    let name = Global::Authored(Qualifier::from(["Bad"]));
+    let declaration = StructDecl {
+        universe_context: UniverseContext::empty(),
+        params: Telescope::Done(Box::new(())),
+        fields: Telescope::Cons(
+            field_type,
+            curios_core::Scope::close(
+                curios_core::One,
+                &[&Free::local(0, Some("value"))],
+                Telescope::Done(Box::new(())),
+            ),
+        ),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::<Polarity>::new(),
+    };
+    kernel.declare_struct(&name, &declaration);
+
+    declaration
 }

@@ -12,7 +12,7 @@
 mod tests;
 
 use {
-    super::{Kernel, KernelError, Sort, infer::check},
+    super::{Kernel, KernelError, Sort, carries_information, infer::check},
     crate::{group_totality, yields_a_sort},
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
@@ -123,12 +123,52 @@ pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
+    check_non_informative(kernel, declaration)?;
+
     check_sizing(
         kernel,
         &declaration.fields,
         declaration.params.len(),
         &declaration.result_sort,
     )
+}
+
+/// A `Prop`-sorted structure's fields must all be non-informative — a proof or a type, the two things erasure deletes.
+///
+/// Proof irrelevance makes any two inhabitants of a proposition definitionally equal, and a structure's payload is read back by *projection*, which is not an elimination and so meets no large-elimination guard. A `Prop` structure carrying a `Nat` therefore hands the same field two convertible inhabitants with different values, and `Eq` plus congruence turns that into `False`.
+///
+/// Parameters are skipped: they are the family's arguments rather than stored payload, so a proposition may be indexed by data without carrying any. Inductives are deliberately not subject to this — `induct Box : Prop | mk(n : Nat)` is a legal declaration whose *elimination* the singleton rung guards instead.
+fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
+    if !matches!(
+        &*kernel.reduce_forced(declaration.result_sort.clone())?,
+        Subterm::Prop
+    ) {
+        return Ok(());
+    }
+
+    let mark = kernel.mark();
+    let outcome = (|| {
+        let mut telescope = declaration.fields.clone();
+        let mut position = 0;
+
+        while let Telescope::Cons(type_, rest) = telescope {
+            if position >= declaration.params.len() && carries_information(kernel, &type_)? {
+                return Err(KernelError::Informative {
+                    field: Box::new(type_),
+                });
+            }
+
+            let binder = kernel.fresh(rest.first_hint());
+            kernel.assume(&binder, &type_);
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+            position += 1;
+        }
+
+        Ok(())
+    })();
+    kernel.retract(mark);
+
+    outcome
 }
 
 /// Walk one declaration telescope, requiring each `Type`-sorted domain to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.

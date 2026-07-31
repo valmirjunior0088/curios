@@ -335,3 +335,17 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
         _ => Ok(None),
     }
 }
+
+/// Whether a value of this type can be distinguished from another of the same type — the question "does eliminating it leak anything".
+///
+/// A proof does not: irrelevance makes any two interchangeable. A type does not either: erasure deletes it. Anything else does.
+pub(crate) fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
+    if Sort::of(kernel, type_)?.is_prop() {
+        return Ok(false);
+    }
+
+    Ok(!matches!(
+        &*kernel.reduce_forced(type_.clone())?,
+        Subterm::Type(_) | Subterm::Prop
+    ))
+}
