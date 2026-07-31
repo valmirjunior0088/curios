@@ -4,18 +4,20 @@ pub(crate) use caches::*;
 mod program;
 pub(crate) use program::*;
 
+mod solutions;
+pub(crate) use solutions::*;
+
 use {
     super::{
-        Error, Goal, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
+        Error, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
     },
     curios_base::{Entropy, Qualifier, RootId, Span},
     curios_core::ReduceError,
     curios_core::{
         Bound, Concept, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl, Level,
-        MetaId, Metavar, MetavarOrigin, StructDecl, Subterm, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
-        instantiate_universe_levels_scoped, project_erased_universes,
+        MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
+        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped, project_erased_universes,
     },
     std::{
         cell::Cell,
@@ -36,19 +38,6 @@ type SharedTelescope = Rc<Vec<(Free, Term)>>;
 
 /// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder — shared the same way.
 type SharedSpine = Rc<Vec<Term>>;
-
-/// One metavariable's record in the [`MetaStore`]. Everything here is frozen at birth except `solution`, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`).
-#[derive(Debug)]
-pub(crate) struct MetaEntry {
-    /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
-    pub telescope: SharedTelescope,
-    /// The metavariable's type — the `expected` it was checked against at birth.
-    pub result: Term,
-    /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a subset of `telescope`'s names.
-    pub solution: Option<Term>,
-    /// Ordinary inference holes may be solved by conversion. Recursive elaboration slots are filled only by the owning `rec` elaborator; conversion treats an unfilled slot as a blocking dependency.
-    pub kind: MetaKind,
-}
 
 pub(crate) struct UniverseMutation<'a> {
     solver: &'a mut UniverseSolver,
@@ -78,23 +67,11 @@ impl Drop for UniverseMutation<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MetaKind {
-    Inference,
-    RecSlot,
-}
-
 /// A transaction watermark spanning both unification stores.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SolutionMark {
     term_solution_log_len: usize,
     universe: UniverseMark,
-}
-
-/// Flat, frame-independent store of metavariable records, indexed by `Metavar::id`. Its contents are monotonic facts about the program being elaborated, not lexically-scoped bindings — so `enter_frame`/`leave_frame` never touch it.
-#[derive(Debug, Default)]
-pub(crate) struct MetaStore {
-    entries: Vec<Option<MetaEntry>>,
 }
 
 /// One definition: the definiens, plus the [`DefinitionKind`] of the module item that introduced it. Every `DefEntry` — whether a plain `let`/`rec` member or mid-window rec-group registration — is treated uniformly; there is no `recursive` marker distinguishing them.
@@ -116,36 +93,6 @@ pub(crate) struct FrozenFrame {
     refinement_scrutinees: Vec<(Term, Term)>,
     /// The `use`-plicity binders in scope at park time (a subset of `assumptions`, in the same binding order). Witness resolution scans these; a retry must see the same instance scope its origin saw.
     witness_binders: Vec<(Free, Term)>,
-}
-
-/// The work a parked problem will retry.
-#[derive(Debug)]
-pub(crate) enum ParkedWork {
-    /// A conversion constraint that quiesced blocked on unsolved metavariables.
-    Conversion(Goal),
-    /// A whole checking problem: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled.
-    Checking {
-        term: Term,
-        expected: Term,
-        placeholder: MetaId,
-    },
-    /// A witness-resolution goal whose key type is not yet rigid: `slot` is the metavariable standing in the omitted `use`-argument's place, `goal` its (concept application) type. Woken when a watched metavariable solves; resolution then retries under the frozen frame.
-    Witness {
-        slot: MetaId,
-        goal: Term,
-        provenance: WitnessOrigin,
-    },
-}
-
-/// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. Like a [`MetaEntry`], it freezes the local frame it was born under.
-#[derive(Debug)]
-pub(crate) struct ParkedGoal {
-    pub work: ParkedWork,
-    /// The term being checked at park time; its span anchors the eventual error if the problem never resolves.
-    pub origin: Term,
-    pub frame: FrozenFrame,
-    /// The unsolved metavariables whose solutions could unblock this — solving any of them is the wake signal.
-    pub watching: BTreeSet<MetaId>,
 }
 
 /// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
@@ -170,28 +117,17 @@ pub struct Context {
     // The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
     local: Vec<(Free, Term)>,
     local_marks: Vec<usize>,
-    // Parked conversion constraints — frame-independent, like `metas`.
-    parked: Vec<ParkedGoal>,
-    // Ids solved since the last `wake_parked` sweep: the wake signal.
-    newly_solved: Vec<MetaId>,
-    // Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
-    solved_log: Vec<MetaId>,
-    // While set, `expect` may not park: conversion is being used as a yes/no oracle (re-validation) and provisional success would leak into it.
-    suppress_parking: bool,
     // One tick per mutation of `local` (assume, frame exit, reassume) — an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads. Invalidates `identity_cache`, which shares the frozen telescope and identity spine between every meta born under an unchanged Γ.
     locals_stamp: Entropy,
     identity_cache: Option<(usize, SharedTelescope, SharedSpine)>,
-    metas: MetaStore,
+    // The unification state — metavariable records, the solve journal, and parked/deferred work; flat and frame-independent. See [`Solutions`].
+    solutions: Solutions,
     universe_solver: UniverseSolver,
-    // The next metavariable id this context may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with its `metavar_floor` argument so core-minted ids sit strictly above `into_core`'s.
-    next_metavar: Entropy<MetaId>,
     // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
     program: Program,
     // The `use`-plicity binders currently in scope, in binding order (a subset of `local`), with frame boundaries in `witness_marks` — resolution's step-1/2 search space, scanned innermost-first.
     witness_scope: Vec<(Free, Term)>,
     witness_marks: Vec<usize>,
-    // Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated.
-    deferred_witnesses: Vec<ParkedGoal>,
     // The module whose item is currently being elaborated — the qualifier prefix of that item's name (a fresh context starts at the root, the empty qualifier). Set by `elaborate_module_suffix` per item; read by the representation-privacy checks. `None` arises only through `with_suppressed_privacy` and means there is no surface use site to judge from, which suppresses the checks structurally: privacy is a property of *surface elaboration*, and machinery that re-derives types from already-elaborated terms — erasure, the metavariable oracle — walks compiler-built projections (witness splices, eta-expansions) that must not be re-adjudicated. A machinery path that forgets its bracket fails loudly (a spurious privacy error), never silently.
     island: Option<Qualifier>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
@@ -224,18 +160,12 @@ impl Context {
             suppress_refinements: false,
             local: Vec::new(),
             local_marks: Vec::new(),
-            metas: MetaStore::default(),
+            solutions: Solutions::new(),
             universe_solver: UniverseSolver::new(0),
-            next_metavar: Entropy::<MetaId>::new(),
             program: Program::new(),
             witness_scope: Vec::new(),
             witness_marks: Vec::new(),
-            deferred_witnesses: Vec::new(),
             island: Some(Qualifier::empty()),
-            parked: Vec::new(),
-            newly_solved: Vec::new(),
-            solved_log: Vec::new(),
-            suppress_parking: false,
             locals_stamp: Entropy::new(),
             identity_cache: None,
             checked: Vec::new(),
@@ -1114,15 +1044,14 @@ impl Context {
         self.caches.note_write();
     }
 
-    /// Defer a witness goal whose key is rigid but has no table entry yet — retried after later items register witnesses, reported only at the end of the module.
+    /// Defer a witness goal ([`Solutions::defer_witness`]), stamping the write.
     pub(crate) fn defer_witness(&mut self, goal: ParkedGoal) {
         self.caches.note_write();
-        self.deferred_witnesses.push(goal);
+        self.solutions.defer_witness(goal);
     }
 
-    /// Take every deferred witness goal for a retry sweep.
     pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedGoal> {
-        mem::take(&mut self.deferred_witnesses)
+        self.solutions.take_deferred_witnesses()
     }
 
     /// The module whose item is currently being elaborated (the qualifier prefix of its name; empty for the root), or `None` when no surface item is being elaborated — which suppresses the representation-privacy checks (see the field's invariant).
@@ -1148,7 +1077,7 @@ impl Context {
 
     // === Metavariable store =================================================
 
-    /// Materialize a metavariable's birth record. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once).
+    /// Materialize a metavariable's birth record ([`Solutions::birth`]), stamping the write.
     pub(crate) fn birth_metavar(
         &mut self,
         id: MetaId,
@@ -1156,46 +1085,26 @@ impl Context {
         result: Term,
     ) {
         self.caches.note_write();
-        if id.0 >= self.metas.entries.len() {
-            self.metas.entries.resize_with(id.0 + 1, || None);
-        }
-
-        self.metas.entries[id.0] = Some(MetaEntry {
-            telescope: telescope.into(),
-            result,
-            solution: None,
-            kind: MetaKind::Inference,
-        });
+        self.solutions.birth(id, telescope.into(), result);
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
     pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetaId, Term) {
         self.caches.note_write();
-        let id = self.next_metavar.fresh();
+        let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
-        if id.0 >= self.metas.entries.len() {
-            self.metas.entries.resize_with(id.0 + 1, || None);
-        }
-        self.metas.entries[id.0] = Some(MetaEntry {
-            telescope,
-            result,
-            solution: None,
-            kind: MetaKind::RecSlot,
-        });
+        self.solutions.birth_rec_slot(id, telescope, result);
         (id, Term::metavar_birthed(id, None, spine))
     }
 
     pub(crate) fn is_rec_slot(&self, id: MetaId) -> bool {
-        self.metavar_entry(id)
-            .is_some_and(|entry| entry.kind == MetaKind::RecSlot)
+        self.solutions.is_rec_slot(id)
     }
 
     pub(crate) fn fill_rec_slot(&mut self, id: MetaId, term: Term) {
         let entry = self
-            .metas
-            .entries
-            .get(id.0)
-            .and_then(Option::as_ref)
+            .solutions
+            .entry(id)
             .expect("recursive slot has a birth entry");
         assert_eq!(entry.kind, MetaKind::RecSlot, "filled a non-rec slot");
         assert!(entry.solution.is_none(), "recursive slot filled twice");
@@ -1243,7 +1152,7 @@ impl Context {
 
     /// Raise the minting floor: every id `fresh_metavar` hands out will be `>= floor`. Called by `elaborate_module_suffix` with its `metavar_floor` argument (the count `into_core` minted) before any item is elaborated.
     pub(crate) fn seed_metavars(&mut self, floor: usize) {
-        self.next_metavar.seed(floor);
+        self.solutions.seed_floor(floor);
     }
 
     /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]).
@@ -1278,7 +1187,7 @@ impl Context {
         span: Option<Span>,
         origin: Option<MetavarOrigin>,
     ) -> (MetaId, Term) {
-        let id = self.next_metavar.fresh();
+        let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
         let metavar = Term::metavar_birthed(id, origin, spine);
@@ -1292,79 +1201,39 @@ impl Context {
     }
 
     pub(crate) fn metavar_entry(&self, id: MetaId) -> Option<&MetaEntry> {
-        self.metas.entries.get(id.0).and_then(Option::as_ref)
+        self.solutions.entry(id)
     }
 
-    /// If `term` is a witness-resolution hole, its provenance and the concept goal it stands for (e.g. `Add(Nat)`). A conversion left stuck between two such holes is really an unresolved witness — reported as one rather than as a bare metavariable mismatch between two anonymous placeholders.
     pub(crate) fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
-        let Subterm::Metavar(metavar) = &**term else {
-            return None;
-        };
-        let Some(MetavarOrigin::Witness(origin)) = &metavar.origin else {
-            return None;
-        };
-        let goal = self.metavar_entry(metavar.id)?.result.clone();
-        Some((origin.clone(), goal))
+        self.solutions.witness_hole(term)
     }
 
     pub(crate) fn metavar_solution(&self, id: MetaId) -> Option<&Term> {
-        self.metavar_entry(id).and_then(|e| e.solution.as_ref())
+        self.solutions.solution(id)
     }
 
-    /// Resolve a solved metavariable *at its occurrence*: the stored solution is spelled with the birth telescope's names, and the occurrence's spine records what each of those binders corresponds to here — so resolution is the solution with birth names rewritten through the spine. An empty spine (a never-rebuilt `into_core` hole) resolves as the identity. `None` while unsolved.
     pub(crate) fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
-        let entry = self.metavar_entry(metavar.id)?;
-        let solution = entry.solution.as_ref()?;
-
-        if metavar.spine.is_empty() {
-            return Some(solution.clone());
-        }
-
-        let binders = entry
-            .telescope
-            .iter()
-            .map(|(name, _)| name)
-            .collect::<Vec<_>>();
-
-        let spine = metavar.spine.iter().collect::<Vec<_>>();
-
-        Some(solution.capture(&binders).release(&spine))
+        self.solutions.resolve(metavar)
     }
 
-    /// Commit a metavariable's solution. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.) Records the id as newly solved — the wake signal for parked constraints — and journals it for [`Context::rollback_solutions`].
+    /// Commit a metavariable's solution ([`Solutions::solve`]), stamping the write. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.)
     pub(crate) fn solve_metavar(&mut self, id: MetaId, term: Term) {
         self.caches.note_write();
-        if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
-            entry.solution = Some(term);
-            self.newly_solved.push(id);
-            self.solved_log.push(id);
-        }
+        self.solutions.solve(id, term);
     }
 
-    /// Watermark for [`Context::rollback_solutions`]: how many solutions have been committed so far.
+    /// Watermark for [`Context::rollback_solutions`]: how many solutions have been committed so far. Spans both unification stores, which is why it lives here rather than on either.
     pub(crate) fn solution_mark(&self) -> SolutionMark {
         SolutionMark {
-            term_solution_log_len: self.solved_log.len(),
+            term_solution_log_len: self.solutions.solved_len(),
             universe: self.universe_solver.mark(),
         }
     }
 
     /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals and clears the reduction cache, which may have cached reducts through them.
     pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
-        let unwound = self
-            .solved_log
-            .split_off(mark.term_solution_log_len.min(self.solved_log.len()));
-
-        for id in &unwound {
-            #[cfg(feature = "profile")]
-            curios_profile::tracing::debug!(target: "curios_elab::solve", meta = id.0, "solution unwound");
-            if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
-                entry.solution = None;
-            }
-        }
-
+        self.solutions.unwind_to(mark.term_solution_log_len);
         self.universe_solver.rollback(mark.universe);
-        self.newly_solved.retain(|id| !unwound.contains(id));
         self.caches.invalidate_for_rollback();
     }
 
@@ -1532,40 +1401,15 @@ impl Context {
         self.repark(work, origin, frame);
     }
 
-    /// Re-park work that is still blocked after a retry, keeping its originally frozen frame. The watch set is recomputed from the work's current unsolved metavariables.
+    /// Re-park work that is still blocked after a retry, keeping its originally frozen frame ([`Solutions::park`]), stamping the write.
     pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
         self.caches.note_write();
-        let watching = match &work {
-            ParkedWork::Conversion(goal) => goal
-                .this
-                .metavars()
-                .into_iter()
-                .chain(goal.that.metavars())
-                .filter(|id| self.metavar_solution(*id).is_none())
-                .collect(),
-            ParkedWork::Checking { expected, .. } => expected
-                .metavars()
-                .into_iter()
-                .filter(|id| self.metavar_solution(*id).is_none())
-                .collect(),
-            ParkedWork::Witness { goal, .. } => goal
-                .metavars()
-                .into_iter()
-                .filter(|id| self.metavar_solution(*id).is_none())
-                .collect(),
-        };
-
-        self.parked.push(ParkedGoal {
-            work,
-            origin,
-            frame,
-            watching,
-        });
+        self.solutions.park(work, origin, frame);
     }
 
     /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance. If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
     pub(crate) fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (MetaId, Term) {
-        let id = self.next_metavar.fresh();
+        let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
         let term = Term::metavar_birthed(id, None, spine);
@@ -1578,40 +1422,24 @@ impl Context {
         (id, term)
     }
 
-    /// Take the parked goals woken by solutions landed since the last sweep. Consumes the wake signals; empty when nothing new has been solved.
     pub(crate) fn wake_parked(&mut self) -> Vec<ParkedGoal> {
-        if self.newly_solved.is_empty() || self.parked.is_empty() {
-            self.newly_solved.clear();
-
-            return Vec::new();
-        }
-
-        let solved = self.newly_solved.drain(..).collect::<BTreeSet<_>>();
-
-        let (woken, kept) = mem::take(&mut self.parked)
-            .into_iter()
-            .partition(|p| p.watching.iter().any(|id| solved.contains(id)));
-
-        self.parked = kept;
-
-        woken
+        self.solutions.wake_parked()
     }
 
-    /// Take every parked goal — the drain's final sweep.
     pub(crate) fn take_parked(&mut self) -> Vec<ParkedGoal> {
-        mem::take(&mut self.parked)
+        self.solutions.take_parked()
     }
 
     pub(crate) fn parked_len(&self) -> usize {
-        self.parked.len()
+        self.solutions.parked_len()
     }
 
     pub(crate) fn has_newly_solved(&self) -> bool {
-        !self.newly_solved.is_empty()
+        self.solutions.has_newly_solved()
     }
 
     pub(crate) fn parking_suppressed(&self) -> bool {
-        self.suppress_parking
+        self.solutions.parking_suppressed()
     }
 
     /// Run `f` as a yes/no *oracle* around full elaboration (re-validation): parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — counterfactual refinements are suppressed with it, and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter.
@@ -1622,10 +1450,9 @@ impl Context {
     }
 
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.suppress_parking;
-        self.suppress_parking = true;
+        let previous = self.solutions.set_parking_suppressed(true);
         let result = f(self);
-        self.suppress_parking = previous;
+        self.solutions.set_parking_suppressed(previous);
 
         result
     }
