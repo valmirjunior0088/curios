@@ -421,6 +421,33 @@ const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
     /std/print("FORGED")
     "#;
 
+/// A `Bool` arm is checked at *its own* case value.
+///
+/// The `false` arm's goal is the motive at `false`, so `Eq/refl()` would have to inhabit `Eq(false, true)`. An arm rule that refined the scrutinee to the wrong case — or to none at all — would let reflexivity discharge it, and every boolean would equal `true`.
+const BOOL_ARM_AT_THE_WRONG_CASE: &str = r#"
+    use /std/{Bool, Eq};
+    let bogus(b : Bool) -> Eq(b, true) =
+        match b : (c) => Eq(c, true)
+        | true => Eq/refl()
+        | false => Eq/refl()
+        end;
+    /std/print("FORGED")
+    "#;
+
+/// A natural-number dispatch's *literal* arm is checked at that literal.
+///
+/// The `1` arm's goal is the motive at `1`, which `Eq/refl()` cannot inhabit for `Eq(1, 0)`. This is the companion to the default-arm fixture: there the danger is refining an arm that binds nothing, here it is refining a literal arm to the wrong literal.
+const DISPATCH_LITERAL_AT_THE_WRONG_VALUE: &str = r#"
+    use /std/{Nat, Eq};
+    let bogus(n : Nat) -> Eq(n, 0) =
+        match n : (m) => Eq(m, 0)
+        | 0 => Eq/refl()
+        | 1 => Eq/refl()
+        | _ => Eq/refl()
+        end;
+    /std/print("FORGED")
+    "#;
+
 /// A program both checkers must accept, so a harness that refused everything would fail here.
 const A_SOUND_PROGRAM: &str = r#"
     use /std/{Nat};
@@ -622,6 +649,18 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "distinct_recursions_are_not_equal",
         DISTINCT_RECURSIONS_ARE_NOT_EQUAL,
+        Expect::Refuses("type mismatch"),
+        Expect::NotAsked,
+    ),
+    (
+        "bool_arm_at_the_wrong_case",
+        BOOL_ARM_AT_THE_WRONG_CASE,
+        Expect::Refuses("type mismatch"),
+        Expect::NotAsked,
+    ),
+    (
+        "dispatch_literal_at_the_wrong_value",
+        DISPATCH_LITERAL_AT_THE_WRONG_VALUE,
         Expect::Refuses("type mismatch"),
         Expect::NotAsked,
     ),
