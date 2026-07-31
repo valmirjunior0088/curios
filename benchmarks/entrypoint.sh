@@ -9,6 +9,14 @@ cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
 mkdir -p bin
 
+# Allowlist, not a blocklist: default stdout to stderr for the whole script, so
+# every command's output — this script's own or any subprocess's, present or
+# future — lands on stderr unless explicitly reopened. `table` below reopens
+# fd 3 (the real stdout) around just the `hyperfine` call, the one thing meant
+# to reach it.
+exec 3>&1
+exec 1>&2
+
 # OCaml's flambda compiler lives in the opam switch.
 eval "$(opam env 2>/dev/null)" || true
 
@@ -75,7 +83,7 @@ table() {  # table "<title>" <hyperfine args...>
   local title=$1; shift
   echo; echo "============================================================"
   echo "$title"; echo "============================================================"
-  hyperfine --warmup "$WARMUP" --runs "$RUNS" "$@"
+  hyperfine --warmup "$WARMUP" --runs "$RUNS" "$@" 1>&3
 }
 
 build lcg   lcg

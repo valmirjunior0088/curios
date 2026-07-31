@@ -15,6 +15,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [00 — The most surprising night in a long while](00_RESULTS.md)  | 2026-06-30 |
 | [01 — This is what growing a language looks like](01_RESULTS.md) | 2026-07-16 |
 | [02 — The debt got paid back, with interest](02_RESULTS.md)      | 2026-07-20 |
+| [03 — Nothing moved, and that was the point](03_RESULTS.md)      | 2026-07-31 |
 
 ### Curios across runs
 
@@ -66,6 +67,15 @@ Mean ± std dev in milliseconds from each run's results file, one row appended p
       <td align="right">0.99×</td>
       <td align="right">0.97×</td>
     </tr>
+    <tr>
+      <td>03</td>
+      <td align="right">437.3 ± 1.9</td>
+      <td align="right">0.98×</td>
+      <td align="right">1.00×</td>
+      <td align="right">438.4 ± 1.7</td>
+      <td align="right">0.99×</td>
+      <td align="right">1.00×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -115,6 +125,15 @@ Mean ± std dev in milliseconds from each run's results file, one row appended p
       <td align="right">0.76×</td>
       <td align="right">0.54×</td>
     </tr>
+    <tr>
+      <td>03</td>
+      <td align="right">256.4 ± 8.3</td>
+      <td align="right">0.81×</td>
+      <td align="right">1.02×</td>
+      <td align="right">260.0 ± 9.2</td>
+      <td align="right">0.81×</td>
+      <td align="right">1.06×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -145,21 +164,16 @@ Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** �
 ```
 benchmarks/
   Dockerfile           kitchen-sink arm64 image with all 8 toolchains + curios
-  build.sh             build the image (repo root as context) from anywhere
   entrypoint.sh        build all, cross-check outputs, then 4 hyperfine tables
   programs/
     lcg/               lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
     trees/             trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
 ```
 
-The image build needs the Curios sources, which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The helper does that from anywhere:
+The image build needs the Curios sources, which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The `benchmarks` Makefile target does that, from the repo root:
 
 ```sh
-bash benchmarks/build.sh                   # builds the image (repo root as context)
-docker run --rm --cpuset-cpus 0 curios-benchmarks
-
-# equivalent by hand, from the repo root:
-docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-benchmarks .
+make benchmarks
 
 # tune the workloads:
 docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e RUNS=7 curios-benchmarks

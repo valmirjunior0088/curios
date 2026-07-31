@@ -44,3 +44,17 @@ curios/profile:
 		--features profile \
 		--target-dir "$(CARGO_TARGET_DIR)" \
 		-- profile "$(CURIOS_PROFILE_SOURCE)"
+
+.PHONY: benchmarks
+BENCHMARKS_TAG ?= curios-benchmarks
+
+benchmarks:
+	docker build \
+	    --platform linux/arm64 \
+		--file benchmarks/Dockerfile \
+		--tag "$(BENCHMARKS_TAG)" .
+
+	docker run \
+	    --rm \
+		--cpuset-cpus 0 \
+		"$(BENCHMARKS_TAG)"
