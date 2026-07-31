@@ -331,6 +331,19 @@ const INFERRED_PROOF_POSITION: &str = r#"
     /std/print(Nat/to_str(conjured))
     "#;
 
+/// A non-descending `rec` written *inline*, at a `Type`-sorted type so the kernel's local descent gate does not apply, inside a definition that is not itself a proof position.
+///
+/// Nothing but the classification walk can see this one: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`.
+const INLINE_REC_UNDER_CARRIER: &str = r#"
+    use /std/{Nat, False};
+    struct Box : pub Type { p : False }
+    let make : Box =
+        rec r : Box = r;
+        r;
+    let bad : False = make.p;
+    /std/print("FORGED")
+    "#;
+
 /// A program both checkers must accept, so a harness that refused everything would fail here.
 const A_SOUND_PROGRAM: &str = r#"
     use /std/{Nat};
@@ -490,6 +503,12 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "inferred_proof_position",
         INFERRED_PROOF_POSITION,
+        Expect::Refuses("not known to terminate"),
+        Expect::Refuses("not known to terminate"),
+    ),
+    (
+        "inline_rec_under_carrier",
+        INLINE_REC_UNDER_CARRIER,
         Expect::Refuses("not known to terminate"),
         Expect::Refuses("not known to terminate"),
     ),
