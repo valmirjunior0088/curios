@@ -15,7 +15,7 @@
 use {
     super::{
         Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
-        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
+        check_induct_decl, check_positions, check_rec_group, check_struct_decl, closed,
         derived_binder_floor, partial_definitions, positivity_vectors, satisfiable,
     },
     curios_core::{Definition, Free, Global, Item, Module, Term},
@@ -148,19 +148,22 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     kernel.set_local_floor(module.binder_floor.max(derived_binder_floor(module)));
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
-    for (name, declaration) in &module.induct_decls {
-        if !satisfiable(&declaration.universe_context.constraints) {
+    let contexts = module
+        .induct_decls
+        .iter()
+        .map(|(name, declaration)| (name.clone(), &declaration.universe_context))
+        .chain(
+            module
+                .struct_decls
+                .iter()
+                .map(|(name, declaration)| (name.clone(), &declaration.universe_context)),
+        )
+        .collect::<Vec<_>>();
+    for (name, context) in contexts {
+        if let Some(error) = universe_verdict(context) {
             verdicts.push(Verdict {
-                name: Some(name.clone()),
-                error: KernelError::UnsatisfiableUniverses,
-            });
-        }
-    }
-    for (name, declaration) in &module.struct_decls {
-        if !satisfiable(&declaration.universe_context.constraints) {
-            verdicts.push(Verdict {
-                name: Some(name.clone()),
-                error: KernelError::UnsatisfiableUniverses,
+                name: Some(name),
+                error,
             });
         }
     }
@@ -169,10 +172,10 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
             Item::Let(definition) => vec![definition.clone()],
             Item::Rec(rec) => rec.definitions(),
         } {
-            if !satisfiable(&definition.universe_context.constraints) {
+            if let Some(error) = universe_verdict(&definition.universe_context) {
                 verdicts.push(Verdict {
                     name: Some(definition.name.clone()),
-                    error: KernelError::UnsatisfiableUniverses,
+                    error,
                 });
             }
         }
@@ -345,3 +348,17 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
 
 #[cfg(test)]
 mod tests;
+
+/// What is wrong with a universe context the walk is about to assume, if anything.
+///
+/// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
+fn universe_verdict(context: &curios_core::UniverseContext) -> Option<KernelError> {
+    if !closed(context) {
+        return Some(KernelError::UnclosedUniverses);
+    }
+    if !satisfiable(&context.constraints) {
+        return Some(KernelError::UnsatisfiableUniverses);
+    }
+
+    None
+}

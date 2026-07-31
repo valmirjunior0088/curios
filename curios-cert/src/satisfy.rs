@@ -15,7 +15,24 @@
 #[cfg(test)]
 mod tests;
 
-use curios_core::{Level, LevelHead, UniverseConstraint};
+use curios_core::{Level, LevelHead, UniverseConstraint, UniverseContext};
+
+/// Whether a context mentions only what it declares.
+///
+/// A context is closed: universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still name, and elaboration is over by the time one reaches this crate. A constraint naming a parameter past `parameter_count` is not a stronger hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become — while a constraint carrying a metavariable is elaboration residue that a zonked module cannot contain. Both are refused rather than interpreted.
+pub fn closed(context: &UniverseContext) -> bool {
+    let within = |level: &Level| {
+        level
+            .params()
+            .all(|param| param.0 < context.parameter_count)
+            && level.metas().next().is_none()
+    };
+
+    context
+        .constraints
+        .iter()
+        .all(|constraint| within(&constraint.lower) && within(&constraint.upper))
+}
 
 /// Search nodes this decision will visit before giving up.
 ///

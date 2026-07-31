@@ -89,3 +89,47 @@ fn an_unsatisfiable_universe_context_is_refused() {
         "the kernel assumed a contradiction as a hypothesis without noticing",
     );
 }
+
+/// A constraint may only mention parameters the context declares.
+///
+/// A context is closed: universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still reference. One that names `P3` while declaring a single parameter is not a stricter hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become. The elaborator refuses this as an escaping level; the kernel assumes the context, so it must refuse it too.
+#[test]
+fn a_constraint_naming_an_undeclared_parameter_is_refused() {
+    let escaping = UniverseConstraint {
+        lower: Level::param(UniverseParam(3)),
+        upper: Level::param(UniverseParam(0)),
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    };
+    let universe_context = UniverseContext {
+        parameter_count: 1,
+        constraints: vec![escaping],
+    };
+
+    let definition = Definition {
+        name: Global::Authored(Qualifier::from(["held"])),
+        kind: DefinitionKind::Authored,
+        universe_context,
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::prim(Prim::NatType),
+        body: Term::prim(Prim::Nat(curios_core::Nat::new(0usize))),
+    };
+
+    let module = Module {
+        items: vec![Item::Let(definition)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Term::prim(Prim::NatType),
+    };
+
+    assert!(
+        !recheck_module_verdicts(&module, 1_000_000).is_empty(),
+        "the kernel assumed a constraint about a parameter the declaration does not have",
+    );
+}

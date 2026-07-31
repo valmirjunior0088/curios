@@ -1,6 +1,9 @@
 use {
     super::*,
-    curios_core::{UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam},
+    curios_core::{
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
+        UniverseParam,
+    },
 };
 
 fn param(index: usize) -> Level {
@@ -89,4 +92,27 @@ fn a_constant_needs_the_offset_to_cover_it() {
     // `3 ≤ P0` is satisfiable — `P0` may simply be three — where `3 ≤ 0` is not.
     assert!(satisfiable(&[leq(three.clone(), u)]));
     assert!(!satisfiable(&[leq(three, Level::zero())]));
+}
+
+/// Closure is about what a context may name, and it has two halves.
+#[test]
+fn a_context_names_only_what_it_declares() {
+    let within = UniverseContext {
+        parameter_count: 2,
+        constraints: vec![leq(param(0), param(1))],
+    };
+    assert!(closed(&within));
+
+    let escaping = UniverseContext {
+        parameter_count: 1,
+        constraints: vec![leq(param(3), param(0))],
+    };
+    assert!(!closed(&escaping));
+
+    // A metavariable is elaboration residue: a zonked module carries none, so a context that does is not one this crate should interpret.
+    let unsolved = UniverseContext {
+        parameter_count: 1,
+        constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
+    };
+    assert!(!closed(&unsolved));
 }
