@@ -232,6 +232,15 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         return Ok(());
     };
 
+    // Obligation (T)'s early net, on the one written type position that rides on no definition's type. Every other declaration position reaches it through some `Definition`: a parameter through the type former's own type, an `induct` payload through its constructor wrapper's, a `concept` method through the method wrapper's. A field is projected rather than constructed, so no wrapper names it, and until this ran the field type below was elaborated with nothing having looked at it — a productive `Shape(inf)` then unfolded until the stack died.
+    //
+    // Read off the *lowered* telescope, before `check_telescope_entries` touches it, which is the whole point of an early net. Entries stay closed under the binders before them; only globals matter here, so nothing needs opening.
+    let mut written = &struct_decl.fields;
+    while let Telescope::Cons(entry, rest) = written {
+        check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
+        written = rest.body();
+    }
+
     let n_params = struct_decl.params.len();
     let labels = struct_decl
         .fields

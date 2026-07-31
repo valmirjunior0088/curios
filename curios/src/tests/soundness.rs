@@ -344,6 +344,57 @@ const SHAPE: &str = r#"
     rec inf : F = F/more(inf);
 "#;
 
+/// The productive twin of [`SHAPE`], whose `Shape(inf)` unfolds to `Sink(Shape(inf))` forever rather than to itself.
+const PRODUCTIVE_SHAPE: &str = r#"
+    induct Sink(A : Type) : pub Type
+    | sink(f : (A) -> /std/False)
+    end
+
+    induct F : pub Type
+    | stop()
+    | more(rest : F)
+    end
+
+    rec Shape(f : F) -> Type =
+        match f
+        | stop() => /std/False
+        | more(rest) => Sink(Shape(rest))
+        end;
+
+    rec inf : F = F/more(inf);
+"#;
+
+// A struct *field* is the one written type position obligation (T)'s early net did not reach, and the three fixtures below are the two halves of that gap and its control.
+//
+// The net exists so a type reaching a partial definition is refused by name before elaboration forces it — the post-zonk gate runs after the reduction (T) exists to make safe, so by then a productive type has already spun. It is applied to a *definition's* written type, and every declaration position rides on some definition: an `induct` or `struct` parameter on the type former's own type, an `induct` payload on its constructor wrapper's, a `concept` method on the method wrapper's. A struct field rides on nothing — a field is projected, not constructed, so no wrapper's type mentions it — and so nothing looked at it until it had been elaborated.
+//
+// Neither half is a route to `False`; both fail closed, and that is why this is recorded as a coverage gap rather than as a forgery. What they broke is the claim `a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted` makes for its own shape — that the compiler answers instead of dying — and the claim `a_non_productive_type_level_loop_is_diagnosed_not_exhausted` makes for its twin, that both shapes report the same thing. Both held for every spelling but this one.
+//
+// Verified while the hole was open, on the default main-thread stack with no `RUST_MIN_STACK`: the productive field aborted the compiler outright (`exit=134`, "has overflowed its stack"), and the non-productive field was refused with "reduction ran out of steps on: Shape(inf)", naming neither the definition at fault nor the reason. The same `Shape(inf)` written as an `induct` payload, an `induct` parameter, a `struct` parameter, or a `concept` method type was diagnosed by name in every case.
+#[test]
+fn a_productive_type_level_loop_in_a_struct_field_is_diagnosed_not_aborted() {
+    rejected_as_a_type(&format!(
+        "{PRODUCTIVE_SHAPE}\n struct Trap : pub Type {{ x : Shape(inf) }}\n\n ()"
+    ));
+}
+
+#[test]
+fn a_non_productive_type_level_loop_in_a_struct_field_is_diagnosed_too() {
+    rejected_as_a_type(&format!(
+        "{SHAPE}\n struct Trap : pub Type {{ x : Shape(inf) }}\n\n 0"
+    ));
+}
+
+// The control. `Shape` applied to a *total* value is an ordinary type-level application and must keep working in a field, so a net that refused every struct field — or every field whose type mentions a `rec` — would fail here rather than pass quietly. It runs, so the field type really did reduce to `Nat`.
+#[test]
+fn a_struct_field_over_a_total_application_still_compiles() {
+    let source = format!(
+        "{SHAPE}\n struct Holder : pub Type {{ x : Shape(F/more(F/stop())) }}\n \
+         let take(h : Holder) -> Nat = h.x;\n\n /std/print(Nat/to_str(take(Holder {{ x = 7 }})))"
+    );
+    assert_eq!(run(&source), b"7");
+}
+
 // The three fixtures below probe the *erasure premise*: that everything erasure deletes lies within a term one of the obligations covers.
 //
 // Erasure deletes more than types and proofs. Each of these sites drops a whole construct, arguments included, and those arguments are ordinary values — neither a type nor a proof, so nothing seeds them directly. What makes that safe is containment rather than coverage: the *enclosing* term is a proof position, and the reachability closure walks into it. Each fixture therefore hides a partial `Nat` computation inside one deleted construct, and each must be rejected for reaching it.
