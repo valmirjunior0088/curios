@@ -20,7 +20,8 @@ use {
     super::{Context, Error, is_prop, zonk},
     curios_cert::{group_totality, yields_a_sort},
     curios_core::{
-        Definition, Global, Item, Module, Prim, Rec, RecGroup, RecItem, Subterm, Term, Totality,
+        Definition, Enter, Global, Item, Module, Prim, Rec, RecGroup, RecItem, Subterm, Term,
+        Totality,
     },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
@@ -444,46 +445,24 @@ type LocalMemo = HashMap<Term, bool>;
 /// The memo is what makes the sharing pay: hash-consing gives the tails one node, so each distinct node is classified once however many positions reach it. Per-position answers are unchanged — the cache records each node's own verdict, not whether some earlier position already reported it.
 #[allow(clippy::mutable_key_type)]
 fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> bool {
-    // Post-order over the term's DAG: a node is pushed once to expand its children and once to combine their verdicts, and the stack ordering is what guarantees every child is settled before the combine runs.
-    let mut pending = vec![(term.clone(), false)];
-
-    while let Some((node, combining)) = pending.pop() {
-        if memo.contains_key(&node) {
-            continue;
-        }
-
-        if !combining {
-            pending.push((node.clone(), true));
-
-            let subterm: &Subterm = &node;
-            subterm.any_child_term(&mut |child| {
-                if !memo.contains_key(child) {
-                    pending.push((child.clone(), false));
-                }
-                false
-            });
-
-            continue;
-        }
-
-        let mut partial = matches!(&*node, Subterm::Prim(Prim::Exit(..)));
-        if let Subterm::Rec(Rec { group, .. }) = &*node {
-            let group = group.clone();
-            partial = partial || group_totality(context, &group) == Totality::Partial;
-        }
-        if !partial {
-            let subterm: &Subterm = &node;
-            subterm.any_child_term(&mut |child| {
-                let child_partial = memo.get(child).copied().unwrap_or(false);
-                partial = partial || child_partial;
-                child_partial
-            });
-        }
-
-        memo.insert(node, partial);
-    }
-
-    memo.get(term).copied().unwrap_or(false)
+    // Post-order over the term's DAG on the shared `Term::walk` driver: a memo hit settles at enter, and the exit combine sees every child's verdict.
+    let mut state = (context, memo);
+    term.walk(
+        &mut state,
+        |state, term| match state.1.get(term) {
+            Some(&partial) => Enter::Skip(partial),
+            None => Enter::Descend,
+        },
+        |state, term, mut children| {
+            let mut partial = matches!(&**term, Subterm::Prim(Prim::Exit(..)));
+            if let Subterm::Rec(Rec { group, .. }) = &**term {
+                partial = partial || group_totality(state.0, group) == Totality::Partial;
+            }
+            let partial = partial || children.any(|child| child);
+            state.1.insert(term.clone(), partial);
+            partial
+        },
+    )
 }
 
 /// Whether this definition is partial on its own account: it mentions an exit, or it contains a local `rec` group that does not descend.
