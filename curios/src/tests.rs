@@ -14,6 +14,7 @@ mod io;
 mod kernel;
 mod map;
 mod matching;
+mod mutation;
 mod network;
 mod numeric;
 mod operators;
