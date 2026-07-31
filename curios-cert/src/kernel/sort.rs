@@ -341,6 +341,8 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
 /// Exactly one thing cannot be: a proof, because irrelevance makes any two inhabitants of a proposition interchangeable. Everything else can, **a type included**.
 ///
 /// That a type is erased is not the criterion, and reading it as one is what certified a closed inhabitant of `False`. Erasure governs what the *runtime* can observe; irrelevance is a claim about *definitional equality*, and conversion reads a type-valued position back in full. A proposition carrying `A : Type` is identified with one carrying `B`, so eliminating it — or projecting it, which meets no guard at all — makes `A` and `B` convertible, and transport does the rest. `crate::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds that derivation shut; `erased_half` asks the runtime question and is where the structural `Type(_) | Prop` test legitimately belongs.
-pub(crate) fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
+///
+/// Public for one reason: `curios-elab` writes this rule a second time as `is_prop`, and the two disagreed. A compile cannot observe that — the elaborator refuses such a declaration before the kernel is asked — so the two are compared directly by `curios-elab`'s `typing::tests::both_checkers_decide_non_informativeness_alike`, which needs to name this one. It answers a question about a type and admits nothing on its own, so exporting it widens what the trusted base can be *asked* without widening what it can be told.
+pub fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
     Ok(!Sort::of(kernel, type_)?.is_prop())
 }

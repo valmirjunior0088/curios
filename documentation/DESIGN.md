@@ -122,7 +122,7 @@ The perimeter has two halves, and they differ in how coverage is obtained. The *
 | --- | --- | --- |
 | Coverage | Every elimination enumerates its constructors | **probed** |
 | Large-elimination guard | A proposition eliminates into a relevant result only when empty or singleton | **probed**, both directions, and in both checkers |
-| `Prop` non-informativeness | A `Prop`-sorted structure or concept carries only non-informative fields | **probed**, in both checkers |
+| `Prop` non-informativeness | A `Prop`-sorted structure or concept carries only non-informative fields | **probed**, in both checkers, and the two predicates deciding it held to each other differentially |
 | Witness coherence and the orphan rule | One witness per key, declarable only by a root owning the concept or a rigid head | **probed** |
 | Foreign wire contract | A `foreign` declaration's type is drawn from the wire grammar, so an embedder cannot supply an inhabitant of a proposition | **probed** |
 | Definitional proof irrelevance | Any two inhabitants of a proposition are interchangeable | **argued** (fixpoint on (V), below); not directly observable, but its side condition — the guard above — is probed |
