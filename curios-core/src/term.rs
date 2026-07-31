@@ -1,9 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-// Deliberately not re-exported: the packed cache is [`Node`]'s private business.
+// Deliberately not re-exported: the caches are [`Node`]'s private business.
 mod scalars;
 use scalars::*;
+
+mod frees;
+use frees::*;
 
 use {
     super::{
@@ -14,7 +17,6 @@ use {
     curios_base::{Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
     num_bigint::BigUint,
     std::{
-        cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
         hash::{Hash, Hasher},
@@ -65,7 +67,7 @@ struct Node {
     scalars: ScalarCache,
     /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
-    free_vars: OnceCell<Rc<BTreeSet<Free>>>,
+    frees: FreeCache,
     subterm: Subterm,
 }
 
@@ -73,7 +75,7 @@ impl Node {
     fn new(subterm: Subterm) -> Self {
         Node {
             scalars: ScalarCache::default(),
-            free_vars: OnceCell::new(),
+            frees: FreeCache::default(),
             subterm,
         }
     }
@@ -1497,26 +1499,29 @@ impl Term {
 }
 
 impl Term {
-    /// The memoized free-variable set, filled bottom-up on an explicit stack: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion. `free_vars` is the fill marker.
-    fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<Free>> {
-        if self.inner.free_vars.get().is_none() {
-            self.fill_post_order(
-                |node| node.free_vars.get().is_some(),
-                |node| {
-                    node.free_vars
-                        .get_or_init(|| Rc::new(node.subterm.free_vars_from_children()));
-                },
-            );
-        }
-        self.inner
-            .free_vars
-            .get()
-            .expect("fill_post_order fills free_vars")
+    /// Fill the memoized free-variable set bottom-up on an explicit stack: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion.
+    fn warm_frees(&self) {
+        self.fill_post_order(
+            |node| node.frees.is_filled(),
+            |node| {
+                node.frees
+                    .fill(Rc::new(node.subterm.free_vars_from_children()))
+            },
+        );
     }
 
-    /// Whether `name` occurs free in this term, through the same memoized set [`Bound::free_vars`] fills — but as a lookup instead of a set clone: `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
+    fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<Free>> {
+        self.warm_frees();
+        self.inner
+            .frees
+            .get()
+            .expect("warm_frees fills the free-variable cache")
+    }
+
+    /// Whether `name` occurs free in this term, through the same memoized set [`Bound::free_vars`] fills — but as a membership probe instead of a set clone ([`FreeCache::contains`]): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
     pub fn mentions_free(&self, name: &Free) -> bool {
-        self.get_or_init_free_vars().contains(name)
+        self.warm_frees();
+        self.inner.frees.contains(name)
     }
 
     /// The free-variable identities of this term. Inherent so a `term.free_vars()` call routes through the memoized, iteratively-filled set (this and the [`Bound`] impl agree) rather than deref-ing to the uncached, recursive [`Subterm::free_vars`] when the `Bound` trait is out of scope.

@@ -21,12 +21,12 @@ fn archive_resets_caches_and_preserves_rc_sharing() {
     term.has_local_free();
     term.has_metavar();
     assert!(term.inner.scalars.is_filled());
-    assert!(term.inner.free_vars.get().is_some());
+    assert!(term.inner.frees.is_filled());
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&term).unwrap();
     let restored = rkyv::from_bytes::<Term, rkyv::rancor::Error>(&bytes).unwrap();
     assert!(!restored.inner.scalars.is_filled());
-    assert!(restored.inner.free_vars.get().is_none());
+    assert!(!restored.inner.frees.is_filled());
 
     let Subterm::Tuple(tuple) = restored.as_ref() else {
         panic!("restored term changed shape");
