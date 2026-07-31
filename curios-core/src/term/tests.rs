@@ -92,6 +92,25 @@ fn collect_ignores_index_names() {
     assert_eq!(term.free_vars(), BTreeSet::from([w.clone(), z.clone()]));
 }
 
+/// A chain-shaped term shares its single carrier child's memoized set upward instead of copying it once per link.
+#[test]
+fn free_vars_share_the_single_carrier_child_allocation() {
+    let x = Free::local(0, Some("x"));
+    let chain = Term::proj(Term::proj(Term::free_var(&x), 0), 0);
+    chain.free_vars();
+
+    let Subterm::Proj(outer) = chain.as_ref() else {
+        panic!("chain changed shape");
+    };
+    let Subterm::Proj(middle) = outer.head.as_ref() else {
+        panic!("chain changed shape");
+    };
+    assert!(Rc::ptr_eq(
+        chain.inner.frees.get().unwrap(),
+        middle.head.inner.frees.get().unwrap(),
+    ));
+}
+
 #[test]
 fn metavar_is_a_closed_global_head() {
     let m = Term::metavar(7);

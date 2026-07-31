@@ -2652,18 +2652,37 @@ impl Subterm {
     }
 
     /// This subterm's free-variable set as its own identity (if it is a free `Var`) unioned with its children's already-memoized sets — the child-combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep spine bottom-up in O(children) per node instead of re-walking the subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a free name occurs free in exactly the nodes whose subtrees contain it.
-    fn free_vars_from_children(&self) -> BTreeSet<Free> {
+    ///
+    /// A node that adds no identity of its own and whose free variables all arrive through one child shares that child's allocation ([`FreeVars::Shared`]) instead of copying it: on a chain-shaped term every link above the one free occurrence carries the same set, and copying it per link would cost O(set) where the pass-through costs O(1). The union only materializes once a second carrying child appears.
+    fn free_vars_from_children(&self) -> FreeVars {
         if let Subterm::Var(var) = self
             && let Some(name) = var.as_free()
         {
-            return BTreeSet::from([name.clone()]);
+            return FreeVars::Owned(BTreeSet::from([name.clone()]));
         }
-        let mut vars = BTreeSet::new();
+        let mut carrier: Option<Rc<BTreeSet<Free>>> = None;
+        let mut union: Option<BTreeSet<Free>> = None;
         self.any_child_term(&mut |child| {
-            vars.extend(child.get_or_init_free_vars().iter().cloned());
+            let frees = child.get_or_init_free_vars();
+            if frees.is_empty() {
+                return false;
+            }
+            match (&carrier, &mut union) {
+                (None, _) => carrier = Some(Rc::clone(frees)),
+                (Some(first), None) => {
+                    let mut merged = (**first).clone();
+                    merged.extend(frees.iter().cloned());
+                    union = Some(merged);
+                }
+                (Some(_), Some(merged)) => merged.extend(frees.iter().cloned()),
+            }
             false
         });
-        vars
+        match (carrier, union) {
+            (_, Some(merged)) => FreeVars::Owned(merged),
+            (Some(shared), None) => FreeVars::Shared(shared),
+            (None, None) => FreeVars::Owned(BTreeSet::new()),
+        }
     }
 
     /// Collect the ids of every metavariable occurring in this subterm. `Visit` only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses cannot piggyback on `free_vars` — this walk (an `any_metavar` whose collector never short-circuits) enumerates them directly.
