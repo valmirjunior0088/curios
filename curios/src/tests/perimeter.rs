@@ -344,6 +344,16 @@ const INLINE_REC_UNDER_CARRIER: &str = r#"
     /std/print("FORGED")
     "#;
 
+/// Obligation **(T)** rather than (V): a *type* that reaches a definition which is not known to terminate.
+///
+/// `spin` is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this syntactically from written type positions; the kernel seeds it from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T).
+const TYPE_REACHING_PARTIAL: &str = r#"
+    use /std/{Nat, Vec};
+    rec spin(n : Nat) -> Nat = spin(n);
+    let Sized(n : Nat) -> Type = Vec(Nat, spin(n));
+    /std/print("FORGED")
+    "#;
+
 /// A program both checkers must accept, so a harness that refused everything would fail here.
 const A_SOUND_PROGRAM: &str = r#"
     use /std/{Nat};
@@ -509,6 +519,12 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "inline_rec_under_carrier",
         INLINE_REC_UNDER_CARRIER,
+        Expect::Refuses("not known to terminate"),
+        Expect::Refuses("not known to terminate"),
+    ),
+    (
+        "type_reaching_partial",
+        TYPE_REACHING_PARTIAL,
         Expect::Refuses("not known to terminate"),
         Expect::Refuses("not known to terminate"),
     ),
