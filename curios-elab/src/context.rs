@@ -1,6 +1,9 @@
 mod caches;
 pub(crate) use caches::*;
 
+mod program;
+pub(crate) use program::*;
+
 use {
     super::{
         Error, Goal, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
@@ -182,16 +185,8 @@ pub struct Context {
     universe_solver: UniverseSolver,
     // The next metavariable id this context may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with its `metavar_floor` argument so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetaId>,
-    // Inductive declarations, keyed by the type's qualified name ("Result"). Like `metas`, a flat store of monotonic facts about the program, not lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
-    induct_decls: BTreeMap<Global, InductDecl>,
-    // Struct declarations, keyed the same way — a flat monotonic store like `induct_decls`. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
-    struct_decls: BTreeMap<Global, StructDecl>,
-    // Concept declarations, keyed by the concept's qualified name — a flat monotonic store like `struct_decls` (which also holds each concept's record entry; this adds the resolution metadata).
-    concepts: BTreeMap<Global, Concept>,
-    // The definition names `into_core` marked as witness declarations; each registers into `witness_table` when its signature elaborates (`elaborate_module_let` → `register_witness`).
-    witness_declarations: BTreeSet<Global>,
-    // The program-wide witness table: one witness per (concept, parameter-head tuple) key — global coherence, checked at registration.
-    witness_table: BTreeMap<(Global, WitnessKey), Witness>,
+    // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
+    program: Program,
     // The `use`-plicity binders currently in scope, in binding order (a subset of `local`), with frame boundaries in `witness_marks` — resolution's step-1/2 search space, scanned innermost-first.
     witness_scope: Vec<(Free, Term)>,
     witness_marks: Vec<usize>,
@@ -203,8 +198,6 @@ pub struct Context {
     checked: Vec<(Term, Term, Rc<str>)>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
-    // Each definition's totality, recorded as it is defined. The whole-module pass recomputes these post-zonk; this copy exists so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
-    totality: BTreeMap<Global, Totality>,
 }
 
 impl Context {
@@ -234,11 +227,7 @@ impl Context {
             metas: MetaStore::default(),
             universe_solver: UniverseSolver::new(0),
             next_metavar: Entropy::<MetaId>::new(),
-            induct_decls: BTreeMap::new(),
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witness_declarations: BTreeSet::new(),
-            witness_table: BTreeMap::new(),
+            program: Program::new(),
             witness_scope: Vec::new(),
             witness_marks: Vec::new(),
             deferred_witnesses: Vec::new(),
@@ -251,7 +240,6 @@ impl Context {
             identity_cache: None,
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
-            totality: BTreeMap::new(),
         }
     }
 
@@ -278,25 +266,16 @@ impl Context {
         &self.checked
     }
 
-    /// Record a definition's totality the moment it is defined.
-    ///
-    /// The whole-module pass computes the same verdicts by a fixpoint, and needs one because it sees every item at once. Here the items arrive in dependency order, so everything a definition mentions is already classified and one pass per definition suffices.
     pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
-        self.totality.insert(name.clone(), totality);
+        self.program.record_definition_totality(name, totality);
     }
 
-    /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.
     pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
-        self.totality.get(name).copied()
+        self.program.definition_totality(name)
     }
 
-    /// Seed the recorded verdicts with a replayed prefix's, which its own archive settled.
     pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
-        self.totality.extend(
-            inherited
-                .iter()
-                .map(|(name, totality)| (name.clone(), *totality)),
-        );
+        self.program.seed_totality(inherited);
     }
 
     /// Drain the recorded terms. The gate takes them once per module.
@@ -1039,161 +1018,99 @@ impl Context {
         result
     }
 
-    // === Inductive registry =================================================
+    // === Registries (see [`Program`]) =======================================
 
-    /// Record a new inductive declaration's metadata. Called once per `induct` declaration as a module is seeded into the context. Errs with `DuplicateInduct` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this `Context`, so a collision is rejected rather than silently overwriting a prior root's declaration. Mid-elaboration rebuilds of an already-registered entry go through [`Context::update_induct`] instead.
     pub(crate) fn register_induct(
         &mut self,
         name: &Global,
         induct_decl: InductDecl,
     ) -> Result<(), Error> {
-        if self.induct_decls.contains_key(name) {
-            return Err(Error::duplicate_induct(name.symbol()));
-        }
-        self.induct_decls.insert(name.clone(), induct_decl);
-        Ok(())
+        self.program.register_induct(name, induct_decl)
     }
 
-    /// Overwrite an already-registered inductive's metadata with a rebuilt telescope — called mid-elaboration by `elaborate_induct_indices`/ `elaborate_induct_constructors` to refine the same declaration's own entry, not to register a new one, so unlike [`Context::register_induct`] this always overwrites. Panics if `name` has no prior entry — every caller is expected to have checked `Context::induct_decl` first (a construction bug otherwise, not a user-facing case).
     pub(crate) fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
-        assert!(
-            self.induct_decls.contains_key(name),
-            "update_induct: '{name}' is not already registered"
-        );
-        self.induct_decls.insert(name.clone(), induct_decl);
+        self.program.update_induct(name, induct_decl);
     }
 
-    /// Look up an inductive declaration by the type's qualified name.
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        self.induct_decls.get(name)
+        self.program.induct_decl(name)
     }
 
-    // === Struct registry ====================================================
-
-    /// Record a new struct declaration's metadata. Called once per `struct` declaration as a module is seeded into the context (elaboration or erasure). Errs with `DuplicateStruct` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this `Context`, so a collision is rejected rather than silently overwriting a prior root's declaration. Mid-elaboration rebuilds of an already-registered entry go through [`Context::update_struct`] instead.
     pub(crate) fn register_struct(
         &mut self,
         name: &Global,
         struct_decl: StructDecl,
     ) -> Result<(), Error> {
-        if self.struct_decls.contains_key(name) {
-            return Err(Error::duplicate_struct(name.symbol()));
-        }
-        self.struct_decls.insert(name.clone(), struct_decl);
-        Ok(())
+        self.program.register_struct(name, struct_decl)
     }
 
-    /// Overwrite an already-registered struct's metadata with rebuilt field types — called mid-elaboration by `elaborate_struct` to refine the same declaration's own entry, not to register a new one, so unlike [`Context::register_struct`] this always overwrites. Panics if `name` has no prior entry — every caller is expected to have checked `Context::struct_decl` first (a construction bug otherwise, not a user-facing case).
     pub(crate) fn update_struct(&mut self, name: &Global, struct_decl: StructDecl) {
-        assert!(
-            self.struct_decls.contains_key(name),
-            "update_struct: '{name}' is not already registered"
-        );
-        #[cfg(feature = "profile")]
-        curios_profile::tracing::debug!(
-            target: "curios_elab::universe",
-            %name,
-            params = struct_decl.universe_context.parameter_count,
-            was = self.struct_decls[name].universe_context.parameter_count,
-            "struct scheme rewritten",
-        );
-        self.struct_decls.insert(name.clone(), struct_decl);
+        self.program.update_struct(name, struct_decl);
     }
 
-    /// Look up a struct declaration by the type's qualified name.
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        self.struct_decls.get(name)
+        self.program.struct_decl(name)
     }
 
-    // === Concept & witness registries =======================================
-
-    /// Record a new concept declaration's resolution metadata (its record shape is registered separately, as an ordinary structure). Called once per `concept` declaration when a module's registries are seeded. Errs with `DuplicateConcept` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this `Context`, so a collision is rejected rather than silently overwriting a prior root's declaration.
     pub(crate) fn register_concept(
         &mut self,
         name: &Global,
         concept: Concept,
     ) -> Result<(), Error> {
-        if self.concepts.contains_key(name) {
-            return Err(Error::duplicate_concept(name.symbol()));
-        }
-        self.concepts.insert(name.clone(), concept);
-        Ok(())
+        self.program.register_concept(name, concept)
     }
 
-    /// Look up a concept by its qualified name.
     pub(crate) fn concept(&self, name: &Global) -> Option<&Concept> {
-        self.concepts.get(name)
+        self.program.concept(name)
     }
 
     pub(crate) fn update_concept(&mut self, name: &Global, concept: Concept) {
-        assert!(
-            self.concepts.contains_key(name),
-            "update_concept: '{name}' is not already registered"
-        );
-        self.concepts.insert(name.clone(), concept);
+        self.program.update_concept(name, concept);
     }
 
-    /// The registered concepts, for whole-registry validation (superclass acyclicity) at seed time.
     pub(crate) fn concepts(&self) -> &BTreeMap<Global, Concept> {
-        &self.concepts
+        self.program.concepts()
     }
 
-    /// The compilation root that declares one witness key's rigid head — a nominal head's own `root` (looked up from whichever registry has it, struct or inductive), or the fixed `RootId::Sys` for a primitive head, which is never user-declarable. Consulted by the orphan-rule check in `register_witness`.
     pub(crate) fn root_of_head(&self, head: &HeadKey) -> RootId {
-        match head {
-            HeadKey::Nominal(name) => self
-                .struct_decl(name)
-                .map(|struct_decl| struct_decl.root)
-                .or_else(|| self.induct_decl(name).map(|induct_decl| induct_decl.root))
-                .expect("a nominal head names a registered structure or inductive"),
-            _ => RootId::Sys,
-        }
+        self.program.root_of_head(head)
     }
 
-    /// Mark a definition name as a witness declaration; when its signature elaborates, `elaborate_module_suffix` registers it into the witness table.
     pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
-        self.witness_declarations.insert(name.clone());
+        self.program.mark_witness_declaration(name);
     }
 
     pub(crate) fn is_witness_declaration(&self, name: &Global) -> bool {
-        self.witness_declarations.contains(name)
+        self.program.is_witness_declaration(name)
     }
 
-    /// The witness registered under `(concept, key)`, if any.
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
-        self.witness_table.get(&(concept.clone(), key.clone()))
+        self.program.witness(concept, key)
     }
 
-    /// Insert a witness under its key, returning the previous occupant's declaring module on a collision (the caller reports `DuplicateWitness`, which reports modules rather than the anonymous witnesses' compiler-minted names).
+    /// [`Program::insert_witness`], stamping the write on an actual insert — a new witness can change which pure elaborations succeed.
     pub(crate) fn insert_witness(
         &mut self,
         concept: Global,
         key: WitnessKey,
         witness: Witness,
     ) -> Option<Qualifier> {
-        match self.witness_table.get(&(concept.clone(), key.clone())) {
-            Some(existing) => Some(existing.module.clone()),
-            None => {
-                self.caches.note_write();
-                self.witness_table.insert((concept, key), witness);
-                None
-            }
+        let existing = self.program.insert_witness(concept, key, witness);
+        if existing.is_none() {
+            self.caches.note_write();
         }
+        existing
     }
 
+    /// [`Program::update_witness_scheme`], stamping the write.
     pub(crate) fn update_witness_scheme(
         &mut self,
         name: &Global,
         universe_context: UniverseContext,
         signature: Term,
     ) {
-        let witness = self
-            .witness_table
-            .values_mut()
-            .find(|witness| witness.name == *name)
-            .unwrap_or_else(|| panic!("witness '{name}' was not registered"));
-        witness.universe_context = universe_context;
-        witness.signature = signature;
+        self.program
+            .update_witness_scheme(name, universe_context, signature);
         self.caches.note_write();
     }
 
