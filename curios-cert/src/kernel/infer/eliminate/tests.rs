@@ -434,6 +434,68 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
     );
 }
 
+/// The same shape with a payload that is *itself a type*. `mk(a : Type 0)` pins nothing — the index target is the constant `0` — so eliminating into `Type` hands a program the type the proposition was built with, while irrelevance says every inhabitant is the same one. `mk({})` and `mk(False)` are convertible at a `Prop`-sorted family, `refl` therefore proves `Eq(mk({}), mk(False))`, congruence through this eliminator carries that to `Eq({}, False)`, and `subst` turns `()` into a closed inhabitant of `False`.
+///
+/// The rule refused a `Nat` payload and admitted this one: `carries_information` reported a component whose *type is a universe* as carrying nothing, reasoning that erasure deletes a type either way. Erasure governs what the runtime observes; irrelevance is a claim about definitional equality, and conversion reads this component back in full. No `.crs` file could reach the hole while it was open — `curios-elab`'s `singleton_eliminable` requires each binder to be `Prop`-sorted or index-pinned, and refused every surface spelling — but `recheck_module_verdicts` certified the hand-built derivation with zero refusals, which is what `crate::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` now holds shut.
+///
+/// `a_singleton_whose_index_pins_its_payload_eliminates_into_a_type` is the control: a payload the targets do recover must stay eliminable, or `Eq/subst` becomes unstatable.
+#[test]
+fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
+    let mut kernel = kernel();
+    let a = binder(0, "a");
+    let arm_binder = binder(10, "a");
+
+    let family = declare(
+        &mut kernel,
+        "TypeBox",
+        Term::prop(),
+        vec![carrying("mk", a, Term::type_ground(), nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        Term::type_ground(),
+        vec![("mk", vec![arm_binder.clone()], Term::free_var(&arm_binder))],
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Err(KernelError::LargeElimination(family)),
+    );
+}
+
+/// The other half of the same clause: a payload whose type is `Prop` holds a proposition *as data* rather than proving one. `Sort::of(Prop)` is `Type 0`, so the component is informative for exactly the reason above — `mk(True)` and `mk(False)` are convertible at a `Prop`-sorted family while this eliminator tells them apart, and transporting a proof of `True` along the resulting equality inhabits `False`.
+///
+/// Worth its own fixture: the clause that admitted these named both `Subterm::Type(_)` and `Subterm::Prop`, so a fix dropping only the first would leave this open.
+#[test]
+fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
+    let mut kernel = kernel();
+    let a = binder(0, "a");
+    let arm_binder = binder(10, "a");
+
+    let family = declare(
+        &mut kernel,
+        "PropBox",
+        Term::prop(),
+        vec![carrying("mk", a, Term::prop(), nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        Term::type_ground(),
+        vec![("mk", vec![arm_binder.clone()], Term::free_var(&arm_binder))],
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Err(KernelError::LargeElimination(family)),
+    );
+}
+
 /// An empty proposition eliminates into anything: there is nothing to have received, so nothing to extract.
 #[test]
 fn an_empty_proposition_eliminates_into_a_type() {

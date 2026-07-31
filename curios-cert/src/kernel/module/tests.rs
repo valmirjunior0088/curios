@@ -122,13 +122,53 @@ fn a_proposition_may_not_carry_an_informative_field() {
     ));
 }
 
+/// A `Prop`-sorted structure carrying a *type*, which the same rule forbids for the same reason.
+///
+/// `carried : Type 0` makes the field a type held as data. Irrelevance identifies `Bad{{}}` with `Bad{False}` at `Bad`, and `.0` reads the carried type straight back out — a projection meets no elimination guard at all — so `{}` and `False` become convertible, and `subst` turns `()` into a closed inhabitant of `False`.
+///
+/// This is the field-side face of the elimination-side hole in `super::super::infer::eliminate::tests`: both gates asked `carries_information`, which reported a universe-typed field as carrying nothing on the grounds that erasure deletes a type. No `.crs` file reached it — `curios-elab` refuses the declaration by its own `is_prop` test, which is why the two-checker matrix records `informative_prop_field` as never reaching the kernel — but `check_struct_decl` returned `Ok(())` while the hole was open.
+#[test]
+fn a_proposition_may_not_carry_a_type() {
+    let mut kernel = kernel();
+    let declaration = proposition_with_field(&mut kernel, Term::type_ground());
+
+    assert!(matches!(
+        check_struct_decl(&mut kernel, &declaration),
+        Err(KernelError::Informative { .. })
+    ));
+}
+
 /// The other end of the discrimination: a proposition whose field is *itself* a proposition carries nothing a program can read, and must stay legal — a rule that refused every `Prop` structure would be indistinguishable from one that refused this.
+///
+/// The field type is a `Prop`-sorted family, not the universe `Prop`. It was written `Term::prop()` until the universe-typed field above was refused, which typed the field as a proposition held *as data* rather than as a proof of one — precisely the shape now forbidden. So this control passed for the wrong reason, and the discrimination it names went untested for as long as the hole was open.
 #[test]
 fn a_proposition_may_carry_a_proof() {
     let mut kernel = kernel();
-    let declaration = proposition_with_field(&mut kernel, Term::prop());
+    let held = proposition(&mut kernel, "Held");
+    let declaration = proposition_with_field(&mut kernel, held);
 
     assert!(check_struct_decl(&mut kernel, &declaration).is_ok());
+}
+
+/// A `Prop`-sorted family with no constructors, so that a field typed by it is a genuine proof rather than a proposition held as data.
+fn proposition(kernel: &mut Kernel, path: &str) -> Term {
+    let name = Global::Authored(Qualifier::from([path]));
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            params: Telescope::done(()),
+            indices: Telescope::done(()),
+            constructors: Vec::new(),
+            result_sort: Term::prop(),
+            module: Qualifier::from([path]),
+            root: RootId::Entry,
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 /// A `Prop`-sorted structure with one field of `field_type` and no parameters, registered and returned for checking.

@@ -1,12 +1,15 @@
 //! What the walk derives for itself rather than reading off the module.
+//!
+//! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
     super::{derived_binder_floor, recheck_module_verdicts},
-    curios_base::{Qualifier, RootId},
+    crate::KernelError,
+    curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Item, Level, Module, Prim, Term, Totality,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseParam,
+        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Level, Many,
+        Module, Prim, Scope, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseParam,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -132,4 +135,303 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         !recheck_module_verdicts(&module, 1_000_000).is_empty(),
         "the kernel assumed a constraint about a parameter the declaration does not have",
     );
+}
+
+/// The derivation a `Prop` carrying a type made possible, as a whole module.
+///
+/// `Box : Prop | mk(a : Type 0)` is a legal declaration — `Prop` is impredicative, so its payload carries no size condition, and the large-elimination guard is what is supposed to keep that sound. The guard admitted `unbox` because `carries_information` reported a universe-typed payload as carrying nothing, on the reasoning that erasure deletes a type either way. Every step after that is ordinary: irrelevance makes `mk(A)` and `mk(B)` convertible at `Box`, so `refl` inhabits `Eq(Box, mk(A), mk(B))`; congruence through `unbox` carries that to `Eq(Type 0, A, B)` for *any* two types; and transport — the licensed singleton case, `refl`'s payload being pinned by its own targets — turns `()` into a proof of `False`.
+///
+/// While the hole was open `recheck_module_verdicts` returned zero refusals for exactly this module, with the evaluation memos on and off, and `check_induct_decl` accepted the declaration. It never compiled and never ran: `curios-elab`'s `singleton_eliminable` refused `unbox` at every surface spelling, which is what kept the certifier's copy of the rule unobserved. The fixtures in `crate::kernel::infer::eliminate::tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
+#[test]
+fn a_derivation_through_a_type_carrying_proposition_is_refused() {
+    let verdicts = recheck_module_verdicts(&forgery(), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::LargeElimination(_))),
+        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+    );
+}
+
+/// A top-level definition, as `recheck_module_verdicts` binds one.
+fn authored(name: &Global, type_: Term, body: Term) -> Item {
+    Item::Let(Definition {
+        name: name.clone(),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext::empty(),
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        // Non-recursive and `Exit`-free, so the honest flag; `partial_definitions` recomputes it.
+        totality: Totality::Total,
+        type_,
+        body,
+    })
+}
+
+/// A nullary `Prop`-sorted family: `False` itself, and the shape `Box` takes but for its payload.
+fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
+    InductDecl {
+        universe_context: UniverseContext::default(),
+        params: Telescope::done(()),
+        indices: Telescope::done(()),
+        constructors,
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    }
+}
+
+/// The module the doc comment above describes: three declarations, and the five definitions that close on `False`.
+fn forgery() -> Module {
+    let type_0 = Term::type_ground();
+    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let box_name = Global::Authored(Qualifier::from(["Box"]));
+    let equality_name = Global::Authored(Qualifier::from(["Eq"]));
+
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let box_type = Term::induct_type(box_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let boxed =
+        |carried: Term| Term::variant(box_name.clone(), Vec::<Term>::new(), "mk", [carried]);
+    let equality = |carrier: Term, left: Term, right: Term| {
+        Term::induct_type(equality_name.clone(), [carrier], [left, right])
+    };
+    let reflexivity = |carrier: Term, value: Term| {
+        Term::variant(equality_name.clone(), [carrier], "refl", [value])
+    };
+
+    // induct Box : Prop | mk(a : Type 0) end
+    let payload = Free::local(10, Some("a"));
+    let box_decl = proposition(vec![(
+        Atom::from("mk"),
+        InductParam {
+            telescope: Telescope::build([(payload, type_0.clone())], box_type.clone()),
+            plicities: vec![Plicity::Explicit],
+        },
+    )]);
+
+    // induct Eq(A : Type 1) : (x : A, y : A) -> Prop | refl(z : A) : (z, z) end
+    let carrier = Free::local(20, Some("A"));
+    let left = Free::local(21, Some("x"));
+    let right = Free::local(22, Some("y"));
+    let value = Free::local(23, Some("z"));
+    let mut equality_decl = proposition(vec![(
+        Atom::from("refl"),
+        InductParam {
+            telescope: Telescope::build(
+                [
+                    (carrier.clone(), type_1.clone()),
+                    (value.clone(), Term::free_var(&carrier)),
+                ],
+                Term::induct_type(
+                    equality_name.clone(),
+                    [Term::free_var(&carrier)],
+                    [Term::free_var(&value), Term::free_var(&value)],
+                ),
+            ),
+            plicities: vec![Plicity::Implicit, Plicity::Explicit],
+        },
+    )]);
+    equality_decl.params = Telescope::build([(carrier.clone(), type_1.clone())], ());
+    equality_decl.indices = Telescope::build(
+        [
+            (carrier.clone(), type_1.clone()),
+            (left, Term::free_var(&carrier)),
+            (right, Term::free_var(&carrier)),
+        ],
+        (),
+    );
+
+    // unbox : (Box) -> Type 0 = (b) => match b : (_) => Type 0 | mk(a) => a end
+    let unbox_name = Global::Authored(Qualifier::from(["unbox"]));
+    let subject = Free::local(30, Some("b"));
+    let scrutinee = Free::local(31, Some("s"));
+    let opened = Free::local(32, Some("a"));
+    let unbox = authored(
+        &unbox_name,
+        Term::func_type(
+            [(Free::local(33, Some("b")), box_type.clone())],
+            type_0.clone(),
+        ),
+        Term::func(
+            [(subject.clone(), box_type.clone())],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&subject),
+                Scope::close(Many(1), &[&scrutinee], type_0.clone()),
+                [(
+                    "mk",
+                    vec![(Plicity::Explicit, opened.clone())],
+                    Term::free_var(&opened),
+                )],
+                None,
+            ),
+        ),
+    );
+    let unboxed = |carried: Term| Term::apply(Term::free_var(&Free::from(&unbox_name)), [carried]);
+
+    // boxes_equal : (A : Type 0, B : Type 0) -> Eq(Box, mk(A), mk(B)) = refl(mk(A))
+    let boxes_equal_name = Global::Authored(Qualifier::from(["boxes_equal"]));
+    let this = Free::local(40, Some("A"));
+    let that = Free::local(41, Some("B"));
+    let boxes_equal = authored(
+        &boxes_equal_name,
+        Term::func_type(
+            [
+                (this.clone(), type_0.clone()),
+                (that.clone(), type_0.clone()),
+            ],
+            equality(
+                box_type.clone(),
+                boxed(Term::free_var(&this)),
+                boxed(Term::free_var(&that)),
+            ),
+        ),
+        Term::func(
+            [
+                (this.clone(), type_0.clone()),
+                (that.clone(), type_0.clone()),
+            ],
+            reflexivity(box_type.clone(), boxed(Term::free_var(&this))),
+        ),
+    );
+
+    // types_equal : (A : Type 0, B : Type 0) -> Eq(Type 0, A, B)
+    //   = match boxes_equal(A, B) : (x, y, _) => Eq(Type 0, unbox(x), unbox(y))
+    //     | refl(z) => refl(unbox(z)) end
+    let types_equal_name = Global::Authored(Qualifier::from(["types_equal"]));
+    let source = Free::local(50, Some("A"));
+    let target = Free::local(51, Some("B"));
+    let motive_left = Free::local(52, Some("x"));
+    let motive_right = Free::local(53, Some("y"));
+    let motive_proof = Free::local(54, Some("q"));
+    let arm_value = Free::local(55, Some("z"));
+    let types_equal = authored(
+        &types_equal_name,
+        Term::func_type(
+            [
+                (source.clone(), type_0.clone()),
+                (target.clone(), type_0.clone()),
+            ],
+            equality(
+                type_0.clone(),
+                Term::free_var(&source),
+                Term::free_var(&target),
+            ),
+        ),
+        Term::func(
+            [
+                (source.clone(), type_0.clone()),
+                (target.clone(), type_0.clone()),
+            ],
+            Term::induct_match_scoped_marked(
+                Term::apply(
+                    Term::free_var(&Free::from(&boxes_equal_name)),
+                    [Term::free_var(&source), Term::free_var(&target)],
+                ),
+                Scope::close(
+                    Many(3),
+                    &[&motive_left, &motive_right, &motive_proof],
+                    equality(
+                        type_0.clone(),
+                        unboxed(Term::free_var(&motive_left)),
+                        unboxed(Term::free_var(&motive_right)),
+                    ),
+                ),
+                [(
+                    "refl",
+                    vec![(Plicity::Explicit, arm_value.clone())],
+                    reflexivity(type_0.clone(), unboxed(Term::free_var(&arm_value))),
+                )],
+                None,
+            ),
+        ),
+    );
+
+    // cast : (A : Type 0, B : Type 0, v : A) -> B
+    //   = (match types_equal(A, B) : (x, y, _) => (x) -> y | refl(z) => (w) => w end)(v)
+    let cast_name = Global::Authored(Qualifier::from(["cast"]));
+    let from = Free::local(60, Some("A"));
+    let into = Free::local(61, Some("B"));
+    let carried = Free::local(62, Some("v"));
+    let cast_left = Free::local(63, Some("x"));
+    let cast_right = Free::local(64, Some("y"));
+    let cast_proof = Free::local(65, Some("q"));
+    let cast_value = Free::local(66, Some("z"));
+    let coerced = Free::local(67, Some("w"));
+    let identity = Free::local(68, Some("w"));
+    let cast_params = [
+        (from.clone(), type_0.clone()),
+        (into.clone(), type_0.clone()),
+        (carried.clone(), Term::free_var(&from)),
+    ];
+    let cast = authored(
+        &cast_name,
+        Term::func_type(cast_params.clone(), Term::free_var(&into)),
+        Term::func(
+            cast_params,
+            Term::apply(
+                Term::induct_match_scoped_marked(
+                    Term::apply(
+                        Term::free_var(&Free::from(&types_equal_name)),
+                        [Term::free_var(&from), Term::free_var(&into)],
+                    ),
+                    Scope::close(
+                        Many(3),
+                        &[&cast_left, &cast_right, &cast_proof],
+                        Term::func_type(
+                            [(coerced, Term::free_var(&cast_left))],
+                            Term::free_var(&cast_right),
+                        ),
+                    ),
+                    [(
+                        "refl",
+                        vec![(Plicity::Explicit, cast_value.clone())],
+                        Term::func(
+                            [(identity.clone(), Term::free_var(&cast_value))],
+                            Term::free_var(&identity),
+                        ),
+                    )],
+                    None,
+                ),
+                [Term::free_var(&carried)],
+            ),
+        ),
+    );
+
+    // forged : False = cast({}, False, ())
+    let forged_name = Global::Authored(Qualifier::from(["forged"]));
+    let forged = authored(
+        &forged_name,
+        false_type.clone(),
+        Term::apply(
+            Term::free_var(&Free::from(&cast_name)),
+            [
+                Term::tuple_type_unit(),
+                false_type.clone(),
+                Term::tuple(Vec::<Term>::new()),
+            ],
+        ),
+    );
+
+    Module {
+        items: vec![unbox, boxes_equal, types_equal, cast, forged],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([
+            (false_name, proposition(Vec::new())),
+            (box_name, box_decl),
+            (equality_name, equality_decl),
+        ]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        // The module as a whole is a closed program of type `False`.
+        type_: Some(false_type),
+        body: Term::free_var(&Free::from(&forged_name)),
+    }
 }

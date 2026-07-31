@@ -83,7 +83,7 @@ pub enum KernelError {
         erased: crate::Erased,
         reached: Option<Global>,
     },
-    /// A field of a `Prop`-sorted structure that is neither a proof nor a type. Irrelevance identifies every inhabitant of a proposition, while projection reads a field back out without meeting any elimination guard, so an informative field hands two convertible values to the same projection.
+    /// A field of a `Prop`-sorted structure that is not a proof. Irrelevance identifies every inhabitant of a proposition, while projection reads a field back out without meeting any elimination guard, so an informative field hands two convertible values to the same projection — a type-valued field included.
     Informative { field: Box<Term> },
     /// A declaration whose universe constraints name something the declaration does not have: a parameter past its own count, or a metavariable elaboration should have solved. Either way the context cannot be instantiated, so assuming it means assuming something with no meaning.
     UnclosedUniverses,

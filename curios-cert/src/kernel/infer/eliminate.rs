@@ -376,7 +376,7 @@ fn guard_large_elimination(
                         if determined.contains(name) {
                             continue;
                         }
-                        // A component that is itself a proof or a type carries no information a relevant result could depend on: erasure deletes it either way.
+                        // A component that is itself a proof carries no information a relevant result could depend on: irrelevance makes any two of them interchangeable. A *type*-valued component does not qualify, however completely erasure deletes it — see `carries_information`.
                         let type_ = infer(kernel, component)?;
                         if !carries_information(kernel, &type_)? {
                             continue;

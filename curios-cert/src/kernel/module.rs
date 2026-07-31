@@ -133,9 +133,9 @@ pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
     )
 }
 
-/// A `Prop`-sorted structure's fields must all be non-informative — a proof or a type, the two things erasure deletes.
+/// A `Prop`-sorted structure's fields must all be non-informative, which means every one of them is a proof.
 ///
-/// Proof irrelevance makes any two inhabitants of a proposition definitionally equal, and a structure's payload is read back by *projection*, which is not an elimination and so meets no large-elimination guard. A `Prop` structure carrying a `Nat` therefore hands the same field two convertible inhabitants with different values, and `Eq` plus congruence turns that into `False`.
+/// Proof irrelevance makes any two inhabitants of a proposition definitionally equal, and a structure's payload is read back by *projection*, which is not an elimination and so meets no large-elimination guard. A `Prop` structure carrying a `Nat` therefore hands the same field two convertible inhabitants with different values, and `Eq` plus congruence turns that into `False`. A field carrying a *type* does the same thing one level up — the two convertible inhabitants hand the projection two different types — so being erased buys it no exemption; see [`carries_information`].
 ///
 /// Parameters are skipped: they are the family's arguments rather than stored payload, so a proposition may be indexed by data without carrying any. Inductives are deliberately not subject to this — `induct Box : Prop | mk(n : Nat)` is a legal declaration whose *elimination* the singleton rung guards instead.
 fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {

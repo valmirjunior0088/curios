@@ -190,52 +190,94 @@ const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
         /std/print(Nat/to_str(extract(Tight/mk(7))))
         "#;
 
+const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
+        use /std/{Eq, False, Nat};
+
+        induct Box : pub Prop
+        | mk(A : Type)
+        end
+
+        let unbox(b : Box) -> Type =
+            match b : (_) => Type
+            | mk(A) => A
+            end;
+
+        let boxes_equal(A : Type, B : Type) -> Eq(Box/mk(A), Box/mk(B)) = Eq/refl();
+
+        let types_equal(A : Type, B : Type) -> Eq(A, B) =
+            Eq/cong(unbox, boxes_equal(A, B));
+
+        let bad : False =
+            Eq/subst((t : Type) => t, types_equal(Nat, False), 0);
+
+        /std/print("FORGED")
+        "#;
+
+const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
+        struct Bad : pub Prop {
+            carried : Type
+        }
+
+        ()
+        "#;
+
 // The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
 #[test]
 fn a_multi_constructor_proposition_cannot_be_eliminated_into_data() {
-    let source = A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA;
-    rejected_by(source, "cannot eliminate the proposition");
+    rejected_by(
+        A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA,
+        "cannot eliminate the proposition",
+    );
 }
 
 // The same guard, in the direction that matters for the language staying usable. A guard that rejected these would be indistinguishable from one that rejected everything, and `ex falso` and transport are both load-bearing: `/std/Eq/subst` in the prelude is the singleton case.
 #[test]
 fn an_empty_proposition_still_eliminates_into_data() {
-    let source = AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA;
-    assert_eq!(run(source), b"0");
+    assert_eq!(run(AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA), b"0");
 }
 
 #[test]
 fn a_proposition_still_eliminates_into_another_proposition() {
-    let source = A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION;
-    assert_eq!(run(source), b"1");
+    assert_eq!(
+        run(A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION),
+        b"1"
+    );
 }
 
 // `Prop` non-informativeness, which is what makes proof irrelevance safe: a proposition whose inhabitants differ observably is not a subsingleton, so identifying them would identify the data they carry.
 #[test]
 fn a_proposition_may_not_carry_informative_fields() {
-    let source = A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS;
-    rejected_by(source, "is informative");
+    rejected_by(
+        A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS,
+        "is informative",
+    );
 }
 
 // A concept is a structure, so the same rule must reach a `Prop`-sorted concept whose method returns data. Worth its own fixture: the concept path generates its record entry rather than declaring it, so it could regress independently.
 #[test]
 fn a_proposition_concept_may_not_carry_informative_methods() {
-    let source = A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS;
-    rejected_by(source, "is informative");
+    rejected_by(
+        A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS,
+        "is informative",
+    );
 }
 
 // Coverage. A missing arm leaves an elimination undefined at that constructor, which is a proof of the motive at an index nothing established.
 #[test]
 fn an_elimination_must_enumerate_its_constructors() {
-    let source = AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS;
-    rejected_by(source, "missing match case");
+    rejected_by(
+        AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS,
+        "missing match case",
+    );
 }
 
 // The foreign wire contract. The embedder supplies these values, so a `foreign` admitted at an arbitrary type would let the host hand back an inhabitant of a proposition that nothing ever checked.
 #[test]
 fn a_foreign_declaration_is_confined_to_wire_types() {
-    let source = A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES;
-    rejected_by(source, "expected a wire type");
+    rejected_by(
+        A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES,
+        "expected a wire type",
+    );
 }
 
 // The large-elimination guard again, at its *singleton* rung. A one-constructor proposition may eliminate into data only when every payload binder is non-informative — a proposition itself, or *pinned* by the constructor's index targets, as `Eq`'s `refl(@z) : (z, z)` recovers `z`.
@@ -245,8 +287,10 @@ fn a_foreign_declaration_is_confined_to_wire_types() {
 // The two ends of the discrimination are covered alongside: the same declaration with target `(0)` is rejected below, and `(a)` is a genuinely forced binder that must stay accepted.
 #[test]
 fn a_non_injective_index_target_does_not_force_its_binder() {
-    let source = A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER;
-    rejected_by(source, "cannot eliminate the proposition");
+    rejected_by(
+        A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER,
+        "cannot eliminate the proposition",
+    );
 }
 
 // Proof irrelevance and index inversion disagree about a `Prop`-valued index, and the disagreement is a closed inhabitant of `False`. Conversion identifies `Two/a()` with `Two/b()` — any two inhabitants of a proposition are equal — so `Ind(Two/a())` and `Ind(Two/b())` are the same type and `coerce` is well typed. Inversion decides a case is impossible by *syntactic* constructor clash (`invert_indices` decomposes constructor forms and clashes on distinct tags, with no sort condition), so it reads `only`'s target `Two/a()` against the actual index `Two/b()` as disjoint and accepts the arm-less elimination as vacuous — at a type conversion just proved inhabited.
@@ -256,9 +300,8 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
 // The refusal is the coverage rule's: with the clash retracted, `only` is an ordinary reachable constructor, and an elimination with no arm for it is missing one it cannot prove absent.
 #[test]
 fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
-    let source = A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS;
     rejected_by(
-        source,
+        A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS,
         "is not provably impossible at the scrutinee's indices",
     );
 }
@@ -266,9 +309,8 @@ fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
 // The same disagreement through coverage rather than vacuity, which is why the fix belongs in the shared walk and not at one of its callers: here the elimination has an arm, and it is the *omitted* one that inversion wrongly excuses. `Ind/right()` inhabits `Ind(Two/a())` by the same conversion, so the match falls through every arm it enumerated.
 #[test]
 fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
-    let source = A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM;
     rejected_by(
-        source,
+        A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM,
         "is not provably impossible at the scrutinee's indices",
     );
 }
@@ -276,8 +318,31 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
 // The lower end of that discrimination: drop `a` from the index target and the guard fires. Without this, a fix could "close" the hole above by rejecting every indexed proposition and nothing here would notice.
 #[test]
 fn an_unmentioned_payload_binder_is_not_forced() {
-    let source = AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED;
-    rejected_by(source, "cannot eliminate the proposition");
+    rejected_by(
+        AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED,
+        "cannot eliminate the proposition",
+    );
+}
+
+// The singleton rung's side condition at its other half: a payload that is *itself a type*. `mk(A : Type)` pins nothing, so eliminating a `Box` recovers the type it was built with while irrelevance says every `Box` is the same one — `Eq/cong` then equates any two types and `Eq/subst` transports `0` into `False`.
+//
+// The elaborator refuses at `unbox`, so the items after it never elaborate; they document the route rather than being checked. The certifier is where this rule needed backing up and where it was wrong: `carries_information` reported a component whose type is a universe as carrying nothing, on the reasoning that erasure deletes a type either way — which confuses what the runtime observes with what conversion observes. `recheck_module_verdicts` certified the hand-built equivalent of this program with zero refusals, memos on and off.
+//
+// No surface program reaches that gate, which is what the `NotAsked` in this row's kernel column means. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::tests` pin the predicate at both halves of the clause that admitted it.
+#[test]
+fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
+    rejected_by(
+        A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE,
+        "cannot eliminate the proposition",
+    );
+}
+
+// `Prop` non-informativeness at the same half, and the shorter route: a field whose type is a universe holds a type as data, and a projection reads it back out meeting no elimination guard at all, so two convertible propositions hand `.0` two different types.
+//
+// Both gates asked `carries_information`, so `check_struct_decl` returned `Ok(())` while the hole was open. Its control in `curios-cert` — `a_proposition_may_carry_a_proof`, which keeps a genuine proof field legal — was itself mis-specified, typing its field as the universe `Prop` rather than as a `Prop`-sorted family, so it asserted the admitted shape and passed for the wrong reason. That is why the discrimination this row names went untested on the kernel side for as long as it did.
+#[test]
+fn a_proposition_may_not_carry_a_type_field() {
+    rejected_by(A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD, "is informative");
 }
 
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so before the erasure obligations moved into `curios-cert` these were the class the trusted base took entirely on the elaborator's word.
@@ -578,6 +643,20 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "unmentioned_binder",
         AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED,
         Expect::Refuses("cannot eliminate the proposition"),
+        Expect::NotAsked,
+    ),
+    // `NotAsked` here is the elaborator gating first, not the kernel being silent: its half of both
+    // rules is guarded in `curios-cert`'s own tests, which reach it by building the module directly.
+    (
+        "singleton_carrying_a_type",
+        A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE,
+        Expect::Refuses("cannot eliminate the proposition"),
+        Expect::NotAsked,
+    ),
+    (
+        "type_valued_prop_field",
+        A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD,
+        Expect::Refuses("is informative"),
         Expect::NotAsked,
     ),
     (

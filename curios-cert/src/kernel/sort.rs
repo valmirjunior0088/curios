@@ -336,16 +336,11 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
     }
 }
 
-/// Whether a value of this type can be distinguished from another of the same type — the question "does eliminating it leak anything".
+/// Whether a value of this type can be distinguished from another of the same type — the question the large-elimination guard and the `Prop`-field rule both turn on.
 ///
-/// A proof does not: irrelevance makes any two interchangeable. A type does not either: erasure deletes it. Anything else does.
+/// Exactly one thing cannot be: a proof, because irrelevance makes any two inhabitants of a proposition interchangeable. Everything else can, **a type included**.
+///
+/// That a type is erased is not the criterion, and reading it as one is what certified a closed inhabitant of `False`. Erasure governs what the *runtime* can observe; irrelevance is a claim about *definitional equality*, and conversion reads a type-valued position back in full. A proposition carrying `A : Type` is identified with one carrying `B`, so eliminating it — or projecting it, which meets no guard at all — makes `A` and `B` convertible, and transport does the rest. `crate::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds that derivation shut; `erased_half` asks the runtime question and is where the structural `Type(_) | Prop` test legitimately belongs.
 pub(crate) fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
-    if Sort::of(kernel, type_)?.is_prop() {
-        return Ok(false);
-    }
-
-    Ok(!matches!(
-        &*kernel.reduce_forced(type_.clone())?,
-        Subterm::Type(_) | Subterm::Prop
-    ))
+    Ok(!Sort::of(kernel, type_)?.is_prop())
 }
