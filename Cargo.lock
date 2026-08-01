@@ -510,6 +510,7 @@ dependencies = [
 name = "curios-cert"
 version = "0.6.0"
 dependencies = [
+ "curios-abi",
  "curios-base",
  "curios-core",
  "curios-profile",
