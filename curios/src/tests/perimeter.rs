@@ -221,6 +221,47 @@ const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
         ()
         "#;
 
+const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
+        use /std/{Eq, Lst, True};
+
+        let all_equal(@X : Prop, x : X, y : X) -> Eq(x, y) =
+            Eq/refl();
+
+        let one : Lst(True) = [True/qed()];
+        let none : Lst(True) = [];
+
+        let bad : Eq(one, none) =
+            all_equal(one, none);
+
+        /std/print("FORGED")
+        "#;
+
+/// The witness's lemma at a *genuine* proposition, which must stay accepted: `all_equal` is sound, and a fix that closed the hole by refusing `Prop`-abstracted binders would take this with it. Type-checked rather than run — it is the shape the erase boundary cannot lower.
+const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
+        use /std/{Nat, Eq};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        let all_equal(@X : Prop, x : X, y : X) -> Eq(x, y) =
+            Eq/refl();
+
+        let same : Eq(Two/a(), Two/b()) =
+            all_equal(Two/a(), Two/b());
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+const A_LIST_OF_PROOFS_IS_STILL_A_LIST: &str = r#"
+        use /std/{Nat, Lst, True};
+
+        let one : Lst(True) = [True/qed()];
+
+        /std/print(Nat/to_str(Lst/len(one)))
+        "#;
+
 const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
         use /std/{Nat, Eq};
 
@@ -361,6 +402,25 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
 #[test]
 fn a_proposition_may_not_carry_a_type_field() {
     rejected_by(A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD, "is informative");
+}
+
+// Definitional proof irrelevance, at the premise the rule is stated over rather than at the rule: *which* types are propositions. `Prop` is the type of propositions, so anything admitted at `Prop` is one as far as every later rule is concerned, and irrelevance then identifies its inhabitants without looking at them.
+//
+// `Lst(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized primitive former was a second implementation of that one rule and reported the element's sort as the former's, so `Lst(True)` inferred at `Prop` on both sides. Nothing here needed the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `LstType` node.
+//
+// From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — reflexivity discharges `Eq(@X, x, y)` because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at `Lst(True)` yields `Eq(one, none)` for a one-element list against the empty one; `Eq/cong` through `Lst/len` carries that to `Eq(1, 0)`, and `Eq/subst` transports `()` into `False`.
+//
+// Verified against the compiler of the day, while the hole was open: this source elaborated and `recheck_module_suffix` on the compile path certified `let /bad : Eq(Lst True, /one, /none)` with zero refusals — the `--print=core-elab` dump shows the solved `@X` as the `Lst` former applied to `True`. It never reached a runtime, and not because a checker stopped it: erasure refuses *any* call whose every argument erases, which is a defect of the erase boundary rather than of this rule, and which the control below trips identically at a genuine proposition.
+//
+// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `Lst`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. The first is asserted through the two-checker matrix rather than by running, since it is the program the erase boundary cannot lower; what it has to establish is that both checkers still accept the lemma and its instantiation.
+#[test]
+fn a_list_of_proofs_is_not_a_proposition() {
+    rejected_by(A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION, "type mismatch");
+}
+
+#[test]
+fn a_list_of_proofs_is_still_a_list() {
+    assert_eq!(run(A_LIST_OF_PROOFS_IS_STILL_A_LIST), b"1");
 }
 
 // The arm rule at its one arm with no case value of its own. A `| _ =>` catch-all binds nothing and refines no index, so the only instance it can be checked at is the scrutinee's — which is the instance the elimination then hands its caller.
@@ -686,6 +746,27 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD,
         Expect::Refuses("is informative"),
         Expect::NotAsked,
+    ),
+    // Both accepted this one: the sort of a parameterized primitive former was implemented twice on
+    // each side, and the typing rule's copy disagreed with `Sort::of`'s. Its kernel half is guarded
+    // where the rule lives, in `curios_cert::kernel::infer::tests`.
+    (
+        "list_of_proofs_is_not_a_prop",
+        A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION,
+        Expect::Refuses("type mismatch"),
+        Expect::NotAsked,
+    ),
+    (
+        "irrelevance_still_identifies",
+        IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "list_of_proofs_is_still_a_list",
+        A_LIST_OF_PROOFS_IS_STILL_A_LIST,
+        Expect::Accepts,
+        Expect::Accepts,
     ),
     // Both must accept: the catch-all's instance is a rule they are supposed to decide the same way, and this row is where they were caught deciding it differently.
     (

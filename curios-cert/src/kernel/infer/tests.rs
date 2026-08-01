@@ -667,6 +667,64 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
     ));
 }
 
+/// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
+///
+/// The two answers came from two implementations of one rule. `Sort::of` routes a parameterized former through `sort_of_prim`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule computed the *element's* sort instead and reported that as the former's, so `Lst(P)` inferred at `Prop` while `Sort::of(Lst(P))` said `Type 0`.
+///
+/// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Eq(@X, x, y)` — reflexivity discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `Lst(P)` yields `Eq(Lst(P), [p], [])` for a one-element list against the empty one. Congruence through `Lst/len` carries that to `Eq(1, 0)`, and transport turns `()` into a proof of `False`.
+///
+/// Verified while the hole was open: `check(Lst(P), Prop)` returned `Ok(())`, `check_definition` accepted that lemma, and `infer` on the instantiated application returned `Eq(Lst P, [p], [])`. The surface route was live too — `curios/src/tests/perimeter::a_list_of_proofs_is_not_a_proposition` is the program, which elaborated and which the compile-path recheck certified. It stopped short of a runtime only in erasure, which refuses any call whose every argument erases; that is a separate defect of the erase boundary, and the same lemma at a genuine proposition trips it identically.
+///
+/// The controls are the other half. A list at a relevant element still reports that element's level, `Lst(Type 0)` included, so the fix cannot have pinned every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it cannot have closed the hole by refusing the position outright.
+#[test]
+fn a_list_or_cell_of_proofs_is_not_a_proposition() {
+    let mut kernel = kernel();
+    let name = Global::Authored(Qualifier::from(["P"]));
+
+    // `induct P : Prop end` — an empty proposition, so `Sort::of` reads `Prop` off its declaration.
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            params: Telescope::done(()),
+            indices: Telescope::done(()),
+            constructors: Vec::new(),
+            result_sort: Term::prop(),
+            module: Qualifier::from(["P"]),
+            root: RootId::Entry,
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+    let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
+
+    let list = Term::prim(Prim::LstType(proposition.clone()));
+    let cell = Term::prim(Prim::CellType(proposition.clone()));
+
+    assert_eq!(infer(&mut kernel, &list), Ok(Term::type_ground()));
+    assert_eq!(infer(&mut kernel, &cell), Ok(Term::type_ground()));
+
+    assert!(matches!(
+        check(&mut kernel, &list, &Term::prop()),
+        Err(KernelError::Mismatch { .. }),
+    ));
+    assert!(matches!(
+        check(&mut kernel, &cell, &Term::prop()),
+        Err(KernelError::Mismatch { .. }),
+    ));
+
+    // A former still carries its element's level rather than being pinned at zero, and a proposition still stands where one is wanted.
+    assert_eq!(
+        infer(&mut kernel, &Term::prim(Prim::LstType(nat_type()))),
+        Ok(Term::type_ground()),
+    );
+    assert_eq!(
+        infer(&mut kernel, &Term::prim(Prim::LstType(Term::type_ground())),),
+        Ok(Term::type_at(one())),
+    );
+    assert_eq!(check(&mut kernel, &proposition, &Term::prop()), Ok(()));
+}
+
 /// Elaboration-only syntax reaching the kernel means a term was handed over before elaboration finished with it.
 #[test]
 fn elaboration_only_syntax_is_refused() {

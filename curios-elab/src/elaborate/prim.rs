@@ -255,9 +255,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::BinConcat(Grain::B, elaborated), bin_b_type)
         }
+        // The former's sort is `Sort::of`'s to compute, not the element's own: a list *of* proofs has a length, so it is not itself a proposition however propositional its element is. Restating the rule here typed `Lst(P)` at `Prop`, which admitted it wherever a proposition was wanted.
         Prim::LstType(elem) => {
-            let (elem, sort) = crate::check_is_sort(context, elem)?;
-            (Prim::LstType(elem), sort.term())
+            let elem = crate::check_is_sort(context, elem)?.0;
+            let former: Term = Subterm::Prim(Prim::LstType(elem.clone())).into();
+            let sort = crate::sort_term(context, &former)?;
+            (Prim::LstType(elem), sort)
         }
         // Inferring: the element type is unknown, so mint a fresh metavar — the implicit `@T` a `nil`/`cons` constructor would insert — which the elements solve (an empty `[]` leaves it for a later unification to ground, exactly as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which borrows the concrete element type from `expected` before reaching here.
         Prim::Lst(_, elems) => {
@@ -362,9 +365,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
 
             (Prim::Foreign(Arc::clone(function), elaborated), result)
         }
+        // The same rule as `LstType` above, and for the same reason: a cell has an identity.
         Prim::CellType(elem) => {
-            let (elem, sort) = crate::check_is_sort(context, elem)?;
-            (Prim::CellType(elem), sort.term())
+            let elem = crate::check_is_sort(context, elem)?.0;
+            let former: Term = Subterm::Prim(Prim::CellType(elem.clone())).into();
+            let sort = crate::sort_term(context, &former)?;
+            (Prim::CellType(elem), sort)
         }
         Prim::Cell(type_, init) => {
             let type_ = crate::check_is_sort(context, type_)?.0;

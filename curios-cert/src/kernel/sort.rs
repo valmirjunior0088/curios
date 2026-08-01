@@ -202,7 +202,9 @@ fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, K
 /// The sort of a primitive type former.
 ///
 /// A closed primitive quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `Lst : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
-fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
+///
+/// Reachable from [`infer_prim`](super::infer::infer_prim) as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
+pub(crate) fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
     match prim {
         Prim::BoolType
         | Prim::NatType

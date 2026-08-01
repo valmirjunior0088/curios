@@ -6,7 +6,7 @@
 
 use {
     super::{check, infer},
-    crate::{Kernel, KernelError, Sort},
+    crate::{Kernel, KernelError, sort_of_prim},
     curios_base::Grain,
     curios_core::{Prim, Subterm, Term, wire_term},
 };
@@ -65,11 +65,10 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         | Prim::BinType(_)
         | Prim::HandleType => Ok(Term::type_ground()),
 
-        // A parameterized former is a type at whatever level its element sits at, which is what `Sort::of` reports for it.
+        // A parameterized former's sort is whatever `Sort::of` computes for it, asked here rather than restated: the element's own sort is *not* the answer, because a list or a cell of proofs has a length or an identity and so is not itself a proposition.
         Prim::LstType(element) | Prim::CellType(element) => {
-            let element = element.clone();
-            let sort = Sort::of(kernel, &element)?;
-            let _ = check_is_type(kernel, &element)?;
+            let sort = sort_of_prim(kernel, prim)?;
+            let _ = check_is_type(kernel, element)?;
 
             Ok(sort.term())
         }
