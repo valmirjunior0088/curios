@@ -4,6 +4,9 @@
 //!
 //! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What each side supplies for itself is reduction and conversion, through [`Judge`] — see that module for the line, and for the concession borrowing conversion represents.
 
+#[cfg(test)]
+mod tests;
+
 use {
     crate::Judge,
     curios_core::{Free, InductType, Peel, Subterm, Telescope, Term, peel_prim},
