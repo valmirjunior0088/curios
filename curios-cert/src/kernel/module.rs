@@ -15,8 +15,8 @@ use {
     super::{Kernel, KernelError, Sort, carries_information, infer::check},
     crate::{group_totality, yields_a_sort},
     curios_core::{
-        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
-        UniverseContext,
+        Bound, Free, Global, InductDecl, InductType, RecGroup, Reducer, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseContext,
     },
 };
 
@@ -141,17 +141,113 @@ pub fn check_rec_group(
 /// Payload well-sortedness and registry-versus-binding agreement fall out of the ordinary item walk, because a declaration lowers to a `rec` group of real definitions. What does not fall out is the *constructor size condition* — each `Type`-sorted domain of a constructor must sit at or below the family's declared level, with one extra rung of slack for the uniform parameters — because the item walk computes each signature's sort and compares it to nothing. This is the clause that keeps an inductive from containing the universe it lives in, which is the paradox the hierarchy exists to exclude.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
-pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
+pub fn check_induct_decl(
+    kernel: &mut Kernel,
+    name: &Global,
+    declaration: &InductDecl,
+) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
+    check_index_telescope(kernel, declaration)?;
+
     for constructor in declaration.signatures() {
-        check_sizing(
+        check_signature(
             kernel,
             &constructor.telescope,
             declaration.params.len(),
             &declaration.result_sort,
+            |kernel, binders, terminal| {
+                check_constructed(kernel, name, declaration, binders, terminal)
+            },
         )?;
+    }
+
+    Ok(())
+}
+
+/// The index telescope's own domains are types, under the parameters that precede them.
+///
+/// The telescope carries the declaration's parameters first and its indices after (see [`InductDecl::indices`]), so this reaches the parameter domains as well — which matters for a family with no constructors, whose parameters no constructor signature would otherwise present for sorting.
+fn check_index_telescope(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
+    let mark = kernel.mark();
+    let outcome = (|| {
+        let mut telescope = declaration.indices.clone();
+
+        while let Telescope::Cons(domain, rest) = telescope {
+            Sort::of(kernel, &domain)?;
+
+            let binder = kernel.fresh(rest.first_hint());
+            kernel.assume(&binder, &domain);
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+        }
+
+        Ok(())
+    })();
+    kernel.retract(mark);
+
+    outcome
+}
+
+/// A constructor's terminal is the type it constructs, so it must be *this* family, at *this* declaration's parameters, at index targets the declared index telescope admits.
+///
+/// The first two are positional and syntactic, which is what the lowering builds: a constructor telescope is closed over the parameter binders and its terminal names them directly. The third is a typing clause and it is the one nothing asked before — a target is read by index inversion and by the arm rule, and until this ran it reached both without any judgment having seen it.
+fn check_constructed(
+    kernel: &mut Kernel,
+    name: &Global,
+    declaration: &InductDecl,
+    binders: &[Free],
+    terminal: &Term,
+) -> Result<(), KernelError> {
+    let refused = || KernelError::NotConstructed {
+        family: name.clone(),
+        terminal: Box::new(terminal.clone()),
+    };
+
+    let Subterm::InductType(InductType {
+        name: constructed,
+        params,
+        indices,
+        ..
+    }) = &**terminal
+    else {
+        return Err(refused());
+    };
+
+    let declared = binders
+        .iter()
+        .take(declaration.params.len())
+        .map(Term::free_var)
+        .collect::<Vec<_>>();
+
+    if constructed != name || *params != declared {
+        return Err(refused());
+    }
+
+    let expected = declaration
+        .indices
+        .len()
+        .saturating_sub(declaration.params.len());
+    if indices.len() != expected {
+        return Err(KernelError::Arity {
+            expected,
+            actual: indices.len(),
+        });
+    }
+
+    // Peeling only makes sense once there is a target to check, and only then is the index telescope known to be long enough to peel — a declaration whose telescope does not lead with its own parameters is a malformed *encoding* rather than a wrong judgment, and refusing it here would squash that state instead of removing it.
+    if indices.is_empty() {
+        return Ok(());
+    }
+
+    let mut telescope = declaration.indices.clone().open_params(&declared);
+    for target in indices {
+        let Telescope::Cons(domain, rest) = telescope else {
+            break;
+        };
+
+        check(kernel, target, &domain)?;
+        telescope = rest.open(&[target]);
     }
 
     Ok(())
@@ -164,11 +260,12 @@ pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
 
     check_non_informative(kernel, declaration)?;
 
-    check_sizing(
+    check_signature(
         kernel,
         &declaration.fields,
         declaration.params.len(),
         &declaration.result_sort,
+        |_, _, _| Ok(()),
     )
 }
 
@@ -213,45 +310,67 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
 /// Walk one declaration telescope, requiring each `Type`-sorted domain to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
 ///
 /// A `Prop`-sorted result imposes no condition: `Prop` is impredicative, and what keeps *that* sound is the large-elimination guard, not sizing. A `Prop`-sorted domain imposes none either — `Prop` sits below every level.
-fn check_sizing<B: Bound + Clone>(
+fn check_signature<B: Bound + Clone>(
     kernel: &mut Kernel,
     telescope: &Telescope<B>,
     uniform: usize,
     result_sort: &Term,
+    terminal: impl FnOnce(&mut Kernel, &[Free], &B) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
-    let result = kernel.reduce_forced(result_sort.clone())?;
-    let Subterm::Type(bound) = &*result else {
-        return Ok(());
-    };
-    let raised = bound.checked_add(1)?;
-
     let mark = kernel.mark();
-    let outcome = (|| {
-        let mut position = 0;
-        let mut telescope = telescope.clone();
-        while let Telescope::Cons(domain, rest) = telescope {
-            if let Sort::Type(level) = Sort::of(kernel, &domain)? {
-                let upper = if position < uniform { &raised } else { bound };
-
-                if !kernel.level_leq(&level, upper) {
-                    return Err(KernelError::Oversized {
-                        domain: level,
-                        bound: upper.clone(),
-                    });
-                }
-            }
-
-            let binder = kernel.fresh(rest.first_hint());
-            kernel.assume(&binder, &domain);
-            telescope = rest.open(&[&Term::free_var(&binder)]);
-            position += 1;
-        }
-
-        Ok(())
-    })();
+    let outcome = check_signature_within(kernel, telescope, uniform, result_sort, terminal);
     kernel.retract(mark);
 
     outcome
+}
+
+/// [`check_signature`]'s body, with the scope bracket left to its caller so every failing path retracts too.
+fn check_signature_within<B: Bound + Clone>(
+    kernel: &mut Kernel,
+    telescope: &Telescope<B>,
+    uniform: usize,
+    result_sort: &Term,
+    terminal: impl FnOnce(&mut Kernel, &[Free], &B) -> Result<(), KernelError>,
+) -> Result<(), KernelError> {
+    let result = kernel.reduce_forced(result_sort.clone())?;
+    // A `Prop`-sorted result imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result sort is.
+    let sized = match &*result {
+        Subterm::Type(bound) => Some((bound.clone(), bound.checked_add(1)?)),
+        _ => None,
+    };
+
+    let mut binders = Vec::new();
+    let mut telescope = telescope.clone();
+
+    while let Telescope::Cons(domain, rest) = telescope {
+        if let Some((bound, raised)) = &sized
+            && let Sort::Type(level) = Sort::of(kernel, &domain)?
+        {
+            let upper = if binders.len() < uniform {
+                raised
+            } else {
+                bound
+            };
+
+            if !kernel.level_leq(&level, upper) {
+                return Err(KernelError::Oversized {
+                    domain: level,
+                    bound: upper.clone(),
+                });
+            }
+        }
+
+        let binder = kernel.fresh(rest.first_hint());
+        kernel.assume(&binder, &domain);
+        telescope = rest.open(&[&Term::free_var(&binder)]);
+        binders.push(binder);
+    }
+
+    let Telescope::Done(body) = telescope else {
+        unreachable!("the loop exits only at the terminal")
+    };
+
+    terminal(kernel, &binders, &body)
 }
 
 /// Check a term that closes the program — an entrypoint body, with no name to export. `expected` is its declared type when it has one.

@@ -442,7 +442,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
         });
     }
     for (name, declaration) in &module.induct_decls {
-        if let Err(error) = check_induct_decl(&mut kernel, declaration) {
+        if let Err(error) = check_induct_decl(&mut kernel, name, declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
                 error,

@@ -606,7 +606,11 @@ fn indexed_module(target: Term) -> Module {
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         params: Telescope::done(()),
-        indices: Telescope::done(()),
+        // The family states one index, because its constructor aims at one. Declaring none while a constructor targets one is a malformed declaration in its own right, which the terminal clause now reports as an arity.
+        indices: Telescope::build(
+            [(Free::local(902, Some("i")), Term::prim(Prim::NatType))],
+            (),
+        ),
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
@@ -724,6 +728,102 @@ fn level_registry(level: &Level) -> Module {
         items: Vec::new(),
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// A constructor's index target may be a *proof*, and no judgment in the walk types it.
+///
+/// Definitional proof irrelevance accepts without inspecting either term, and DESIGN.md states plainly what makes that correct: every inhabitant of a proposition is total, which is (V)'s job. The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the kernel's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
+///
+/// It does not. `partial_definitions` iterates `module.items` and nothing else; `derived_binder_floor` is the only pass that reads a registry entry, and it collects free variables rather than partiality. Nor does the item walk reach these terms: `check_sizing` walks a constructor telescope's domains and stops at the terminal, so the index targets a constructor states are typed by nothing, and `check_group`'s local gate — a proof-typed member whose group does not descend is refused — never fires on a group that no judgment ever meets.
+///
+/// So the module below states its constructor's index at `rec p : Absurd = p`, a closed non-descending inhabitant of an empty proposition, and `recheck_module_verdicts` returned **zero refusals** for it. `Absurd` has no constructors, so nothing else could ever have produced that index; irrelevance then identifies it with any other proof of `Absurd`, which is the identification (V) exists to prevent. Reachable from no surface program — the elaborator builds registry and bindings from one declaration and types the targets through the constructor wrappers it lowers — which is why it is built here.
+///
+/// The fix is not the one-line boundary predicate the two `NotCore` passes above use, because partiality is not syntactic: deciding it needs `group_totality` under the declaration's own parameter binders, which means *typing* the registry rather than scanning it. That is the registry-versus-binding agreement `check_induct_decl` leaves to the `rec` group a declaration lowers to, and choosing how the kernel should establish it for itself is a design decision rather than a correction — so this test is left failing rather than paired with a guess.
+///
+/// The control is [`a_real_proof_in_a_registry_index_target_is_accepted`], the same declaration aimed at a genuine `qed()`: whatever establishes the target must refuse a diverging proof without refusing an ordinary one.
+#[test]
+fn a_partial_proof_in_a_registry_index_target_is_refused() {
+    let verdicts = recheck_module_verdicts(&indexed_by_proof(true), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.error.to_string().contains("does not descend")),
+        "the kernel certified a non-descending proof standing as a constructor's index target: {verdicts:?}",
+    );
+}
+
+/// The control for the fixture above: an ordinary proof in the same position stays accepted.
+#[test]
+fn a_real_proof_in_a_registry_index_target_is_accepted() {
+    assert_eq!(
+        recheck_module_verdicts(&indexed_by_proof(false), 1_000_000),
+        Vec::new(),
+        "a constructor aimed at a genuine proof was refused",
+    );
+}
+
+/// A family indexed by the proposition `Held`, whose one constructor states its index either as a diverging `rec` or as `Held/qed()`.
+fn indexed_by_proof(diverging: bool) -> Module {
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let witness = Free::local(900, Some("p"));
+
+    let target = match diverging {
+        true => Term::rec(
+            [(witness.clone(), held.clone(), Term::free_var(&witness))],
+            Term::free_var(&witness),
+        ),
+        false => Term::variant(
+            held_name.clone(),
+            Vec::<Term>::new(),
+            "qed",
+            Vec::<Term>::new(),
+        ),
+    };
+
+    let family = Global::Authored(Qualifier::from(["Indexed"]));
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        params: Telescope::done(()),
+        indices: Telescope::build([(Free::local(901, Some("i")), held.clone())], ()),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::done(Term::induct_type(
+                    family.clone(),
+                    Vec::<Term>::new(),
+                    [target],
+                )),
+                plicities: Vec::new(),
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let qed = (
+        Atom::from("qed"),
+        InductParam {
+            telescope: Telescope::done(held),
+            plicities: Vec::new(),
+        },
+    );
+
+    Module {
+        items: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(held_name, proposition(vec![qed])), (family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
