@@ -146,11 +146,12 @@ pub fn check_rec_group(
 /// 2. It carries no elaboration residue: no `Metavar` node, no level holding an unsolved universe metavariable — `induct_residue`.
 /// 3. Its `result_sort` is a *literal* sort — `check_declared_sort`. See the note below on why literal, and not merely something that reduces to one.
 /// 4. Every domain of its arity is a type — `check_arity`, which reaches the parameters as well as the indices, and so covers a family with no constructors at all.
-/// 5. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
-/// 6. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
-/// 7. Every constructor states as many index targets as the family declares indices — `check_constructed`.
-/// 8. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
-/// 9. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](crate::positivity_vectors) rather than per entry.
+/// 5. No two constructors share a tag — `check_distinct_tags`. Every lookup resolves a tag by first match, so this is what makes `constructors` a set of constructors rather than a list in which some are unreachable.
+/// 6. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
+/// 7. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
+/// 8. Every constructor states as many index targets as the family declares indices — `check_constructed`.
+/// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
+/// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](crate::positivity_vectors) rather than per entry.
 ///
 /// # What is unspellable rather than checked
 ///
@@ -158,15 +159,15 @@ pub fn check_rec_group(
 ///
 /// # The one repetition kept, and why
 ///
-/// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 6 is what makes it an enforced agreement rather than an assumed one.
+/// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 7 is what makes it an enforced agreement rather than an assumed one.
 ///
 /// # Not established here
 ///
-/// Two things, found by reading every consumer of a registry entry against the clauses above rather than by probing. Each is recorded as a gap rather than assumed, and neither has a witness yet. A third — that `result_sort` is a literal sort — was on this list, was probed, and is clause 3 above.
+/// One thing, found by reading every consumer of a registry entry against the clauses above rather than by probing, and recorded as a gap rather than assumed.
 ///
-/// That `plicities` has one entry per telescope binder. `payload_plicities` and the arm rule zip it against the signature, so a short or long vector misaligns a constructor's calling convention against its own payload.
+/// That `plicities` has one entry per telescope binder. Its only consumer is `curios-elab`'s `payload_plicities`, which slices at the parameter count, so a short vector is a panic in the elaborator rather than a judgment this kernel makes — fail-closed, and outside what a clause here would establish.
 ///
-/// That constructor tags are distinct. `constructor` finds the *first* match while `constructor_order` yields every entry, so a duplicate tag would have `infer` type a `Variant` against one signature while erasure assigns it the other's runtime index.
+/// The other two are gone. That `result_sort` is a literal sort is clause 3, and that constructor tags are distinct is clause 5; each was probed, and the second was found admitting a term.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
@@ -174,6 +175,7 @@ pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Resul
     kernel.assume_universes(&declaration.universe_context);
 
     check_declared_sort(&declaration.result_sort)?;
+    check_distinct_tags(declaration)?;
     check_arity(kernel, declaration)?;
 
     for constructor in declaration.signatures() {
@@ -199,6 +201,26 @@ fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {
         Subterm::Prop | Subterm::Type(_) => Ok(()),
         _ => Err(KernelError::NotASort(result_sort.clone())),
     }
+}
+
+/// No two constructors share a tag.
+///
+/// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match* — [`InductDecl::constructor`], and `constructor_index` with it. So a repeat does not add a constructor, it hides one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage is where that showed: asked whether each constructor is impossible at the scrutinee's indices, it resolved both entries to the first and reported a family empty at an index the declaration's own second entry constructs at — certifying a refutation of a constructor the same declaration states.
+///
+/// Nothing exploited it, because construction resolves by first match too, so the shadowed entry has no inhabitant to hand that refutation. This clause is what replaces that accident: the elimination rule now ranges over constructors that are distinct, rather than being sound because an unrelated rule happens to be lossy in the same direction.
+fn check_distinct_tags(declaration: &InductDecl) -> Result<(), KernelError> {
+    // Scanned rather than collected into a set, for the reason [`InductDecl::constructor`] gives for scanning: constructor counts are small enough that the set costs more than it saves.
+    for (position, tag) in declaration.constructor_order().enumerate() {
+        if declaration
+            .constructor_order()
+            .take(position)
+            .any(|earlier| earlier == tag)
+        {
+            return Err(KernelError::RepeatedTag(tag.clone()));
+        }
+    }
+
+    Ok(())
 }
 
 /// Every domain of the declaration's arity is a type: its parameters, and the index telescope they terminate in.
@@ -290,9 +312,9 @@ fn check_constructed(
     Ok(())
 }
 
-/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 5), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
+/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 6), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
 ///
-/// A `struct` has no constructors and no index targets, so clauses 6 through 8 have nothing to range over — and clause 6 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
+/// A `struct` has no constructors and no index targets, so clauses 5 through 9 have nothing to range over — and clause 7 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
 pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);

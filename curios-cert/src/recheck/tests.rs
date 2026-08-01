@@ -1024,3 +1024,125 @@ fn relevant_index_control() -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A family that declares one tag twice, where the shadowed entry is the one a coverage decision is about.
+///
+/// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match*. So a repeat hides a constructor instead of adding one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage is where that showed. `Held(t : Two)` below declares `mk() : (Two/a())` and then `mk() : (Two/b())`; asked whether each constructor is impossible at `Two/b()`, the rule resolved both entries to the first, compared `Two/a()` against `Two/b()` twice, and reported the family empty at an index its own second entry constructs at.
+///
+/// What it certified is `vacuous : (x : Held(Two/b())) -> False` — a refutation of a constructor the same declaration states. While the hole was open `recheck_module_verdicts` returned **zero refusals** for exactly that module. It was not a closed inhabitant of `False`, and the paired experiment is what established that: adding `let h : Held(Two/b()) = Held/mk()` produced one verdict and one only, a `Mismatch` of `Held(Two/a())` against `Held(Two/b())` — construction resolves by first match too, so the shadowed entry has no inhabitant to hand the refutation. The elimination rule was therefore sound because an unrelated rule happened to be lossy in the same direction, which is the dependency this clause replaces.
+///
+/// No `.crs` file reaches it: `curios-text` refuses both spellings with `duplicate public declaration: mk`, whether or not the representation is public. That is the `Expect::NotAsked` shape — the elaborator is the stricter of the two, so the certifier's copy of the rule is unreachable from the corpus — and it is why this belongs here rather than in `curios/src/tests`.
+///
+/// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a clause that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
+#[test]
+fn a_family_that_declares_one_tag_twice_is_refused() {
+    let verdicts = recheck_module_verdicts(&shadowed_constructor(["mk", "mk"]), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::RepeatedTag(_))),
+        "the kernel certified a refutation of a constructor the declaration states: {verdicts:?}",
+    );
+}
+
+#[test]
+fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
+    let verdicts = recheck_module_verdicts(&shadowed_constructor(["mk", "mk2"]), 1_000_000);
+
+    assert!(
+        verdicts.is_empty(),
+        "an elimination whose every constructor genuinely clashes was refused: {verdicts:?}",
+    );
+}
+
+/// `Two : Type 0` with constructors `a` and `b`, `Held(t : Two)` whose two constructors both target `Two/a()` under the given tags, and `vacuous : (x : Held(Two/b())) -> False` eliminating with no arms at all.
+///
+/// Both constructors target `Two/a()`, so at `Two/b()` every one of them is genuinely impossible and the elimination is legal — *when the tags are distinct*. Giving them the same tag changes nothing about the targets and everything about which entry the coverage rule reads.
+fn shadowed_constructor(tags: [&str; 2]) -> Module {
+    let two_name = Global::Authored(Qualifier::from(["Two"]));
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let two = Term::induct_type(two_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let at = |tag: &str| {
+        Term::variant(
+            two_name.clone(),
+            Vec::<Term>::new(),
+            tag,
+            Vec::<Term>::new(),
+        )
+    };
+    let nullary = |tag: &str, targets: Vec<Term>| {
+        (
+            Atom::from(tag),
+            InductParam {
+                telescope: Telescope::done(targets),
+                plicities: Vec::new(),
+            },
+        )
+    };
+
+    let two_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let held_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build([(Free::local(800, Some("t")), two)], ())),
+        constructors: vec![
+            nullary(tags[0], vec![at("a")]),
+            nullary(tags[1], vec![at("a")]),
+        ],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let at_b = Term::induct_type(held_name, Vec::<Term>::new(), [at("b")]);
+    let vacuous_name = Global::Authored(Qualifier::from(["vacuous"]));
+    let subject = Free::local(801, Some("x"));
+    let vacuous = authored(
+        &vacuous_name,
+        Term::func_type([(subject.clone(), at_b.clone())], false_type.clone()),
+        Term::func(
+            [(subject.clone(), at_b)],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&subject),
+                Scope::close(
+                    Many(2),
+                    &[&Free::local(802, Some("t")), &Free::local(803, Some("s"))],
+                    false_type,
+                ),
+                Vec::<(Atom, Vec<(Plicity, Free)>, Term)>::new(),
+                None,
+            ),
+        ),
+    );
+
+    Module {
+        items: vec![vacuous],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([
+            (two_name, two_decl),
+            (Global::Authored(Qualifier::from(["Held"])), held_decl),
+            (false_name, proposition(Vec::new())),
+        ]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}

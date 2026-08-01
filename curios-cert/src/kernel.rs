@@ -66,6 +66,8 @@ pub enum KernelError {
     LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator, or a polymorphic numeric literal — reached the kernel. The term was handed over before elaboration finished with it.
     NotCore(Term),
+    /// A family that declares one constructor tag more than once. Every lookup resolves a tag by first match, so a repeat hides a constructor rather than adding one — and the coverage rule then answers about the first entry once per entry, reporting a family empty at an index its own later entry constructs at.
+    RepeatedTag(Atom),
     /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
     /// A recursive member that is a proof or a type, in a group whose recursion does not descend. Assuming such a member at its declared type is what certifies `rec f : False = f` — erasure deletes proofs and types wholesale, so a non-descending one proves anything. A non-descending *value* recursion is not an error: `rec` is general recursion by design, and a program that loops is only a program that loops.
@@ -136,6 +138,12 @@ impl fmt::Display for KernelError {
             ),
             KernelError::NotCore(term) => {
                 write!(formatter, "`{term}` is elaboration-only syntax")
+            }
+            KernelError::RepeatedTag(tag) => {
+                write!(
+                    formatter,
+                    "constructor tag `{tag}` is declared more than once"
+                )
             }
             KernelError::MissingArm { family, tag } => write!(
                 formatter,
