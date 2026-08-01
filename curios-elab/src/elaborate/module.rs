@@ -4,8 +4,8 @@ use {
         check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
         check_type_totality, check_written_type_totality, finish_deferred_witnesses, is_prop,
         record_definition_totality, record_totality, recorded_totality, reduce_with,
-        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_field_telescope,
-        zonk_module, zonk_solved_term_metas,
+        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module,
+        zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     curios_cert::group_totality,
@@ -64,6 +64,34 @@ fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
     found.borrow_mut().take()
 }
 
+/// [`add_declaration_sizing`] for a nested arity: the parameters, then the telescope they terminate in, sized inside the parameters' own scope. Only the parameters carry the extra rung.
+fn add_arity_sizing(
+    context: &mut Context,
+    declaration: &Global,
+    arity: &Telescope<Telescope<()>>,
+    uniform_count: usize,
+    result_sort: &Term,
+    kind: UniverseConstraintKind,
+) -> Result<(), Error> {
+    let Subterm::Type(result_level) = &*reduce_with(context, result_sort)? else {
+        return Ok(());
+    };
+    let result_level = result_level.clone();
+
+    context.with_frame(|context| {
+        let terminal = telescope_sizing(
+            context,
+            declaration,
+            arity,
+            uniform_count,
+            &result_level,
+            &kind,
+        )?;
+        telescope_sizing(context, declaration, &terminal, 0, &result_level, &kind)?;
+        Ok(())
+    })
+}
+
 /// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
@@ -84,6 +112,53 @@ fn check_telescope_entries<B: Bound>(
     }
 }
 
+/// Record what a telescope's domains impose on `result_level`, in the caller's frame, and hand back the terminal opened under the binders assumed for them. The first `uniform_count` domains are parameters and get one rung of slack; the rest must fit under the result level itself. Split out of [`add_declaration_sizing`] so a nested arity can size its terminal inside its parameters' own scope.
+fn telescope_sizing<B: Bound>(
+    context: &mut Context,
+    declaration: &Global,
+    telescope: &Telescope<B>,
+    uniform_count: usize,
+    result_level: &Level,
+    kind: &UniverseConstraintKind,
+) -> Result<B, Error> {
+    let mut position = 0;
+    let mut telescope = telescope.clone();
+    loop {
+        let (domain, rest) = match telescope {
+            Telescope::Done(terminal) => break Ok(*terminal),
+            Telescope::Cons(domain, rest) => (domain, rest),
+        };
+
+        let domain_sort = sort_term(context, &domain)?;
+        let domain_sort = reduce_with(context, &domain_sort)?;
+        if let Subterm::Type(domain_level) = &*domain_sort {
+            let upper = if position < uniform_count {
+                result_level.checked_add(1).map_err(Error::from)?
+            } else {
+                result_level.clone()
+            };
+            context
+                .universes_mut()
+                .add_leq(
+                    domain_level.clone(),
+                    upper,
+                    UniverseConstraintOrigin {
+                        span: domain.span(),
+                        kind: kind.clone(),
+                        declaration: Some(declaration.to_string()),
+                        binder: rest.first_hint().map(str::to_string),
+                    },
+                )
+                .map_err(Error::from)?;
+        }
+
+        let label = context.fresh(rest.first_hint());
+        context.assume(&label, &domain);
+        telescope = rest.open(&[&Term::free_var(&label)]);
+        position += 1;
+    }
+}
+
 fn add_declaration_sizing<B: Bound>(
     context: &mut Context,
     declaration: &Global,
@@ -98,37 +173,14 @@ fn add_declaration_sizing<B: Bound>(
     let result_level = result_level.clone();
 
     context.with_frame(|context| {
-        let mut position = 0;
-        let mut telescope = telescope.clone();
-        while let Telescope::Cons(domain, rest) = telescope {
-            let domain_sort = sort_term(context, &domain)?;
-            let domain_sort = reduce_with(context, &domain_sort)?;
-            if let Subterm::Type(domain_level) = &*domain_sort {
-                let upper = if position < uniform_count {
-                    result_level.checked_add(1).map_err(Error::from)?
-                } else {
-                    result_level.clone()
-                };
-                context
-                    .universes_mut()
-                    .add_leq(
-                        domain_level.clone(),
-                        upper,
-                        UniverseConstraintOrigin {
-                            span: domain.span(),
-                            kind: kind.clone(),
-                            declaration: Some(declaration.to_string()),
-                            binder: rest.first_hint().map(str::to_string),
-                        },
-                    )
-                    .map_err(Error::from)?;
-            }
-
-            let label = context.fresh(rest.first_hint());
-            context.assume(&label, &domain);
-            telescope = rest.open(&[&Term::free_var(&label)]);
-            position += 1;
-        }
+        telescope_sizing(
+            context,
+            declaration,
+            telescope,
+            uniform_count,
+            &result_level,
+            &kind,
+        )?;
         Ok(())
     })
 }
@@ -265,54 +317,69 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     // Obligation (T)'s early net, on the one written type position that rides on no definition's type. Every other declaration position reaches it through some `Definition`: a parameter through the type former's own type, an `induct` payload through its constructor wrapper's, a `concept` method through the method wrapper's. A field is projected rather than constructed, so no wrapper names it, and until this ran the field type below was elaborated with nothing having looked at it — a productive `Shape(inf)` then unfolded until the stack died.
     //
     // Read off the *lowered* telescope, before `check_telescope_entries` touches it, which is the whole point of an early net. Entries stay closed under the binders before them; only globals matter here, so nothing needs opening.
-    let mut written = &struct_decl.fields;
+    let mut written = &struct_decl.arity;
+    let fields = loop {
+        match written {
+            Telescope::Cons(entry, rest) => {
+                check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
+                written = rest.body();
+            }
+            Telescope::Done(fields) => break &**fields,
+        }
+    };
+    let mut written = fields;
     while let Telescope::Cons(entry, rest) = written {
         check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
         written = rest.body();
     }
 
-    let n_params = struct_decl.params.len();
-    let labels = struct_decl
-        .fields
-        .labels()
-        .iter()
-        .map(|label| label.to_string())
-        .collect::<Vec<_>>();
+    let owned = |labels: Vec<&str>| {
+        labels
+            .iter()
+            .map(|label| label.to_string())
+            .collect::<Vec<_>>()
+    };
+    let param_labels = owned(struct_decl.arity.labels());
+    let field_labels = owned(struct_decl.fields().labels());
 
     let declared_prop = matches!(
         &*reduce_with(context, &struct_decl.result_sort)?,
         Subterm::Prop
     );
 
-    let (entries, ()) = context.with_frame(|context| -> Result<_, Error> {
-        let (entries, ()) = check_telescope_entries(context, struct_decl.fields.clone())?;
+    // Walk the parameters, then the field telescope they terminate in, checking each entry type against `Type` under the binders before it.
+    let (param_entries, field_entries) = context.with_frame(|context| -> Result<_, Error> {
+        let (params, inner) = check_telescope_entries(context, struct_decl.arity.clone())?;
+        let (fields, ()) = check_telescope_entries(context, inner)?;
 
         // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
         if declared_prop {
-            for (i, (_, ty)) in entries[n_params..].iter().enumerate() {
+            for ((_, ty), label) in fields.iter().zip(&field_labels) {
                 if !is_prop(context, ty)? {
-                    let field = labels[n_params + i].clone();
                     return Err(Error::informative_prop_struct(
                         name.symbol(),
-                        field,
+                        label.clone(),
                         ty.clone(),
                     ));
                 }
             }
         }
 
-        Ok((entries, ()))
+        Ok((params, fields))
     })?;
 
-    let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
-    let params =
-        Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
-    let fields = Telescope::build(entries, ()).relabel(&label_refs);
-    add_declaration_sizing(
+    let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let field_refs = field_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let arity = Telescope::build(
+        param_entries,
+        Telescope::build(field_entries, ()).relabel(&field_refs),
+    )
+    .relabel(&param_refs);
+    add_arity_sizing(
         context,
         name,
-        &fields,
-        n_params,
+        &arity,
+        struct_decl.param_count(),
         &struct_decl.result_sort,
         UniverseConstraintKind::FieldSizing,
     )?;
@@ -321,8 +388,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         name,
         StructDecl {
             universe_context: struct_decl.universe_context,
-            params,
-            fields,
+            arity,
             result_sort: struct_decl.result_sort,
             module: struct_decl.module,
             root: struct_decl.root,
@@ -441,15 +507,13 @@ fn finalize_definition(
         return Ok((universe_context, type_, body));
     }
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
-        let params = zonk_field_telescope(context, &struct_decl.params)?;
-        let fields = zonk_field_telescope(context, &struct_decl.fields)?;
+        let arity = zonk_arity(context, &struct_decl.arity)?;
         let result_sort = zonk(context, &struct_decl.result_sort)?;
         context.update_struct(
             name,
             StructDecl {
                 universe_context: struct_decl.universe_context,
-                params,
-                fields,
+                arity,
                 result_sort,
                 module: struct_decl.module,
                 root: struct_decl.root,
@@ -476,8 +540,7 @@ fn finalize_definition(
     let mut interface = context.universe_metas_in(&type_);
     interface.retain(|meta| !determined.contains(meta));
     if let Some(struct_decl) = context.struct_decl(name) {
-        interface.extend(universe_metas(&struct_decl.params));
-        interface.extend(universe_metas(&struct_decl.fields));
+        interface.extend(universe_metas(&struct_decl.arity));
         interface.extend(struct_decl.result_sort.universe_metas());
     }
     if let Some(concept) = context.concept(name) {
@@ -505,14 +568,8 @@ fn finalize_definition(
             name,
             StructDecl {
                 universe_context: universe_context.clone(),
-                params: stamp_declaration_instance(
-                    &context.zonk_universe_levels(&struct_decl.params)?,
-                    &owned,
-                    free,
-                    &levels,
-                ),
-                fields: stamp_declaration_instance(
-                    &context.zonk_universe_levels(&struct_decl.fields)?,
+                arity: stamp_declaration_instance(
+                    &context.zonk_universe_levels(&struct_decl.arity)?,
                     &owned,
                     free,
                     &levels,

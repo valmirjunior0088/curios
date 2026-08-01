@@ -181,8 +181,7 @@ fn project_module(module: &Module) -> Module {
                     name.clone(),
                     StructDecl {
                         universe_context: Default::default(),
-                        params: project_erased_universes(&declaration.params),
-                        fields: project_erased_universes(&declaration.fields),
+                        arity: project_erased_universes(&declaration.arity),
                         result_sort: project_erased_universes(&declaration.result_sort),
                         module: declaration.module.clone(),
                         root: declaration.root,

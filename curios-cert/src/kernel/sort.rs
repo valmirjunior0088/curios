@@ -330,17 +330,15 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     let Some(declaration) = kernel.struct_decl(&name) else {
                         return Ok(None);
                     };
-                    if declaration.fields.len() < params.len() {
+                    if declaration.param_count() != params.len() {
                         return Ok(None);
                     }
 
-                    let fields = instantiate_universe_levels_scoped(
-                        &declaration.fields.clone(),
-                        &universes,
-                    )?;
+                    let arity =
+                        instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
 
-                    Ok(fields
-                        .open_params(&params)
+                    Ok(arity
+                        .open(&params.iter().collect::<Vec<_>>())
                         .nth(*index, |j| Term::proj(head.clone(), j)))
                 }
                 _ => Ok(None),

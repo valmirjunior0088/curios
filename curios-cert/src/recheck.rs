@@ -166,8 +166,7 @@ fn struct_metavar(declaration: &StructDecl) -> Option<MetaId> {
             true
         };
 
-        let _ = declaration.params.any_metavar(&mut note)
-            || declaration.fields.any_metavar(&mut note)
+        let _ = declaration.arity.any_metavar(&mut note)
             || declaration.result_sort.any_metavar(&mut note);
     }
 
@@ -201,8 +200,7 @@ fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
 fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
     struct_metavar(declaration)
         .map(|id| KernelError::NotCore(Term::metavar(id)))
-        .or_else(|| universe_residue(&declaration.params))
-        .or_else(|| universe_residue(&declaration.fields))
+        .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
 }
 

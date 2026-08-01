@@ -44,7 +44,7 @@ impl Lowering {
             .cloned()
             .expect("erase: a registered struct");
         let entries = context.with_frame(|context| {
-            let params = open_opaque(context, struct_decl.params.clone());
+            let params = open_opaque(context, struct_decl.arity.clone());
             signature_entries(context, struct_decl.fields_at(&params))
         })?;
         let mask: Vec<bool> = entries.iter().map(|(_, erased)| *erased).collect();

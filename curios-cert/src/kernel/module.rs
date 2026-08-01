@@ -280,19 +280,28 @@ fn check_constructed(
 
 /// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), the size condition over its field telescope (clause 4), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
 ///
-/// A `struct` has no constructors and no index targets, so clauses 5 through 7 have nothing to range over. It does still carry its parameters twice — once in `params` and again as the prefix of `fields` — which is the redundancy [`InductDecl::arity`] no longer has. Giving it the same nesting is pending, and until then the two declaration kinds do not encode their parameters the same way.
+/// A `struct` has no constructors and no index targets, so clauses 5 through 7 have nothing to range over. Clause 3 is likewise vacuous: a structure's fields are the terminal of its own `arity`, so there is no separately-stored parameter prefix that could disagree with it — the same nesting, and the same reason, as [`InductDecl::arity`].
 pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
     check_non_informative(kernel, declaration)?;
 
+    // The parameters, then the fields they terminate in — the second walk runs inside the first's scope, so a field domain sees every parameter. Parameters get the extra rung of slack; fields do not.
     check_signature(
         kernel,
-        &declaration.fields,
-        declaration.params.len(),
+        &declaration.arity,
+        declaration.param_count(),
         &declaration.result_sort,
-        |_, _, _| Ok(()),
+        |kernel, _, fields| {
+            check_signature(
+                kernel,
+                fields,
+                0,
+                &declaration.result_sort,
+                |_, _, _| Ok(()),
+            )
+        },
     )
 }
 
@@ -311,11 +320,22 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
 
     let mark = kernel.mark();
     let outcome = (|| {
-        let mut telescope = declaration.fields.clone();
-        let mut position = 0;
+        // The parameters are skipped rather than counted past: they are the arity's own binders, and the fields it terminates in are exactly the stored payload this rule is about.
+        let mut arity = declaration.arity.clone();
 
-        while let Telescope::Cons(type_, rest) = telescope {
-            if position >= declaration.params.len() && carries_information(kernel, &type_)? {
+        let mut fields = loop {
+            match arity {
+                Telescope::Cons(type_, rest) => {
+                    let binder = kernel.fresh(rest.first_hint());
+                    kernel.assume(&binder, &type_);
+                    arity = rest.open(&[&Term::free_var(&binder)]);
+                }
+                Telescope::Done(fields) => break *fields,
+            }
+        };
+
+        while let Telescope::Cons(type_, rest) = fields {
+            if carries_information(kernel, &type_)? {
                 return Err(KernelError::Informative {
                     field: Box::new(type_),
                 });
@@ -323,8 +343,7 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
 
             let binder = kernel.fresh(rest.first_hint());
             kernel.assume(&binder, &type_);
-            telescope = rest.open(&[&Term::free_var(&binder)]);
-            position += 1;
+            fields = rest.open(&[&Term::free_var(&binder)]);
         }
 
         Ok(())

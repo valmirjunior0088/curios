@@ -213,8 +213,7 @@ pub fn derived_binder_floor(module: &Module) -> usize {
     }
 
     for declaration in module.struct_decls.values() {
-        consider(declaration.params.free_vars());
-        consider(declaration.fields.free_vars());
+        consider(declaration.arity.free_vars());
         consider(declaration.result_sort.free_vars());
     }
 

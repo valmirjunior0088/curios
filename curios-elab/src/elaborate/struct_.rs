@@ -9,28 +9,26 @@ fn instantiate_struct_decl(
     struct_decl: StructDecl,
     universes: Option<&[Level]>,
 ) -> Result<(StructDecl, Vec<Level>), Error> {
-    let (fields, universes) = match universes {
+    let (arity, universes) = match universes {
         Some(universes) => (
             context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
-                &struct_decl.fields,
+                &struct_decl.arity,
                 universes,
             )?,
             universes.to_vec(),
         ),
-        None => context
-            .instantiate_universe_bound(&struct_decl.universe_context, &struct_decl.fields)?,
+        None => {
+            context.instantiate_universe_bound(&struct_decl.universe_context, &struct_decl.arity)?
+        }
     };
     let arguments = universes.clone();
-    let params =
-        instantiate_universe_levels_scoped(&struct_decl.params, &arguments).map_err(Error::from)?;
     let result_sort = instantiate_universe_levels_scoped(&struct_decl.result_sort, &arguments)
         .map_err(Error::from)?;
     Ok((
         StructDecl {
             universe_context: UniverseContext::empty(),
-            params,
-            fields,
+            arity,
             result_sort,
             module: struct_decl.module,
             root: struct_decl.root,
@@ -65,9 +63,9 @@ pub(super) fn elaborate_struct_type(
     let (struct_decl, universes) =
         instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
-    if params.is_empty() && !struct_decl.params.is_empty() {
-        let mut resolved = Vec::with_capacity(struct_decl.params.len());
-        let mut tele = struct_decl.params.clone();
+    if params.is_empty() && struct_decl.param_count() != 0 {
+        let mut resolved = Vec::with_capacity(struct_decl.param_count());
+        let mut tele = struct_decl.arity.clone();
         while let Telescope::Cons(ty, rest) = tele {
             let binder = binder_name(rest.first_hint());
             let arg = context.fresh_metavar(
@@ -87,15 +85,15 @@ pub(super) fn elaborate_struct_type(
         ));
     }
 
-    if params.len() != struct_decl.params.len() {
+    if params.len() != struct_decl.param_count() {
         return Err(Error::struct_arity_mismatch(
             name.symbol(),
-            struct_decl.params.len(),
+            struct_decl.param_count(),
             params.len(),
         ));
     }
 
-    let (elaborated, ()) = check_args_against(context, struct_decl.params, params)?;
+    let (elaborated, _fields) = check_args_against(context, struct_decl.arity, params)?;
 
     Ok((
         Term::struct_type_at(name.clone(), universes, elaborated),
@@ -179,10 +177,10 @@ pub(super) fn elaborate_struct(
     }
 
     // A written-but-wrong parameter count is an error; an *empty* list is the bare-name head, which mints one fresh metavariable per parameter.
-    if !params.is_empty() && params.len() != struct_decl.params.len() {
+    if !params.is_empty() && params.len() != struct_decl.param_count() {
         return Err(Error::struct_arity_mismatch(
             name.symbol(),
-            struct_decl.params.len(),
+            struct_decl.param_count(),
             params.len(),
         ));
     }
@@ -320,8 +318,8 @@ pub(super) fn resolve_struct_params(
     term: &Term,
 ) -> Result<Vec<Term>, Error> {
     let mut written = params.iter();
-    let mut resolved = Vec::with_capacity(struct_decl.params.len());
-    let mut tele = struct_decl.params.clone();
+    let mut resolved = Vec::with_capacity(struct_decl.param_count());
+    let mut tele = struct_decl.arity.clone();
     while let Telescope::Cons(ty, rest) = tele {
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,

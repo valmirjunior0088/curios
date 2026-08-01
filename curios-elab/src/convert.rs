@@ -176,17 +176,17 @@ pub(crate) fn synth_neutral(
                     let Some(declaration) = context.struct_decl(&name).cloned() else {
                         return Ok(None);
                     };
-                    if declaration.fields.len() < params.len() {
+                    if declaration.param_count() != params.len() {
                         return Ok(None);
                     }
-                    let fields = instantiate_bound_at(
+                    let arity = instantiate_bound_at(
                         context,
                         &declaration.universe_context,
-                        &declaration.fields,
+                        &declaration.arity,
                         &universes,
                     )?;
-                    Ok(fields
-                        .open_params(&params)
+                    Ok(arity
+                        .open(&params.iter().collect::<Vec<_>>())
                         .nth(*index, |j| Term::proj(head.clone(), j)))
                 }
                 _ => Ok(None),
@@ -935,10 +935,10 @@ impl Convert {
                 instantiate_bound_at(
                     context,
                     &struct_decl.universe_context,
-                    &struct_decl.fields,
+                    &struct_decl.arity,
                     &this.universes,
                 )?
-                .open_params(&this.params),
+                .open(&this.params.iter().collect::<Vec<_>>()),
             ),
             None => None,
         };
@@ -1233,10 +1233,10 @@ impl Convert {
                     instantiate_bound_at(
                         context,
                         &struct_decl.universe_context,
-                        &struct_decl.fields,
+                        &struct_decl.arity,
                         &universes,
                     )?
-                    .open_params(&params),
+                    .open(&params.iter().collect::<Vec<_>>()),
                 ),
                 None => None,
             },
@@ -1287,7 +1287,7 @@ impl Convert {
             Subterm::StructType(StructType { name, .. }) => {
                 let n = context
                     .struct_decl(&name)
-                    .map(|struct_decl| struct_decl.fields.len() - struct_decl.params.len());
+                    .map(|struct_decl| struct_decl.field_count());
                 let Some(n) = n else {
                     return Ok(false);
                 };

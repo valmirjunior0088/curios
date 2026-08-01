@@ -932,14 +932,13 @@ fn convert_struct_unit_field_is_irrelevant() {
             &nominal("Wrap"),
             StructDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::done(()),
-                fields: Telescope::build(
+                arity: Telescope::done(Telescope::build(
                     [
                         (x.clone(), Term::prim(Prim::NatType)),
                         (u.clone(), Term::tuple_type_unit()),
                     ],
                     (),
-                ),
+                )),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 root: RootId::Entry,
@@ -1762,19 +1761,12 @@ fn imitation_solves_against_struct_type() {
             &nominal("Pair"),
             StructDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::build(
+                arity: Telescope::build(
                     [
                         (first.clone(), Term::type_ground()),
                         (second.clone(), Term::type_ground()),
                     ],
-                    (),
-                ),
-                fields: Telescope::build(
-                    [
-                        (first.clone(), Term::type_ground()),
-                        (second.clone(), Term::type_ground()),
-                    ],
-                    (),
+                    Telescope::done(()),
                 ),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),

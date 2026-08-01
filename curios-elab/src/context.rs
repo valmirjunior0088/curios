@@ -553,8 +553,7 @@ impl Context {
         self.universes_mut()
             .instantiate_at(&struct_decl.universe_context, levels)?;
         let mut instantiated = struct_decl.clone();
-        instantiated.params = rewrite(&instantiated.params, levels)?;
-        instantiated.fields = rewrite(&instantiated.fields, levels)?;
+        instantiated.arity = rewrite(&instantiated.arity, levels)?;
         instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
         instantiated.universe_context = UniverseContext::empty();
         Ok(instantiated)

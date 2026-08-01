@@ -124,9 +124,9 @@ impl Split {
         let declaration = structs
             .get(name)
             .expect("every analyzed name is an inductive or a struct");
-        let params = binders(env, &declaration.params);
+        let params = binders(env, &declaration.arity);
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
-        let parts = labelled(env, declaration.fields.clone().open_params(&arguments))
+        let parts = labelled(env, declaration.fields_at(&arguments))
             .into_iter()
             .map(|(label, type_)| Part { label, type_ })
             .collect();

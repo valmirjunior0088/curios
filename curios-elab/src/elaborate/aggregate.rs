@@ -61,9 +61,9 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             let Some(struct_decl) = context.struct_decl(name).cloned() else {
                 return Err(Error::unknown_declaration(name.symbol()));
             };
-            let fields = context.instantiate_universe_bound_at(
+            let arity = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
-                &struct_decl.fields,
+                &struct_decl.arity,
                 universes,
             )?;
 
@@ -80,7 +80,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
                 return Err(Error::private_field(name.symbol(), field));
             }
 
-            fields.open_params(params)
+            arity.open(&params.iter().collect::<Vec<_>>())
         }
         other => return Err(Error::not_a_tuple(other.clone())),
     };

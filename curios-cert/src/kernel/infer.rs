@@ -184,13 +184,11 @@ fn infer_node(
                         .struct_decl(&name)
                         .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
                     kernel.check_instance(&declaration.universe_context, &universes)?;
-                    let fields = instantiate_universe_levels_scoped(
-                        &declaration.fields.clone(),
-                        &universes,
-                    )?;
+                    let arity =
+                        instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
 
-                    fields
-                        .open_params(&params)
+                    arity
+                        .open(&params.iter().collect::<Vec<_>>())
                         .nth(*index, |j| Term::proj(head.clone(), j))
                         .ok_or(KernelError::Arity {
                             expected: *index,
@@ -267,8 +265,8 @@ fn infer_node(
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?
                 .clone();
             kernel.check_instance(&declaration.universe_context, universes)?;
-            let telescope = instantiate_universe_levels_scoped(&declaration.fields, universes)?
-                .open_params(params);
+            let telescope = instantiate_universe_levels_scoped(&declaration.arity, universes)?
+                .open(&params.iter().collect::<Vec<_>>());
 
             if telescope.len() != fields.len() {
                 return Err(KernelError::Arity {
@@ -723,9 +721,13 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
                     .struct_decl(&name)
                     .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
                 kernel.check_instance(&declaration.universe_context, &universes)?;
-                let fields_telescope =
-                    instantiate_universe_levels_scoped(&declaration.fields.clone(), &universes)?;
-                return check_fields(kernel, fields, fields_telescope.open_params(&params));
+                let arity =
+                    instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
+                return check_fields(
+                    kernel,
+                    fields,
+                    arity.open(&params.iter().collect::<Vec<_>>()),
+                );
             }
             // Not a telescope-shaped expectation: fall through, so the mismatch keeps its ordinary inferred-versus-expected shape.
             _ => {}

@@ -79,9 +79,9 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
     }
     for (name, declaration) in &module.struct_decls {
         let site = format!("a parameter of '{name}'");
-        entries(&declaration.params, &site, &mut positions);
+        entries(&declaration.arity, &site, &mut positions);
         let site = format!("a field of '{name}'");
-        entries(&declaration.fields, &site, &mut positions);
+        entries(declaration.fields(), &site, &mut positions);
     }
 
     positions

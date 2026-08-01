@@ -232,15 +232,14 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
     let name = Global::Authored(Qualifier::from(["Bad"]));
     let declaration = StructDecl {
         universe_context: UniverseContext::empty(),
-        params: Telescope::Done(Box::new(())),
-        fields: Telescope::Cons(
+        arity: Telescope::Done(Box::new(Telescope::Cons(
             field_type,
             curios_core::Scope::close(
                 curios_core::One,
                 &[&Free::local(0, Some("value"))],
                 Telescope::Done(Box::new(())),
             ),
-        ),
+        ))),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         root: RootId::Entry,

@@ -125,8 +125,7 @@ fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<Free> {
             }
         }
         if let Some(struct_decl) = module.struct_decls.get(name) {
-            names.extend(struct_decl.params.free_vars());
-            names.extend(struct_decl.fields.free_vars());
+            names.extend(struct_decl.arity.free_vars());
         }
     }
     names

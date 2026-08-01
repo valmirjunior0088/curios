@@ -895,10 +895,9 @@ fn process_items(
                     name.clone(),
                     curios_core::StructDecl {
                         universe_context: curios_core::UniverseContext::empty(),
-                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: curios_core::Telescope::build(
-                            param_tys_unmarked.iter().cloned().chain(field_tys),
-                            (),
+                        arity: curios_core::Telescope::build(
+                            param_tys_unmarked.clone(),
+                            curios_core::Telescope::build(field_tys, ()),
                         ),
                         result_sort: result_sort.clone(),
                         module,
@@ -991,10 +990,9 @@ fn process_items(
                     name.clone(),
                     curios_core::StructDecl {
                         universe_context: curios_core::UniverseContext::empty(),
-                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: curios_core::Telescope::build(
-                            param_tys_unmarked.iter().cloned().chain(field_tys),
-                            (),
+                        arity: curios_core::Telescope::build(
+                            param_tys_unmarked.clone(),
+                            curios_core::Telescope::build(field_tys, ()),
                         ),
                         result_sort: result_sort.clone(),
                         module,
@@ -1326,13 +1324,12 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_cor
         .collect()
 }
 
-/// The external references of a struct registry entry: every free var of its parameter and field telescopes. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. primitive) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
+/// The external references of a struct registry entry: every free var of its arity — its parameter domains and the field telescope they terminate in. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. primitive) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
 fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
     struct_decl
-        .params
+        .arity
         .free_vars()
         .into_iter()
-        .chain(struct_decl.fields.free_vars())
         .filter_map(|name| name.as_global().cloned())
         .collect()
 }
@@ -1569,12 +1566,19 @@ fn audit_public_exposures(
                     )?;
                 }
             } else if let Some(struct_decl) = struct_decls.get(&nominal) {
+                // The parameter domains alone: `arity.free_vars()` would reach the fields it terminates in, and the two are audited under different rules — parameters belong to the nominal type's public face, fields to its representation.
+                let mut walk = &struct_decl.arity;
+                let mut param_dependencies = Vec::new();
+                while let curios_core::Telescope::Cons(domain, rest) = walk {
+                    param_dependencies.extend(domain.free_vars());
+                    walk = rest.body();
+                }
                 audit_dependencies(
                     &audiences,
                     &sources,
                     &exposure,
                     &item,
-                    globals(struct_decl.params.free_vars()),
+                    globals(param_dependencies),
                 )?;
 
                 if struct_decl.rep_public {
@@ -1583,7 +1587,7 @@ fn audit_public_exposures(
                         &sources,
                         &exposure,
                         &item,
-                        globals(struct_decl.fields.free_vars()),
+                        globals(struct_decl.fields().free_vars()),
                     )?;
                 }
             }

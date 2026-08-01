@@ -411,7 +411,7 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 pub(crate) enum MotiveShape<'a> {
     /// A primitive carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
     Prim(&'a Term),
-    /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices` under `open_params`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
+    /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices_at`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
     Induct {
         name: &'a Global,
         universes: &'a [Level],

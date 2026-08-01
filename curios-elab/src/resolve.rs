@@ -267,12 +267,12 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
         return Ok(Vec::new());
     };
 
-    let fields = context.instantiate_universe_bound_at(
+    let arity = context.instantiate_universe_bound_at(
         &struct_decl.universe_context,
-        &struct_decl.fields,
+        &struct_decl.arity,
         universes,
     )?;
-    let telescope = fields.open_params(params);
+    let telescope = arity.open(&params.iter().collect::<Vec<_>>());
     let mut out = Vec::with_capacity(concept.supers.len());
     for (index, _) in &concept.supers {
         let field_type = telescope
@@ -310,13 +310,13 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
                 .struct_decl(name)
                 .cloned()
                 .ok_or_else(|| Error::unknown_declaration(name.symbol()))?;
-            let fields = context.instantiate_universe_bound_at(
+            let arity = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
-                &struct_decl.fields,
+                &struct_decl.arity,
                 universes,
             )?;
-            Ok(fields
-                .open_params(params)
+            Ok(arity
+                .open(&params.iter().collect::<Vec<_>>())
                 .nth(index, |j| Term::proj(proj.head.clone(), j))
                 .expect("projection index within telescope"))
         }
