@@ -114,7 +114,7 @@ The perimeter has two halves, and they differ in how coverage is obtained. The *
 | --- | --- | --- |
 | `zonk_module` | No unsolved metavariable survives, so nothing downstream can later be solved to a partial or negatively-occurring term | auditable only |
 | `validate_universes` (inside `zonk_module`) | The accumulated level constraints are satisfiable | **probed** differentially: each definition's context put to the kernel's independent `closed`/`satisfiable` and required to agree. Its `validate_bound_universes` half remains auditable only |
-| `check_positivity` | Every `induct`/`struct` declaration is strictly positive modulo polarity | **probed** |
+| `check_positivity` | Every `induct`/`struct` declaration is strictly positive modulo polarity | **probed**, the deliberately out-of-scope obligation included: a declaration reaching itself through a type-former parameter is refused rather than assumed, and a parameter not recursed through is still admitted. The kernel reads no archived polarity vector — it analyzes the whole spliced program at `Coverage::Complete`, where an out-of-set name is `Mixed` |
 | `record_totality` + (T) | Nothing reachable from a type position is partial | **probed** (four routes) |
 | (V) | Nothing at a `Prop`-sorted type is partial | **probed** (three routes) |
 

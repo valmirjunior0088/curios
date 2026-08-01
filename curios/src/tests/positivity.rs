@@ -14,6 +14,19 @@ fn rejected(source: &str) {
     );
 }
 
+/// [`rejected`], naming the rule that must do the rejecting.
+///
+/// A bare `is_err` passes on a typo in the fixture, which is worth guarding wherever the shape under test is one a future relaxation of `occurrences` could plausibly start admitting.
+fn rejected_by(source: &str, diagnostic: &str) {
+    let (system, _io) = MockHost::builder().build();
+    let error =
+        crate::run_text(source, system).expect_err("expected the declaration to be rejected");
+    assert!(
+        error.contains(diagnostic),
+        "rejected, but not by '{diagnostic}':\n{error}",
+    );
+}
+
 // The rule most likely to be implemented wrongly, and the one that would take the whole concurrency stack with it. A nullary `() -> X` is an *empty* parameter list, so nothing flips and `X` stays strictly positive — a zero-argument function is a thunk of its result. Read as "an occurrence under an arrow is negative", this rejects `/std/Async`.
 #[test]
 fn a_nullary_arrow_codomain_is_a_strictly_positive_payload() {
@@ -206,6 +219,48 @@ fn a_negative_occurrence_of_an_unrelated_type_is_admitted() {
         end
         "#;
     assert_eq!(run(source), b"unrelated");
+}
+
+// A declaration reaching itself through a *type-former parameter* is refused, and this pins that it is refused rather than assumed.
+//
+// `curios-cert/src/positivity.rs` names this obligation deliberately out of scope: `F` is a binder with no known polarity, so `Mu` cannot be checked from its own body, and discharging it properly needs an inferred per-binder obligation in a side store. Out of scope leaves open which way the analysis falls, and only one way is safe — an unknown former must read as `Mixed`, never as `Strict`. Nothing in the corpus takes a type-former parameter on an `induct`, so nothing exercised the choice, and a later improvement to `occurrences` that taught it to see through `F(Mu(F))` would flip it silently.
+//
+// What the wrong direction costs is Curry's paradox with no recursion in sight. Admitting `Mu` lets it be instantiated at a negative former — `let Neg(X : Type) -> Type = (X) -> False` — and `Mu(Neg)`'s constructor is then `fix : ((Mu(Neg)) -> False) -> Mu(Neg)`, the negative occurrence this gate exists to forbid, spelled through a parameter instead of directly. `out(m) = match m | fix(f) => f end` and `delta(m) = out(m)(m)` give `delta(Mu/fix(delta)) : False`.
+//
+// Verified as refused rather than as a closed hole: this run found the rule already holding, and the diagnostic is asserted so the fixture cannot pass on an unrelated failure. Its control is `a_type_former_parameter_not_recursed_through_is_admitted`, which shows the refusal is about self-reference through an unknown former and not a blanket ban on higher-kinded parameters — a ban would take `/std`'s `Monad`-shaped abstractions with it.
+#[test]
+fn a_declaration_recursing_through_a_type_former_parameter_is_refused() {
+    rejected_by(
+        r#"
+        induct Mu(F : (Type) -> Type) : pub Type
+        | fix(F(Mu(F)))
+        end
+
+        /std/print("unreachable")
+        "#,
+        "is not strictly positive",
+    );
+}
+
+// The control for the fixture above: a type-former parameter is legal, and applying it is legal. What is refused there is the declaration reaching *itself* through a former whose polarity nothing knows — so the diagonal of the occurrence relation is what decides, exactly as the acceptance predicate says. `Apply` never appears inside `F(A)`, so its diagonal stays `Unused` however `F` behaves.
+#[test]
+fn a_type_former_parameter_not_recursed_through_is_admitted() {
+    let source = r#"
+        induct Apply(F : (Type) -> Type, A : Type) : pub Type
+        | wrap(F(A))
+        end
+
+        induct Box(A : Type) : pub Type
+        | put(A)
+        end
+
+        let boxed : Apply(Box, /std/Nat) = Apply/wrap(Box/put(7));
+
+        match boxed
+        | wrap(_) => /std/print("applied")
+        end
+        "#;
+    assert_eq!(run(source), b"applied");
 }
 
 // The whole reason the gate exists. `Bad` is not the initial algebra of any functor — the payload is a function *out of* `Bad` — and admitting it hands back an eliminator that inhabits `False` in four lines with no recursion.
