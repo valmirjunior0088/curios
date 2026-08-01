@@ -116,6 +116,97 @@ fn a_dispatch_that_enumerates_zero_licenses_the_decrease() {
     assert_eq!(run(source), b"ok");
 }
 
+// A `Nat` dispatch is not the only thing that can establish nonzero, and the other one had no fixture. A *boolean* arm does it too, when its scrutinee compares a tracked binder against a literal: the classifier reads the comparison, and the arm in which it holds either excludes zero or does not. `/std/Nat/to_str` descends on exactly that — the false arm of `n < 10` gives `n >= 10`, which is what licenses `to_str(n / 10)` — so the route is live throughout the corpus while the pair above probed only the dispatch route.
+//
+// Three spellings reach the same reader and all three must refuse, because each exercises a different piece of it. `n < 10` is already a primitive after elaboration, so it tests the relation table alone. `10 > n` arrives with its operands the other way round and is only readable once flipped, so it tests the flip — a flip that turned `n < 10` into `n > 10` would report nonzero for an arm that admits zero. `small(n)` is an ordinary definition, so it is readable only through the same bounded weak-head unfolding the shape reader uses, and an unfolding that lost track of which arm it was in would do the same. In every one the true arm gives `n < 10`, which admits zero, so `n - 1` is a fixed point at zero and the group does not descend.
+//
+// Read the wrong way the cost is the same as for the dispatch route and is spelled out there: a non-terminating type, type formation resting on a family that never forms, and (T) satisfied by a false premise.
+//
+// Probed rather than closed: all three already refused when this was written, and each asserts the diagnostic so none can pass on an unrelated failure. The control is `a_boolean_guard_that_excludes_zero_licenses_the_decrease`, which must keep compiling in both spellings — refusing them would take `/std/Nat/to_str` with it.
+#[test]
+fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
+    // The primitive spelling: the relation table on its own.
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat) -> Type =
+            match n < 10
+            | true => Bad(n - 1)
+            | false => {}
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+
+    // The literal first, so the guard is readable only once its operands are exchanged.
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat) -> Type =
+            match 10 > n
+            | true => Bad(n - 1)
+            | false => {}
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+
+    // Behind a definition, so the guard is readable only after unfolding.
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat, Bool};
+
+        let small(n : Nat) -> Bool = n < 10;
+
+        rec Bad(n : Nat) -> Type =
+            match small(n)
+            | true => Bad(n - 1)
+            | false => {}
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// The control for the fixture above, in both spellings the guard reader accepts. `n > 0` excludes zero whatever the literal, and `0 < n` is the same fact with its operands exchanged — so the flip is pinned in the accepting direction as well as the refusing one, which a rejection-only fixture cannot do.
+#[test]
+fn a_boolean_guard_that_excludes_zero_licenses_the_decrease() {
+    let direct = r#"
+        use /std/{Nat};
+
+        rec Good(n : Nat) -> Type =
+            match n > 0
+            | true => Good(n - 1)
+            | false => {}
+            end;
+
+        let held : Good(2) = ();
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(direct), b"ok");
+
+    let flipped = r#"
+        use /std/{Nat};
+
+        rec Good(n : Nat) -> Type =
+            match 0 < n
+            | true => Good(n - 1)
+            | false => {}
+            end;
+
+        let held : Good(2) = ();
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(flipped), b"ok");
+}
+
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
     rejected(&format!(
