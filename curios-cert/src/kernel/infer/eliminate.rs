@@ -74,17 +74,9 @@ pub(super) fn check_induct_arms(
             .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
         let mark = kernel.mark();
-        let outcome = open_payload(
-            kernel,
-            signature,
-            |kernel, binders, _payload, constructed| {
-                let Subterm::InductType(constructed) = &**constructed else {
-                    return Err(KernelError::Unclassified(constructed.clone()));
-                };
-
-                invert_indices(kernel, &family.indices, &constructed.indices, binders)
-            },
-        );
+        let outcome = open_payload(kernel, signature, |kernel, binders, _payload, targets| {
+            invert_indices(kernel, &family.indices, targets, binders)
+        });
         kernel.retract(mark);
 
         if !matches!(outcome?, Invert::Impossible) {
@@ -120,55 +112,46 @@ fn check_arm(
     }
 
     let mark = kernel.mark();
-    let outcome = open_payload(
-        kernel,
-        signature,
-        |kernel, binders, payload, constructed| {
-            // The constructed type's indices are this case's targets, with the payload binders substituted in — which is what makes `Vec/nil`'s arm check at length `0` and `Vec/cons`'s at `succ(n)`.
-            let Subterm::InductType(constructed) = &**constructed else {
-                return Err(KernelError::Unclassified(constructed.clone()));
-            };
+    let outcome = open_payload(kernel, signature, |kernel, binders, payload, targets| {
+        // The forced equations of this case, as one substitution. An unreachable arm (a definite clash) is checked as written, exactly as the elaborator checks one.
+        let mut solutions = specialize(kernel, family, targets, binders)?;
 
-            // The forced equations of this case, as one substitution. An unreachable arm (a definite clash) is checked as written, exactly as the elaborator checks one.
-            let mut solutions = specialize(kernel, family, &constructed.indices, binders)?;
+        // The value this arm's scrutinee is: the constructor at its payload.
+        let value: Term = Subterm::Variant(Variant {
+            name: family.name.clone(),
+            universes: family.universes.clone(),
+            params: family.params.clone(),
+            tag: tag.clone(),
+            payload: payload.to_vec(),
+        })
+        .into();
 
-            // The value this arm's scrutinee is: the constructor at its payload.
-            let value: Term = Subterm::Variant(Variant {
-                name: family.name.clone(),
-                universes: family.universes.clone(),
-                params: family.params.clone(),
-                tag: tag.clone(),
-                payload: payload.to_vec(),
-            })
-            .into();
+        // A variable scrutinee is this case's value within the arm — the zero-index instance of the same equations. Any other scrutinee stands as a case equation the reducer consults.
+        if let Subterm::Var(var) = &**scrutinee
+            && var.as_bound().is_none()
+            && kernel.local_type(var.unwrap()).is_some()
+        {
+            let solved = substitute(&value, &solutions);
+            solutions.push((var.unwrap().clone(), solved));
+        } else {
+            let stuck = kernel
+                .reduce(scrutinee.clone())
+                .unwrap_or_else(|_| scrutinee.clone());
+            kernel.refine(stuck, substitute(&value, &solutions));
+        }
 
-            // A variable scrutinee is this case's value within the arm — the zero-index instance of the same equations. Any other scrutinee stands as a case equation the reducer consults.
-            if let Subterm::Var(var) = &**scrutinee
-                && var.as_bound().is_none()
-                && kernel.local_type(var.unwrap()).is_some()
-            {
-                let solved = substitute(&value, &solutions);
-                solutions.push((var.unwrap().clone(), solved));
-            } else {
-                let stuck = kernel
-                    .reduce(scrutinee.clone())
-                    .unwrap_or_else(|_| scrutinee.clone());
-                kernel.refine(stuck, substitute(&value, &solutions));
-            }
+        let refs = payload.iter().collect::<Vec<_>>();
+        let body = substitute(&arm.open(&refs), &solutions);
 
-            let refs = payload.iter().collect::<Vec<_>>();
-            let body = substitute(&arm.open(&refs), &solutions);
+        let mut arguments = targets.clone();
+        arguments.push(value);
+        let refs = arguments.iter().collect::<Vec<_>>();
+        let expected = substitute(&motive.open(&refs), &solutions);
 
-            let mut arguments = constructed.indices.clone();
-            arguments.push(value);
-            let refs = arguments.iter().collect::<Vec<_>>();
-            let expected = substitute(&motive.open(&refs), &solutions);
+        shadow(kernel, &solutions);
 
-            shadow(kernel, &solutions);
-
-            check(kernel, &body, &expected)
-        },
-    );
+        check(kernel, &body, &expected)
+    });
     kernel.retract(mark);
 
     outcome
@@ -284,10 +267,10 @@ pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
 }
 
 /// Open a constructor signature's payload binders into scope, hand the binder names, the occurrences, and the constructed terminal to `body`.
-fn open_payload<T>(
+fn open_payload<T, B: Bound>(
     kernel: &mut Kernel,
-    signature: Telescope<Term>,
-    body: impl FnOnce(&mut Kernel, &[Free], &[Term], &Term) -> Result<T, KernelError>,
+    signature: Telescope<B>,
+    body: impl FnOnce(&mut Kernel, &[Free], &[Term], &B) -> Result<T, KernelError>,
 ) -> Result<T, KernelError> {
     let mut signature = signature;
     let mut binders = Vec::new();
@@ -352,37 +335,29 @@ fn guard_large_elimination(
                 .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
             let mark = kernel.mark();
-            let outcome = open_payload(
-                kernel,
-                signature,
-                |kernel, _binders, payload, constructed| {
-                    let Subterm::InductType(constructed) = &**constructed else {
-                        return Ok(false);
+            let outcome = open_payload(kernel, signature, |kernel, _binders, payload, targets| {
+                let determined = pinned_by_targets(targets);
+
+                for component in payload {
+                    let Subterm::Var(var) = &**component else {
+                        continue;
                     };
+                    let name = var.unwrap();
 
-                    let determined = pinned_by_targets(&constructed.indices);
-
-                    for component in payload {
-                        let Subterm::Var(var) = &**component else {
-                            continue;
-                        };
-                        let name = var.unwrap();
-
-                        if determined.contains(name) {
-                            continue;
-                        }
-                        // A component that is itself a proof carries no information a relevant result could depend on: irrelevance makes any two of them interchangeable. A *type*-valued component does not qualify, however completely erasure deletes it — see `carries_information`.
-                        let type_ = infer(kernel, component)?;
-                        if !carries_information(kernel, &type_)? {
-                            continue;
-                        }
-
-                        return Ok(false);
+                    if determined.contains(name) {
+                        continue;
+                    }
+                    // A component that is itself a proof carries no information a relevant result could depend on: irrelevance makes any two of them interchangeable. A *type*-valued component does not qualify, however completely erasure deletes it — see `carries_information`.
+                    let type_ = infer(kernel, component)?;
+                    if !carries_information(kernel, &type_)? {
+                        continue;
                     }
 
-                    Ok(true)
-                },
-            );
+                    return Ok(false);
+                }
+
+                Ok(true)
+            });
             kernel.retract(mark);
 
             match outcome? {

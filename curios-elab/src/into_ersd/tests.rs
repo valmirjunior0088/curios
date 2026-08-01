@@ -410,7 +410,7 @@ fn opt_induct() -> InductDecl {
             (
                 Atom::from("none"),
                 InductParam {
-                    telescope: Telescope::done(opt_type()),
+                    telescope: Telescope::done(Vec::new()),
                     plicities: vec![],
                 },
             ),
@@ -419,7 +419,7 @@ fn opt_induct() -> InductDecl {
                 InductParam {
                     telescope: Telescope::build(
                         [(x.clone(), Term::prim(Prim::NatType))],
-                        opt_type(),
+                        Vec::new(),
                     ),
                     plicities: vec![Plicity::Explicit],
                 },

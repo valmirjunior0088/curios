@@ -236,10 +236,16 @@ pub(super) fn elaborate_variant(
         ));
     }
 
-    let (elaborated, output) = check_args_against(context, signature, &args)?;
+    let (elaborated, targets) = check_args_against(context, signature, &args)?;
 
+    // The constructed type, rebuilt from the targets the signature states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
     let output = stamp_declaration_instance(
-        &output,
+        &Term::induct_type_at(
+            name.clone(),
+            universes.clone(),
+            elaborated[..params.len()].iter().cloned(),
+            targets,
+        ),
         &BTreeSet::from([name.clone()]),
         SelfReference::Free,
         &universes,

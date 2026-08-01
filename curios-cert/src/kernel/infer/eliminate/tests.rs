@@ -57,13 +57,13 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec
     let entries = constructors
         .into_iter()
         .map(|case| {
-            let constructed = Term::induct_type(family.clone(), Vec::<Term>::new(), [case.index]);
+            let targets = vec![case.index];
             let (telescope, plicities) = match case.payload {
                 Some((field, type_)) => (
-                    Telescope::build([(field, type_)], constructed),
+                    Telescope::build([(field, type_)], targets),
                     vec![Plicity::Explicit],
                 ),
-                None => (Telescope::done(constructed), Vec::new()),
+                None => (Telescope::done(targets), Vec::new()),
             };
 
             (

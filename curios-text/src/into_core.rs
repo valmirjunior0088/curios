@@ -651,13 +651,10 @@ fn process_items(
                                         .collect::<Result<Vec<_>, Error>>()
                                 })?;
 
+                                // The signature terminates in the index targets alone: the family and its parameters are fixed by the declaration, so a terminal carries nothing else.
                                 let telescope = curios_core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
-                                    curios_core::Term::induct_type(
-                                        name.clone(),
-                                        param_vars.clone(),
-                                        target,
-                                    ),
+                                    target,
                                 );
 
                                 // The value constructor's calling convention: every leading declaration parameter is implicit, each payload keeps its declared mark — the same source `ctor_type` uses.

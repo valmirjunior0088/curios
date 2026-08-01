@@ -618,7 +618,7 @@ impl Lowering {
         context: &mut Context,
         m: &InductMatch<'_>,
         (tag, scope): (&Atom, &Scope<Many>),
-        telescope: Telescope<Term>,
+        telescope: Telescope<Vec<Term>>,
         mask: &[bool],
         constructor: curios_ersd::ConstructorId,
     ) -> Result<curios_ersd::VariantArm, Error> {
@@ -718,7 +718,7 @@ fn refine_arm(
     tag: &Atom,
     labels: &[Free],
     vars: &[Term],
-    telescope: Telescope<Term>,
+    telescope: Telescope<Vec<Term>>,
 ) -> Result<Term, Error> {
     let mut telescope = telescope;
     for (label, var) in labels.iter().zip(vars) {
@@ -732,10 +732,7 @@ fn refine_arm(
     }
 
     let target_indices = match &telescope {
-        Telescope::Done(terminal) => match &***terminal {
-            Subterm::InductType(InductType { indices, .. }) => indices.clone(),
-            _ => unreachable!("erase: constructor terminal is its inductive type"),
-        },
+        Telescope::Done(targets) => (**targets).clone(),
         Telescope::Cons(..) => unreachable!("erase: constructor arity checked by elaborate"),
     };
 

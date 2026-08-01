@@ -273,7 +273,7 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
             constructors: vec![(
                 Atom::from("mk"),
                 InductParam {
-                    telescope: Telescope::build([(payload, nat_type())], constructed.clone()),
+                    telescope: Telescope::build([(payload, nat_type())], Vec::new()),
                     plicities: vec![Plicity::Explicit],
                 },
             )],
@@ -295,7 +295,6 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
     let mut kernel = kernel();
     let name = Global::Authored(Qualifier::from(["Wrapped"]));
     let payload = binder(0, "value");
-    let constructed = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
     kernel.declare_induct(
         &name,
@@ -305,7 +304,7 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
             constructors: vec![(
                 Atom::from("mk"),
                 InductParam {
-                    telescope: Telescope::build([(payload, nat_type())], constructed),
+                    telescope: Telescope::build([(payload, nat_type())], Vec::new()),
                     plicities: vec![Plicity::Explicit],
                 },
             )],

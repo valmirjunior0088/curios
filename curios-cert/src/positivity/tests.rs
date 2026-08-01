@@ -12,9 +12,8 @@ use {
 };
 
 /// A single-constructor family whose one payload is `payload_type`.
-fn single_payload(name: &Global, payload_type: Term, result_sort: Term) -> InductDecl {
+fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
     let binder = Free::local(0, Some("f"));
-    let constructed = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
     InductDecl {
         universe_context: UniverseContext::default(),
@@ -22,7 +21,7 @@ fn single_payload(name: &Global, payload_type: Term, result_sort: Term) -> Induc
         constructors: vec![(
             Atom::from("c"),
             InductParam {
-                telescope: Telescope::build([(binder, payload_type)], constructed),
+                telescope: Telescope::build([(binder, payload_type)], Vec::new()),
                 plicities: vec![Plicity::Explicit],
             },
         )],
@@ -50,13 +49,12 @@ fn a_negative_self_occurrence_is_refused() {
         false_name.clone(),
         InductDecl {
             constructors: Vec::new(),
-            ..single_payload(&false_name, Term::type_ground(), Term::prop())
+            ..single_payload(Term::type_ground(), Term::prop())
         },
     );
     inducts.insert(
         bad_name.clone(),
         single_payload(
-            &bad_name,
             Term::func_type([(Free::local(1, Some("x")), bad_type)], false_type),
             Term::type_ground(),
         ),
@@ -79,10 +77,7 @@ fn a_strict_self_occurrence_is_admitted() {
     let name = Global::Authored(Qualifier::from(["Chain"]));
     let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
     let mut inducts = BTreeMap::new();
-    inducts.insert(
-        name.clone(),
-        single_payload(&name, self_type, Term::type_ground()),
-    );
+    inducts.insert(name.clone(), single_payload(self_type, Term::type_ground()));
     for (entry_name, entry) in &inducts {
         kernel.declare_induct(entry_name, entry);
     }
@@ -326,7 +321,7 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
         false_name.clone(),
         InductDecl {
             constructors: Vec::new(),
-            ..single_payload(&false_name, Term::type_ground(), Term::prop())
+            ..single_payload(Term::type_ground(), Term::prop())
         },
     );
     inducts.insert(
@@ -335,7 +330,6 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
             // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
             polarities: vec![Polarity::Strict],
             ..single_payload(
-                &bad_name,
                 Term::func_type([(Free::local(0, Some("f")), bad_type)], false_type),
                 Term::type_ground(),
             )

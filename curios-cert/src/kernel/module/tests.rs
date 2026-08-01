@@ -22,7 +22,6 @@ fn fam() -> Global {
 fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductDecl {
     let name = Global::Authored(Qualifier::from(["Fam"]));
     let payload = Free::local(0, Some("x"));
-    let constructed = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -30,7 +29,7 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
-                telescope: Telescope::build([(payload, payload_type)], constructed),
+                telescope: Telescope::build([(payload, payload_type)], Vec::new()),
                 plicities: vec![Plicity::Explicit],
             },
         )],
@@ -52,7 +51,7 @@ fn a_payload_at_the_familys_own_level_is_refused() {
     let declaration = family(&mut kernel, Term::type_ground(), Term::type_ground());
 
     assert!(matches!(
-        check_induct_decl(&mut kernel, &fam(), &declaration),
+        check_induct_decl(&mut kernel, &declaration),
         Err(KernelError::Oversized { .. }),
     ));
 }
@@ -64,7 +63,7 @@ fn a_payload_below_the_familys_level_is_admitted() {
     let one = Level::zero().succ().expect("level zero has a successor");
     let declaration = family(&mut kernel, Term::type_at(one), Term::type_ground());
 
-    assert_eq!(check_induct_decl(&mut kernel, &fam(), &declaration), Ok(()));
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
 /// A `Prop`-sorted family carries no size condition: `Prop` is impredicative, and the large-elimination guard is what keeps that sound.
@@ -73,7 +72,7 @@ fn a_proposition_family_has_no_size_condition() {
     let mut kernel = kernel();
     let declaration = family(&mut kernel, Term::prop(), Term::type_ground());
 
-    assert_eq!(check_induct_decl(&mut kernel, &fam(), &declaration), Ok(()));
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
 /// A uniform parameter gets one rung of slack: a family at `Type 0` may take a `T : Type` parameter — the parameter's domain sorts at `1 ≤ 0 + 1` — while the same domain as a *payload* is refused above.
@@ -83,7 +82,6 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
     let name = Global::Authored(Qualifier::from(["Vec"]));
     let t = Free::local(0, Some("T"));
     let x = Free::local(1, Some("x"));
-    let constructed = Term::induct_type(name.clone(), [Term::free_var(&t)], Vec::<Term>::new());
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -93,7 +91,7 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
             InductParam {
                 telescope: Telescope::build(
                     [(t.clone(), Term::type_ground()), (x, Term::free_var(&t))],
-                    constructed,
+                    Vec::new(),
                 ),
                 plicities: vec![Plicity::Implicit, Plicity::Explicit],
             },
@@ -106,7 +104,7 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
     };
     kernel.declare_induct(&name, &declaration);
 
-    assert_eq!(check_induct_decl(&mut kernel, &name, &declaration), Ok(()));
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
 /// A constructor's parameter prefix must be the declaration's own parameters, not merely as many binders.
@@ -122,7 +120,7 @@ fn a_parameter_prefix_that_disagrees_with_the_family_is_refused() {
     let declaration = prefixed(&mut kernel, Term::prim(Prim::NatType));
 
     assert!(matches!(
-        check_induct_decl(&mut kernel, &fam(), &declaration),
+        check_induct_decl(&mut kernel, &declaration),
         Err(KernelError::Mismatch { .. }),
     ));
 }
@@ -133,14 +131,13 @@ fn a_matching_parameter_prefix_is_admitted() {
     let mut kernel = kernel();
     let declaration = prefixed(&mut kernel, Term::type_ground());
 
-    assert_eq!(check_induct_decl(&mut kernel, &fam(), &declaration), Ok(()));
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
 /// `Fam(T : Type) | mk(_ : Nat)`, with the constructor telescope's *parameter slot* declared at `prefix` rather than at the family's `Type`.
 fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
     let t = Free::local(0, Some("T"));
     let payload = Free::local(1, Some("n"));
-    let constructed = Term::induct_type(fam(), [Term::free_var(&t)], Vec::<Term>::new());
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -150,7 +147,7 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
             InductParam {
                 telescope: Telescope::build(
                     [(t, prefix), (payload, Term::prim(Prim::NatType))],
-                    constructed,
+                    Vec::new(),
                 ),
                 plicities: vec![Plicity::Implicit, Plicity::Explicit],
             },

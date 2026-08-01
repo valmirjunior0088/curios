@@ -78,8 +78,6 @@ pub enum KernelError {
     },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
     Oversized { domain: Level, bound: Level },
-    /// A constructor whose signature does not end in the family that declares it, standing at that family's own parameters. A constructor telescope's terminal *is* the type it constructs: `infer` hands it back as a `Variant`'s type, and index inversion reads a case's targets out of it. So a terminal naming another family, or standing at parameters other than the declaration's own, builds a value of a type nothing checked it against.
-    NotConstructed { family: Global, terminal: Box<Term> },
     /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or a `Prim::Exit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
     NotTotal {
         erased: crate::Erased,
@@ -146,10 +144,6 @@ impl fmt::Display for KernelError {
             KernelError::NotDescending { type_ } => write!(
                 formatter,
                 "a recursive proof or type at `{type_}` does not descend",
-            ),
-            KernelError::NotConstructed { family, terminal } => write!(
-                formatter,
-                "a constructor of `{family}` ends in `{terminal}` rather than in `{family}` at its own parameters",
             ),
             KernelError::UnclosedUniverses => write!(
                 formatter,

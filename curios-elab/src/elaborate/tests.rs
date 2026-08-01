@@ -39,7 +39,7 @@ fn register_opt(context: &mut Context) {
                     (
                         Atom::from("none"),
                         InductParam {
-                            telescope: Telescope::done(opt_type()),
+                            telescope: Telescope::done(Vec::new()),
                             plicities: vec![],
                         },
                     ),
@@ -48,7 +48,7 @@ fn register_opt(context: &mut Context) {
                         InductParam {
                             telescope: Telescope::build(
                                 [(payload, Term::prim(Prim::NatType))],
-                                opt_type(),
+                                Vec::new(),
                             ),
                             plicities: vec![Plicity::Explicit],
                         },
@@ -359,14 +359,14 @@ fn register_flag(context: &mut Context) {
                     (
                         Atom::from("off"),
                         InductParam {
-                            telescope: Telescope::done(flag_type(nat_lit(0))),
+                            telescope: Telescope::done(vec![nat_lit(0)]),
                             plicities: vec![],
                         },
                     ),
                     (
                         Atom::from("on"),
                         InductParam {
-                            telescope: Telescope::done(flag_type(nat_lit(1))),
+                            telescope: Telescope::done(vec![nat_lit(1)]),
                             plicities: vec![],
                         },
                     ),

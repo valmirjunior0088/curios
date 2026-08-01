@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::Judge,
-    curios_core::{Free, InductType, Peel, Subterm, Telescope, Term, peel_prim},
+    curios_core::{Free, Peel, Subterm, Telescope, Term, peel_prim},
     std::collections::BTreeSet,
 };
 
@@ -46,13 +46,10 @@ enum Step {
     Refuse,
 }
 
-/// Open a constructor's instantiated telescope with `vars` and read the terminal's index expressions.
-pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
+/// Open a constructor's instantiated telescope with `vars` and read the index targets it terminates in.
+pub fn case_target_indices(telescope: Telescope<Vec<Term>>, vars: &[Term]) -> Vec<Term> {
     match telescope.open_params(vars) {
-        Telescope::Done(terminal) => match &**terminal {
-            Subterm::InductType(InductType { indices, .. }) => indices.clone(),
-            _ => unreachable!("constructor terminal is its inductive type"),
-        },
+        Telescope::Done(targets) => *targets,
         Telescope::Cons(..) => unreachable!("telescope arity matches the binder count"),
     }
 }

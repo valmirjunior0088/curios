@@ -15,8 +15,8 @@ use {
     super::{Kernel, KernelError, Sort, carries_information, convert::convert, infer::check},
     crate::{group_totality, yields_a_sort},
     curios_core::{
-        Bound, Free, Global, InductDecl, InductType, RecGroup, Reducer, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseContext,
+        Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
+        UniverseContext,
     },
 };
 
@@ -141,11 +141,7 @@ pub fn check_rec_group(
 /// Payload well-sortedness and registry-versus-binding agreement fall out of the ordinary item walk, because a declaration lowers to a `rec` group of real definitions. What does not fall out is the *constructor size condition* — each `Type`-sorted domain of a constructor must sit at or below the family's declared level, with one extra rung of slack for the uniform parameters — because the item walk computes each signature's sort and compares it to nothing. This is the clause that keeps an inductive from containing the universe it lives in, which is the paradox the hierarchy exists to exclude.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
-pub fn check_induct_decl(
-    kernel: &mut Kernel,
-    name: &Global,
-    declaration: &InductDecl,
-) -> Result<(), KernelError> {
+pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
@@ -157,9 +153,7 @@ pub fn check_induct_decl(
             &constructor.telescope,
             declaration.param_count(),
             &declaration.result_sort,
-            |kernel, binders, terminal| {
-                check_constructed(kernel, name, declaration, binders, terminal)
-            },
+            |kernel, entries, targets| check_constructed(kernel, declaration, entries, targets),
         )?;
     }
 
@@ -202,47 +196,25 @@ fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), Kern
     outcome
 }
 
-/// A constructor's terminal is the type it constructs, so it must be *this* family, at *this* declaration's parameters, at index targets the declared index telescope admits.
+/// A constructor's index targets must inhabit the family's index telescope, and its parameter prefix must be the family's own parameters.
 ///
-/// The first two are positional and syntactic, which is what the lowering builds: a constructor telescope is closed over the parameter binders and its terminal names them directly. The third is a typing clause and it is the one nothing asked before — a target is read by index inversion and by the arm rule, and until this ran it reached both without any judgment having seen it.
+/// The terminal carries the targets and nothing else — the family and its parameters are fixed by the declaration, so a terminal naming another family or standing at other parameters is unspellable rather than refused. What remains is two typing clauses: the targets are checked here, and until they were, index inversion and the arm rule both read them without any judgment having seen them.
 fn check_constructed(
     kernel: &mut Kernel,
-    name: &Global,
     declaration: &InductDecl,
     entries: &[(Free, Term)],
-    terminal: &Term,
+    targets: &[Term],
 ) -> Result<(), KernelError> {
-    let refused = || KernelError::NotConstructed {
-        family: name.clone(),
-        terminal: Box::new(terminal.clone()),
-    };
-
-    let Subterm::InductType(InductType {
-        name: constructed,
-        params,
-        indices,
-        ..
-    }) = &**terminal
-    else {
-        return Err(refused());
-    };
-
-    let declared = entries
-        .iter()
-        .take(declaration.param_count())
-        .map(|(binder, _)| Term::free_var(binder))
-        .collect::<Vec<_>>();
-
-    // A constructor binds the declaration's parameters before its own payload, so a signature with fewer binders than the family has parameters constructs nothing this family declares.
-    if declared.len() != declaration.param_count() || constructed != name || *params != declared {
-        return Err(refused());
-    }
-
     // The prefix must be the declaration's parameters, not merely as many binders. `instantiate` substitutes the family's actual parameters into these slots, so a constructor declaring one at a different domain types its payload against a family this declaration does not describe — and closed telescopes are why the prefix is repeated here at all, which makes the agreement something to enforce rather than something to assume.
     let mut arity = declaration.arity.clone();
+    let mut declared = Vec::with_capacity(declaration.param_count());
+
     for (binder, domain) in entries.iter().take(declaration.param_count()) {
         let Telescope::Cons(expected, rest) = arity else {
-            return Err(refused());
+            return Err(KernelError::Arity {
+                expected: declaration.param_count(),
+                actual: entries.len(),
+            });
         };
         if !convert(kernel, &Term::type_ground(), domain, &expected)? {
             return Err(KernelError::Mismatch {
@@ -251,19 +223,21 @@ fn check_constructed(
             });
         }
 
-        arity = rest.open(&[&Term::free_var(binder)]);
+        let occurrence = Term::free_var(binder);
+        arity = rest.open(&[&occurrence]);
+        declared.push(occurrence);
     }
 
     let expected = declaration.index_count();
-    if indices.len() != expected {
+    if targets.len() != expected {
         return Err(KernelError::Arity {
             expected,
-            actual: indices.len(),
+            actual: targets.len(),
         });
     }
 
     let mut telescope = declaration.indices_at(&declared);
-    for target in indices {
+    for target in targets {
         let Telescope::Cons(domain, rest) = telescope else {
             break;
         };

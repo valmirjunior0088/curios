@@ -506,11 +506,8 @@ fn singleton_eliminable(
         }
     };
 
-    // A binder is forced iff the terminal's index targets pin it. A terminal that is not the constructed family type decomposes to nothing, which is the stricter direction.
-    let forced = match &*terminal {
-        Subterm::InductType(constructed) => pinned_by_targets(&constructed.indices),
-        _ => Vec::new(),
-    };
+    // A binder is forced iff the index targets the signature terminates in pin it.
+    let forced = pinned_by_targets(&terminal);
     for (name, ty) in &binders {
         if !forced.contains(name) && !is_prop(context, ty)? {
             return Ok(false);
@@ -734,12 +731,9 @@ fn elaborate_induct_match(
                 }
             }
 
-            // This case's target indices: the terminal of its (instantiated, opened) signature states them over the payload binders.
+            // This case's target indices, which its (instantiated, opened) signature terminates in, stated over the payload binders.
             let ix_c = match &telescope {
-                Telescope::Done(terminal) => match &***terminal {
-                    Subterm::InductType(InductType { indices, .. }) => indices.clone(),
-                    _ => unreachable!("constructor terminal is its inductive type"),
-                },
+                Telescope::Done(targets) => (**targets).clone(),
                 Telescope::Cons(..) => unreachable!("arity checked above"),
             };
 

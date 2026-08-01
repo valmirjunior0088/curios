@@ -206,17 +206,33 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             .map(|label| label.to_string())
             .collect::<Vec<_>>();
 
-        let (entries, terminal) = context.with_frame(|context| {
-            let (entries, terminal) = check_telescope_entries(context, signature.clone())?;
-            let terminal = crate::check_is_sort(context, &terminal)?.0;
-            Ok::<_, Error>((entries, terminal))
+        let (entries, targets) = context.with_frame(|context| {
+            let (entries, targets) = check_telescope_entries(context, signature.clone())?;
+
+            // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
+            let params = entries
+                .iter()
+                .take(induct_decl.param_count())
+                .map(|(binder, _)| Term::free_var(binder))
+                .collect::<Vec<_>>();
+            let constructed =
+                crate::check_is_sort(context, &Term::induct_type(name.clone(), params, targets))?.0;
+
+            match &*constructed {
+                Subterm::InductType(constructed) => {
+                    Ok::<_, Error>((entries, constructed.indices.clone()))
+                }
+                _ => Err(Error::UniverseInvariant(
+                    "a constructor's terminal elaborates to its own family".into(),
+                )),
+            }
         })?;
 
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.push((
             tag.clone(),
             InductParam {
-                telescope: Telescope::build(entries, terminal).relabel(&label_refs),
+                telescope: Telescope::build(entries, targets).relabel(&label_refs),
                 // Plicity is metadata parallel to the telescope; elaboration re-checks the types but never changes the calling convention.
                 plicities: param.plicities.clone(),
             },

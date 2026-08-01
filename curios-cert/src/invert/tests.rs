@@ -16,7 +16,6 @@ fn kernel() -> Kernel {
 /// Two constructors is the point: it gives the family two closed inhabitants that are syntactically distinct, so whether they are *interchangeable* is decided by the family's sort and by nothing else.
 fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
     let family = Global::Authored(Qualifier::from([path]));
-    let constructed = Term::induct_type(family.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
     kernel.declare_induct(
         &family,
@@ -29,7 +28,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
                     (
                         Atom::from(tag),
                         InductParam {
-                            telescope: Telescope::done(constructed.clone()),
+                            telescope: Telescope::done(Vec::new()),
                             plicities: Vec::new(),
                         },
                     )

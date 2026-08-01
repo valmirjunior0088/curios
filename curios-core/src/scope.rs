@@ -240,6 +240,24 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     }
 }
 
+/// A constructor's index targets, which is all its signature's terminal carries: the family and its parameters are fixed by the declaration, so nothing else in a terminal is information.
+impl Bound for Vec<Term> {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        self.iter().map(|target| target.traverse(visit)).collect()
+    }
+
+    fn reach(&self) -> usize {
+        self.iter().map(Bound::reach).max().unwrap_or(0)
+    }
+
+    fn has_metavar(&self) -> bool {
+        self.iter().any(Bound::has_metavar)
+    }
+}
+
 impl Bound for () {
     fn traverse<F>(&self, _: &mut Visit<F>) -> Self
     where
@@ -786,6 +804,16 @@ impl Telescope<Term> {
                 rest.body().collect_construction_names(names);
             }
             Telescope::Done(body) => body.collect_construction_names(names),
+        }
+    }
+}
+
+impl Telescope<Vec<Term>> {
+    /// Whether any metavariable in a constructor signature — the payload domains, or one of the index targets it terminates in — satisfies `pred`, short-circuiting on the first hit.
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Done(targets) => targets.iter().any(|target| target.any_metavar(pred)),
         }
     }
 }

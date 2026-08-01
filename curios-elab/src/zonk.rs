@@ -142,7 +142,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                             Ok((
                                 tag.clone(),
                                 InductParam {
-                                    telescope: zonk_telescope(context, &param.telescope)?,
+                                    telescope: zonk_signature(context, &param.telescope)?,
                                     plicities: param.plicities.clone(),
                                 },
                             ))
@@ -1225,6 +1225,25 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
 /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and its trailing body/return type, which is a real term to recurse into.
 ///
 /// A free function rather than an inherent method on [`Telescope`]: the telescope is representation, this is the elaborator's metavariable machinery, and only the latter may name [`Context`].
+/// [`zonk_telescope`] for a constructor signature: the payload domains, and the index targets it terminates in.
+pub(crate) fn zonk_signature(
+    context: &Context,
+    telescope: &Telescope<Vec<Term>>,
+) -> Result<Telescope<Vec<Term>>, Error> {
+    match telescope {
+        Telescope::Done(targets) => Ok(Telescope::Done(Box::new(
+            targets
+                .iter()
+                .map(|target| zonk_term(context, target))
+                .collect::<Result<_, Error>>()?,
+        ))),
+        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+            zonk_term(context, ty)?,
+            rest.try_map_body(|inner| zonk_signature(context, inner))?,
+        )),
+    }
+}
+
 pub(crate) fn zonk_telescope(
     context: &Context,
     telescope: &Telescope<Term>,

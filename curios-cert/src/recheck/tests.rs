@@ -221,7 +221,7 @@ fn forgery() -> Module {
     let box_decl = proposition(vec![(
         Atom::from("mk"),
         InductParam {
-            telescope: Telescope::build([(payload, type_0.clone())], box_type.clone()),
+            telescope: Telescope::build([(payload, type_0.clone())], Vec::new()),
             plicities: vec![Plicity::Explicit],
         },
     )]);
@@ -239,11 +239,7 @@ fn forgery() -> Module {
                     (carrier.clone(), type_1.clone()),
                     (value.clone(), Term::free_var(&carrier)),
                 ],
-                Term::induct_type(
-                    equality_name.clone(),
-                    [Term::free_var(&carrier)],
-                    [Term::free_var(&value), Term::free_var(&value)],
-                ),
+                vec![Term::free_var(&value), Term::free_var(&value)],
             ),
             plicities: vec![Plicity::Implicit, Plicity::Explicit],
         },
@@ -601,7 +597,6 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 /// A one-constructor indexed family whose constructor aims at `target`, carried as a registry entry with no items lowering it.
 fn indexed_module(target: Term) -> Module {
     let family = Global::Authored(Qualifier::from(["Indexed"]));
-    let constructed = Term::induct_type(family.clone(), Vec::<Term>::new(), [target]);
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -613,7 +608,7 @@ fn indexed_module(target: Term) -> Module {
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
-                telescope: Telescope::done(constructed),
+                telescope: Telescope::done(vec![target]),
                 plicities: Vec::new(),
             },
         )],
@@ -797,11 +792,7 @@ fn indexed_by_proof(diverging: bool) -> Module {
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
-                telescope: Telescope::done(Term::induct_type(
-                    family.clone(),
-                    Vec::<Term>::new(),
-                    [target],
-                )),
+                telescope: Telescope::done(vec![target]),
                 plicities: Vec::new(),
             },
         )],
@@ -815,7 +806,7 @@ fn indexed_by_proof(diverging: bool) -> Module {
     let qed = (
         Atom::from("qed"),
         InductParam {
-            telescope: Telescope::done(held),
+            telescope: Telescope::done(Vec::new()),
             plicities: Vec::new(),
         },
     );

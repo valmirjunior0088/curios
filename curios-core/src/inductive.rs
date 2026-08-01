@@ -14,7 +14,7 @@ use {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct InductParam {
-    pub telescope: Telescope<Term>,
+    pub telescope: Telescope<Vec<Term>>,
     /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is `Implicit` (a value constructor infers them), each payload keeps its declared mark. Parallels `telescope`; `plicities.len()` equals `telescope.len()`.
     pub plicities: Vec<Plicity>,
 }
@@ -105,7 +105,7 @@ impl InductDecl {
     }
 
     /// Instantiate `tag`'s signature at the given type parameters, yielding the payload-only telescope: `success` at `[Nat, Bin]` becomes `(_0 : Nat) -> InductType { Result, [Nat, Bin] }`.
-    pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
+    pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Vec<Term>>> {
         Some(self.constructor(tag)?.telescope.clone().open_params(params))
     }
 

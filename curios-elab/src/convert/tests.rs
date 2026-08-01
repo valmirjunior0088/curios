@@ -986,11 +986,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                                 (x.clone(), Term::prim(Prim::NatType)),
                                 (u.clone(), Term::tuple_type_unit()),
                             ],
-                            Term::induct_type(
-                                nominal("Wrap"),
-                                Vec::<Term>::new(),
-                                Vec::<Term>::new(),
-                            ),
+                            Vec::new(),
                         ),
                         plicities: vec![Plicity::Explicit, Plicity::Explicit],
                     },

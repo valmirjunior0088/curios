@@ -241,8 +241,15 @@ fn infer_node(
             }
             defer(deferred, obligations);
 
+            // The constructed type, rebuilt from what the terminal states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
             match signature {
-                Telescope::Done(constructed) => Ok(*constructed),
+                Telescope::Done(targets) => Ok(Subterm::InductType(InductType {
+                    name: name.clone(),
+                    universes: universes.clone(),
+                    params: params.clone(),
+                    indices: *targets,
+                })
+                .into()),
                 Telescope::Cons(..) => unreachable!("arity was checked above"),
             }
         }
