@@ -18,7 +18,7 @@ use {
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, closed,
         derived_binder_floor, partial_definitions, positivity_vectors, satisfiable,
     },
-    curios_core::{Definition, Free, Global, Item, Module, Term},
+    curios_core::{Definition, Free, Global, InductDecl, Item, MetaId, Module, StructDecl, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -135,6 +135,43 @@ pub fn recheck_module_verdicts_uncached(module: &Module, budget: u64) -> Vec<Ver
 /// One item's erased positions, carried with the name a refusal should be reported against.
 type ItemPositions = (Option<Global>, Vec<(Term, Erased)>);
 
+/// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
+fn induct_metavar(declaration: &InductDecl) -> Option<MetaId> {
+    let mut found = None;
+    {
+        let mut note = |id: MetaId| {
+            found = Some(id);
+            true
+        };
+
+        let _ = declaration.params.any_metavar(&mut note)
+            || declaration.indices.any_metavar(&mut note)
+            || declaration.result_sort.any_metavar(&mut note)
+            || declaration
+                .signatures()
+                .any(|constructor| constructor.telescope.any_metavar(&mut note));
+    }
+
+    found
+}
+
+/// [`induct_metavar`] for a `struct` registry entry.
+fn struct_metavar(declaration: &StructDecl) -> Option<MetaId> {
+    let mut found = None;
+    {
+        let mut note = |id: MetaId| {
+            found = Some(id);
+            true
+        };
+
+        let _ = declaration.params.any_metavar(&mut note)
+            || declaration.fields.any_metavar(&mut note)
+            || declaration.result_sort.any_metavar(&mut note);
+    }
+
+    found
+}
+
 // Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
 #[allow(clippy::mutable_key_type)]
 fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Vec<Verdict> {
@@ -178,6 +215,24 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
                     error,
                 });
             }
+        }
+    }
+
+    // A registry entry is data that no judgment in this walk types. `check_sizing` walks a constructor telescope's *domains* and stops at the terminal, so the index targets a constructor states reach index inversion and the arm rule without ever having been checked, and `check_induct_decl` leaves them to the `rec` group a declaration lowers to — a lowering nothing here confirms exists. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
+    for (name, declaration) in &module.induct_decls {
+        if let Some(id) = induct_metavar(declaration) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error: KernelError::NotCore(Term::metavar(id)),
+            });
+        }
+    }
+    for (name, declaration) in &module.struct_decls {
+        if let Some(id) = struct_metavar(declaration) {
+            verdicts.push(Verdict {
+                name: Some(name.clone()),
+                error: KernelError::NotCore(Term::metavar(id)),
+            });
         }
     }
 

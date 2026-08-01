@@ -564,3 +564,72 @@ fn selection_module(body: Term) -> Module {
         body: Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["bad"])))),
     }
 }
+
+/// A constructor's *index target* is registry data that no judgment in the walk reads.
+///
+/// `check_sizing` walks a constructor telescope's **domains** — each must sit at or below the family's declared level — and stops there. The terminal the telescope ends in, `Family(params, indices)`, is never visited, so the index targets a constructor states reach index inversion and the arm rule without any judgment having typed them. [`check_induct_decl`](crate::check_induct_decl) says so outright: the rest "falls out of the ordinary item walk, because a declaration lowers to a `rec` group of real definitions", and for a module the elaborator built that holds — the constructor wrapper's declared type ends in that terminal, so checking the wrapper's body against it types the targets.
+///
+/// The kernel never confirmed the lowering exists. The module below carries the registry entry and no items at all, so nothing types the terminal, and its index target is an unsolved metavariable — precisely what `zonk_module` promises has been eliminated, in the one position the kernel's walk did not re-derive. That made the guarantee the elaborator's word rather than the kernel's, which is the dependency the two-checker split exists to remove.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for this module. It is reachable from no surface program — the elaborator builds registry and bindings from one declaration — which is why it belongs here rather than in `curios/src/tests`, and why nothing in the corpus could have found it. The diagnostic is asserted rather than bare failure, since a module this small could fail for unrelated reasons and still look guarded.
+///
+/// The control is [`a_registry_index_target_of_a_real_term_is_accepted`], which is the same module with the metavariable replaced by a literal: the pass must refuse an elaboration-only node, not every registry entry.
+#[test]
+fn a_registry_index_target_is_checked_rather_than_believed() {
+    let verdicts = recheck_module_verdicts(&indexed_module(Term::metavar(7_usize)), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::NotCore(_))),
+        "the kernel certified a module carrying an unsolved metavariable: {verdicts:?}",
+    );
+}
+
+/// The control for the fixture above: a registry entry whose index target is a real term stays accepted.
+#[test]
+fn a_registry_index_target_of_a_real_term_is_accepted() {
+    let target = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+
+    assert_eq!(
+        recheck_module_verdicts(&indexed_module(target), 1_000_000),
+        Vec::new(),
+        "the boundary pass refused a registry entry that carries nothing elaboration-only",
+    );
+}
+
+/// A one-constructor indexed family whose constructor aims at `target`, carried as a registry entry with no items lowering it.
+fn indexed_module(target: Term) -> Module {
+    let family = Global::Authored(Qualifier::from(["Indexed"]));
+    let constructed = Term::induct_type(family.clone(), Vec::<Term>::new(), [target]);
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        params: Telescope::done(()),
+        indices: Telescope::done(()),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::done(constructed),
+                plicities: Vec::new(),
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    Module {
+        items: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
