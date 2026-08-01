@@ -12,7 +12,7 @@
 mod tests;
 
 use {
-    super::{Kernel, KernelError, Sort, carries_information, infer::check},
+    super::{Kernel, KernelError, Sort, carries_information, convert::convert, infer::check},
     crate::{group_totality, yields_a_sort},
     curios_core::{
         Bound, Free, Global, InductDecl, InductType, RecGroup, Reducer, StructDecl, Subterm,
@@ -209,7 +209,7 @@ fn check_constructed(
     kernel: &mut Kernel,
     name: &Global,
     declaration: &InductDecl,
-    binders: &[Free],
+    entries: &[(Free, Term)],
     terminal: &Term,
 ) -> Result<(), KernelError> {
     let refused = || KernelError::NotConstructed {
@@ -227,15 +227,31 @@ fn check_constructed(
         return Err(refused());
     };
 
-    let declared = binders
+    let declared = entries
         .iter()
         .take(declaration.param_count())
-        .map(Term::free_var)
+        .map(|(binder, _)| Term::free_var(binder))
         .collect::<Vec<_>>();
 
     // A constructor binds the declaration's parameters before its own payload, so a signature with fewer binders than the family has parameters constructs nothing this family declares.
     if declared.len() != declaration.param_count() || constructed != name || *params != declared {
         return Err(refused());
+    }
+
+    // The prefix must be the declaration's parameters, not merely as many binders. `instantiate` substitutes the family's actual parameters into these slots, so a constructor declaring one at a different domain types its payload against a family this declaration does not describe — and closed telescopes are why the prefix is repeated here at all, which makes the agreement something to enforce rather than something to assume.
+    let mut arity = declaration.arity.clone();
+    for (binder, domain) in entries.iter().take(declaration.param_count()) {
+        let Telescope::Cons(expected, rest) = arity else {
+            return Err(refused());
+        };
+        if !convert(kernel, &Term::type_ground(), domain, &expected)? {
+            return Err(KernelError::Mismatch {
+                inferred: Box::new(domain.clone()),
+                expected: Box::new(expected),
+            });
+        }
+
+        arity = rest.open(&[&Term::free_var(binder)]);
     }
 
     let expected = declaration.index_count();
@@ -321,7 +337,7 @@ fn check_signature<B: Bound + Clone>(
     telescope: &Telescope<B>,
     uniform: usize,
     result_sort: &Term,
-    terminal: impl FnOnce(&mut Kernel, &[Free], &B) -> Result<(), KernelError>,
+    terminal: impl FnOnce(&mut Kernel, &[(Free, Term)], &B) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
     let mark = kernel.mark();
     let outcome = check_signature_within(kernel, telescope, uniform, result_sort, terminal);
@@ -336,7 +352,7 @@ fn check_signature_within<B: Bound + Clone>(
     telescope: &Telescope<B>,
     uniform: usize,
     result_sort: &Term,
-    terminal: impl FnOnce(&mut Kernel, &[Free], &B) -> Result<(), KernelError>,
+    terminal: impl FnOnce(&mut Kernel, &[(Free, Term)], &B) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
     let result = kernel.reduce_forced(result_sort.clone())?;
     // A `Prop`-sorted result imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result sort is.
@@ -345,14 +361,14 @@ fn check_signature_within<B: Bound + Clone>(
         _ => None,
     };
 
-    let mut binders = Vec::new();
+    let mut entries: Vec<(Free, Term)> = Vec::new();
     let mut telescope = telescope.clone();
 
     while let Telescope::Cons(domain, rest) = telescope {
         if let Some((bound, raised)) = &sized
             && let Sort::Type(level) = Sort::of(kernel, &domain)?
         {
-            let upper = if binders.len() < uniform {
+            let upper = if entries.len() < uniform {
                 raised
             } else {
                 bound
@@ -369,14 +385,14 @@ fn check_signature_within<B: Bound + Clone>(
         let binder = kernel.fresh(rest.first_hint());
         kernel.assume(&binder, &domain);
         telescope = rest.open(&[&Term::free_var(&binder)]);
-        binders.push(binder);
+        entries.push((binder, domain));
     }
 
     let Telescope::Done(body) = telescope else {
         unreachable!("the loop exits only at the terminal")
     };
 
-    terminal(kernel, &binders, &body)
+    terminal(kernel, &entries, &body)
 }
 
 /// Check a term that closes the program — an entrypoint body, with no name to export. `expected` is its declared type when it has one.

@@ -2,8 +2,8 @@ use {
     crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Level, Polarity, StructDecl, Telescope, Term,
-        UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Level, Polarity, Prim, StructDecl, Telescope,
+        Term, UniverseContext,
     },
 };
 
@@ -107,6 +107,63 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
     kernel.declare_induct(&name, &declaration);
 
     assert_eq!(check_induct_decl(&mut kernel, &name, &declaration), Ok(()));
+}
+
+/// A constructor's parameter prefix must be the declaration's own parameters, not merely as many binders.
+///
+/// A `Telescope` is closed — it carries its own binders — and a constructor's payload types mention the family's parameters, so the parameters are repeated as the constructor telescope's prefix. That repetition is the price of self-contained telescopes and is kept deliberately; what is *not* optional is that the two agree, because [`InductDecl::instantiate`] substitutes the family's actual parameters into those slots. A prefix declaring one at a different domain types the payload against a family this declaration does not describe.
+///
+/// Nothing checked it. `check_signature` asked `Sort::of` on each domain for the size condition alone, and the terminal clause compared the constructed type's parameters against the *minted binder identities* rather than against the arity's domains — so the family below, whose `mk` declares its parameter slot at `Nat` while the family declares it at `Type`, passed both. Its payload is deliberately `Nat` rather than `T`, so that the refusal comes from the prefix clause and not from `Sort::of` tripping over a non-sort.
+///
+/// Its control is [`a_matching_parameter_prefix_is_admitted`], the same declaration with the prefix at `Type`: the clause must refuse a disagreement, not every constructor.
+#[test]
+fn a_parameter_prefix_that_disagrees_with_the_family_is_refused() {
+    let mut kernel = kernel();
+    let declaration = prefixed(&mut kernel, Term::prim(Prim::NatType));
+
+    assert!(matches!(
+        check_induct_decl(&mut kernel, &fam(), &declaration),
+        Err(KernelError::Mismatch { .. }),
+    ));
+}
+
+/// The control for the fixture above: a prefix that does agree stays admitted.
+#[test]
+fn a_matching_parameter_prefix_is_admitted() {
+    let mut kernel = kernel();
+    let declaration = prefixed(&mut kernel, Term::type_ground());
+
+    assert_eq!(check_induct_decl(&mut kernel, &fam(), &declaration), Ok(()));
+}
+
+/// `Fam(T : Type) | mk(_ : Nat)`, with the constructor telescope's *parameter slot* declared at `prefix` rather than at the family's `Type`.
+fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
+    let t = Free::local(0, Some("T"));
+    let payload = Free::local(1, Some("n"));
+    let constructed = Term::induct_type(fam(), [Term::free_var(&t)], Vec::<Term>::new());
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::build([(t.clone(), Term::type_ground())], Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(t, prefix), (payload, Term::prim(Prim::NatType))],
+                    constructed,
+                ),
+                plicities: vec![Plicity::Implicit, Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::from(["Fam"]),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+    kernel.declare_induct(&fam(), &declaration);
+
+    declaration
 }
 
 /// A `Prop`-sorted structure carrying a `Nat`, which is the shape `Prop` non-informativeness exists to forbid.
