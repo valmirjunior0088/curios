@@ -136,9 +136,32 @@ pub fn check_rec_group(
     Ok(())
 }
 
-/// Check an `induct` declaration's registry entry: the size condition, under the declaration's own universe hypotheses.
+/// What a well-formed `induct` registry entry asserts — the whole statement, under the declaration's own universe hypotheses.
 ///
-/// Payload well-sortedness and registry-versus-binding agreement fall out of the ordinary item walk, because a declaration lowers to a `rec` group of real definitions. What does not fall out is the *constructor size condition* — each `Type`-sorted domain of a constructor must sit at or below the family's declared level, with one extra rung of slack for the uniform parameters — because the item walk computes each signature's sort and compares it to nothing. This is the clause that keeps an inductive from containing the universe it lives in, which is the paradox the hierarchy exists to exclude.
+/// A registry entry is not an ordinary term. The typing rules consult it as an *oracle*: `Sort::of` reads `result_sort` and that decides irrelevance, `infer` on a `Variant` reads a constructor's signature, and the arm rule and index inversion read its targets. So the entry is a premise of judgments rather than an object of one, and what it asserts has to be written down somewhere. This is that place.
+///
+/// # The clauses
+///
+/// 1. Its universe context is closed and satisfiable — `universe_verdict`, run before anything is assumed.
+/// 2. It carries no elaboration residue: no `Metavar` node, no level holding an unsolved universe metavariable — `induct_residue`.
+/// 3. Every domain of its arity is a type — `check_arity`, which reaches the parameters as well as the indices, and so covers a family with no constructors at all.
+/// 4. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
+/// 5. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
+/// 6. Every constructor states as many index targets as the family declares indices — `check_constructed`.
+/// 7. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
+/// 8. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](crate::positivity_vectors) rather than per entry.
+///
+/// # What is unspellable rather than checked
+///
+/// Two agreements used to need clauses and no longer exist to be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written — which also retired three `unreachable!`s that asserted exactly that.
+///
+/// # The one repetition kept, and why
+///
+/// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 5 is what makes it an enforced agreement rather than an assumed one.
+///
+/// # Not established here
+///
+/// That `plicities` has one entry per telescope binder, and that constructor tags are distinct. Neither is checked anywhere I have found; both are recorded as gaps rather than assumed.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
@@ -249,7 +272,9 @@ fn check_constructed(
     Ok(())
 }
 
-/// [`check_induct_decl`] for a `struct`: one field telescope instead of one telescope per constructor, under the same rule.
+/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), the size condition over its field telescope (clause 4), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
+///
+/// A `struct` has no constructors and no index targets, so clauses 5 through 7 have nothing to range over. It does still carry its parameters twice — once in `params` and again as the prefix of `fields` — which is the redundancy [`InductDecl::arity`] no longer has. Giving it the same nesting is pending, and until then the two declaration kinds do not encode their parameters the same way.
 pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
@@ -320,7 +345,7 @@ fn check_signature<B: Bound + Clone>(
     outcome
 }
 
-/// [`check_signature`]'s body, with the scope bracket left to its caller so every failing path retracts too.
+/// `check_signature`'s body, with the scope bracket left to its caller so every failing path retracts too.
 fn check_signature_within<B: Bound + Clone>(
     kernel: &mut Kernel,
     telescope: &Telescope<B>,
