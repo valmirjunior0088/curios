@@ -1851,3 +1851,59 @@ fn imitation_solves_flex_apply_against_prim_former() {
     assert!(context.metavar_solution(MetaId(0)).is_some());
     assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
 }
+
+/// Proof irrelevance at a *computed* proposition — a stuck `match` whose motive is `Prop`.
+///
+/// The rule is measured, and the measurement is why this fixture exists. Across the prelude's elaboration it fires 37 times in 84,826 conversion goals, and **every one of the 37 is at a computed proposition rather than a nominal `Prop` family**: validity predicates over `Bits` and `Nat`, the shape a decision procedure takes. Not one is at a bare `Prop`-sorted declaration. So the tests that name irrelevance — `curios-cert`'s `any_two_inhabitants_of_a_proposition_convert` and its control — cover a shape the corpus never actually presents, and they cover the *kernel's* copy, which the same measurement found inert at 0 firings in 86,547 goals. This crate's copy is the one that does the work and had no direct test; its only exercise was the prelude happening to be written with those predicates, which is coverage by accident rather than by assertion.
+///
+/// What the fixture pins is the mechanism those 37 firings rest on. `Sort::of` classifies a stuck `Match` by reading its **motive**, not its arms — "a type-valued match: its sort is the motive" — so a match that cannot reduce is nonetheless a proposition when its motive says `Prop`, and irrelevance may then discharge a goal at it without examining either side. Two distinct neutrals convert there.
+///
+/// The control is the identical term with the motive at `Type`. It must not convert, and it is what makes this a test of the *motive* rather than of matches in general: read the arms instead, or default to `Prop` for anything unclassifiable, and the two fixtures stop disagreeing.
+#[test]
+fn irrelevance_fires_at_a_computed_proposition() {
+    let mut context = context();
+    let (left, right) = (context.fresh(Some("p")), context.fresh(Some("q")));
+    let computed = computed_type(&mut context, Term::prop());
+
+    assert_eq!(
+        convert(
+            &mut context,
+            &computed,
+            &Term::free_var(&left),
+            &Term::free_var(&right),
+        ),
+        Ok(true),
+    );
+}
+
+/// The control for the fixture above: the same stuck `match`, with its motive at `Type`. Irrelevance is a property of the type, and a computed type is no exception.
+#[test]
+fn irrelevance_does_not_fire_at_a_computed_relevant_type() {
+    let mut context = context();
+    let (left, right) = (context.fresh(Some("p")), context.fresh(Some("q")));
+    let computed = computed_type(&mut context, Term::type_ground());
+
+    assert_eq!(
+        convert(
+            &mut context,
+            &computed,
+            &Term::free_var(&left),
+            &Term::free_var(&right),
+        ),
+        Ok(false),
+    );
+}
+
+/// `match n | 0 => Nat | _ => Nat end` at the given motive, stuck because `n` is a neutral assumption. The arms are deliberately a *relevant* type in both fixtures: what decides the sort is the motive, and picking arms that agree with it would let a rule reading the arms pass too.
+fn computed_type(context: &mut Context, motive: Term) -> Term {
+    let subject = context.fresh(Some("n"));
+    context.assume(&subject, &Term::prim(Prim::NatType));
+
+    let scrutinee = context.fresh(Some("k"));
+    Term::switch_scoped(
+        Term::free_var(&subject),
+        Scope::close(Many(1), &[&scrutinee], motive),
+        [(0u32, Term::prim(Prim::NatType))],
+        Term::prim(Prim::NatType),
+    )
+}
