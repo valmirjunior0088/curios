@@ -18,7 +18,10 @@ use {
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, closed,
         derived_binder_floor, partial_definitions, positivity_vectors, satisfiable,
     },
-    curios_core::{Definition, Free, Global, InductDecl, Item, MetaId, Module, StructDecl, Term},
+    curios_core::{
+        Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
+        universe_metas,
+    },
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -172,6 +175,39 @@ fn struct_metavar(declaration: &StructDecl) -> Option<MetaId> {
     found
 }
 
+/// The first unsolved *universe* metavariable one of `value`'s levels holds.
+///
+/// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`] inspects a `UniverseContext`'s *constraints* — the only place this crate looked for a meta level — never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
+fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
+    universe_metas(value)
+        .into_iter()
+        .next()
+        .map(|meta| KernelError::NotCore(Term::type_at(Level::meta(meta))))
+}
+
+/// Every kind of elaboration residue an `induct` registry entry can carry.
+fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
+    induct_metavar(declaration)
+        .map(|id| KernelError::NotCore(Term::metavar(id)))
+        .or_else(|| universe_residue(&declaration.params))
+        .or_else(|| universe_residue(&declaration.indices))
+        .or_else(|| universe_residue(&declaration.result_sort))
+        .or_else(|| {
+            declaration
+                .signatures()
+                .find_map(|constructor| universe_residue(&constructor.telescope))
+        })
+}
+
+/// [`induct_residue`] for a `struct` registry entry.
+fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
+    struct_metavar(declaration)
+        .map(|id| KernelError::NotCore(Term::metavar(id)))
+        .or_else(|| universe_residue(&declaration.params))
+        .or_else(|| universe_residue(&declaration.fields))
+        .or_else(|| universe_residue(&declaration.result_sort))
+}
+
 // Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
 #[allow(clippy::mutable_key_type)]
 fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Vec<Verdict> {
@@ -220,20 +256,44 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
 
     // A registry entry is data that no judgment in this walk types. `check_sizing` walks a constructor telescope's *domains* and stops at the terminal, so the index targets a constructor states reach index inversion and the arm rule without ever having been checked, and `check_induct_decl` leaves them to the `rec` group a declaration lowers to — a lowering nothing here confirms exists. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
     for (name, declaration) in &module.induct_decls {
-        if let Some(id) = induct_metavar(declaration) {
+        if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
-                error: KernelError::NotCore(Term::metavar(id)),
+                error,
             });
         }
     }
     for (name, declaration) in &module.struct_decls {
-        if let Some(id) = struct_metavar(declaration) {
+        if let Some(error) = struct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
-                error: KernelError::NotCore(Term::metavar(id)),
+                error,
             });
         }
+    }
+    // An item's own terms are walked, so a `Metavar` node in one is refused where a judgment meets it. A level is not: the walk types `Type(?u)` without objecting, so the same boundary decides it here.
+    for item in &module.items {
+        for definition in match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        } {
+            if let Some(error) =
+                universe_residue(&definition.type_).or_else(|| universe_residue(&definition.body))
+            {
+                verdicts.push(Verdict {
+                    name: Some(definition.name.clone()),
+                    error,
+                });
+            }
+        }
+    }
+    if let Some(error) = module
+        .type_
+        .as_ref()
+        .and_then(universe_residue)
+        .or_else(|| universe_residue(&module.body))
+    {
+        verdicts.push(Verdict { name: None, error });
     }
 
     // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later.

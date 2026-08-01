@@ -10,7 +10,7 @@ use {
         Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Level, Many,
         Module, Prim, RecGroup, RecMemberScopes, Scope, Telescope, Term, Totality,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseParam,
+        UniverseMetaId, UniverseParam,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -615,6 +615,105 @@ fn indexed_module(target: Term) -> Module {
             },
         )],
         result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    Module {
+        items: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// A *level* holding an unsolved universe metavariable is elaboration residue, and nothing in the walk refused one.
+///
+/// `validate_universes` is where the elaborator eliminates them, and its `validate_bound_universes` half is what walks a term's own levels and rejects a metavariable. The kernel's counterpart, [`closed`](crate::closed), inspects a [`UniverseContext`]'s *constraints* — the only place in this crate that looked for a meta level at all — and never a level sitting inside a term. So `Sort::of` read `Type(?u)` and answered `Type(?u + 1)`, and the walk carried the residue rather than refusing it.
+///
+/// Both positions below were certified. The registry one is the shape the metavariable pass beside it already covers: registry data no judgment types. The *definition type* one is sharper, because that position is fully walked — `check_definition` asks `Sort::of` for it and then checks the body against it — so this was not a coverage gap in which terms the walk reaches. It was the level algebra having no opinion about an unsolved level at all, which is why refusing it belongs at the boundary rather than inside a judgment.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for each of the two modules. Neither is reachable from a surface program — `validate_universes` runs before a module ever leaves the elaborator — which is why they are built here and why nothing in the corpus could have found this. An unsolved level is not itself a closed inhabitant of `False`; what it is, is a level every cumulativity question is then decided against, with `entails` answering about a variable that no longer has a solver behind it. The refusal is the safe direction and the one the perimeter row already claims.
+///
+/// The control is [`a_ground_level_in_the_same_positions_is_accepted`], the same two modules at `Type 0`: the pass must refuse residue, not every level.
+#[test]
+fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
+    let residue = Level::meta(UniverseMetaId::from(0usize));
+
+    for (label, module) in [
+        ("a definition's declared type", level_definition(&residue)),
+        ("a registry entry's result sort", level_registry(&residue)),
+    ] {
+        let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, KernelError::NotCore(_))),
+            "{label}: the kernel certified a module carrying an unsolved universe metavariable: {verdicts:?}",
+        );
+    }
+}
+
+/// The control for the fixture above: the same two positions at a ground level stay accepted.
+#[test]
+fn a_ground_level_in_the_same_positions_is_accepted() {
+    let ground = Level::zero();
+
+    for (label, module) in [
+        ("a definition's declared type", level_definition(&ground)),
+        ("a registry entry's result sort", level_registry(&ground)),
+    ] {
+        assert_eq!(
+            recheck_module_verdicts(&module, 1_000_000),
+            Vec::new(),
+            "{label}: the boundary pass refused a level that holds no residue",
+        );
+    }
+}
+
+/// `let held : Type(level) = Nat`, as a whole module.
+fn level_definition(level: &Level) -> Module {
+    let definition = Definition {
+        name: Global::Authored(Qualifier::from(["held"])),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext::empty(),
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::type_at(level.clone()),
+        body: Term::prim(Prim::NatType),
+    };
+
+    Module {
+        items: vec![Item::Let(definition)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// A constructor-free family declared at `Type(level)`, carried as a registry entry.
+fn level_registry(level: &Level) -> Module {
+    let family = Global::Authored(Qualifier::from(["Levelled"]));
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        params: Telescope::done(()),
+        indices: Telescope::done(()),
+        constructors: Vec::new(),
+        result_sort: Term::type_at(level.clone()),
         module: Qualifier::default(),
         root: RootId::Entry,
         rep_public: true,
