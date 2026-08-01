@@ -1146,3 +1146,119 @@ fn shadowed_constructor(tags: [&str; 2]) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A level naming a universe parameter its declaration does not have, in the two positions the boundary pass walks.
+///
+/// A declaration's universe scheme is a promise that every level it mentions is either ground or one of the parameters it declares, so a use site fully determines it. `curios-elab`'s `validate_bound_universes` is what checks that promise, and this crate had no equivalent: `universe_residue` looks for an unsolved *metavariable* in a level and nothing looks for a parameter index past the declaration's own count.
+///
+/// What makes that a soundness question rather than a tidiness one is what instantiation does next. `instantiate_universe_levels_scoped` substitutes the indices an instance supplies and *renumbers* the rest down by the instance's width — the correct de Bruijn shift for a well-scoped term, where an index at or above the width refers to an enclosing binder. For an ill-scoped one it is a capture: `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same `Type.{u}`, so two levels that were distinct become one, and the hierarchy's questions are then decided about the wrong one.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for each of the two modules below, and the renumbering was confirmed directly against `instantiate_universe_levels_scoped`. Neither module is reachable from a surface program — `validate_universes` runs before a module ever leaves the elaborator, so this is a rule the elaborator holds and the certifier did not, and the certifier was the permissive one. No closed inhabitant of `False` was built from it; what is demonstrated is the capture and the missing judgment.
+///
+/// The control is [`a_level_naming_a_declared_universe_parameter_is_accepted`], the same two positions with the parameter actually declared. It is not decoration: the prelude is universe-polymorphic throughout, so a check that refused every parameter-naming level would reject the standard library rather than this.
+#[test]
+fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
+    let escaping = Level::param(UniverseParam(0));
+
+    for (label, module) in [
+        (
+            "a definition's declared type",
+            scheme_definition(&escaping, 0),
+        ),
+        (
+            "a registry entry's result sort",
+            scheme_registry(&escaping, 0),
+        ),
+    ] {
+        let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, KernelError::UnclosedUniverses)),
+            "{label}: the kernel certified a level naming a parameter the declaration does not have: {verdicts:?}",
+        );
+    }
+}
+
+/// The control for the fixture above: the same level in the same positions, with the declaration declaring the parameter it names.
+#[test]
+fn a_level_naming_a_declared_universe_parameter_is_accepted() {
+    let declared = Level::param(UniverseParam(0));
+
+    for (label, module) in [
+        (
+            "a definition's declared type",
+            scheme_definition(&declared, 1),
+        ),
+        (
+            "a registry entry's result sort",
+            scheme_registry(&declared, 1),
+        ),
+    ] {
+        assert_eq!(
+            recheck_module_verdicts(&module, 1_000_000),
+            Vec::new(),
+            "{label}: the boundary pass refused a parameter the declaration declares",
+        );
+    }
+}
+
+/// [`level_definition`] with a universe scheme of `parameter_count` parameters.
+fn scheme_definition(level: &Level, parameter_count: usize) -> Module {
+    let definition = Definition {
+        name: Global::Authored(Qualifier::from(["held"])),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::type_at(level.clone()),
+        body: Term::prim(Prim::NatType),
+    };
+
+    Module {
+        items: vec![Item::Let(definition)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// [`level_registry`] with a universe scheme of `parameter_count` parameters.
+fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
+    let family = Global::Authored(Qualifier::from(["Levelled"]));
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new(),
+        result_sort: Term::type_at(level.clone()),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    Module {
+        items: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}

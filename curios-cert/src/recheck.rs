@@ -20,7 +20,7 @@ use {
     },
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
-        universe_metas,
+        rewrite_universe_levels_scoped, universe_metas,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
 };
@@ -183,6 +183,25 @@ fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
         .map(|meta| KernelError::NotCore(Term::type_at(Level::meta(meta))))
 }
 
+/// The first universe parameter one of `value`'s levels names that a scheme of `parameter_count` parameters does not have.
+///
+/// A declaration's universe scheme promises that every level it mentions is ground or one of the parameters it declares, so a use site fully determines it. [`universe_residue`] above checks half of that promise — no unsolved metavariable — and this checks the other half, which nothing here checked: no parameter index past the declaration's own count. `closed` sees a `UniverseContext`'s constraints and not a level sitting in a term, so the two are the same omission at different depths.
+///
+/// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universe_levels_scoped` substitutes what the instance supplies and *renumbers* the rest down by the instance's width. For a well-scoped term that is the correct de Bruijn shift, since an index at or above the width names an enclosing binder. For an ill-scoped one it is a capture — `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same level — so two distinct levels become one and every cumulativity question after that is answered about the wrong one.
+///
+/// Scoped rather than flat: a nested scheme binds its own parameters innermost, so the bound at any point is the enclosing binder depth plus the declaration's count, exactly as `curios-elab`'s `validate_bound_universes` computes it. Metavariables are left to [`universe_residue`] so the two diagnostics stay distinct.
+fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<KernelError> {
+    rewrite_universe_levels_scoped(value, move |depth, level| {
+        let visible = depth.checked_add(parameter_count).ok_or(())?;
+        match level.params().any(|param| param.0 >= visible) {
+            true => Err(()),
+            false => Ok(level.clone()),
+        }
+    })
+    .err()
+    .map(|()| KernelError::UnclosedUniverses)
+}
+
 /// Every kind of elaboration residue an `induct` registry entry can carry.
 fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
     induct_metavar(declaration)
@@ -194,6 +213,16 @@ fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
                 .signatures()
                 .find_map(|constructor| universe_residue(&constructor.telescope))
         })
+        .or_else(|| {
+            let count = declaration.universe_context.parameter_count;
+            universe_escape(&declaration.arity, count)
+                .or_else(|| universe_escape(&declaration.result_sort, count))
+                .or_else(|| {
+                    declaration
+                        .signatures()
+                        .find_map(|constructor| universe_escape(&constructor.telescope, count))
+                })
+        })
 }
 
 /// [`induct_residue`] for a `struct` registry entry.
@@ -202,6 +231,11 @@ fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
         .map(|id| KernelError::NotCore(Term::metavar(id)))
         .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
+        .or_else(|| {
+            let count = declaration.universe_context.parameter_count;
+            universe_escape(&declaration.arity, count)
+                .or_else(|| universe_escape(&declaration.result_sort, count))
+        })
 }
 
 // Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
@@ -273,8 +307,11 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
             Item::Let(definition) => vec![definition.clone()],
             Item::Rec(rec) => rec.definitions(),
         } {
-            if let Some(error) =
-                universe_residue(&definition.type_).or_else(|| universe_residue(&definition.body))
+            let count = definition.universe_context.parameter_count;
+            if let Some(error) = universe_residue(&definition.type_)
+                .or_else(|| universe_residue(&definition.body))
+                .or_else(|| universe_escape(&definition.type_, count))
+                .or_else(|| universe_escape(&definition.body, count))
             {
                 verdicts.push(Verdict {
                     name: Some(definition.name.clone()),
@@ -283,11 +320,19 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
             }
         }
     }
+    // The module's own type and body stand under no scheme, so every parameter index in them escapes.
     if let Some(error) = module
         .type_
         .as_ref()
         .and_then(universe_residue)
         .or_else(|| universe_residue(&module.body))
+        .or_else(|| {
+            module
+                .type_
+                .as_ref()
+                .and_then(|type_| universe_escape(type_, 0))
+        })
+        .or_else(|| universe_escape(&module.body, 0))
     {
         verdicts.push(Verdict { name: None, error });
     }
