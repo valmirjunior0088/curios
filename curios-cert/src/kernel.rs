@@ -446,11 +446,20 @@ impl Kernel {
     /// Verify a stated instance satisfies its scheme's constraint set: each declared `lower ≤ upper`, instantiated at this occurrence's levels, must hold under the assumed constraints of the item being checked.
     ///
     /// A constraint level naming a parameter the instance does not supply is refused rather than kept: an unsubstituted scheme parameter would be misread as one of the ambient item's, which is the accepting direction.
+    ///
+    /// The instance's *width* is checked first, and separately, because the constraint loop cannot see it. A scheme with an empty constraint set never enters the guard above at all, and the guard only ever covered levels appearing in constraints — while every one of the declaration's own terms is instantiated at these same levels by the callers below. There an unsupplied parameter is not refused but renumbered: `instantiate_universe_levels_scoped` shifts it down by the instance's width, which is the correct de Bruijn step for a full instance and a capture for a short one, landing the declaration's parameter on the ambient item's. This is the same hazard the paragraph above names, at the position it does not reach.
     pub(crate) fn check_instance(
         &self,
         context: &UniverseContext,
         levels: &[Level],
     ) -> Result<(), KernelError> {
+        if levels.len() != context.parameter_count {
+            return Err(KernelError::Arity {
+                expected: context.parameter_count,
+                actual: levels.len(),
+            });
+        }
+
         let instantiate = |level: &Level| -> Result<Level, KernelError> {
             if level.params().any(|param| param.0 >= levels.len()) {
                 return Err(KernelError::UniverseInstance {

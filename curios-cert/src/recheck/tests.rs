@@ -1262,3 +1262,86 @@ fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A universe instance supplying fewer levels than the scheme it instantiates has parameters.
+///
+/// `Kernel::check_instance` discharges a scheme's *constraints* at the levels an occurrence supplies, and that is all it does. A scheme with an empty constraint set therefore accepts an instance of any width — the loop body never runs — so nothing anywhere asked whether an occurrence supplies as many levels as the declaration declares. `curios-elab`'s `validate_instance_arities` asks exactly that, of every `UniverseInst`, `InductType`, `Variant`, `StructType` and `Struct` in the module, and this crate had no equivalent.
+///
+/// The consequence is the capture [`a_level_naming_an_undeclared_universe_parameter_is_refused`] records, reached from the other side. That fixture is about a declaration naming a parameter it does not have; this one is about a declaration naming a parameter it *does* have, at an occurrence that does not supply it. `instantiate_universe_levels_scoped` renumbers whatever the instance leaves unsupplied down by the instance's width, so `Levelled`'s `Type.{param 1}` at the one-level instance `[param 0]` becomes `Type.{param 0}` — and `param 0` at the use site is the *use site's* own first parameter, not the declaration's second. Two levels that were distinct are now one, and cumulativity is decided about the wrong one.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for the module below, and the renumbering was confirmed directly against `instantiate_universe_levels_scoped`. Not reachable from a surface program — `validate_universes` runs before a module leaves the elaborator — so this is again a rule the elaborator holds and the certifier did not, with the certifier the permissive one. No closed inhabitant of `False` was built from it; the capture and the missing judgment are what is demonstrated.
+///
+/// The control is [`a_universe_instance_of_the_declared_width_is_accepted`], the same occurrence supplying both levels. It is load-bearing: every occurrence of a universe-polymorphic declaration in the prelude carries an instance, so a width check that got the bound wrong would reject the standard library rather than this.
+#[test]
+fn a_universe_instance_narrower_than_its_scheme_is_refused() {
+    let verdicts = recheck_module_verdicts(&instance_of_width(1), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::Arity { .. })),
+        "the kernel certified an occurrence that leaves a declared universe parameter unsupplied: {verdicts:?}",
+    );
+}
+
+/// The control for the fixture above: the same occurrence, supplying one level per declared parameter.
+#[test]
+fn a_universe_instance_of_the_declared_width_is_accepted() {
+    assert_eq!(
+        recheck_module_verdicts(&instance_of_width(2), 1_000_000),
+        Vec::new(),
+        "the boundary refused an occurrence that supplies exactly the levels its scheme declares",
+    );
+}
+
+/// `let held : Type.{u} = Levelled.{…}`, where `Levelled` declares two universe parameters and the occurrence supplies `width` of them.
+fn instance_of_width(width: usize) -> Module {
+    let family = Global::Authored(Qualifier::from(["Levelled"]));
+
+    // Two parameters and no constraints — the shape `check_instance`'s loop never inspects.
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new(),
+        result_sort: Term::type_at(Level::param(UniverseParam(1))),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let levels = vec![Level::param(UniverseParam(0)); width];
+    let definition = Definition {
+        name: Global::Authored(Qualifier::from(["held"])),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::type_at(Level::param(UniverseParam(0))),
+        body: Term::induct_type_at(
+            family.clone(),
+            levels,
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        ),
+    };
+
+    Module {
+        items: vec![Item::Let(definition)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
