@@ -1420,3 +1420,139 @@ fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// An inductive's registry entry and its type-former definition may declare different universe schemes here, and that is not a hole.
+///
+/// `curios-elab`'s `validate_universes` refuses the disagreement outright — "inductive Foo and its type-former definition have different universe contexts" — and it is one of three such agreement clauses, the others pairing a `struct` with its type-former and a `concept` with its structure entry. All three are elaborator-only, and one concept stored twice with the agreement checked in one place is the shape that produced the three findings this file already records. So it was worth constructing rather than assuming.
+///
+/// The kernel certifies it, in both directions of the mismatch, and the reason it may is that it never reads the agreement: it reads each scheme where that scheme is *authoritative*. An `InductType` occurrence is checked and instantiated against the registry entry's context; the definition is checked under its own. Neither is ever consulted for the other's question, so there is nothing for a disagreement to corrupt.
+///
+/// The second fixture is what makes that a demonstration rather than a hope. It claims `Foo` at instance `[u, u]` inhabits the sort `Foo`'s registry gives instance `[u, v]`, and the kernel refuses with a `Mismatch` of `Type u` against `Type v` — the registry's `result_sort` applied faithfully to the levels the *occurrence* supplied. A kernel that read the definition's scheme here, or conflated the two, would accept it.
+///
+/// The verdict, stated plainly because the skill file asks for it: this is the elaborator being strict, not the certifier being permissive. The distinction is not that the elaborator is merely cautious — the agreement is load-bearing *for the elaborator*, which reads a scheme from whichever of its two copies is in hand. It is not load-bearing for a checker that reads each in its own place. No rule was added: making the kernel enforce an elaborator construction invariant it does not consult would be the kernel believing elaborator output, which is the thing this crate exists not to do.
+///
+/// Both routes by which a disagreement *could* have mattered are closed already, and by this same file: an ill-scoped level (`a_level_naming_an_undeclared_universe_parameter_is_refused`) and an instance of the wrong width (`a_universe_instance_narrower_than_its_scheme_is_refused`).
+#[test]
+fn a_registry_and_its_type_former_may_declare_different_schemes() {
+    for (label, registry, definition) in
+        [("registry narrower", 1, 2), ("definition narrower", 2, 1)]
+    {
+        assert_eq!(
+            recheck_module_verdicts(&disagreeing_schemes(registry, definition), 1_000_000),
+            Vec::new(),
+            "{label}: the kernel refused a disagreement it never consults",
+        );
+    }
+}
+
+/// The demonstration that each scheme is nonetheless applied where it is authoritative: a claim about the family's sort that the *registry's* `result_sort` refutes.
+#[test]
+fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
+    let family = Global::Authored(Qualifier::from(["Foo"]));
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new(),
+        // The sort is the *second* parameter, so an occurrence's second level decides it.
+        result_sort: Term::type_at(Level::param(UniverseParam(1))),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    // `Foo.{u, u}` claimed at `Type v`: its sort is `Type u`, and nothing may conflate the two.
+    let definition = Definition {
+        name: Global::Authored(Qualifier::from(["held"])),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::type_at(Level::param(UniverseParam(1))),
+        body: Term::induct_type_at(
+            family.clone(),
+            vec![Level::param(UniverseParam(0)); 2],
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        ),
+    };
+
+    let module = Module {
+        items: vec![Item::Let(definition)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    };
+
+    let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+        "the registry's result sort was not applied to the levels the occurrence supplied: {verdicts:?}",
+    );
+}
+
+/// `Foo`'s registry entry and its type-former definition, declaring `registry` and `definition` universe parameters respectively.
+fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
+    let family = Global::Authored(Qualifier::from(["Foo"]));
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: registry,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new(),
+        result_sort: Term::type_at(Level::param(UniverseParam(0))),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    // The type-former binding, whose body is the family's own normal form at the registry's width.
+    let former = Definition {
+        name: family.clone(),
+        kind: DefinitionKind::InductiveType,
+        universe_context: UniverseContext {
+            parameter_count: definition,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::type_at(Level::param(UniverseParam(0))),
+        body: Term::induct_type_at(
+            family.clone(),
+            vec![Level::param(UniverseParam(0)); registry],
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        ),
+    };
+
+    Module {
+        items: vec![Item::Let(former)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
