@@ -161,7 +161,13 @@ pub fn check_rec_group(
 ///
 /// # Not established here
 ///
-/// That `plicities` has one entry per telescope binder, and that constructor tags are distinct. Neither is checked anywhere I have found; both are recorded as gaps rather than assumed.
+/// Three things, found by reading every consumer of a registry entry against the clauses above rather than by probing. Each is recorded as a gap rather than assumed, and none has a witness yet.
+///
+/// That `plicities` has one entry per telescope binder. `payload_plicities` and the arm rule zip it against the signature, so a short or long vector misaligns a constructor's calling convention against its own payload.
+///
+/// That constructor tags are distinct. `constructor` finds the *first* match while `constructor_order` yields every entry, so a duplicate tag would have `infer` type a `Variant` against one signature while erasure assigns it the other's runtime index.
+///
+/// That `result_sort` is a *literal* sort rather than something that merely reduces to one. This one is a disagreement between consumers of the same field: `check_non_informative` and `check_signature` both read it through `Reducer::reduce_forced`, while the `Prop`-valued index guard in [`invert`](crate::invert_indices) matches it syntactically — `matches!(&*declaration.result_sort, Subterm::Prop)`. A `result_sort` that unfolds to `Prop` rather than being it would leave that guard silent while `Sort::of` still reported the family a proposition, so inversion would decide equations at a `Prop`-valued position. That is the direction DESIGN.md records as having produced two closed inhabitants of `False`, which makes it the first of these three to probe.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
