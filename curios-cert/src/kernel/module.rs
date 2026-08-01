@@ -144,12 +144,13 @@ pub fn check_rec_group(
 ///
 /// 1. Its universe context is closed and satisfiable — `universe_verdict`, run before anything is assumed.
 /// 2. It carries no elaboration residue: no `Metavar` node, no level holding an unsolved universe metavariable — `induct_residue`.
-/// 3. Every domain of its arity is a type — `check_arity`, which reaches the parameters as well as the indices, and so covers a family with no constructors at all.
-/// 4. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
-/// 5. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
-/// 6. Every constructor states as many index targets as the family declares indices — `check_constructed`.
-/// 7. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
-/// 8. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](crate::positivity_vectors) rather than per entry.
+/// 3. Its `result_sort` is a *literal* sort — `check_declared_sort`. See the note below on why literal, and not merely something that reduces to one.
+/// 4. Every domain of its arity is a type — `check_arity`, which reaches the parameters as well as the indices, and so covers a family with no constructors at all.
+/// 5. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
+/// 6. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
+/// 7. Every constructor states as many index targets as the family declares indices — `check_constructed`.
+/// 8. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
+/// 9. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](crate::positivity_vectors) rather than per entry.
 ///
 /// # What is unspellable rather than checked
 ///
@@ -157,23 +158,22 @@ pub fn check_rec_group(
 ///
 /// # The one repetition kept, and why
 ///
-/// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 5 is what makes it an enforced agreement rather than an assumed one.
+/// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 6 is what makes it an enforced agreement rather than an assumed one.
 ///
 /// # Not established here
 ///
-/// Three things, found by reading every consumer of a registry entry against the clauses above rather than by probing. Each is recorded as a gap rather than assumed, and none has a witness yet.
+/// Two things, found by reading every consumer of a registry entry against the clauses above rather than by probing. Each is recorded as a gap rather than assumed, and neither has a witness yet. A third — that `result_sort` is a literal sort — was on this list, was probed, and is clause 3 above.
 ///
 /// That `plicities` has one entry per telescope binder. `payload_plicities` and the arm rule zip it against the signature, so a short or long vector misaligns a constructor's calling convention against its own payload.
 ///
 /// That constructor tags are distinct. `constructor` finds the *first* match while `constructor_order` yields every entry, so a duplicate tag would have `infer` type a `Variant` against one signature while erasure assigns it the other's runtime index.
-///
-/// That `result_sort` is a *literal* sort rather than something that merely reduces to one. This one is a disagreement between consumers of the same field: `check_non_informative` and `check_signature` both read it through `Reducer::reduce_forced`, while the `Prop`-valued index guard in [`invert`](crate::invert_indices) matches it syntactically — `matches!(&*declaration.result_sort, Subterm::Prop)`. A `result_sort` that unfolds to `Prop` rather than being it would leave that guard silent while `Sort::of` still reported the family a proposition, so inversion would decide equations at a `Prop`-valued position. That is the direction DESIGN.md records as having produced two closed inhabitants of `False`, which makes it the first of these three to probe.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
+    check_declared_sort(&declaration.result_sort)?;
     check_arity(kernel, declaration)?;
 
     for constructor in declaration.signatures() {
@@ -187,6 +187,18 @@ pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Resul
     }
 
     Ok(())
+}
+
+/// The declared result sort is a *literal* sort, not a term that reduces to one.
+///
+/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](crate::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` made the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion went on to tell a proposition's constructors apart, and the arm it excused as impossible was reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
+///
+/// Nothing legitimate is refused: the surface grammar admits only the keywords `Type` and `Prop` after a declaration's `:`, so an entry the elaborator builds satisfies this by construction.
+fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {
+    match &**result_sort {
+        Subterm::Prop | Subterm::Type(_) => Ok(()),
+        _ => Err(KernelError::NotASort(result_sort.clone())),
+    }
 }
 
 /// Every domain of the declaration's arity is a type: its parameters, and the index telescope they terminate in.
@@ -278,13 +290,14 @@ fn check_constructed(
     Ok(())
 }
 
-/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), the size condition over its field telescope (clause 4), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
+/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 5), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
 ///
-/// A `struct` has no constructors and no index targets, so clauses 5 through 7 have nothing to range over. Clause 3 is likewise vacuous: a structure's fields are the terminal of its own `arity`, so there is no separately-stored parameter prefix that could disagree with it — the same nesting, and the same reason, as [`InductDecl::arity`].
+/// A `struct` has no constructors and no index targets, so clauses 6 through 8 have nothing to range over — and clause 6 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
 pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
+    check_declared_sort(&declaration.result_sort)?;
     check_non_informative(kernel, declaration)?;
 
     // The parameters, then the fields they terminate in — the second walk runs inside the first's scope, so a field domain sees every parameter. Parameters get the extra rung of slack; fields do not.

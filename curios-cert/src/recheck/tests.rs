@@ -823,3 +823,204 @@ fn indexed_by_proof(diverging: bool) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A declared result sort that merely *reduces* to `Prop` silences the index guard that reads it syntactically.
+///
+/// `Sort::of` decides irrelevance by reducing `result_sort`, and so do `check_signature` and `check_non_informative`. Index inversion does not: its `Prop`-valued guard — the rule that stops a proposition's constructors from being told apart, because irrelevance says they are the same value — matches `Subterm::Prop` on the nose. A family declared at `((s : Type 0) => s)(Prop)` is therefore a proposition to every consumer except the one whose silence is unsound.
+///
+/// The consequence below is the vacuous-elimination route. `Two` is that family, with constructors `a` and `b`; `Held(t : Two)` has one constructor targeting `Two/a()`. Irrelevance makes `Two/a()` and `Two/b()` convertible, so `Held/mk()` inhabits `Held(Two/b())` — and then eliminating that value with *no arms at all* is accepted, because inversion clashes `Two/b()` against `Two/a()` and reports the only constructor impossible. The motive is `False`.
+///
+/// While the hole was open `recheck_module_verdicts` returned zero refusals for exactly this module, certifying `let forged : False` from a value that exists. It never compiled: the surface grammar admits only the literal keywords `Type` and `Prop` after a declaration's `:`, so no `.crs` file can spell the sort, and the elaborator builds no such entry.
+///
+/// The control is the same module with `Two` at `Type 0`, where the clash is genuine and the empty elimination must stay accepted — general vacuous elimination is how an indexed family rules its impossible cases out, and refusing it is how this hole would be shut with a brick.
+#[test]
+fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
+    let verdicts = recheck_module_verdicts(&aliased_sort_forgery(), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::NotASort(_))),
+        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+    );
+}
+
+#[test]
+fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
+    let verdicts = recheck_module_verdicts(&relevant_index_control(), 1_000_000);
+
+    assert!(
+        verdicts.is_empty(),
+        "an arm the index targets genuinely clash with was refused: {verdicts:?}",
+    );
+}
+
+/// `Two`, at whatever sort its caller declares it, and `Held(t : Two)` with one constructor targeting `Two/a()`.
+fn clashing_index_decls(carrier_sort: Term) -> (Global, Global, BTreeMap<Global, InductDecl>) {
+    let two_name = Global::Authored(Qualifier::from(["Two"]));
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let two = Term::induct_type(two_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let nullary = |tag: &str| {
+        (
+            Atom::from(tag),
+            InductParam {
+                telescope: Telescope::done(Vec::new()),
+                plicities: Vec::new(),
+            },
+        )
+    };
+
+    let two_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![nullary("a"), nullary("b")],
+        result_sort: carrier_sort,
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let held_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build([(Free::local(700, Some("t")), two)], ())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::done(vec![Term::variant(
+                    two_name.clone(),
+                    Vec::<Term>::new(),
+                    "a",
+                    Vec::<Term>::new(),
+                )]),
+                plicities: Vec::new(),
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    (
+        two_name.clone(),
+        held_name.clone(),
+        BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
+    )
+}
+
+/// The module the doc comment above describes, with `Two`'s sort written as a redex that reduces to `Prop`.
+fn aliased_sort_forgery() -> Module {
+    let sort = Free::local(701, Some("s"));
+    let aliased = Term::apply(
+        Term::func([(sort.clone(), Term::type_ground())], Term::free_var(&sort)),
+        [Term::prop()],
+    );
+
+    let (two_name, held_name, mut decls) = clashing_index_decls(aliased);
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    decls.insert(false_name, proposition(Vec::new()));
+
+    let at_b = Term::induct_type(
+        held_name.clone(),
+        Vec::<Term>::new(),
+        [Term::variant(
+            two_name,
+            Vec::<Term>::new(),
+            "b",
+            Vec::<Term>::new(),
+        )],
+    );
+
+    // held : Held(Two/b()) = Held/mk() — accepted because irrelevance identifies the two index values.
+    let held_value = Global::Authored(Qualifier::from(["held"]));
+    let held = authored(
+        &held_value,
+        at_b,
+        Term::variant(held_name, Vec::<Term>::new(), "mk", Vec::<Term>::new()),
+    );
+
+    // forged : False = match held : (t, s) => False end — no arms, `mk` excused as impossible.
+    let forged_name = Global::Authored(Qualifier::from(["forged"]));
+    let forged = authored(
+        &forged_name,
+        false_type.clone(),
+        Term::induct_match_scoped_marked(
+            Term::free_var(&Free::from(&held_value)),
+            Scope::close(
+                Many(2),
+                &[&Free::local(702, Some("t")), &Free::local(703, Some("h"))],
+                false_type.clone(),
+            ),
+            Vec::<(Atom, Vec<(Plicity, Free)>, Term)>::new(),
+            None,
+        ),
+    );
+
+    Module {
+        items: vec![held, forged],
+        universe_seeds: Vec::new(),
+        induct_decls: decls,
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: Some(false_type),
+        body: Term::free_var(&Free::from(&forged_name)),
+    }
+}
+
+/// The control: the same two families with `Two` at `Type 0`, where `Two/b()` really does clash with `Two/a()`. Nothing inhabits `Held(Two/b())`, so the module proves nothing — what it pins is that the empty elimination stays legal.
+fn relevant_index_control() -> Module {
+    let (two_name, held_name, mut decls) = clashing_index_decls(Term::type_ground());
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    decls.insert(false_name, proposition(Vec::new()));
+
+    let at_b = Term::induct_type(
+        held_name,
+        Vec::<Term>::new(),
+        [Term::variant(
+            two_name,
+            Vec::<Term>::new(),
+            "b",
+            Vec::<Term>::new(),
+        )],
+    );
+
+    // vacuous : (h : Held(Two/b())) -> False = (h) => match h : (t, s) => False end
+    let vacuous_name = Global::Authored(Qualifier::from(["vacuous"]));
+    let subject = Free::local(710, Some("h"));
+    let vacuous = authored(
+        &vacuous_name,
+        Term::func_type([(subject.clone(), at_b.clone())], false_type.clone()),
+        Term::func(
+            [(subject.clone(), at_b)],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&subject),
+                Scope::close(
+                    Many(2),
+                    &[&Free::local(711, Some("t")), &Free::local(712, Some("h"))],
+                    false_type,
+                ),
+                Vec::<(Atom, Vec<(Plicity, Free)>, Term)>::new(),
+                None,
+            ),
+        ),
+    );
+
+    Module {
+        items: vec![vacuous],
+        universe_seeds: Vec::new(),
+        induct_decls: decls,
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
