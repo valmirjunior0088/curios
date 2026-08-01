@@ -255,7 +255,7 @@ fn universes_convert_only_at_the_same_level() {
 
 /// Binder *identity* must not leak into conversion. Two `rec` groups written with different minted names are the same group: binder names are display hints, and the bodies are de Bruijn-indexed under their scopes.
 ///
-/// This is the property that lets a folded recursive call be compared structurally at all — see the `RecMember` arm, which requires the groups to be equal.
+/// This is the property that lets a folded recursive call be compared structurally at all — see the projection arm, which requires the groups to be equal.
 #[test]
 fn two_alpha_variant_recursive_groups_convert() {
     let mut kernel = kernel();

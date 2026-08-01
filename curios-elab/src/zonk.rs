@@ -8,9 +8,9 @@ use {
         Apply, Bound, Carrier, Cases, Concept, Definition, DefinitionKind, Free, Func, FuncType,
         Global, InductDecl, InductParam, InductType, Item, Let, LetBinding, Level, LevelHead,
         Match, MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecGroup, RecItem,
-        RecMember, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Variant,
-        Visit, rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
+        RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Variant, Visit,
+        rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
     },
     std::{
         cell::RefCell,
@@ -223,7 +223,6 @@ pub(crate) fn validate_bound_universes<B: Bound>(
         Box::new(move |_, term| {
             let contexts: Vec<&UniverseContext> = match &**term {
                 Subterm::Rec(rec) => vec![rec.group.universe_context()],
-                Subterm::RecMember(member) => vec![member.group.universe_context()],
                 _ => Vec::new(),
             };
             for context in contexts {
@@ -303,26 +302,30 @@ fn validate_instance_arities<B: Bound>(
                 })
             };
             let invalid = match &**term {
-                Subterm::UniverseInst(instance) => match &*instance.head {
-                    Subterm::Var(var) => var.as_free().and_then(Free::as_global).and_then(|name| {
-                        definitions.get(name).and_then(|expected| {
-                            mismatch(
-                                "definition instance",
-                                &name.symbol(),
-                                *expected,
-                                instance.levels.len(),
-                            )
-                        })
-                    }),
-                    Subterm::RecMember(member) => mismatch(
+                Subterm::UniverseInst(instance) => match instance.head.as_rec_proj() {
+                    Some((group, _)) => mismatch(
                         "recursive instance",
                         "<local rec>",
-                        member.group.universe_context().parameter_count,
+                        group.universe_context().parameter_count,
                         instance.levels.len(),
                     ),
-                    _ => Some(format!(
-                        "{owner}: a universe instance wraps neither a variable nor a recursive member"
-                    )),
+                    None => match &*instance.head {
+                        Subterm::Var(var) => {
+                            var.as_free().and_then(Free::as_global).and_then(|name| {
+                                definitions.get(name).and_then(|expected| {
+                                    mismatch(
+                                        "definition instance",
+                                        &name.symbol(),
+                                        *expected,
+                                        instance.levels.len(),
+                                    )
+                                })
+                            })
+                        }
+                        _ => Some(format!(
+                            "{owner}: a universe instance wraps neither a variable nor a projection of a recursive group"
+                        )),
+                    },
                 },
                 Subterm::InductType(induct) => inducts.get(&induct.name).and_then(|expected| {
                     mismatch(
@@ -1025,23 +1028,6 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             )
             .with_universe_context(group.universe_context().clone()),
             tail: tail.try_map_body(|b| zonk_term(context, b))?,
-        }),
-
-        Subterm::RecMember(member) => Subterm::RecMember(RecMember {
-            group: RecGroup::new(
-                member
-                    .group
-                    .iter()
-                    .map(|scopes| {
-                        Ok(RecMemberScopes {
-                            type_: scopes.type_.try_map_body(|t| zonk_term(context, t))?,
-                            body: scopes.body.try_map_body(|b| zonk_term(context, b))?,
-                        })
-                    })
-                    .collect::<Result<_, Error>>()?,
-            )
-            .with_universe_context(member.group.universe_context().clone()),
-            index: member.index,
         }),
 
         // Handled in `zonk_term` before dispatch.

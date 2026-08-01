@@ -80,9 +80,14 @@ pub(crate) fn unfold_rec(_context: &mut Context, rec: Rec) -> Term {
     rec.tail.open(&refs)
 }
 
-/// Expose only `Rec` binding syntax, without unfolding a selected member's fixed point. This turns `rec f = ...; f` into its structural `RecMember` value while preserving the folded recursive call as the canonical neutral.
+/// Expose only `Rec` binding syntax, without unfolding a selected member's fixed point. This strips down to the projection `rec f = ...; f` denotes, preserving the folded recursive call as the canonical neutral.
 fn expose_rec_tail(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
     loop {
+        // A projection is the fixed point of this unfolding: opening its tail over the group yields the same term, so stripping stops here.
+        if term.as_rec_proj().is_some() {
+            return Ok(term);
+        }
+
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => {
                 let tail = unfold_rec(context, rec);
@@ -105,11 +110,11 @@ pub(crate) fn unfold_rec_apply(
     } = apply;
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
-    let Subterm::RecMember(member) = Term::unwrap_or_clone(head) else {
+    let Some((group, index)) = head.as_rec_proj() else {
         return Ok(None);
     };
 
-    let body = reduce(context, member.group.member_body(member.index))?;
+    let body = reduce(context, group.member_body(index))?;
     let body = force_rec(context, body)?;
     let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
         return Ok(None);
@@ -127,13 +132,17 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     loop {
         context.spend()?;
 
+        // Unfolding a projection means stepping to the member's body; unfolding any other `rec` means opening its tail.
+        if let Some((group, index)) = term.as_rec_proj() {
+            let body = group.member_body(index);
+            term = reduce(context, body)?;
+            continue;
+        }
+
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => {
                 let tail = unfold_rec(context, rec);
                 term = reduce(context, tail)?;
-            }
-            Subterm::RecMember(member) => {
-                term = reduce(context, member.group.member_body(member.index))?;
             }
             Subterm::Apply(apply) => match unfold_rec_apply(context, apply)? {
                 Some(unfolded) => term = reduce(context, unfolded)?,
@@ -203,11 +212,6 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
     let head = expose_rec_tail(context, head)?;
     match Term::unwrap_or_clone(head) {
         Subterm::Func(Func { telescope, .. }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
-        Subterm::RecMember(member) => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
-            head: Term::rec_member(member.group, member.index),
-            params,
-            plicities,
-        })))),
         head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
             head: head.into(),
             params,
@@ -435,7 +439,6 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Reduce, ReduceError> {
     let reduct = match &*instance.head {
         Subterm::Var(var) => context.var_reduct_at(var.unwrap()).cloned(),
-        Subterm::RecMember(_) => Some(instance.head.clone()),
         _ => Some(instance.head.clone()),
     };
     let Some(reduct) = reduct else {
@@ -445,15 +448,14 @@ fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Red
         )));
     };
     let arguments = instance.levels;
-    let reduct = match &*reduct {
-        Subterm::RecMember(member) => Term::rec_member(
-            member
-                .group
+    let reduct = match reduct.as_rec_proj() {
+        Some((group, index)) => Term::rec_proj(
+            group
                 .instantiate_universes(&arguments)
                 .map_err(ReduceError::Universe)?,
-            member.index,
+            index,
         ),
-        _ => instantiate_universe_levels_scoped(&reduct, &arguments)
+        None => instantiate_universe_levels_scoped(&reduct, &arguments)
             .map_err(ReduceError::Universe)?,
     };
     Ok(Reduce::Continue(reduct))

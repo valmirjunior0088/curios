@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Arity, Atom, Bound, Carrier, Cases, Field, Free, Func, FuncType, Global, InductType,
-        Infix, Let, Level, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
+        Infix, Let, Level, Match, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
         Flt, Grain, Plicity, Qualifier,
@@ -171,12 +171,6 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
                 scope(out, &member.body);
             }
             scope(out, tail);
-        }
-        Subterm::RecMember(RecMember { group, .. }) => {
-            for member in group.iter() {
-                scope(out, &member.type_);
-                scope(out, &member.body);
-            }
         }
         Subterm::Match(Match {
             head,
@@ -1229,10 +1223,6 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                 pure(";\n"),
                 sub(tail, inner_depth),
             ])
-        }
-        Subterm::RecMember(RecMember { group, index }) => {
-            let tail = Scope::constant(Many(group.length()), Term::var(Var::bound(index)));
-            sub(Subterm::Rec(Rec { group, tail }).into(), depth)
         }
         Subterm::Var(var) => print_var(var),
         Subterm::NumLit(num_lit) => {

@@ -81,7 +81,7 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let reduced = reduce(&mut context, opened).expect("ordinary reduction should terminate");
     assert!(matches!(
         &*reduced,
-        Subterm::Apply(Apply { head, .. }) if matches!(&**head, Subterm::RecMember(_))
+        Subterm::Apply(Apply { head, .. }) if head.as_rec_proj().is_some()
     ));
 
     let concrete = Term::rec(

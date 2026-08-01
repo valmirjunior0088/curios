@@ -142,7 +142,7 @@ pub(super) fn elaborate_rec(
         crate::check_rec_totality(context, &group, &names)?;
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
-            context.define(label, &Term::rec_member(group.clone(), index), None);
+            context.define(label, &Term::rec_proj(group.clone(), index), None);
         }
 
         let tail = rec.tail.open(&label_refs);

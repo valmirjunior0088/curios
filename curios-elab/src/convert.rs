@@ -9,11 +9,10 @@ use {
     super::{Context, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
     curios_base::Plicity,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Level, Many, Match,
-        Metavar, Prim, Proj, Rec, RecMember, ReduceError, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseInst, Var, Variant, Visit, instantiate_universe_levels_scoped,
-        project_erased_universes,
+        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Level, Match,
+        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseInst, Variant, Visit, instantiate_universe_levels_scoped, project_erased_universes,
     },
     std::collections::{HashMap, HashSet, VecDeque},
 };
@@ -83,6 +82,11 @@ pub(crate) fn synth_neutral(
     opened: &Opened,
     term: &Term,
 ) -> Result<Option<Term>, ReduceError> {
+    // A projection's type is carried by its own group — no lookup, and no unfolding, so this cannot re-enter the group it names.
+    if let Some((group, index)) = term.as_rec_proj() {
+        return Ok(Some(group.member_type(index)));
+    }
+
     match &**term {
         Subterm::Var(var) => {
             let name = var.unwrap();
@@ -95,31 +99,32 @@ pub(crate) fn synth_neutral(
                 .map(|instance| instance.map(|(type_, _)| type_))
                 .map_err(ReduceError::Universe)
         }
-        // A recursive member's type is carried by its own group — no lookup, and no unfolding, so this cannot re-enter the group it names.
-        Subterm::RecMember(RecMember { group, index }) => Ok(Some(group.member_type(*index))),
-
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
-        Subterm::UniverseInst(UniverseInst { head, levels }) => match &**head {
-            Subterm::Var(var) => {
-                let name = var.unwrap();
-                if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
-                    return Ok(Some(type_.clone()));
-                }
-                let Some(scheme) = context.assumption(name).cloned() else {
-                    return Ok(None);
-                };
-                instantiate_universe_levels_scoped(&scheme, levels)
-                    .map(Some)
-                    .map_err(ReduceError::Universe)
-            }
-            Subterm::RecMember(RecMember { group, index }) => {
+        Subterm::UniverseInst(UniverseInst { head, levels }) => {
+            if let Some((group, index)) = head.as_rec_proj() {
                 let group = group
                     .instantiate_universes(levels)
                     .map_err(ReduceError::Universe)?;
-                Ok(Some(group.member_type(*index)))
+
+                return Ok(Some(group.member_type(index)));
             }
-            _ => Ok(None),
-        },
+
+            match &**head {
+                Subterm::Var(var) => {
+                    let name = var.unwrap();
+                    if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
+                        return Ok(Some(type_.clone()));
+                    }
+                    let Some(scheme) = context.assumption(name).cloned() else {
+                        return Ok(None);
+                    };
+                    instantiate_universe_levels_scoped(&scheme, levels)
+                        .map(Some)
+                        .map_err(ReduceError::Universe)
+                }
+                _ => Ok(None),
+            }
+        }
 
         Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(context, opened, head)? else {
@@ -1897,12 +1902,15 @@ impl Convert {
                 }
                 // Both sides already reached `reduce`'s weak-head normal form before this dispatch (see `drain`), so a surviving `Apply` is genuinely stuck — same head or not, there is nothing further unfolding could reveal; `compare_apply` handles both uniformly (enqueuing the heads themselves when they differ, which recurs to a hard mismatch or resolves through whatever solves the head). The canonicalized `history` (see `history_key`) still recognizes a coinductive recurrence across repeated rounds of an unfolding cycle; a genuinely growing comparison spends the budget instead.
                 (Subterm::Apply(this_a), Subterm::Apply(that_a)) => {
-                    match (&*this_a.head, &*that_a.head) {
-                        (Subterm::RecMember(this), Subterm::RecMember(that)) if this == that => {
+                    let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
+                    let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
+
+                    match (this_head, that_head) {
+                        (Some(this), Some(that)) if this == that => {
                             self.compare_same_rec_apply(context, this_a, that_a, type_.clone())?
                         }
                         // Applications of *different* folded members (or a folded member against another stuck head) may still compute the same value, so congruence proves nothing: take one symmetric delta step instead.
-                        (Subterm::RecMember(_), _) | (_, Subterm::RecMember(_)) => {
+                        (Some(_), _) | (_, Some(_)) => {
                             let this_unfolded = unfold_rec_apply(context, this_a.clone())?;
                             let that_unfolded = unfold_rec_apply(context, that_a.clone())?;
                             match (this_unfolded, that_unfolded) {
@@ -1920,7 +1928,7 @@ impl Convert {
                         _ => self.compare_apply(context, this_a, that_a)?,
                     }
                 }
-                (Subterm::Apply(apply), other) if matches!(&*apply.head, Subterm::RecMember(_)) => {
+                (Subterm::Apply(apply), other) if apply.head.as_rec_proj().is_some() => {
                     match unfold_rec_apply(context, apply)? {
                         Some(unfolded) => {
                             self.enqueue(type_, unfolded, other.into());
@@ -1929,7 +1937,7 @@ impl Convert {
                         None => false,
                     }
                 }
-                (other, Subterm::Apply(apply)) if matches!(&*apply.head, Subterm::RecMember(_)) => {
+                (other, Subterm::Apply(apply)) if apply.head.as_rec_proj().is_some() => {
                     match unfold_rec_apply(context, apply)? {
                         Some(unfolded) => {
                             self.enqueue(type_, other.into(), unfolded);
@@ -1970,52 +1978,34 @@ impl Convert {
                     self.eta_expand_struct(context, struct_, other.into(), type_.clone())?
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
-                    self.compare_rec(context, this, that)?
-                }
-                (Subterm::RecMember(this), Subterm::RecMember(that)) => {
-                    if this.index != that.index {
-                        self.enqueue(
-                            type_,
-                            this.group.member_body(this.index),
-                            that.group.member_body(that.index),
-                        );
-                        true
-                    } else {
-                        self.compare_rec(
-                            context,
-                            Rec {
-                                tail: Scope::constant(
-                                    Many(this.group.length()),
-                                    Term::var(Var::bound(this.index)),
-                                ),
-                                group: this.group,
-                            },
-                            Rec {
-                                tail: Scope::constant(
-                                    Many(that.group.length()),
-                                    Term::var(Var::bound(that.index)),
-                                ),
-                                group: that.group,
-                            },
-                        )?
+                    match (this.as_proj(), that.as_proj()) {
+                        // Two projections at *different* indices are still two `rec` blocks, but comparing their tails would only report that 0 is not 1. What is being asked is whether the members they select agree, so compare those.
+                        (Some(this_index), Some(that_index)) if this_index != that_index => {
+                            self.enqueue(
+                                type_,
+                                this.group.member_body(this_index),
+                                that.group.member_body(that_index),
+                            );
+                            true
+                        }
+                        _ => self.compare_rec(context, this, that)?,
                     }
                 }
-                (Subterm::RecMember(member), other) => {
-                    self.enqueue(type_, member.group.member_body(member.index), other.into());
-                    true
-                }
-                (other, Subterm::RecMember(member)) => {
-                    self.enqueue(type_, other.into(), member.group.member_body(member.index));
-                    true
-                }
                 (Subterm::Rec(rec), other) => {
-                    let tail = unfold_rec(context, rec);
-                    self.enqueue(type_, tail, other.into());
+                    // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body.
+                    let stepped = match rec.as_proj() {
+                        Some(index) => rec.group.member_body(index),
+                        None => unfold_rec(context, rec),
+                    };
+                    self.enqueue(type_, stepped, other.into());
                     true
                 }
                 (other, Subterm::Rec(rec)) => {
-                    let tail = unfold_rec(context, rec);
-                    self.enqueue(type_, other.into(), tail);
+                    let stepped = match rec.as_proj() {
+                        Some(index) => rec.group.member_body(index),
+                        None => unfold_rec(context, rec),
+                    };
+                    self.enqueue(type_, other.into(), stepped);
                     true
                 }
                 // Flex-apply imitation: a stuck application against a nominal type constructor. The unsolved-metavariable-head guard (and the `eta_expand_neutral` fallthrough for every other `Apply`) lives inside `imitate_flex_apply`.

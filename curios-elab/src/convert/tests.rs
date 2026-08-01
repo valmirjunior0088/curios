@@ -338,7 +338,7 @@ fn convert_same_recursive_head_compares_spines() {
 }
 
 /// `body` is built over the member's own parameter, which this helper mints — a caller that wants the identity function has to be handed that binder, not mint a like-named one of its own.
-fn structural_rec_member(context: &mut Context, body: impl FnOnce(&Free) -> Term) -> Term {
+fn structural_rec_proj(context: &mut Context, body: impl FnOnce(&Free) -> Term) -> Term {
     let member = context.fresh(Some("f"));
     let parameter = context.fresh(Some("x"));
     let body = body(&parameter);
@@ -354,7 +354,7 @@ fn structural_rec_member(context: &mut Context, body: impl FnOnce(&Free) -> Term
     let Subterm::Rec(rec) = Term::unwrap_or_clone(rec) else {
         unreachable!()
     };
-    Term::rec_member(rec.group, 0)
+    Term::rec_proj(rec.group, 0)
 }
 
 #[test]
@@ -362,12 +362,12 @@ fn same_structural_recursive_head_does_not_assume_injective_spines() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
-    let constant = structural_rec_member(&mut context, |_| nat(0));
+    let constant = structural_rec_proj(&mut context, |_| nat(0));
     let this = Term::apply(constant.clone(), [Term::free_var(&a)]);
     let that = Term::apply(constant, [Term::free_var(&b)]);
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 
-    let identity = structural_rec_member(&mut context, Term::free_var);
+    let identity = structural_rec_proj(&mut context, Term::free_var);
     let this = Term::apply(identity.clone(), [Term::free_var(&a)]);
     let that = Term::apply(identity, [Term::free_var(&b)]);
     assert_eq!(conv(&mut context, &this, &that), Ok(false));

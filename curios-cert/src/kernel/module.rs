@@ -43,6 +43,64 @@ pub fn check_definition(
     Ok(())
 }
 
+/// Check every member of `group` against its declared type, then run `within` with the members in scope.
+///
+/// Each member is assumed under a *fresh binder identity* rather than opened over the group's own folded spelling. A member occurrence inside a body is then an ordinary local, gated by the scope stack like every other binder — which is what stops a body from naming a group nothing ever checked, and what stops checking a body from re-entering the check it is already inside. `within` runs within that scope, because a `rec` tail sees the members too; the names retract on every path out, so what the caller returns must not mention them.
+///
+/// Totality is not decided for the group as a whole. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see "Totality of the erased program" in `documentation/DESIGN.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
+pub(crate) fn check_group<R>(
+    kernel: &mut Kernel,
+    group: &RecGroup,
+    within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, KernelError>,
+) -> Result<R, KernelError> {
+    let mark = kernel.mark();
+    let outcome = check_group_members(kernel, group, within);
+    kernel.retract(mark);
+
+    outcome
+}
+
+/// [`check_group`]'s body, with the scope bracket left to its caller so that every failing path retracts too.
+fn check_group_members<R>(
+    kernel: &mut Kernel,
+    group: &RecGroup,
+    within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, KernelError>,
+) -> Result<R, KernelError> {
+    let mut names = Vec::with_capacity(group.length());
+    let mut erased_member: Option<Term> = None;
+
+    // Every member is assumed before any body is checked, because a member may call any other.
+    for index in 0..group.length() {
+        let type_ = group.member_type(index);
+        let sort = Sort::of(kernel, &type_)?;
+
+        if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
+            erased_member = Some(type_.clone());
+        }
+
+        let name = kernel.fresh(Some("rec"));
+        kernel.assume(&name, &type_);
+        names.push(name);
+    }
+
+    let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
+    let refs = members.iter().collect::<Vec<_>>();
+
+    for (index, member) in group.iter().enumerate() {
+        check(kernel, &member.body.open(&refs), &group.member_type(index))?;
+    }
+
+    if let Some(type_) = erased_member
+        && group_totality(kernel, group) != Totality::Total
+    {
+        return Err(KernelError::NotDescending {
+            type_: Box::new(type_),
+        });
+    }
+
+    within(kernel, &names)
+}
+
 /// Check a top-level recursive group, then bring every member into scope under the name it is exported as.
 ///
 /// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `names` parallels the group's members positionally; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through.
@@ -64,32 +122,13 @@ pub fn check_rec_group(
         });
     }
 
-    let mut erased_member: Option<Term> = None;
-    for index in 0..group.length() {
-        let type_ = group.member_type(index);
-
-        let sort = Sort::of(kernel, &type_)?;
-        check(kernel, &group.member_body(index), &type_)?;
-
-        // A proof-typed or type-yielding member is deleted by erasure, so its recursion must descend: assuming it at its declared type otherwise certifies `rec f : False = f`.
-        if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
-            erased_member = Some(type_);
-        }
-    }
-
-    if let Some(type_) = erased_member
-        && group_totality(kernel, group) != Totality::Total
-    {
-        return Err(KernelError::NotDescending {
-            type_: Box::new(type_),
-        });
-    }
+    check_group(kernel, group, |_, _| Ok(()))?;
 
     for (index, name) in names.iter().enumerate() {
         kernel.define(
             name,
             &group.member_type(index),
-            &Term::rec_member(group.clone(), index),
+            &Term::rec_proj(group.clone(), index),
             universes,
         );
     }

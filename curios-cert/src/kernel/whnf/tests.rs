@@ -329,7 +329,7 @@ fn a_recursive_application_stays_folded_until_forced() {
     let reduced = whnf(&mut kernel, unfold_rec(rec)).expect("ordinary reduction terminates");
     assert!(matches!(
         &*reduced,
-        Subterm::Apply(Apply { head, .. }) if matches!(&**head, Subterm::RecMember(_))
+        Subterm::Apply(Apply { head, .. }) if head.as_rec_proj().is_some()
     ));
 
     // Applied to a literal, forcing runs it to the end.

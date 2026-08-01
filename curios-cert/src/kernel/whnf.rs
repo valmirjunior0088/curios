@@ -89,7 +89,7 @@ pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 pending.push(Pending { motive, cases });
                 Step::Continue(head)
             }
-            // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`, `FuncType`, `Type`/`Prop`, `Rec`/`RecMember`, and a `Metavar` no kernel input should contain are all weak-head normal already: their sub-terms are not reduced in this position.
+            // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`, `FuncType`, `Type`/`Prop`, `Rec`, and a `Metavar` no kernel input should contain are all weak-head normal already: their sub-terms are not reduced in this position.
             other => Step::Stop(other.into()),
         };
 
@@ -158,11 +158,6 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
             let refs = params.iter().collect::<Vec<_>>();
             Step::Continue(telescope.open(&refs))
         }
-        Subterm::RecMember(member) => Step::Stop(Term::from(Subterm::Apply(Apply {
-            head: Term::rec_member(member.group, member.index),
-            params,
-            plicities,
-        }))),
         head => Step::Stop(Term::from(Subterm::Apply(Apply {
             head: head.into(),
             params,
@@ -255,15 +250,16 @@ fn step_universe_inst(kernel: &mut Kernel, instance: UniverseInst) -> Result<Ste
         return Ok(Step::Stop(Term::universe_inst(head, levels)));
     };
 
-    Ok(Step::Continue(match &*reduct {
-        Subterm::RecMember(member) => Term::rec_member(
-            member
-                .group
+    Ok(Step::Continue(match reduct.as_rec_proj() {
+        Some((group, index)) => Term::rec_proj(
+            group
                 .instantiate_universes(&levels)
                 .map_err(ReduceError::Universe)?,
-            member.index,
+            index,
         ),
-        _ => instantiate_universe_levels_scoped(&reduct, &levels).map_err(ReduceError::Universe)?,
+        None => {
+            instantiate_universe_levels_scoped(&reduct, &levels).map_err(ReduceError::Universe)?
+        }
     }))
 }
 
@@ -376,11 +372,16 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
     }
 }
 
-/// Strip `rec` binding syntax without unfolding a member's fixed point, turning `rec f = ...; f` into the structural `RecMember` it denotes.
+/// Strip `rec` binding syntax without unfolding a member's fixed point, leaving the projection that `rec f = ...; f` denotes.
 fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
 
     loop {
+        // A projection already *is* the member it denotes: opening its tail over the group yields the same term, so this is where stripping stops rather than a step it could take.
+        if term.as_rec_proj().is_some() {
+            return Ok(term);
+        }
+
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => term = whnf(kernel, unfold_rec(rec))?,
             other => return Ok(other.into()),
@@ -408,11 +409,15 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     loop {
         kernel.spend()?;
 
+        // Unfolding a projection means stepping to the member's body; unfolding any other `rec` means opening its tail. Both are the same rule read at the two tail shapes.
+        if let Some((group, index)) = term.as_rec_proj() {
+            let body = group.member_body(index);
+            term = whnf(kernel, body)?;
+            continue;
+        }
+
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => term = whnf(kernel, unfold_rec(rec))?,
-            Subterm::RecMember(member) => {
-                term = whnf(kernel, member.group.member_body(member.index))?;
-            }
             Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply)? {
                 Some(unfolded) => term = whnf(kernel, unfolded)?,
                 None => return Ok(folded),
@@ -437,11 +442,14 @@ pub(crate) fn unfold_spelling(
     kernel: &mut Kernel,
     term: &Term,
 ) -> Result<Option<Term>, ReduceError> {
+    if let Some((group, index)) = term.as_rec_proj() {
+        let body = group.member_body(index);
+
+        return Ok(Some(whnf(kernel, body)?));
+    }
+
     match &**term {
         Subterm::Rec(rec) => Ok(Some(whnf(kernel, unfold_rec(rec.clone()))?)),
-        Subterm::RecMember(member) => {
-            Ok(Some(whnf(kernel, member.group.member_body(member.index))?))
-        }
         Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply.clone())? {
             Some(unfolded) => Ok(Some(whnf(kernel, unfolded)?)),
             None => Ok(None),
@@ -457,11 +465,11 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
     let head = whnf(kernel, head)?;
     let head = expose_rec_tail(kernel, head)?;
 
-    let Subterm::RecMember(member) = Term::unwrap_or_clone(head) else {
+    let Some((group, index)) = head.as_rec_proj() else {
         return Ok(None);
     };
 
-    let body = whnf(kernel, member.group.member_body(member.index))?;
+    let body = whnf(kernel, group.member_body(index))?;
     let body = force(kernel, body)?;
 
     let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {

@@ -209,7 +209,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
                         kernel.define(
                             &Free::from(name),
                             &rec.group.member_type(member),
-                            &Term::rec_member(rec.group.clone(), member),
+                            &Term::rec_proj(rec.group.clone(), member),
                             &universes,
                         );
                     }
@@ -263,7 +263,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
                         kernel.define(
                             name,
                             &rec.group.member_type(member),
-                            &Term::rec_member(rec.group.clone(), member),
+                            &Term::rec_proj(rec.group.clone(), member),
                             &universes,
                         );
                     }

@@ -174,25 +174,24 @@ fn elaborate_subterm(
         ),
         Subterm::Prop => (term.clone(), Term::type_ground()),
         Subterm::UniverseInst(instance) => {
-            let type_ = match &*instance.head {
-                Subterm::Var(var) => context
-                    .instantiate_assumption_at(var.unwrap(), &instance.levels)?
-                    .ok_or_else(|| Error::unbound_variable(instance.head.clone()))?,
-                Subterm::RecMember(member) => {
-                    context
-                        .universes_mut()
-                        .instantiate_at(member.group.universe_context(), &instance.levels)
-                        .map_err(Error::from)?;
-                    instantiate_universe_levels_scoped(
-                        &member.group.member_type(member.index),
-                        &instance.levels,
-                    )
+            let type_ = if let Some((group, index)) = instance.head.as_rec_proj() {
+                context
+                    .universes_mut()
+                    .instantiate_at(group.universe_context(), &instance.levels)
+                    .map_err(Error::from)?;
+
+                instantiate_universe_levels_scoped(&group.member_type(index), &instance.levels)
                     .map_err(Error::from)?
-                }
-                _ => {
-                    return Err(Error::UniverseInvariant(
-                        "a universe instance must wrap a variable or recursive member".into(),
-                    ));
+            } else {
+                match &*instance.head {
+                    Subterm::Var(var) => context
+                        .instantiate_assumption_at(var.unwrap(), &instance.levels)?
+                        .ok_or_else(|| Error::unbound_variable(instance.head.clone()))?,
+                    _ => {
+                        return Err(Error::UniverseInvariant(
+                            "a universe instance must wrap a variable or a projection of a recursive group".into(),
+                        ));
+                    }
                 }
             };
             (term.clone(), type_)
@@ -205,7 +204,6 @@ fn elaborate_subterm(
         Subterm::Proj(proj) => elaborate_proj(context, proj)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
-        Subterm::RecMember(member) => (term.clone(), member.group.member_type(member.index)),
         Subterm::Var(var) => match context.instantiate_assumption(var.unwrap())? {
             Some((type_, levels)) => {
                 let rebuilt = if levels.is_empty() {

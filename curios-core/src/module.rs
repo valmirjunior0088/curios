@@ -434,7 +434,7 @@ impl fmt::Display for Module {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::Subterm};
+    use super::*;
 
     fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         let global = Global::Authored(Qualifier::from([name]));
@@ -464,11 +464,11 @@ mod tests {
                 .free_vars()
                 .is_empty()
         );
-        assert!(matches!(
-            &*rec.group.member_body(0),
-            Subterm::RecMember(member)
-                if member.index == 0 && member.group == rec.group
-        ));
+        assert_eq!(
+            rec.group.member_body(0).as_rec_proj(),
+            Some((&rec.group, 0)),
+            "a member's body sees itself as a projection of its own group"
+        );
 
         let opened = rec.definitions();
         assert_eq!(

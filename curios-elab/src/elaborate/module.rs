@@ -808,7 +808,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         context.reassume(&name, &rec.group.member_type(index));
         context.define(
             &name,
-            &Term::rec_member(rec.group.clone(), index),
+            &Term::rec_proj(rec.group.clone(), index),
             Some(&definition.kind),
         );
         context.set_assumption_universe_context(&name, universe_context.clone());
@@ -947,7 +947,7 @@ fn elaborate_module_suffix(
                         );
                         context.define(
                             &name,
-                            &Term::rec_member(rec.group.clone(), index),
+                            &Term::rec_proj(rec.group.clone(), index),
                             Some(&definition.kind),
                         );
                     }

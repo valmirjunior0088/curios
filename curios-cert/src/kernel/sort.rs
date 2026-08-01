@@ -12,8 +12,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, whnf::whnf},
     curios_core::{
-        Apply, Field, FuncType, InductType, Level, Prim, Proj, RecMember, Reducer, StructType,
-        Subterm, Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
+        Apply, Field, FuncType, InductType, Level, Prim, Proj, Reducer, StructType, Subterm,
+        Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
     },
 };
 
@@ -110,13 +110,13 @@ impl Sort {
                 as_sort(kernel, &motive)
             }
 
-            // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable. Its synthesized type *is* its sort.
-            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) | Subterm::RecMember(_) => {
-                let synthesized = synth_neutral(kernel, &reduced)?
-                    .ok_or_else(|| KernelError::Unclassified(reduced.clone()))?;
-
-                as_sort(kernel, &synthesized)
+            // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable.
+            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
+                sort_of_neutral(kernel, &reduced)
             }
+
+            // A projection of a recursive group is neutral in the same way: `rec Lt = ..; Lt` is stuck at its own fixed point, and its type is the one its group carries.
+            Subterm::Rec(_) if reduced.as_rec_proj().is_some() => sort_of_neutral(kernel, &reduced),
 
             // `Type u : Type (u + 1)`, and `Prop : Type 0`.
             Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
@@ -127,6 +127,14 @@ impl Sort {
             _ => Err(KernelError::Unclassified(reduced.clone())),
         }
     }
+}
+
+/// The sort of a neutral type: what [`synth_neutral`] reads off its head *is* its sort.
+fn sort_of_neutral(kernel: &mut Kernel, reduced: &Term) -> Result<Sort, KernelError> {
+    let synthesized = synth_neutral(kernel, reduced)?
+        .ok_or_else(|| KernelError::Unclassified(reduced.clone()))?;
+
+    as_sort(kernel, &synthesized)
 }
 
 /// Run `walk` with every binder it opens closed again afterwards, on the failing path as well as the succeeding one.
@@ -235,38 +243,43 @@ pub(crate) fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, Ker
 ///
 /// This must never reach [`convert`](super::convert): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
 pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, KernelError> {
+    // A projection's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
+    if let Some((group, index)) = term.as_rec_proj() {
+        return Ok(Some(group.member_type(index)));
+    }
+
     match &**term {
         Subterm::Var(var) => Ok(kernel.type_of(var.unwrap()).cloned()),
 
-        // A recursive member's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
-        Subterm::RecMember(RecMember { group, index }) => Ok(Some(group.member_type(*index))),
-
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
-        Subterm::UniverseInst(UniverseInst { head, levels }) => match &**head {
-            Subterm::Var(var) => {
-                let name = var.unwrap();
-
-                // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
-                if let Some(type_) = kernel.local_type(name) {
-                    return Ok(Some(type_.clone()));
-                }
-
-                let Some((scheme, context)) = kernel.scheme_of(name) else {
-                    return Ok(None);
-                };
-                let (scheme, context) = (scheme.clone(), context.clone());
-                kernel.check_instance(&context, levels)?;
-
-                Ok(Some(instantiate_universe_levels_scoped(&scheme, levels)?))
-            }
-            Subterm::RecMember(RecMember { group, index }) => {
+        Subterm::UniverseInst(UniverseInst { head, levels }) => {
+            if let Some((group, index)) = head.as_rec_proj() {
                 kernel.check_instance(group.universes(), levels)?;
                 let group = group.instantiate_universes(levels)?;
 
-                Ok(Some(group.member_type(*index)))
+                return Ok(Some(group.member_type(index)));
             }
-            _ => Ok(None),
-        },
+
+            match &**head {
+                Subterm::Var(var) => {
+                    let name = var.unwrap();
+
+                    // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
+                    if let Some(type_) = kernel.local_type(name) {
+                        return Ok(Some(type_.clone()));
+                    }
+
+                    let Some((scheme, context)) = kernel.scheme_of(name) else {
+                        return Ok(None);
+                    };
+                    let (scheme, context) = (scheme.clone(), context.clone());
+                    kernel.check_instance(&context, levels)?;
+
+                    Ok(Some(instantiate_universe_levels_scoped(&scheme, levels)?))
+                }
+                _ => Ok(None),
+            }
+        }
 
         Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(kernel, head)? else {

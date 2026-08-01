@@ -1147,12 +1147,18 @@ impl Term {
         }))
     }
 
-    pub fn rec_member(group: RecGroup, index: usize) -> Self {
+    /// Member `index` of `group`, spelled as what it is: the group bound, with a tail that selects one member. `rec f and g; f`.
+    ///
+    /// This is an ordinary [`Rec`] node and not a form of its own, which is what keeps one typing rule from having to be written twice — a member occurrence is checked by the rule that checks the group, because it *is* the group. Opening this tail over the group's members yields the same term back, so a projection is the fixed point of `rec` unfolding and therefore a normal form; [`Term::as_rec_proj`] is how a reducer recognizes one without running the substitution to find out.
+    pub fn rec_proj(group: RecGroup, index: usize) -> Self {
         assert!(
             index < group.length(),
             "recursive member index out of bounds"
         );
-        Self::from(Subterm::RecMember(RecMember { group, index }))
+
+        let tail = Scope::constant(Many(group.length()), Self::var(Var::bound(index)));
+
+        Self::from(Subterm::Rec(Rec { group, tail }))
     }
 }
 
@@ -1943,9 +1949,10 @@ impl RecGroup {
         self.iter().len()
     }
 
+    /// One term per member, each denoting that member and needing nothing in scope to do it — what every scope in this group opens over.
     pub fn members(&self) -> Vec<Term> {
         (0..self.length())
-            .map(|index| Term::rec_member(self.clone(), index))
+            .map(|index| Term::rec_proj(self.clone(), index))
             .collect()
     }
 
@@ -2027,7 +2034,9 @@ impl RecGroup {
     }
 }
 
-/// A block of mutually recursive bindings with an arbitrary tail in scope of the shared group. It is binding syntax; demanded member occurrences are represented explicitly by [`RecMember`].
+/// A block of mutually recursive bindings with a tail in scope of the shared group.
+///
+/// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node was the earlier design, and what it cost is worth recording: a node that is well-formed standing alone is a node no scope gates, and the kernel typed one from the group it carried without ever checking that group.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2038,17 +2047,18 @@ pub struct Rec {
     pub tail: Scope<Many>,
 }
 
-/// The folded fixed point selecting one member of a [`RecGroup`]. This is a structural term, not an allocation identity: separately allocated alpha-equivalent groups compare equal.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
-pub struct RecMember {
-    pub group: RecGroup,
-    pub index: usize,
+impl Rec {
+    /// The member index this block's tail selects, when it selects one rather than computing something of its own — see [`Term::rec_proj`].
+    pub fn as_proj(&self) -> Option<usize> {
+        let Subterm::Var(var) = &**self.tail.body() else {
+            return None;
+        };
+
+        var.as_bound().filter(|index| *index < self.group.length())
+    }
 }
 
+/// The folded fixed point selecting one member of a [`RecGroup`]. This is a structural term, not an allocation identity: separately allocated alpha-equivalent groups compare equal.
 /// Provenance of an inserted implicit argument: the applied function (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
@@ -2166,7 +2176,6 @@ pub enum Subterm {
     Proj(Proj),
     Let(Let),
     Rec(Rec),
-    RecMember(RecMember),
     UniverseInst(UniverseInst),
     Var(Var),
     Metavar(Metavar),
@@ -2177,6 +2186,17 @@ pub enum Subterm {
 }
 
 impl Subterm {
+    /// The group and index this term projects, when it is a member selection rather than a `rec` block with a tail of its own.
+    ///
+    /// On [`Subterm`] rather than [`Term`] so both reach it: a `Term` derefs here.
+    pub fn as_rec_proj(&self) -> Option<(&RecGroup, usize)> {
+        let Subterm::Rec(rec) = self else {
+            return None;
+        };
+
+        rec.as_proj().map(|index| (&rec.group, index))
+    }
+
     fn any_direct_universe_meta(&self, pred: &mut impl FnMut(UniverseMetaId) -> bool) -> bool {
         let mut level_matches = |level: &Level| level.metas().any(&mut *pred);
         let context_matches =
@@ -2200,7 +2220,7 @@ impl Subterm {
             | Subterm::Struct(Struct {
                 universes: levels, ..
             }) => levels.iter().any(level_matches),
-            Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
+            Subterm::Rec(Rec { group, .. }) => {
                 context_matches(group.universe_context(), &mut level_matches)
             }
             _ => false,
@@ -2395,12 +2415,6 @@ impl Subterm {
                 }
                 tail.body().collect_construction_names(names);
             }
-            Subterm::RecMember(RecMember { group, .. }) => {
-                for member in group.iter() {
-                    member.type_.body().collect_construction_names(names);
-                    member.body.body().collect_construction_names(names);
-                }
-            }
         }
     }
 
@@ -2495,9 +2509,6 @@ impl Subterm {
                     member.type_.body().any_metavar(pred) || member.body.body().any_metavar(pred)
                 }) || tail.body().any_metavar(pred)
             }
-            Subterm::RecMember(RecMember { group, .. }) => group.iter().any(|member| {
-                member.type_.body().any_metavar(pred) || member.body.body().any_metavar(pred)
-            }),
         }
     }
 
@@ -2579,9 +2590,6 @@ impl Subterm {
                     .any(|member| pred(member.type_.body()) || pred(member.body.body()))
                     || pred(tail.body())
             }
-            Subterm::RecMember(RecMember { group, .. }) => group
-                .iter()
-                .any(|member| pred(member.type_.body()) || pred(member.body.body())),
         }
     }
 
@@ -2631,7 +2639,7 @@ impl Subterm {
             | Subterm::Struct(Struct { universes, .. }) => {
                 !universes.is_empty() || self.any_child_term(&mut |term| term.has_universe_data())
             }
-            Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
+            Subterm::Rec(Rec { group, .. }) => {
                 group.universe_context() != &UniverseContext::empty()
                     || self.any_child_term(&mut |term| term.has_universe_data())
             }
@@ -2899,10 +2907,6 @@ impl Bound for Subterm {
                 group: group.traverse(visit),
                 tail: visit.visit_scope(tail),
             }),
-            Subterm::RecMember(RecMember { group, index }) => Subterm::RecMember(RecMember {
-                group: group.traverse(visit),
-                index: *index,
-            }),
             Subterm::UniverseInst(UniverseInst { head, .. }) if visit.erases_universes() => {
                 (*visit.visit_subterm(head)).clone()
             }
@@ -3023,7 +3027,6 @@ impl Bound for Subterm {
                 reach
             }
             Subterm::Rec(Rec { group, tail }) => group.reach().max(tail.reach()),
-            Subterm::RecMember(RecMember { group, .. }) => group.reach(),
         }
     }
 

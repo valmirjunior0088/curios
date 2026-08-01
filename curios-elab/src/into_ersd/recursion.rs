@@ -1,9 +1,9 @@
-//! Recursive groups — local `rec` blocks, rec-member selections, and the top-level recursive items.
+//! Recursive groups — local `rec` blocks, the member selections that are one more `rec` block apiece, and the top-level recursive items.
 //!
 //! Members are classified syntactically: a member whose body is a lambda is a function member (a reserved arena function), anything else is an eagerly computed member (a value with an initializer block). Every member is pre-bound before any body is erased, so mutual references resolve; source order is preserved as the eager initialization order. An all-function group erases to a `Functions` statement, a mixed or value-only group to a recursive group — and the representation's verifier owns the rejection of the recursion classes the language does not admit (a computed member evaluating itself or a later member), so no diagnostic is re-derived here.
 
 use {
-    super::{Context, Error, Lowering, Outcome, Rec, RecMember, Scope, Subterm, Term},
+    super::{Context, Error, Lowering, Outcome, Rec, Subterm, Term},
     curios_core::Free,
 };
 
@@ -47,29 +47,11 @@ impl Lowering {
                 context.set_assumption_universe_context(name, group.universe_context().clone());
             }
             for (index, name) in names.iter().enumerate() {
-                context.define(name, &Term::rec_member(group.clone(), index), None);
+                context.define(name, &Term::rec_proj(group.clone(), index), None);
             }
             self.emit_group(context, &names, &hints, &members)?;
             self.walk(context, &tail, expected, hint)
         })
-    }
-
-    /// Erase a bare rec-member selection: the whole group is introduced, then the selected member's operand is the result.
-    pub(super) fn erase_rec_member(
-        &mut self,
-        context: &mut Context,
-        member: &RecMember,
-        expected: &Term,
-        hint: Option<&str>,
-    ) -> Result<Outcome, Error> {
-        let rec = Rec {
-            group: member.group.clone(),
-            tail: Scope::constant(
-                super::Many(member.group.length()),
-                Term::var(super::Var::bound(member.index)),
-            ),
-        };
-        self.erase_rec(context, &rec, expected, hint)
     }
 
     /// Erase a top-level recursive item. Bindings persist in the base frame (no scoping frame), exactly like `let` items.
@@ -87,7 +69,7 @@ impl Lowering {
         for (index, definition) in definitions.iter().enumerate() {
             context.define(
                 &Free::from(&definition.name),
-                &Term::rec_member(rec.group.clone(), index),
+                &Term::rec_proj(rec.group.clone(), index),
                 Some(&definition.kind),
             );
         }

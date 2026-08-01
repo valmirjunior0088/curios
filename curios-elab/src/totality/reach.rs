@@ -13,7 +13,7 @@
 use {
     curios_core::{
         Bound, Definition, Enter, Func, FuncType, Global, Item, Let, Match, Module, Prim, Rec,
-        RecMember, Struct, Subterm, Telescope, Term, Variant,
+        Struct, Subterm, Telescope, Term, Variant,
     },
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
@@ -220,7 +220,7 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>) -> Ente
             }
         }
 
-        Subterm::Rec(Rec { group, .. }) | Subterm::RecMember(RecMember { group, .. }) => {
+        Subterm::Rec(Rec { group, .. }) => {
             for member in group.iter() {
                 push(positions, site, member.type_.body());
             }

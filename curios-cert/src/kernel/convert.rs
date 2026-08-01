@@ -29,8 +29,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
     curios_core::{
-        Bound, Carrier, Cases, Field, FuncType, Global, InductType, Level, Many, Proj, RecMember,
-        Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
+        Bound, Carrier, Cases, Field, FuncType, Global, InductType, Level, Many, Proj, Reducer,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
         UniverseInst, instantiate_universe_levels_scoped,
     },
     std::collections::HashSet,
@@ -442,17 +442,12 @@ fn structural(
             .into())
         }
 
-        // A folded recursive call, and a `rec` that forcing declined to unfold. Both are compared syntactically: the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here.
-        (
-            Subterm::RecMember(RecMember {
-                group: left,
-                index: left_index,
-            }),
-            Subterm::RecMember(RecMember {
-                group: right,
-                index: right_index,
-            }),
-        ) => Ok((left_index == right_index && left == right).into()),
+        // A folded recursive call, and a `rec` that forcing declined to unfold. Both are compared syntactically: the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
+        (Subterm::Rec(_), Subterm::Rec(_))
+            if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() =>
+        {
+            Ok((this.as_rec_proj() == that.as_rec_proj()).into())
+        }
 
         // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
         _ => unfolded(kernel, this, that),

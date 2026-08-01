@@ -400,7 +400,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Weak-head-reduce `term` when its head could reduce, which is what unfolds a type-level `let` — `pub let Fiber : Type = () -> Async({})` mentioned as `struct Job { resume : Fiber, … }`, or `Valid(bytes)` inside `struct Str` — into the type former it actually names.
     ///
-    /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a `RecMember`, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
+    /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
     ///
     /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. A term whose `reach` is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling de Bruijn index. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis.
     fn forced(&mut self, term: &Term) -> Term {
@@ -414,7 +414,6 @@ impl<E: Env> Walk<'_, E> {
                 | Subterm::Let(_)
                 | Subterm::Metavar(_)
                 | Subterm::Rec(_)
-                | Subterm::RecMember(_)
         );
         if !reducible || term.reach() != 0 {
             return term.clone();
@@ -546,7 +545,6 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Proj(_)
             | Subterm::Let(_)
             | Subterm::Rec(_)
-            | Subterm::RecMember(_)
             | Subterm::UniverseInst(_)
             | Subterm::Metavar(_)
             | Subterm::Infix(_) => self.opaque(&term),

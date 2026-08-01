@@ -357,7 +357,6 @@ impl Lowering {
             Subterm::Func(func) => self.erase_func(context, func, expected, hint),
             Subterm::Apply(apply) => self.erase_apply(context, apply, hint),
             Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
-            Subterm::RecMember(member) => self.erase_rec_member(context, member, expected, hint),
             // Erasure runs downstream of zonking and elaboration.
             Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
             Subterm::Infix(_) => unreachable!("infix node survived elaboration into erasure"),
@@ -499,7 +498,7 @@ pub fn erase_module_with_prelude(
                     for (index, definition) in definitions.iter().enumerate() {
                         context.define(
                             &Free::from(&definition.name),
-                            &Term::rec_member(rec.group.clone(), index),
+                            &Term::rec_proj(rec.group.clone(), index),
                             Some(&definition.kind),
                         );
                     }

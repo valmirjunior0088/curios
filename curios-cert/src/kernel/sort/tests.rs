@@ -1,7 +1,10 @@
 use {
     crate::{Kernel, Sort},
     curios_base::{Plicity, Qualifier, RootId},
-    curios_core::{Global, InductDecl, Level, Prim, Telescope, Term, UniverseContext},
+    curios_core::{
+        Free, Global, InductDecl, Level, Many, Prim, RecGroup, RecMemberScopes, Scope, Telescope,
+        Term, UniverseContext,
+    },
 };
 
 fn kernel() -> Kernel {
@@ -140,6 +143,31 @@ fn a_list_of_proofs_is_not_a_proposition() {
 }
 
 /// The type of a hypothesis is read off the binder it was opened at, which is how a `Prop`-typed variable is recognized as a proof.
+/// A recursive group's claim about its own member is not what decides that member's sort.
+///
+/// [`Sort::of`] reduces before it classifies, and forcing unfolds a projection to the member's body — so the sort reported is the body's, read honestly, rather than the `member_type` the group asserts. That matters because the projection arm answers through [`synth_neutral`](super::synth_neutral), which is a *lookup*: it reads the group's claim and checks nothing, and it has to stay that way, since certifying there would re-enter the very group whose member types are being sorted.
+///
+/// So the group below claims its member is a proposition while its body is a `Type`-sorted family, and the honest answer is the body's. Reduction is the whole defense at this arm, which is why it is pinned here rather than left to be re-derived from the reduction rules.
+#[test]
+fn a_groups_claim_about_its_member_does_not_decide_that_members_sort() {
+    let mut kernel = kernel();
+    let data = declare(&mut kernel, "Data", Term::type_ground());
+    let member = Free::local(900, Some("T"));
+
+    let group = RecGroup::new(vec![RecMemberScopes {
+        // The claim: this member is a proposition.
+        type_: Scope::close(Many(1), &[&member], Term::prop()),
+        // The body: a family the registry puts at `Type 0`.
+        body: Scope::close(Many(1), &[&member], data.clone()),
+    }]);
+
+    assert_eq!(
+        Sort::of(&mut kernel, &Term::rec_proj(group, 0)),
+        Ok(Sort::Type(Level::zero())),
+        "the group's `Prop` claim was trusted over the sort its member actually reduces to",
+    );
+}
+
 #[test]
 fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let mut kernel = kernel();

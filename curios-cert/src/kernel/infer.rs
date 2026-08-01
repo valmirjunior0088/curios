@@ -23,13 +23,13 @@ mod tests;
 
 use {
     super::{
-        Kernel, KernelError, Sort,
+        Kernel, KernelError, Sort, check_group,
         convert::{convert, scoped},
         synth_neutral,
     },
     curios_core::{
-        Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Proj, Rec, RecMember, Reducer,
-        Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, UniverseInst,
+        Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Many, Proj, Rec, Reducer,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst,
         Variant, instantiate_universe_levels_scoped,
     },
 };
@@ -348,41 +348,29 @@ fn infer_node(
             infer(kernel, &tail)
         }
 
-        // A recursive group: every member is assumed at its declared type — mutually, so a member may call any other — and then every body is checked against that type. Totality is *not* decided here; `rec` is general recursion by design, and the obligation that keeps it sound is positional, enforced by (T) and (V) over the whole module.
-        Subterm::Rec(Rec { group, tail }) => {
-            let members = group.members();
+        // A recursive group, checked by the one rule that holds it — asked here rather than restated, so a `rec` in a term and a `rec` at the top level cannot come to disagree about what makes a group legal.
+        Subterm::Rec(Rec { group, tail }) => check_group(kernel, group, |kernel, names| {
+            let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
             let refs = members.iter().collect::<Vec<_>>();
 
-            let mut erased_member: Option<Term> = None;
-            for index in 0..group.length() {
-                let type_ = group.member_type(index);
-                let sort = Sort::of(kernel, &type_)?;
-                check(kernel, &group.member_body(index), &type_)?;
+            let type_ = infer(kernel, &tail.open(&refs))?;
 
-                // As in `check_rec_group`: a proof-typed or type-yielding member is deleted by erasure, so its recursion must descend.
-                if erased_member.is_none() && (sort.is_prop() || crate::yields_a_sort(&type_)) {
-                    erased_member = Some(type_);
-                }
-            }
+            // The tail's type may mention the members, and their binders retract with the group's scope. Re-fold the knot so what leaves this judgment is closed: the folded spelling denotes the same member and needs nothing in scope to do it.
+            let folded = group.members();
+            let folded = folded.iter().collect::<Vec<_>>();
+            let binders = names.iter().collect::<Vec<_>>();
 
-            if let Some(type_) = erased_member
-                && crate::group_totality(kernel, group) != Totality::Total
-            {
-                return Err(KernelError::NotDescending {
-                    type_: Box::new(type_),
-                });
-            }
-
-            let tail = tail.open(&refs);
-
-            infer(kernel, &tail)
-        }
-
-        // A folded recursive call carries its own type on its group.
-        Subterm::RecMember(RecMember { group, index }) => Ok(group.member_type(*index)),
+            Ok(Scope::close(Many(names.len()), &binders, type_).open(&folded))
+        }),
 
         // A polymorphic name at a stated instance: its scheme, substituted.
         Subterm::UniverseInst(UniverseInst { head, levels }) => {
+            // `synth_neutral` reads a projection's type off the group it carries, which is a lookup and must stay one — so the group is certified *here*, before the read, at the generic spelling the instance was taken from. Skipping this would leave the instance spelling as a way to type a member of a group nothing checked.
+            if let Some((group, _)) = head.as_rec_proj() {
+                let group = group.clone();
+                check_group(kernel, &group, |_, _| Ok(()))?;
+            }
+
             match synth_neutral(kernel, term)? {
                 Some(type_) => Ok(type_),
                 None => {

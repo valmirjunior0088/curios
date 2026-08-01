@@ -19,8 +19,8 @@ use {
     crate::Env,
     curios_core::{
         Apply, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, Global, InductArm, Layer,
-        Let, Match, Nat, Prim, Proj, Rec, RecGroup, RecMember, Scope, Struct, Subterm, Telescope,
-        Term, Totality, Tuple, Variant,
+        Let, Match, Nat, Prim, Proj, Rec, RecGroup, Scope, Struct, Subterm, Telescope, Term,
+        Totality, Tuple, Variant,
     },
     num_bigint::BigUint,
     std::collections::{BTreeMap, BTreeSet},
@@ -611,7 +611,7 @@ impl<E: Env> Walk<'_, E> {
                 | Subterm::Proj(_)
                 | Subterm::Match(_)
                 | Subterm::Let(_)
-                | Subterm::RecMember(_)
+                | Subterm::Rec(_)
         );
         if fuel == 0 || !reducible || term.reach() != 0 {
             return Shape::Opaque;
@@ -640,7 +640,7 @@ impl<E: Env> Walk<'_, E> {
                 | Subterm::Proj(_)
                 | Subterm::Match(_)
                 | Subterm::Let(_)
-                | Subterm::RecMember(_)
+                | Subterm::Rec(_)
         );
         if fuel == 0 || !reducible || head.reach() != 0 {
             return None;
@@ -728,19 +728,20 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Var(_)
             | Subterm::Metavar(_) => {}
 
-            // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully.
-            Subterm::RecMember(RecMember { group, index }) => {
+            // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. This arm precedes the general `rec` one below because a projection *is* a `rec` node: descending into its bodies would re-enter the group at every recursive call and never terminate.
+            Subterm::Rec(_) if term.as_rec_proj().is_some() => {
+                let (group, index) = term.as_rec_proj().expect("a projection");
                 if group == self.group {
-                    self.call(*index, &[]);
+                    self.call(index, &[]);
                 }
             }
 
             Subterm::Apply(Apply { head, params, .. }) => {
                 let (spine_head, arguments) = flatten(term);
-                if let Subterm::RecMember(RecMember { group, index }) = &*spine_head
+                if let Some((group, index)) = spine_head.as_rec_proj()
                     && group == self.group
                 {
-                    self.call(*index, &arguments);
+                    self.call(index, &arguments);
                     for argument in &arguments {
                         self.walk(argument);
                     }
