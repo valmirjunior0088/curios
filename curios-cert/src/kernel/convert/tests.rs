@@ -417,3 +417,58 @@ fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
         "the constant function and the identity are not convertible",
     );
 }
+
+/// The coinductive recurrence rule, which nothing in the corpus reaches.
+///
+/// Two folded recursive spellings can unfold forever without ever disagreeing — that is what an equirecursive type is — so `compare` keeps the goals it is already inside and *assumes* one that recurs. It is the only rule in this crate that discharges a goal without looking at either term, which is why `convert`'s module documentation calls it the place a conversion checker is most likely to be unsound.
+///
+/// Instrumenting `History::enter` and running the whole corpus — the fixed prelude through the kernel's own walk, plus every test program — counts 83,945 goals entered and **zero** recurrences. The two recursive-group fixtures above do not reach it either: `two_alpha_variant_recursive_groups_convert` converges because alpha-variant groups are structurally equal, and `a_folded_recursive_call_converts_without_unfolding_forever` terminates on `force` discarding an unfolding that restuck. So the rule was live code that no program could exercise, which is the condition under which a rule's mistakes stay invisible — the same shape as (V)'s argument rule sitting inert at 6010 of 6041 sites while the corpus passed throughout.
+///
+/// This reaches it. Both sides are the equirecursive type `X = (X) -> Nat`, spelled as *different* groups — the right carries a second, unused member — so the projection arm's syntactic comparison fails and both sides take a delta step. Unfolding poses `(left) -> Nat ≡ (right) -> Nat`, whose domain goal is the goal already in progress, and the recurrence discharges it. The two really are the same type, so accepting is correct; what is being pinned is that the rule fires here at all.
+///
+/// The control is [`a_recurrence_does_not_excuse_a_finite_disagreement`], the same construction with the codomains differing: the cycle closes on the domain exactly as here, and the comparison must still fail on the sibling goal. That is the whole argument the rule rests on — a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces elsewhere first — so a blanket accept would pass the witness and fail the control.
+#[test]
+fn a_recurring_goal_is_assumed_rather_than_unfolded_forever() {
+    let mut kernel = kernel();
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &equirecursive(binder(20, "a"), binder(21, "x"), nat_type(), false),
+            &equirecursive(binder(30, "b"), binder(31, "y"), nat_type(), true),
+        ),
+        Ok(true),
+        "two spellings of the equirecursive type `X = (X) -> Nat` did not converge",
+    );
+}
+
+/// The control for the fixture above: the cycle closes on the domain, and the codomains still have to agree.
+#[test]
+fn a_recurrence_does_not_excuse_a_finite_disagreement() {
+    let mut kernel = kernel();
+    let other = declare(&mut kernel, "Other", Term::type_ground());
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &equirecursive(binder(40, "a"), binder(41, "x"), nat_type(), false),
+            &equirecursive(binder(50, "b"), binder(51, "y"), other, true),
+        ),
+        Ok(false),
+        "the recurrence on the domain was read as settling the whole comparison",
+    );
+}
+
+/// `rec m : Type = (m) -> codomain; m`, optionally carrying a second unused member so that two such groups are not structurally equal and must take a delta step to be compared.
+fn equirecursive(member: Free, param: Free, codomain: Term, padded: bool) -> Term {
+    let body = Term::func_type([(param, Term::free_var(&member))], codomain);
+    let mut items = vec![(member.clone(), Term::type_ground(), body)];
+
+    if padded {
+        items.push((binder(99, "unused"), Term::type_ground(), nat_type()));
+    }
+
+    Term::rec(items, Term::free_var(&member))
+}

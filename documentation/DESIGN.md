@@ -127,7 +127,7 @@ The perimeter has two halves, and they differ in how coverage is obtained. The *
 | Foreign wire contract | A `foreign` declaration's type is drawn from the wire grammar, so an embedder cannot supply an inhabitant of a proposition | **probed** |
 | Definitional proof irrelevance | Any two inhabitants of a proposition are interchangeable | **argued** (fixpoint on (V), below); not directly observable, but its side condition — the guard above — is probed |
 | Index inversion and K | `Eq : Prop` licenses deleting a redundant constraint | auditable only, and counted: the rule fires at 20 of 5883 inversions, of which every acceptance is a syntactically identical pair. Its semantic half is reached only by `curios-cert`'s `invert::tests` |
-| Conversion recurrence | Absence of finite disagreement is sufficient for equality | **argued** (fixpoint on (T), below); auditable only otherwise |
+| Conversion recurrence | Absence of finite disagreement is sufficient for equality | **argued** (fixpoint on (T), below); auditable only otherwise, and counted inert — 0 recurrences in 83,945 goals across the corpus, the two recursive-group fixtures included, so the only thing that reaches the rule is `curios-cert`'s `kernel::convert::tests` |
 
 **Three entries can never be attacked, only read.** The universe hierarchy has no surface syntax for levels — they are implicit and inferred — so no program can be written that forces a violation. Index inversion and the conversion recurrence rule need constructed internal state that no source text reaches. These will never accumulate the kind of evidence positivity and the elimination guard have, and that asymmetry is a permanent property of the claim rather than a gap awaiting work.
 
