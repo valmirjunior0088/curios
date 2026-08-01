@@ -73,6 +73,49 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
 }
 
 // The same knot behind a projection. A rule keyed on "the `rec` member is itself sort-valued" misses this: `P`'s type is a tuple, and only `P.0` is a type.
+// The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and a `Nat` dispatch's default arm establishes nonzero exactly when `0` is one of the enumerated cases. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
+//
+// Read the wrong way the cost is a non-terminating *type*, which is the negative knot `a_type_level_rec_cannot_tie_the_negative_knot` above spells out in full: `Bad(0)` would unfold to `Bad(0)` forever while the classifier reported the group total, type formation would rest on a family that never forms, and (T) — whose whole job is that nothing reachable from a type position is partial — would have been satisfied by a false premise rather than by a fact.
+//
+// This side condition carries more weight than its size suggests. Instrumenting the classifier across the whole corpus counts 1365 call gradings and 4117 grade *changes* from the enclosing arms' refinements, every one of them an upgrade away from `Unknown` — 2810 to `Less` and 1307 to `Same`, and not a single downgrade. The arm facts are what make the corpus's recursion provable at all, so the conditions under which an arm may establish one are the accepting direction throughout.
+//
+// Probed rather than closed: the rule already held when this was written, and the fixture asserts the diagnostic so it cannot pass on an unrelated failure. Its control is `a_dispatch_that_enumerates_zero_licenses_the_decrease`, the same recursion with `0` enumerated, which must keep compiling — refusing it would take `/std/Nat/to_str` and every other bounded `Nat` descent with it.
+#[test]
+fn a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat) -> Type =
+            match n
+            | 1 => {}
+            | _ => Bad(n - 1)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// The control for the fixture above: with `0` enumerated, the default arm does establish nonzero, `n - 1` is a genuine decrease, and the same type-level recursion is accepted.
+#[test]
+fn a_dispatch_that_enumerates_zero_licenses_the_decrease() {
+    let source = r#"
+        use /std/{Nat};
+
+        rec Good(n : Nat) -> Type =
+            match n
+            | 0 => {}
+            | _ => Good(n - 1)
+            end;
+
+        let held : Good(2) = ();
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
     rejected(&format!(
