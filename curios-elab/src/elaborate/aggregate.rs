@@ -126,7 +126,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     Ok((Term::proj(head, index), field_type))
 }
 
-/// Type a primitive inductive type against its registry entry: the parameters and indices are checked pointwise (dependently) as one flat argument list through the declaration's full index telescope (whose leading binders are the parameters), and the whole node is a `Type`.
+/// Type a primitive inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`.
 pub(super) fn elaborate_induct_type(
     context: &mut Context,
     ut: &InductType,
@@ -141,38 +141,43 @@ pub(super) fn elaborate_induct_type(
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Err(Error::unknown_declaration(name.symbol()));
     };
-    let (indices_telescope, result_sort, universes) = if written_universes.is_empty() {
-        let (indices_telescope, universes) = context
-            .instantiate_universe_bound(&induct_decl.universe_context, &induct_decl.indices)?;
+    let (arity, result_sort, universes) = if written_universes.is_empty() {
+        let (arity, universes) = context
+            .instantiate_universe_bound(&induct_decl.universe_context, &induct_decl.arity)?;
         let result_sort = instantiate_universe_levels_scoped(&induct_decl.result_sort, &universes)
             .map_err(Error::from)?;
-        (indices_telescope, result_sort, universes)
+        (arity, result_sort, universes)
     } else {
         let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;
         (
-            induct_decl.indices,
+            induct_decl.arity,
             induct_decl.result_sort,
             written_universes.clone(),
         )
     };
 
-    let args: Vec<Term> = params.iter().chain(indices.iter()).cloned().collect();
+    if params.len() != arity.len() {
+        return Err(Error::wrong_number_of_arguments(arity.len(), params.len()));
+    }
 
-    if args.len() != indices_telescope.len() {
+    // The parameters against the arity, then the indices against the telescope it terminates in — already scoped under the parameters just checked.
+    let (elaborated_params, index_telescope) = check_args_against(context, arity, params)?;
+
+    if indices.len() != index_telescope.len() {
         return Err(Error::wrong_number_of_arguments(
-            indices_telescope.len(),
-            args.len(),
+            index_telescope.len(),
+            indices.len(),
         ));
     }
 
-    let (elaborated, ()) = check_args_against(context, indices_telescope, &args)?;
+    let (elaborated_indices, ()) = check_args_against(context, index_telescope, indices)?;
 
     Ok((
         Term::induct_type_at(
             name.clone(),
             universes,
-            elaborated[..params.len()].iter().cloned(),
-            elaborated[params.len()..].iter().cloned(),
+            elaborated_params,
+            elaborated_indices,
         ),
         result_sort,
     ))

@@ -30,8 +30,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
         &name,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: Vec::new(),
             result_sort,
             module: Qualifier::from([path]),

@@ -779,30 +779,35 @@ impl Convert {
             return Ok(false);
         }
 
-        // Recover the full param+index telescope from the registry so each argument compares at its declared type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — a stuck `Eq(P, p, q)` converts with `Eq(P, p, p)`. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
-        let this_args: Vec<Term> = this
-            .params
-            .iter()
-            .chain(this.indices.iter())
-            .cloned()
-            .collect();
-        let arg_types = match context.induct_decl(&this.name).cloned() {
+        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — a stuck `Eq(P, p, q)` converts with `Eq(P, p, p)`. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
+        let arity = match context.induct_decl(&this.name).cloned() {
             Some(induct_decl) => Some(instantiate_bound_at(
                 context,
                 &induct_decl.universe_context,
-                &induct_decl.indices,
+                &induct_decl.arity,
                 &this.universes,
             )?),
             None => None,
         };
-        let arg_types = match arg_types {
-            Some(telescope) if telescope.len() == this_args.len() => {
-                let mut types = Vec::with_capacity(this_args.len());
-                telescope.walk(&this_args, |_, _, ty| {
+        // The parameters against the arity, then the indices against the telescope it terminates in — the same order the arguments are compared in below.
+        let arg_types = match arity {
+            Some(arity) if arity.len() == this.params.len() => {
+                let mut types = Vec::with_capacity(this.params.len() + this.indices.len());
+                let indices = arity.walk(&this.params, |_, _, ty| -> Result<(), ReduceError> {
                     types.push(ty.clone());
                     Ok(())
                 })?;
-                Some(types)
+
+                match indices.len() == this.indices.len() {
+                    true => {
+                        indices.walk(&this.indices, |_, _, ty| -> Result<(), ReduceError> {
+                            types.push(ty.clone());
+                            Ok(())
+                        })?;
+                        Some(types)
+                    }
+                    false => None,
+                }
             }
             _ => None,
         };

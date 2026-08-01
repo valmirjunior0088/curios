@@ -147,8 +147,7 @@ fn induct_metavar(declaration: &InductDecl) -> Option<MetaId> {
             true
         };
 
-        let _ = declaration.params.any_metavar(&mut note)
-            || declaration.indices.any_metavar(&mut note)
+        let _ = declaration.arity.any_metavar(&mut note)
             || declaration.result_sort.any_metavar(&mut note)
             || declaration
                 .signatures()
@@ -189,8 +188,7 @@ fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
 fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
     induct_metavar(declaration)
         .map(|id| KernelError::NotCore(Term::metavar(id)))
-        .or_else(|| universe_residue(&declaration.params))
-        .or_else(|| universe_residue(&declaration.indices))
+        .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
         .or_else(|| {
             declaration

@@ -34,8 +34,7 @@ fn register_opt(context: &mut Context) {
             &nominal("Opt"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::done(()),
-                indices: Telescope::done(()),
+                arity: Telescope::done(Telescope::done(())),
                 constructors: Vec::from([
                     (
                         Atom::from("none"),
@@ -355,8 +354,7 @@ fn register_flag(context: &mut Context) {
             &nominal("Flag"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::done(()),
-                indices: Telescope::build([(index, nat())], ()),
+                arity: Telescope::done(Telescope::build([(index, nat())], ())),
                 constructors: Vec::from([
                     (
                         Atom::from("off"),

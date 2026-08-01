@@ -141,29 +141,44 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
         return Ok(());
     };
 
-    let n_params = induct_decl.params.len();
-    let labels = induct_decl
-        .indices
-        .labels()
-        .iter()
-        .map(|label| label.to_string())
-        .collect::<Vec<_>>();
+    let owned = |labels: Vec<&str>| {
+        labels
+            .iter()
+            .map(|label| label.to_string())
+            .collect::<Vec<_>>()
+    };
+    let param_labels = owned(induct_decl.arity.labels());
+    let index_labels = {
+        let mut walk = &induct_decl.arity;
+        loop {
+            match walk {
+                Telescope::Cons(_, rest) => walk = rest.body(),
+                Telescope::Done(indices) => break owned(indices.labels()),
+            }
+        }
+    };
 
-    // Walk the full (params-first) index telescope, checking each entry type against `Type` under the earlier binders.
-    let (entries, ()) = context
-        .with_frame(|context| check_telescope_entries(context, induct_decl.indices.clone()))?;
+    // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
+    let (param_entries, index_entries) = context.with_frame(|context| {
+        let (params, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
+        let (indices, ()) = check_telescope_entries(context, inner)?;
 
-    let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
-    let params =
-        Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
-    let indices = Telescope::build(entries, ()).relabel(&label_refs);
+        Ok::<_, Error>((params, indices))
+    })?;
+
+    let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let index_refs = index_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let arity = Telescope::build(
+        param_entries,
+        Telescope::build(index_entries, ()).relabel(&index_refs),
+    )
+    .relabel(&param_refs);
 
     context.update_induct(
         name,
         InductDecl {
             universe_context: induct_decl.universe_context,
-            params,
-            indices,
+            arity,
             constructors: induct_decl.constructors,
             result_sort: induct_decl.result_sort,
             module: induct_decl.module,
@@ -212,8 +227,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
         name,
         InductDecl {
             universe_context: induct_decl.universe_context,
-            params: induct_decl.params,
-            indices: induct_decl.indices,
+            arity: induct_decl.arity,
             constructors,
             result_sort: induct_decl.result_sort,
             module: induct_decl.module,
@@ -639,7 +653,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     context,
                     &def.name,
                     &constructor.telescope,
-                    induct_decl.params.len(),
+                    induct_decl.param_count(),
                     &induct_decl.result_sort,
                     UniverseConstraintKind::ConstructorSizing,
                 )?;
@@ -664,8 +678,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             &def.name,
             InductDecl {
                 universe_context: induct_decl.universe_context,
-                params: zonk_solved_term_metas(context, &induct_decl.params),
-                indices: zonk_solved_term_metas(context, &induct_decl.indices),
+                arity: zonk_solved_term_metas(context, &induct_decl.arity),
                 constructors: induct_decl
                     .constructors
                     .into_iter()
@@ -695,8 +708,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .collect::<BTreeSet<_>>();
     for def in &defs {
         if let Some(induct_decl) = context.induct_decl(&def.name) {
-            interface.extend(universe_metas(&induct_decl.params));
-            interface.extend(universe_metas(&induct_decl.indices));
+            interface.extend(universe_metas(&induct_decl.arity));
             interface.extend(induct_decl.result_sort.universe_metas());
             for constructor in induct_decl.signatures() {
                 interface.extend(universe_metas(&constructor.telescope));
@@ -765,15 +777,13 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             })
             .collect::<Result<_, Error>>()?;
         let free = SelfReference::Free;
-        let params = stamp(context, &induct_decl.params, &owned, free, &instance)?;
-        let indices = stamp(context, &induct_decl.indices, &owned, free, &instance)?;
+        let arity = stamp(context, &induct_decl.arity, &owned, free, &instance)?;
         let result_sort = stamp(context, &induct_decl.result_sort, &owned, free, &instance)?;
         context.update_induct(
             &def.name,
             InductDecl {
                 universe_context: universe_context.clone(),
-                params,
-                indices,
+                arity,
                 constructors,
                 result_sort,
                 module: induct_decl.module,

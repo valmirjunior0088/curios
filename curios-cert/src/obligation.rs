@@ -205,8 +205,7 @@ pub fn derived_binder_floor(module: &Module) -> usize {
     }
 
     for declaration in module.induct_decls.values() {
-        consider(declaration.params.free_vars());
-        consider(declaration.indices.free_vars());
+        consider(declaration.arity.free_vars());
         consider(declaration.result_sort.free_vars());
         for (_, constructor) in &declaration.constructors {
             consider(constructor.telescope.free_vars());

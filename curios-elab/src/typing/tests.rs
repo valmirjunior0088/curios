@@ -48,8 +48,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     let held = Global::Authored(curios_base::Qualifier::from(["Held"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
-        indices: Telescope::done(()),
+        arity: Telescope::done(Telescope::done(())),
         constructors: Vec::new(),
         result_sort: Term::prop(),
         module: curios_base::Qualifier::from(["Held"]),

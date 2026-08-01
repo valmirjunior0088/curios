@@ -149,8 +149,7 @@ fn project_module(module: &Module) -> Module {
                     name.clone(),
                     InductDecl {
                         universe_context: Default::default(),
-                        params: project_erased_universes(&declaration.params),
-                        indices: project_erased_universes(&declaration.indices),
+                        arity: project_erased_universes(&declaration.arity),
                         constructors: declaration
                             .constructors
                             .iter()

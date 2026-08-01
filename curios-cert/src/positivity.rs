@@ -98,7 +98,7 @@ impl Split {
         name: &Global,
     ) -> Self {
         if let Some(declaration) = inducts.get(name) {
-            let params = binders(env, &declaration.params);
+            let params = binders(env, &declaration.arity);
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
 
@@ -136,7 +136,7 @@ impl Split {
 }
 
 /// One fresh binder per entry of a parameter telescope, carrying the declared hints so a diagnostic reads in the user's own names.
-fn binders<E: Env>(env: &mut E, params: &Telescope<()>) -> Vec<Free> {
+fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
     params
         .labels()
         .into_iter()

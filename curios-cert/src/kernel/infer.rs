@@ -904,8 +904,7 @@ fn instantiate_induct_decl(
 
     let mut instantiated = declaration.clone();
 
-    instantiated.params = instantiate_universe_levels_scoped(&instantiated.params, levels)?;
-    instantiated.indices = instantiate_universe_levels_scoped(&instantiated.indices, levels)?;
+    instantiated.arity = instantiate_universe_levels_scoped(&instantiated.arity, levels)?;
     instantiated.result_sort =
         instantiate_universe_levels_scoped(&instantiated.result_sort, levels)?;
     for constructor in instantiated.signatures_mut() {

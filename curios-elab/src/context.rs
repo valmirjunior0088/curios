@@ -522,8 +522,7 @@ impl Context {
         self.universes_mut()
             .instantiate_at(&induct_decl.universe_context, levels)?;
         let mut instantiated = induct_decl.clone();
-        instantiated.params = rewrite(&instantiated.params, levels)?;
-        instantiated.indices = rewrite(&instantiated.indices, levels)?;
+        instantiated.arity = rewrite(&instantiated.arity, levels)?;
         instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
         for constructor in instantiated.signatures_mut() {
             constructor.telescope = rewrite(&constructor.telescope, levels)?;

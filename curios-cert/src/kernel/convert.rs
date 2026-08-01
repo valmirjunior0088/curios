@@ -467,21 +467,34 @@ fn induct_type_args(
         return Ok(false);
     }
 
-    let telescope = match kernel.induct_decl(name) {
-        Some(declaration) => declaration.indices.clone(),
+    let arity = match kernel.induct_decl(name) {
+        Some(declaration) => declaration.arity.clone(),
         // A declaration the registry seeding refused: keep the grounded comparison rather than inventing types.
         None => {
             return Ok(compare_each(kernel, history, left_params, right_params)?
                 && compare_each(kernel, history, left_indices, right_indices)?);
         }
     };
-    let mut telescope = instantiate_universe_levels_scoped(&telescope, universes)?;
+    let mut arity = instantiate_universe_levels_scoped(&arity, universes)?;
 
-    for (left, right) in left_params
-        .iter()
-        .chain(left_indices)
-        .zip(right_params.iter().chain(right_indices))
-    {
+    // The parameters, against the outer telescope; each one opens the rest, because a later domain may name it.
+    for (left, right) in left_params.iter().zip(right_params) {
+        let Telescope::Cons(type_, rest) = arity else {
+            return Ok(false);
+        };
+        if !compare(kernel, history, &type_, left, right)? {
+            return Ok(false);
+        }
+        arity = rest.open(&[left]);
+    }
+
+    // Then the indices, which the parameter telescope terminates in — already scoped under the parameters just opened.
+    let Telescope::Done(indices) = arity else {
+        return Ok(false);
+    };
+    let mut telescope = *indices;
+
+    for (left, right) in left_indices.iter().zip(right_indices) {
         let Telescope::Cons(type_, rest) = telescope else {
             return Ok(false);
         };

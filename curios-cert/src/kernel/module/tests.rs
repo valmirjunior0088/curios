@@ -26,8 +26,7 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
-        indices: Telescope::done(()),
+        arity: Telescope::done(Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
@@ -88,8 +87,7 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::build([(t.clone(), Term::type_ground())], ()),
-        indices: Telescope::done(()),
+        arity: Telescope::build([(t.clone(), Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
@@ -162,8 +160,7 @@ fn proposition(kernel: &mut Kernel, path: &str) -> Term {
         &name,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: Vec::new(),
             result_sort: Term::prop(),
             module: Qualifier::from([path]),

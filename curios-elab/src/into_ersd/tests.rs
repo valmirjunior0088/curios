@@ -405,8 +405,7 @@ fn opt_induct() -> InductDecl {
     let x = context.fresh(Some("x"));
     InductDecl {
         universe_context: UniverseContext::empty(),
-        params: Telescope::done(()),
-        indices: Telescope::done(()),
+        arity: Telescope::done(Telescope::done(())),
         constructors: Vec::from([
             (
                 Atom::from("none"),

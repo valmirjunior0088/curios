@@ -149,13 +149,13 @@ pub fn check_induct_decl(
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
-    check_index_telescope(kernel, declaration)?;
+    check_arity(kernel, declaration)?;
 
     for constructor in declaration.signatures() {
         check_signature(
             kernel,
             &constructor.telescope,
-            declaration.params.len(),
+            declaration.param_count(),
             &declaration.result_sort,
             |kernel, binders, terminal| {
                 check_constructed(kernel, name, declaration, binders, terminal)
@@ -166,20 +166,33 @@ pub fn check_induct_decl(
     Ok(())
 }
 
-/// The index telescope's own domains are types, under the parameters that precede them.
+/// Every domain of the declaration's arity is a type: its parameters, and the index telescope they terminate in.
 ///
-/// The telescope carries the declaration's parameters first and its indices after (see [`InductDecl::indices`]), so this reaches the parameter domains as well — which matters for a family with no constructors, whose parameters no constructor signature would otherwise present for sorting.
-fn check_index_telescope(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
+/// One walk, because the indices are scoped under the parameters by construction. It reaches the parameter domains as well, which matters for a family with no constructors — nothing else would present them for sorting.
+fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
     let mark = kernel.mark();
     let outcome = (|| {
-        let mut telescope = declaration.indices.clone();
+        let mut arity = declaration.arity.clone();
 
-        while let Telescope::Cons(domain, rest) = telescope {
+        let mut indices = loop {
+            match arity {
+                Telescope::Cons(domain, rest) => {
+                    Sort::of(kernel, &domain)?;
+
+                    let binder = kernel.fresh(rest.first_hint());
+                    kernel.assume(&binder, &domain);
+                    arity = rest.open(&[&Term::free_var(&binder)]);
+                }
+                Telescope::Done(indices) => break *indices,
+            }
+        };
+
+        while let Telescope::Cons(domain, rest) = indices {
             Sort::of(kernel, &domain)?;
 
             let binder = kernel.fresh(rest.first_hint());
             kernel.assume(&binder, &domain);
-            telescope = rest.open(&[&Term::free_var(&binder)]);
+            indices = rest.open(&[&Term::free_var(&binder)]);
         }
 
         Ok(())
@@ -216,18 +229,16 @@ fn check_constructed(
 
     let declared = binders
         .iter()
-        .take(declaration.params.len())
+        .take(declaration.param_count())
         .map(Term::free_var)
         .collect::<Vec<_>>();
 
-    if constructed != name || *params != declared {
+    // A constructor binds the declaration's parameters before its own payload, so a signature with fewer binders than the family has parameters constructs nothing this family declares.
+    if declared.len() != declaration.param_count() || constructed != name || *params != declared {
         return Err(refused());
     }
 
-    let expected = declaration
-        .indices
-        .len()
-        .saturating_sub(declaration.params.len());
+    let expected = declaration.index_count();
     if indices.len() != expected {
         return Err(KernelError::Arity {
             expected,
@@ -235,12 +246,7 @@ fn check_constructed(
         });
     }
 
-    // Peeling only makes sense once there is a target to check, and only then is the index telescope known to be long enough to peel — a declaration whose telescope does not lead with its own parameters is a malformed *encoding* rather than a wrong judgment, and refusing it here would squash that state instead of removing it.
-    if indices.is_empty() {
-        return Ok(());
-    }
-
-    let mut telescope = declaration.indices.clone().open_params(&declared);
+    let mut telescope = declaration.indices_at(&declared);
     for target in indices {
         let Telescope::Cons(domain, rest) = telescope else {
             break;

@@ -185,8 +185,7 @@ fn authored_partial(name: &Global, type_: Term, body: Term) -> Item {
 fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
     InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
-        indices: Telescope::done(()),
+        arity: Telescope::done(Telescope::done(())),
         constructors,
         result_sort: Term::prop(),
         module: Qualifier::default(),
@@ -249,14 +248,15 @@ fn forgery() -> Module {
             plicities: vec![Plicity::Implicit, Plicity::Explicit],
         },
     )]);
-    equality_decl.params = Telescope::build([(carrier.clone(), type_1.clone())], ());
-    equality_decl.indices = Telescope::build(
-        [
-            (carrier.clone(), type_1.clone()),
-            (left, Term::free_var(&carrier)),
-            (right, Term::free_var(&carrier)),
-        ],
-        (),
+    equality_decl.arity = Telescope::build(
+        [(carrier.clone(), type_1.clone())],
+        Telescope::build(
+            [
+                (left, Term::free_var(&carrier)),
+                (right, Term::free_var(&carrier)),
+            ],
+            (),
+        ),
     );
 
     // unbox : (Box) -> Type 0 = (b) => match b : (_) => Type 0 | mk(a) => a end
@@ -605,12 +605,11 @@ fn indexed_module(target: Term) -> Module {
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
         // The family states one index, because its constructor aims at one. Declaring none while a constructor targets one is a malformed declaration in its own right, which the terminal clause now reports as an arity.
-        indices: Telescope::build(
+        arity: Telescope::done(Telescope::build(
             [(Free::local(902, Some("i")), Term::prim(Prim::NatType))],
             (),
-        ),
+        )),
         constructors: vec![(
             Atom::from("mk"),
             InductParam {
@@ -714,8 +713,7 @@ fn level_registry(level: &Level) -> Module {
     let family = Global::Authored(Qualifier::from(["Levelled"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
-        indices: Telescope::done(()),
+        arity: Telescope::done(Telescope::done(())),
         constructors: Vec::new(),
         result_sort: Term::type_at(level.clone()),
         module: Qualifier::default(),
@@ -792,8 +790,10 @@ fn indexed_by_proof(diverging: bool) -> Module {
     let family = Global::Authored(Qualifier::from(["Indexed"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
-        indices: Telescope::build([(Free::local(901, Some("i")), held.clone())], ()),
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(901, Some("i")), held.clone())],
+            (),
+        )),
         constructors: vec![(
             Atom::from("mk"),
             InductParam {

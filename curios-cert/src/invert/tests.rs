@@ -22,8 +22,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
         &family,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: ["a", "b"]
                 .into_iter()
                 .map(|tag| {

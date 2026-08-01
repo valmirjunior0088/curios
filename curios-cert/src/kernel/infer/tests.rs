@@ -269,8 +269,7 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
         &name,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: vec![(
                 Atom::from("mk"),
                 InductParam {
@@ -302,8 +301,7 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
         &name,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: vec![(
                 Atom::from("mk"),
                 InductParam {
@@ -525,8 +523,7 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
         &name,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: Vec::new(),
             result_sort: Term::prop(),
             module: Qualifier::from(["False"]),
@@ -686,8 +683,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
         &name,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
+            arity: Telescope::done(Telescope::done(())),
             constructors: Vec::new(),
             result_sort: Term::prop(),
             module: Qualifier::from(["P"]),

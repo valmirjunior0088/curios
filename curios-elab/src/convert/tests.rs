@@ -977,8 +977,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
             &nominal("Wrap"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::done(()),
-                indices: Telescope::done(()),
+                arity: Telescope::done(Telescope::done(())),
                 constructors: Vec::from([(
                     Atom::from("wrap"),
                     InductParam {
@@ -1631,8 +1630,7 @@ fn register_lst(context: &mut Context) {
             &nominal("Lst"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::build([(elem.clone(), Term::type_ground())], ()),
-                indices: Telescope::build([(elem, Term::type_ground())], ()),
+                arity: Telescope::build([(elem, Term::type_ground())], Telescope::done(())),
                 constructors: Vec::new(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
@@ -1653,13 +1651,9 @@ fn register_vec(context: &mut Context) {
             &nominal("Vec"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
-                params: Telescope::build([(elem.clone(), Term::type_ground())], ()),
-                indices: Telescope::build(
-                    [
-                        (elem, Term::type_ground()),
-                        (length, Term::prim(Prim::NatType)),
-                    ],
-                    (),
+                arity: Telescope::build(
+                    [(elem, Term::type_ground())],
+                    Telescope::build([(length, Term::prim(Prim::NatType))], ()),
                 ),
                 constructors: Vec::new(),
                 result_sort: Term::type_ground(),

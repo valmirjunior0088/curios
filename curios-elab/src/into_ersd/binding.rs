@@ -119,8 +119,7 @@ fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<Free> {
     }
     for name in item.declared_names() {
         if let Some(induct_decl) = module.induct_decls.get(name) {
-            names.extend(induct_decl.params.free_vars());
-            names.extend(induct_decl.indices.free_vars());
+            names.extend(induct_decl.arity.free_vars());
             for parameter in induct_decl.signatures() {
                 names.extend(parameter.telescope.free_vars());
             }

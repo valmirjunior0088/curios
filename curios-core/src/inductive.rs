@@ -29,10 +29,10 @@ pub struct InductParam {
 )]
 pub struct InductDecl {
     pub universe_context: UniverseContext,
-    /// The declaration's parameter telescope, e.g. `(A : Type, E : Type)` for `induct Result(A : Type, E : Type)`. Ends in `()` like a `TupleType`'s telescope: there is no trailing body, only binders.
-    pub params: Telescope<()>,
-    /// The declaration's *full* index telescope — the parameter binders first (index types may depend on them), then the index binders from the head's `: (...)` group, e.g. `(T : Type, n : Nat)` for `induct Vec(T : Type) : (n : Nat)`. Empty-beyond-params for an unindexed inductive. Like `constructors`, instantiate at known parameters by peeling the leading `params.len()` binders.
-    pub indices: Telescope<()>,
+    /// The declaration's parameters, terminating in its index telescope: `induct Vec(T : Type) : (n : Nat)` is `(T : Type)` ending in `(n : Nat)` ending in `()`.
+    ///
+    /// Nested rather than two parallel telescopes. The indices are scoped under the parameters *by construction*, so there is no agreement between two encodings to state, nothing to keep in sync, and no malformed pairing for a judgment to refuse — a declaration claiming one parameter and an index telescope that does not lead with it is unspellable rather than rejected.
+    pub arity: Telescope<Telescope<()>>,
     /// Per-constructor signatures **in declaration order** — each the constructor's signature telescope (see [`InductParam`]).
     ///
     /// A sequence rather than a map, because the order is load-bearing: a constructor's position here *is* its runtime tag (`Self::constructor_index`). A `BTreeMap<Atom, _>` made that position the collation order over constructor spellings, so renaming a case silently renumbered the emitted tags of every case it sorted past. Declaration order is predictable from the source, stable under a rename, and changes only under an edit that visibly reorders the declaration.
@@ -50,6 +50,27 @@ pub struct InductDecl {
 }
 
 impl InductDecl {
+    /// How many of this declaration's binders are uniform parameters.
+    pub fn param_count(&self) -> usize {
+        self.arity.len()
+    }
+
+    /// This family's index telescope at `params` — the domains its index targets must inhabit.
+    pub fn indices_at(&self, params: &[Term]) -> Telescope<()> {
+        self.arity.open(&params.iter().collect::<Vec<_>>())
+    }
+
+    /// How many indices the family is declared over, read without instantiating it.
+    pub fn index_count(&self) -> usize {
+        let mut telescope = &self.arity;
+        loop {
+            match telescope {
+                Telescope::Cons(_, rest) => telescope = rest.body(),
+                Telescope::Done(indices) => return indices.len(),
+            }
+        }
+    }
+
     /// This declaration's polarity in its `i`th parameter.
     ///
     /// [`Polarity::Mixed`] when the declaration has not been analyzed — the sound default. `Unused` would be the *unsound* one: it claims a parameter is harmless without evidence, which is exactly what lets a negative occurrence through.
@@ -61,8 +82,7 @@ impl InductDecl {
     pub fn shared(&self, sharing: &crate::Sharing) -> Self {
         Self {
             universe_context: self.universe_context.clone(),
-            params: sharing.share(&self.params),
-            indices: sharing.share(&self.indices),
+            arity: sharing.share(&self.arity),
             constructors: self
                 .constructors
                 .iter()
@@ -109,7 +129,7 @@ impl InductDecl {
 
     /// The canonical plicities of `tag`'s *payload* binders — the constructor signature plicities past the leading `params.len()` declaration parameters, paralleling the telescope [`Self::instantiate`] peels. `None` if `tag` is not a constructor of this inductive.
     pub fn payload_plicities(&self, tag: &Atom) -> Option<&[Plicity]> {
-        let param_count = self.params.len();
+        let param_count = self.param_count();
         self.constructor(tag)
             .map(|param| &param.plicities[param_count..])
     }

@@ -18,8 +18,7 @@ fn single_payload(name: &Global, payload_type: Term, result_sort: Term) -> Induc
 
     InductDecl {
         universe_context: UniverseContext::default(),
-        params: Telescope::done(()),
-        indices: Telescope::done(()),
+        arity: Telescope::done(Telescope::done(())),
         constructors: vec![(
             Atom::from("c"),
             InductParam {

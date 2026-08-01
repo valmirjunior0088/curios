@@ -686,16 +686,9 @@ fn process_items(
                             name.clone(),
                             curios_core::InductDecl {
                                 universe_context: curios_core::UniverseContext::empty(),
-                                params: curios_core::Telescope::build(
+                                arity: curios_core::Telescope::build(
                                     param_tys_unmarked.clone(),
-                                    (),
-                                ),
-                                indices: curios_core::Telescope::build(
-                                    param_tys_unmarked
-                                        .iter()
-                                        .cloned()
-                                        .chain(index_tys.iter().cloned()),
-                                    (),
+                                    curios_core::Telescope::build(index_tys.iter().cloned(), ()),
                                 ),
                                 constructors,
                                 result_sort: result_sort.clone(),
@@ -1323,10 +1316,9 @@ fn order_flat_items(
 /// The external references of an inductive registry entry: every free var of its telescopes. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.
 fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
     induct_decl
-        .params
+        .arity
         .free_vars()
         .into_iter()
-        .chain(induct_decl.indices.free_vars())
         .chain(
             induct_decl
                 .constructors
@@ -1562,13 +1554,7 @@ fn audit_public_exposures(
             }
 
             if let Some(induct_decl) = induct_decls.get(&nominal) {
-                let nominal_dependencies = globals(
-                    induct_decl
-                        .params
-                        .free_vars()
-                        .into_iter()
-                        .chain(induct_decl.indices.free_vars()),
-                );
+                let nominal_dependencies = globals(induct_decl.arity.free_vars());
                 audit_dependencies(&audiences, &sources, &exposure, &item, nominal_dependencies)?;
 
                 if induct_decl.rep_public {

@@ -579,7 +579,7 @@ fn elaborate_induct_match(
         name: &name,
         universes: &universes,
         params: &params,
-        indices: induct_decl.indices.clone().open_params(&params),
+        indices: induct_decl.indices_at(&params),
     };
 
     // An elided motive (the lowering's bare metavar) checked against an expected type is filled in by dependent-motive synthesis: the arms are then checked against the expected type specialised at each constructor, exactly as a hand-written convoy motive would, and the match's result is a concrete type rather than a metavar that would stall the large-elimination guard. Outside checking mode there is no expected type to abstract, so the metavar stays and is solved by unifying the arms (`check_motive`).
@@ -840,7 +840,7 @@ fn synthesize_induct_motive(
     head: &Term,
     expected: &Term,
 ) -> Result<SynthesizedMotive, Error> {
-    let n_indices = induct_decl.indices.len() - induct_decl.params.len();
+    let n_indices = induct_decl.index_count();
 
     // One abstraction label per index, then the scrutinee — the binder order every motive has. The labels that come back as a variable's own name (`used` accumulates them) are the *roots*: the binders that genuinely specialise the goal, and the ones a context hypothesis can depend on.
     //

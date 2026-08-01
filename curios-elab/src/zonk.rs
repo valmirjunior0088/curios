@@ -134,8 +134,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 name.clone(),
                 InductDecl {
                     universe_context: induct_decl.universe_context.clone(),
-                    params: zonk_field_telescope(context, &induct_decl.params)?,
-                    indices: zonk_field_telescope(context, &induct_decl.indices)?,
+                    arity: zonk_arity(context, &induct_decl.arity)?,
                     constructors: induct_decl
                         .constructors
                         .iter()
@@ -430,8 +429,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
         }
     }
     for (name, declaration) in &module.induct_decls {
-        validate!(&declaration.params, &format!("inductive {name} parameters"))?;
-        validate!(&declaration.indices, &format!("inductive {name} indices"))?;
+        validate!(&declaration.arity, &format!("inductive {name} arity"))?;
         validate!(
             &declaration.result_sort,
             &format!("inductive {name} result sort"),
@@ -553,14 +551,9 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
         })?;
         let parameter_count = induct_decl.universe_context.parameter_count;
         validate_bound_universes(
-            &induct_decl.params,
+            &induct_decl.arity,
             parameter_count,
-            &format!("inductive {name} parameters"),
-        )?;
-        validate_bound_universes(
-            &induct_decl.indices,
-            parameter_count,
-            &format!("inductive {name} indices"),
+            &format!("inductive {name} arity"),
         )?;
         validate_bound_universes(
             &induct_decl.result_sort,
@@ -660,8 +653,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
         }
     }
     for declaration in module.induct_decls.values() {
-        collect!(&declaration.params);
-        collect!(&declaration.indices);
+        collect!(&declaration.arity);
         collect!(&declaration.result_sort);
         for constructor in declaration.signatures() {
             collect!(&constructor.telescope);
@@ -1247,6 +1239,22 @@ pub(crate) fn zonk_telescope(
 }
 
 /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is `()`, which carries no metavariables and is rebuilt as-is. The companion of [`zonk_telescope`], and a free function for the same reason.
+/// [`zonk_field_telescope`] for a declaration's nested arity: the parameter domains, then the index telescope they terminate in.
+pub(crate) fn zonk_arity(
+    context: &Context,
+    arity: &Telescope<Telescope<()>>,
+) -> Result<Telescope<Telescope<()>>, Error> {
+    match arity {
+        Telescope::Done(indices) => Ok(Telescope::Done(Box::new(zonk_field_telescope(
+            context, indices,
+        )?))),
+        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+            zonk_term(context, ty)?,
+            rest.try_map_body(|inner| zonk_arity(context, inner))?,
+        )),
+    }
+}
+
 pub(crate) fn zonk_field_telescope(
     context: &Context,
     telescope: &Telescope<()>,

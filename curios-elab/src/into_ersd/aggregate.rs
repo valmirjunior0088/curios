@@ -4,13 +4,16 @@
 //!
 //! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 
-use super::{
-    Context, Error, Field, Lowering, Outcome, Proj, Struct, StructType, Subterm, Telescope, Term,
-    Tuple, TupleType, Variant, emitted, erasure_mask, reduce_with, signature_entries,
+use {
+    super::{
+        Context, Error, Field, Lowering, Outcome, Proj, Struct, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, Variant, emitted, erasure_mask, reduce_with, signature_entries,
+    },
+    curios_core::Bound,
 };
 
 /// Open a parameter telescope with fresh assumed variables, handing back the abstract parameter terms a declaration's fields are instantiated at.
-fn open_opaque(context: &mut Context, mut telescope: Telescope<()>) -> Vec<Term> {
+fn open_opaque<B: Bound>(context: &mut Context, mut telescope: Telescope<B>) -> Vec<Term> {
     let mut params = Vec::new();
     loop {
         match telescope {
@@ -84,7 +87,7 @@ impl Lowering {
         let mut constructors = Vec::new();
         for tag in induct_decl.constructor_order() {
             let entries = context.with_frame(|context| {
-                let params = open_opaque(context, induct_decl.params.clone());
+                let params = open_opaque(context, induct_decl.arity.clone());
                 let telescope = induct_decl
                     .instantiate(tag, &params)
                     .expect("erase: constructor instantiates at its inductive's parameters");

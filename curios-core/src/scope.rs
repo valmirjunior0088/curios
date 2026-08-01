@@ -790,6 +790,16 @@ impl Telescope<Term> {
     }
 }
 
+impl Telescope<Telescope<()>> {
+    /// Whether any metavariable in a nested arity telescope — a declaration's parameter domains and, at its terminal, its index or field domains — satisfies `pred`, short-circuiting on the first hit.
+    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Done(inner) => inner.any_metavar(pred),
+        }
+    }
+}
+
 impl Telescope<()> {
     /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field types; its `Done` body is `()` — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
