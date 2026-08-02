@@ -25,7 +25,7 @@ use {
     super::{
         Kernel, KernelError, Sort, check_group,
         convert::{convert, scoped},
-        sort::as_sort,
+        sort::{arity_matches, as_sort},
         synth_neutral,
     },
     curios_core::{
@@ -217,6 +217,9 @@ fn infer_node(
                 .clone();
             let declaration = instantiate_induct_decl(kernel, &declaration, universes)?;
 
+            // The parameter count, before the signature is peeled at it. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below compares against the wrong number.
+            arity_matches(declaration.param_count(), params.len())?;
+
             let signature = declaration
                 .instantiate(tag, params)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
@@ -266,6 +269,10 @@ fn infer_node(
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?
                 .clone();
             kernel.check_instance(&declaration.universe_context, universes)?;
+
+            // The parameter count, before the arity is opened at it: `Telescope::open` asserts, so a disagreement here aborts the walk rather than refusing the item.
+            arity_matches(declaration.param_count(), params.len())?;
+
             let telescope = instantiate_universe_levels_scoped(&declaration.arity, universes)?
                 .open(&params.iter().collect::<Vec<_>>());
 

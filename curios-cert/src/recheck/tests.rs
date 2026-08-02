@@ -1890,3 +1890,164 @@ fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A nominal *value*'s parameter count must be its declaration's, as its type's already must be.
+///
+/// [`an_occurrence_whose_arity_is_not_its_declarations_is_refused`] closed this for the two type formers, where `Sort::of` consults a declaration to answer for an occurrence. It does not reach the value forms: nothing calls `Sort::of` on a `Struct` or a `Variant`, so their carried parameter list was still taken on the term's own word.
+///
+/// The two forms failed differently, and neither failed well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure aborted the process with `telescope arity mismatch in open: expected 1, got 0`, and at two parameters with `expected 1, got 2`. A panic refuses rather than admits, so it is inside what DESIGN.md permits of the Rust implementation, but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is a `KernelError`, and `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
+///
+/// A `Variant` instead opens with `open_params`, which is tolerant: too few parameters leaves the declaration's own parameter binders unopened, so they read as *payload* slots and the payload-arity check compares against the wrong number. That was refused while the hole was open, but downstream and by accident — the resulting type carried the short parameter list into a conversion that happened to reject it — rather than by any rule about the value. Sound by coincidence is the pattern this class keeps producing.
+///
+/// Not reachable from a surface program: `curios-elab` builds a nominal value saturated from the declaration it looked up. No inhabitant of `False` was built from either; what is demonstrated is that the count is unchecked and that both consumers are wrong when it is.
+///
+/// The control is [`a_nominal_value_at_its_declared_arity_is_accepted`], both forms at exactly the parameters they declare, which must keep passing: every constructor application and every record literal in every program is one.
+#[test]
+fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
+    for (label, module) in nominal_value_cases() {
+        let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, KernelError::Arity { .. })),
+            "{label}: the value's parameter count was not held to its declaration: {verdicts:?}",
+        );
+    }
+}
+
+/// The control for the fixture above: one parameter each, as declared.
+#[test]
+fn a_nominal_value_at_its_declared_arity_is_accepted() {
+    let nat = Term::prim(Prim::NatType);
+
+    assert_eq!(
+        recheck_module_verdicts(&struct_value_module(vec![nat.clone()]), 1_000_000),
+        Vec::new(),
+        "a record literal at exactly its declared parameters was refused",
+    );
+    assert_eq!(
+        recheck_module_verdicts(&variant_value_module(vec![nat]), 1_000_000),
+        Vec::new(),
+        "a constructor application at exactly its declared parameters was refused",
+    );
+}
+
+/// The four ways a one-parameter nominal value can disagree with its declaration.
+fn nominal_value_cases() -> Vec<(&'static str, Module)> {
+    let nat = Term::prim(Prim::NatType);
+    vec![
+        ("struct at no parameters", struct_value_module(Vec::new())),
+        (
+            "struct at two parameters",
+            struct_value_module(vec![nat.clone(), nat.clone()]),
+        ),
+        ("variant at no parameters", variant_value_module(Vec::new())),
+        (
+            "variant at two parameters",
+            variant_value_module(vec![nat.clone(), nat]),
+        ),
+    ]
+}
+
+/// `struct S(A : Type) : Type { f : A }`, with a literal at `params`.
+fn struct_value_module(params: Vec<Term>) -> Module {
+    let name = Global::Authored(Qualifier::from(["S"]));
+    let a = Free::local(980, Some("A"));
+    let declaration = curios_core::StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::build(
+            [(a.clone(), Term::type_ground())],
+            Telescope::build([(Free::local(981, Some("f")), Term::free_var(&a))], ()),
+        ),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let declared: Term = curios_core::Subterm::StructType(curios_core::StructType {
+        name: name.clone(),
+        universes: Vec::new(),
+        params: vec![Term::prim(Prim::NatType)],
+    })
+    .into();
+
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        declared,
+        Term::struct_(
+            name.clone(),
+            params,
+            [Term::prim(Prim::Nat(curios_core::Nat::new(3usize)))],
+        ),
+    );
+
+    Module {
+        items: vec![held],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::from([(name, declaration)]),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// `induct F(A : Type) : Type | mk(x : A) end`, with a constructor application at `params`.
+fn variant_value_module(params: Vec<Term>) -> Module {
+    let family = Global::Authored(Qualifier::from(["F"]));
+    let a = Free::local(970, Some("A"));
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::build([(a.clone(), Term::type_ground())], Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::build(
+                    [
+                        (a.clone(), Term::type_ground()),
+                        (Free::local(971, Some("x")), Term::free_var(&a)),
+                    ],
+                    Vec::new(),
+                ),
+                plicities: vec![Plicity::Implicit, Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        Term::induct_type(
+            family.clone(),
+            [Term::prim(Prim::NatType)],
+            Vec::<Term>::new(),
+        ),
+        Term::variant(
+            family.clone(),
+            params,
+            "mk",
+            [Term::prim(Prim::Nat(curios_core::Nat::new(3usize)))],
+        ),
+    );
+
+    Module {
+        items: vec![held],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
