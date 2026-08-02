@@ -309,7 +309,12 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
 
         Cases::Induct { cases, default } => {
             if let Subterm::Variant(Variant { tag, payload, .. }) = &*forced {
-                if let Some((_, arm)) = cases.iter().find(|(candidate, _)| candidate == tag) {
+                // The arm's binders must match the payload it is opened at. `check_arm` establishes that, but only once typing reaches the elimination — and a `match` standing in a type position is reduced *before* anything types it, which is the ordering typing itself depends on. `Scope::open` asserts, so an arm that does not match would abort the walk; it is left stuck instead.
+                if let Some((_, arm)) = cases
+                    .iter()
+                    .find(|(candidate, _)| candidate == tag)
+                    .filter(|(_, arm)| arm.arity() == payload.len())
+                {
                     let refs = payload.iter().collect::<Vec<_>>();
                     return Step::Continue(arm.open(&refs));
                 }
@@ -476,6 +481,10 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
     let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
         return Ok(None);
     };
+    // Saturation, for the reason `step_apply` needs it: this is the recursive twin of the β step, and `Telescope::open` asserts. An application that does not saturate its member declines to unfold rather than aborting the walk.
+    if telescope.len() != params.len() {
+        return Ok(None);
+    }
 
     let refs = params.iter().collect::<Vec<_>>();
     Ok(Some(telescope.open(&refs)))

@@ -2214,3 +2214,164 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         ),
     ]
 }
+
+/// The two reduction steps that still opened a binder set at a count the term supplied.
+///
+/// [`a_count_a_term_carries_is_refused_rather_than_indexed_with`] closed the β step and the partial-spine slice. It closed one of two twins and one of two openers. `whnf` opens a binder set in four places, and an enumeration of them found these two still unguarded — both reached the same way, through `check_definition` sorting a declared type it never infers.
+///
+/// **The arm of an elimination.** Reducing a `match` on a concrete constructor opens the matching arm at that constructor's payload. `Scope::open` asserts, so an arm binding two components of a one-component payload — or none — **aborted the walk**. The arm arity *is* checked, by `check_arm`, but only once typing reaches the elimination; reduction of a type position runs first and had no such precondition.
+///
+/// **The recursive twin of the β step.** `unfold_rec_apply` unfolds a folded recursive application by opening its member's telescope at the arguments, exactly as `step_apply` did, and was left behind when `step_apply` was guarded. `rec f : (a, b) -> Type = …; f(3)` in a type position aborted there.
+///
+/// Verified while the holes were open: each of the three cases panicked at `Scope::open` or `Telescope::open` rather than producing a verdict, and each was confirmed independently reachable. Both are stuck now, which is the same conservative direction the β step took — reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than aborting the walk and taking every other verdict with it.
+///
+/// `step_proj` was enumerated alongside them and needed nothing: every arm already guards its index (`index < fields.len()`, `(1..=payload.len()).contains(&index)`) and falls through to stuck, which is what these two now do. It is the pattern, and it was already there to copy.
+///
+/// The control is [`a_saturated_application_in_a_type_position_is_accepted`] together with [`an_arm_matching_its_payload_still_reduces`]: a guard that merely stopped reducing would pass every witness here while breaking every program.
+#[test]
+fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
+    for (label, module) in unguarded_opener_cases() {
+        // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking
+        // to the end with each verdict independent of the others, and a panic makes that false.
+        let verdicts = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            recheck_module_verdicts(&module, 1_000_000)
+        }))
+        .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
+
+        assert!(
+            !verdicts.is_empty(),
+            "{label}: the module was certified rather than refused",
+        );
+    }
+}
+
+/// The control for the arm half: an arm binding exactly its constructor's payload still reduces, so the type position it computes is classified as it always was.
+#[test]
+fn an_arm_matching_its_payload_still_reduces() {
+    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
+
+    assert_eq!(
+        recheck_module_verdicts(&module, 1_000_000),
+        Vec::new(),
+        "an arm binding exactly its payload was refused",
+    );
+    let _ = three;
+}
+
+/// The three shapes: an arm over- and under-binding its payload, and a recursive application short of its member's binders.
+fn unguarded_opener_cases() -> Vec<(&'static str, Module)> {
+    vec![
+        (
+            "an arm binding two components of a one-component payload",
+            arm_module(vec![
+                (Plicity::Explicit, Free::local(996, Some("a"))),
+                (Plicity::Explicit, Free::local(997, Some("b"))),
+            ]),
+        ),
+        (
+            "an arm binding none of a one-component payload",
+            arm_module(Vec::new()),
+        ),
+        (
+            "a recursive application short of its binders",
+            rec_apply_module(),
+        ),
+    ]
+}
+
+/// `held : match F/mk(3) : (s) => Type | mk(<binders>) => Nat end`, for `induct F : Type | mk(x : Nat) end`.
+fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
+    let family = Global::Authored(Qualifier::from(["F"]));
+    let nat = Term::prim(Prim::NatType);
+    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(Free::local(995, Some("x")), nat.clone())],
+                    Vec::new(),
+                ),
+                plicities: vec![Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let declared = Term::induct_match_scoped_marked(
+        Term::variant(family.clone(), Vec::<Term>::new(), "mk", [three.clone()]),
+        Scope::close(
+            Many(1),
+            &[&Free::local(998, Some("s"))],
+            Term::type_ground(),
+        ),
+        [("mk", binders, nat)],
+        None,
+    );
+
+    Module {
+        items: vec![authored(
+            &Global::Authored(Qualifier::from(["held"])),
+            declared,
+            three,
+        )],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// `rec f : (a : Nat, b : Nat) -> Type = (a, b) => Nat; f(3)` as a declared type.
+fn rec_apply_module() -> Module {
+    let a = Free::local(990, Some("a"));
+    let b = Free::local(991, Some("b"));
+    let f = Free::local(992, Some("f"));
+    let nat = Term::prim(Prim::NatType);
+    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let plicities = vec![Plicity::Explicit, Plicity::Explicit];
+
+    let member_type: Term = curios_core::Subterm::FuncType(curios_core::FuncType {
+        telescope: Telescope::build(
+            [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
+            Term::type_ground(),
+        ),
+        plicities: plicities.clone(),
+    })
+    .into();
+    let member_body: Term = curios_core::Subterm::Func(curios_core::Func {
+        telescope: Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], nat),
+        plicities,
+    })
+    .into();
+
+    let selection = Term::rec([(f.clone(), member_type, member_body)], Term::free_var(&f));
+
+    Module {
+        items: vec![authored(
+            &Global::Authored(Qualifier::from(["held"])),
+            Term::apply(selection, [three.clone()]),
+            three,
+        )],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
