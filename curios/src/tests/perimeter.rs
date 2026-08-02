@@ -175,6 +175,54 @@ const A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
         /std/print(Nat/to_str(f(coerce(Ind/right()))))
         "#;
 
+/// `drop`'s `@A` is constrained by nothing — no argument mentions it and no result determines it — so every use below leaves one unsolved term metavariable exactly where the fixture plants it.
+const AN_UNCONSTRAINED_IMPLICIT: &str = r#"
+        use /std/{Nat};
+
+        let drop(@A : Type, n : Nat) -> Nat = n;
+"#;
+
+const A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE: &str = r#"
+        induct Bad : pub Type
+        | c(x : /std/Eq(drop(0), 0))
+        end
+
+        ()
+        "#;
+
+const A_METAVARIABLE_IN_A_STRUCT_FIELD: &str = r#"
+        struct Bad : pub Type {
+            x : /std/Eq(drop(0), 0)
+        }
+
+        ()
+        "#;
+
+const A_METAVARIABLE_IN_A_DEFINITIONS_TYPE: &str = r#"
+        let f(x : /std/Eq(drop(0), 0)) -> Nat = 0;
+
+        ()
+        "#;
+
+const A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY: &str = r#"
+        /std/print(Nat/to_str(drop(0)))
+        "#;
+
+/// The same argument supplied in all four positions at once, so the refusals above cannot be passing for "a declaration may not mention an implicit".
+const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
+        induct Fine : pub Type
+        | c(x : /std/Eq(drop(@Nat, 0), 0))
+        end
+
+        struct Also : pub Type {
+            x : /std/Eq(drop(@Nat, 0), 0)
+        }
+
+        let f(x : /std/Eq(drop(@Nat, 0), 0)) -> Nat = 0;
+
+        /std/print(Nat/to_str(drop(@Nat, 0)))
+        "#;
+
 const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
         use /std/{Nat, False};
 
@@ -410,6 +458,53 @@ fn a_foreign_declaration_is_confined_to_wire_types() {
     rejected_by(
         A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES,
         "expected a wire type",
+    );
+}
+
+// `zonk_module`, the one whole-module pass graded *auditable only* — a grade that does not fit. `DESIGN.md` names the three entries no source text can reach, and this is not among them: every program reaches this pass, and every "was not inferred" diagnostic is this rule firing. What had never been checked is its *extent*. The assumption is that no unsolved metavariable survives into the module, and the module has exactly four term-bearing places for one to survive in: a definition's type, a definition's body (with the entrypoint body walked separately from both), an `induct` registry telescope, and a `struct` field telescope. The fields `zonk_module` deliberately skips carry `Vec<String>`, `Vec<(usize, Global)>` and `BTreeSet<Global>`, so its comment that concept metadata and witness markers hold no terms of their own is exact rather than approximate.
+//
+// The extent is where the soundness sits, because the assumption's second clause is that nothing can *later* be solved to a partial or negatively-occurring term. `check_positivity` and `record_totality` run after zonking and on the module zonking returned, and positivity reads a `Metavar` through `opaque`: its spine children at `Mixed`, and never its solution, which does not exist yet. A metavariable surviving into a registry telescope would therefore be analyzed as a hole while the term it is later solved to is analyzed not at all. Refusal before those passes run is what closes that, not the ordering by itself.
+//
+// Each fixture plants one unconstrained implicit in one of the four places; all four were refused. Null result, and the control is what keeps the row from being read as "declarations may not mention implicits" — it supplies the same argument in all four positions and requires the program to run.
+#[test]
+fn a_metavariable_does_not_survive_into_an_induct_telescope() {
+    rejected_by(
+        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE}"),
+        "was not inferred",
+    );
+}
+
+#[test]
+fn a_metavariable_does_not_survive_into_a_struct_field() {
+    rejected_by(
+        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_STRUCT_FIELD}"),
+        "was not inferred",
+    );
+}
+
+#[test]
+fn a_metavariable_does_not_survive_a_definitions_type() {
+    rejected_by(
+        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_DEFINITIONS_TYPE}"),
+        "was not inferred",
+    );
+}
+
+#[test]
+fn a_metavariable_does_not_survive_the_entrypoint_body() {
+    rejected_by(
+        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY}"),
+        "was not inferred",
+    );
+}
+
+#[test]
+fn a_solved_metavariable_still_reaches_every_zonked_position() {
+    assert_eq!(
+        run(&format!(
+            "{AN_UNCONSTRAINED_IMPLICIT}{A_SOLVED_METAVARIABLE_IN_EVERY_POSITION}"
+        )),
+        b"0"
     );
 }
 
