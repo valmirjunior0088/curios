@@ -42,6 +42,16 @@ impl Sort {
 /// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
 ///
 /// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
+/// An occurrence supplies exactly as many parameters, or indices, as its declaration declares.
+///
+/// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the two arities a nominal occurrence carries beside its universe instance. Both are read from the declaration the moment anything asks what an occurrence *is*, and both were taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family was classified as a well-formed type, and every consumer of the arity after that was wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
+fn arity_matches(expected: usize, actual: usize) -> Result<(), KernelError> {
+    match expected == actual {
+        true => Ok(()),
+        false => Err(KernelError::Arity { expected, actual }),
+    }
+}
+
 pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, KernelError> {
     let reduced = whnf(kernel, universe.clone())?;
 
@@ -60,24 +70,32 @@ impl Sort {
         match &*reduced {
             // A nominal type's sort is declared, not derived: the declaration says whether the family lands in `Type` or in `Prop`, at the universes this occurrence instantiated it at.
             Subterm::InductType(InductType {
-                name, universes, ..
+                name,
+                universes,
+                params,
+                indices,
             }) => {
                 let declaration = kernel
                     .induct_decl(name)
                     .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
                 kernel.check_instance(&declaration.universe_context, universes)?;
+                arity_matches(declaration.param_count(), params.len())?;
+                arity_matches(declaration.index_count(), indices.len())?;
                 let result_sort =
                     instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
 
                 as_sort(kernel, &result_sort)
             }
             Subterm::StructType(StructType {
-                name, universes, ..
+                name,
+                universes,
+                params,
             }) => {
                 let declaration = kernel
                     .struct_decl(name)
                     .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
                 kernel.check_instance(&declaration.universe_context, universes)?;
+                arity_matches(declaration.param_count(), params.len())?;
                 let result_sort =
                     instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
 

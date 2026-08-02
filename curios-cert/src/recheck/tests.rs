@@ -1788,3 +1788,105 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         "a vacuous elimination carried a motive nothing validated: {verdicts:?}",
     );
 }
+
+/// A nominal occurrence's parameter and index counts must be the declaration's.
+///
+/// `Sort::of` reads an `InductType`'s declaration to answer for it — `check_instance` for the universe width, then `result_sort` instantiated at those levels. It never asked whether the occurrence supplies as many *parameters* and *indices* as the declaration declares. That is the same omission the universe width had before `check_instance` checked it: an occurrence's arity validated against itself rather than against the scheme it instantiates.
+///
+/// Verified while the hole was open, in both halves. Where the arity is merely carried, the module was **certified with zero refusals** — `let held : Type = F` for a one-parameter, one-index family, at no parameters, at no indices, and at two indices, all three accepted. Where the arity is *used*, the kernel **aborted**: eliminating over such a scrutinee reaches `InductDecl::indices_at`, whose `Telescope::open` asserts, and the process panicked with `telescope arity mismatch in open: expected 1, got 0`. A panic refuses rather than admits, so it is inside what DESIGN.md permits of the Rust implementation — but a malformed occurrence is the *program's* fault, and the house rule is that a program's fault is a `KernelError`. The certified half is the one that matters: a type the kernel blessed whose shape its own declaration contradicts.
+///
+/// Not reachable from a surface program — `curios-elab` builds a nominal occurrence saturated from the declaration it looked up — which is why this is constructed here. No inhabitant of `False` was built from it; what is demonstrated is that the arity is unchecked and that both of its consumers are wrong when it is.
+///
+/// The control is [`an_occurrence_at_its_declared_arity_is_accepted`], the same family at the parameters and indices it declares, which must keep passing: every nominal type in every program is such an occurrence.
+#[test]
+fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
+    for (label, params, indices) in arity_cases() {
+        let verdicts = recheck_module_verdicts(&occurrence_module(params, indices), 1_000_000);
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, KernelError::Arity { .. })),
+            "{label}: the kernel accepted an occurrence its declaration contradicts: {verdicts:?}",
+        );
+    }
+}
+
+/// The control for the fixture above: one parameter and one index, as declared.
+#[test]
+fn an_occurrence_at_its_declared_arity_is_accepted() {
+    let module = occurrence_module(
+        vec![Term::prim(Prim::NatType)],
+        vec![Term::prim(Prim::Nat(curios_core::Nat::new(0usize)))],
+    );
+
+    assert_eq!(
+        recheck_module_verdicts(&module, 1_000_000),
+        Vec::new(),
+        "the boundary refused an occurrence at exactly the arity its declaration states",
+    );
+}
+
+/// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
+fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
+    let zero = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+    vec![
+        ("no parameters", Vec::new(), vec![zero.clone()]),
+        ("no indices", vec![Term::prim(Prim::NatType)], Vec::new()),
+        (
+            "two indices",
+            vec![Term::prim(Prim::NatType)],
+            vec![zero.clone(), zero],
+        ),
+    ]
+}
+
+/// `let held : Type = F(params)(indices)`, where `F(A : Type) : (i : Nat) -> Type` declares one of each.
+fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
+    let family = Global::Authored(Qualifier::from(["F"]));
+    let zero = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::build(
+            [(Free::local(950, Some("A")), Term::type_ground())],
+            Telescope::build(
+                [(Free::local(951, Some("i")), Term::prim(Prim::NatType))],
+                (),
+            ),
+        ),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(Free::local(952, Some("A")), Term::type_ground())],
+                    vec![zero],
+                ),
+                plicities: vec![Plicity::Implicit],
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        Term::type_ground(),
+        Term::induct_type(family.clone(), params, indices),
+    );
+
+    Module {
+        items: vec![held],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
