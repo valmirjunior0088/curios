@@ -421,6 +421,44 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
     );
 }
 
+// The size-change engine never opened the group that called back. `Walk::walk` gives a *member reference* — a `rec` node whose tail selects one member — an arm above the general `rec` one, so that a self-reference cannot send the walk into the bodies it is already inside; `RecGroup::member_body` materializes each self-reference as a projection carrying the whole group, so descending would regenerate those bodies without end. That arm answered for every projection and not only the group's own: a projection of a *different* group fell into it, matched no branch, and returned, leaving that group's member bodies unwalked. The general arm below is there for exactly the case it thereby skipped — an inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
+//
+// So a call back into `f` from inside the projected `g` was invisible, and so was `g`'s own call site inside `f`. Each group closed to no call at all, and a group with no recursive call is accepted — both classified `Total` while `f(0)` diverges through `g`, which is a closed inhabitant of `False`: `f`'s declared type is a proposition, so (V) is the whole defence and it read the engine's verdict.
+//
+// Verified while the hole was open: the program compiled, the compile-path kernel recheck raised no verdict, and `False/absurd` on the forged proof erased to an `unreachable` the runtime trapped on. The same loop with the inner group removed — `rec f(n : Nat) -> False = f(n);` — was refused throughout, which is what places the defect in the walk rather than in the obligation.
+#[test]
+fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
+    rejected_as_a_proof(
+        r#"
+        use /std/{Nat, Str, False};
+
+        rec f(n : Nat) -> False =
+            (rec g(m : Nat) -> False = f(m); g)(n);
+
+        /std/print(False/absurd(@Str, f(0)))
+        "#,
+    );
+}
+
+// The accepting side of that same descent, and the reason the fix is not "a group whose body mentions a projection is partial". `outer` descends on its own parameter, and its arm projects a foreign group whose bodies the walk now enters. Nothing in `keep` calls back, so entering it must find no edge and leave both groups total — `outer` by its own `outer(p)`, `keep` by having no recursive call at all. Both types are propositions, so a spurious edge in either is a rejection rather than a silent loss of precision.
+#[test]
+fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
+    let source = r#"
+        use /std/{Nat, True};
+
+        rec outer(n : Nat) -> True =
+            match n
+            | 0 => True/qed()
+            | p + 1; _ => (rec keep(t : True) -> True = t; keep)(outer(p))
+            end;
+
+        let proved : True = outer(3);
+
+        /std/print("kept")
+        "#;
+    assert_eq!(run(source), b"kept");
+}
+
 // General recursion is untouched wherever erasure keeps it. `collatz` cannot pass any size-change checker — it recurses on a computed quotient, and whether it terminates at all is an open problem — and it runs anyway, because its result is a `Nat` the program actually consumes.
 #[test]
 fn a_partial_definition_stays_usable_in_a_program() {

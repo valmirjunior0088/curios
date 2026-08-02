@@ -327,6 +327,7 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
             params: &member.params,
             refined: BTreeMap::new(),
             nonzero: BTreeSet::new(),
+            entered: Vec::new(),
             calls: Vec::new(),
         };
         walk.walk(&member.body);
@@ -434,6 +435,8 @@ struct Walk<'a, E: Env> {
     ///
     /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `rec loop(n : Nat) -> Nat = loop(n / 10)` would be accepted while looping forever at zero.
     nonzero: BTreeSet<Free>,
+    /// The nested groups whose bodies the walk is currently inside, entered and left exactly like `refined`. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
+    entered: Vec<RecGroup>,
     calls: Vec<(usize, usize, Matrix)>,
 }
 
@@ -728,12 +731,14 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Var(_)
             | Subterm::Metavar(_) => {}
 
-            // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. This arm precedes the general `rec` one below because a projection *is* a `rec` node: descending into its bodies would re-enter the group at every recursive call and never terminate.
-            Subterm::Rec(_) if term.as_rec_proj().is_some() => {
-                let (group, index) = term.as_rec_proj().expect("a projection");
-                if group == self.group {
-                    self.call(index, &[]);
-                }
+            // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
+            Subterm::Rec(_)
+                if term
+                    .as_rec_proj()
+                    .is_some_and(|(group, _)| group == self.group) =>
+            {
+                let (_, index) = term.as_rec_proj().expect("a projection");
+                self.call(index, &[]);
             }
 
             Subterm::Apply(Apply { head, params, .. }) => {
@@ -834,10 +839,16 @@ impl<E: Env> Walk<'_, E> {
             }
 
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
+            //
+            // `entered` is what keeps the descent finite. `RecGroup::member_body` materializes every member reference as a projection carrying the whole group, so a group reached from inside its own bodies would regenerate them without end — which is why a projection of *this* group is answered above rather than descended into, and why any other group is walked at most once per path. It is entered and left exactly like `refined`, so a group met twice in sibling positions is still walked under each one's refinements.
             Subterm::Rec(Rec { group, tail }) => {
-                for index in 0..group.length() {
-                    let body = group.member_body(index);
-                    self.walk(&body);
+                if !self.entered.contains(group) {
+                    self.entered.push(group.clone());
+                    for index in 0..group.length() {
+                        let body = group.member_body(index);
+                        self.walk(&body);
+                    }
+                    self.entered.pop();
                 }
                 let (_, body) = self.open_many(tail);
                 self.walk(&body);
