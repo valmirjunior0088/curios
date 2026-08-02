@@ -2378,3 +2378,88 @@ fn rec_apply_module() -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or a `Prim::Exit`.
+///
+/// Instrumented across a kernel walk of the whole prelude and every program in `curios`'s test corpus, the named route refused 9 times — 8 at a proof position, 1 at a type position — and the anonymous route refused **zero**, with no test in this crate asserting a `NotTotal` verdict at all. The reason is the one this module documents: every surface spelling that would reach it is refused during elaboration, so no module carries it here. `rec b : False = b; b`, the shape three of `curios`'s `tests::soundness` fixtures use, never arrives.
+///
+/// `Prim::Exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` types at `{}` — deliberately, so that nothing is forged by a term that never returns — and `Held/qed(exit(0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
+///
+/// The control is the same module with `()` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
+#[test]
+fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
+    let verdicts = recheck_module_verdicts(&proof_carrying_unit(true), 1_000_000);
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            verdict.error,
+            KernelError::NotTotal {
+                erased: crate::Erased::Proof,
+                reached: None,
+            }
+        )),
+        "the kernel certified a proof carrying an exit: {verdicts:?}",
+    );
+}
+
+/// The control for the fixture above: the same proposition built from the unit value stays accepted.
+#[test]
+fn a_proof_carrying_the_unit_value_is_accepted() {
+    assert_eq!(
+        recheck_module_verdicts(&proof_carrying_unit(false), 1_000_000),
+        Vec::new(),
+        "an ordinary proof at a unit-carrying proposition was refused",
+    );
+}
+
+/// `induct Held : Prop | qed(u : {})`, with `bad : Held` built either from `exit(0)` or from `()`.
+fn proof_carrying_unit(exiting: bool) -> Module {
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("qed"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(Free::local(910, Some("u")), Term::tuple_type_unit())],
+                    Vec::new(),
+                ),
+                plicities: vec![Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let payload = match exiting {
+        true => Term::prim(Prim::Exit(Term::prim(Prim::Nat(curios_core::Nat::new(
+            0usize,
+        ))))),
+        false => Term::tuple(Vec::<Term>::new()),
+    };
+
+    let mut induct_decls = BTreeMap::new();
+    induct_decls.insert(held_name.clone(), declaration);
+
+    Module {
+        items: vec![authored(
+            &Global::Authored(Qualifier::from(["bad"])),
+            held,
+            Term::variant(held_name, Vec::<Term>::new(), "qed", [payload]),
+        )],
+        universe_seeds: Vec::new(),
+        induct_decls,
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Term::prim(Prim::NatType),
+    }
+}
