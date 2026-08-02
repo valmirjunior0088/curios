@@ -345,3 +345,53 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
         "the carried vector was believed instead of recomputed",
     );
 }
+
+/// The same claim at the branch that actually decides it, which the fixture above does not reach: there `Bad` is *inside* the analyzed set, so its polarity comes from the fixpoint and the carried vector is never consulted by any rule. What separates the two coverage modes is the lookup for a name from *outside* the set, and `Coverage::Complete` answering it `Mixed` is the whole of the kernel not inheriting an elaborator-computed vector.
+///
+/// So `Wrapper` is registered but withheld from the analyzed map, and its carried vector lies — `Strict` in a parameter its constructor would use negatively. `Outer` stores a `Wrapper(Outer)`. Under `Complete` the lookup declines to read the registry and returns `Mixed`, `Outer` reaches itself at `Mixed`, and the set is refused. Under `Partial` — the elaborator replaying a prelude, where an out-of-set name is one *this same pass* analyzed earlier — the registry answers `Strict` and the set is admitted. Same declarations, same kernel, opposite verdicts: that difference is the branch, and nothing else in the crate exercises it.
+///
+/// It was measured firing nowhere before this test. Across a kernel walk of the whole prelude every one of 124 lookups resolved from the computed map, and across `curios`'s whole test corpus 30,271 did, with the `Complete` fallback taken zero times and the `Partial` registry read taken 26. A change routing `Complete` to the registry the way `Partial` does would therefore have passed every test in the workspace while making the certifier believe a conclusion it did not establish.
+#[test]
+fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+
+    let wrapper_name = Global::Authored(Qualifier::from(["Wrapper"]));
+    let outer_name = Global::Authored(Qualifier::from(["Outer"]));
+    let outer_type = Term::induct_type(outer_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    // Registered, never analyzed: the lie rides on `polarities` and only a registry lookup can read it.
+    kernel.declare_induct(
+        &wrapper_name,
+        &InductDecl {
+            arity: Telescope::build(
+                [(Free::local(2, Some("A")), Term::type_ground())],
+                Telescope::done(()),
+            ),
+            constructors: Vec::new(),
+            polarities: vec![Strict],
+            ..single_payload(Term::type_ground(), Term::type_ground())
+        },
+    );
+
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        outer_name.clone(),
+        single_payload(
+            Term::induct_type(wrapper_name, [outer_type], Vec::<Term>::new()),
+            Term::type_ground(),
+        ),
+    );
+    for (name, entry) in &inducts {
+        kernel.declare_induct(name, entry);
+    }
+
+    assert!(
+        positivity_vectors(&mut kernel, &inducts, &BTreeMap::new(), Coverage::Complete).is_err(),
+        "an out-of-set name must read `Mixed` under complete coverage, not the registry's vector",
+    );
+    assert!(
+        positivity_vectors(&mut kernel, &inducts, &BTreeMap::new(), Coverage::Partial).is_ok(),
+        "under partial coverage the registry vector is this pass's own earlier result",
+    );
+}
