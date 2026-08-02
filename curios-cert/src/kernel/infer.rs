@@ -350,7 +350,7 @@ fn infer_node(
                 let type_ = binding.type_().release(&refs);
                 let value = binding.value().release(&refs);
 
-                Sort::of(kernel, &type_)?;
+                infer_type(kernel, &type_)?;
                 check(kernel, &value, &type_)?;
                 values.push(value);
             }
@@ -398,6 +398,22 @@ fn infer_node(
             Err(KernelError::NotCore(term.clone()))
         }
     }
+}
+
+/// Establish that `type_` is a type by **typing** it, and hand back the sort it lands in.
+///
+/// The kernel had two ways to accept a type: this judgment, and `Sort::of`, which classifies a term structurally without typing it. Only one of them is a judgment, and the classifier was the one every caller used — so a declared type reached reduction, conversion and erasure having been *read* rather than *checked*, and every function downstream trusted a shape nothing had established. That is the root the motive clause, the β step, the elimination arm and the recursive twin all came through.
+///
+/// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate now.
+///
+/// **The reduction comes first, and it is not incidental.** `Sort::of` opens by reducing, and typing the unreduced spelling instead answers a different question: `Lst.{v,w}(Waker)` types as `Type v` — its former's promised codomain — while its reduced form `LstType(Waker)` is the minimal `Type 0` that the constructor size condition needs, and a computed type is only the shape it computes to once reduced. Without this line the standard library loses twelve items to the size condition and one to a projection through `/std/Fmt`.
+///
+/// That reduction is also why `whnf` must be *total* on arbitrary terms rather than merely correct on well-typed ones: this judgment hands it a term nothing has typed yet, by construction.
+pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
+    let reduced = kernel.reduce_forced(type_.clone())?;
+    let inferred = infer(kernel, &reduced)?;
+
+    as_sort(kernel, &inferred)
 }
 
 /// A motive is a claim the term makes about its own result, and two rules downstream read it: `infer` takes the elimination's type from it, and `Sort::of` classifies a type-valued `match` by it. Nothing established that the claim is true — the arms are checked *against* the motive, which a lie survives, because a motive reduces honestly at each arm's concrete case while reading as whatever it states at the abstract binders. So the motive is checked here, generically, and required to land in a sort.
@@ -763,7 +779,7 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
             let type_ = binding.type_().release(&refs);
             let value = binding.value().release(&refs);
 
-            Sort::of(kernel, &type_)?;
+            infer_type(kernel, &type_)?;
             check(kernel, &value, &type_)?;
             values.push(value);
         }
@@ -842,7 +858,7 @@ fn check_lambda(
     loop {
         match (lambda, against) {
             (Telescope::Cons(mine, mine_rest), Telescope::Cons(theirs, theirs_rest)) => {
-                Sort::of(kernel, &mine)?;
+                infer_type(kernel, &mine)?;
                 if !convert(kernel, &Term::type_ground(), &mine, &theirs)? {
                     return Err(KernelError::Mismatch {
                         inferred: Box::new(mine),
@@ -972,7 +988,7 @@ fn infer_telescope(
             Ok(Telescope::Done(Box::new(type_)))
         }
         Telescope::Cons(domain, rest) => {
-            Sort::of(kernel, &domain)?;
+            infer_type(kernel, &domain)?;
 
             let binder = kernel.fresh(rest.first_hint());
             let mark = kernel.mark();

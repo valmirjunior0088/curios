@@ -2063,15 +2063,18 @@ fn variant_value_module(params: Vec<Term>) -> Module {
 /// Verified while the holes were open: each case aborted the process rather than producing a verdict, and the two are independently reachable — the lambda cases still refuse with the reduction guard alone, and the neutral case still aborted until the slice was guarded too. Neither is reachable from a surface program: `curios-elab` emits saturated applications and plicity vectors built alongside the telescopes they parallel. No inhabitant of `False` was built from either; what is demonstrated is that a program's fault aborted the kernel where a `KernelError` belongs.
 ///
 /// The control is [`a_saturated_application_in_a_type_position_is_accepted`]. It is the direction that matters: reduction must still fire on a well-formed application, and a guard that simply stopped reducing would pass every witness here while breaking every program.
+///
+/// The lambda case's diagnostic *improved* when `infer_type` landed: with the declared type typed rather than classified, `infer` refuses it as `Arity { expected: 2, actual: 1 }` — naming the defect — where reduction going stuck had left it a generic `Unclassified`. Both are accepted here because the two rules refuse different cases: the neutral spine's plicities are a count no typing rule reads, so it is still the guard that catches it.
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
     for (label, module) in unsaturated_cases() {
         let verdicts = recheck_module_verdicts(&module, 1_000_000);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, KernelError::Unclassified(_))),
+            verdicts.iter().any(|verdict| matches!(
+                verdict.error,
+                KernelError::Arity { .. } | KernelError::Unclassified(_)
+            )),
             "{label}: the term was indexed at a count nothing checked: {verdicts:?}",
         );
     }

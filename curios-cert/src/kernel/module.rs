@@ -12,7 +12,11 @@
 mod tests;
 
 use {
-    super::{Kernel, KernelError, Sort, carries_information, convert::convert, infer::check},
+    super::{
+        Kernel, KernelError, Sort, carries_information,
+        convert::convert,
+        infer::{check, infer_type},
+    },
     crate::{group_totality, yields_a_sort},
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
@@ -35,7 +39,7 @@ pub fn check_definition(
     kernel.restore_budget();
     kernel.assume_universes(universes);
 
-    Sort::of(kernel, type_)?;
+    infer_type(kernel, type_)?;
     check(kernel, body, type_)?;
 
     kernel.define(name, type_, body, universes);
@@ -72,7 +76,7 @@ fn check_group_members<R>(
     // Every member is assumed before any body is checked, because a member may call any other.
     for index in 0..group.length() {
         let type_ = group.member_type(index);
-        let sort = Sort::of(kernel, &type_)?;
+        let sort = infer_type(kernel, &type_)?;
 
         if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
             erased_member = Some(type_.clone());
@@ -234,7 +238,7 @@ fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), Kern
         let mut indices = loop {
             match arity {
                 Telescope::Cons(domain, rest) => {
-                    Sort::of(kernel, &domain)?;
+                    infer_type(kernel, &domain)?;
 
                     let binder = kernel.fresh(rest.first_hint());
                     kernel.assume(&binder, &domain);
@@ -245,7 +249,7 @@ fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), Kern
         };
 
         while let Telescope::Cons(domain, rest) = indices {
-            Sort::of(kernel, &domain)?;
+            infer_type(kernel, &domain)?;
 
             let binder = kernel.fresh(rest.first_hint());
             kernel.assume(&binder, &domain);
@@ -425,7 +429,7 @@ fn check_signature_within<B: Bound + Clone>(
 
     while let Telescope::Cons(domain, rest) = telescope {
         if let Some((bound, raised)) = &sized
-            && let Sort::Type(level) = Sort::of(kernel, &domain)?
+            && let Sort::Type(level) = infer_type(kernel, &domain)?
         {
             let upper = if entries.len() < uniform {
                 raised
@@ -465,7 +469,7 @@ pub fn check_entrypoint(
 
     match expected {
         Some(type_) => {
-            Sort::of(kernel, type_)?;
+            infer_type(kernel, type_)?;
             check(kernel, body, type_)
         }
         None => super::infer::infer(kernel, body).map(|_| ()),
