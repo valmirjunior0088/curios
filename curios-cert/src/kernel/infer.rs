@@ -25,6 +25,7 @@ use {
     super::{
         Kernel, KernelError, Sort, check_group,
         convert::{convert, scoped},
+        sort::as_sort,
         synth_neutral,
     },
     curios_core::{
@@ -392,6 +393,77 @@ fn infer_node(
     }
 }
 
+/// A motive is a claim the term makes about its own result, and two rules downstream read it: `infer` takes the elimination's type from it, and `Sort::of` classifies a type-valued `match` by it. Nothing established that the claim is true — the arms are checked *against* the motive, which a lie survives, because a motive reduces honestly at each arm's concrete case while reading as whatever it states at the abstract binders. So the motive is checked here, generically, and required to land in a sort.
+///
+/// Coq's `type_of_case` is this clause: compute the predicate's type, reduce it, `destSort` it, and refuse with a dedicated `error_elim_arity` otherwise. Without it a motive may state `Prop` while its arms inhabit `Type`, and `guard_large_elimination` — which returns immediately when the result is not relevant, because a proposition eliminated into a proposition needs no condition — never runs. That was a two-constructor proposition eliminated into `Nat`, certified with zero refusals.
+///
+/// The binders are the motive's real ones: the family's own index domains, then the scrutinee at the family instantiated *at those binders* rather than at the elimination's actual indices. Opening at the actuals instead would check the motive at one instance and miss exactly the lie, since a motive scrutinising its own index binder reduces once that index is concrete.
+///
+/// Placed before the dispatch in [`check_cases`], so it covers every `Cases` form with one clause and does not inherit `check_induct_arms`'s skip for a vacuous elimination: an elimination that cannot run still hands its caller a type read off this motive. No exploit through that path was demonstrated; what makes it unconditional is that the type propagates whether or not the elimination runs.
+///
+/// The sort it derives is handed to the guard, which used to re-ask `Sort::of` under binders it assumed at `Type` — a second reading of the same question, and the one that was wrong.
+fn check_motive(
+    kernel: &mut Kernel,
+    family: Option<&InductType>,
+    motive: &curios_core::Scope<curios_core::Many>,
+    scrutinee_type: &Term,
+) -> Result<Sort, KernelError> {
+    let mark = kernel.mark();
+    let outcome = (|| {
+        let mut opened: Vec<Term> = Vec::new();
+
+        match family {
+            Some(family) => {
+                let declaration = kernel
+                    .induct_decl(&family.name)
+                    .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?
+                    .clone();
+                let declaration = instantiate_induct_decl(kernel, &declaration, &family.universes)?;
+
+                let mut indices = declaration.indices_at(&family.params);
+                while let Telescope::Cons(domain, rest) = indices {
+                    let binder = kernel.fresh(rest.first_hint());
+                    kernel.assume(&binder, &domain);
+                    let occurrence = Term::free_var(&binder);
+                    indices = rest.open(&[&occurrence]);
+                    opened.push(occurrence);
+                }
+
+                let at_binders = Term::induct_type_at(
+                    family.name.clone(),
+                    family.universes.clone(),
+                    family.params.clone(),
+                    opened.clone(),
+                );
+                let binder = kernel.fresh(None);
+                kernel.assume(&binder, &at_binders);
+                opened.push(Term::free_var(&binder));
+            }
+            None => {
+                let binder = kernel.fresh(None);
+                kernel.assume(&binder, scrutinee_type);
+                opened.push(Term::free_var(&binder));
+            }
+        }
+
+        let refs = opened.iter().collect::<Vec<_>>();
+        let body = motive.open(&refs);
+
+        // A budget failure is not a malformed motive, so it keeps its own diagnostic; every other refusal is reported as the rule that was violated rather than as whichever mismatch happened to expose it.
+        let type_ = match infer(kernel, &body) {
+            Ok(type_) => type_,
+            Err(error @ KernelError::Reduce(_)) => return Err(error),
+            Err(_) => return Err(KernelError::NotAMotive(body.clone())),
+        };
+
+        // The motive's own sort *is* its type read as one: a body typed `Prop` is a proposition, a body typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
+        as_sort(kernel, &type_).map_err(|_| KernelError::NotAMotive(body.clone()))
+    })();
+    kernel.retract(mark);
+
+    outcome
+}
+
 /// Check an elimination's arms against its motive.
 ///
 /// A nominal elimination is verified in full, each arm at its own constructor's index targets. The primitive carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms.
@@ -403,6 +475,8 @@ fn check_cases(
     scrutinee: &Term,
     scrutinee_type: &Term,
 ) -> Result<(), KernelError> {
+    let motive_sort = check_motive(kernel, family, motive, scrutinee_type)?;
+
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
         let expected = motive.open(&[&value]);
 
@@ -445,6 +519,11 @@ fn check_cases(
                 .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?
                 .clone();
             let declaration = instantiate_induct_decl(kernel, &declaration, &family.universes)?;
+
+            // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `check_motive`, and a second derivation is what this whole clause exists to remove.
+            if !(cases.is_empty() && default.is_none()) {
+                eliminate::guard_large_elimination(kernel, &declaration, family, motive_sort)?;
+            }
 
             check_induct_arms(
                 kernel,

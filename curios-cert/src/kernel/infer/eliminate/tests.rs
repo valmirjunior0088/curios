@@ -80,7 +80,10 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec
         &family,
         &InductDecl {
             universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
+            arity: Telescope::done(Telescope::build(
+                [(Free::local(9_000, Some("i")), Term::prim(Prim::NatType))],
+                (),
+            )),
             constructors: entries,
             result_sort,
             module: Qualifier::from([path]),

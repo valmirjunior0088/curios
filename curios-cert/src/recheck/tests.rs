@@ -1556,3 +1556,235 @@ fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A motive that lies about its own sort skips the large-elimination guard entirely.
+///
+/// `Sort::of` classifies a stuck `match` used as a type by reading its **motive** — "its motive is the sort, which every arm shares", as the arm says. Nothing establishes that. `check_definition` calls `Sort::of` on a declared type and never infers it, so a type-position `match` has its arms checked against its motive by no judgment at all, and the motive may claim whatever it likes.
+///
+/// The guard is what that buys. `check_elimination` computes `let relevant = Sort::of(result).map(|sort| !sort.is_prop())` and **returns immediately when the result is not relevant** — eliminating a proposition into a proposition needs no condition. So a motive whose body is `switch i : (_) => Prop | 0 => Nat | _ => Nat` reads as `Prop` at the abstract binder the guard opens it at, the guard is skipped, and the very same motive *reduces to `Nat`* at the concrete index each arm is checked against, so the arms typecheck as data.
+///
+/// `P` below is a two-constructor proposition, the shape the guard exists to refuse: `mk()` and `mk2()` both inhabit `P(0)`, proof irrelevance identifies them, and `extract` maps them to `7` and `9`. Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for exactly this module, and `Sort::of` was confirmed directly to answer `Ok(Prop)` for a switch whose every arm is `Nat` while answering `Ok(Type 0)` for the same switch with an honest motive. This is the route DESIGN.md records as having produced two closed inhabitants of `False`, reached through the classifier rather than through the guard's own condition.
+///
+/// Not reachable from a surface program: `curios-elab` builds a match's motive and checks the arms against it, so it never emits one that lies. That is what kept the certifier's copy of the guard unobserved, and it is why this is built here.
+///
+/// Closed by checking the motive itself: `check_motive` types it under its real binders and requires it to land in a sort, which is Coq's `type_of_case` clause, and hands the sort it derives to the guard so nothing re-reads the claim. The lying motive no longer typechecks — its arms inhabit `Type` while it states `Prop` — so the refusal names that rule rather than the guard it used to bypass.
+///
+/// The control is [`an_honest_motive_still_refuses_the_large_elimination`], the same module with the motive stating `Type` — where the motive is honest, the guard does fire, and the elimination is refused for the reason it should be. Together they pin that what was being skipped is the guard, and that closing the bypass did not close the guard itself.
+#[test]
+fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
+    let verdicts = recheck_module_verdicts(&lying_motive(Term::prop()), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::NotAMotive(_))),
+        "the kernel eliminated a two-constructor proposition into `Nat`: {verdicts:?}",
+    );
+}
+
+/// The control: the identical module whose motive states the `Type` its arms actually have. The guard sees a relevant result and refuses, which is what proves the fixture above is about the *classifier* rather than about eliminations in general.
+#[test]
+fn an_honest_motive_still_refuses_the_large_elimination() {
+    let verdicts = recheck_module_verdicts(&lying_motive(Term::type_ground()), 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::LargeElimination(_))),
+        "the guard did not fire even on an honest motive: {verdicts:?}",
+    );
+}
+
+/// `extract : (p : P(0)) -> Nat`, eliminating the two-constructor proposition `P` under a motive whose inner switch states `sort` while every arm of it is `Nat`.
+fn lying_motive(sort: Term) -> Module {
+    let family = Global::Authored(Qualifier::from(["P"]));
+    let zero = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+
+    let nullary = |tag: &str| {
+        (
+            Atom::from(tag),
+            InductParam {
+                telescope: Telescope::done(vec![zero.clone()]),
+                plicities: Vec::new(),
+            },
+        )
+    };
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(600, Some("i")), Term::prim(Prim::NatType))],
+            (),
+        )),
+        constructors: vec![nullary("mk"), nullary("mk2")],
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let at_zero = Term::induct_type(family.clone(), Vec::<Term>::new(), [zero.clone()]);
+
+    let index = Free::local(601, Some("i"));
+    let scrutinee = Free::local(602, Some("s"));
+    let motive_body = Term::switch_scoped(
+        Term::free_var(&index),
+        Scope::close(Many(1), &[&Free::local(603, Some("k"))], sort),
+        [(0u32, Term::prim(Prim::NatType))],
+        Term::prim(Prim::NatType),
+    );
+
+    let subject = Free::local(604, Some("p"));
+    let literal = |n: usize| Term::prim(Prim::Nat(curios_core::Nat::new(n)));
+    let extract = authored(
+        &Global::Authored(Qualifier::from(["extract"])),
+        Term::func_type(
+            [(subject.clone(), at_zero.clone())],
+            Term::prim(Prim::NatType),
+        ),
+        Term::func(
+            [(subject.clone(), at_zero)],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&subject),
+                Scope::close(Many(2), &[&index, &scrutinee], motive_body),
+                [
+                    ("mk", Vec::new(), literal(7)),
+                    ("mk2", Vec::new(), literal(9)),
+                ],
+                None,
+            ),
+        ),
+    );
+
+    Module {
+        items: vec![extract],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(family, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    }
+}
+
+/// A motive is checked even where the elimination cannot run.
+///
+/// `check_induct_arms` skips the large-elimination guard for a vacuous elimination — no arms, no catch-all — and the reason is good: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The question this fixture settles is whether the *motive* clause inherits that skip.
+///
+/// It does not, and the reason is not an exploit. No route from a vacuous elimination to a forged term was demonstrated, and the honest reading of that is the weak one: an attempt failed, which is not the same as a proof that none exists. What makes the clause unconditional is that `infer` reads the elimination's **type** off the motive and hands it to the caller whether or not the elimination can run — so a motive nothing validated means a term whose type nothing validated, and `Sort::of` will classify it downstream. The module below was certified with **zero refusals** while the clause did not run: a vacuous elimination at an uninhabited `Held(Two/b())`, whose motive states `Prop` over arms inhabiting `Type`, declared as the codomain of a definition so no ordinary mismatch fires first.
+///
+/// It also costs nothing. The clause sits in [`check_cases`](crate::infer) above the dispatch, where every `Cases` form shares one `motive` binding, so *not* running it here would mean pushing it down into `check_induct_arms`, guarding it with the vacuous condition, and duplicating it into the three primitive-carrier arms. Unconditional is the cheap implementation; the skip would have been the deliberate exception.
+#[test]
+fn a_vacuous_elimination_still_has_its_motive_checked() {
+    let two_name = Global::Authored(Qualifier::from(["Two"]));
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let nullary = |tag: &str, targets: Vec<Term>| {
+        (
+            Atom::from(tag),
+            InductParam {
+                telescope: Telescope::done(targets),
+                plicities: Vec::new(),
+            },
+        )
+    };
+    let at = |tag: &str| {
+        Term::variant(
+            two_name.clone(),
+            Vec::<Term>::new(),
+            tag,
+            Vec::<Term>::new(),
+        )
+    };
+
+    // `Two : Type 0`, so `a` and `b` genuinely clash and the elimination really is vacuous.
+    let two_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())],
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+    // `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play.
+    let held_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(
+                Free::local(900, Some("t")),
+                Term::induct_type(two_name.clone(), Vec::<Term>::new(), Vec::<Term>::new()),
+            )],
+            (),
+        )),
+        constructors: vec![nullary("mk", vec![at("a")])],
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let at_b = Term::induct_type(held_name.clone(), Vec::<Term>::new(), [at("b")]);
+    let outer = Free::local(903, Some("n"));
+    let lying = || {
+        Term::switch_scoped(
+            Term::free_var(&outer),
+            Scope::close(Many(1), &[&Free::local(904, Some("k"))], Term::prop()),
+            [(0u32, Term::prim(Prim::NatType))],
+            Term::prim(Prim::NatType),
+        )
+    };
+    let subject = Free::local(902, Some("s"));
+
+    // The declared codomain *is* the lying motive, so no ordinary mismatch can refuse this first.
+    let vacuous = authored(
+        &Global::Authored(Qualifier::from(["vacuous"])),
+        Term::func_type(
+            [
+                (outer.clone(), Term::prim(Prim::NatType)),
+                (subject.clone(), at_b.clone()),
+            ],
+            lying(),
+        ),
+        Term::func(
+            [
+                (outer.clone(), Term::prim(Prim::NatType)),
+                (subject.clone(), at_b),
+            ],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&subject),
+                Scope::close(
+                    Many(2),
+                    &[&Free::local(901, Some("t")), &Free::local(905, Some("z"))],
+                    lying(),
+                ),
+                Vec::<(Atom, Vec<(Plicity, Free)>, Term)>::new(),
+                None,
+            ),
+        ),
+    );
+
+    let module = Module {
+        items: vec![vacuous],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    };
+
+    let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::NotAMotive(_))),
+        "a vacuous elimination carried a motive nothing validated: {verdicts:?}",
+    );
+}

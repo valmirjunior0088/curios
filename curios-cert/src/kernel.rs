@@ -51,6 +51,8 @@ pub enum KernelError {
     Unclassified(Term),
     /// A term used as a universe that is neither `Type` nor `Prop`.
     NotASort(Term),
+    /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
+    NotAMotive(Term),
     /// A term arrived with a type other than the one required of it.
     Mismatch {
         inferred: Box<Term>,
@@ -122,6 +124,10 @@ impl fmt::Display for KernelError {
                 write!(formatter, "cannot determine the sort of `{type_}`")
             }
             KernelError::NotASort(term) => write!(formatter, "`{term}` is not a universe"),
+            KernelError::NotAMotive(term) => write!(
+                formatter,
+                "`{term}` is not a valid motive: it must be well-typed and land in a sort",
+            ),
             KernelError::Mismatch { inferred, expected } => {
                 write!(formatter, "expected `{expected}`, found `{inferred}`")
             }

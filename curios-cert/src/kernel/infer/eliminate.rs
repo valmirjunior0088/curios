@@ -43,11 +43,6 @@ pub(super) fn check_induct_arms(
     default: Option<&Term>,
     scrutinee: &Term,
 ) -> Result<(), KernelError> {
-    // A match with no arms and no catch-all is a vacuous elimination: the coverage loop below must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot.
-    if !(cases.is_empty() && default.is_none()) {
-        guard_large_elimination(kernel, declaration, family, motive)?;
-    }
-
     for (tag, arm) in cases {
         check_arm(kernel, declaration, family, motive, scrutinee, tag, arm)?;
     }
@@ -296,32 +291,19 @@ fn open_payload<T, B: Bound>(
 /// Refuse eliminating a proposition into a relevant result unless the proposition is empty or a singleton.
 ///
 /// The guard fires only when both halves hold: the scrutinee's family is `Prop`-sorted, and the motive lands in `Type`. A proposition eliminated into another proposition is always fine — irrelevance makes the result indistinguishable either way.
-fn guard_large_elimination(
+pub(super) fn guard_large_elimination(
     kernel: &mut Kernel,
     declaration: &InductDecl,
     family: &InductType,
-    motive: &Scope<Many>,
+    motive_sort: Sort,
 ) -> Result<(), KernelError> {
     let scrutinee_type: Term = Subterm::InductType(family.clone()).into();
     if !Sort::of(kernel, &scrutinee_type)?.is_prop() {
         return Ok(());
     }
 
-    // The motive under fresh binders: its *result* is what decides relevance, and it is the same sort at every case.
-    let mark = kernel.mark();
-    let binders = (0..motive.arity())
-        .map(|_| {
-            let binder = kernel.fresh(None);
-            kernel.assume(&binder, &Term::type_ground());
-            Term::free_var(&binder)
-        })
-        .collect::<Vec<_>>();
-    let refs = binders.iter().collect::<Vec<_>>();
-    let result = motive.open(&refs);
-    let relevant = Sort::of(kernel, &result).map(|sort| !sort.is_prop());
-    kernel.retract(mark);
-
-    if !relevant? {
+    // The motive's sort is taken from `check_motive`, which derived it by typing the motive under its real binders. This used to re-ask `Sort::of` under binders assumed at `Type` — a second reading of a question already answered, and the reading that could be lied to: a motive stating `Prop` over arms inhabiting `Type` was classified `Prop` here and skipped the whole guard.
+    if motive_sort.is_prop() {
         return Ok(());
     }
 
