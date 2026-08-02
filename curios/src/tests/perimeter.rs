@@ -175,6 +175,80 @@ const A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
         /std/print(Nat/to_str(f(coerce(Ind/right()))))
         "#;
 
+const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
+        use /std/{Nat, False};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        induct Pair : pub Type
+        | mk(n : Nat, p : Two)
+        end
+
+        induct Ind : (x : Pair) -> pub Type
+        | only() : (Pair/mk(0, Two/a()))
+        end
+
+        let coerce(w : Ind(Pair/mk(0, Two/a()))) -> Ind(Pair/mk(0, Two/b())) = w;
+
+        let boom(w : Ind(Pair/mk(0, Two/b()))) -> False =
+            match w : (x, q) => False
+            end;
+
+        let bad : False = boom(coerce(Ind/only()));
+
+        /std/print("FORGED")
+        "#;
+
+const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
+        use /std/{Nat};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        induct Pair : pub Type
+        | mk(n : Nat, p : Two)
+        end
+
+        induct Ind : (x : Pair) -> pub Type
+        | left()  : (Pair/mk(0, Two/a()))
+        | right() : (Pair/mk(0, Two/b()))
+        end
+
+        let coerce(w : Ind(Pair/mk(0, Two/b()))) -> Ind(Pair/mk(0, Two/a())) = w;
+
+        let f(w : Ind(Pair/mk(0, Two/a()))) -> Nat =
+            match w : (x, q) => Nat
+            | left() => 0
+            end;
+
+        /std/print(Nat/to_str(f(coerce(Ind/right()))))
+        "#;
+
+const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#"
+        use /std/{Nat};
+
+        induct Pair : pub Type
+        | mk(n : Nat)
+        end
+
+        induct Ind : (x : Pair) -> pub Type
+        | left()  : (Pair/mk(0))
+        | right() : (Pair/mk(1))
+        end
+
+        let f(w : Ind(Pair/mk(0))) -> Nat =
+            match w : (x, q) => Nat
+            | left() => 0
+            end;
+
+        /std/print(Nat/to_str(f(Ind/left())))
+        "#;
+
 const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
         use /std/{Nat};
 
@@ -371,6 +445,36 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
     rejected_by(
         A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM,
         "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// The same rule one decomposition step down, which is where its implementation could most plausibly have parted from its statement. `invert_indices` decides the `Prop` condition from the *family of the values being compared* rather than from the declared type of the position, and it decides it wherever the recursion reaches rather than only at the top of one: here `Pair` is relevant and the `Two` it carries is not, so the condition has to fire inside a matching constructor's payload. Read off the index domain instead — `Pair : Type`, therefore relevant — or applied only at `top`, `Two/a()` against `Two/b()` would clash at depth exactly as it once did at the surface, and both routes below would be closed inhabitants of `False` again.
+//
+// Both were refused when run, and the part worth keeping is that `coerce` elaborated in each: conversion *did* identify the two `Ind` instances through the nested proof, so the premise each exploit needs was available and inversion's refusal to clash on it is the only thing that stood in the way. Null result; the probes are recorded so the rung is not re-attacked.
+#[test]
+fn a_nested_proposition_valued_index_cannot_make_an_elimination_vacuous() {
+    rejected_by(
+        A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+#[test]
+fn a_nested_proposition_valued_index_cannot_excuse_an_omitted_arm() {
+    rejected_by(
+        A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// Coverage's *accepting* rung, which had no fixture of its own: an omitted arm excused because its index target genuinely clashes with the scrutinee's. Every fixture above asserts the refusing direction, so a change that made every absent arm mandatory would break the standard library and nothing in this file — and the standard library leans on this rung hard, at 14 excusals over `/syn/Str/Utf8`, `/std/Nat/Lte`, and `/std/Vec` in one kernel walk of the prelude, with no omitted arm ever coming back mandatory. `AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA` is not this control: a family with no constructors leaves the coverage loop with nothing to iterate, so it exercises the loop's absence rather than its verdict.
+//
+// It is deliberately the nested shape, which is what discriminates the two refusals above rather than merely sitting beside them: the clash is at the same depth and differs only in that `Pair/mk(0)` and `Pair/mk(1)` are values a program can tell apart.
+#[test]
+fn a_nested_relevant_clash_still_excuses_an_omitted_arm() {
+    assert_eq!(
+        run(A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM),
+        b"0"
     );
 }
 
