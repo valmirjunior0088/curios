@@ -734,21 +734,23 @@ fn level_registry(level: &Level) -> Module {
 ///
 /// Definitional proof irrelevance accepts without inspecting either term, and DESIGN.md states plainly what makes that correct: every inhabitant of a proposition is total, which is (V)'s job. The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the kernel's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
 ///
-/// It does not. `partial_definitions` iterates `module.items` and nothing else; `derived_binder_floor` is the only pass that reads a registry entry, and it collects free variables rather than partiality. Nor does the item walk reach these terms: `check_sizing` walks a constructor telescope's domains and stops at the terminal, so the index targets a constructor states are typed by nothing, and `check_group`'s local gate — a proof-typed member whose group does not descend is refused — never fires on a group that no judgment ever meets.
+/// For a time it did not, and a constructor's index target was the gap. `partial_definitions` iterates `module.items` and nothing else, and the module below has none; `derived_binder_floor` is the only other pass that reads a registry entry, and it collects free variables rather than partiality. Nor did the item walk reach these terms — `check_sizing` walks a constructor telescope's domains and stops at the terminal — so a target was typed by nothing, and `check_group`'s local gate, which refuses a proof-typed member whose group does not descend, never fired on a group no judgment met.
 ///
-/// So the module below states its constructor's index at `rec p : Absurd = p`, a closed non-descending inhabitant of an empty proposition, and `recheck_module_verdicts` returned **zero refusals** for it. `Absurd` has no constructors, so nothing else could ever have produced that index; irrelevance then identifies it with any other proof of `Absurd`, which is the identification (V) exists to prevent. Reachable from no surface program — the elaborator builds registry and bindings from one declaration and types the targets through the constructor wrappers it lowers — which is why it is built here.
+/// So the module below states its constructor's index at `rec p : Held = p`, a closed non-descending inhabitant of a proposition, and `recheck_module_verdicts` returned **zero refusals** for it. Irrelevance identifies that target with any other proof of `Held`, which is the identification (V) exists to prevent. Reachable from no surface program — the elaborator builds registry and bindings from one declaration and types the targets through the constructor wrappers it lowers — which is why it is built here.
 ///
-/// The fix is not the one-line boundary predicate the two `NotCore` passes above use, because partiality is not syntactic: deciding it needs `group_totality` under the declaration's own parameter binders, which means *typing* the registry rather than scanning it. That is the registry-versus-binding agreement `check_induct_decl` leaves to the `rec` group a declaration lowers to, and choosing how the kernel should establish it for itself is a design decision rather than a correction — so this test is left failing rather than paired with a guess.
+/// What closed it is clause 9 of `check_induct_decl`, in `check_constructed`: every index target must inhabit the index telescope at the constructor's own parameters, which *checks* the target instead of scanning past it. That is the shape this comment predicted while the hole was open — partiality is not syntactic, so establishing it takes typing the registry rather than reading it — and typing `rec p : Held = p` against `Held` is what puts `check_group`'s gate in front of it. Nothing about the fixture changed; the clause arrived and the verdict followed.
 ///
-/// The control is [`a_real_proof_in_a_registry_index_target_is_accepted`], the same declaration aimed at a genuine `qed()`: whatever establishes the target must refuse a diverging proof without refusing an ordinary one.
+/// The control is [`a_real_proof_in_a_registry_index_target_is_accepted`], the same declaration aimed at a genuine `qed()`: what establishes the target must refuse a diverging proof without refusing an ordinary one. The assertion pins the refusing item as well as the diagnostic, because this module declares two families and "does not descend" reaching the verdict list from either would otherwise read as a pass.
 #[test]
 fn a_partial_proof_in_a_registry_index_target_is_refused() {
+    let family = Global::Authored(Qualifier::from(["Indexed"]));
     let verdicts = recheck_module_verdicts(&indexed_by_proof(true), 1_000_000);
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.error.to_string().contains("does not descend")),
+        verdicts.iter().any(|verdict| {
+            verdict.name.as_ref() == Some(&family)
+                && verdict.error.to_string().contains("does not descend")
+        }),
         "the kernel certified a non-descending proof standing as a constructor's index target: {verdicts:?}",
     );
 }
