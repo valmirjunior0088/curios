@@ -312,16 +312,19 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     Ok(Some(telescope.open(&refs)))
                 }
                 // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain.
+                // `plicities` is documented as parallel to the telescope and is *sliced* here, so the guard covers it as well: a vector shorter than the arguments supplied would panic rather than refuse, and a spine whose type is malformed has no residual type to report.
                 Subterm::FuncType(FuncType {
                     telescope,
                     plicities,
-                }) if telescope.len() > params.len() => Ok(Some(
-                    Subterm::FuncType(FuncType {
-                        telescope: telescope.open_params(params),
-                        plicities: plicities[params.len()..].to_vec(),
-                    })
-                    .into(),
-                )),
+                }) if telescope.len() > params.len() && plicities.len() >= params.len() => {
+                    Ok(Some(
+                        Subterm::FuncType(FuncType {
+                            telescope: telescope.open_params(params),
+                            plicities: plicities[params.len()..].to_vec(),
+                        })
+                        .into(),
+                    ))
+                }
                 _ => Ok(None),
             }
         }

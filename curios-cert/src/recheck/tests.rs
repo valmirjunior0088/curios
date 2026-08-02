@@ -2051,3 +2051,166 @@ fn variant_value_module(params: Vec<Term>) -> Module {
         body: Term::tuple(Vec::<Term>::new()),
     }
 }
+
+/// A count carried on a term and used to *index* must be checked, not assumed — twice, in reduction and in synthesis.
+///
+/// Both are reached the same way. `check_definition` calls `Sort::of` on a declared type and never infers it, so a type position holds a term nothing has typed, and the two functions that walk it were written against an invariant typing would have established.
+///
+/// **Reduction.** `step_apply` opens a lambda's telescope at the application's arguments. `Telescope::open` asserts, so an application that does not saturate its lambda **aborted the walk** — `telescope arity mismatch in open: expected 2, got 1`. It is now stuck instead, which is the conservative direction twice over: reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than killing every other verdict. `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and an abort is what makes that false.
+///
+/// **Synthesis.** With reduction stuck, `synth_neutral`'s partial-application arm reports a spine's residual function type — and slices `plicities` at the argument count while guarding only on the *telescope's* length. A `FuncType` whose plicities are not parallel to its telescope therefore aborted there instead, at `sort.rs`'s slice. `plicities` is documented as parallel and nothing checked it; the arm now declines to report a residual type for a spine whose own type is malformed.
+///
+/// Verified while the holes were open: each case aborted the process rather than producing a verdict, and the two are independently reachable — the lambda cases still refuse with the reduction guard alone, and the neutral case still aborted until the slice was guarded too. Neither is reachable from a surface program: `curios-elab` emits saturated applications and plicity vectors built alongside the telescopes they parallel. No inhabitant of `False` was built from either; what is demonstrated is that a program's fault aborted the kernel where a `KernelError` belongs.
+///
+/// The control is [`a_saturated_application_in_a_type_position_is_accepted`]. It is the direction that matters: reduction must still fire on a well-formed application, and a guard that simply stopped reducing would pass every witness here while breaking every program.
+#[test]
+fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
+    for (label, module) in unsaturated_cases() {
+        let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, KernelError::Unclassified(_))),
+            "{label}: the term was indexed at a count nothing checked: {verdicts:?}",
+        );
+    }
+}
+
+/// The control for the fixture above: a lambda applied to exactly its binders still reduces, so the type position it stands in is classified as it always was.
+#[test]
+fn a_saturated_application_in_a_type_position_is_accepted() {
+    let a = Free::local(990, Some("a"));
+    let b = Free::local(991, Some("b"));
+    let nat = Term::prim(Prim::NatType);
+    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let former = Global::Authored(Qualifier::from(["f"]));
+
+    let plicities = vec![Plicity::Explicit, Plicity::Explicit];
+    let former_def = authored(
+        &former,
+        curios_core::Subterm::FuncType(curios_core::FuncType {
+            telescope: Telescope::build(
+                [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
+                Term::type_ground(),
+            ),
+            plicities: plicities.clone(),
+        })
+        .into(),
+        curios_core::Subterm::Func(curios_core::Func {
+            telescope: Telescope::build(
+                [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
+                nat.clone(),
+            ),
+            plicities,
+        })
+        .into(),
+    );
+
+    // `f(3, 4)` reduces to `Nat`, so `held : f(3, 4) = 3` is an ordinary well-typed item.
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        Term::apply(
+            Term::free_var(&Free::from(&former)),
+            [
+                three.clone(),
+                Term::prim(Prim::Nat(curios_core::Nat::new(4usize))),
+            ],
+        ),
+        three,
+    );
+
+    let module = Module {
+        items: vec![former_def, held],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    };
+
+    assert_eq!(
+        recheck_module_verdicts(&module, 1_000_000),
+        Vec::new(),
+        "a saturated application in a type position was refused",
+    );
+}
+
+/// The two shapes: an application that under-saturates its lambda, and a neutral spine whose `plicities` are shorter than the arguments applied to it.
+fn unsaturated_cases() -> Vec<(&'static str, Module)> {
+    let a = Free::local(990, Some("a"));
+    let b = Free::local(991, Some("b"));
+    let g = Free::local(992, Some("g"));
+    let nat = Term::prim(Prim::NatType);
+    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+
+    let two_binder = |result: Term| {
+        Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], result)
+    };
+    let module_of = |items: Vec<Item>| Module {
+        items,
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::tuple(Vec::<Term>::new()),
+    };
+
+    // `f : (a : Nat, b : Nat) -> Type`, applied to one argument in a type position.
+    let former = Global::Authored(Qualifier::from(["f"]));
+    let plicities = vec![Plicity::Explicit, Plicity::Explicit];
+    let former_def = authored(
+        &former,
+        curios_core::Subterm::FuncType(curios_core::FuncType {
+            telescope: two_binder(Term::type_ground()),
+            plicities: plicities.clone(),
+        })
+        .into(),
+        curios_core::Subterm::Func(curios_core::Func {
+            telescope: two_binder(nat.clone()),
+            plicities,
+        })
+        .into(),
+    );
+    let under_applied = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        Term::apply(Term::free_var(&Free::from(&former)), [three.clone()]),
+        three.clone(),
+    );
+
+    // `held : (g : (a : Nat, b : Nat) -> Type) -> g(3)`, where `g`'s type carries no plicities at all.
+    let short_plicities: Term = curios_core::Subterm::FuncType(curios_core::FuncType {
+        telescope: two_binder(Term::type_ground()),
+        plicities: Vec::new(),
+    })
+    .into();
+    let neutral = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        curios_core::Subterm::FuncType(curios_core::FuncType {
+            telescope: Telescope::build(
+                [(g.clone(), short_plicities)],
+                Term::apply(Term::free_var(&g), [three.clone()]),
+            ),
+            plicities: vec![Plicity::Explicit],
+        })
+        .into(),
+        three,
+    );
+
+    vec![
+        (
+            "a lambda applied to fewer arguments than it binds",
+            module_of(vec![former_def, under_applied]),
+        ),
+        (
+            "a neutral spine whose plicities are shorter than its arguments",
+            module_of(vec![neutral]),
+        ),
+    ]
+}

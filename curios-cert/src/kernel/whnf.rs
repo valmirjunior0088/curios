@@ -154,7 +154,8 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
     let head = expose_rec_tail(kernel, head)?;
 
     Ok(match Term::unwrap_or_clone(head) {
-        Subterm::Func(Func { telescope, .. }) => {
+        // Saturation is the precondition of the β step, not an assumption about it: `Telescope::open` asserts on a count mismatch, so an under- or over-applied lambda would abort the walk rather than be refused. An application that does not saturate its lambda is stuck instead, which is the conservative direction — it leaves the term for the typing rules to reject with a diagnostic, and reduction that declines to fire can never admit anything.
+        Subterm::Func(Func { telescope, .. }) if telescope.len() == params.len() => {
             let refs = params.iter().collect::<Vec<_>>();
             Step::Continue(telescope.open(&refs))
         }
