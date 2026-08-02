@@ -93,15 +93,16 @@ cargo fmt --all -- --check
 cargo check --workspace --all-targets --all-features
 RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features > /tmp/curios-hunt.txt 2>&1
-cargo test --workspace -- --ignored kernel_disagreements
 ```
 
-Every command must pass, the witness must now be rejected by the diagnostic it names, and `kernel_disagreements` must report zero items refused for every fixture. If its output cannot be read as a count, that is a stop, not a pass.
+Every command must pass, and the witness must now be rejected by the diagnostic it names.
+
+**Do not run the ignored `kernel_disagreements`.** It is a measurement, not an assertion — it prints a per-class tally and never fails, so a green run of it establishes nothing. What pins the disagreement count at zero is already inside the suite above: `curios/src/tests/kernel.rs`'s `a_trivial_program_rechecks` and `arithmetic_rechecks` hand the *whole* elaborated module to `recheck_module`, re-deriving every prelude item from the terms rather than reading the verdict the archive recorded, and assert `Ok(())`; and every `.crs` fixture compiles through `compile_entrypoint`, which runs `recheck_module_suffix` on the compile path. Note which of these carries it rather than re-running the tally. (The prelude *build* is not what covers this — `curios-prelude/build.rs` produces the archive, and an ordinary compile judges the user suffix while the archived prefix rides on verdicts recorded at archive-build time.)
 
 Two conditions the script cannot check, which are judgments and are named as such:
 
 - **The control test passes.** A witness alone proves the hole is shut, not that you shut it with something other than a brick; the guard fix shipped with `an_unmentioned_payload_binder_is_not_forced` precisely to prove it had not closed the hole by rejecting every indexed proposition. If the fix has no control, it is not ready.
-- **The fix diff is additive or corrective only.** No deleted assertion, no loosened bound, no `#[ignore]` anywhere, no edited expectation on an existing test. Making a rule stricter always looks safe given that incompleteness is the safe direction, and it is not: a stricter rule may reject valid programs, which is what the prelude compiling and the disagreement count exist to catch.
+- **The fix diff is additive or corrective only.** No deleted assertion, no loosened bound, no `#[ignore]` anywhere, no edited expectation on an existing test. Making a rule stricter always looks safe given that incompleteness is the safe direction, and it is not: a stricter rule may reject valid programs, which is what the prelude compiling and the whole-module recheck exist to catch.
 
 Clear all of it and the test and the fix go in one commit, and the hunt continues.
 
