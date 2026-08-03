@@ -950,13 +950,6 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::empty())));
             }
-            // A nested slice reassociates: `slice(slice(b, p, q), i, j) = slice(b, p + i, p + j)`. Sound for the in-range bounds real call sites produce; reassociating the window lets a codepoint walk collapse a `slice(drop1(b), ..)` back onto `b`.
-            if let Subterm::Prim(Prim::BinSlice(Grain::X, inner, p, _q)) = &*bin {
-                let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
-                let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
-                let flattened = Term::prim(Prim::bin_slice(Grain::X, inner.clone(), lo, hi));
-                return reducer.reduce(flattened).map(Term::unwrap_or_clone);
-            }
             let s = as_index(&start_reduced);
             let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
@@ -1128,13 +1121,6 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Bin(Grain::B, PackedBin::empty())));
             }
-            if let Subterm::Prim(Prim::BinSlice(Grain::B, inner, offset, _)) = &*bin {
-                let lo = Term::prim(Prim::nat_add(offset.clone(), start_reduced.clone()));
-                let hi = Term::prim(Prim::nat_add(offset.clone(), end_reduced.clone()));
-                return reducer
-                    .reduce(Term::prim(Prim::bin_slice(Grain::B, inner.clone(), lo, hi)))
-                    .map(Term::unwrap_or_clone);
-            }
             if let (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(start), Some(end)) =
                 (&*bin, as_index(&start_reduced), as_index(&end_reduced))
             {
@@ -1299,13 +1285,6 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic `a` — an empty range yields no elements regardless — and the base case the cons peel below bottoms out on (the `Lst` twin of `BinSlice`'s empty-slice identity).
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Lst(type_.clone(), Vec::new())));
-            }
-            // A nested slice reassociates: `slice(slice(a, p, q), i, j) = slice(a, p + i, p + j)`. Sound for the in-range bounds real call sites produce — the `Lst` twin of `BinSlice`'s window reassociation — so a slice of a slice over a symbolic base collapses to one slice.
-            if let Subterm::Prim(Prim::LstSlice(_inner_ty, inner, p, _q)) = &*list {
-                let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
-                let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
-                let flattened = Term::prim(Prim::lst_slice(type_.clone(), inner.clone(), lo, hi));
-                return reducer.reduce(flattened).map(Term::unwrap_or_clone);
             }
             let s = as_index(&start_reduced);
             let e = as_index(&end_reduced);
