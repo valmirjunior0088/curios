@@ -51,8 +51,8 @@ pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> Async(A)) -> A
         | failure(e) => Async/pure(Result/failure(e))
         end);
 
-let drain(f : File) -> Async(Bytes) =
+let drain(f : File) -> Async(Result(Bytes, Handle/Error)) =
     Async/drain((n) => read(f, n));
 
 pub let read_all(path : Str) -> Async(Result(Bytes, Handle/Error)) =
-    with(path, Mode/read(), (f) => drain(f));
+    Async/map(with(path, Mode/read(), (f) => drain(f)), (r) => Result/flatten(r));

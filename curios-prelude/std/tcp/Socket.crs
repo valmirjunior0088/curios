@@ -88,9 +88,16 @@ pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket
                 Async/bind(close(c), (_) => Async/pure(Result/success(a))))
         end);
 
-let drain(c : Socket) -> Async(Bytes) =
+let drain(c : Socket) -> Async(Result(Bytes, Handle/Error)) =
     Async/drain((n) => read(c, n));
 
+-- `with` wraps the body's own failure channel in its connect/close one; flatten collapses the two so a caller sees one channel whichever stage failed.
 pub let call(settings : Settings, host : Str, port : Nat, request : Bytes) -> Async(Result(Bytes, Handle/Error)) =
-    with(settings, host, port, (c) =>
-        Async/bind(write(c, request), (_) => drain(c)));
+    Async/map(
+        with(settings, host, port, (c) =>
+            Async/bind(write(c, request), (w) =>
+                match w
+                | success(_) => drain(c)
+                | failure(e) => Async/pure(Result/failure(e))
+                end)),
+        (r) => Result/flatten(r));

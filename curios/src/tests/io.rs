@@ -261,3 +261,49 @@ fn proc_exit_in_local_binding_halts() {
     assert_eq!(code, 3);
     assert!(io.output().is_empty());
 }
+
+// `drain` treats `eof` as the stream's only orderly terminator. The load-bearing script is chunk-then-error: the accumulated prefix must not be passed off as complete content, so the verdict is a failure and the prefix's length leaks nowhere. Chunk-then-eof is the control that accumulation itself still works.
+#[test]
+fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
+    let source = r#"
+        use /std/{Nat, Bytes, Handle, Result, Async, Cell, Str, print};
+        let show(r : Result(Result(Bytes, Handle/Error), Async/Deadlock)) -> Str =
+            match r
+            | failure(_) => "deadlock"
+            | success(inner) =>
+                match inner
+                | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/len(bytes)))
+                | failure(_) => "error"
+                end
+            end;
+        let error_first(n : Nat) -> Async(Handle/Read) =
+            Async/pure(Handle/Read/error(Handle/error_of(255)));
+        let chunk_then_error() -> (Nat) -> Async(Handle/Read) =
+            let calls = Cell/new(0);
+            (n) =>
+                let k = Cell/get(calls);
+                let _ = Cell/set(calls, k + 1);
+                match k
+                | 0 => Async/pure(Handle/Read/chunk(x\41\42))
+                | _ => Async/pure(Handle/Read/error(Handle/error_of(255)))
+                end;
+        let chunk_then_eof() -> (Nat) -> Async(Handle/Read) =
+            let calls = Cell/new(0);
+            (n) =>
+                let k = Cell/get(calls);
+                let _ = Cell/set(calls, k + 1);
+                match k
+                | 0 => Async/pure(Handle/Read/chunk(x\41\42\43))
+                | _ => Async/pure(Handle/Read/eof())
+                end;
+        let _ = print(show(Async/block_on(Async/drain(error_first))));
+        let _ = print(" / ");
+        let _ = print(show(Async/block_on(Async/drain(chunk_then_error()))));
+        let _ = print(" / ");
+        print(show(Async/block_on(Async/drain(chunk_then_eof()))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"error / error / ok:3");
+}

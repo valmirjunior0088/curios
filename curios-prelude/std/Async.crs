@@ -139,13 +139,14 @@ pub let accept(l : Handle) -> Async(Result(Handle, Handle/Error)) =
     go()
     end;
 
-pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Bytes) =
-    rec go(acc : Bytes) -> Async(Bytes) =
+-- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
+pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =
+    rec go(acc : Bytes) -> Async(Result(Bytes, Handle/Error)) =
         bind(read(4096), (r) =>
             match r
             | chunk(bytes) => go(x\..acc\..bytes)
-            | eof() => pure(acc)
-            | error(_) => pure(acc)
+            | eof() => pure(Result/success(acc))
+            | error(e) => pure(Result/failure(e))
             end);
     go(x\);
 

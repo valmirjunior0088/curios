@@ -25,6 +25,12 @@ pub let bind(@A : Type, @B : Type, @E : Type, m : Result(A, E), f : (A) -> Resul
     | failure(e) => Result/failure(e)
     end;
 
+pub let flatten(@A : Type, @E : Type, r : Result(Result(A, E), E)) -> Result(A, E) =
+    match r
+    | success(inner) => inner
+    | failure(e) => Result/failure(e)
+    end;
+
 pub let unwrap_or(@A : Type, @E : Type, r : Result(A, E), default : A) -> A =
     match r
     | success(a) => a

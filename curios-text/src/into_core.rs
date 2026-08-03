@@ -1087,7 +1087,11 @@ fn process_items(
                         ),
                         island: context.island(),
                         root: context.root(),
-                        type_: lower.term(&signature.type_())?,
+                        // The wrapper re-lowers the field type in its *output* position, but that type's written-`Type` spans already seeded universes in the record pass above, under `input_type`'s lexical `Generalizable`. The span-keyed seeds are shared across the two lowerings — the wrapper must speak the concept's inherited levels — and `fresh_universe` asserts the roles agree, so the whole signature lowers `Generalizable`: the record's reading, not the output-position default that panicked on a field whose result spine spells `Type`.
+                        type_: context
+                            .with_universe_role(curios_core::UniverseRole::Generalizable, || {
+                                lower.term(&signature.type_())
+                            })?,
                         body: lower.value(&signature.body())?,
                     }));
                 }
