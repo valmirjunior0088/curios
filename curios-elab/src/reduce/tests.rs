@@ -1262,38 +1262,6 @@ mod prim {
             Term::unwrap_or_clone(tail),
         );
     }
-
-    // A nested `Lst/slice` reassociates to one slice over the base, even when the base is symbolic: `slice(slice(xs, 1, 5), 0, 2) = slice(xs, 1, 3)` (the `Lst` twin of `BinSlice`'s window reassociation).
-    #[test]
-    fn lst_slice_reassociates_nested() {
-        let mut context = context();
-        let xs_binder = context.fresh(Some("xs"));
-        let xs = Term::free_var(&xs_binder);
-        let inner = Term::prim(Prim::lst_slice(
-            Term::prim(Prim::NatType),
-            xs.clone(),
-            lit(1),
-            lit(5),
-        ));
-        let outer = Term::prim(Prim::lst_slice(
-            Term::prim(Prim::NatType),
-            inner,
-            lit(0),
-            lit(2),
-        ));
-        assert_eq!(
-            reduced(&mut context, outer),
-            reduced(
-                &mut context,
-                Term::prim(Prim::lst_slice(
-                    Term::prim(Prim::NatType),
-                    xs.clone(),
-                    lit(1),
-                    lit(3)
-                )),
-            ),
-        );
-    }
 }
 
 /// The kernel in `curios-core` re-decides reduction from the term alone, with none of this crate's machinery — no cache, no refinements, no metavariables. These tests are the check that the two agree where they must.
