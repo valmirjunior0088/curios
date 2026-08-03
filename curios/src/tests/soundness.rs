@@ -207,6 +207,101 @@ fn a_boolean_guard_that_excludes_zero_licenses_the_decrease() {
     assert_eq!(run(flipped), b"ok");
 }
 
+// The nonzero fact is only half of what licenses an arithmetic decrease, and the other half had no fixture at all: the *right* operand must be a literal, and it must be at or above the smallest value that makes the operation strictly decreasing — `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. Read the wrong way each is a fixed point graded as a descent, at which point the cost is the one `a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease` spells out in full: a non-terminating type, type formation resting on a family that never forms, and (T) satisfied by a false premise.
+//
+// Two spellings, because the clause has two halves and each fails independently. `n / 1` sits under the dispatch that *does* enumerate zero, so the nonzero condition is satisfied and only the magnitude bound stands between this program and acceptance — and `Nat/div` folds only when both operands are literals, so with a symbolic `n` the term really does reach the reader as a division by one rather than as `n` itself. `n / k` names a parameter instead of a literal, which is the half that must hold whatever `k` turns out to be, since nothing here rules out `1`.
+//
+// Probed rather than closed: both already refused when this was written, and each asserts the diagnostic so neither can pass on an unrelated failure. Its control is `a_division_by_a_literal_above_one_licenses_the_decrease` below, which must keep compiling — refusing every division, or every division whose divisor could not be read, would take `/std/Nat/to_str` with it.
+#[test]
+fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
+    // Divisor below the least value that decreases: `n / 1` is `n`.
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat) -> Type =
+            match n
+            | 0 => {}
+            | _ => Bad(n / 1)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+
+    // A divisor that is not a literal at all, so no bound can be read off it.
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat, k : Nat) -> Type =
+            match n
+            | 0 => {}
+            | _ => Bad(n / k, k)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// The control for the fixture above: the same dispatch, the same operand shape, and a divisor of `2`, which does decrease. `/std/Nat/to_str` descends on exactly this, so a rule that stopped reading divisors would fail here rather than pass quietly.
+#[test]
+fn a_division_by_a_literal_above_one_licenses_the_decrease() {
+    let source = r#"
+        use /std/{Nat};
+
+        rec Good(n : Nat) -> Type =
+            match n
+            | 0 => {}
+            | _ => Good(n / 2)
+            end;
+
+        let held : Good(4) = ();
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+// A nonzero fact has the extent of the arm that established it, and nothing had pinned that. `n > 0` hands its *true* arm the fact and its *false* arm the opposite one, so a reader that recorded the fact for the whole match rather than for one arm would license the decrease precisely where `n` is zero — which is the fixed point the condition exists to exclude, and `Bad(0)` then unfolds to `Bad(0)` forever.
+//
+// `a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease` cannot see this: there *neither* arm establishes nonzero, so a leaked fact has nothing to leak. This is the sibling-arm bracket, not the relation table.
+//
+// Both operations, because the fact is read at one site and each arrives at it carrying its own least literal — a bracket that leaked would license both.
+//
+// Probed rather than closed: both already refused when this was written, and each asserts the diagnostic. Its control is `a_boolean_guard_that_excludes_zero_licenses_the_decrease` above, whose true arm must keep descending on the same guard.
+#[test]
+fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat) -> Type =
+            match n > 0
+            | true => {}
+            | false => Bad(n - 1)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        rec Bad(n : Nat) -> Type =
+            match n > 0
+            | true => {}
+            | false => Bad(n / 2)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
     rejected(&format!(
