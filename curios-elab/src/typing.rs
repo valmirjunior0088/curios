@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use super::{Context, Error, Mode, Outcome, Sort, elaborate};
+use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
     Apply, Field, Free, Func, Global, Level, Many, MetaId, Prim, PrimHead, Proj, ReduceError,
     Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
@@ -143,7 +143,7 @@ pub(crate) fn expect(
             }
 
             for goal in goals {
-                context.park(super::ParkedWork::Conversion(goal), term.clone());
+                context.park(ParkedWork::Conversion(goal), term.clone());
             }
             context.retry_parked()
         }
@@ -199,7 +199,7 @@ impl Context {
             if self.parked_len() >= before && !self.has_newly_solved() {
                 if let Some(parked) = self.take_parked().into_iter().next() {
                     return Err(match parked.work {
-                        super::ParkedWork::Conversion(goal) => {
+                        ParkedWork::Conversion(goal) => {
                             // A conversion stuck between two witness holes reads as a bare metavariable mismatch; name the unresolved witness it actually is instead.
                             match self
                                 .witness_hole(&goal.this)
@@ -215,8 +215,11 @@ impl Context {
                                     .at_opt(parked.origin.span()),
                             }
                         }
-                        super::ParkedWork::Checking { .. } => Error::CannotInfer,
-                        super::ParkedWork::Witness {
+                        ParkedWork::Checking { expected, .. } => {
+                            Error::postponed_check(resolved_for_display(self, &expected))
+                                .at_opt(parked.origin.span())
+                        }
+                        ParkedWork::Witness {
                             goal, provenance, ..
                         } => Error::no_witness(
                             resolved_for_display(self, &goal),
@@ -241,13 +244,13 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     } = parked;
 
     let goal = match work {
-        super::ParkedWork::Conversion(goal) => goal,
-        super::ParkedWork::Checking {
+        ParkedWork::Conversion(goal) => goal,
+        ParkedWork::Checking {
             term,
             expected,
             placeholder,
         } => return retry_checking(context, term, expected, placeholder, origin, frame),
-        super::ParkedWork::Witness {
+        ParkedWork::Witness {
             slot,
             goal,
             provenance,
@@ -288,11 +291,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         Retry::Mismatch(this, that) => Err(Error::type_mismatch(this, that).at_opt(origin.span())),
         Retry::Blocked(goals) => {
             for goal in goals {
-                context.repark(
-                    super::ParkedWork::Conversion(goal),
-                    origin.clone(),
-                    frame.clone(),
-                );
+                context.repark(ParkedWork::Conversion(goal), origin.clone(), frame.clone());
             }
             Ok(())
         }
@@ -319,13 +318,36 @@ fn retry_checking(
     })?;
 
     match rebuilt {
-        Some(rebuilt) => {
-            context.solve_metavar(placeholder, rebuilt);
-            Ok(())
-        }
+        Some(rebuilt) => match context.metavar_solution(placeholder).cloned() {
+            None => {
+                context.solve_metavar(placeholder, rebuilt);
+                Ok(())
+            }
+            // Unification reached the placeholder first. Reconcile rather than overwrite: `Solutions::solve` replaces silently, and goals already discharged against the earlier solution would be standing on a value that just changed under them. The checked term must convert with what the tree committed to, at the type both inhabit; a disagreement is an honest mismatch at the argument, and an undecidable comparison parks like any conversion.
+            Some(existing) => {
+                let outcome = super::convert_outcome(context, &expected, &rebuilt, &existing)
+                    .map_err(|error| {
+                        Error::from_reduce(error, || {
+                            Error::convert_exhausted(rebuilt.clone(), existing.clone())
+                        })
+                    })?;
+                match outcome {
+                    Outcome::Converts => Ok(()),
+                    Outcome::Mismatch => {
+                        Err(display_mismatch(context, &rebuilt, &existing).at_opt(origin.span()))
+                    }
+                    Outcome::Blocked(goals) => {
+                        for goal in goals {
+                            context.park(ParkedWork::Conversion(goal), origin.clone());
+                        }
+                        Ok(())
+                    }
+                }
+            }
+        },
         None => {
             context.repark(
-                super::ParkedWork::Checking {
+                ParkedWork::Checking {
                     term,
                     expected,
                     placeholder,

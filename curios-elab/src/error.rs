@@ -241,6 +241,10 @@ pub enum Error {
         term: Box<Term>,
     },
     CannotInfer,
+    /// A parked checking problem that survived every retry: the expression's expected type never gained the structure the check was waiting on. Reported at the expression's own span by the item drain.
+    PostponedCheck {
+        expected: Box<Term>,
+    },
     /// An overloaded infix operator applied at an operand type with no matching scalar primitive — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
@@ -406,6 +410,12 @@ impl Error {
     pub(crate) fn type_mismatch<U: Into<Term>, V: Into<Term>>(inferred: U, expected: V) -> Self {
         Self::TypeMismatch {
             inferred: Box::new(inferred.into()),
+            expected: Box::new(expected.into()),
+        }
+    }
+
+    pub(crate) fn postponed_check<U: Into<Term>>(expected: U) -> Self {
+        Self::PostponedCheck {
             expected: Box::new(expected.into()),
         }
     }
@@ -919,6 +929,7 @@ impl Error {
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
+            Self::PostponedCheck { expected } => out.push(expected),
             Self::NoWitness { goal, .. } => out.push(goal),
             Self::Goal {
                 scope,
@@ -1287,6 +1298,12 @@ impl fmt::Display for Error {
             }
             Error::CannotInfer => {
                 write!(f, "cannot infer type of expression")
+            }
+            Error::PostponedCheck { expected } => {
+                write!(
+                    f,
+                    "cannot check expression: its expected type never gained structure: {expected}"
+                )
             }
             Error::OperatorUndefined { symbol, type_ } => {
                 write!(f, "operator '{symbol}' is not defined for type {type_}")
