@@ -371,6 +371,43 @@ fn written_higher_kinded_argument_resolves_the_witness() {
     assert_eq!(run(source), b"7");
 }
 
+// A written hidden argument *behind an explicit slot*: the materialization walk substitutes the explicit `7` raw, so the trailing `use` binder's goal cannot be typed there — it is minted in the checking walk, where its domain is opened through the elaborated `@Option` rather than the raw spelling.
+#[test]
+fn written_hidden_argument_after_an_explicit_slot_resolves() {
+    let source = r#"
+        use /syn/{Monad};
+        use /std/{Nat, Handle, Str, Option};
+        pub let lift2(seed : Nat, @M : (Type) -> Type, use Monad(M)) -> M(Nat) =
+            Monad/pure(seed);
+        let o : Option(Nat) = lift2(7, @Option);
+        /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
+        "#;
+
+    assert_eq!(run(source), b"7");
+}
+
+// A written type-level *lambda* as the carrier: an intro form keeps its postponement path, so the witness goal must be minted only after the lambda's own elaboration turns its body into the nominal normal form the head key can read (`Box`) — the raw application spelling inside the unelaborated lambda keys on nothing.
+#[test]
+fn written_type_lambda_argument_resolves_the_witness() {
+    let source = r#"
+        use /syn/{Monad};
+        use /std/{Nat, Handle, Str, Result};
+        struct Box(A : Type) : pub Type {
+            A
+        }
+        satisfy Monad(Box) {
+            pure(x) = Box { x },
+            bind(m, f) = f(m.0)
+        }
+        pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =
+            Monad/pure(seed);
+        let b : Box(Nat) = lift(@((A : Type) => Box(A)), 3);
+        /std/print(Nat/to_str(b.0))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}
+
 // A bare reference to an all-hidden generic function, checked against a rigid concrete carrier: the check turnaround inserts the implicit carrier and the witness goal, imitation pins `M := Option` from the expectation, and the goal resolves through the table.
 #[test]
 fn bare_generic_reference_resolves_toward_a_rigid_expectation() {

@@ -193,10 +193,11 @@ pub(super) fn elaborate_apply(
         return Err(Error::too_many_witness_args(witness_slots, used.len()));
     }
 
-    // Materialize the saturated argument vector, threading the dependent substitution so each inserted metavariable is born at its binder's *instantiated* type. The walk below re-checks the inserted metavariables idempotently (`elaborate_metavar` re-checks the recorded type).
+    // Materialize the saturated argument vector, threading the dependent substitution so each inserted implicit metavariable is born at its binder's *instantiated* type. The walk below re-checks those metavariables idempotently (`elaborate_metavar` re-checks the recorded type). A missing *witness* slot is not filled here at all: its goal must be typed at a domain built from elaborated spellings, so the checking walk below mints it on arrival — this walk substitutes a fresh unassumed variable instead, which is sound because a witness binder is anonymous and no later domain can name it, and loud (an unbound-variable error) if that invariant ever breaks.
     //
-    // A *written* hidden argument is rebuilt before it opens the telescope: substituted raw, a reference to a universe-polymorphic definition stays a bare `Var` inside every later domain, where the reducer's polymorphic gate leaves it inert — an inserted witness goal built from such a domain (`Monad(Fetch)` for `mk2(@Fetch, 7)`) then has no rigid head to key on and resolution misses a registered witness. The eager check applies only while every preceding substituted term is itself rebuilt or compiler-born (a raw explicit argument in the prefix would put raw spellings in the domain being checked against) and only to synthesizable forms — an intro form keeps its postponement path in the walk below, which re-checks eagerly rebuilt slots idempotently like the inserted metavariables.
+    // A *written* hidden argument is rebuilt before it opens the telescope: substituted raw, a reference to a universe-polymorphic definition stays a bare `Var` inside every later domain, where the reducer's polymorphic gate leaves it inert — an implicit metavariable born at such a domain then records a spelling conversion cannot connect to the rebuilt one. The eager check applies only while every preceding substituted term is itself rebuilt or compiler-born (a raw explicit argument in the prefix would put raw spellings in the domain being checked against) and only to synthesizable forms — an intro form keeps its postponement path in the walk below.
     let mut full_args = Vec::with_capacity(ft.plicities.len());
+    let mut deferred_goals: Vec<usize> = Vec::new();
     {
         let mut tele = ft.telescope.clone();
         let mut prefix_rebuilt = true;
@@ -228,14 +229,21 @@ pub(super) fn elaborate_apply(
                                 arg
                             }
                         }
-                        None => insert_auto_argument(
-                            context,
-                            *plicity,
-                            &ty,
-                            rest.first_hint(),
-                            &func_label,
-                            term,
-                        )?,
+                        None => match plicity {
+                            Plicity::Implicit => insert_auto_argument(
+                                context,
+                                *plicity,
+                                &ty,
+                                rest.first_hint(),
+                                &func_label,
+                                term,
+                            )?,
+                            Plicity::Witness => {
+                                deferred_goals.push(full_args.len());
+                                Term::free_var(&context.fresh(rest.first_hint()))
+                            }
+                            Plicity::Explicit => unreachable!("matched above"),
+                        },
                     }
                 }
             };
@@ -274,14 +282,25 @@ pub(super) fn elaborate_apply(
             Telescope::Done(body) => break *body,
             Telescope::Cons(ty, rest) => (ty, rest),
         };
-        let term = if checking
+        // A deferred witness slot is minted here, where `ty` was opened through the elaborated prefix, so the goal is typed at rebuilt spellings only (the walk-1 placeholder is discarded — this metavar is the slot's argument).
+        let term = if deferred_goals.contains(&index) {
+            let provenance = WitnessOrigin {
+                func: func_label.clone(),
+                binder: binder_name(rest.first_hint()),
+            };
+            let (id, metavar) =
+                context.fresh_witness_metavar(ty.clone(), term.span(), provenance.clone());
+            attempt_witness_goal(context, id, &ty, provenance, term)?;
+            metavar
+        } else if checking
             && blocked_on_metavar(
                 context,
                 &params[index],
                 &ty,
                 &result_metavars,
                 expected_ground,
-            )? {
+            )?
+        {
             postponed.push(index);
             params[index].clone()
         } else {
