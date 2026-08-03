@@ -271,55 +271,7 @@ pub(super) fn elaborate_apply(
         expect(context, term, &output, expected)?;
 
         if !pendings.is_empty() {
-            // PHASE3-RAWBETA fallback, temporary and measured: a pending the wake machinery could not discharge may wait on a metavariable only the raw spelling can pin — beta-reducing the unelaborated body through the result type is the documented cycle-breaker a placeholder cannot replicate. The pin runs under *suppressed parking* inside a solution bracket: suppressed, it can neither park new work nor retry parked work, so nothing is consumed inside a bracket that may roll back — a retry fired mid-bracket would elaborate a pending whose solutions the rollback then unwinds while its lowering-minted holes stay birthed, and the force tier's second elaboration would drop their spines. Deleted (or promoted to a documented rule) once the corpus measurement decides.
-            let undischarged: Vec<(usize, Term)> = pendings
-                .iter()
-                .filter(|(_, id, _)| context.metavar_solution(*id).is_none())
-                .map(|(slot, _, raw)| (*slot, raw.clone()))
-                .collect();
-            if !undischarged.is_empty() {
-                let mut raw_opened = elaborated.clone();
-                for (slot, raw) in &undischarged {
-                    raw_opened[*slot] = raw.clone();
-                }
-                if let Telescope::Done(raw_output) = original.clone().open_params(&raw_opened) {
-                    let mark = context.solution_mark();
-                    let pinned = context.with_suppressed_parking(|context| {
-                        expect(context, term, &raw_output, expected)
-                    });
-                    if pinned.is_err() {
-                        context.rollback_solutions(mark);
-                    }
-                    context.retry_parked()?;
-
-                    // TEMP PHASE3 measurement: log every firing and how many pendings it discharged.
-                    let discharged = undischarged
-                        .iter()
-                        .filter(|(slot, _)| {
-                            pendings.iter().any(|(s, id, _)| {
-                                s == slot && context.metavar_solution(*id).is_some()
-                            })
-                        })
-                        .count();
-                    {
-                        use std::io::Write;
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("/tmp/claude-1000/-var-home-valmirpretto-Workspace-curios/5dd7d59b-fd3f-419b-813e-b6157632180a/scratchpad/rawbeta.log")
-                        {
-                            let _ = writeln!(
-                                f,
-                                "fired undischarged={} discharged={}",
-                                undischarged.len(),
-                                discharged
-                            );
-                        }
-                    }
-                }
-            }
-
-            // The force tier — the retired settle, kept: a pending still undischarged after every pin is checked now, under whatever the turnarounds landed. A lambda whose domain only its own body can ground is grounded by that body here, exactly as the settle once grounded it; the placeholder takes the checked term, so no pending outlives its apply undischarged — which is also what keeps the fallback bracket above safe, since no foreign obligation can be consumed inside it. The parked copy of the obligation reconciles against this solution when its retry fires.
+            // The force tier — the retired settle, kept: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here, exactly as the settle once grounded it; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. The retired design also ran a bracketed best-effort expect over the *raw* spellings before settling — measured across the corpus, that pin never discharged a pending the wake machinery and this tier did not, so it is gone rather than kept.
             for (slot, placeholder, written) in &pendings {
                 if context.metavar_solution(*placeholder).is_none() {
                     let slot_ty = original

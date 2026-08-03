@@ -1159,7 +1159,7 @@ impl Context {
         })
     }
 
-    pub(crate) fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.solutions.set_parking_suppressed(true);
         let result = f(self);
         self.solutions.set_parking_suppressed(previous);
