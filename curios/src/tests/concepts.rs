@@ -356,6 +356,21 @@ fn bang_works_in_monad_generic_code() {
     assert_eq!(run(source), b"422");
 }
 
+// A *written* higher-kinded instantiation: `@Option` fills `M` at the call, so the `use Monad(M)` goal is minted from the telescope opened at the written argument. That argument must enter the telescope rebuilt (a `UniverseInst` at its fresh levels): substituted raw, the bare polymorphic `Option` reference is inert under the reducer's monomorphic-variable gate, resolution's global-table step finds no rigid head to key on, and the registered witness is missed while the inferred path (`lift(7)` against an expected `Option(Nat)`) resolves fine.
+#[test]
+fn written_higher_kinded_argument_resolves_the_witness() {
+    let source = r#"
+        use /syn/{Monad};
+        use /std/{Nat, Handle, Str, Option};
+        pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =
+            Monad/pure(seed);
+        let o : Option(Nat) = lift(@Option, 7);
+        /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
+        "#;
+
+    assert_eq!(run(source), b"7");
+}
+
 // A higher-kinded superclass: inside the generic function the goal `Monad(M)` (M a bound variable) resolves through step 2's superclass projection of the local `use MonadPlus(M)` binder. The witness's own omitted `monad` field resolves through the table to the std `Monad(Option)` witness — a higher-kinded auto-fill.
 #[test]
 fn higher_kinded_superclass_projects() {

@@ -194,37 +194,50 @@ pub(super) fn elaborate_apply(
     }
 
     // Materialize the saturated argument vector, threading the dependent substitution so each inserted metavariable is born at its binder's *instantiated* type. The walk below re-checks the inserted metavariables idempotently (`elaborate_metavar` re-checks the recorded type).
+    //
+    // A *written* hidden argument is rebuilt before it opens the telescope: substituted raw, a reference to a universe-polymorphic definition stays a bare `Var` inside every later domain, where the reducer's polymorphic gate leaves it inert — an inserted witness goal built from such a domain (`Monad(Fetch)` for `mk2(@Fetch, 7)`) then has no rigid head to key on and resolution misses a registered witness. The eager check applies only while every preceding substituted term is itself rebuilt or compiler-born (a raw explicit argument in the prefix would put raw spellings in the domain being checked against) and only to synthesizable forms — an intro form keeps its postponement path in the walk below, which re-checks eagerly rebuilt slots idempotently like the inserted metavariables.
     let mut full_args = Vec::with_capacity(ft.plicities.len());
     {
         let mut tele = ft.telescope.clone();
+        let mut prefix_rebuilt = true;
         for plicity in &ft.plicities {
             let Telescope::Cons(ty, rest) = tele else {
                 unreachable!("plicities parallel the telescope");
             };
             let arg = match plicity {
-                Plicity::Explicit => plain.pop_front().expect("arity checked above"),
-                Plicity::Implicit => match marked.pop_front() {
-                    Some(arg) => arg,
-                    None => insert_auto_argument(
-                        context,
-                        *plicity,
-                        &ty,
-                        rest.first_hint(),
-                        &func_label,
-                        term,
-                    )?,
-                },
-                Plicity::Witness => match used.pop_front() {
-                    Some(arg) => arg,
-                    None => insert_auto_argument(
-                        context,
-                        *plicity,
-                        &ty,
-                        rest.first_hint(),
-                        &func_label,
-                        term,
-                    )?,
-                },
+                Plicity::Explicit => {
+                    prefix_rebuilt = false;
+                    plain.pop_front().expect("arity checked above")
+                }
+                Plicity::Implicit | Plicity::Witness => {
+                    let queue = match plicity {
+                        Plicity::Implicit => &mut marked,
+                        Plicity::Witness => &mut used,
+                        Plicity::Explicit => unreachable!("matched above"),
+                    };
+                    match queue.pop_front() {
+                        Some(arg) => {
+                            let intro_form = matches!(
+                                &*arg,
+                                Subterm::Func(_) | Subterm::Tuple(_) | Subterm::Prim(Prim::Lst(..))
+                            );
+                            if prefix_rebuilt && !intro_form {
+                                check(context, &arg, ty.clone())?
+                            } else {
+                                prefix_rebuilt = false;
+                                arg
+                            }
+                        }
+                        None => insert_auto_argument(
+                            context,
+                            *plicity,
+                            &ty,
+                            rest.first_hint(),
+                            &func_label,
+                            term,
+                        )?,
+                    }
+                }
             };
             tele = rest.open(&[&arg]);
             full_args.push(arg);
