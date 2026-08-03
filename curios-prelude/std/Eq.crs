@@ -1,4 +1,4 @@
-pub induct Eq(@A : Type) : (x : A, y : A) -> pub Prop
+pub induct Eq(@A : Type) : (A, A) -> pub Prop
 | refl(@z : A) : (z, z)
 end
 

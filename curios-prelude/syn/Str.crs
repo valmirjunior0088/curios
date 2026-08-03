@@ -46,7 +46,7 @@ pub let step(c : Byte, s : Scan) -> Scan =
         end
     end;
 
-pub induct Utf8 : (s : Scan, b : Bytes) -> pub Prop
+pub induct Utf8 : (Scan, Bytes) -> pub Prop
 | stop() : (Scan/lead(), x\)
 | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
     : (st, Bytes/cons(c, t))

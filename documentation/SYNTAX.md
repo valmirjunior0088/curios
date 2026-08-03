@@ -655,6 +655,8 @@ pub induct Vec(T : Type) : (length : Nat) -> pub Type
 end
 ```
 
+Each index binder may be named or left bare — `(length : Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it.
+
 Each constructor of an indexed family must state the indices it produces after `:`. A non-indexed constructor does not accept a target.
 
 An inductive proposition is declared with `Prop`:

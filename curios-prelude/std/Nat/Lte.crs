@@ -2,7 +2,7 @@
 
 use /std/{Nat};
 
-pub induct Lte : (a : Nat, b : Nat) -> pub Prop
+pub induct Lte : (Nat, Nat) -> pub Prop
 | z(@n : Nat) : (0, n)
 | s(@a : Nat, @b : Nat, prev : Lte(a, b)) : (a + 1, b + 1)
 end
