@@ -107,3 +107,42 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
         );
     }
 }
+
+/// The rule's third answer, which the pair above does not reach: a binder whose *type* is out of scope.
+///
+/// `consolidate` decides a re-forcing by asking the `Judge` for the binder's assumed type and comparing the two forcings at it. With no assumption there is nothing to compare at, so it drops the binder's solutions — the conservative direction, leaving the binder unsolved and the arm still checked. Instrumenting that branch and running the fixed prelude through the kernel's own walk, every program in `curios`'s corpus through both checkers, and this crate's own tests counts it firing **zero** times in all three: both kernel callers reach `invert_indices` through `open_payload`, which assumes every binder it opens before the body runs, so from this crate the branch is unreachable by construction.
+///
+/// It is pinned anyway, because the conservative answer is not the obvious one to write. `None => true` — no type, so nothing to disagree about, so keep the forcing — is the plausible slip, and it would accept a re-forcing that *no convertibility test ever decided*, which is the deletion rule discharging a constraint it never checked. Nothing else in the workspace would notice.
+///
+/// The discrimination is against the proposition case above rather than beside it: identical family, identical sort, identical forcings, and the binder assumed there and not here. That one difference must turn one surviving solution into none. And as there, the verdict must stay `Solved` — `Impossible` excuses the arm from being checked, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to `False`.
+#[test]
+fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
+    let mut kernel = kernel();
+    let family = declare(&mut kernel, "Forced", Term::prop());
+    let binder = Free::local(900, Some("p"));
+
+    // Deliberately not assumed: this is the whole of the fixture.
+
+    let inhabitant =
+        |tag| Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+    let target = Term::free_var(&binder);
+
+    let outcome = invert_indices(
+        &mut kernel,
+        &[inhabitant("a"), inhabitant("b")],
+        &[target.clone(), target],
+        slice::from_ref(&binder),
+    )
+    .expect("inversion is a total function of finished terms");
+
+    let Invert::Solved(solutions) = outcome else {
+        panic!(
+            "a binder with no assumption was reported unreachable, which excuses the arm from being checked"
+        );
+    };
+
+    assert!(
+        solutions.is_empty(),
+        "a binder whose type is out of scope kept a forcing that no convertibility test decided",
+    );
+}
