@@ -2,14 +2,14 @@
 //!
 //! This is what a checker is handed. Elaboration produces it and erasure consumes it, but the shape itself is representation — a [`Definition`] is a name, a universe context, a type, and a body, and a [`RecItem`] is the same for a recursive group whose members reference each other through one shared [`RecGroup`] binder rather than through free names. Both checkers walk this structure, which is why it lives here rather than beside either of them.
 //!
-//! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`Concept`]), the witness set, the binder high-water mark a checker must seed above, and the entrypoint's own type and body.
+//! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, the binder high-water mark a checker must seed above, and the entrypoint's own type and body.
 //!
 //! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable runs a solver and belongs to `curios-elab`; whether a definition terminates runs the size-change engine and belongs to `curios-cert`. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
 
 use {
     super::{
-        Atom, Concept, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope, Sharing,
-        StructDecl, Term, UniverseContext, UniverseError, UniverseSeed, build_shorten,
+        Atom, ConceptDecl, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope,
+        Sharing, StructDecl, Term, UniverseContext, UniverseError, UniverseSeed, build_shorten,
         project_erased_universes, with_short_names,
     },
     curios_base::{Qualifier, RootId},
@@ -76,7 +76,7 @@ pub struct Definition {
     pub universe_context: UniverseContext,
     /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `Structure::module` carries for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
-    /// This definition's declaring root — `island`'s leading segment, precomputed once by `into_core` the same way `Concept`/`StructDecl`/ `InductDecl` are, so `Context::set_island` (and, downstream, the orphan-rule check) never has to re-derive it from `island` itself.
+    /// This definition's declaring root — `island`'s leading segment, precomputed once by `into_core` the same way `ConceptDecl`/`StructDecl`/ `InductDecl` are, so `Context::set_island` (and, downstream, the orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,
     /// Whether this definition terminates on every input, together with everything it reaches. Written back by [`crate::record_totality`] after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
     ///
@@ -298,7 +298,7 @@ pub struct Module {
     /// Struct declarations' registry entries, keyed by the type's qualified name. Carried on the module like `induct_decls` (and for the same reason): elaboration and erasure each seed their own `Context` from here on entry.
     pub struct_decls: BTreeMap<Global, StructDecl>,
     /// Concept declarations' resolution metadata, keyed by the concept's qualified name (each concept's record shape also lives in `struct_decls`). Seeded into the elaboration `Context` on entry; erasure never consults it.
-    pub concepts: BTreeMap<Global, Concept>,
+    pub concepts: BTreeMap<Global, ConceptDecl>,
     /// The definition names that are witness declarations. Elaboration registers each into the witness table when its signature elaborates — carried as names (not keys) because the table key needs the *elaborated* head, which only exists once elaboration runs.
     pub witnesses: BTreeSet<Global>,
     /// One past the highest binder index `into_core` minted for this module.

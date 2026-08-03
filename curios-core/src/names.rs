@@ -105,7 +105,7 @@ pub enum Global {
 }
 
 impl Global {
-    /// This name's canonical flattened spelling — the key the declaration registries are still keyed by. A boundary, not a rendering choice: retired when `InductType`/`Struct`/`Concept` carry a [`Global`] too.
+    /// This name's canonical flattened spelling — the key the declaration registries are still keyed by. A boundary, not a rendering choice: retired when `InductType`/`Struct`/`ConceptDecl` carry a [`Global`] too.
     pub fn symbol(&self) -> String {
         self.to_string()
     }

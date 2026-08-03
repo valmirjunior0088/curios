@@ -5,10 +5,10 @@ use {
     super::{Context, Error, UniverseSolver, universe_context_validate},
     curios_base::Grain,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Concept, Definition, DefinitionKind, Free, Func, FuncType,
-        Global, InductDecl, InductParam, InductType, Item, Let, LetBinding, Level, LevelHead,
-        Match, MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecGroup, RecItem,
-        RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
+        Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
+        FuncType, Global, InductDecl, InductParam, InductType, Item, Let, LetBinding, Level,
+        LevelHead, Match, MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecGroup,
+        RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Variant, Visit,
         rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
     },
@@ -190,7 +190,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             .map(|(name, concept)| {
                 Ok((
                     name.clone(),
-                    Concept {
+                    ConceptDecl {
                         universe_context: concept.universe_context.clone(),
                         params: zonk_field_telescope(context, &concept.params)?,
                         fields: concept.fields.clone(),

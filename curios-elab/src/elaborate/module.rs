@@ -10,7 +10,7 @@ use {
     curios_base::Qualifier,
     curios_cert::group_totality,
     curios_core::{
-        Bound, Concept, Definition, DefinitionKind, Free, FuncType, Global, InductDecl,
+        Bound, ConceptDecl, Definition, DefinitionKind, Free, FuncType, Global, InductDecl,
         InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope,
         Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
@@ -525,7 +525,7 @@ fn finalize_definition(
     if let Some(concept) = context.concept(name).cloned() {
         context.update_concept(
             name,
-            Concept {
+            ConceptDecl {
                 universe_context: concept.universe_context,
                 params: zonk_solved_term_metas(context, &concept.params),
                 fields: concept.fields,
@@ -590,7 +590,7 @@ fn finalize_definition(
     if let Some(concept) = context.concept(name).cloned() {
         context.update_concept(
             name,
-            Concept {
+            ConceptDecl {
                 universe_context: universe_context.clone(),
                 params: stamp_declaration_instance(
                     &context.zonk_universe_levels(&concept.params)?,

@@ -13,7 +13,7 @@ use {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct Concept {
+pub struct ConceptDecl {
     pub universe_context: UniverseContext,
     /// The declaration's parameter telescope, e.g. `(A : Type)` for `concept Show(A : Type)`. Ends in `()` like a `StructDecl`'s.
     pub params: Telescope<()>,
@@ -25,7 +25,7 @@ pub struct Concept {
     pub root: RootId,
 }
 
-impl Concept {
+impl ConceptDecl {
     /// This concept with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
     pub(crate) fn shared(&self, sharing: &Sharing) -> Self {
         Self {

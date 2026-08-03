@@ -416,7 +416,7 @@ fn process_items(
     flat_items: &mut Vec<FlatItem>,
     induct_decls: &mut BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &mut BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    concepts: &mut BTreeMap<curios_core::Global, curios_core::Concept>,
+    concepts: &mut BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
     witnesses: &mut BTreeSet<curios_core::Global>,
     foreigns: &mut ForeignStore,
     modules: &HashMap<Qualifier, Rc<Module>>,
@@ -1021,7 +1021,7 @@ fn process_items(
 
                 concepts.insert(
                     name.clone(),
-                    curios_core::Concept {
+                    curios_core::ConceptDecl {
                         universe_context: curios_core::UniverseContext::empty(),
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),

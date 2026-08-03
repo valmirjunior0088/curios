@@ -17,8 +17,8 @@ use {
     curios_base::{Entropy, Qualifier, RootId, Span},
     curios_core::ReduceError,
     curios_core::{
-        Bound, Concept, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl, Level,
-        MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality, UniverseConstraintKind,
+        Bound, ConceptDecl, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl,
+        Level, MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
@@ -739,20 +739,20 @@ impl Context {
     pub(crate) fn register_concept(
         &mut self,
         name: &Global,
-        concept: Concept,
+        concept: ConceptDecl,
     ) -> Result<(), Error> {
         self.program.register_concept(name, concept)
     }
 
-    pub(crate) fn concept(&self, name: &Global) -> Option<&Concept> {
+    pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
         self.program.concept(name)
     }
 
-    pub(crate) fn update_concept(&mut self, name: &Global, concept: Concept) {
+    pub(crate) fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
         self.program.update_concept(name, concept);
     }
 
-    pub(crate) fn concepts(&self) -> &BTreeMap<Global, Concept> {
+    pub(crate) fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
         self.program.concepts()
     }
 

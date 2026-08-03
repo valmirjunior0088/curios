@@ -5,7 +5,7 @@
 use {
     crate::{Error, HeadKey, Witness, WitnessKey},
     curios_base::{Qualifier, RootId},
-    curios_core::{Concept, Global, InductDecl, StructDecl, Term, Totality, UniverseContext},
+    curios_core::{ConceptDecl, Global, InductDecl, StructDecl, Term, Totality, UniverseContext},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -17,7 +17,7 @@ pub(crate) struct Program {
     /// Struct declarations, keyed the same way. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
     struct_decls: BTreeMap<Global, StructDecl>,
     /// Concept declarations, keyed by the concept's qualified name (`struct_decls` also holds each concept's record entry; this adds the resolution metadata).
-    concepts: BTreeMap<Global, Concept>,
+    concepts: BTreeMap<Global, ConceptDecl>,
     /// The definition names `into_core` marked as witness declarations; each registers into `witness_table` when its signature elaborates (`elaborate_module_let` → `register_witness`).
     witness_declarations: BTreeSet<Global>,
     /// The program-wide witness table: one witness per (concept, parameter-head tuple) key — global coherence, checked at registration.
@@ -97,7 +97,7 @@ impl Program {
     pub(crate) fn register_concept(
         &mut self,
         name: &Global,
-        concept: Concept,
+        concept: ConceptDecl,
     ) -> Result<(), Error> {
         if self.concepts.contains_key(name) {
             return Err(Error::duplicate_concept(name.symbol()));
@@ -107,11 +107,11 @@ impl Program {
     }
 
     /// Look up a concept by its qualified name.
-    pub(crate) fn concept(&self, name: &Global) -> Option<&Concept> {
+    pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
         self.concepts.get(name)
     }
 
-    pub(crate) fn update_concept(&mut self, name: &Global, concept: Concept) {
+    pub(crate) fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
         assert!(
             self.concepts.contains_key(name),
             "update_concept: '{name}' is not already registered"
@@ -120,7 +120,7 @@ impl Program {
     }
 
     /// The registered concepts, for whole-registry validation (superclass acyclicity) at seed time.
-    pub(crate) fn concepts(&self) -> &BTreeMap<Global, Concept> {
+    pub(crate) fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
         &self.concepts
     }
 

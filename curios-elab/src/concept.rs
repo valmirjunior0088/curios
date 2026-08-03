@@ -1,6 +1,6 @@
 //! Witness registry entries and the keys resolution looks them up by.
 //!
-//! The [`Concept`](curios_core::Concept) entry itself is representation and lives in `curios-core` beside the other registry entries; what stays here is the instance-argument machinery: a [`Witness`] keys an ordinary top-level definition in the program-wide table under `(concept name, tuple of parameter heads)` — the [`WitnessKey`] of [`HeadKey`]s — and resolution searches that table.
+//! The [`ConceptDecl`](curios_core::ConceptDecl) entry itself is representation and lives in `curios-core` beside the other registry entries; what stays here is the instance-argument machinery: a [`Witness`] keys an ordinary top-level definition in the program-wide table under `(concept name, tuple of parameter heads)` — the [`WitnessKey`] of [`HeadKey`]s — and resolution searches that table.
 
 #[cfg(test)]
 mod tests;
@@ -23,7 +23,7 @@ pub(crate) struct Witness {
     pub module: Qualifier,
     pub universe_context: UniverseContext,
     pub signature: Term,
-    /// The compilation root that declares this witness — consulted by the orphan-rule ownership check alongside `Concept::root` and the key's head roots. Derived from `Context::island()` at registration, the same source `module_of` reads for the (unrelated) representation-privacy check.
+    /// The compilation root that declares this witness — consulted by the orphan-rule ownership check alongside `ConceptDecl::root` and the key's head roots. Derived from `Context::island()` at registration, the same source `module_of` reads for the (unrelated) representation-privacy check.
     pub root: RootId,
 }
 

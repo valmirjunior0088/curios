@@ -1,6 +1,6 @@
 //! First-class compilation-root identity.
 //!
-//! A compilation is a small, fixed set of roots: `sys`, `syn`, `std`, and the entry program. [`RootId`] is the handle every other stage compares by equality instead of re-deriving "which root does this belong to" from a qualified-name string. It lives in `curios-base` — the compiler's shared vocabulary — because both `curios-text` (module resolution) and `curios-elab` (on `Concept`, `Structure`, and `Inductive` registry entries) key on it. Neither the host/guest wire ABI nor the runtime names it.
+//! A compilation is a small, fixed set of roots: `sys`, `syn`, `std`, and the entry program. [`RootId`] is the handle every other stage compares by equality instead of re-deriving "which root does this belong to" from a qualified-name string. It lives in `curios-base` — the compiler's shared vocabulary — because both `curios-text` (module resolution) and `curios-elab` (on `ConceptDecl`, `Structure`, and `Inductive` registry entries) key on it. Neither the host/guest wire ABI nor the runtime names it.
 
 #[cfg(test)]
 mod tests;

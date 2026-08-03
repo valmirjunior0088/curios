@@ -9,7 +9,7 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        Concept, Definition, Free, Global, InductParam, Item, Module, StructDecl,
+        ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl,
         project_erased_universes,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -198,7 +198,7 @@ fn project_module(module: &Module) -> Module {
             .map(|(name, concept)| {
                 (
                     name.clone(),
-                    Concept {
+                    ConceptDecl {
                         universe_context: Default::default(),
                         params: project_erased_universes(&concept.params),
                         fields: concept.fields.clone(),
