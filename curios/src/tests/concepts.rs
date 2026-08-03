@@ -371,6 +371,21 @@ fn written_higher_kinded_argument_resolves_the_witness() {
     assert_eq!(run(source), b"7");
 }
 
+// A bare reference to an all-hidden generic function, checked against a rigid concrete carrier: the check turnaround inserts the implicit carrier and the witness goal, imitation pins `M := Option` from the expectation, and the goal resolves through the table.
+#[test]
+fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
+    let source = r#"
+        use /syn/{Monad};
+        use /std/{Nat, Handle, Str, Option};
+        pub let mk(@M : (Type) -> Type, use Monad(M)) -> M(Nat) =
+            Monad/pure(5);
+        let z : Option(Nat) = mk;
+        /std/print(Nat/to_str(Option/unwrap_or(z, 0)))
+        "#;
+
+    assert_eq!(run(source), b"5");
+}
+
 // A higher-kinded superclass: inside the generic function the goal `Monad(M)` (M a bound variable) resolves through step 2's superclass projection of the local `use MonadPlus(M)` binder. The witness's own omitted `monad` field resolves through the table to the std `Monad(Option)` witness — a higher-kinded auto-fill.
 #[test]
 fn higher_kinded_superclass_projects() {

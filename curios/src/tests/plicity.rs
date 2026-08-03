@@ -132,3 +132,39 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
         error(source)
     );
 }
+
+// A bare reference whose type leads with an implicit binder, checked against a rigid non-arrow expectation, has the hidden prefix inserted at the reference. Plicity is part of function identity, so this configuration was a guaranteed mismatch — insertion only rescues errors.
+#[test]
+fn bare_reference_inserts_hidden_arguments_at_a_rigid_expectation() {
+    let source = r#"
+        use /std/{Nat, Str, Option};
+        let none_of(@A : Type) -> Option(A) =
+            Option/none();
+        let x : Option(Nat) =
+            match false
+            | true => Option/some(1)
+            | false => none_of
+            end;
+        let shown : Str =
+            match x
+            | some(n) => Nat/to_str(n)
+            | none() => "none"
+            end;
+        /std/print(shown)
+        "#;
+    assert_eq!(run(source), b"none");
+}
+
+// The exemption: a bare reference assigned at its own hidden-headed function type keeps the polymorphic value — insertion fires only where that type could never convert.
+#[test]
+fn bare_reference_keeps_its_type_at_a_hidden_expectation() {
+    let source = r#"
+        use /std/{Nat, Str};
+        let ident(@A : Type, a : A) -> A =
+            a;
+        let keep : (@A : Type, a : A) -> A =
+            ident;
+        /std/print(Nat/to_str(keep(9)))
+        "#;
+    assert_eq!(run(source), b"9");
+}

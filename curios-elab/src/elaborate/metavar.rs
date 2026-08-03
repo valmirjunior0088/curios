@@ -125,9 +125,18 @@ pub(super) fn check_args_against<B: Bound>(
     Ok((elaborated, terminal))
 }
 
+/// Whether the (reduced) expectation is headed by an unsolved metavariable — including a stuck application of one. Such an expectation may yet be solved to the reference's own hidden-headed function type, so insertion must not fire on it.
+fn flexible(context: &Context, term: &Term) -> bool {
+    match &**term {
+        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
+        Subterm::Apply(apply) => flexible(context, &apply.head),
+        _ => false,
+    }
+}
+
 /// Implicit-eta on the check turnaround. A reference whose type leads with an implicit binder, checked against a concrete *explicit* function type, has its leading implicits inserted as metavariables and is eta-expanded over the remaining explicit binders — so a bare `Lst/concat` is accepted where `(Lst B, Lst B) -> Lst B` is expected, instead of demanding `(l, r) => concat(l, r)`. Implicit insertion is otherwise an application-site mechanism (`elaborate_apply`); this is the one extension into value position. Producing a full lambda (rather than a partial application) keeps erase/CPS untouched: the output is an ordinary closure over a saturated call.
 ///
-/// Fires only for `Var`/`Proj` heads against a ground explicit-arrow expectation; every other shape returns the term unchanged for the ordinary `expect`. The expected-not-implicit gate preserves polymorphic-value assignment (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when it does not fire, or the inserted shape does not convert, behavior is as before.
+/// Fires only for `Var`/`Proj` heads, and only where a hidden-headed function type could never convert anyway: against a ground explicit-arrow expectation, and against a *rigid non-arrow* expectation — plicity is part of function identity, so both configurations are guaranteed plicity mismatches, and inserting can only rescue programs that were errors. A flexible (metavar-headed) expectation must not fire, since it may still be solved to the reference's own polymorphic type; the expected-not-hidden gate likewise preserves polymorphic-value assignment (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when it does not fire, or the inserted shape does not convert, behavior is as before.
 pub(super) fn insert_implicits_on_check(
     context: &mut Context,
     term: &Term,
@@ -148,14 +157,14 @@ pub(super) fn insert_implicits_on_check(
     }
 
     let expected_reduced = reduce_with(context, expected)?;
-    let expected_explicit = matches!(
-        &*expected_reduced,
-        Subterm::FuncType(eft) if !matches!(
+    let fires = match &*expected_reduced {
+        Subterm::FuncType(eft) => !matches!(
             eft.plicities.first(),
             Some(Plicity::Implicit) | Some(Plicity::Witness)
-        )
-    );
-    if !expected_explicit {
+        ),
+        _ => !flexible(context, &expected_reduced),
+    };
+    if !fires {
         return Ok((rebuilt, type_));
     }
 
