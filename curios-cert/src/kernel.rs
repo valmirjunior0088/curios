@@ -10,17 +10,36 @@
 //!
 //! Where the elaborator cannot classify something it falls back conservatively and carries on, because a diagnostic is worth more to a programmer than a refusal. The kernel does the opposite: a shape it cannot classify is a [`KernelError`], not a default. A guessed universe level is the unsound direction — it claims a type is smaller than it is — and a checker that guesses is not a second opinion. The cost is that the kernel may reject a term the elaborator accepted; that is a disagreement to investigate, which is exactly what a second opinion is for.
 
+mod at;
+pub(crate) use at::*;
+
 mod convert;
 pub use convert::*;
+
+mod globals;
+use globals::Globals;
 
 mod infer;
 pub use infer::*;
 
+mod memos;
+use memos::Memos;
+
 mod module;
 pub(crate) use module::*;
 
+mod positions;
+use positions::Positions;
+
+mod scope;
+use scope::Scope;
+
 mod sort;
 pub use sort::*;
+
+mod spend;
+pub(crate) use spend::Replay;
+use spend::Spend;
 
 mod whnf;
 pub(crate) use whnf::*;
@@ -28,12 +47,11 @@ pub(crate) use whnf::*;
 use {
     crate::{Env, Judge, entails},
     crate::{Erased, erased_half},
-    curios_base::Entropy,
     curios_core::{
         Atom, Free, Global, InductDecl, Level, LevelHead, Polarity, ReduceError, Reducer,
         StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
     },
-    std::{collections::HashMap, fmt},
+    std::fmt,
 };
 
 /// Why the kernel refused a term.
@@ -242,122 +260,63 @@ impl Judge for Kernel {
     }
 }
 
-/// One remembered reduction: the reduct, and everything computing it consumed — so a hit can charge exactly what a recomputation would have.
-#[derive(Debug, Clone)]
-pub(crate) struct Replay {
-    reduct: Term,
-    steps: u64,
-    mints: usize,
-}
-
-/// A top-level name's entry: what it is, and what it unfolds to if anything.
-///
-/// The universe context is not decoration. A definition with universe parameters is *not* unfoldable through a bare occurrence, because such an occurrence denotes no particular instance; it reduces only through a [`UniverseInst`](curios_core::UniverseInst) that says which one.
-struct Definition {
-    type_: Term,
-    /// `None` for something with a type and no body — a `foreign` declaration, or a name deliberately kept opaque.
-    value: Option<Term>,
-    universes: UniverseContext,
-}
-
-/// A scope checkpoint: the depths of the binder stack and the case-equation stack when [`Kernel::scoped`] entered, restored together on the way out so neither can outlive the arm that opened it.
-///
-/// Private to this module, and so is every operation on it, which is what makes [`Kernel::scoped`] the only way to open a binder scope at all.
-#[derive(Clone, Copy)]
-struct Mark {
-    locals: usize,
-    refinements: usize,
-}
-
 /// The kernel's context: what is in scope, what may unfold, and how much work a judgment may spend.
 ///
-/// Deliberately small. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. The kernel holds a local telescope, top-level definitions, the nominal registry, and a budget. Growing this struct is how independence gets lost, so a new field should have to argue for itself.
+/// Deliberately small, and now deliberately *composed*. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. This held seventeen loose fields, which is the same shape read from the other end: five independent jobs whose invariants were spread across the methods that happened to touch them. Each is now a component that states its own, and what remains here is the composition and the couplings that genuinely cross it.
+///
+/// The one such coupling is worth naming, because it is why [`Globals::insert`] reports rather than acts: overwriting a definition invalidates every remembered reduct, which is a fact about [`Globals`] *and* [`Memos`] and therefore belongs to neither.
+///
+/// Growing this struct is still how independence gets lost. A new *component* should have to argue for itself the way a new field used to.
 pub struct Kernel {
-    /// Reduction steps a single judgment may spend. Restored at each declaration boundary by [`Kernel::restore_budget`].
-    budget: u64,
-    remaining: u64,
-    /// Identities for binders the kernel opens itself, when comparing under a telescope and when eta-contracting. Seeded above every index the earlier stages minted, so a kernel-minted binder can never alias one in a term.
-    fresh_names: Entropy,
-    /// Binders opened by the walk in progress, with their types, outermost first. A local has a type and never a value: `let` substitutes rather than binding, so nothing in scope here can be unfolded.
-    locals: Vec<(Free, Term)>,
-    /// Whether the evaluation memos below are consulted. On by default; [`Kernel::uncached`] exists so a test can assert that switching them off changes no verdict — the property that makes them an evaluation strategy rather than a store.
-    memoized: bool,
-    /// The weak-head reduct each *monomorphic* definition's body reaches, keyed by name and computed on first delta — the analog of Lean's `m_unfold`, which its trusted `type_checker` holds beside `m_whnf` and `m_whnf_core`. Definition bodies are closed, so an entry depends on nothing but the definition store, and [`Kernel::define`] clears every memo if it ever *overwrites* a name — so validity is by construction, not by an append-only assumption.
-    ///
-    /// This is not the kind of store the warning below forbids. A metavariable heap or a refinement layer *injects* answers a term alone could not produce; a memo replays the kernel's own pure function of `(term, definitions)`, computed once. The measured cost of refusing even that was a 10× whole-prelude re-check, spent re-deriving the same prelude spines for every recursive group the totality gate walks.
-    ///
-    /// Every entry carries what its computation consumed — budget steps and minted binder identities — and a hit charges exactly both. The budget prices the work a term *denotes*, performed or replayed, and the entropy counter advances as if the eta probes had run, so the whole observable trajectory — refusal payloads, exhaustion points, every later-minted identity — is bit-identical with the memos on or off. `kernel_memo_parity` is the test that holds this to account.
-    unfold_memo: HashMap<Free, Replay>,
-    /// Weak-head reducts of *local-free* terms, per entry point (plain, and rec-forced). Local-free — every free variable a definition name — is what makes a key scope-independent: whnf reads no local (locals carry no values by design) and no constraint, so the reduct is a function of the definition store alone, and no key can dangle a retracted binder.
-    whnf_memo: HashMap<Term, Replay>,
-    forced_memo: HashMap<Term, Replay>,
-    /// The case equations of the arms currently being checked, innermost last: within an arm, the scrutinee expression *is* the case's value, definitionally — the built-in face of the convoy pattern, which is how the elaborator's refinement store reads inside an arm. Scoped exactly like the binders the arm opens, through the same [`Kernel::mark`] / [`Kernel::retract`] bracket. The reducer consults these at stuck heads.
-    refinements: Vec<(Term, Term)>,
+    /// What the walk in progress has opened.
+    scope: Scope,
+    /// What a judgment may consume, and what it has.
+    spend: Spend,
+    /// Remembered weak-head reducts, replayed rather than re-derived.
+    memos: Memos,
+    /// The erased positions this walk recorded — an output, not an input.
+    positions: Positions,
+    /// Top-level definitions and the nominal registry.
+    globals: Globals,
     /// The constraint set of the item being checked — its own declared hypotheses, assumed while its parameters are held abstract. A generic definition is valid exactly when it checks *under* its constraints, so the level judgments below consult these; discarding them was the route by which a correct polymorphic definition was refused.
-    assumed: Vec<UniverseConstraint>,
-    /// The erased positions this walk has recorded — the seed for obligations (T) and (V), taken from the kernel's own typing rather than from another crate's record. Drained per item by [`Kernel::take_checked`].
     ///
-    /// Classified *when recorded*, not afterwards. A position's type routinely mentions the binders the item opened, and those are retracted the moment the item's check returns, so a later pass cannot ask for their sorts at all — it can only fail, and failing quietly is how positions across a tenth of the fixed prelude came to be silently unconstrained.
-    checked: Vec<(Term, Erased)>,
-    /// Sort-hood per distinct type, so classifying at every record site costs one question per type rather than one per position. Keyed on terms whose binders are the item's own, which is what makes an entry meaningful only within the item that made it — cleared with the drain.
-    erasure_memo: HashMap<Term, Option<Erased>>,
-    /// The first classification that could not be decided, surfaced with the drain. Deciding asks for a sort, which cannot be reported from a recording site that returns nothing.
-    erasure_failure: Option<KernelError>,
-    /// Re-entrancy guard. Deciding a position's erased half types terms of its own, and those must not be recorded as positions in turn.
-    classifying: bool,
-    definitions: HashMap<Free, Definition>,
-    inducts: HashMap<Global, InductDecl>,
-    structs: HashMap<Global, StructDecl>,
+    /// The one field with no component of its own: it is a single vector replaced wholesale at each declaration boundary, and wrapping it would state nothing the type does not.
+    assumed: Vec<UniverseConstraint>,
 }
 
 impl Kernel {
     /// A kernel that may spend `budget` reduction steps per judgment.
     pub fn new(budget: u64) -> Self {
         Self {
-            budget,
-            remaining: budget,
-            fresh_names: Entropy::new(),
-            locals: Vec::new(),
-            memoized: true,
-            unfold_memo: HashMap::new(),
-            whnf_memo: HashMap::new(),
-            forced_memo: HashMap::new(),
-            refinements: Vec::new(),
+            scope: Scope::default(),
+            spend: Spend::new(budget),
+            memos: Memos::new(true),
+            positions: Positions::default(),
+            globals: Globals::default(),
             assumed: Vec::new(),
-            checked: Vec::new(),
-            erasure_memo: HashMap::new(),
-            erasure_failure: None,
-            classifying: false,
-            definitions: HashMap::new(),
-            inducts: HashMap::new(),
-            structs: HashMap::new(),
         }
     }
 
     /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no verdict.
     pub fn uncached(budget: u64) -> Self {
         Self {
-            memoized: false,
+            memos: Memos::new(false),
             ..Self::new(budget)
         }
     }
 
     /// The remembered reduct of `name`'s body, with the replayed computation's whole consumption charged.
+    ///
+    /// Looking one up and charging it are two components' jobs, joined here: [`Memos`] can hand back a [`Replay`] and cannot apply one.
     pub(crate) fn unfold_hit(&mut self, name: &Free) -> Option<Result<Term, ReduceError>> {
-        if !self.memoized {
-            return None;
-        }
+        let replay = self.memos.unfold(name)?;
 
-        let replay = self.unfold_memo.get(name).cloned()?;
-
-        Some(self.charge(replay))
+        Some(self.spend.charge(replay))
     }
 
     /// Remember what `name`'s body reduces to, and what computing it consumed.
     pub(crate) fn unfold_store(&mut self, name: Free, replay: Replay) {
-        if self.memoized {
-            self.unfold_memo.insert(name, replay);
-        }
+        self.memos.store_unfold(name, replay);
     }
 
     /// The remembered weak-head reduct of a local-free `term`, per entry point, with the replayed computation's whole consumption charged.
@@ -366,66 +325,29 @@ impl Kernel {
         term: &Term,
         forced: bool,
     ) -> Option<Result<Term, ReduceError>> {
-        if !self.memoized || term.has_local_free() {
-            return None;
-        }
+        let replay = self.memos.whnf(term, forced)?;
 
-        let replay = match forced {
-            false => self.whnf_memo.get(term).cloned()?,
-            true => self.forced_memo.get(term).cloned()?,
-        };
-
-        Some(self.charge(replay))
+        Some(self.spend.charge(replay))
     }
 
     /// Remember a local-free `term`'s weak-head reduct and its consumption.
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
-        if !self.memoized || term.has_local_free() {
-            return;
-        }
-
-        match forced {
-            false => self.whnf_memo.insert(term, replay),
-            true => self.forced_memo.insert(term, replay),
-        };
+        self.memos.store_whnf(term, forced, replay);
     }
 
     /// A consumption snapshot, for measuring what a computation charges.
     pub(crate) fn consumption(&self) -> (u64, usize) {
-        (self.remaining, self.fresh_names.count())
+        self.spend.snapshot()
     }
 
     /// The [`Replay`] for `reduct`, measured against the snapshot taken before the computation ran.
-    pub(crate) fn replay_since(&self, reduct: Term, (budget, minted): (u64, usize)) -> Replay {
-        Replay {
-            reduct,
-            steps: budget - self.remaining,
-            mints: self.fresh_names.count() - minted,
-        }
-    }
-
-    /// Charge a replayed computation's whole consumption at once. Exhausting here is exactly where the recomputation would have exhausted mid-chain, and it reports the same error; the entropy advances as if every probe binder had been minted, so later identities land where they would have.
-    fn charge(&mut self, replay: Replay) -> Result<Term, ReduceError> {
-        self.fresh_names
-            .seed(self.fresh_names.count() + replay.mints);
-
-        match self.remaining.checked_sub(replay.steps) {
-            Some(remaining) => {
-                self.remaining = remaining;
-                Ok(replay.reduct)
-            }
-            None => {
-                self.remaining = 0;
-                Err(ReduceError::Exhausted)
-            }
-        }
+    pub(crate) fn replay_since(&self, reduct: Term, before: (u64, usize)) -> Replay {
+        self.spend.replay_since(reduct, before)
     }
 
     /// Raise the binder counter above every index minted by an earlier stage.
-    ///
-    /// The lowerer, the elaborator, and the archived prelude all mint into one identity space; a kernel that started at zero would mint binders that alias theirs, and an alias between two distinct binders is a capture.
     pub fn set_local_floor(&mut self, floor: usize) {
-        self.fresh_names.seed(floor);
+        self.spend.set_local_floor(floor);
     }
 
     /// Assume `universes`' constraints for the item about to be checked, replacing the previous item's. Like [`Kernel::restore_budget`], this is a declaration-boundary reset.
@@ -497,7 +419,7 @@ impl Kernel {
 
     /// Record a top-level name at `type_`, generalized over `universes`, with `value` as its body where it has one.
     ///
-    /// The invalidation clause lives here rather than at each entry point below, because it is the whole of what makes the evaluation memos valid by construction: a redefinition discards every remembered reduct. Written once, a third entry point cannot arrive without it.
+    /// The invalidation clause lives here rather than at either entry point below, and here rather than inside [`Globals`], because it is the one coupling that crosses two components: a redefinition makes every remembered reduct stale. `Globals::insert` reports the overwrite and this applies it, so neither component can forget the other exists.
     fn insert(
         &mut self,
         name: &Free,
@@ -505,19 +427,8 @@ impl Kernel {
         value: Option<&Term>,
         universes: &UniverseContext,
     ) {
-        let previous = self.definitions.insert(
-            name.clone(),
-            Definition {
-                type_: type_.clone(),
-                value: value.cloned(),
-                universes: universes.clone(),
-            },
-        );
-
-        if previous.is_some() {
-            self.unfold_memo.clear();
-            self.whnf_memo.clear();
-            self.forced_memo.clear();
+        if self.globals.insert(name, type_, value, universes) {
+            self.memos.invalidate();
         }
     }
 
@@ -533,189 +444,126 @@ impl Kernel {
 
     /// Register an `induct` declaration's registry entry.
     pub fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) {
-        self.inducts.insert(name.clone(), declaration.clone());
+        self.globals.declare_induct(name, declaration);
     }
 
     /// Register a `struct` declaration's registry entry.
     pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) {
-        self.structs.insert(name.clone(), declaration.clone());
+        self.globals.declare_struct(name, declaration);
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        self.inducts.get(name)
+        self.globals.induct_decl(name)
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        self.structs.get(name)
+        self.globals.struct_decl(name)
     }
 
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
     ///
     /// Locals are a stack, and closing them is [`Kernel::scoped`]'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
-        self.locals.push((name.clone(), type_.clone()));
+        self.scope.assume(name, type_);
     }
 
     /// Run `walk` with every binder it opened — and every case equation it assumed — closed again afterwards, on the failing path as well as the succeeding one.
     ///
-    /// **The only way to open a binder scope.** `mark` and `retract` below are private to this module precisely so that it is. A judgment that opened a binder and returned early would leak it into the conversion history, where the local context is part of the goal key, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Kernel` throughout, and a guard holding the borrow would leave them nothing to be called with.
+    /// **The only way to open a binder scope.** [`Scope`]'s `mark` and `retract` are `pub(super)` and this is their only caller anywhere, which is what makes that true. A judgment that opened a binder and returned early would leak it into the conversion history, where the local context is part of the goal key, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Kernel` throughout, and a guard holding the borrow would leave them nothing to be called with.
     pub(crate) fn scoped<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
-        let mark = self.mark();
+        let mark = self.scope.mark();
         let outcome = walk(self);
-        self.retract(mark);
+        self.scope.retract(mark);
 
         outcome
     }
 
-    /// The current scope depth, to be handed back to `retract`.
-    fn mark(&self) -> Mark {
-        Mark {
-            locals: self.locals.len(),
-            refinements: self.refinements.len(),
-        }
-    }
-
-    /// Close every binder opened — and drop every case equation assumed — since `mark`.
-    fn retract(&mut self, mark: Mark) {
-        self.locals.truncate(mark.locals);
-        self.refinements.truncate(mark.refinements);
-    }
-
-    /// Assume an arm's case equation: within the arm, `scrutinee` — already in weak-head normal form — is `value`, definitionally. Push inside the arm's `mark`/`retract` bracket, which is what scopes it.
-    ///
-    /// A local-free scrutinee is skipped rather than recorded: local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — they store local-free terms only, and reduction of a local-free term never encounters a local-bearing stuck form, so no memoized reduct can depend on an equation that was later retracted.
+    /// Assume an arm's case equation: within the arm, `scrutinee` — already in weak-head normal form — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
     pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) {
-        if scrutinee.has_local_free() {
-            self.refinements.push((scrutinee, value));
-        }
+        self.scope.refine(scrutinee, value);
     }
 
     /// The case value the stuck form `term` is refined to, innermost arm first.
     pub(crate) fn refinement_of(&self, term: &Term) -> Option<Term> {
-        self.refinements
-            .iter()
-            .rev()
-            .find(|(key, _)| key == term)
-            .map(|(_, value)| value.clone())
+        self.scope.refinement_of(term)
     }
 
     /// The types of the binders currently in scope, outermost first. The conversion history keys on this: the same goal under a different context is a different goal.
     pub(crate) fn local_types(&self) -> Vec<Term> {
-        self.locals.iter().map(|(_, type_)| type_.clone()).collect()
+        self.scope.local_types()
     }
 
     /// The identities of the binders currently in scope, outermost first — parallel to [`Kernel::local_types`]. What the conversion history renames away, so that a goal reached again on a later round of an unfolding cycle is recognized as the goal it already is.
     pub(crate) fn local_names(&self) -> Vec<Free> {
-        self.locals.iter().map(|(name, _)| name.clone()).collect()
+        self.scope.local_names()
     }
 
     /// The type `name` was opened at, if it is a binder currently in scope.
-    ///
-    /// Innermost first — which cannot actually matter, since binder identities are minted unique, but scanning in that order means the rule does not depend on that being true.
     pub(crate) fn local_type(&self, name: &Free) -> Option<&Term> {
-        self.locals
-            .iter()
-            .rev()
-            .find(|(bound, _)| bound == name)
-            .map(|(_, type_)| type_)
+        self.scope.local_type(name)
     }
 
     /// The type `name` was bound or declared at. Locals shadow definitions.
     pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
-        self.local_type(name)
-            .or_else(|| self.definitions.get(name).map(|entry| &entry.type_))
+        self.scope
+            .local_type(name)
+            .or_else(|| self.globals.type_of(name))
     }
 
     /// The universe scheme `name` was generalized under, for a use that states its own instance.
     pub(crate) fn scheme_of(&self, name: &Free) -> Option<(&Term, &UniverseContext)> {
-        self.definitions
-            .get(name)
-            .map(|entry| (&entry.type_, &entry.universes))
+        self.globals.scheme_of(name)
     }
 
     /// Charge one reduction step, failing when the budget is spent.
-    ///
-    /// The kernel is not strongly normalizing and does not pretend to be: a non-productive `rec` reduces forever. The budget is what makes every judgment terminate, and it is deterministic — the same program spends the same steps on every machine — so exhausting it is a fact about the program, not about the host that checked it.
     pub(crate) fn spend(&mut self) -> Result<(), ReduceError> {
-        match self.remaining {
-            0 => Err(ReduceError::Exhausted),
-            remaining => {
-                self.remaining = remaining - 1;
-                Ok(())
-            }
-        }
+        self.spend.step()
     }
 
     /// A fresh binder identity, rendering as `hint`.
     pub(crate) fn fresh(&self, hint: Option<&str>) -> Free {
-        let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
-
-        Free::local(index, hint)
+        self.spend.fresh(hint)
     }
 
-    /// What `name` unfolds to through a bare occurrence.
-    ///
-    /// A definition with universe parameters is withheld: see [`Definition`].
+    /// What `name` unfolds to through a bare occurrence. A definition with universe parameters is withheld.
     pub(crate) fn value(&self, name: &Free) -> Option<&Term> {
-        self.definitions
-            .get(name)
-            .filter(|definition| definition.universes.parameter_count == 0)
-            .and_then(|definition| definition.value.as_ref())
+        self.globals.value(name)
     }
 
     /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.
     pub(crate) fn value_at(&self, name: &Free) -> Option<&Term> {
-        self.definitions
-            .get(name)
-            .and_then(|definition| definition.value.as_ref())
+        self.globals.value_at(name)
     }
 
-    /// Restore the full budget for a new judgment.
     /// Record `term` as an erased position if the type it was judged at makes it one: a term at a `Prop`-sorted type is a proof, and one at a sort is a type.
     ///
-    /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it.
+    /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it. The orchestration lives here rather than on [`Positions`] because the middle of it — `erased_half` — needs the whole kernel; see `Positions::begin` on why that bracket cannot be a closure.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
-        if self.classifying {
+        if self.positions.suppressed() {
             return;
         }
 
-        let erased = match self.erasure_memo.get(type_) {
-            Some(erased) => *erased,
+        let erased = match self.positions.remembered(type_) {
+            Some(erased) => erased,
             None => {
-                self.classifying = true;
+                self.positions.begin();
                 let outcome = erased_half(self, type_);
-                self.classifying = false;
 
-                let erased = match outcome {
-                    Ok(erased) => erased,
-                    Err(error) => {
-                        self.erasure_failure.get_or_insert(error);
-                        None
-                    }
-                };
-                self.erasure_memo.insert(type_.clone(), erased);
-                erased
+                self.positions.settle(type_, outcome)
             }
         };
 
         if let Some(erased) = erased {
-            self.checked.push((term.clone(), erased));
+            self.positions.push(term, erased);
         }
     }
 
     /// Take this item's recorded positions and any classification that could not be decided, leaving both empty for the next item.
-    ///
-    /// The memo goes with them: its keys mention the item's own binders, so an entry means nothing once they are retracted.
     pub(crate) fn take_checked(&mut self) -> (Vec<(Term, Erased)>, Option<KernelError>) {
-        self.erasure_memo.clear();
-
-        (
-            std::mem::take(&mut self.checked),
-            self.erasure_failure.take(),
-        )
+        self.positions.drain()
     }
 
     pub fn restore_budget(&mut self) {
-        self.remaining = self.budget;
+        self.spend.restore_budget();
     }
 }

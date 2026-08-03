@@ -23,17 +23,13 @@ mod tests;
 
 use {
     super::{
-        Kernel, KernelError, Sort, check_group,
-        convert::convert,
-        sort::{arity_matches, as_sort},
-        synth_neutral,
+        Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort, synth_neutral,
     },
     curios_base::{Grain, PackedBin},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductDecl, InductType, Let,
-        Level, Many, Nat, One, Prim, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, UniverseContext, UniverseInst, Variant,
-        instantiate_universe_levels_scoped,
+        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Let, Many, Nat, One,
+        Prim, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, UniverseInst, Variant,
     },
 };
 
@@ -182,24 +178,14 @@ fn infer_node(
                     name,
                     universes,
                     params,
-                }) => {
-                    let declaration = kernel
-                        .struct_decl(&name)
-                        .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
-                    kernel.check_instance(&declaration.universe_context, &universes)?;
-                    // The parameter count, before the arity is opened at it: `Telescope::open` asserts, so a disagreement here would abort the walk rather than refuse the item.
-                    arity_matches(declaration.param_count(), params.len())?;
-                    let arity =
-                        instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
-
-                    arity
-                        .open(&params.iter().collect::<Vec<_>>())
-                        .nth(*index, |j| Term::proj(head.clone(), j))
-                        .ok_or(KernelError::Arity {
-                            expected: *index,
-                            actual: 0,
-                        })
-                }
+                }) => kernel
+                    .struct_at(&name, &universes, &params)?
+                    .fields()
+                    .nth(*index, |j| Term::proj(head.clone(), j))
+                    .ok_or(KernelError::Arity {
+                        expected: *index,
+                        actual: 0,
+                    }),
                 _ => Err(KernelError::NotATuple(head_type)),
             }
         }
@@ -215,17 +201,10 @@ fn infer_node(
             tag,
             payload,
         }) => {
-            let declaration = kernel
-                .induct_decl(name)
-                .ok_or_else(|| KernelError::Undeclared(name.clone()))?
-                .clone();
-            let declaration = instantiate_induct_decl(kernel, &declaration, universes)?;
-
-            // The parameter count, before the signature is peeled at it. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below compares against the wrong number.
-            arity_matches(declaration.param_count(), params.len())?;
-
-            let signature = declaration
-                .instantiate(tag, params)
+            // The handle checks the universe instance and the parameter count before any of the declaration is read at them. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below would compare against the wrong number.
+            let signature = kernel
+                .induct_at_params(name, universes, params)?
+                .signature(tag)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
 
             if signature.len() != payload.len() {
@@ -268,17 +247,7 @@ fn infer_node(
             fields,
             ..
         }) => {
-            let declaration = kernel
-                .struct_decl(name)
-                .ok_or_else(|| KernelError::Undeclared(name.clone()))?
-                .clone();
-            kernel.check_instance(&declaration.universe_context, universes)?;
-
-            // The parameter count, before the arity is opened at it: `Telescope::open` asserts, so a disagreement here aborts the walk rather than refusing the item.
-            arity_matches(declaration.param_count(), params.len())?;
-
-            let telescope = instantiate_universe_levels_scoped(&declaration.arity, universes)?
-                .open(&params.iter().collect::<Vec<_>>());
+            let telescope = kernel.struct_at(name, universes, params)?.fields();
 
             if telescope.len() != fields.len() {
                 return Err(KernelError::Arity {
@@ -440,13 +409,7 @@ fn check_motive(
 
         match family {
             Some(family) => {
-                let declaration = kernel
-                    .induct_decl(&family.name)
-                    .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?
-                    .clone();
-                let declaration = instantiate_induct_decl(kernel, &declaration, &family.universes)?;
-
-                let mut indices = declaration.indices_at(&family.params);
+                let mut indices = kernel.induct_at(family)?.indices();
                 while let Telescope::Cons(domain, rest) = indices {
                     let binder = kernel.fresh(rest.first_hint());
                     kernel.assume(&binder, &domain);
@@ -521,20 +484,16 @@ fn check_cases(
             let Some(family) = family else {
                 return Err(KernelError::Unclassified(scrutinee.clone()));
             };
-            let declaration = kernel
-                .induct_decl(&family.name)
-                .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?
-                .clone();
-            let declaration = instantiate_induct_decl(kernel, &declaration, &family.universes)?;
+            let at = kernel.induct_at(family)?;
 
             // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `check_motive`, and a second derivation is what this whole clause exists to remove.
             if !(cases.is_empty() && default.is_none()) {
-                eliminate::guard_large_elimination(kernel, &declaration, family, motive_sort)?;
+                eliminate::guard_large_elimination(kernel, &at, family, motive_sort)?;
             }
 
             check_induct_arms(
                 kernel,
-                &declaration,
+                &at,
                 family,
                 motive,
                 cases,
@@ -783,19 +742,9 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
                 universes,
                 params,
             }) => {
-                let declaration = kernel
-                    .struct_decl(&name)
-                    .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
-                kernel.check_instance(&declaration.universe_context, &universes)?;
-                // As in the projection rule above, and for the same reason: `Telescope::open` asserts on a count mismatch.
-                arity_matches(declaration.param_count(), params.len())?;
-                let arity =
-                    instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
-                return check_fields(
-                    kernel,
-                    fields,
-                    arity.open(&params.iter().collect::<Vec<_>>()),
-                );
+                let telescope = kernel.struct_at(&name, &universes, &params)?.fields();
+
+                return check_fields(kernel, fields, telescope);
             }
             // Not a telescope-shaped expectation: fall through, so the mismatch keeps its ordinary inferred-versus-expected shape.
             _ => {}
@@ -969,25 +918,4 @@ fn infer_telescope(
             ))
         }
     }
-}
-
-/// A declaration with its universe parameters replaced by this occurrence's instance, so its constructor signatures speak of the right levels.
-fn instantiate_induct_decl(
-    kernel: &Kernel,
-    declaration: &InductDecl,
-    levels: &[Level],
-) -> Result<InductDecl, KernelError> {
-    kernel.check_instance(&declaration.universe_context, levels)?;
-
-    let mut instantiated = declaration.clone();
-
-    instantiated.arity = instantiate_universe_levels_scoped(&instantiated.arity, levels)?;
-    instantiated.result_sort =
-        instantiate_universe_levels_scoped(&instantiated.result_sort, levels)?;
-    for constructor in instantiated.signatures_mut() {
-        constructor.telescope = instantiate_universe_levels_scoped(&constructor.telescope, levels)?;
-    }
-    instantiated.universe_context = UniverseContext::empty();
-
-    Ok(instantiated)
 }

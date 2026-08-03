@@ -400,13 +400,14 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
         &UniverseContext::default(),
     );
 
-    let mark = kernel.mark();
-    let binder_ = binder(1, "x");
-    kernel.assume(&binder_, &nat_type());
-    let inside = kernel
-        .reduce_forced(Term::free_var(&name))
-        .expect("reduces");
-    kernel.retract(mark);
+    let inside = kernel.scoped(|kernel| {
+        let binder_ = binder(1, "x");
+        kernel.assume(&binder_, &nat_type());
+
+        kernel
+            .reduce_forced(Term::free_var(&name))
+            .expect("reduces")
+    });
 
     let outside = kernel
         .reduce_forced(Term::free_var(&name))
@@ -442,17 +443,16 @@ fn a_redefinition_clears_the_memos() {
 ///
 /// Every arm rule brackets its work in `mark`/`retract`, and the reducer consults these at stuck heads — so an equation outliving its bracket is a definitional equality between two terms that are not equal, applied to everything checked after it. The bracket is a truncation to a recorded length; this is what holds it to that.
 #[test]
-fn a_case_equation_does_not_outlive_its_mark() {
+fn a_case_equation_does_not_outlive_its_scope() {
     let mut kernel = kernel();
     let scrutinee = binder(1, "n");
     kernel.assume(&scrutinee, &nat_type());
     // Local-free scrutinees are deliberately not recorded, so the key has to mention a local.
     let stuck = Term::free_var(&scrutinee);
 
-    let mark = kernel.mark();
-    kernel.refine(stuck.clone(), nat(0));
-    assert_eq!(kernel.refinement_of(&stuck), Some(nat(0)));
-
-    kernel.retract(mark);
+    kernel.scoped(|kernel| {
+        kernel.refine(stuck.clone(), nat(0));
+        assert_eq!(kernel.refinement_of(&stuck), Some(nat(0)));
+    });
     assert_eq!(kernel.refinement_of(&stuck), None);
 }

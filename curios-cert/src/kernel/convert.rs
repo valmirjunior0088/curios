@@ -505,11 +505,12 @@ fn struct_eta(
     literal: &Struct,
     other: &Term,
 ) -> Result<bool, KernelError> {
-    let Some(declaration) = kernel.struct_decl(&literal.name) else {
+    // Through the checked handle: a literal at the wrong parameter count would otherwise reach `fields_at`, which opens the arity and asserts. Declining is conversion's own answer for a shape it cannot decide, and it is the right one here too.
+    let Ok(at) = kernel.struct_at(&literal.name, &literal.universes, &literal.params) else {
         return Ok(false);
     };
 
-    let mut telescope = declaration.fields_at(&literal.params);
+    let mut telescope = at.fields();
     for (index, field) in literal.fields.iter().enumerate() {
         let Telescope::Cons(type_, rest) = telescope else {
             return Ok(false);

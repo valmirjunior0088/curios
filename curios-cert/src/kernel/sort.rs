@@ -75,14 +75,13 @@ impl Sort {
                 params,
                 indices,
             }) => {
-                let declaration = kernel
-                    .induct_decl(name)
-                    .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
-                kernel.check_instance(&declaration.universe_context, universes)?;
-                arity_matches(declaration.param_count(), params.len())?;
-                arity_matches(declaration.index_count(), indices.len())?;
-                let result_sort =
-                    instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
+                let family = InductType {
+                    name: name.clone(),
+                    universes: universes.clone(),
+                    params: params.clone(),
+                    indices: indices.clone(),
+                };
+                let result_sort = kernel.induct_at(&family)?.result_sort().clone();
 
                 as_sort(kernel, &result_sort)
             }
@@ -91,13 +90,10 @@ impl Sort {
                 universes,
                 params,
             }) => {
-                let declaration = kernel
-                    .struct_decl(name)
-                    .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
-                kernel.check_instance(&declaration.universe_context, universes)?;
-                arity_matches(declaration.param_count(), params.len())?;
-                let result_sort =
-                    instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
+                let result_sort = kernel
+                    .struct_at(name, universes, params)?
+                    .result_sort()
+                    .clone();
 
                 as_sort(kernel, &result_sort)
             }
@@ -327,19 +323,11 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     universes,
                     params,
                 }) => {
-                    let Some(declaration) = kernel.struct_decl(&name) else {
+                    let Ok(at) = kernel.struct_at(&name, &universes, &params) else {
                         return Ok(None);
                     };
-                    if declaration.param_count() != params.len() {
-                        return Ok(None);
-                    }
 
-                    let arity =
-                        instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
-
-                    Ok(arity
-                        .open(&params.iter().collect::<Vec<_>>())
-                        .nth(*index, |j| Term::proj(head.clone(), j)))
+                    Ok(at.fields().nth(*index, |j| Term::proj(head.clone(), j)))
                 }
                 _ => Ok(None),
             }

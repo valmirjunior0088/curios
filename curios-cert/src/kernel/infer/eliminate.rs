@@ -24,19 +24,19 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        Invert, Kernel, KernelError, Sort, carries_information, invert_indices,
+        InductAt, Invert, Kernel, KernelError, Sort, carries_information, invert_indices,
         invert_indices_outer, pinned_by_targets,
     },
     curios_core::{
-        Atom, Bound, Free, InductArm, InductDecl, InductType, Many, Reducer, Scope, Subterm,
-        Telescope, Term, Variant, Visit,
+        Atom, Bound, Free, InductArm, InductType, Many, Reducer, Scope, Subterm, Telescope, Term,
+        Variant, Visit,
     },
 };
 
 /// Check every arm of an elimination of `scrutinee_type` under `motive`.
 pub(super) fn check_induct_arms(
     kernel: &mut Kernel,
-    declaration: &InductDecl,
+    at: &InductAt,
     family: &InductType,
     motive: &Scope<Many>,
     cases: &[(Atom, InductArm)],
@@ -44,7 +44,7 @@ pub(super) fn check_induct_arms(
     scrutinee: &Term,
 ) -> Result<(), KernelError> {
     for (tag, arm) in cases {
-        check_arm(kernel, declaration, family, motive, scrutinee, tag, arm)?;
+        check_arm(kernel, at, family, motive, scrutinee, tag, arm)?;
     }
 
     // A catch-all binds nothing and stands for the scrutinee itself, so it is checked at the scrutinee's own indices *and at the scrutinee* — the one arm with no case value of its own, and therefore the one whose instance can only come from the term being eliminated. That is the instance `infer` reads the elimination's type off, so any other one proves something other than what the elimination hands its caller.
@@ -59,13 +59,13 @@ pub(super) fn check_induct_arms(
     }
 
     // Coverage: an absent arm must justify its absence. With no catch-all, every constructor with no arm must be *impossible* at the scrutinee's indices — its targets must clash with the actuals, decided by the same shared unifier that specializes the present arms. A case the unifier merely cannot decide is a refusal, not a pass: undecided is not absent.
-    for (tag, _) in &declaration.constructors {
+    for (tag, _) in &at.declaration().constructors {
         if cases.iter().any(|(present, _)| present == tag) {
             continue;
         }
 
-        let signature = declaration
-            .instantiate(tag, &family.params)
+        let signature = at
+            .signature(tag)
             .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
         let outcome = kernel.scoped(|kernel| {
@@ -88,15 +88,15 @@ pub(super) fn check_induct_arms(
 /// One arm: open the constructor's payload under fresh binders at its declared field types, specialize the context by this case's forced equations, then require the body to inhabit the motive at this constructor's index targets and at the value it constructs.
 fn check_arm(
     kernel: &mut Kernel,
-    declaration: &InductDecl,
+    at: &InductAt,
     family: &InductType,
     motive: &Scope<Many>,
     scrutinee: &Term,
     tag: &Atom,
     arm: &InductArm,
 ) -> Result<(), KernelError> {
-    let signature = declaration
-        .instantiate(tag, &family.params)
+    let signature = at
+        .signature(tag)
         .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
     if signature.len() != arm.arity() {
@@ -308,7 +308,7 @@ fn open_payload<T, B: Bound>(
 /// The guard fires only when both halves hold: the scrutinee's family is `Prop`-sorted, and the motive lands in `Type`. A proposition eliminated into another proposition is always fine — irrelevance makes the result indistinguishable either way.
 pub(super) fn guard_large_elimination(
     kernel: &mut Kernel,
-    declaration: &InductDecl,
+    at: &InductAt,
     family: &InductType,
     motive_sort: Sort,
 ) -> Result<(), KernelError> {
@@ -322,13 +322,13 @@ pub(super) fn guard_large_elimination(
         return Ok(());
     }
 
-    match declaration.constructors.as_slice() {
+    match at.declaration().constructors.as_slice() {
         // Empty: there is nothing to have received, so nothing to extract.
         [] => Ok(()),
         // Singleton: allowed exactly when every payload component is already determined, so knowing the value tells a program nothing it did not already know.
         [(tag, _)] => {
-            let signature = declaration
-                .instantiate(tag, &family.params)
+            let signature = at
+                .signature(tag)
                 .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
             let outcome = kernel.scoped(|kernel| {
