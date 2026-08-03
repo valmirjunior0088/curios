@@ -12,13 +12,22 @@
 //!
 //! Both checkers run *this* engine, through [`Env`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The kernel's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
 
+mod guard;
+use guard::*;
+
+mod matrix;
+use matrix::*;
+
+mod shape;
+use shape::*;
+
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{Env, forceable},
     curios_core::{
-        Apply, Arity, Atom, Carrier, Cases, Free, FreeMonoid, Func, FuncType, Global, InductArm,
+        Apply, Arity, Atom, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductArm,
         InductType, Infix, Layer, Let, Many, Match, Nat, Prim, Proj, Rec, RecGroup, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst,
         Variant,
@@ -36,277 +45,6 @@ const UNFOLD_FUEL: usize = 3;
 ///
 /// Each nested `match` on a binder introduced by an outer arm adds one level — `raw_trimmed` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
 const EXPAND_FUEL: usize = 16;
-
-/// The largest transitive closure a group's call matrices may reach.
-///
-/// Closure is worst-case exponential in the number of call sites. The prelude's largest group closes in tens of matrices; a group that blows past this is classified `Partial`, which is the conservative direction.
-const CLOSURE_LIMIT: usize = 4096;
-
-/// How a call argument's size compares to the caller parameter it is graded against.
-///
-/// Ordered `Unknown ⊏ Same ⊏ Less`, so joining several routes to the same entry keeps the most informative one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Size {
-    /// No relation the analysis can establish.
-    Unknown,
-    /// The argument is the parameter's own expanded value.
-    Same,
-    /// The argument is a proper subterm of the parameter's expanded value.
-    Less,
-}
-
-impl Size {
-    /// Sequential composition: what one call followed by another establishes.
-    ///
-    /// `Unknown` annihilates — a link that says nothing breaks the chain. `Same` is the identity, and `Less` absorbs, because a chain containing one strict decrease is a strict decrease.
-    fn compose(self, other: Size) -> Size {
-        match (self, other) {
-            (Size::Unknown, _) | (_, Size::Unknown) => Size::Unknown,
-            (Size::Less, _) | (_, Size::Less) => Size::Less,
-            (Size::Same, Size::Same) => Size::Same,
-        }
-    }
-
-    /// Least upper bound: two routes between the same pair of positions keep the stronger claim.
-    fn join(self, other: Size) -> Size {
-        self.max(other)
-    }
-}
-
-/// One call's size relation: `entry(row, column)` grades the callee's `column`th argument against the caller's `row`th parameter.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Matrix {
-    rows: usize,
-    columns: usize,
-    entries: Vec<Size>,
-}
-
-impl Matrix {
-    /// The matrix that claims nothing — what an unanalyzable call contributes.
-    fn unknown(rows: usize, columns: usize) -> Self {
-        Self {
-            rows,
-            columns,
-            entries: vec![Size::Unknown; rows * columns],
-        }
-    }
-
-    fn entry(&self, row: usize, column: usize) -> Size {
-        self.entries[row * self.columns + column]
-    }
-
-    fn set(&mut self, row: usize, column: usize, size: Size) {
-        self.entries[row * self.columns + column] = size;
-    }
-
-    /// `self` followed by `other`, in the (join, compose) semiring: the best relation reachable through any intermediate position.
-    fn compose(&self, other: &Matrix) -> Option<Matrix> {
-        if self.columns != other.rows {
-            return None;
-        }
-        let mut composed = Matrix::unknown(self.rows, other.columns);
-        for row in 0..self.rows {
-            for column in 0..other.columns {
-                let mut best = Size::Unknown;
-                for middle in 0..self.columns {
-                    best = best.join(self.entry(row, middle).compose(other.entry(middle, column)));
-                }
-                composed.set(row, column, best);
-            }
-        }
-        Some(composed)
-    }
-
-    /// Whether this matrix describes a call path that composes with itself unchanged — the paths that can repeat forever.
-    fn is_idempotent(&self) -> bool {
-        self.rows == self.columns && self.compose(self).as_ref() == Some(self)
-    }
-
-    /// Whether some parameter strictly decreases along this path.
-    fn descends(&self) -> bool {
-        (0..self.rows.min(self.columns)).any(|index| self.entry(index, index) == Size::Less)
-    }
-}
-
-/// The constructor a [`Shape`] node stands for.
-///
-/// Carriers are kept apart so a `Bin` cons can never be mistaken for an `Lst` cons. Well-typed code could not confuse them, but the size order is only as trustworthy as the identities it compares.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Tag {
-    /// An inductive constructor, by tag alone.
-    ///
-    /// The owning type is deliberately not part of the identity, because a freshly minted arm binder has no recorded type to read it from. Dropping it cannot manufacture a false decrease: every leaf of a shape is a binder identity minted by this very traversal, so two trees compare equal only when they name the same binders, and a same-named constructor of a different type would still have to reach the same binders to be mistaken for one.
-    Variant(Atom),
-    /// A nominal structure literal.
-    Struct(Global),
-    /// An anonymous tuple.
-    Tuple,
-    /// One generator of a free-monoid carrier: `Nat`'s successor, a `Bin` byte, an `Lst` element.
-    Cons(Carriers),
-    /// A free-monoid carrier's identity: zero, `b\`, `[]`.
-    Empty(Carriers),
-    /// A boolean literal.
-    Bool(bool),
-}
-
-/// Which native free monoid a [`Tag::Cons`] or [`Tag::Empty`] belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Carriers {
-    Unary,
-    Bin,
-    Lst,
-}
-
-/// A call argument or a parameter, read as a constructor tree over binder atoms — the term on which the size order is a proper-subterm order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Shape {
-    /// A binder the analysis tracks but cannot see inside.
-    Atom(Free),
-    /// A constructor applied to its arguments.
-    Node(Tag, Vec<Shape>),
-    /// A `Nat` strictly below the binder it names, established arithmetically rather than structurally: `n / k` for a literal `k >= 2`, or `n - k` for a literal `k >= 1`, at a point where `n` is known nonzero.
-    ///
-    /// It is a claim *about* another shape rather than a shape of its own, so it is inert everywhere the constructor order is read — never equal to anything, never a subterm of anything — and is consulted only by [`Shape::against`].
-    Smaller(Free),
-    /// Anything else. Never equal to, and never a subterm of, anything — including another `Opaque`, since two unreadable terms are not thereby the same term.
-    Opaque,
-}
-
-impl Shape {
-    /// Whether these are the same value. `Opaque` is deliberately unequal to itself: it means "not read", not "read and found identical".
-    fn same_as(&self, other: &Shape) -> bool {
-        match (self, other) {
-            (Shape::Atom(left), Shape::Atom(right)) => left == right,
-            (Shape::Node(left, left_kids), Shape::Node(right, right_kids)) => {
-                left == right
-                    && left_kids.len() == right_kids.len()
-                    && left_kids
-                        .iter()
-                        .zip(right_kids)
-                        .all(|(left, right)| left.same_as(right))
-            }
-            _ => false,
-        }
-    }
-
-    /// Whether `self` occurs strictly inside `whole`.
-    fn proper_subterm_of(&self, whole: &Shape) -> bool {
-        match whole {
-            Shape::Node(_, kids) => kids
-                .iter()
-                .any(|kid| self.same_as(kid) || self.proper_subterm_of(kid)),
-            _ => false,
-        }
-    }
-
-    /// This argument's size against a parameter whose expanded value is `parameter` — the whole size order, applied to one entry.
-    fn against(&self, parameter: &Shape) -> Size {
-        // An arithmetic decrease names the binder it is below, so it grades only against a parameter still standing for exactly that binder. A parameter an enclosing arm has refined to a constructor is a different value, and withholding the claim there is the conservative reading rather than a missed case.
-        if let Shape::Smaller(below) = self {
-            return match parameter {
-                Shape::Atom(atom) if atom == below => Size::Less,
-                _ => Size::Unknown,
-            };
-        }
-        if self.same_as(parameter) {
-            return Size::Same;
-        }
-        if self.proper_subterm_of(parameter) {
-            return Size::Less;
-        }
-        Size::Unknown
-    }
-}
-
-/// How a [`Guard`] relates its binder to its literal, always read with the binder on the left.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Relation {
-    Lt,
-    Lte,
-    Gt,
-    Gte,
-    Eql,
-    Neq,
-}
-
-impl Relation {
-    /// The same relation with the operands exchanged, for a guard written with its literal first (`10 > n`).
-    fn flipped(self) -> Relation {
-        match self {
-            Relation::Lt => Relation::Gt,
-            Relation::Lte => Relation::Gte,
-            Relation::Gt => Relation::Lt,
-            Relation::Gte => Relation::Lte,
-            Relation::Eql => Relation::Eql,
-            Relation::Neq => Relation::Neq,
-        }
-    }
-}
-
-/// A boolean scrutinee read as a comparison between a tracked binder and a `Nat` literal — the only shape from which an arm can conclude that the binder is not zero.
-struct Guard {
-    atom: Free,
-    literal: BigUint,
-    relation: Relation,
-}
-
-impl Guard {
-    fn read(term: &Term) -> Option<Guard> {
-        let (left, right, relation) = match &**term {
-            Subterm::Prim(Prim::NatLt(left, right)) => (left, right, Relation::Lt),
-            Subterm::Prim(Prim::NatLte(left, right)) => (left, right, Relation::Lte),
-            Subterm::Prim(Prim::NatGt(left, right)) => (left, right, Relation::Gt),
-            Subterm::Prim(Prim::NatGte(left, right)) => (left, right, Relation::Gte),
-            Subterm::Prim(Prim::NatEql(left, right)) => (left, right, Relation::Eql),
-            Subterm::Prim(Prim::NatNeq(left, right)) => (left, right, Relation::Neq),
-            _ => return None,
-        };
-
-        let atom = |term: &Term| match &**term {
-            Subterm::Var(var) => var.as_free().cloned(),
-            _ => None,
-        };
-        let literal = |term: &Term| term.as_nat().and_then(|nat| nat.to_big_uint());
-
-        if let (Some(atom), Some(literal)) = (atom(left), literal(right)) {
-            return Some(Guard {
-                atom,
-                literal,
-                relation,
-            });
-        }
-        match (literal(left), atom(right)) {
-            (Some(literal), Some(atom)) => Some(Guard {
-                atom,
-                literal,
-                relation: relation.flipped(),
-            }),
-            _ => None,
-        }
-    }
-
-    /// Whether the arm in which this guard evaluated to `taken` proves the binder is not zero.
-    ///
-    /// Each row is the arm's fact about `atom` followed by what it takes for that fact to exclude zero: `atom >= k` excludes it only for `k >= 1`, while `atom > k` excludes it for every `k`.
-    fn establishes_nonzero(&self, taken: bool) -> bool {
-        let zero = BigUint::from(0usize);
-        let one = BigUint::from(1usize);
-
-        match (self.relation, taken) {
-            // atom > k, hence atom >= k + 1 >= 1.
-            (Relation::Gt, true) | (Relation::Lte, false) => true,
-            // atom >= k.
-            (Relation::Gte, true) | (Relation::Lt, false) => self.literal >= one,
-            // atom == k.
-            (Relation::Eql, true) | (Relation::Neq, false) => self.literal >= one,
-            // atom != k.
-            (Relation::Neq, true) | (Relation::Eql, false) => self.literal == zero,
-            // atom < k and atom <= k both admit zero.
-            (Relation::Lt, true) | (Relation::Lte, true) => false,
-            (Relation::Gt, false) | (Relation::Gte, false) => false,
-        }
-    }
-}
 
 /// Whether every recursive call path in `group` descends.
 ///
@@ -381,46 +119,6 @@ impl Member {
 
         Self { params, body }
     }
-}
-
-/// Close the call matrices transitively, or `None` if the closure outgrows [`CLOSURE_LIMIT`].
-///
-/// The closure is what makes mutual recursion work without the analysis knowing which members were declared together: `raw_comm` calls `raw_swap_step` which calls back, and only the composite path is a cycle.
-///
-/// By generator extension: every product of call matrices is a shorter product followed by its last factor, so extending each discovered element by the *generators* alone reaches the whole closure — `|closure| × |calls|` compositions, not `|closure|²`, and not `|closure|²` per round as the original fixpoint paid. The distinction was measured, on the one group that makes it matter: `/std/BigNat/add/raw_assoc`'s 88 calls close to 1,599 matrices, at fifty seconds per round-based closure, twenty-two semi-naive over all pairs, and under a second this way. The set is hashed rather than ordered because its one consumer runs an order-independent `all`.
-fn close(calls: Vec<(usize, usize, Matrix)>) -> Option<Vec<(usize, usize, Matrix)>> {
-    let mut closed: std::collections::HashSet<(usize, usize, Matrix)> =
-        std::collections::HashSet::new();
-    let mut frontier: Vec<(usize, usize, Matrix)> = Vec::new();
-    let mut generators: Vec<(usize, usize, Matrix)> = Vec::new();
-    for call in calls {
-        if closed.insert(call.clone()) {
-            frontier.push(call.clone());
-            generators.push(call);
-        }
-    }
-
-    while let Some((from, middle, first)) = frontier.pop() {
-        let mut discovered = Vec::new();
-        for (start, to, second) in &generators {
-            if middle == *start
-                && let Some(composed) = first.compose(second)
-            {
-                discovered.push((from, *to, composed));
-            }
-        }
-
-        for candidate in discovered {
-            if closed.insert(candidate.clone()) {
-                if closed.len() > CLOSURE_LIMIT {
-                    return None;
-                }
-                frontier.push(candidate);
-            }
-        }
-    }
-
-    Some(closed.into_iter().collect())
 }
 
 /// One member body's traversal: it finds the recursive calls and grades them.
