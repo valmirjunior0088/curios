@@ -413,10 +413,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
     }
 
     for item in &module.items {
-        for definition in match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        } {
+        for definition in item.definitions() {
             validate!(
                 &definition.type_,
                 &format!("definition {} type", definition.name),
@@ -518,10 +515,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
 
 pub fn validate_universes(module: &Module) -> Result<(), Error> {
     for item in &module.items {
-        for definition in match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        } {
+        for definition in item.definitions() {
             universe_context_validate(&definition.universe_context).map_err(|error| {
                 Error::UniverseInvariant(format!(
                     "definition {} has an invalid universe context: {error}",
@@ -633,10 +627,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
     }
 
     for item in &module.items {
-        for definition in match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        } {
+        for definition in item.definitions() {
             collect!(&definition.type_);
             collect!(&definition.body);
             for constraint in &definition.universe_context.constraints {

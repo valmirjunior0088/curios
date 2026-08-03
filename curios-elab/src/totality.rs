@@ -16,6 +16,10 @@ use reach::*;
 #[cfg(test)]
 mod tests;
 
+/// Which half of erasure an obligation guards — `curios-cert`'s type, re-exported rather than restated.
+///
+/// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it was two vocabularies that could drift while describing one thing. The certifier's is the one that survives, because it is the half `KernelError::NotTotal` already exports.
+pub use curios_cert::Erased;
 use {
     super::{Context, Error, is_prop, zonk},
     curios_cert::{group_totality, yields_a_sort},
@@ -25,23 +29,7 @@ use {
     },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
-/// Which half of erasure an obligation guards.
-///
-/// The two obligations run one analysis over one partiality relation, seeded twice. This says which seeding rejected, because the two failures want different advice: a type must be total or type formation may not terminate, a proof must be total or it proves anything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Erased {
-    Type,
-    Proof,
-}
 
-impl std::fmt::Display for Erased {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Erased::Type => write!(formatter, "type"),
-            Erased::Proof => write!(formatter, "proof"),
-        }
-    }
-}
 /// Every top-level definition's totality.
 ///
 /// Group rejection is only the local part. A definition is also `Partial` if it mentions [`Prim::Exit`] — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.

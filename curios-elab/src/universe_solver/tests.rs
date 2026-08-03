@@ -634,7 +634,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
     let mut verdicts = Vec::new();
     for (label, context) in &contexts {
         let elaborator = universe_context_validate(context).is_ok();
-        let kernel = curios_cert::closed(context) && curios_cert::satisfiable(&context.constraints);
+        let kernel = context.is_closed() && curios_cert::satisfiable(&context.constraints);
 
         assert_eq!(
             elaborator,

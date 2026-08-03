@@ -402,6 +402,22 @@ impl UniverseContext {
         Self::default()
     }
 
+    /// Whether this context mentions only what it declares: no constraint level naming a parameter past `parameter_count`, and none holding a metavariable.
+    ///
+    /// A context is closed. Universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still name, and elaboration is over by the time anything asks. A constraint naming a parameter past the count is not a stronger hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become — while a constraint carrying a metavariable is elaboration residue a zonked module cannot contain. Both are refused rather than interpreted.
+    ///
+    /// **A method on the data, not a judgment.** Both checkers used to spell this out, character for character, and `documentation/PERIMETER.md` recorded the pair as a second opinion known to be worth nothing. The predicate is too simple to have two genuine implementations — any "independent" rewrite would agree by construction rather than by independence — so the copies bought a diff test over a copy of themselves. It lives here for the reason [`Level::structurally_leq`] does: it decides a property of the representation by looking at it, runs no solver, and admits nothing on its own. Deciding *satisfiability* is the opposite case and stays written twice — see `curios-cert`'s `satisfiable` for why.
+    pub fn is_closed(&self) -> bool {
+        let within = |level: &Level| {
+            level.params().all(|param| param.0 < self.parameter_count)
+                && level.metas().next().is_none()
+        };
+
+        self.constraints
+            .iter()
+            .all(|constraint| within(&constraint.lower) && within(&constraint.upper))
+    }
+
     /// This context's own parameters as an argument vector: the one instance that instantiates it to itself.
     ///
     /// A declaration denotes this instance at every occurrence inside its own signature, body, and registry entries, because a group is monomorphic in its own universes. External uses instead take a fresh instance from `curios-elab`'s `UniverseSolver::instantiate`.
@@ -522,3 +538,45 @@ impl fmt::Display for UniverseError {
 }
 
 impl std::error::Error for UniverseError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leq(lower: Level, upper: Level) -> UniverseConstraint {
+        UniverseConstraint {
+            lower,
+            upper,
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }
+    }
+
+    fn param(index: usize) -> Level {
+        Level::param(UniverseParam(index))
+    }
+
+    /// Closure is about what a context may name, and it has two halves.
+    ///
+    /// Moved here with the predicate it covers. It used to live in `curios-cert`, beside a copy of the rule that has since become this method — a test of a transcription, which is what the two checkers deciding closure separately amounted to.
+    #[test]
+    fn a_context_names_only_what_it_declares() {
+        let within = UniverseContext {
+            parameter_count: 2,
+            constraints: vec![leq(param(0), param(1))],
+        };
+        assert!(within.is_closed());
+
+        let escaping = UniverseContext {
+            parameter_count: 1,
+            constraints: vec![leq(param(3), param(0))],
+        };
+        assert!(!escaping.is_closed());
+
+        // A metavariable is elaboration residue: a zonked module carries none, so a context that does is not one any checker should interpret.
+        let unsolved = UniverseContext {
+            parameter_count: 1,
+            constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
+        };
+        assert!(!unsolved.is_closed());
+    }
+}

@@ -78,10 +78,7 @@ pub(crate) fn partial_definitions(
     let mut memo = HashMap::new();
 
     for (index, item) in module.items.iter().enumerate() {
-        let definitions = match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        };
+        let definitions = item.definitions();
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
             Item::Rec(rec) if index >= checked_from => {
@@ -195,10 +192,7 @@ pub(crate) fn derived_binder_floor(module: &Module) -> usize {
     };
 
     for item in &module.items {
-        for definition in match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        } {
+        for definition in item.definitions() {
             consider(definition.type_.free_vars());
             consider(definition.body.free_vars());
         }

@@ -129,10 +129,7 @@ pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Gl
 
 /// Every top-level definition in the module, `let` and `rec` alike.
 fn definitions(module: &Module) -> impl Iterator<Item = Definition> + '_ {
-    module.items.iter().flat_map(|item| match item {
-        Item::Let(definition) => vec![definition.clone()],
-        Item::Rec(rec) => rec.definitions(),
-    })
+    module.items.iter().flat_map(Item::definitions)
 }
 
 /// Record every definition this term names.

@@ -4,7 +4,13 @@
 //!
 //! `curios-elab` decides the same question in its solver, and this is deliberately a *second* implementation rather than a copy. A transcription would inherit whatever the original gets wrong and agree for that reason, which is the failure the shared analyses already demonstrate; written from the constraint semantics instead, the two can disagree, and a disagreement is a signal.
 //!
-//! That argument incurs an obligation, and the obligation is discharged rather than assumed. A disagreement is a signal only where something can observe one, and nothing in a compile can: `universe_context_validate` refuses during elaboration, so a context it rejects never becomes part of a module, and these two functions are asked only about contexts it has already passed — for every program in the corpus. `curios-elab`'s `universe_solver::tests::both_checkers_decide_universe_context_validity_alike` therefore puts the two decisions to each other directly, which is the only place this second opinion is worth anything. The unsound direction is *this* side being the more permissive of the two, because the kernel assumes a context while checking under it. One caveat the argument above should not claim for itself: [`closed`] is a transcription of the elaborator's own closure test, and only [`satisfiable`] is written independently.
+//! That argument incurs an obligation, and the obligation is discharged rather than assumed. A disagreement is a signal only where something can observe one, and nothing in a compile can: `universe_context_validate` refuses during elaboration, so a context it rejects never becomes part of a module, and this function is asked only about contexts it has already passed — for every program in the corpus. `curios-elab`'s `universe_solver::tests::both_checkers_decide_universe_context_validity_alike` therefore puts the two decisions to each other directly, which is the only place this second opinion is worth anything. The unsound direction is *this* side being the more permissive of the two, because the kernel assumes a context while checking under it.
+//!
+//! # The closure half is not here, and that is the correction
+//!
+//! Deciding whether a context is *closed* used to sit beside this as a second `pub fn`, and it was a character-for-character transcription of the elaborator's own test — a second opinion known to be worth nothing, which `documentation/PERIMETER.md` recorded as such. Rewriting it independently was the proposed remedy and does not survive inspection: the predicate is "every parameter index is below the declared count and no level holds a metavariable", which has essentially one implementation, so any rewrite would agree by construction rather than by independence. It is now [`UniverseContext::is_closed`], decided once on the data it is about.
+//!
+//! Satisfiability is the opposite case and stays written twice, because here there is real algorithmic freedom for the two to differ in: this is a difference-constraint search with backtracking, and the elaborator's is a run of its solver. That is the line — a property of the data is read once; a question that needs a procedure is answered twice.
 //!
 //! # The decision
 //!
@@ -17,24 +23,7 @@
 #[cfg(test)]
 mod tests;
 
-use curios_core::{Level, LevelHead, UniverseConstraint, UniverseContext};
-
-/// Whether a context mentions only what it declares.
-///
-/// A context is closed: universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still name, and elaboration is over by the time one reaches this crate. A constraint naming a parameter past `parameter_count` is not a stronger hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become — while a constraint carrying a metavariable is elaboration residue that a zonked module cannot contain. Both are refused rather than interpreted.
-pub fn closed(context: &UniverseContext) -> bool {
-    let within = |level: &Level| {
-        level
-            .params()
-            .all(|param| param.0 < context.parameter_count)
-            && level.metas().next().is_none()
-    };
-
-    context
-        .constraints
-        .iter()
-        .all(|constraint| within(&constraint.lower) && within(&constraint.upper))
-}
+use curios_core::{Level, LevelHead, UniverseConstraint};
 
 /// Search nodes this decision will visit before giving up.
 ///

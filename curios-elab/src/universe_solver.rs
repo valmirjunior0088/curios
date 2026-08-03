@@ -1662,18 +1662,13 @@ impl UniverseSolver {
 /// A context is always closed. Universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a context could still reference.
 ///
 /// A free function on the solver side rather than a method on [`UniverseContext`]: deciding satisfiability is a judgment, and it runs a solver. The context itself is data and knows nothing about how it is checked.
+///
+/// *Closure* is the other case, and it used to be spelled out here as well as in `curios-cert` — two identical loops, which is a second opinion worth nothing about a predicate too simple to have two implementations. It is [`UniverseContext::is_closed`] now, decided once on the data, which is the line this function's own note draws and did not apply to both halves.
 pub(crate) fn universe_context_validate(context: &UniverseContext) -> Result<(), UniverseError> {
-    for constraint in &context.constraints {
-        let valid = |level: &Level| {
-            level
-                .params()
-                .all(|param| param.0 < context.parameter_count)
-                && level.metas().next().is_none()
-        };
-        if !valid(&constraint.lower) || !valid(&constraint.upper) {
-            return Err(UniverseError::EscapingLevel);
-        }
+    if !context.is_closed() {
+        return Err(UniverseError::EscapingLevel);
     }
+
     let mut solver = UniverseSolver::new(0);
     for constraint in &context.constraints {
         solver.add_constraint(constraint.clone())?;

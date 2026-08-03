@@ -15,7 +15,7 @@
 use {
     super::{
         Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
-        check_induct_decl, check_positions, check_rec_group, check_struct_decl, closed,
+        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
         derived_binder_floor, partial_definitions, positivity_vectors, satisfiable,
     },
     curios_core::{
@@ -271,10 +271,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
         }
     }
     for item in &module.items {
-        for definition in match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        } {
+        for definition in item.definitions() {
             if let Some(error) = universe_verdict(&definition.universe_context) {
                 verdicts.push(Verdict {
                     name: Some(definition.name.clone()),
@@ -303,10 +300,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, checked_from: usize) -> Ve
     }
     // An item's own terms are walked, so a `Metavar` node in one is refused where a judgment meets it. A level is not: the walk types `Type(?u)` without objecting, so the same boundary decides it here.
     for item in &module.items {
-        for definition in match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
-        } {
+        for definition in item.definitions() {
             let count = definition.universe_context.parameter_count;
             if let Some(error) = universe_residue(&definition.type_)
                 .or_else(|| universe_residue(&definition.body))
@@ -509,7 +503,7 @@ mod tests;
 ///
 /// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
 fn universe_verdict(context: &UniverseContext) -> Option<KernelError> {
-    if !closed(context) {
+    if !context.is_closed() {
         return Some(KernelError::UnclosedUniverses);
     }
     if !satisfiable(&context.constraints) {

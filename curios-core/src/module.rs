@@ -267,6 +267,18 @@ impl Item {
                 .collect(),
         }
     }
+
+    /// The definitions this top-level item declares, in the same order as [`Item::declared_names`] — one for a `let`, one per member for a `rec`.
+    ///
+    /// The fan-out this replaces was written out at eight sites across three crates, which is eight places a new `Item` variant could be missed. It belongs here beside `declared_names` for the same reason that one does: what an item declares is the item's own question.
+    ///
+    /// Owned rather than borrowed, because a `rec` member's [`Definition`] is *materialized* from the group rather than stored — there is nothing to hand a reference to.
+    pub fn definitions(&self) -> Vec<Definition> {
+        match self {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        }
+    }
 }
 
 /// The whole program as a *flat* list of top-level `items`, the entrypoint `body`, and its optional `type_` annotation.
