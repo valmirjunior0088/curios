@@ -1076,9 +1076,13 @@ impl Context {
     }
 
     /// Reapply a frozen frame inside a fresh `with_frame`, restoring the equalities the parked problem's origin saw.
+    ///
+    /// Only what is not already live is reapplied: an intra-item retry runs while the origin's outer binders are still in scope, and re-assuming a live identity would double it in Γ — a metavariable born under the doubled telescope carries a non-linear identity spine (`?m[V, m, V, m, …]`) that pattern inversion can never invert, leaving its goals parked forever. Identities are unique mints, so a name already assumed *is* the frozen binder and skipping it loses nothing.
     pub(crate) fn restore_frame(&mut self, frame: &FrozenFrame) {
         for (name, type_) in &frame.assumptions {
-            self.assume(name, type_);
+            if self.assumption(name).is_none() {
+                self.assume(name, type_);
+            }
         }
 
         for (name, entry) in &frame.definitions {
@@ -1155,7 +1159,7 @@ impl Context {
         })
     }
 
-    fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.solutions.set_parking_suppressed(true);
         let result = f(self);
         self.solutions.set_parking_suppressed(previous);

@@ -193,74 +193,9 @@ pub(super) fn elaborate_apply(
         return Err(Error::too_many_witness_args(witness_slots, used.len()));
     }
 
-    // Materialize the saturated argument vector, threading the dependent substitution so each inserted implicit metavariable is born at its binder's *instantiated* type. The walk below re-checks those metavariables idempotently (`elaborate_metavar` re-checks the recorded type). A missing *witness* slot is not filled here at all: its goal must be typed at a domain built from elaborated spellings, so the checking walk below mints it on arrival — this walk substitutes a fresh unassumed variable instead, which is sound because a witness binder is anonymous and no later domain can name it, and loud (an unbound-variable error) if that invariant ever breaks.
-    //
-    // A *written* hidden argument is rebuilt before it opens the telescope: substituted raw, a reference to a universe-polymorphic definition stays a bare `Var` inside every later domain, where the reducer's polymorphic gate leaves it inert — an implicit metavariable born at such a domain then records a spelling conversion cannot connect to the rebuilt one. The eager check applies only while every preceding substituted term is itself rebuilt or compiler-born (a raw explicit argument in the prefix would put raw spellings in the domain being checked against) and only to synthesizable forms — an intro form keeps its postponement path in the walk below.
-    let mut full_args = Vec::with_capacity(ft.plicities.len());
-    let mut deferred_goals: Vec<usize> = Vec::new();
-    {
-        let mut tele = ft.telescope.clone();
-        let mut prefix_rebuilt = true;
-        for plicity in &ft.plicities {
-            let Telescope::Cons(ty, rest) = tele else {
-                unreachable!("plicities parallel the telescope");
-            };
-            let arg = match plicity {
-                Plicity::Explicit => {
-                    prefix_rebuilt = false;
-                    plain.pop_front().expect("arity checked above")
-                }
-                Plicity::Implicit | Plicity::Witness => {
-                    let queue = match plicity {
-                        Plicity::Implicit => &mut marked,
-                        Plicity::Witness => &mut used,
-                        Plicity::Explicit => unreachable!("matched above"),
-                    };
-                    match queue.pop_front() {
-                        Some(arg) => {
-                            let intro_form = matches!(
-                                &*arg,
-                                Subterm::Func(_) | Subterm::Tuple(_) | Subterm::Prim(Prim::Lst(..))
-                            );
-                            if prefix_rebuilt && !intro_form {
-                                check(context, &arg, ty.clone())?
-                            } else {
-                                prefix_rebuilt = false;
-                                arg
-                            }
-                        }
-                        None => match plicity {
-                            Plicity::Implicit => insert_auto_argument(
-                                context,
-                                *plicity,
-                                &ty,
-                                rest.first_hint(),
-                                &func_label,
-                                term,
-                            )?,
-                            Plicity::Witness => {
-                                deferred_goals.push(full_args.len());
-                                Term::free_var(&context.fresh(rest.first_hint()))
-                            }
-                            Plicity::Explicit => unreachable!("matched above"),
-                        },
-                    }
-                }
-            };
-            tele = rest.open(&[&arg]);
-            full_args.push(arg);
-        }
-    }
-    let params = &full_args;
-
-    // Result-directed argument order. An introduction form (tuple, lambda) is checked-only: it can't be elaborated against a parameter type that reduces to a bare, unsolved metavar — there is no structure to drive it. In `Check` mode we postpone exactly those arguments, unify the application's result type against `expected` (which pins the metavars — both those a sibling argument would witness and phantom ones the expected type alone carries), then re-check the postponed arguments against their now-refined types. Synthesizable arguments (`Var`/`Apply`/`Proj`/literals) are never postponed: they run first and feed that very unification, so this only reorders the checked-only forms and is otherwise byte-for-byte the previous left-to-right walk. If the result unification fails to pin a postponed argument's type, the re-check fails with the same error as before — no new acceptance, graceful degradation.
     let checking = matches!(mode, Mode::Check(_));
 
-    // The metavars the result type carries — exactly the ones `expect(output, expected)` can pin. A continuation lambda whose codomain still mentions one of these is postponed (see `blocked_on_metavar`) so its body is checked only after that unification refines the codomain. Opening over the raw args is pure substitution (no birth/solve), so this is just an early read of the result type.
-    let arg_refs = params.iter().collect::<Vec<&Term>>();
-    let result_metavars = ft.telescope.clone().open(&arg_refs).metavars();
-
-    // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground we fall back to the eager (current) behavior.
+    // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground the argument checks eagerly.
     let expected_ground = match &mode {
         Mode::Check(expected) => expected
             .metavars()
@@ -269,99 +204,135 @@ pub(super) fn elaborate_apply(
         Mode::Infer => false,
     };
 
-    // The telescope is opened with the *rebuilt* argument at every eager slot, so later entry types and the output carry rebuilt spellings only — a lowered copy spliced into the output would smuggle a birthed hole's bare node past its rebuild (and a lowered term toward the reducer). A postponed intro form stays lowered for now; its holes are unbirthed, and its rebuilt form lands after the output `expect` pins its metas.
-
-    // Walk the telescope, checking each argument against its (dependent) domain and opening the rest with the elaborated form. A checked-only intro form blocked on a metavar is postponed — its slot keeps the raw term for now — but the moment a *later* synthesizable argument grounds the metavar it was waiting on (e.g. `subst`'s `p : Eq(x, y)` grounds the motive's domain), it is re-checked and the remaining telescope re-opened through its elaborated form. Otherwise a sibling whose type mentions it (`subst`'s `v : P x`) or the result (`P y`) would reduce through a raw term whose un-inserted implicits (like `Eq`'s `@A`) panic the reducer. Arguments still genuinely blocked at the end (a continuation awaiting a codomain metavar) are settled after the result `expect`, as before.
+    // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands — which subsumes the retired clear loop, since a sibling's turnaround retries the parked check before any later slot opens through it. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus (fact F1) and merely safe.
     let original = ft.telescope.clone();
-    let mut elaborated: Vec<Term> = Vec::with_capacity(params.len());
-    let mut postponed: Vec<usize> = Vec::new();
+    let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities.len());
+    // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
+    let mut pendings: Vec<(usize, MetaId, Term)> = Vec::new();
     let mut tele = original.clone();
-    let mut index = 0;
-    let mut output = loop {
-        let (ty, rest) = match tele {
-            Telescope::Done(body) => break *body,
-            Telescope::Cons(ty, rest) => (ty, rest),
+    for plicity in &ft.plicities {
+        let Telescope::Cons(ty, rest) = tele else {
+            unreachable!("plicities parallel the telescope");
         };
-        // A deferred witness slot is minted here, where `ty` was opened through the elaborated prefix, so the goal is typed at rebuilt spellings only (the walk-1 placeholder is discarded — this metavar is the slot's argument).
-        let term = if deferred_goals.contains(&index) {
-            let provenance = WitnessOrigin {
-                func: func_label.clone(),
-                binder: binder_name(rest.first_hint()),
-            };
-            let (id, metavar) =
-                context.fresh_witness_metavar(ty.clone(), term.span(), provenance.clone());
-            attempt_witness_goal(context, id, &ty, provenance, term)?;
-            metavar
-        } else if checking
-            && blocked_on_metavar(
-                context,
-                &params[index],
-                &ty,
-                &result_metavars,
-                expected_ground,
-            )?
-        {
-            postponed.push(index);
-            params[index].clone()
-        } else {
-            check(context, &params[index], ty.clone())?
+        let written = match plicity {
+            Plicity::Explicit => Some(plain.pop_front().expect("arity checked above")),
+            Plicity::Implicit => marked.pop_front(),
+            Plicity::Witness => used.pop_front(),
         };
-        elaborated.push(term);
-
-        // Re-check any postponed argument whose block this slot just cleared.
-        let mut resolved = false;
-        let mut cursor = 0;
-        while cursor < postponed.len() {
-            let slot = postponed[cursor];
-            let slot_ty = original
-                .clone()
-                .nth(slot, |k| elaborated[k].clone())
-                .expect("postponed slot is within the telescope");
-            if blocked_on_metavar(
-                context,
-                &params[slot],
-                &slot_ty,
-                &result_metavars,
-                expected_ground,
-            )? {
-                cursor += 1;
-            } else {
-                elaborated[slot] = check(context, &params[slot], slot_ty)?;
-                postponed.remove(cursor);
-                resolved = true;
+        let arg = match written {
+            Some(written) => {
+                let blocked = checking
+                    && !context.parking_suppressed()
+                    && matches!(
+                        &*written,
+                        Subterm::Func(_) | Subterm::Tuple(_) | Subterm::Prim(Prim::Lst(..))
+                    )
+                    && {
+                        let result_metavars = result_metavars_from(context, &rest);
+                        blocked_on_metavar(
+                            context,
+                            &written,
+                            &ty,
+                            &result_metavars,
+                            expected_ground,
+                        )?
+                    };
+                if blocked {
+                    let (placeholder, stand_in) =
+                        context.fresh_placeholder(ty.clone(), written.span());
+                    context.park(
+                        ParkedWork::Checking {
+                            term: written.clone(),
+                            expected: ty.clone(),
+                            placeholder,
+                        },
+                        written.clone(),
+                    );
+                    pendings.push((elaborated.len(), placeholder, written));
+                    stand_in
+                } else {
+                    check(context, &written, ty.clone())?
+                }
             }
-        }
-
-        // Re-open from the top through the (possibly updated) prefix so later slot types carry the elaborated forms; otherwise just advance.
-        tele = match resolved {
-            false => rest.open(&[&elaborated[index]]),
-            true => original.clone().open_params(&elaborated),
+            None => {
+                insert_auto_argument(context, *plicity, &ty, rest.first_hint(), &func_label, term)?
+            }
         };
-        index += 1;
+        tele = rest.open(&[&arg]);
+        elaborated.push(arg);
+    }
+    let Telescope::Done(output) = tele else {
+        unreachable!("plicities parallel the telescope");
     };
+    let output = *output;
 
     if let Mode::Check(expected) = &mode {
-        // With nothing postponed the output is already built from elaborated spellings and this check is authoritative. With a slot still raw it is not: `elaborate_proj` only resolves a label projection on the *checked* form, so beta-reducing a raw lambda body through the result type can manufacture a stuck `head.label` that cannot convert against the settled `head.index` spelling (`Eq/cong((n : T) => n.field, p)`). The raw spelling still has to be substituted — reducing through it is what pins the result metavariables a postponed slot waits on — so run this as a best-effort pin, discard a non-authoritative mismatch along with any partial solutions it committed, and let the re-check below decide.
-        let mark = context.solution_mark();
-        match expect(context, term, &output, expected) {
-            Ok(()) => {}
-            Err(error) if postponed.is_empty() => return Err(error),
-            Err(_) => context.rollback_solutions(mark),
-        }
+        // The output carries any pending's placeholder, which *blocks* rather than manufacturing the raw-substitution false mismatches the retired design had to bracket against — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
+        expect(context, term, &output, expected)?;
 
-        for &slot in &postponed {
-            let slot_ty = original
-                .clone()
-                .nth(slot, |k| elaborated[k].clone())
-                .expect("postponed slot is within the telescope");
-            elaborated[slot] = check(context, &params[slot], slot_ty)?;
-        }
+        if !pendings.is_empty() {
+            // PHASE3-RAWBETA fallback, temporary and measured: a pending the wake machinery could not discharge may wait on a metavariable only the raw spelling can pin — beta-reducing the unelaborated body through the result type is the documented cycle-breaker a placeholder cannot replicate. The pin runs under *suppressed parking* inside a solution bracket: suppressed, it can neither park new work nor retry parked work, so nothing is consumed inside a bracket that may roll back — a retry fired mid-bracket would elaborate a pending whose solutions the rollback then unwinds while its lowering-minted holes stay birthed, and the force tier's second elaboration would drop their spines. Deleted (or promoted to a documented rule) once the corpus measurement decides.
+            let undischarged: Vec<(usize, Term)> = pendings
+                .iter()
+                .filter(|(_, id, _)| context.metavar_solution(*id).is_none())
+                .map(|(slot, _, raw)| (*slot, raw.clone()))
+                .collect();
+            if !undischarged.is_empty() {
+                let mut raw_opened = elaborated.clone();
+                for (slot, raw) in &undischarged {
+                    raw_opened[*slot] = raw.clone();
+                }
+                if let Telescope::Done(raw_output) = original.clone().open_params(&raw_opened) {
+                    let mark = context.solution_mark();
+                    let pinned = context.with_suppressed_parking(|context| {
+                        expect(context, term, &raw_output, expected)
+                    });
+                    if pinned.is_err() {
+                        context.rollback_solutions(mark);
+                    }
+                    context.retry_parked()?;
 
-        // Re-open the result through the now fully elaborated arguments, whose spellings carry label projections rebuilt positionally and implicits inserted. This is the authoritative check, and the output the caller receives.
-        if !postponed.is_empty() {
-            if let Telescope::Done(body) = original.clone().open_params(&elaborated) {
-                output = *body;
+                    // TEMP PHASE3 measurement: log every firing and how many pendings it discharged.
+                    let discharged = undischarged
+                        .iter()
+                        .filter(|(slot, _)| {
+                            pendings.iter().any(|(s, id, _)| {
+                                s == slot && context.metavar_solution(*id).is_some()
+                            })
+                        })
+                        .count();
+                    {
+                        use std::io::Write;
+                        if let Ok(mut f) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open("/tmp/claude-1000/-var-home-valmirpretto-Workspace-curios/5dd7d59b-fd3f-419b-813e-b6157632180a/scratchpad/rawbeta.log")
+                        {
+                            let _ = writeln!(
+                                f,
+                                "fired undischarged={} discharged={}",
+                                undischarged.len(),
+                                discharged
+                            );
+                        }
+                    }
+                }
             }
+
+            // The force tier — the retired settle, kept: a pending still undischarged after every pin is checked now, under whatever the turnarounds landed. A lambda whose domain only its own body can ground is grounded by that body here, exactly as the settle once grounded it; the placeholder takes the checked term, so no pending outlives its apply undischarged — which is also what keeps the fallback bracket above safe, since no foreign obligation can be consumed inside it. The parked copy of the obligation reconciles against this solution when its retry fires.
+            for (slot, placeholder, written) in &pendings {
+                if context.metavar_solution(*placeholder).is_none() {
+                    let slot_ty = original
+                        .clone()
+                        .nth(*slot, |k| elaborated[k].clone())
+                        .expect("pending slot is within the telescope");
+                    let checked = check(context, written, slot_ty)?;
+                    context.solve_metavar(*placeholder, checked.clone());
+                    elaborated[*slot] = checked;
+                }
+            }
+
+            // The authoritative turnaround, through fully settled arguments.
             expect(context, term, &output, expected)?;
         }
     }
@@ -373,52 +344,23 @@ pub(super) fn elaborate_apply(
     ))
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, or a lambda whose expected *domain*, reduces to one. (A lambda only needs its domain known: the body, which may project the parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `Lst _` — to be known.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
-pub(super) fn blocked_on_metavar(
+/// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.
+fn result_metavars_from(
     context: &mut Context,
-    arg: &Term,
-    ty: &Term,
-    result_metavars: &BTreeSet<MetaId>,
-    expected_ground: bool,
-) -> Result<bool, Error> {
-    let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_list = matches!(&**arg, Subterm::Prim(Prim::Lst(..)));
-    let is_tuple = matches!(&**arg, Subterm::Tuple(_));
-    if !is_lambda && !is_list && !is_tuple {
-        return Ok(false);
-    }
-    let reduced = reduce_with(context, ty)?;
-    Ok(match &*reduced {
-        // A tuple/list/lambda whose whole expected type is an unsolved metavar.
-        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
-        Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => match telescope {
-            Telescope::Cons(domain, _) => {
-                // A lambda whose expected *domain* is an unsolved metavar: its body may need the domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
-                let domain_blocked = match &*reduce_with(context, domain)? {
-                    Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
-                    _ => false,
-                };
-                // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
-                domain_blocked
-                    || (expected_ground
-                        && reduced.metavars().iter().any(|id| {
-                            result_metavars.contains(id) && context.metavar_solution(*id).is_none()
-                        }))
+    rest: &Scope<One, Telescope<Term>>,
+) -> BTreeSet<MetaId> {
+    let mut tele = rest
+        .clone()
+        .open(&[&Term::free_var(&context.fresh(rest.first_hint()))]);
+    loop {
+        match tele {
+            Telescope::Done(body) => return body.metavars(),
+            Telescope::Cons(_, next) => {
+                tele = next
+                    .clone()
+                    .open(&[&Term::free_var(&context.fresh(next.first_hint()))]);
             }
-            Telescope::Done(_) => false,
-        },
-        _ => false,
-    })
-}
-
-/// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its solution is itself transitively ground. `metavar_solution` only sees one level, and a solution can still embed unsolved metavars, so `expected_ground` needs this transitive view to be sure the turnaround will actually pin a result metavar rather than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
-pub(super) fn transitively_ground(context: &Context, id: MetaId) -> bool {
-    match context.metavar_solution(id) {
-        None => false,
-        Some(solution) => solution
-            .metavars()
-            .iter()
-            .all(|&inner| transitively_ground(context, inner)),
+        }
     }
 }
 

@@ -27,15 +27,15 @@ mod tests;
 
 use {
     super::{
-        Context, ElabProbe, ElaborationStamp, Error, ParkedWork, attempt_witness_goal, check,
-        expect, reduce_with, sort_term,
+        Context, ElabProbe, ElaborationStamp, Error, ParkedWork, attempt_witness_goal,
+        blocked_on_metavar, check, expect, reduce_with, sort_term, transitively_ground,
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
     curios_core::{
         Apply, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix, Let, MetaId,
-        Metavar, MetavarOrigin, Nat, NumLit, Prim, Proj, Rec, Struct, StructDecl, StructEntry,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, WitnessOrigin,
-        instantiate_universe_levels_scoped,
+        Metavar, MetavarOrigin, Nat, NumLit, One, Prim, Proj, Rec, Scope, Struct, StructDecl,
+        StructEntry, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
+        WitnessOrigin, instantiate_universe_levels_scoped,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,

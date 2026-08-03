@@ -3,10 +3,11 @@ mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
-    Apply, Field, Free, Func, Global, Level, Many, MetaId, Prim, PrimHead, Proj, ReduceError,
-    Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+    Apply, Field, Free, Func, FuncType, Global, Level, Many, MetaId, Metavar, Prim, PrimHead, Proj,
+    ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
     UniverseRole,
 };
+use std::collections::BTreeSet;
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering.
 pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
@@ -147,6 +148,55 @@ pub(crate) fn expect(
             }
             context.retry_parked()
         }
+    }
+}
+
+/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, or a lambda whose expected *domain*, reduces to one. (A lambda only needs its domain known: the body, which may project the parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `Lst _` — to be known.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
+pub(crate) fn blocked_on_metavar(
+    context: &mut Context,
+    arg: &Term,
+    ty: &Term,
+    result_metavars: &BTreeSet<MetaId>,
+    expected_ground: bool,
+) -> Result<bool, Error> {
+    let is_lambda = matches!(&**arg, Subterm::Func(_));
+    let is_list = matches!(&**arg, Subterm::Prim(Prim::Lst(..)));
+    let is_tuple = matches!(&**arg, Subterm::Tuple(_));
+    if !is_lambda && !is_list && !is_tuple {
+        return Ok(false);
+    }
+    let reduced = reduce_with(context, ty)?;
+    Ok(match &*reduced {
+        // A tuple/list/lambda whose whole expected type is an unsolved metavar.
+        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
+        Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => match telescope {
+            Telescope::Cons(domain, _) => {
+                // A lambda whose expected *domain* is an unsolved metavar: its body may need the domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
+                let domain_blocked = match &*reduce_with(context, domain)? {
+                    Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
+                    _ => false,
+                };
+                // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
+                domain_blocked
+                    || (expected_ground
+                        && reduced.metavars().iter().any(|id| {
+                            result_metavars.contains(id) && context.metavar_solution(*id).is_none()
+                        }))
+            }
+            Telescope::Done(_) => false,
+        },
+        _ => false,
+    })
+}
+
+/// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its solution is itself transitively ground. `metavar_solution` only sees one level, and a solution can still embed unsolved metavars, so `expected_ground` needs this transitive view to be sure the turnaround will actually pin a result metavar rather than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
+pub(crate) fn transitively_ground(context: &Context, id: MetaId) -> bool {
+    match context.metavar_solution(id) {
+        None => false,
+        Some(solution) => solution
+            .metavars()
+            .iter()
+            .all(|&inner| transitively_ground(context, inner)),
     }
 }
 
@@ -307,10 +357,16 @@ fn retry_checking(
     origin: Term,
     frame: super::FrozenFrame,
 ) -> Result<(), Error> {
+    // Discharged already — by the force tier at its own apply (the same obligation's check, run in the richer live context), or by a unification commitment downstream checking will judge. Re-running the check here would re-elaborate a term whose lowering-minted holes are already birthed, and the rebuilt occurrence would drop their spines.
+    if context.metavar_solution(placeholder).is_some() {
+        return Ok(());
+    }
+
     let rebuilt = context.with_frame(|context| {
         context.restore_frame(&frame);
 
-        if matches!(&*reduce_with(context, &expected)?, Subterm::Metavar(_)) {
+        // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly, matching the retired settle's behavior.
+        if blocked_on_metavar(context, &term, &expected, &BTreeSet::new(), false)? {
             return Ok(None);
         }
 
