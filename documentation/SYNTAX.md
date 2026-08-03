@@ -848,13 +848,13 @@ A `foreign` declaration introduces a value implemented by the embedder. Its decl
 
 ```crs
 foreign random : Nat;
-foreign frobnicate : (Nat, Bin) -> Nat;
-pub foreign log : (Bin) -> Nat;
+foreign frobnicate : (Nat, Bytes) -> Nat;
+pub foreign log : (Bytes) -> Nat;
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Bin`, `Handle`, and recursively `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
+The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
 
-Wire `Bin` maps to object-language `Bytes`. `Byte` and `Bits` are not distinct wire types. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
+`Byte` and `Bits` are not distinct wire types. `Lst` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `Lst(Lst(T))` is rejected. `Lst` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
 
 ## Equality and proofs
 

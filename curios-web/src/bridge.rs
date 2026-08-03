@@ -1,4 +1,4 @@
-//! The wire-ABI `Bin` bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings through its exports. It declares the compiler's `array (mut i8)` payload shape locally — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
+//! The wire-ABI `Bytes` bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings through its exports. It declares the compiler's `array (mut i8)` payload shape locally — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
 
 use curios_wasm::{
     ArrayType, BlockType, CompType, Export, Expr, FieldType, Func, FuncName, FuncType, HeapType,
@@ -75,54 +75,54 @@ fn set(local: &LocalName) -> Instr {
     }
 }
 
-/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — the exported memory plus `bin_load`/`bin_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte.
+/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — the exported memory plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte.
 pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
-    let bin = TypeName::from("bytes");
+    let bytes = TypeName::from("bytes");
 
-    module.add_type(bin.clone(), bytes_sub_type());
+    module.add_type(bytes.clone(), bytes_sub_type());
 
-    let bin_ref = ValType::Ref(RefType {
+    let bytes_ref = ValType::Ref(RefType {
         is_nullable: false,
-        heap_type: HeapType::Concrete(bin.clone()),
+        heap_type: HeapType::Concrete(bytes.clone()),
     });
 
     let i32_val = ValType::Num(NumType::I32);
 
     let accessors: [Accessor; 4] = [
         (
-            "bin_len",
-            vec![("b", bin_ref.clone())],
+            "bytes_len",
+            vec![("b", bytes_ref.clone())],
             vec![i32_val.clone()],
             Instr::ArrayLen,
         ),
         (
-            "bin_get",
-            vec![("b", bin_ref.clone()), ("i", i32_val.clone())],
+            "bytes_get",
+            vec![("b", bytes_ref.clone()), ("i", i32_val.clone())],
             vec![i32_val.clone()],
             Instr::ArrayGetU {
-                type_name: bin.clone(),
+                type_name: bytes.clone(),
             },
         ),
         (
-            "bin_new",
+            "bytes_new",
             vec![("n", i32_val.clone())],
-            vec![bin_ref.clone()],
+            vec![bytes_ref.clone()],
             Instr::ArrayNewDefault {
-                type_name: bin.clone(),
+                type_name: bytes.clone(),
             },
         ),
         (
-            "bin_set",
+            "bytes_set",
             vec![
-                ("b", bin_ref.clone()),
+                ("b", bytes_ref.clone()),
                 ("i", i32_val.clone()),
                 ("v", i32_val.clone()),
             ],
             vec![],
             Instr::ArraySet {
-                type_name: bin.clone(),
+                type_name: bytes.clone(),
             },
         ),
     ];
@@ -182,21 +182,21 @@ pub(crate) fn bridge_module() -> Module {
     let len = LocalName::from("len");
     let out = LocalName::from("out");
 
-    let bin_nullable = ValType::Ref(RefType {
+    let bytes_nullable = ValType::Ref(RefType {
         is_nullable: true,
-        heap_type: HeapType::Concrete(bin.clone()),
+        heap_type: HeapType::Concrete(bytes.clone()),
     });
 
-    // bin_load(b): memory[0..len] = b[0..len]; returns len. The caller grows the memory to at least len bytes first.
-    let load_name = FuncName::from("bin_load");
+    // bytes_load(b): memory[0..len] = b[0..len]; returns len. The caller grows the memory to at least len bytes first.
+    let load_name = FuncName::from("bytes_load");
     module.add_type(
-        TypeName::from("bin_load"),
-        func_type(vec![bin_ref.clone()], vec![i32_val.clone()]),
+        TypeName::from("bytes_load"),
+        func_type(vec![bytes_ref.clone()], vec![i32_val.clone()]),
     );
     module.add_func(
         load_name.clone(),
         Func {
-            type_name: TypeName::from("bin_load"),
+            type_name: TypeName::from("bytes_load"),
             params: vec![b.clone()],
             locals: vec![(i.clone(), i32_val.clone()), (len.clone(), i32_val.clone())],
             expr: Expr::from([
@@ -211,7 +211,7 @@ pub(crate) fn bridge_module() -> Module {
                         get(&b),
                         get(&i),
                         Instr::ArrayGetU {
-                            type_name: bin.clone(),
+                            type_name: bytes.clone(),
                         },
                         Instr::I32Store8,
                     ],
@@ -220,24 +220,24 @@ pub(crate) fn bridge_module() -> Module {
             ]),
         },
     );
-    module.add_export("bin_load", Export::Func(load_name));
+    module.add_export("bytes_load", Export::Func(load_name));
 
-    // bin_store(len): returns a fresh bytes array filled from memory[0..len]. The caller wrote the bytes into the memory first.
-    let store_name = FuncName::from("bin_store");
+    // bytes_store(len): returns a fresh bytes array filled from memory[0..len]. The caller wrote the bytes into the memory first.
+    let store_name = FuncName::from("bytes_store");
     module.add_type(
-        TypeName::from("bin_store"),
-        func_type(vec![i32_val.clone()], vec![bin_ref.clone()]),
+        TypeName::from("bytes_store"),
+        func_type(vec![i32_val.clone()], vec![bytes_ref.clone()]),
     );
     module.add_func(
         store_name.clone(),
         Func {
-            type_name: TypeName::from("bin_store"),
+            type_name: TypeName::from("bytes_store"),
             params: vec![len.clone()],
-            locals: vec![(i.clone(), i32_val.clone()), (out.clone(), bin_nullable)],
+            locals: vec![(i.clone(), i32_val.clone()), (out.clone(), bytes_nullable)],
             expr: Expr::from([
                 get(&len),
                 Instr::ArrayNewDefault {
-                    type_name: bin.clone(),
+                    type_name: bytes.clone(),
                 },
                 set(&out),
                 counted_loop(
@@ -249,7 +249,7 @@ pub(crate) fn bridge_module() -> Module {
                         get(&i),
                         Instr::I32Load8U,
                         Instr::ArraySet {
-                            type_name: bin.clone(),
+                            type_name: bytes.clone(),
                         },
                     ],
                 ),
@@ -258,7 +258,7 @@ pub(crate) fn bridge_module() -> Module {
             ]),
         },
     );
-    module.add_export("bin_store", Export::Func(store_name));
+    module.add_export("bytes_store", Export::Func(store_name));
 
     module
 }

@@ -67,7 +67,7 @@ pub struct TopLet {
     pub signature: LetSignature,
 }
 
-/// A `foreign` declaration: a name and a wire signature, bound to a host-provided implementation at link time rather than a Curios definition. `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bin) -> Nat`) — a closed grammar of the six wire shapes, not an ordinary Curios type — so there is no name resolution to do and no `= body` form.
+/// A `foreign` declaration: a name and a wire signature, bound to a host-provided implementation at link time rather than a Curios definition. `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bytes) -> Nat`) — a closed grammar of the six wire types, not an ordinary Curios type — so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
     pub vis_pub: bool,

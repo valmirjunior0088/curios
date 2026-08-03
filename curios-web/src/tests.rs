@@ -51,12 +51,12 @@ fn accessors_are_exported_with_their_shapes() {
     let module = crate::bridge::bridge_module();
 
     for (name, inputs, outputs) in [
-        ("bin_len", 1, 1),
-        ("bin_get", 2, 1),
-        ("bin_new", 1, 1),
-        ("bin_set", 3, 0),
-        ("bin_load", 1, 1),
-        ("bin_store", 1, 1),
+        ("bytes_len", 1, 1),
+        ("bytes_get", 2, 1),
+        ("bytes_new", 1, 1),
+        ("bytes_set", 3, 0),
+        ("bytes_load", 1, 1),
+        ("bytes_store", 1, 1),
     ] {
         let export = module
             .exports()
@@ -86,37 +86,37 @@ fn bridge_accessors_roundtrip() {
     let mut store = Store::new(shared_engine(), ());
     let bridge = instantiate(&mut store, &crate::bridge_bytes());
 
-    let bin_new = export(&mut store, &bridge, "bin_new");
-    let bin_set = export(&mut store, &bridge, "bin_set");
-    let bin_get = export(&mut store, &bridge, "bin_get");
-    let bin_len = export(&mut store, &bridge, "bin_len");
+    let bytes_new = export(&mut store, &bridge, "bytes_new");
+    let bytes_set = export(&mut store, &bridge, "bytes_set");
+    let bytes_get = export(&mut store, &bridge, "bytes_get");
+    let bytes_len = export(&mut store, &bridge, "bytes_len");
 
-    let bin = call(&mut store, &bin_new, &[Val::I32(3)]);
+    let bin = call(&mut store, &bytes_new, &[Val::I32(3)]);
 
     for (index, value) in [7, 8, 9].into_iter().enumerate() {
-        bin_set
+        bytes_set
             .call(
                 &mut store,
                 &[bin, Val::I32(index as i32), Val::I32(value)],
                 &mut [],
             )
-            .expect("bin_set failed");
+            .expect("bytes_set failed");
     }
 
     assert_eq!(
-        call(&mut store, &bin_len, std::slice::from_ref(&bin)).unwrap_i32(),
+        call(&mut store, &bytes_len, std::slice::from_ref(&bin)).unwrap_i32(),
         3
     );
 
     for (index, value) in [7, 8, 9].into_iter().enumerate() {
         assert_eq!(
-            call(&mut store, &bin_get, &[bin, Val::I32(index as i32)]).unwrap_i32(),
+            call(&mut store, &bytes_get, &[bin, Val::I32(index as i32)]).unwrap_i32(),
             value
         );
     }
 }
 
-/// The bulk lane end to end: bytes written into the exported memory become a `bytes` array via `bin_store`, and `bin_load` copies them back out.
+/// The bulk lane end to end: bytes written into the exported memory become a `bytes` array via `bytes_store`, and `bytes_load` copies them back out.
 #[test]
 fn bulk_transfers_roundtrip_through_the_memory() {
     let mut store = Store::new(shared_engine(), ());
@@ -133,15 +133,15 @@ fn bulk_transfers_roundtrip_through_the_memory() {
         .write(&mut store, 0, payload)
         .expect("memory write failed");
 
-    let bin_store = export(&mut store, &bridge, "bin_store");
-    let bin_load = export(&mut store, &bridge, "bin_load");
-    let bin = call(&mut store, &bin_store, &[Val::I32(payload.len() as i32)]);
+    let bytes_store = export(&mut store, &bridge, "bytes_store");
+    let bytes_load = export(&mut store, &bridge, "bytes_load");
+    let bin = call(&mut store, &bytes_store, &[Val::I32(payload.len() as i32)]);
 
     memory
         .write(&mut store, 0, &vec![0; payload.len()])
         .expect("memory clear failed");
     assert_eq!(
-        call(&mut store, &bin_load, std::slice::from_ref(&bin)).unwrap_i32(),
+        call(&mut store, &bytes_load, std::slice::from_ref(&bin)).unwrap_i32(),
         payload.len() as i32
     );
 

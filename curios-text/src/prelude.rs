@@ -189,9 +189,9 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Nat => nat(),
         WireType::Int => int(),
         WireType::Bool => bool_(),
-        WireType::Bin => bin(Grain::X),
+        WireType::Bytes => bin(Grain::X),
         WireType::Handle => handle(),
-        WireType::Lst(element) => lst_of(wire_type(element)),
+        WireType::Lst(element) => lst_of(wire_type(&(*element).into())),
     }
 }
 

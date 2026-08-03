@@ -4,7 +4,7 @@ use {
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
         EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,
     },
-    curios_abi::WireType,
+    curios_abi::{WireLeaf, WireType},
     curios_base::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
@@ -246,7 +246,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ]
             }
-            LoadAs::Bin => {
+            LoadAs::Bytes => {
                 vec![curios_wasm::Instr::RefCast {
                     ref_type: curios_wasm::RefType {
                         is_nullable: false,
@@ -586,28 +586,28 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `Lst(Bin)`/`Lst(Handle)`, whose *elements* the host lifts as raw `$bytes`.
+    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `Lst(Bytes)`/`Lst(Handle)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bin | WireType::Handle => self.table().bytes_force_func(),
-            WireType::Lst(inner) => match **inner {
-                WireType::Bin | WireType::Handle => self.table().lst_bin_force_func(),
-                _ => self.table().lst_force_func(),
+            WireType::Bytes | WireType::Handle => self.table().bytes_force_func(),
+            WireType::Lst(inner) => match inner {
+                WireLeaf::Bytes | WireLeaf::Handle => self.table().lst_bytes_force_func(),
+                WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().lst_force_func(),
             },
         };
 
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
+    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `Lst(Bytes)`, whose elements the host lowered as raw `$bytes`.
     fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bin | WireType::Handle => self.table().bytes_embed_func(),
-            WireType::Lst(inner) => match **inner {
-                WireType::Bin | WireType::Handle => self.table().lst_bin_embed_func(),
-                _ => self.table().lst_embed_func(),
+            WireType::Bytes | WireType::Handle => self.table().bytes_embed_func(),
+            WireType::Lst(inner) => match inner {
+                WireLeaf::Bytes | WireLeaf::Handle => self.table().lst_bytes_embed_func(),
+                WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().lst_embed_func(),
             },
         };
 
@@ -724,17 +724,17 @@ pub(crate) enum LoadAs {
     Nat,
     Int,
     Flt,
-    Bin,
+    Bytes,
     Lst,
 }
 
-/// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), and the reference shapes cast to their rope base type (a handle is its `Bin` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
+/// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {
             WireType::Nat | WireType::Bool => LoadAs::Nat,
             WireType::Int => LoadAs::Int,
-            WireType::Bin | WireType::Handle => LoadAs::Bin,
+            WireType::Bytes | WireType::Handle => LoadAs::Bytes,
             WireType::Lst(_) => LoadAs::Lst,
         }
     }

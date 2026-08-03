@@ -199,7 +199,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux x86_64/aarch64, macOS aarch64 native binaries + wasm playground bundle, via tag-triggered GitHub Releases)
 - [x] Browser playground
-  - [x] Run harness owned by `curios-web` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
+  - [x] Run harness owned by `curios-web` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bytes` payload shape)
 - [x] Documentation
   - [x] Syntax overview, examples, and tutorial
   - [x] Full language reference

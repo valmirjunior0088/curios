@@ -2066,7 +2066,7 @@ fn foreign_declaration_populates_the_store() {
         function.signature.params,
         vec![
             ("a0".to_string(), WireType::Nat),
-            ("a1".to_string(), WireType::Bin),
+            ("a1".to_string(), WireType::Bytes),
         ]
     );
     assert_eq!(

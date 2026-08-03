@@ -31,7 +31,7 @@ use {
         TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
         WitnessField,
     },
-    curios_abi::{WireSignature, WireType},
+    curios_abi::{WireLeaf, WireSignature, WireType},
     curios_base::{
         Flt, Grain, NumOp, Plicity, Qualifier,
         parser::{

@@ -646,7 +646,7 @@ pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Ter
         false => Err(match expected {
             PrimHead::Nat => Error::not_nat_type(head_type),
             PrimHead::Bool => Error::not_bool_type(head_type),
-            PrimHead::Bin(_) => Error::not_bin_type(head_type),
+            PrimHead::Bin(grain) => Error::not_bin_type(grain, head_type),
         }),
     }
 }

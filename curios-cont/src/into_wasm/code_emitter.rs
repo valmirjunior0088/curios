@@ -998,7 +998,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 4 bytes, then OR the bytes back into an i32 -- each `$bytes/read` zero-extends its packed byte -- and reinterpret. Byte-for-byte `f32::from_le_bytes`, no host round-trip.
                 let rope = self.context.table().bin_rope();
                 let read = self.context.table().bytes_read_func();
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bytes));
                 self.emit_instr(Self::rope_get(&rope, &rope.len_field));
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 4 });
                 self.emit_instr(curios_wasm::Instr::I32Ne);
@@ -1009,7 +1009,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     else_instructions: vec![],
                 });
                 for shift in [0, 8, 16, 24] {
-                    self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
+                    self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bytes));
                     self.emit_instr(curios_wasm::Instr::I32Const { value: shift / 8 });
                     self.emit_instr(curios_wasm::Instr::Call {
                         func_name: read.clone(),
@@ -1085,7 +1085,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_unary_op(
                     &result_local,
                     bin,
-                    LoadAs::Bin,
+                    LoadAs::Bytes,
                     Self::rope_get(&rope, &rope.len_field),
                     WrapAs::I31,
                 );
@@ -1095,8 +1095,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     Grain::B => self.context.table().bits_eql_func(),
                     Grain::X => self.context.table().bytes_eql_func(),
                 };
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bin));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bytes));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bytes));
                 self.emit_instr(curios_wasm::Instr::Call { func_name: eql });
                 self.emit_instr(curios_wasm::Instr::RefI31);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
@@ -1108,7 +1108,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     Grain::B => self.context.table().bits_read_func(),
                     Grain::X => self.context.table().bytes_read_func(),
                 };
-                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bytes));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
                 self.emit_instr(curios_wasm::Instr::Call { func_name: read });
                 self.emit_instr(curios_wasm::Instr::RefI31);
@@ -1121,16 +1121,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     Grain::B => self.context.table().bits_slice_func(),
                     Grain::X => self.context.table().bytes_slice_func(),
                 };
-                self.emit_rope_slice(&result_local, bin, start, end, LoadAs::Bin, slice);
+                self.emit_rope_slice(&result_local, bin, start, end, LoadAs::Bytes, slice);
             }
             EmissionCode::BinAppend(_grain, bin, byte) => {
                 let rope = self.context.table().bin_rope();
                 let elem_instrs = self.context.load_value_instrs(byte, LoadAs::Nat);
-                self.emit_rope_append(&result_local, bin, elem_instrs, LoadAs::Bin, &rope);
+                self.emit_rope_append(&result_local, bin, elem_instrs, LoadAs::Bytes, &rope);
             }
             EmissionCode::BinConcat(_grain, operands) => {
                 let rope = self.context.table().bin_rope();
-                self.emit_rope_concat(&result_local, operands, LoadAs::Bin, &rope);
+                self.emit_rope_concat(&result_local, operands, LoadAs::Bytes, &rope);
             }
             EmissionCode::LstLen(lst) => {
                 let rope = self.context.table().lst_rope();

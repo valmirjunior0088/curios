@@ -8,7 +8,7 @@
 //! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
 //! - `$lst/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
 //!
-//! The `lst/bin` variants are the host boundary's deep forms: an `Lst(Bin)` / `Lst(Handle)` wire value carries `Bin`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
+//! The `lst/bytes` variants are the host boundary's deep forms: an `Lst(Bytes)` / `Lst(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
 
 use super::{RopeData, Table};
 
@@ -1301,8 +1301,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/bin/force (ref $rope/lst) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
-    pub(crate) fn emit_lst_bin_force_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$lst/bytes/force (ref $rope/lst) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
+    pub(crate) fn emit_lst_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
 
@@ -1735,8 +1735,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/bin/embed (ref $elems) -> (ref $rope/lst)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/lst/leaf`.
-    pub(crate) fn emit_lst_bin_embed_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$lst/bytes/embed (ref $elems) -> (ref $rope/lst)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/lst/leaf`.
+    pub(crate) fn emit_lst_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
         let lst = self.table.lst_rope();

@@ -262,10 +262,10 @@ pub(crate) struct Table<'a> {
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
     lst_force: OnceCell<curios_wasm::FuncName>,
-    lst_bin_force: OnceCell<curios_wasm::FuncName>,
+    lst_bytes_force: OnceCell<curios_wasm::FuncName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
     lst_embed: OnceCell<curios_wasm::FuncName>,
-    lst_bin_embed: OnceCell<curios_wasm::FuncName>,
+    lst_bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
     bits_slice: OnceCell<curios_wasm::FuncName>,
     lst_slice: OnceCell<curios_wasm::FuncName>,
@@ -332,10 +332,10 @@ impl<'a> Table<'a> {
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             lst_force: OnceCell::new(),
-            lst_bin_force: OnceCell::new(),
+            lst_bytes_force: OnceCell::new(),
             bytes_embed: OnceCell::new(),
             lst_embed: OnceCell::new(),
-            lst_bin_embed: OnceCell::new(),
+            lst_bytes_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
             bits_slice: OnceCell::new(),
             lst_slice: OnceCell::new(),
@@ -574,15 +574,15 @@ impl<'a> Table<'a> {
         self.lst_force.get().is_some()
     }
 
-    /// `$lst/bin/force (ref $rope/lst) -> (ref $elems)`: force an `Lst(Bin)` / `Lst(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.
-    pub(crate) fn lst_bin_force_func(&self) -> curios_wasm::FuncName {
-        self.lst_bin_force
-            .get_or_init(|| curios_wasm::FuncName::from("lst/bin/force"))
+    /// `$lst/bytes/force (ref $rope/lst) -> (ref $elems)`: force an `Lst(Bytes)` / `Lst(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.
+    pub(crate) fn lst_bytes_force_func(&self) -> curios_wasm::FuncName {
+        self.lst_bytes_force
+            .get_or_init(|| curios_wasm::FuncName::from("lst/bytes/force"))
             .clone()
     }
 
-    pub(crate) fn lst_bin_force_used(&self) -> bool {
-        self.lst_bin_force.get().is_some()
+    pub(crate) fn lst_bytes_force_used(&self) -> bool {
+        self.lst_bytes_force.get().is_some()
     }
 
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat payload into a fresh leaf on re-entry.
@@ -607,15 +607,15 @@ impl<'a> Table<'a> {
         self.lst_embed.get().is_some()
     }
 
-    /// `$lst/bin/embed (ref $elems) -> (ref $rope/lst)`: embed an `Lst(Bin)` host result *deeply* — each raw `$bytes` element into a leaf (in place; the host-built array is fresh), then the outer array.
-    pub(crate) fn lst_bin_embed_func(&self) -> curios_wasm::FuncName {
-        self.lst_bin_embed
-            .get_or_init(|| curios_wasm::FuncName::from("lst/bin/embed"))
+    /// `$lst/bytes/embed (ref $elems) -> (ref $rope/lst)`: embed an `Lst(Bytes)` host result *deeply* — each raw `$bytes` element into a leaf (in place; the host-built array is fresh), then the outer array.
+    pub(crate) fn lst_bytes_embed_func(&self) -> curios_wasm::FuncName {
+        self.lst_bytes_embed
+            .get_or_init(|| curios_wasm::FuncName::from("lst/bytes/embed"))
             .clone()
     }
 
-    pub(crate) fn lst_bin_embed_used(&self) -> bool {
-        self.lst_bin_embed.get().is_some()
+    pub(crate) fn lst_bytes_embed_used(&self) -> bool {
+        self.lst_bytes_embed.get().is_some()
     }
 
     /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
@@ -868,7 +868,7 @@ mod tests {
         assert_eq!(table.lst_read_func().as_str(), "lst/read");
         assert_eq!(table.lst_map_func().as_str(), "lst/map");
 
-        assert_eq!(table.lst_bin_force_func().as_str(), "lst/bin/force");
-        assert_eq!(table.lst_bin_embed_func().as_str(), "lst/bin/embed");
+        assert_eq!(table.lst_bytes_force_func().as_str(), "lst/bytes/force");
+        assert_eq!(table.lst_bytes_embed_func().as_str(), "lst/bytes/embed");
     }
 }

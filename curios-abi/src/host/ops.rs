@@ -4,7 +4,9 @@
 //!
 //! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `ListBytes`, `ListHandle`, `ListPoll`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent — it traps rather than returns, its guest type is the polymorphic bottom `(@A : Type) -> Nat -> A`, and it is wired directly as a trap, so it stays a hardcoded primitive outside both the store and the trait.
 
-use super::{ForeignFunction, ForeignStore, Handle, Mode, Poll, Status, WireSignature, WireType};
+use super::{
+    ForeignFunction, ForeignStore, Handle, Mode, Poll, Status, WireLeaf, WireSignature, WireType,
+};
 
 /// The one authored list of builtin host operations. Invoked with the name of a callback macro (`host_ops!(my_callback)`), it applies that callback to the whole table so every projection comes off this single source. Each row is `method [param: Slot, …] [result: Slot, …];` — the method name doubles as the wasm import name and the guest binding label, and each `Slot` is one of the closed vocabulary the `*_of!` helpers map to concrete types.
 ///
@@ -102,7 +104,7 @@ macro_rules! wire_of {
         WireType::Int
     };
     (Bytes) => {
-        WireType::Bin
+        WireType::Bytes
     };
     (Mode) => {
         WireType::Nat
@@ -111,13 +113,13 @@ macro_rules! wire_of {
         WireType::Nat
     };
     (ListBytes) => {
-        WireType::Lst(Box::new(WireType::Bin))
+        WireType::Lst(WireLeaf::Bytes)
     };
     (ListHandle) => {
-        WireType::Lst(Box::new(WireType::Handle))
+        WireType::Lst(WireLeaf::Handle)
     };
     (ListPoll) => {
-        WireType::Lst(Box::new(WireType::Nat))
+        WireType::Lst(WireLeaf::Nat)
     };
 }
 

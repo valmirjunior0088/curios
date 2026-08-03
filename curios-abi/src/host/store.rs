@@ -14,29 +14,48 @@ use std::{
     sync::Arc,
 };
 
-/// The type of one value crossing the host boundary. The whole vocabulary is six shapes; everything a host op consumes or produces is one of them.
-///
-/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `poll`'s timeout keeps the `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs. `Handle` rides the same wire shape as `Bin` (a handle is its token bytes) but stays a distinct guest type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// The element type of a wire [`WireType::Lst`] — the same vocabulary minus `Lst` itself, so a list of lists is unrepresentable rather than merely unchecked. Codegen's host-boundary force and embed steps handle exactly one level of nesting (a deep force for `Bytes`/`Handle` elements, a shallow one for scalars), and the runtime's uniform `Lst` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. This type is what makes that unwritable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+pub enum WireLeaf {
+    Nat,
+    Int,
+    Bool,
+    Bytes,
+    Handle,
+}
+
+/// The type of one value crossing the host boundary — a closed *subset of guest types*, not a vocabulary of wire shapes. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot, and a load/force/embed path. What separates them is only the guest type `curios-core`'s `wire_term` builds, which is why each variant is spelled the way its guest type is.
+///
+/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `poll`'s timeout keeps the `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
-    rkyv(
-        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator, __S::Error: rkyv::rancor::Source),
-        deserialize_bounds(__D::Error: rkyv::rancor::Source),
-        bytecheck(bounds(__C: rkyv::validation::ArchiveContext))
-    )
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum WireType {
     Nat,
     Int,
     Bool,
-    Bin,
+    Bytes,
     Handle,
-    Lst(#[cfg_attr(feature = "archive", rkyv(omit_bounds))] Box<WireType>),
+    Lst(WireLeaf),
+}
+
+// A leaf is a wire type in its own right — the widening every projection over `Lst` takes to read its element, so the five-way match lives here once instead of in each of them.
+impl From<WireLeaf> for WireType {
+    fn from(leaf: WireLeaf) -> Self {
+        match leaf {
+            WireLeaf::Nat => WireType::Nat,
+            WireLeaf::Int => WireType::Int,
+            WireLeaf::Bool => WireType::Bool,
+            WireLeaf::Bytes => WireType::Bytes,
+            WireLeaf::Handle => WireType::Handle,
+        }
+    }
 }
 
 /// The signature of one foreign function: named operands and named results. The result count fixes the guest-facing shape — `0` is the unit value, `1` is the bare result forwarded through, `2..` is a record of the named fields (the labels are load-bearing: the standard library projects `.status`, `.secs_hi`, …).

@@ -38,7 +38,7 @@ export async function run(config) {
     .exports;
 
   // Byte strings cross the boundary through the bridge's memory in one
-  // `bin_load`/`bin_store` call per string; the memory starts empty and grows
+  // `bytes_load`/`bytes_store` call per string; the memory starts empty and grows
   // here, JS-side, to fit the largest string seen so far.
   const memory = bridge.memory;
 
@@ -50,25 +50,25 @@ export async function run(config) {
     }
   };
 
-  const decodeBin = (bin) => {
-    const length = bridge.bin_len(bin);
+  const decodeBytes = (ref) => {
+    const length = bridge.bytes_len(ref);
     ensureCapacity(length);
-    bridge.bin_load(bin);
+    bridge.bytes_load(ref);
 
     return new Uint8Array(memory.buffer, 0, length).slice();
   };
 
-  const encodeBin = (bytes) => {
+  const encodeBytes = (bytes) => {
     ensureCapacity(bytes.length);
     new Uint8Array(memory.buffer).set(bytes);
 
-    return bridge.bin_store(bytes.length);
+    return bridge.bytes_store(bytes.length);
   };
 
   // A handle's wire encoding is the little-endian bytes of its token, so the
   // empty byte string decodes to 0 (stdin).
   const tokenOf = (handle) => {
-    const bytes = decodeBin(handle);
+    const bytes = decodeBytes(handle);
     let token = 0;
 
     for (let i = bytes.length - 1; i >= 0; i--) {
@@ -78,14 +78,14 @@ export async function run(config) {
     return token;
   };
 
-  const emptyBin = () => encodeBin(new Uint8Array(0));
+  const emptyBytes = () => encodeBytes(new Uint8Array(0));
 
   const output = { stdout: [], stderr: [] };
 
   const hooks = config.hooks ?? {};
 
-  const write = (handle, bin) => {
-    const bytes = decodeBin(bin);
+  const write = (handle, ref) => {
+    const bytes = decodeBytes(ref);
 
     switch (tokenOf(handle)) {
       case config.stdio.STDOUT:
@@ -107,7 +107,7 @@ export async function run(config) {
     return [config.status.OK, bytes.length];
   };
 
-  const deniedHandle = () => [config.status.PERMISSION_DENIED, emptyBin()];
+  const deniedHandle = () => [config.status.PERMISSION_DENIED, emptyBytes()];
 
   const denied = () => config.status.PERMISSION_DENIED;
 
@@ -119,7 +119,7 @@ export async function run(config) {
   // browser implementation surfaces as a `LinkError` naming the import when
   // a program calls it.
   const sysEnv = {
-    read: () => [config.status.EOF, emptyBin()],
+    read: () => [config.status.EOF, emptyBytes()],
     write: write,
     open: deniedHandle,
     lookup: deniedHandle,
@@ -164,10 +164,10 @@ export async function run(config) {
       const bytes = new Uint8Array(count);
       crypto.getRandomValues(bytes);
 
-      return encodeBin(bytes);
+      return encodeBytes(bytes);
     },
     args: unsupported("args"),
-    env: () => [config.status.NOT_FOUND, emptyBin()],
+    env: () => [config.status.NOT_FOUND, emptyBytes()],
     exit: (code) => {
       throw new ExitSignal(code);
     },

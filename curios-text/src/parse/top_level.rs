@@ -19,20 +19,34 @@ pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// One of the six wire shapes, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bin`/`Handle` are literal keywords here, and `Lst(T)` recurses on the same grammar.
+// An `Lst` element type — the wire grammar minus `Lst` itself. Splitting it out of `parse_wire_type` is what makes `Lst(Lst(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
+fn parse_wire_leaf<'a>() -> Parser<'a, WireLeaf> {
+    parse_identifier().flat_map(|name| match name {
+        "Nat" => pure(WireLeaf::Nat),
+        "Int" => pure(WireLeaf::Int),
+        "Bool" => pure(WireLeaf::Bool),
+        "Bytes" => pure(WireLeaf::Bytes),
+        "Handle" => pure(WireLeaf::Handle),
+        other => fail(format!(
+            "expected an Lst element type (Nat, Int, Bool, Bytes, or Handle — Lst does not nest), found '{other}'"
+        )),
+    })
+}
+
+// One of the six wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bytes`/`Handle` are literal keywords here, and `Lst(T)` takes a leaf.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     parse_identifier().flat_map(|name| match name {
         "Nat" => pure(WireType::Nat),
         "Int" => pure(WireType::Int),
         "Bool" => pure(WireType::Bool),
-        "Bin" => pure(WireType::Bin),
+        "Bytes" => pure(WireType::Bytes),
         "Handle" => pure(WireType::Handle),
         "Lst" => catch(parse_literal("("))
-            .and_keep(lazy(parse_wire_type))
+            .and_keep(parse_wire_leaf())
             .and_drop(parse_literal(")"))
-            .map(|element| WireType::Lst(Box::new(element))),
+            .map(WireType::Lst),
         other => fail(format!(
-            "expected a wire type (Nat, Int, Bool, Bin, Handle, or Lst(...)), found '{other}'"
+            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or Lst(...)), found '{other}'"
         )),
     })
 }

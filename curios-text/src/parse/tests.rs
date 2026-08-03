@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{WireSignature, WireType},
+    curios_abi::{WireLeaf, WireSignature, WireType},
     curios_base::{Flt, Grain, NumOp, Plicity, Qualifier},
 };
 
@@ -276,7 +276,7 @@ fn parse_top_foreign_without_pub() {
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::Nat),
-                    ("a1".to_string(), WireType::Bin),
+                    ("a1".to_string(), WireType::Bytes),
                 ],
                 results: vec![("_".to_string(), WireType::Nat)],
             },
@@ -297,7 +297,7 @@ fn parse_top_foreign_with_pub() {
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::Nat),
-                    ("a1".to_string(), WireType::Bin),
+                    ("a1".to_string(), WireType::Bytes),
                 ],
                 results: vec![("_".to_string(), WireType::Nat)],
             },
@@ -320,10 +320,21 @@ fn parse_top_foreign_zero_arg() {
     );
 }
 
+/// `Lst` does not nest. Codegen forces and embeds exactly one level at the host boundary — a second level would hand the host rope structs where flat arrays belong — so `WireLeaf` keeps the grammar to what codegen implements, and the parser rejects the nested spelling outright rather than accepting a signature nothing can lower.
 #[test]
-fn parse_top_foreign_nested_lst() {
-    assert_eq!(
+fn parse_top_foreign_rejects_nested_lst() {
+    assert!(
         "foreign frobnicate : (Lst(Lst(Nat))) -> Bool;"
+            .parse::<Module>()
+            .is_err()
+    );
+}
+
+/// One level of `Lst` still parses, over each leaf the wire admits.
+#[test]
+fn parse_top_foreign_lst_of_leaf() {
+    assert_eq!(
+        "foreign frobnicate : (Lst(Bytes), Lst(Handle)) -> Lst(Nat);"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -331,11 +342,11 @@ fn parse_top_foreign_nested_lst() {
             vis_pub: false,
             label: "frobnicate".to_string(),
             signature: WireSignature {
-                params: vec![(
-                    "a0".to_string(),
-                    WireType::Lst(Box::new(WireType::Lst(Box::new(WireType::Nat)))),
-                )],
-                results: vec![("_".to_string(), WireType::Bool)],
+                params: vec![
+                    ("a0".to_string(), WireType::Lst(WireLeaf::Bytes)),
+                    ("a1".to_string(), WireType::Lst(WireLeaf::Handle)),
+                ],
+                results: vec![("_".to_string(), WireType::Lst(WireLeaf::Nat))],
             },
         })]
     );

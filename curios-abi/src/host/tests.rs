@@ -1,5 +1,5 @@
 use {
-    super::{ForeignFunction, WireSignature, WireType, host_ops},
+    super::{ForeignFunction, WireSignature, host_ops},
     std::collections::BTreeSet,
 };
 
@@ -79,7 +79,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("env"), ["status", "value"]);
 }
 
-/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature.
+/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `Lst` does not nest — [`WireLeaf`](super::WireLeaf) makes a nested one unrepresentable.
 #[test]
 fn signatures_are_well_formed() {
     for function in host_ops().iter() {
@@ -92,17 +92,6 @@ fn signatures_are_well_formed() {
             "{} repeats a parameter name",
             function.name
         );
-
-        for (_, type_) in signature.params.iter().chain(&signature.results) {
-            if let WireType::Lst(element) = type_ {
-                assert!(
-                    !matches!(**element, WireType::Lst(_)),
-                    "{} nests Lst — no host op does, and codegen's uniform Lst \
-                     load would not distinguish the layers",
-                    function.name
-                );
-            }
-        }
     }
 }
 

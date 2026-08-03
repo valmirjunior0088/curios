@@ -780,7 +780,13 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
 
         if (end_rows.is_empty() || byte_rows.is_empty()) && self.default.is_none() {
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bin" });
+            // Name the grain the rows actually wrote, not the family: `Bin` is an internal spelling the surface language does not contain. Every row agreed on a grain by here — the mixed case already returned above — and a column with no rows at all cannot reach this check.
+            let carrier = match grain {
+                Some(Grain::B) => "Bits",
+                _ => "Bytes",
+            };
+
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier });
         }
 
         let motive = self.motive_scope(top_motive.unwrap_or(&None))?;

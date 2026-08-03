@@ -1,6 +1,6 @@
 use {
     super::Erased,
-    curios_base::{Int, Plicity, Qualifier, Span},
+    curios_base::{Grain, Int, Plicity, Qualifier, Span},
     curios_core::{
         Atom, Level, Module, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
         build_rename, build_shorten, display_names, with_pretty_names, with_short_names,
@@ -109,7 +109,9 @@ pub enum Error {
     NotLstType {
         head_type: Box<Term>,
     },
+    /// `grain` names the packed binary the operation wanted, so the message says `Bits` or `Bytes` — the spellings the surface has. There is no surface type named after the grain-parametric family.
     NotBinType {
+        grain: Grain,
         head_type: Box<Term>,
     },
     WrongNumberOfArguments {
@@ -490,8 +492,9 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_bin_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_bin_type<U: Into<Term>>(grain: Grain, head_type: U) -> Self {
         Self::NotBinType {
+            grain,
             head_type: Box::new(head_type.into()),
         }
     }
@@ -904,7 +907,7 @@ impl Error {
             | Self::NotNatType { head_type }
             | Self::NotBoolType { head_type }
             | Self::NotLstType { head_type }
-            | Self::NotBinType { head_type }
+            | Self::NotBinType { head_type, .. }
             | Self::NotAInductType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
                 out.push(expected)
@@ -1075,8 +1078,13 @@ impl fmt::Display for Error {
             Error::NotLstType { head_type } => {
                 write!(f, "expected Lst but got {head_type}")
             }
-            Error::NotBinType { head_type } => {
-                write!(f, "expected Bin but got {head_type}")
+            Error::NotBinType { grain, head_type } => {
+                let expected = match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                };
+
+                write!(f, "expected {expected} but got {head_type}")
             }
             Error::WrongNumberOfArguments { expected, got } => {
                 write!(

@@ -12,7 +12,7 @@
 //!
 //! Naive accumulation loops are therefore O(n) by construction, and so are head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
 //!
-//! The host ABI is untouched by the rope: wire `Bin` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are forced before the call, results are embedded into fresh leaves after it), so curios-runtime and the curios-web bridge only ever see flat arrays.
+//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are forced before the call, results are embedded into fresh leaves after it), so curios-runtime and the curios-web bridge only ever see flat arrays.
 
 /// `Flt` — a boxed `f32`: `struct (field $special (f32))`.
 pub(crate) fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
@@ -31,7 +31,7 @@ pub(crate) fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm
     }
 }
 
-/// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bin` host-boundary shape: `array (mut i8)`.
+/// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bytes` host-boundary shape: `array (mut i8)`.
 pub(crate) fn bytes_sub_type() -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,

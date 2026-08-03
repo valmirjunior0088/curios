@@ -11,9 +11,9 @@ pub fn wire_term(wire_type: &WireType) -> Term {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
         WireType::Bool => Prim::BoolType,
-        WireType::Bin => Prim::BinType(Grain::X),
+        WireType::Bytes => Prim::BinType(Grain::X),
         WireType::Handle => Prim::HandleType,
-        WireType::Lst(element) => Prim::LstType(wire_term(element)),
+        WireType::Lst(element) => Prim::LstType(wire_term(&(*element).into())),
     };
 
     Subterm::Prim(prim).into()

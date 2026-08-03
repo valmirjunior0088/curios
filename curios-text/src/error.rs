@@ -70,13 +70,13 @@ pub enum Error {
     },
     /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
-    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/`Lst`/`Bin`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
+    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/`Lst`/`Bits`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
     /// Two match-arm rows write incompatible shapes for the same column — mixing a plain binder with a concrete constructor/tuple/struct shape (a "Path A" full-enumeration violation: no wildcard/catch-all is allowed alongside a concrete case), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
     MatrixInconsistentShape,
     /// Two match-arm rows specify the exact same pattern in every column — including a flat, single-column match with a literally repeated constructor tag. Every arm must be reachable and distinct; "Path A" gives arms no priority order to break the tie with.
     MatrixDuplicateRow,
-    /// A nested `Bool`/`Nat`/`Lst`/`Bin` leaf-pattern column split without both of its required cases present. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these four hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself.
+    /// A nested `Bool`/`Nat`/`Lst`/`Bits`/`Bytes` leaf-pattern column split without both of its required cases present. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself.
     MatrixIncompleteCarrierMatch {
         carrier: &'static str,
     },

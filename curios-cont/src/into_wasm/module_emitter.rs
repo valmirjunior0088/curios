@@ -69,13 +69,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The wasm-level type of a host-import *parameter* of the given wire type: scalars cross as raw `i32` (the call site unboxes the i31 carrier via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete non-nullable heap type (a handle is its `Bin` token).
+    /// The wasm-level type of a host-import *parameter* of the given wire type: scalars cross as raw `i32` (the call site unboxes the i31 carrier via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete non-nullable heap type (a handle is its `Bytes` token).
     fn wire_param_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
             }
-            WireType::Bin | WireType::Handle => curios_wasm::ValType::Ref(curios_wasm::RefType {
+            WireType::Bytes | WireType::Handle => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
                 heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
             }),
@@ -555,12 +555,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
-        if self.table.lst_bin_force_used() {
-            ropes.emit_lst_bin_force_func(self.table.lst_bin_force_func());
+        if self.table.lst_bytes_force_used() {
+            ropes.emit_lst_bytes_force_func(self.table.lst_bytes_force_func());
         }
 
-        if self.table.lst_bin_embed_used() {
-            ropes.emit_lst_bin_embed_func(self.table.lst_bin_embed_func());
+        if self.table.lst_bytes_embed_used() {
+            ropes.emit_lst_bytes_embed_func(self.table.lst_bytes_embed_func());
         }
 
         if self.table.bytes_eql_used() {

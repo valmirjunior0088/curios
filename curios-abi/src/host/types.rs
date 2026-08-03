@@ -1,10 +1,10 @@
 //! The semantic Rust types a builtin host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! Each mirrors a guest-side notion and lifts from / lowers to its wire shape: a [`Handle`] is its token bytes (a `Bin`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
+//! Each mirrors a guest-side notion and lifts from / lowers to its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
 use {crate::stdio, num_bigint::BigUint};
 
-/// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bin` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
+/// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
 #[derive(Clone)]
 pub enum Handle {
     Stdin,

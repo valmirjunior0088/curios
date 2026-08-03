@@ -840,9 +840,9 @@ fn print_wire_type(type_: WireType) -> Printer {
         WireType::Nat => pure("Nat"),
         WireType::Int => pure("Int"),
         WireType::Bool => pure("Bool"),
-        WireType::Bin => pure("Bin"),
+        WireType::Bytes => pure("Bytes"),
         WireType::Handle => pure("Handle"),
-        WireType::Lst(element) => flat([pure("Lst("), print_wire_type(*element), pure(")")]),
+        WireType::Lst(element) => flat([pure("Lst("), print_wire_type(element.into()), pure(")")]),
     }
 }
 
