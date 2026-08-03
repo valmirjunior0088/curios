@@ -2053,7 +2053,7 @@ fn bang_in_a_type_is_rejected() {
 fn foreign_declaration_populates_the_store() {
     // No loader/prelude needed at all: a `foreign` signature is parsed directly into `WireType`s, not resolved as ordinary names.
     let (_, _, _, foreigns) = super::into_core(
-        &"foreign frobnicate : (Nat, Bin) -> Nat; 0"
+        &"foreign frobnicate : (Nat, Bytes) -> Nat; 0"
             .parse::<Entrypoint>()
             .unwrap(),
         &RootSource::none(),
@@ -2092,7 +2092,7 @@ fn foreign_declaration_zero_arg_populates_the_store() {
 fn foreign_declaration_call_lowers() {
     // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Prim::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
     let _ = run(r#"
-        foreign frobnicate : (Nat, Bin) -> Nat;
+        foreign frobnicate : (Nat, Bytes) -> Nat;
         frobnicate(5, x\00\01)
     "#);
 }

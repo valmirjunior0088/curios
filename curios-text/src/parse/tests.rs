@@ -266,7 +266,7 @@ fn parse_top_let_without_pub() {
 #[test]
 fn parse_top_foreign_without_pub() {
     assert_eq!(
-        "foreign frobnicate : (Nat, Bin) -> Nat;"
+        "foreign frobnicate : (Nat, Bytes) -> Nat;"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -287,7 +287,7 @@ fn parse_top_foreign_without_pub() {
 #[test]
 fn parse_top_foreign_with_pub() {
     assert_eq!(
-        "pub foreign frobnicate : (Nat, Bin) -> Nat;"
+        "pub foreign frobnicate : (Nat, Bytes) -> Nat;"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -360,10 +360,10 @@ fn parse_top_foreign_rejects_non_wire_type() {
 #[test]
 fn foreign_declaration_round_trips() {
     for source in [
-        "foreign frobnicate : (Nat, Bin) -> Nat;",
-        "pub foreign frobnicate : (Nat, Bin) -> Nat;",
+        "foreign frobnicate : (Nat, Bytes) -> Nat;",
+        "pub foreign frobnicate : (Nat, Bytes) -> Nat;",
         "foreign clock : Nat;",
-        "foreign frobnicate : (Lst(Lst(Nat))) -> Bool;",
+        "foreign frobnicate : (Lst(Bytes), Lst(Handle)) -> Lst(Nat);",
     ] {
         let module = source.parse::<Module>().unwrap();
 
@@ -2266,8 +2266,8 @@ fn trailing_comma_accepted_in_top_level_comma_lists() {
     for (trailed, plain) in [
         // Foreign wire parameters.
         (
-            "foreign f : (Nat, Bin,) -> Nat;",
-            "foreign f : (Nat, Bin) -> Nat;",
+            "foreign f : (Nat, Bytes,) -> Nat;",
+            "foreign f : (Nat, Bytes) -> Nat;",
         ),
         // Use groups.
         ("use /std/{Nat, Bool,};", "use /std/{Nat, Bool};"),
