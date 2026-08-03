@@ -187,6 +187,8 @@ fn infer_node(
                         .struct_decl(&name)
                         .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
                     kernel.check_instance(&declaration.universe_context, &universes)?;
+                    // The parameter count, before the arity is opened at it: `Telescope::open` asserts, so a disagreement here would abort the walk rather than refuse the item.
+                    arity_matches(declaration.param_count(), params.len())?;
                     let arity =
                         instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
 
@@ -785,6 +787,8 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
                     .struct_decl(&name)
                     .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
                 kernel.check_instance(&declaration.universe_context, &universes)?;
+                // As in the projection rule above, and for the same reason: `Telescope::open` asserts on a count mismatch.
+                arity_matches(declaration.param_count(), params.len())?;
                 let arity =
                     instantiate_universe_levels_scoped(&declaration.arity.clone(), &universes)?;
                 return check_fields(

@@ -731,3 +731,98 @@ fn elaboration_only_syntax_is_refused() {
         Err(KernelError::NotCore(_)),
     ));
 }
+
+/// A structure with one parameter and one field at that parameter's type — the shape an occurrence can state the wrong parameter count for.
+fn parameterized_struct(kernel: &mut Kernel) -> Global {
+    use curios_core::{Polarity, Scope, StructDecl};
+
+    let name = Global::Authored(Qualifier::from(["Boxed"]));
+    let param = binder(0, "A");
+    let field = binder(1, "value");
+
+    let fields = Telescope::Cons(
+        Term::free_var(&param),
+        Scope::close(curios_core::One, &[&field], Telescope::Done(Box::new(()))),
+    );
+    let declaration = StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::Cons(
+            Term::type_ground(),
+            Scope::close(
+                curios_core::One,
+                &[&param],
+                Telescope::Done(Box::new(fields)),
+            ),
+        ),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: vec![Polarity::Strict],
+    };
+    kernel.declare_struct(&name, &declaration);
+
+    name
+}
+
+/// A nominal occurrence states as many parameters as its declaration declares, and the two rules that open a `struct` arity at an occurrence's parameters must check that before opening it.
+///
+/// `Telescope::open` asserts on a count mismatch, so an unguarded rule does not refuse the item — it **aborts the walk**, losing every other verdict, which is what makes `recheck_module_verdicts`' count a count. `Sort::of` and `synth_neutral` both guarded this; `infer`'s projection rule and `check`'s record rule reached `open` behind `check_instance` alone, which decides the *universe* width and says nothing about the parameters.
+///
+/// Neither is reachable from a surface program — the elaborator does not emit an occurrence at the wrong count — so this is the shape that needs a term built by hand, and it is a fail-open-to-abort rather than an unsoundness. Both rules are reached here at a one-parameter family occurring with none: the projection through a variable assumed at that type, and the record through a literal checked against it.
+#[test]
+fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
+    let mut kernel = kernel();
+    let name = parameterized_struct(&mut kernel);
+
+    let short: Term = curios_core::Subterm::StructType(curios_core::StructType {
+        name,
+        universes: Vec::new(),
+        params: Vec::new(),
+    })
+    .into();
+
+    let value = binder(2, "v");
+    kernel.assume(&value, &short);
+
+    assert!(
+        matches!(
+            infer(&mut kernel, &Term::proj(Term::free_var(&value), 0)),
+            Err(KernelError::Arity { .. }),
+        ),
+        "a projection opened the arity at a parameter count the declaration does not have",
+    );
+
+    assert!(
+        matches!(
+            check(&mut kernel, &Term::tuple([nat(0)]), &short),
+            Err(KernelError::Arity { .. }),
+        ),
+        "a record literal opened the arity at a parameter count the declaration does not have",
+    );
+}
+
+/// The control: at the parameter count it declares, the same family still projects and still accepts a record.
+///
+/// Without it the guard above would pass just as well if the rules refused every `struct` occurrence.
+#[test]
+fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
+    let mut kernel = kernel();
+    let name = parameterized_struct(&mut kernel);
+
+    let exact: Term = curios_core::Subterm::StructType(curios_core::StructType {
+        name,
+        universes: Vec::new(),
+        params: vec![nat_type()],
+    })
+    .into();
+
+    let value = binder(2, "v");
+    kernel.assume(&value, &exact);
+
+    assert_eq!(
+        infer(&mut kernel, &Term::proj(Term::free_var(&value), 0)),
+        Ok(nat_type()),
+    );
+    assert_eq!(check(&mut kernel, &Term::tuple([nat(7)]), &exact), Ok(()));
+}
