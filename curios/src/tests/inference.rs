@@ -298,3 +298,20 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
     crate::run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"refined");
 }
+
+// A parked checking problem that survives every retry — a tuple against an implicit nothing ever pins — is reported by the item drain at the expression's own span, naming the expected type it waited on rather than the bare `cannot infer` it used to raise.
+#[test]
+fn unresolvable_parked_check_reports_its_expected_type() {
+    let (system, _io) = curios_runtime::MockHost::builder().build();
+    let source = r#"
+        use /std/{Nat, Str};
+        let use_it(@A : Type, a : A) -> Nat = 0;
+        let z : Nat = use_it((1, true));
+        /std/print(Nat/to_str(z))
+        "#;
+    let error = match crate::run_text(source, system) {
+        Ok(_) => panic!("expected an error, program succeeded"),
+        Err(error) => error.to_string(),
+    };
+    assert!(error.contains("never gained structure"), "{error}");
+}
