@@ -471,3 +471,71 @@ fn equirecursive(member: Free, param: Free, codomain: Term, padded: bool) -> Ter
 
     Term::rec(items, Term::free_var(&member))
 }
+
+/// Definitional proof irrelevance at a *computed* proposition — the shape every real firing takes, and the one this crate's copy had never been tested at.
+///
+/// `any_two_inhabitants_of_a_proposition_convert` above uses a nominal `Prop`-sorted family, which is the easy rung: the registry says outright that the type is a proposition. Every one of the 37 firings measured in `curios-elab` across the whole prelude is at a type that only *computes* to one — a stuck `match` at motive `Prop`, which is how `/std/BigNat` states a validity predicate over a `Bool`. Here the rule is inert, 0 firings in 86,547 goals, because a proof reaching conversion in this crate does so in an untyped child position compared at `Type`; so nothing in any program brings the rule and the shape together, and only a fixture can.
+///
+/// The shape is worth its own fixture because of what irrelevance trusts. It accepts *without inspecting either term*, and `Sort::of` classifies a stuck `match` by its **motive** rather than by its arms — a claim the term makes about itself, which is exactly why `check_motive` exists to type a motive under its real binders before any rule reads it. At a computed proposition the motive is therefore the whole of what this rule rests on.
+///
+/// The control is the identical construction with the motive at `Type` and relevant arms in both, which must *not* converge. It separates "reads the motive" from "accepts every stuck match", and without it a rule that skipped the sort test entirely would satisfy the witness.
+#[test]
+fn irrelevance_fires_at_a_computed_proposition() {
+    let mut kernel = kernel();
+    let held = declare(&mut kernel, "Held", Term::prop());
+    let empty = declare(&mut kernel, "Empty", Term::prop());
+
+    let scrutinee = binder(40, "b");
+    kernel.assume(&scrutinee, &Term::prim(Prim::BoolType));
+
+    let computed = Term::bool_match(Term::free_var(&scrutinee), None, Term::prop(), empty, held);
+
+    let (left, right) = (binder(41, "p"), binder(42, "q"));
+    kernel.assume(&left, &computed);
+    kernel.assume(&right, &computed);
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &computed,
+            &Term::free_var(&left),
+            &Term::free_var(&right),
+        ),
+        Ok(true),
+        "two inhabitants of a proposition the motive computes did not convert",
+    );
+}
+
+/// The control for the fixture above: the same stuck `match`, with the motive at `Type` and relevant arms, must still distinguish its inhabitants.
+#[test]
+fn irrelevance_does_not_fire_at_a_computed_relevant_type() {
+    let mut kernel = kernel();
+    let one = declare(&mut kernel, "One", Term::type_ground());
+    let two = declare(&mut kernel, "Two", Term::type_ground());
+
+    let scrutinee = binder(50, "b");
+    kernel.assume(&scrutinee, &Term::prim(Prim::BoolType));
+
+    let computed = Term::bool_match(
+        Term::free_var(&scrutinee),
+        None,
+        Term::type_ground(),
+        one,
+        two,
+    );
+
+    let (left, right) = (binder(51, "x"), binder(52, "y"));
+    kernel.assume(&left, &computed);
+    kernel.assume(&right, &computed);
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &computed,
+            &Term::free_var(&left),
+            &Term::free_var(&right),
+        ),
+        Ok(false),
+        "irrelevance leaked into a relevant type the motive computes",
+    );
+}
