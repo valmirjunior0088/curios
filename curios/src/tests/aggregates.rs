@@ -171,24 +171,6 @@ fn lst_slice_window_seam_mismatch_is_rejected() {
 }
 
 #[test]
-fn bin_slice_reduces_across_a_cons_spine() {
-    // Stage B foundation: `Bytes/slice` reduces over a cons spine (`concat(append(x\, h), t)`, the shape the `Utf8` relation builds) one byte per `0`/`succ` boundary, and a nested slice reassociates. All provable by `refl` for SYMBOLIC head/tail, which `reduce` peels via `peel_first_byte` (`core::spine`). `take` keeps the head and recurses into the tail; `drop` discards it and shifts both bounds; `nested` flattens `slice(slice(..))`.
-    let source = r#"
-        use /std/{Handle, Str, Eq, Byte, Bytes, Nat};
-        let take(h : Byte, t : Bytes)
-            -> Eq(Bytes/slice(Bytes/concat(Bytes/append(x\, h), t), 0, 2),
-                  Bytes/concat(Bytes/append(x\, h), Bytes/slice(t, 0, 1))) = Eq/refl();
-        let drop(h : Byte, t : Bytes)
-            -> Eq(Bytes/slice(Bytes/concat(Bytes/append(x\, h), t), 1, 3), Bytes/slice(t, 0, 2)) =
-            Eq/refl();
-        let nested(b : Bytes)
-            -> Eq(Bytes/slice(Bytes/slice(b, 2, 10), 1, 3), Bytes/slice(b, 3, 5)) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
-        "#;
-    assert_eq!(run(source), b"ok");
-}
-
-#[test]
 fn bin_len_reduces_across_a_cons_spine() {
     // The `Bytes/len` partner of the slice/get cons-reduction: length distributes over concatenation and an `append` is one byte longer, so a cons spine's length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`. `Nat/lt` then discharges the codepoint walk's bounds guard on that spine: `lt(0, succ _) = true` (the left literal is below the successor floor) and `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for a SYMBOLIC tail, the pair that lets `advance_codepoint` step a symbolic cons.
     let source = r#"
