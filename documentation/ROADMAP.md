@@ -50,7 +50,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
-- [ ] [Anonymous match functions](match_ergonomics/02_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference on the same Phase 0-or-post-cutover schedule)_
+- [ ] [Anonymous match functions](match_ergonomics/02_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference)_
 
 ## Syntax Sugar
 
@@ -97,6 +97,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Independent kernel in `curios-cert` re-checking what the elaborator accepts, from the finished terms alone — reduction, sort, conversion, the typing judgment, nominal elimination (the large-elimination guard's singleton condition decided rather than approximated), subsumption as its own cumulative relation, universe constraint entailment in both directions, and declaration acceptance (constructor/field sizing, strict positivity, size-change totality), with index inversion, positivity, totality, and universe entailment shared rather than duplicated behind the `Env`/`Judge` seam (see [DESIGN.md](DESIGN.md), "An independent kernel re-checks what the elaborator accepts"). On the compile path in production: `recheck_module_suffix` runs inside `compile_entrypoint` and a refusal fails the compile, with the fixed prelude validated the same way at archive-build time and no source fallback. The whole-prelude disagreement count closed at **0 of 1052** across all three profiles; two positions remain named rather than closed — an elimination's motive/arms and `rec`-group/spine-argument comparison at `Type` — both recorded conversion incompleteness that does not count against the gate.
 - [ ] [Full data section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
 - [ ] [Full element section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
+- [ ] Self-hosting bootstrap of the language-specific stages _(deferred until further notice, deliberately unspecified; the objective and the Curios/Rust ownership split are recorded in [DESIGN.md](DESIGN.md))_
 
 ## Optimizations
 
