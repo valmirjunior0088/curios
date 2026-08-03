@@ -46,7 +46,7 @@ fn foreign_declaration_produces_a_wasm_import() {
     // Must actually call `frobnicate` — an unreferenced declaration is pruned by `curios_ersd::optimize` before codegen ever sees it.
     let module = compile(
         r#"
-            foreign frobnicate : (Nat, Bin) -> Nat;
+            foreign frobnicate : (Nat, Bytes) -> Nat;
             frobnicate(5, x\00\01)
         "#,
         None,
