@@ -67,7 +67,7 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 ///
 /// The closure iterates to a fixpoint rather than assuming one pass suffices: items are stored in binding order, and a definition may mention one stored after it.
 #[allow(clippy::mutable_key_type)]
-pub fn partial_definitions(
+pub(crate) fn partial_definitions(
     kernel: &mut Kernel,
     module: &Module,
     checked_from: usize,
@@ -134,7 +134,7 @@ pub fn partial_definitions(
 
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself.
 #[allow(clippy::mutable_key_type)]
-pub fn check_positions(
+pub(crate) fn check_positions(
     kernel: &mut Kernel,
     positions: &[(Term, Erased)],
     partial: &BTreeSet<Global>,
@@ -184,7 +184,7 @@ pub(crate) fn erased_half(
 /// Derived rather than believed. [`Module::binder_floor`] carries the elaborator's answer, and nothing checks it, while the kernel's capture-avoidance depends on it: eta and telescope comparison both open binders of their own, and one that aliases a free local already in a term silently identifies two terms that differ. Since a floor is a *bound* rather than a verdict, the caller takes the maximum of the two — widening is always safe, so a gap in this walk degrades to the carried value rather than to something worse, and no refusal is needed.
 ///
 /// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace.
-pub fn derived_binder_floor(module: &Module) -> usize {
+pub(crate) fn derived_binder_floor(module: &Module) -> usize {
     let mut highest: Option<u32> = None;
     let mut consider = |free_vars: BTreeSet<Free>| {
         for free in free_vars {

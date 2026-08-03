@@ -18,7 +18,7 @@
 mod tests;
 
 use {
-    crate::Env,
+    crate::{Env, forceable},
     curios_core::{
         Bound, Free, FuncType, Global, InductDecl, InductType, One, Polarity, Prim, Scope,
         StructDecl, StructType, Subterm, Telescope, Term, TupleType,
@@ -402,20 +402,9 @@ impl<E: Env> Walk<'_, E> {
     ///
     /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
     ///
-    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. A term whose `reach` is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling de Bruijn index. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis.
+    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. [`forceable`] owns the first — a head that cannot move, or a term still under enclosing binders. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis.
     fn forced(&mut self, term: &Term) -> Term {
-        let reducible = matches!(
-            &**term,
-            Subterm::Var(_)
-                | Subterm::Apply(_)
-                | Subterm::UniverseInst(_)
-                | Subterm::Proj(_)
-                | Subterm::Match(_)
-                | Subterm::Let(_)
-                | Subterm::Metavar(_)
-                | Subterm::Rec(_)
-        );
-        if !reducible || term.reach() != 0 {
+        if !forceable(term) {
             return term.clone();
         }
         self.env.force(term).unwrap_or_else(|_| term.clone())

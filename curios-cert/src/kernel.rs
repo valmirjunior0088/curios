@@ -17,21 +17,21 @@ mod infer;
 pub use infer::*;
 
 mod module;
-pub use module::*;
+pub(crate) use module::*;
 
 mod sort;
 pub use sort::*;
 
 mod whnf;
-pub use whnf::*;
+pub(crate) use whnf::*;
 
 use {
     crate::{Env, Judge, entails},
     crate::{Erased, erased_half},
     curios_base::Entropy,
     curios_core::{
-        Atom, Free, Global, InductDecl, Level, LevelHead, ReduceError, Reducer, StructDecl, Term,
-        UniverseConstraint, UniverseContext, UniverseError,
+        Atom, Free, Global, InductDecl, Level, LevelHead, Polarity, ReduceError, Reducer,
+        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
     },
     std::{collections::HashMap, fmt},
 };
@@ -78,7 +78,7 @@ pub enum KernelError {
     NotPositive {
         name: Global,
         part: String,
-        polarity: curios_core::Polarity,
+        polarity: Polarity,
     },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
     Oversized { domain: Level, bound: Level },
@@ -260,15 +260,18 @@ struct Definition {
     universes: UniverseContext,
 }
 
-/// The kernel's context: what is in scope, what may unfold, and how much work a judgment may spend.
+/// A scope checkpoint: the depths of the binder stack and the case-equation stack when [`Kernel::scoped`] entered, restored together on the way out so neither can outlive the arm that opened it.
 ///
-/// Deliberately small. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. The kernel holds a local telescope, top-level definitions, the nominal registry, and a budget. Growing this struct is how independence gets lost, so a new field should have to argue for itself. A scope checkpoint: the depths of the binder stack and the case-equation stack at [`Kernel::mark`] time, restored together by [`Kernel::retract`] so neither can outlive the arm that opened it.
+/// Private to this module, and so is every operation on it, which is what makes [`Kernel::scoped`] the only way to open a binder scope at all.
 #[derive(Clone, Copy)]
-pub(crate) struct Mark {
+struct Mark {
     locals: usize,
     refinements: usize,
 }
 
+/// The kernel's context: what is in scope, what may unfold, and how much work a judgment may spend.
+///
+/// Deliberately small. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. The kernel holds a local telescope, top-level definitions, the nominal registry, and a budget. Growing this struct is how independence gets lost, so a new field should have to argue for itself.
 pub struct Kernel {
     /// Reduction steps a single judgment may spend. Restored at each declaration boundary by [`Kernel::restore_budget`].
     budget: u64,
@@ -492,18 +495,25 @@ impl Kernel {
         Ok(())
     }
 
-    /// Record a top-level definition: `name : type_ = value`, generalized over `universes`.
-    pub fn define(&mut self, name: &Free, type_: &Term, value: &Term, universes: &UniverseContext) {
+    /// Record a top-level name at `type_`, generalized over `universes`, with `value` as its body where it has one.
+    ///
+    /// The invalidation clause lives here rather than at each entry point below, because it is the whole of what makes the evaluation memos valid by construction: a redefinition discards every remembered reduct. Written once, a third entry point cannot arrive without it.
+    fn insert(
+        &mut self,
+        name: &Free,
+        type_: &Term,
+        value: Option<&Term>,
+        universes: &UniverseContext,
+    ) {
         let previous = self.definitions.insert(
             name.clone(),
             Definition {
                 type_: type_.clone(),
-                value: Some(value.clone()),
+                value: value.cloned(),
                 universes: universes.clone(),
             },
         );
 
-        // A redefinition invalidates every remembered reduct — the memos' validity is by construction, never by an append-only assumption.
         if previous.is_some() {
             self.unfold_memo.clear();
             self.whnf_memo.clear();
@@ -511,22 +521,14 @@ impl Kernel {
         }
     }
 
+    /// Record a top-level definition: `name : type_ = value`, generalized over `universes`.
+    pub fn define(&mut self, name: &Free, type_: &Term, value: &Term, universes: &UniverseContext) {
+        self.insert(name, type_, Some(value), universes);
+    }
+
     /// Record a top-level name with a type and no body — a `foreign` declaration, or one kept opaque. It never unfolds, so it is a permanent neutral.
     pub fn declare(&mut self, name: &Free, type_: &Term, universes: &UniverseContext) {
-        let previous = self.definitions.insert(
-            name.clone(),
-            Definition {
-                type_: type_.clone(),
-                value: None,
-                universes: universes.clone(),
-            },
-        );
-
-        if previous.is_some() {
-            self.unfold_memo.clear();
-            self.whnf_memo.clear();
-            self.forced_memo.clear();
-        }
+        self.insert(name, type_, None, universes);
     }
 
     /// Register an `induct` declaration's registry entry.
@@ -549,13 +551,24 @@ impl Kernel {
 
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
     ///
-    /// Locals are a stack, and every judgment that opens one is responsible for closing it — take a [`Kernel::mark`] first and [`Kernel::retract`] to it afterwards, on every path including the failing one.
+    /// Locals are a stack, and closing them is [`Kernel::scoped`]'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.locals.push((name.clone(), type_.clone()));
     }
 
-    /// The current scope depth, to be handed back to [`Kernel::retract`].
-    pub(crate) fn mark(&self) -> Mark {
+    /// Run `walk` with every binder it opened — and every case equation it assumed — closed again afterwards, on the failing path as well as the succeeding one.
+    ///
+    /// **The only way to open a binder scope.** `mark` and `retract` below are private to this module precisely so that it is. A judgment that opened a binder and returned early would leak it into the conversion history, where the local context is part of the goal key, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Kernel` throughout, and a guard holding the borrow would leave them nothing to be called with.
+    pub(crate) fn scoped<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
+        let mark = self.mark();
+        let outcome = walk(self);
+        self.retract(mark);
+
+        outcome
+    }
+
+    /// The current scope depth, to be handed back to `retract`.
+    fn mark(&self) -> Mark {
         Mark {
             locals: self.locals.len(),
             refinements: self.refinements.len(),
@@ -563,7 +576,7 @@ impl Kernel {
     }
 
     /// Close every binder opened — and drop every case equation assumed — since `mark`.
-    pub(crate) fn retract(&mut self, mark: Mark) {
+    fn retract(&mut self, mark: Mark) {
         self.locals.truncate(mark.locals);
         self.refinements.truncate(mark.refinements);
     }
@@ -693,7 +706,7 @@ impl Kernel {
     /// Take this item's recorded positions and any classification that could not be decided, leaving both empty for the next item.
     ///
     /// The memo goes with them: its keys mention the item's own binders, so an entry means nothing once they are retracted.
-    pub fn take_checked(&mut self) -> (Vec<(Term, Erased)>, Option<KernelError>) {
+    pub(crate) fn take_checked(&mut self) -> (Vec<(Term, Erased)>, Option<KernelError>) {
         self.erasure_memo.clear();
 
         (

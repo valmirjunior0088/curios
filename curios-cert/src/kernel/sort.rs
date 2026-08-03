@@ -12,7 +12,7 @@ mod tests;
 use {
     super::{Kernel, KernelError, whnf::whnf},
     curios_core::{
-        Apply, Field, FuncType, InductType, Level, Prim, Proj, Reducer, StructType, Subterm,
+        Apply, Bound, Field, FuncType, InductType, Level, Prim, Proj, Reducer, StructType, Subterm,
         Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
     },
 };
@@ -105,14 +105,34 @@ impl Sort {
             // A *non-empty* record of propositions is a proposition. The empty tuple is unit rather than a proposition: it is what an effect returns (`/std/print : .. -> {}`), so it must be kept at runtime, and calling it a proposition would erase it.
             Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
                 let telescope = telescope.clone();
-                scoped(kernel, |kernel| sort_of_sigma(kernel, telescope))
+
+                // Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
+                kernel.scoped(|kernel| {
+                    sort_of_binders(kernel, telescope, |_, levels, ()| {
+                        Ok(match levels.is_empty() {
+                            true => Sort::Prop,
+                            false => Sort::Type(Level::max(levels)),
+                        })
+                    })
+                })
             }
             Subterm::TupleType(_) => Ok(Sort::Type(Level::zero())),
 
             // Π into a proposition is a proposition, regardless of what it quantifies over — that is what makes `(n : Nat) -> P(n)` erasable. Otherwise the level is the join of the domains and the codomain.
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let telescope = telescope.clone();
-                scoped(kernel, |kernel| sort_of_pi(kernel, telescope))
+
+                kernel.scoped(|kernel| {
+                    sort_of_binders(kernel, telescope, |kernel, mut levels, codomain| {
+                        Ok(match Sort::of(kernel, &codomain)? {
+                            Sort::Prop => Sort::Prop,
+                            Sort::Type(output) => {
+                                levels.push(output);
+                                Sort::Type(Level::max(levels))
+                            }
+                        })
+                    })
+                })
             }
 
             Subterm::Prim(prim) => sort_of_prim(kernel, prim),
@@ -155,49 +175,16 @@ fn sort_of_neutral(kernel: &mut Kernel, reduced: &Term) -> Result<Sort, KernelEr
     as_sort(kernel, &synthesized)
 }
 
-/// Run `walk` with every binder it opens closed again afterwards, on the failing path as well as the succeeding one.
-fn scoped(
-    kernel: &mut Kernel,
-    walk: impl FnOnce(&mut Kernel) -> Result<Sort, KernelError>,
-) -> Result<Sort, KernelError> {
-    let mark = kernel.mark();
-    let outcome = walk(kernel);
-    kernel.retract(mark);
-
-    outcome
-}
-
-/// Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
+/// Walk a binder telescope, collecting the level each domain contributes, and hand the collected levels and the terminal to the clause that decides the former's own sort.
 ///
-/// Each binder joins the local scope carrying its own type before the walk descends, because a later field may mention an earlier one. Opening with a variable nothing can type would leave [`synth_neutral`] unable to classify every occurrence of it further in — which here is not imprecision but a refusal.
-fn sort_of_sigma(kernel: &mut Kernel, telescope: Telescope<()>) -> Result<Sort, KernelError> {
-    let mut telescope = telescope;
-    let mut levels = Vec::new();
-
-    loop {
-        match telescope {
-            Telescope::Cons(field, rest) => {
-                // A field that is itself a proposition contributes no level: `Prop` sits below the hierarchy rather than in it.
-                if let Sort::Type(level) = Sort::of(kernel, &field)? {
-                    levels.push(level);
-                }
-
-                let binder = kernel.fresh(rest.first_hint());
-                kernel.assume(&binder, &field);
-                telescope = rest.open(&[&Term::free_var(&binder)]);
-            }
-            Telescope::Done(_) => {
-                return Ok(match levels.is_empty() {
-                    true => Sort::Prop,
-                    false => Sort::Type(Level::max(levels)),
-                });
-            }
-        }
-    }
-}
-
-/// Π: a function into a proposition is a proposition, whatever it quantifies over; otherwise its level is the join of its domains' and its codomain's.
-fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, KernelError> {
+/// A domain that is itself a proposition contributes no level: `Prop` sits below the hierarchy rather than in it. Each binder joins the local scope carrying its own type before the walk descends, because a later domain may mention an earlier one — and opening with a variable nothing can type would leave [`synth_neutral`] unable to classify every occurrence of it further in, which here is not imprecision but a refusal.
+///
+/// Σ and Π share every line of that and differ only in the terminal clause, which is exactly where the two rules genuinely differ: a record is a proposition when *all* its fields are, a function when its *codomain* is. Splitting there keeps that difference the only thing either caller states.
+fn sort_of_binders<B: Bound>(
+    kernel: &mut Kernel,
+    telescope: Telescope<B>,
+    terminal: impl FnOnce(&mut Kernel, Vec<Level>, B) -> Result<Sort, KernelError>,
+) -> Result<Sort, KernelError> {
     let mut telescope = telescope;
     let mut levels = Vec::new();
 
@@ -212,15 +199,7 @@ fn sort_of_pi(kernel: &mut Kernel, telescope: Telescope<Term>) -> Result<Sort, K
                 kernel.assume(&binder, &domain);
                 telescope = rest.open(&[&Term::free_var(&binder)]);
             }
-            Telescope::Done(codomain) => {
-                return Ok(match Sort::of(kernel, &codomain)? {
-                    Sort::Prop => Sort::Prop,
-                    Sort::Type(output) => {
-                        levels.push(output);
-                        Sort::Type(Level::max(levels))
-                    }
-                });
-            }
+            Telescope::Done(body) => return terminal(kernel, levels, *body),
         }
     }
 }

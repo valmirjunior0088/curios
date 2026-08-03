@@ -108,15 +108,6 @@ impl History {
     }
 }
 
-/// Run `walk` with every binder it opens closed again afterwards, on the failing path as well as the succeeding one. A comparison that left binders behind would leak them into the conversion history, where the context is part of the key.
-pub(super) fn scoped<T>(kernel: &mut Kernel, walk: impl FnOnce(&mut Kernel) -> T) -> T {
-    let mark = kernel.mark();
-    let outcome = walk(kernel);
-    kernel.retract(mark);
-
-    outcome
-}
-
 /// Compare `this` and `that` at `type_`, under the binders currently in scope.
 ///
 /// An unfolding retry continues this loop instead of recursing into a fresh comparison, so the chain a growing spine produces is bounded by the reduction budget rather than by a depth counter. Measured over the whole `curios` corpus — every test, the entire fixed prelude — the deepest chain real code reaches is three.
@@ -204,7 +195,7 @@ fn eta_function(
     this: &Term,
     that: &Term,
 ) -> Result<bool, KernelError> {
-    scoped(kernel, |kernel| {
+    kernel.scoped(|kernel| {
         let mut telescope = telescope;
         let mut arguments = Vec::new();
 
@@ -568,7 +559,7 @@ fn ground_scope(
         return Ok(false);
     }
 
-    scoped(kernel, |kernel| {
+    kernel.scoped(|kernel| {
         let occurrences = opaque_binders(kernel, this.arity());
         let refs = occurrences.iter().collect::<Vec<_>>();
         ground(kernel, history, &this.open(&refs), &that.open(&refs))
@@ -582,7 +573,7 @@ fn ground_scope_two(
     this: &Scope<Two>,
     that: &Scope<Two>,
 ) -> Result<bool, KernelError> {
-    scoped(kernel, |kernel| {
+    kernel.scoped(|kernel| {
         let o = opaque_binders(kernel, 2);
         ground(
             kernel,
@@ -599,7 +590,7 @@ fn ground_scope_three(
     this: &Scope<Three>,
     that: &Scope<Three>,
 ) -> Result<bool, KernelError> {
-    scoped(kernel, |kernel| {
+    kernel.scoped(|kernel| {
         let o = opaque_binders(kernel, 3);
         ground(
             kernel,
@@ -741,14 +732,17 @@ fn ground_cases(
     }
 }
 
-/// Compare two Π/λ telescopes: domains pairwise, then codomains, opening one shared binder per position so both dependent tails speak of the same variable.
-fn compare_telescope(
+/// Compare two telescopes: domains pairwise, opening one shared binder per position so both dependent tails speak of the same variable, then whatever the terminal clause decides.
+///
+/// Π and Σ differ *only* there — a function type's terminal is its codomain and must be compared, a record type's carries nothing — so the terminal clause is the only thing either caller states, and the shared-binder discipline every dependent comparison rests on is written once.
+fn compare_binders<B: Bound>(
     kernel: &mut Kernel,
     history: &mut History,
-    this: Telescope<Term>,
-    that: Telescope<Term>,
+    this: Telescope<B>,
+    that: Telescope<B>,
+    terminal: impl FnOnce(&mut Kernel, &mut History, B, B) -> Result<bool, KernelError>,
 ) -> Result<bool, KernelError> {
-    scoped(kernel, |kernel| {
+    kernel.scoped(|kernel| {
         let (mut this, mut that) = (this, that);
 
         loop {
@@ -766,7 +760,7 @@ fn compare_telescope(
                     that = right_rest.open(&[&occurrence]);
                 }
                 (Telescope::Done(left), Telescope::Done(right)) => {
-                    return ground(kernel, history, &left, &right);
+                    return terminal(kernel, history, *left, *right);
                 }
                 // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
                 _ => return Ok(false),
@@ -775,35 +769,30 @@ fn compare_telescope(
     })
 }
 
-/// [`compare_telescope`] for a Σ, whose terminal carries nothing.
+/// [`compare_binders`] for a Π or a λ, whose terminal is a codomain to be compared.
+fn compare_telescope(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: Telescope<Term>,
+    that: Telescope<Term>,
+) -> Result<bool, KernelError> {
+    compare_binders(
+        kernel,
+        history,
+        this,
+        that,
+        |kernel, history, left, right| ground(kernel, history, &left, &right),
+    )
+}
+
+/// [`compare_binders`] for a Σ, whose terminal carries nothing.
 fn compare_field_telescope(
     kernel: &mut Kernel,
     history: &mut History,
     this: Telescope<()>,
     that: Telescope<()>,
 ) -> Result<bool, KernelError> {
-    scoped(kernel, |kernel| {
-        let (mut this, mut that) = (this, that);
-
-        loop {
-            match (this, that) {
-                (Telescope::Cons(left, left_rest), Telescope::Cons(right, right_rest)) => {
-                    if !ground(kernel, history, &left, &right)? {
-                        return Ok(false);
-                    }
-
-                    let binder = kernel.fresh(left_rest.first_hint());
-                    kernel.assume(&binder, &left);
-                    let occurrence = Term::free_var(&binder);
-
-                    this = left_rest.open(&[&occurrence]);
-                    that = right_rest.open(&[&occurrence]);
-                }
-                (Telescope::Done(_), Telescope::Done(_)) => return Ok(true),
-                _ => return Ok(false),
-            }
-        }
-    })
+    compare_binders(kernel, history, this, that, |_, _, (), ()| Ok(true))
 }
 
 /// Compare two term sequences pairwise at `Type`. Length is part of the shape.

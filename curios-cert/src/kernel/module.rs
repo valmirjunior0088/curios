@@ -29,7 +29,7 @@ use {
 /// The budget is restored first: each item gets the whole of it, so one expensive definition cannot starve the next.
 ///
 /// A universe-polymorphic definition is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites.
-pub fn check_definition(
+pub(crate) fn check_definition(
     kernel: &mut Kernel,
     name: &Free,
     type_: &Term,
@@ -57,52 +57,41 @@ pub(crate) fn check_group<R>(
     group: &RecGroup,
     within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, KernelError>,
 ) -> Result<R, KernelError> {
-    let mark = kernel.mark();
-    let outcome = check_group_members(kernel, group, within);
-    kernel.retract(mark);
+    kernel.scoped(|kernel| {
+        let mut names = Vec::with_capacity(group.length());
+        let mut erased_member: Option<Term> = None;
 
-    outcome
-}
+        // Every member is assumed before any body is checked, because a member may call any other.
+        for index in 0..group.length() {
+            let type_ = group.member_type(index);
+            let sort = infer_type(kernel, &type_)?;
 
-/// [`check_group`]'s body, with the scope bracket left to its caller so that every failing path retracts too.
-fn check_group_members<R>(
-    kernel: &mut Kernel,
-    group: &RecGroup,
-    within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, KernelError>,
-) -> Result<R, KernelError> {
-    let mut names = Vec::with_capacity(group.length());
-    let mut erased_member: Option<Term> = None;
+            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
+                erased_member = Some(type_.clone());
+            }
 
-    // Every member is assumed before any body is checked, because a member may call any other.
-    for index in 0..group.length() {
-        let type_ = group.member_type(index);
-        let sort = infer_type(kernel, &type_)?;
-
-        if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
-            erased_member = Some(type_.clone());
+            let name = kernel.fresh(Some("rec"));
+            kernel.assume(&name, &type_);
+            names.push(name);
         }
 
-        let name = kernel.fresh(Some("rec"));
-        kernel.assume(&name, &type_);
-        names.push(name);
-    }
+        let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
+        let refs = members.iter().collect::<Vec<_>>();
 
-    let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
-    let refs = members.iter().collect::<Vec<_>>();
+        for (index, member) in group.iter().enumerate() {
+            check(kernel, &member.body.open(&refs), &group.member_type(index))?;
+        }
 
-    for (index, member) in group.iter().enumerate() {
-        check(kernel, &member.body.open(&refs), &group.member_type(index))?;
-    }
+        if let Some(type_) = erased_member
+            && group_totality(kernel, group) != Totality::Total
+        {
+            return Err(KernelError::NotDescending {
+                type_: Box::new(type_),
+            });
+        }
 
-    if let Some(type_) = erased_member
-        && group_totality(kernel, group) != Totality::Total
-    {
-        return Err(KernelError::NotDescending {
-            type_: Box::new(type_),
-        });
-    }
-
-    within(kernel, &names)
+        within(kernel, &names)
+    })
 }
 
 /// Check a top-level recursive group, then bring every member into scope under the name it is exported as.
@@ -110,7 +99,7 @@ fn check_group_members<R>(
 /// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `names` parallels the group's members positionally; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through.
 ///
 /// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see "Totality of the erased program" in `documentation/DESIGN.md`.
-pub fn check_rec_group(
+pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
     names: &[Free],
     group: &RecGroup,
@@ -174,7 +163,10 @@ pub fn check_rec_group(
 /// The other two are gone. That `result_sort` is a literal sort is clause 3, and that constructor tags are distinct is clause 5; each was probed, and the second was found admitting a term.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
-pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
+pub(crate) fn check_induct_decl(
+    kernel: &mut Kernel,
+    declaration: &InductDecl,
+) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
@@ -231,36 +223,49 @@ fn check_distinct_tags(declaration: &InductDecl) -> Result<(), KernelError> {
 ///
 /// One walk, because the indices are scoped under the parameters by construction. It reaches the parameter domains as well, which matters for a family with no constructors — nothing else would present them for sorting.
 fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
-    let mark = kernel.mark();
-    let outcome = (|| {
-        let mut arity = declaration.arity.clone();
+    walk_arity(
+        kernel,
+        &declaration.arity,
+        |kernel, domain| infer_type(kernel, domain).map(|_| ()),
+        |kernel, domain| infer_type(kernel, domain).map(|_| ()),
+    )
+}
 
-        let mut indices = loop {
+/// Walk a declaration's arity: its parameter binders, then the telescope they terminate in — an `induct`'s indices, a `struct`'s fields — handing each domain to the clause that owns it.
+///
+/// One walk rather than two, because the two halves *are* one telescope: the terminal is scoped under the parameters by construction, so an index or field domain sees every parameter without the caller reopening anything. Each domain is assumed before the walk descends past it, which is what lets a later one mention an earlier one; the whole walk runs inside [`Kernel::scoped`], so none of those binders outlives the clause that needed them.
+fn walk_arity<B: Bound>(
+    kernel: &mut Kernel,
+    arity: &Telescope<Telescope<B>>,
+    mut parameter: impl FnMut(&mut Kernel, &Term) -> Result<(), KernelError>,
+    mut terminal: impl FnMut(&mut Kernel, &Term) -> Result<(), KernelError>,
+) -> Result<(), KernelError> {
+    kernel.scoped(|kernel| {
+        let mut arity = arity.clone();
+
+        let mut inner = loop {
             match arity {
                 Telescope::Cons(domain, rest) => {
-                    infer_type(kernel, &domain)?;
+                    parameter(kernel, &domain)?;
 
                     let binder = kernel.fresh(rest.first_hint());
                     kernel.assume(&binder, &domain);
                     arity = rest.open(&[&Term::free_var(&binder)]);
                 }
-                Telescope::Done(indices) => break *indices,
+                Telescope::Done(inner) => break *inner,
             }
         };
 
-        while let Telescope::Cons(domain, rest) = indices {
-            infer_type(kernel, &domain)?;
+        while let Telescope::Cons(domain, rest) = inner {
+            terminal(kernel, &domain)?;
 
             let binder = kernel.fresh(rest.first_hint());
             kernel.assume(&binder, &domain);
-            indices = rest.open(&[&Term::free_var(&binder)]);
+            inner = rest.open(&[&Term::free_var(&binder)]);
         }
 
         Ok(())
-    })();
-    kernel.retract(mark);
-
-    outcome
+    })
 }
 
 /// A constructor's index targets must inhabit the family's index telescope, and its parameter prefix must be the family's own parameters.
@@ -319,7 +324,10 @@ fn check_constructed(
 /// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 6), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
 ///
 /// A `struct` has no constructors and no index targets, so clauses 5 through 9 have nothing to range over — and clause 7 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
-pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
+pub(crate) fn check_struct_decl(
+    kernel: &mut Kernel,
+    declaration: &StructDecl,
+) -> Result<(), KernelError> {
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
@@ -357,39 +365,18 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
         return Ok(());
     }
 
-    let mark = kernel.mark();
-    let outcome = (|| {
-        // The parameters are skipped rather than counted past: they are the arity's own binders, and the fields it terminates in are exactly the stored payload this rule is about.
-        let mut arity = declaration.arity.clone();
-
-        let mut fields = loop {
-            match arity {
-                Telescope::Cons(type_, rest) => {
-                    let binder = kernel.fresh(rest.first_hint());
-                    kernel.assume(&binder, &type_);
-                    arity = rest.open(&[&Term::free_var(&binder)]);
-                }
-                Telescope::Done(fields) => break *fields,
-            }
-        };
-
-        while let Telescope::Cons(type_, rest) = fields {
-            if carries_information(kernel, &type_)? {
-                return Err(KernelError::Informative {
-                    field: Box::new(type_),
-                });
-            }
-
-            let binder = kernel.fresh(rest.first_hint());
-            kernel.assume(&binder, &type_);
-            fields = rest.open(&[&Term::free_var(&binder)]);
-        }
-
-        Ok(())
-    })();
-    kernel.retract(mark);
-
-    outcome
+    // The parameters are skipped rather than counted past: they are the arity's own binders, and the fields it terminates in are exactly the stored payload this rule is about.
+    walk_arity(
+        kernel,
+        &declaration.arity,
+        |_, _| Ok(()),
+        |kernel, type_| match carries_information(kernel, type_)? {
+            true => Err(KernelError::Informative {
+                field: Box::new(type_.clone()),
+            }),
+            false => Ok(()),
+        },
+    )
 }
 
 /// Walk one declaration telescope, requiring each `Type`-sorted domain to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
@@ -402,64 +389,51 @@ fn check_signature<B: Bound + Clone>(
     result_sort: &Term,
     terminal: impl FnOnce(&mut Kernel, &[(Free, Term)], &B) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
-    let mark = kernel.mark();
-    let outcome = check_signature_within(kernel, telescope, uniform, result_sort, terminal);
-    kernel.retract(mark);
+    kernel.scoped(|kernel| {
+        let result = kernel.reduce_forced(result_sort.clone())?;
+        // A `Prop`-sorted result imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result sort is.
+        let sized = match &*result {
+            Subterm::Type(bound) => Some((bound.clone(), bound.checked_add(1)?)),
+            _ => None,
+        };
 
-    outcome
-}
+        let mut entries: Vec<(Free, Term)> = Vec::new();
+        let mut telescope = telescope.clone();
 
-/// `check_signature`'s body, with the scope bracket left to its caller so every failing path retracts too.
-fn check_signature_within<B: Bound + Clone>(
-    kernel: &mut Kernel,
-    telescope: &Telescope<B>,
-    uniform: usize,
-    result_sort: &Term,
-    terminal: impl FnOnce(&mut Kernel, &[(Free, Term)], &B) -> Result<(), KernelError>,
-) -> Result<(), KernelError> {
-    let result = kernel.reduce_forced(result_sort.clone())?;
-    // A `Prop`-sorted result imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result sort is.
-    let sized = match &*result {
-        Subterm::Type(bound) => Some((bound.clone(), bound.checked_add(1)?)),
-        _ => None,
-    };
+        while let Telescope::Cons(domain, rest) = telescope {
+            if let Some((bound, raised)) = &sized
+                && let Sort::Type(level) = infer_type(kernel, &domain)?
+            {
+                let upper = if entries.len() < uniform {
+                    raised
+                } else {
+                    bound
+                };
 
-    let mut entries: Vec<(Free, Term)> = Vec::new();
-    let mut telescope = telescope.clone();
-
-    while let Telescope::Cons(domain, rest) = telescope {
-        if let Some((bound, raised)) = &sized
-            && let Sort::Type(level) = infer_type(kernel, &domain)?
-        {
-            let upper = if entries.len() < uniform {
-                raised
-            } else {
-                bound
-            };
-
-            if !kernel.level_leq(&level, upper) {
-                return Err(KernelError::Oversized {
-                    domain: level,
-                    bound: upper.clone(),
-                });
+                if !kernel.level_leq(&level, upper) {
+                    return Err(KernelError::Oversized {
+                        domain: level,
+                        bound: upper.clone(),
+                    });
+                }
             }
+
+            let binder = kernel.fresh(rest.first_hint());
+            kernel.assume(&binder, &domain);
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+            entries.push((binder, domain));
         }
 
-        let binder = kernel.fresh(rest.first_hint());
-        kernel.assume(&binder, &domain);
-        telescope = rest.open(&[&Term::free_var(&binder)]);
-        entries.push((binder, domain));
-    }
+        let Telescope::Done(body) = telescope else {
+            unreachable!("the loop exits only at the terminal")
+        };
 
-    let Telescope::Done(body) = telescope else {
-        unreachable!("the loop exits only at the terminal")
-    };
-
-    terminal(kernel, &entries, &body)
+        terminal(kernel, &entries, &body)
+    })
 }
 
 /// Check a term that closes the program — an entrypoint body, with no name to export. `expected` is its declared type when it has one.
-pub fn check_entrypoint(
+pub(crate) fn check_entrypoint(
     kernel: &mut Kernel,
     body: &Term,
     expected: Option<&Term>,

@@ -66,7 +66,7 @@ struct Pending {
 }
 
 /// Reduce `term` until its head constructor is stable.
-pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
     let mut pending: Vec<Pending> = Vec::new();
 

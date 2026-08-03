@@ -10,7 +10,7 @@ mod satisfy;
 pub use satisfy::*;
 
 mod entail;
-pub use entail::*;
+pub(crate) use entail::*;
 
 mod obligation;
 pub use obligation::*;

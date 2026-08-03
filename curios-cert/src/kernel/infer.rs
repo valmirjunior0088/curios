@@ -24,14 +24,16 @@ mod tests;
 use {
     super::{
         Kernel, KernelError, Sort, check_group,
-        convert::{convert, scoped},
+        convert::convert,
         sort::{arity_matches, as_sort},
         synth_neutral,
     },
+    curios_base::{Grain, PackedBin},
     curios_core::{
-        Apply, Bound, Cases, Field, Func, FuncType, InductType, Let, Many, Proj, Rec, Reducer,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseInst,
-        Variant, instantiate_universe_levels_scoped,
+        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductDecl, InductType, Let,
+        Level, Many, Nat, One, Prim, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, UniverseContext, UniverseInst, Variant,
+        instantiate_universe_levels_scoped,
     },
 };
 
@@ -428,11 +430,10 @@ pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Kern
 fn check_motive(
     kernel: &mut Kernel,
     family: Option<&InductType>,
-    motive: &curios_core::Scope<curios_core::Many>,
+    motive: &Scope<Many>,
     scrutinee_type: &Term,
 ) -> Result<Sort, KernelError> {
-    let mark = kernel.mark();
-    let outcome = (|| {
+    kernel.scoped(|kernel| {
         let mut opened: Vec<Term> = Vec::new();
 
         match family {
@@ -481,10 +482,7 @@ fn check_motive(
 
         // The motive's own sort *is* its type read as one: a body typed `Prop` is a proposition, a body typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
         as_sort(kernel, &type_).map_err(|_| KernelError::NotAMotive(body.clone()))
-    })();
-    kernel.retract(mark);
-
-    outcome
+    })
 }
 
 /// Check an elimination's arms against its motive.
@@ -493,7 +491,7 @@ fn check_motive(
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
-    motive: &curios_core::Scope<curios_core::Many>,
+    motive: &Scope<Many>,
     cases: &Cases,
     scrutinee: &Term,
     scrutinee_type: &Term,
@@ -503,33 +501,17 @@ fn check_cases(
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
         let expected = motive.open(&[&value]);
 
-        // A variable scrutinee stands refined to this case's value in the arm; any other scrutinee stands as a case equation the reducer consults.
-        let (solutions, equation) = match &**scrutinee {
-            Subterm::Var(var)
-                if var.as_bound().is_none() && kernel.local_type(var.unwrap()).is_some() =>
-            {
-                (vec![(var.unwrap().clone(), value)], None)
-            }
-            _ => (Vec::new(), Some(value)),
-        };
+        kernel.scoped(|kernel| {
+            let mut solutions = Vec::new();
+            eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions);
+            eliminate::shadow(kernel, &solutions);
 
-        let mark = kernel.mark();
-        if let Some(value) = equation {
-            // An effectful scrutinee refuses type-level reduction; its equation is recorded at the spelling it has. Nothing is admitted by this fallback — a missed key only checks the arm under fewer assumptions.
-            let stuck = kernel
-                .reduce(scrutinee.clone())
-                .unwrap_or_else(|_| scrutinee.clone());
-            kernel.refine(stuck, value);
-        }
-        eliminate::shadow(kernel, &solutions);
-        let outcome = check(
-            kernel,
-            &eliminate::substitute(body, &solutions),
-            &eliminate::substitute(&expected, &solutions),
-        );
-        kernel.retract(mark);
-
-        outcome
+            check(
+                kernel,
+                &eliminate::substitute(body, &solutions),
+                &eliminate::substitute(&expected, &solutions),
+            )
+        })
     };
 
     match cases {
@@ -563,18 +545,13 @@ fn check_cases(
             false_case,
             true_case,
         } => {
-            at(
-                kernel,
-                Term::prim(curios_core::Prim::Bool(false)),
-                false_case,
-            )?;
-            at(kernel, Term::prim(curios_core::Prim::Bool(true)), true_case)
+            at(kernel, Term::prim(Prim::Bool(false)), false_case)?;
+            at(kernel, Term::prim(Prim::Bool(true)), true_case)
         }
 
         Cases::Switch { cases, default } => {
             for (key, body) in cases {
-                let literal =
-                    Term::prim(curios_core::Prim::Nat(curios_core::Nat::new(*key as usize)));
+                let literal = Term::prim(Prim::Nat(Nat::new(*key as usize)));
                 at(kernel, literal, body)?;
             }
 
@@ -594,50 +571,35 @@ fn check_cases(
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
     kernel: &mut Kernel,
-    motive: &curios_core::Scope<curios_core::Many>,
+    motive: &Scope<Many>,
     scrutinee: &Term,
     scrutinee_type: &Term,
-    carrier: &curios_core::Carrier,
+    carrier: &Carrier,
     at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
-    use curios_core::{Carrier, Nat, Prim};
-
     // One cons arm: open the binders, assume them at the carrier's types with the induction hypothesis at the tail, and check the body at the motive of the cons value — with the scrutinee standing refined to that value, exactly as in every other arm.
     let cons = |kernel: &mut Kernel,
-                binders: Vec<(&curios_core::Free, Term)>,
+                binders: Vec<(&Free, Term)>,
                 cons_value: Term,
                 body: &Term|
      -> Result<(), KernelError> {
-        let mark = kernel.mark();
-        for (binder, type_) in &binders {
-            kernel.assume(binder, type_);
-        }
-
-        let expected = motive.open(&[&cons_value]);
-        let (solutions, equation) = match &**scrutinee {
-            Subterm::Var(var)
-                if var.as_bound().is_none() && kernel.local_type(var.unwrap()).is_some() =>
-            {
-                (vec![(var.unwrap().clone(), cons_value.clone())], None)
+        kernel.scoped(|kernel| {
+            for (binder, type_) in &binders {
+                kernel.assume(binder, type_);
             }
-            _ => (Vec::new(), Some(cons_value.clone())),
-        };
 
-        if let Some(value) = equation {
-            let stuck = kernel
-                .reduce(scrutinee.clone())
-                .unwrap_or_else(|_| scrutinee.clone());
-            kernel.refine(stuck, value);
-        }
-        eliminate::shadow(kernel, &solutions);
-        let outcome = check(
-            kernel,
-            &eliminate::substitute(body, &solutions),
-            &eliminate::substitute(&expected, &solutions),
-        );
-        kernel.retract(mark);
+            let expected = motive.open(&[&cons_value]);
 
-        outcome
+            let mut solutions = Vec::new();
+            eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions);
+            eliminate::shadow(kernel, &solutions);
+
+            check(
+                kernel,
+                &eliminate::substitute(body, &solutions),
+                &eliminate::substitute(&expected, &solutions),
+            )
+        })
     };
 
     match carrier {
@@ -730,12 +692,12 @@ fn check_free_monoid(
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             }
 
-            let empty = Term::prim(Prim::Bin(*grain, curios_base::PackedBin::empty()));
+            let empty = Term::prim(Prim::Bin(*grain, PackedBin::empty()));
             at(kernel, empty.clone(), empty_case)?;
 
             let atom_type = Term::prim(match grain {
-                curios_base::Grain::X => Prim::ByteType,
-                curios_base::Grain::B => Prim::BoolType,
+                Grain::X => Prim::ByteType,
+                Grain::B => Prim::BoolType,
             });
             let head = kernel.fresh(cons_case.first_hint());
             let tail = kernel.fresh(cons_case.second_hint());
@@ -803,7 +765,7 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
         {
             let lambda = telescope.clone();
             let against = expected_func.telescope.clone();
-            return scoped(kernel, |kernel| check_lambda(kernel, lambda, against));
+            return kernel.scoped(|kernel| check_lambda(kernel, lambda, against));
         }
         // Anything else — a non-Π expectation, a plicity or arity mismatch — falls through, so the refusal keeps its ordinary inferred-versus-expected shape.
     }
@@ -847,7 +809,7 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
     }
 }
 
-/// The telescope walk of the lambda rule above, under `scoped`'s retraction bracket: the guards on plicity and arity ran at the dispatch, so the two telescopes are structurally parallel by construction.
+/// The telescope walk of the lambda rule above, under [`Kernel::scoped`]'s retraction bracket: the guards on plicity and arity ran at the dispatch, so the two telescopes are structurally parallel by construction.
 fn check_lambda(
     kernel: &mut Kernel,
     lambda: Telescope<Term>,
@@ -935,7 +897,7 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
         {
             let (lower, upper) = (lower.telescope.clone(), upper.telescope.clone());
 
-            return scoped(kernel, |kernel| subsumes_telescope(kernel, lower, upper));
+            return kernel.scoped(|kernel| subsumes_telescope(kernel, lower, upper));
         }
         _ => {}
     }
@@ -991,15 +953,15 @@ fn infer_telescope(
             infer_type(kernel, &domain)?;
 
             let binder = kernel.fresh(rest.first_hint());
-            let mark = kernel.mark();
-            kernel.assume(&binder, &domain);
+            let inner = kernel.scoped(|kernel| {
+                kernel.assume(&binder, &domain);
 
-            let inner = infer_telescope(kernel, rest.open(&[&Term::free_var(&binder)]));
-            kernel.retract(mark);
+                infer_telescope(kernel, rest.open(&[&Term::free_var(&binder)]))
+            });
 
             Ok(Telescope::Cons(
                 domain,
-                curios_core::Scope::close(curios_core::One, &[&binder], inner?),
+                Scope::close(One, &[&binder], inner?),
             ))
         }
     }
@@ -1008,9 +970,9 @@ fn infer_telescope(
 /// A declaration with its universe parameters replaced by this occurrence's instance, so its constructor signatures speak of the right levels.
 fn instantiate_induct_decl(
     kernel: &Kernel,
-    declaration: &curios_core::InductDecl,
-    levels: &[curios_core::Level],
-) -> Result<curios_core::InductDecl, KernelError> {
+    declaration: &InductDecl,
+    levels: &[Level],
+) -> Result<InductDecl, KernelError> {
     kernel.check_instance(&declaration.universe_context, levels)?;
 
     let mut instantiated = declaration.clone();
@@ -1021,7 +983,7 @@ fn instantiate_induct_decl(
     for constructor in instantiated.signatures_mut() {
         constructor.telescope = instantiate_universe_levels_scoped(&constructor.telescope, levels)?;
     }
-    instantiated.universe_context = curios_core::UniverseContext::empty();
+    instantiated.universe_context = UniverseContext::empty();
 
     Ok(instantiated)
 }

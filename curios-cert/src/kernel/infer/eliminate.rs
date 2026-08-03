@@ -68,11 +68,11 @@ pub(super) fn check_induct_arms(
             .instantiate(tag, &family.params)
             .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
-        let mark = kernel.mark();
-        let outcome = open_payload(kernel, signature, |kernel, binders, _payload, targets| {
-            invert_indices(kernel, &family.indices, targets, binders)
+        let outcome = kernel.scoped(|kernel| {
+            open_payload(kernel, signature, |kernel, binders, _payload, targets| {
+                invert_indices(kernel, &family.indices, targets, binders)
+            })
         });
-        kernel.retract(mark);
 
         if !matches!(outcome?, Invert::Impossible) {
             return Err(KernelError::MissingArm {
@@ -106,50 +106,65 @@ fn check_arm(
         });
     }
 
-    let mark = kernel.mark();
-    let outcome = open_payload(kernel, signature, |kernel, binders, payload, targets| {
-        // The forced equations of this case, as one substitution. An unreachable arm (a definite clash) is checked as written, exactly as the elaborator checks one.
-        let mut solutions = specialize(kernel, family, targets, binders)?;
+    kernel.scoped(|kernel| {
+        open_payload(kernel, signature, |kernel, binders, payload, targets| {
+            // The forced equations of this case, as one substitution. An unreachable arm (a definite clash) is checked as written, exactly as the elaborator checks one.
+            let mut solutions = specialize(kernel, family, targets, binders)?;
 
-        // The value this arm's scrutinee is: the constructor at its payload.
-        let value: Term = Subterm::Variant(Variant {
-            name: family.name.clone(),
-            universes: family.universes.clone(),
-            params: family.params.clone(),
-            tag: tag.clone(),
-            payload: payload.to_vec(),
+            // The value this arm's scrutinee is: the constructor at its payload.
+            let value: Term = Subterm::Variant(Variant {
+                name: family.name.clone(),
+                universes: family.universes.clone(),
+                params: family.params.clone(),
+                tag: tag.clone(),
+                payload: payload.to_vec(),
+            })
+            .into();
+
+            assume_case_value(kernel, scrutinee, &value, &mut solutions);
+
+            let refs = payload.iter().collect::<Vec<_>>();
+            let body = substitute(&arm.open(&refs), &solutions);
+
+            let mut arguments = targets.clone();
+            arguments.push(value);
+            let refs = arguments.iter().collect::<Vec<_>>();
+            let expected = substitute(&motive.open(&refs), &solutions);
+
+            shadow(kernel, &solutions);
+
+            check(kernel, &body, &expected)
         })
-        .into();
+    })
+}
 
-        // A variable scrutinee is this case's value within the arm — the zero-index instance of the same equations. Any other scrutinee stands as a case equation the reducer consults.
-        if let Subterm::Var(var) = &**scrutinee
-            && var.as_bound().is_none()
-            && kernel.local_type(var.unwrap()).is_some()
-        {
-            let solved = substitute(&value, &solutions);
-            solutions.push((var.unwrap().clone(), solved));
-        } else {
-            let stuck = kernel
-                .reduce(scrutinee.clone())
-                .unwrap_or_else(|_| scrutinee.clone());
-            kernel.refine(stuck, substitute(&value, &solutions));
-        }
+/// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.
+///
+/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for a primitive carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead; an effectful scrutinee refuses type-level reduction and its equation is recorded at the spelling it has, which admits nothing — a missed key only checks the arm under fewer assumptions.
+///
+/// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and free-monoid — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
+///
+/// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Kernel::scoped`] bracket — that bracket is what scopes the refinement to the arm.
+pub(super) fn assume_case_value(
+    kernel: &mut Kernel,
+    scrutinee: &Term,
+    value: &Term,
+    solutions: &mut Vec<(Free, Term)>,
+) {
+    let value = substitute(value, solutions);
 
-        let refs = payload.iter().collect::<Vec<_>>();
-        let body = substitute(&arm.open(&refs), &solutions);
+    if let Subterm::Var(var) = &**scrutinee
+        && var.as_bound().is_none()
+        && kernel.local_type(var.unwrap()).is_some()
+    {
+        solutions.push((var.unwrap().clone(), value));
+        return;
+    }
 
-        let mut arguments = targets.clone();
-        arguments.push(value);
-        let refs = arguments.iter().collect::<Vec<_>>();
-        let expected = substitute(&motive.open(&refs), &solutions);
-
-        shadow(kernel, &solutions);
-
-        check(kernel, &body, &expected)
-    });
-    kernel.retract(mark);
-
-    outcome
+    let stuck = kernel
+        .reduce(scrutinee.clone())
+        .unwrap_or_else(|_| scrutinee.clone());
+    kernel.refine(stuck, value);
 }
 
 /// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution. Empty when the equations force nothing — including when they *clash*, which makes the arm unreachable and therefore checked as written.
@@ -316,31 +331,31 @@ pub(super) fn guard_large_elimination(
                 .instantiate(tag, &family.params)
                 .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
 
-            let mark = kernel.mark();
-            let outcome = open_payload(kernel, signature, |kernel, _binders, payload, targets| {
-                let determined = pinned_by_targets(targets);
+            let outcome = kernel.scoped(|kernel| {
+                open_payload(kernel, signature, |kernel, _binders, payload, targets| {
+                    let determined = pinned_by_targets(targets);
 
-                for component in payload {
-                    let Subterm::Var(var) = &**component else {
-                        continue;
-                    };
-                    let name = var.unwrap();
+                    for component in payload {
+                        let Subterm::Var(var) = &**component else {
+                            continue;
+                        };
+                        let name = var.unwrap();
 
-                    if determined.contains(name) {
-                        continue;
+                        if determined.contains(name) {
+                            continue;
+                        }
+                        // A component that is itself a proof carries no information a relevant result could depend on: irrelevance makes any two of them interchangeable. A *type*-valued component does not qualify, however completely erasure deletes it — see `carries_information`.
+                        let type_ = infer(kernel, component)?;
+                        if !carries_information(kernel, &type_)? {
+                            continue;
+                        }
+
+                        return Ok(false);
                     }
-                    // A component that is itself a proof carries no information a relevant result could depend on: irrelevance makes any two of them interchangeable. A *type*-valued component does not qualify, however completely erasure deletes it — see `carries_information`.
-                    let type_ = infer(kernel, component)?;
-                    if !carries_information(kernel, &type_)? {
-                        continue;
-                    }
 
-                    return Ok(false);
-                }
-
-                Ok(true)
+                    Ok(true)
+                })
             });
-            kernel.retract(mark);
 
             match outcome? {
                 true => Ok(()),

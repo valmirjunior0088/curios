@@ -7,7 +7,7 @@
 use {
     super::{History, ground},
     crate::{Kernel, KernelError},
-    curios_core::{Peel, Prim, Term, Visit, peel_bin, peel_lst, peel_nat},
+    curios_core::{Peel, Prim, Term, Var, Visit, peel_bin, peel_lst, peel_nat},
 };
 
 /// Whether `this` and `that` are the same primitive operation on convertible operands.
@@ -59,7 +59,7 @@ fn peel_nat_pair(this: &Prim, that: &Prim) -> Option<Peel> {
 ///
 /// Both halves come from `Prim::traverse`, which is the single definition of what a primitive's term operands are. Nothing here enumerates operations, so nothing here can forget one.
 fn decompose(prim: &Prim) -> (Prim, Vec<Term>) {
-    let mut visit = Visit::masking(|_, _: &curios_core::Var| None, Term::type_ground());
+    let mut visit = Visit::masking(|_, _: &Var| None, Term::type_ground());
     let shape = prim.traverse(&mut visit);
 
     (shape, visit.take_masked_children())

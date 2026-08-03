@@ -18,7 +18,25 @@
 //!
 //! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `KernelError`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
-use curios_core::{Free, Global, InductDecl, StructDecl, Term};
+use curios_core::{Bound, Free, Global, InductDecl, StructDecl, Subterm, Term};
+
+/// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
+///
+/// Two halves, and they are paired here because they were paired at every site that needed them. The shape half asks whether the head could move at all; anything else is already weak-head normal, so forcing it spends budget to learn nothing. The scope half is a *safety* precondition rather than an optimization: a term whose [`reach`](Term::reach) is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling index rather than refuse.
+///
+/// Written once because it was written three times and the three had already drifted: two spellings excluded `Metavar` and one included it. It is excluded here, which is the reading `whnf` itself takes — a metavariable is a stuck neutral, weak-head normal already. The difference is inert either way, since every analysis on this seam runs post-zonk on meta-free terms; were one ever reached, declining to force it leaves the term opaque, which is the refusing direction for all three callers.
+pub(crate) fn forceable(term: &Term) -> bool {
+    matches!(
+        &**term,
+        Subterm::Var(_)
+            | Subterm::Apply(_)
+            | Subterm::UniverseInst(_)
+            | Subterm::Proj(_)
+            | Subterm::Match(_)
+            | Subterm::Let(_)
+            | Subterm::Rec(_)
+    ) && term.reach() == 0
+}
 
 /// What a shared analysis may ask of the checker running it, beyond the terms it was handed.
 ///

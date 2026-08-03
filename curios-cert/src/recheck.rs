@@ -20,7 +20,7 @@ use {
     },
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
-        rewrite_universe_levels_scoped, universe_metas,
+        UniverseContext, rewrite_universe_levels_scoped, universe_metas,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
 };
@@ -508,7 +508,7 @@ mod tests;
 /// What is wrong with a universe context the walk is about to assume, if anything.
 ///
 /// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
-fn universe_verdict(context: &curios_core::UniverseContext) -> Option<KernelError> {
+fn universe_verdict(context: &UniverseContext) -> Option<KernelError> {
     if !closed(context) {
         return Some(KernelError::UnclosedUniverses);
     }
