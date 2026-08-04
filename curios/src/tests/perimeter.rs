@@ -632,6 +632,58 @@ fn a_catch_all_is_checked_at_its_scrutinee() {
     assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");
 }
 
+/// The premise every rule above is stated over and no entry of `PERIMETER.md` names: a type is a *pure* term. `reduce_prim` is where that is enforced — `Cell`, `CellGet`, `CellSet`, `Foreign` and `Exit` each refuse type-level reduction — and `Eq(Cell/get(c), Cell/get(c))` is refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play.
+const AN_EFFECTFUL_SCRUTINEE_DOES_NOT_REFINE_INTO_A_TYPE: &str = r#"
+    use /std/{Cell, Eq, Bool, False, Str};
+
+    let forged : Str =
+        let c = Cell/new(true);
+        match Cell/get(c)
+        | true =>
+            let p : Eq(Cell/get(c), true) = Eq/refl();
+            let done = Cell/set(c, false);
+            match Cell/get(c)
+            | true => "second read true"
+            | false => False/absurd(Bool/false_neq_true(p))
+            end
+        | false => "first read false"
+        end;
+
+    /std/print(forged)
+    "#;
+
+/// The control: matching on a cell read is ordinary code. Only the refinement's escape into a *type* is at issue, so a fix that refused the elimination outright would be a brick and this is what catches it.
+const A_MATCH_ON_A_CELL_READ_STILL_COMPILES: &str = r#"
+    use /std/{Cell, Str};
+
+    let read : Str =
+        let c = Cell/new(true);
+        match Cell/get(c)
+        | true => "t"
+        | false => "f"
+        end;
+
+    /std/print(read)
+    "#;
+
+// The purity premise, attacked through the one store that rewrites a term before the guard can see it. `refine_head`'s fallback registers the whole canonical scrutinee against the arm's case value, and the reducer consults that store *ahead of* folding the primitive — so inside `| true =>` the effectful `Cell/get(c)` reduces to `true` and never reaches `reduce_prim`. The annotation `Eq(Cell/get(c), true)` is admitted on those terms, and it is stored **as written**: `p`'s recorded type keeps the `Cell/get(c)`, and only the conversion that discharged `Eq/refl` ever saw it as `true`.
+//
+// Two occurrences of one syntactic term then denote two different values. After `Cell/set(c, false)` the inner `match Cell/get(c)` refines that same term to `false`, `p` re-reads at `Eq(false, true)`, and `/std/Bool/false_neq_true` turns it into `/syn/False`. The arm deriving it is *reachable*: the first read is `true`, so the outer arm runs, and the second is `false`, so the inner one runs too.
+//
+// Verified while the hole was open, and the acceptance is the refinement's doing rather than a fixture that never reached the check: the identical program with the derivation moved to the inner `| true =>` arm — where the refinement is `true`, so `p` re-reads at `Eq(true, true)` — is refused by `curios-elab` with `type mismatch`, while this one passes elaboration entire. It never compiled, because `curios-cert` refuses it, but not by any rule of its own: `whnf` folds a `Prim` at the top of its loop and only consults `refinement_of` on the value that comes back, so the same conversion dies on `reduction failed in the kernel`. The kernel's ordering is what stood between this and a closed inhabitant of `False`; this asserts the elaborator's half.
+#[test]
+fn an_effectful_scrutinee_does_not_refine_into_a_type() {
+    rejected_by(
+        AN_EFFECTFUL_SCRUTINEE_DOES_NOT_REFINE_INTO_A_TYPE,
+        "cannot appear at the type level",
+    );
+}
+
+#[test]
+fn a_match_on_a_cell_read_still_compiles() {
+    assert_eq!(run(A_MATCH_ON_A_CELL_READ_STILL_COMPILES), b"t");
+}
+
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so before the erasure obligations moved into `curios-cert` these were the class the trusted base took entirely on the elaborator's word.
 const PARTIAL_DIRECT: &str = r#"
     use /std/{Nat, False};

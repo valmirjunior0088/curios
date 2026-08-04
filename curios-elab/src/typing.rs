@@ -423,7 +423,15 @@ fn retry_checking(
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is canonicalized (head verbatim, arguments in WHNF) and recorded in the term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled with differently-reduced arguments still matches.
 ///
 /// Also drives Rung-B index *learning* (`refine_head(actual, target)`), where `actual` is a scrutinee index: a `Var` index is the live case, and a *constructor* index records an entry the reducer never fires (it has no applied-head symbol to probe) — the inverter pins the arm binders the other way. A stuck-*application* index would be the genuinely cyclic case, but no inductive in the library is indexed by one.
+///
+/// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and an effectful scrutinee does not have it: `Cell/get(c)` is a spelling whose value changes under it. Registering one anyway read the same term as `true` in one arm and `false` in a nested one, which is the equation between two `Bool` literals and from there a closed inhabitant of `False`. It also walked the effect *into a type*, past the `EffectAtTypeLevel` guard that refuses one written directly, because the reducer answered from the store before it ever reached the primitive.
+///
+/// So an effectful scrutinee refines nothing, which is what `curios-cert`'s `assume_case_value` already says of its own store: the arm is checked under strictly fewer assumptions, and a program that needed the refinement is refused where the effect meets the type level rather than admitted there.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+    if refuses_type_level_reduction(context, head) {
+        return Ok(());
+    }
+
     match &**head {
         Subterm::Var(var) => {
             context.refine(var.unwrap(), value);
@@ -458,6 +466,18 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
     }
 
     Ok(())
+}
+
+/// Whether reduction refuses `term` outright, which is how "this scrutinee denotes no single value" is asked.
+///
+/// The reducer is the authority — its `EffectAtTypeLevel` arms *are* the list of operations whose spelling does not fix a value — so this asks it rather than keeping a second list beside it. A syntactic test for those primitives would be that second list and would also be wrong: every one of them reaches source through a `/sys` wrapper, so `Cell/get(c)` is an application of a definition whose *body* holds the primitive and the scrutinee carries no `Prim` node to find. Reduction sees through the wrapper, and through `n == Cell/get(c)` — where the effect is an operand of a fold — for the same reason.
+///
+/// Any other refusal, an exhausted budget included, leaves the refinement registered exactly as before: this narrows what is assumed, and only where the assumption is unsound.
+fn refuses_type_level_reduction(context: &mut Context, term: &Term) -> bool {
+    matches!(
+        super::reduce(context, term.clone()),
+        Err(ReduceError::EffectAtTypeLevel { .. }),
+    )
 }
 
 /// Weak-head normal form of the *spine only*: reduce the function position and beta-open it over the arguments, repeating, but never reduce an argument and never evaluate the primitive node this lands on.
