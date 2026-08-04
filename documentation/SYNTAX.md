@@ -142,7 +142,19 @@ x\..make_bytes(n)
 x\..(pick(flag, a, b))
 ```
 
-The entire packed literal is whitespace-free. An unparenthesized spread operand must be a glued name, projection, application, or postfix-`!` chain. Parentheses admit an arbitrary term. A following `\` resumes the literal. `Bits` and `Bytes` cannot be mixed.
+`\.` splices a single atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — where `\..` splices a whole packed value:
+
+```crs
+b\.head\..tail
+x\.head\..tail
+x\48\.b\00
+x\..prefix\.b
+x\.(pick(flag, a, b))
+```
+
+`\.h\..t` is the cons of `h` onto `t`, and `x\..acc\.b` appends `b` to `acc`; neither operation has a separate named form.
+
+The entire packed literal is whitespace-free. An unparenthesized atom or spread operand must be a glued name, projection, application, or postfix-`!` chain. Parentheses admit an arbitrary term. A following `\` resumes the literal. `Bits` and `Bytes` cannot be mixed.
 
 ## Sorts and types
 

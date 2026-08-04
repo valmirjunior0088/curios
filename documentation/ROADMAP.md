@@ -60,6 +60,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in every comma-separated list
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
 - [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b\1\..bits\0`, `x\00\..bytes\01` — positional splices, any position/count, desugared to n-ary concat prims; packed literals stay whitespace-free with glued atomic operands and require their grain prefix; no tuple/string spread)
+- [x] Packed single-atom splice (`b\.head\..tail`, `x\..acc\.b` — one `Bool`/`Byte` generator where `\..` takes a whole value, desugared to `append` over what precedes it; the cons and append forms are literal syntax rather than named `/std` functions)
 
 ## Primitive Types
 
