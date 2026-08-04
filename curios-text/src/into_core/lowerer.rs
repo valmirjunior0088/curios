@@ -818,7 +818,35 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             })
     }
 
-    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `Lst` — exactly the pre-spread lowering, `[]` included. With spreads, consecutive elements group into `Lst` literal chunks and the whole literal becomes an n-ary `LstConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `LstConcat` case in `curios_elab`'s `elaborate_prim`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
+    /// Flush the pending elements onto `operands`.
+    ///
+    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `LstAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x\..xs\.y` lower alike. Two or more go into an `Lst` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
+    fn flush_lst_run(
+        &self,
+        operands: &mut Vec<curios_core::Term>,
+        run: &mut Vec<curios_core::Term>,
+    ) {
+        let element = || curios_core::Term::metavar(self.context.fresh_metavar());
+
+        match (run.len(), operands.last()) {
+            (0, _) => {}
+            (1, Some(_)) => {
+                let base = operands.pop().expect("the operand just matched");
+                let elem = run.pop().expect("the run just measured one");
+                operands.push(curios_core::Term::prim(curios_core::Prim::lst_append(
+                    element(),
+                    base,
+                    elem,
+                )));
+            }
+            _ => operands.push(curios_core::Term::prim(curios_core::Prim::Lst(
+                element(),
+                std::mem::take(run),
+            ))),
+        }
+    }
+
+    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `Lst` — exactly the pre-spread lowering, `[]` included. With spreads, elements join the literal through [`Self::flush_lst_run`] and the whole becomes an n-ary `LstConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `LstConcat` case in `curios_elab`'s `elaborate_prim`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
     pub(super) fn lower_lst_literal(
         &self,
         entries: &[LstEntry],
@@ -834,13 +862,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             match entry {
                 LstEntry::Elem(term) => run.push(lower(term)?),
                 LstEntry::Spread(term) => {
-                    if !run.is_empty() {
-                        operands.push(curios_core::Term::prim(curios_core::Prim::Lst(
-                            element(),
-                            std::mem::take(&mut run),
-                        )));
-                    }
-
+                    self.flush_lst_run(&mut operands, &mut run);
                     operands.push(lower(term)?);
                 }
             }
@@ -850,14 +872,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             return Ok(curios_core::Prim::Lst(element(), run));
         }
 
-        if !run.is_empty() {
-            operands.push(curios_core::Term::prim(curios_core::Prim::Lst(
-                element(),
-                run,
-            )));
-        }
+        self.flush_lst_run(&mut operands, &mut run);
 
-        Ok(curios_core::Prim::LstConcat(element(), operands))
+        match operands.len() {
+            // A lone append is the value itself; the concatenation would only be normalised away.
+            1 => match &*operands[0] {
+                curios_core::Subterm::Prim(prim) => Ok(prim.clone()),
+                _ => Ok(curios_core::Prim::LstConcat(element(), operands)),
+            },
+            _ => Ok(curios_core::Prim::LstConcat(element(), operands)),
+        }
     }
 
     /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).

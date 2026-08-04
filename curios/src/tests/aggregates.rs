@@ -132,7 +132,7 @@ fn lst_slice_is_a_monoid_citizen() {
 
 #[test]
 fn lst_append_is_concat_with_a_single() {
-    // An element entry rides the spine as `base ++ [e]` (`core::spine`), so it converts to the spread-of-a-singleton form by `refl` even for a symbolic base and element — `xs ++ y ≡ xs ++ [y]`.
+    // A trailing element entry lowers to an append and a spread of a singleton to a concatenation — two different terms, so this is the peel doing the work rather than the two sides being spelled alike. An append rides the spine as `base ++ [e]` (`core::spine`), which is what converts them, for a symbolic base and element that `reduce` cannot fold.
     let source = r#"
         use /std/{Handle, Str, Eq, Lst};
         let law(@T : Type, xs : Lst(T), y : T)
