@@ -8,7 +8,7 @@ use {
     num_bigint::BigUint,
 };
 
-/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`\\`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bin`, the element term itself for `Lst`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
+/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x\`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bin`, the element term itself for `Lst`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
 pub enum Layer {
     Empty,
     Cons { head: Option<Term>, tail: Term },
@@ -84,7 +84,7 @@ impl FreeMonoid {
     }
 }
 
-/// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the symbolic byte of a `Utf8` cons `append(\\, c)` (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
+/// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the symbolic byte of a `Utf8` cons `append(x\, c)` (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
 enum Head {
     LiteralBit(bool),
     LiteralByte(u8),
@@ -101,7 +101,7 @@ impl Head {
         }
     }
 
-    /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a `Utf8` cons head stays the symbolic `append(\\, c)`).
+    /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a `Utf8` cons head stays the symbolic `append(x\, c)`).
     fn into_chunk(self, grain: Grain) -> Term {
         match self {
             Head::LiteralBit(bit) => {
@@ -119,14 +119,14 @@ impl Head {
     }
 }
 
-/// One step of the `Bin` front decode. `Empty` is the identity (`\\`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`\\`-based append).
+/// One step of the `Bin` front decode. `Empty` is the identity (`x\`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`x\`-based append).
 enum Front {
     Empty,
     Cons { head: Head, tail: Term },
     Opaque,
 }
 
-/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a `Utf8` cons `append(\\, c)` yields its symbolic byte; a concatenation recurses into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`\\`-based append) is `Opaque`.
+/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a `Utf8` cons `append(x\, c)` yields its symbolic byte; a concatenation recurses into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x\`-based append) is `Opaque`.
 fn peel_front(grain: Grain, bin: &Term) -> Front {
     match &**bin {
         Subterm::Prim(Prim::Bin(found, bytes)) if *found == grain => match grain {
@@ -192,7 +192,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
     }
 }
 
-/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructor `Bin/get` and `Bin/slice` walk a codepoint at a time, exposing the cons structure the `Utf8` relation builds (`concat(append(\\, h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
+/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructor `Bin/get` and `Bin/slice` walk a codepoint at a time, exposing the cons structure the `Utf8` relation builds (`concat(append(x\, h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
 pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
     match peel_front(grain, bin) {
         Front::Cons { head, tail } => Some((head.into_chunk(grain), tail)),
@@ -256,7 +256,7 @@ pub(crate) fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
     }
 }
 
-// `cons` injects a byte at the front as `append(\\, c)` (a one-byte `Bin`); `peel_front` recognises that encoding to decode a symbolic cons head.
+// `cons` injects a byte at the front as `append(x\, c)` (a one-byte `Bin`); `peel_front` recognises that encoding to decode a symbolic cons head.
 fn is_empty_bin(grain: Grain, term: &Term) -> bool {
     matches!(&**term, Subterm::Prim(Prim::Bin(found, bytes)) if *found == grain && bytes.is_empty())
 }
@@ -266,7 +266,7 @@ fn is_nonempty_lst_literal(term: &Term) -> bool {
     matches!(&**term, Subterm::Prim(Prim::Lst(_, elems)) if !elems.is_empty())
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared verbatim by `BinConcat` and `LstConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`\\`, `[]`), merge adjacent literal runs into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` borrows an operand's run when it is a literal (`None` for a symbolic chunk); `into_literal`/`into_concat` rebuild the result in the carrier's primitives.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared verbatim by `BinConcat` and `LstConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x\`, `[]`), merge adjacent literal runs into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` borrows an operand's run when it is a literal (`None` for a symbolic chunk); `into_literal`/`into_concat` rebuild the result in the carrier's primitives.
 ///
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the spine peel's job when *deciding equality* (`spine::push`); reduction only needs a normal form, and conversion closes any residual gap.
 pub(crate) fn normalize_concat<E: Clone>(

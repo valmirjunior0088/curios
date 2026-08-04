@@ -907,7 +907,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                     }),
                 };
             }
-            // The cons head's byte: `get(append(\\, byte), 0) = byte` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules.
+            // The cons head's byte: `get(append(x\, byte), 0) = byte` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules.
             if let Subterm::Prim(Prim::BinAppend(Grain::X, base, byte)) = &*bin
                 && let Subterm::Prim(Prim::Bin(Grain::X, b)) = &**base
                 && b.is_empty()
@@ -946,7 +946,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
-            // The empty slice is empty: `slice(b, i, i) = \\`. The dual of the full-window identity and equally sound — an empty range yields no bytes regardless of `b`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons.
+            // The empty slice is empty: `slice(b, i, i) = x\`. The dual of the full-window identity and equally sound — an empty range yields no bytes regardless of `b`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons.
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::empty())));
             }
@@ -1020,7 +1020,7 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Normalise by the monoid unit/associativity laws — drop the empty bytestring (so `concat(\\, a)`/`concat(a, \\)` collapse to `a`), merge adjacent literal runs, collapse a lone operand. The definitional partner of `peel_bin`'s `\\`-handling (`core::spine`); see `normalize_concat`.
+            // Normalise by the monoid unit/associativity laws — drop the empty bytestring (so `concat(x\, a)`/`concat(a, x\)` collapse to `a`), merge adjacent literal runs, collapse a lone operand. The definitional partner of `peel_bin`'s `x\`-handling (`core::spine`); see `normalize_concat`.
             fn literal(operand: &Term) -> Option<&[u8]> {
                 match &**operand {
                     Subterm::Prim(Prim::Bin(Grain::X, bytes)) => bytes.as_bytes(),

@@ -251,7 +251,7 @@ pub(super) fn parse_lst_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
-// The `\\` leaf of a nested `Bin` pattern (the empty bytestring literal).
+// The `b\`/`x\` leaf of a nested `Bin` pattern (the grain's empty literal).
 pub(super) fn parse_bin_end_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(take_exact("b\\").and_drop(parse_whitespace()))
         .map(|()| MatchPattern::Bin(BinPattern::End(Grain::B)))

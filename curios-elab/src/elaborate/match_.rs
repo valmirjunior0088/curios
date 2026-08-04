@@ -37,7 +37,7 @@ fn seed_motive(
     Ok(())
 }
 
-/// Resolve the (arity-one) motive of a primitive eliminator. An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `\\` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
+/// Resolve the (arity-one) motive of a primitive eliminator. An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x\` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
 ///
 /// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job exactly as before.
 fn resolve_prim_motive(
@@ -247,7 +247,7 @@ fn elaborate_bin_match(
         context.assume(&tail_label, &head_type);
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
-        // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(\\, head)` (an atom appended to the empty packed sequence), not a literal run.
+        // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x\, head)` (an atom appended to the empty packed sequence), not a literal run.
         let singleton: Term = Subterm::Prim(Prim::BinAppend(
             grain,
             Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into(),
