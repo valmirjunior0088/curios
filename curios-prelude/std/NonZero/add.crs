@@ -2,7 +2,6 @@
 
 use /std/{Bool, Bits, Eq, False, True, BigNat, NonZero};
 use /std/Bool/{false_neq_true};
-use /std/Bits/{cons};
 use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/NonZero/{is_cons, nz_trimmed, raw_non_zero, trim_head_non_zero, trim_head_true};
 
@@ -11,7 +10,7 @@ let raw_cons(x : Bits, y : Bits, c : Bool, ne : is_cons(x)) -> is_cons(BigNat/ad
     match x : (r) => is_cons(BigNat/add/raw(r, y, c))
     | b\ => False/absurd(ne)
     | b\xh\..xt =>
-        match y : (yy) => is_cons(BigNat/add/raw(cons(xh, xt), yy, c))
+        match y : (yy) => is_cons(BigNat/add/raw(b\.xh\..xt, yy, c))
         | b\ => True/qed()
         | b\_\.._ => True/qed()
         end

@@ -1,7 +1,6 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/Bits/{cons};
 use /std/BigNat/{BigNat, cong_cons2, eq};
 
 pub rec raw(x : Bits, y : Bits) -> Order =
@@ -115,7 +114,7 @@ pub rec raw_flip(x : Bits, y : Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
         | b\_\.._ => Eq/refl()
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(raw(b, cons(xh, xt)), Order/flip(raw(cons(xh, xt), b)))
+        match y : (b) => Eq(raw(b, b\.xh\..xt), Order/flip(raw(b\.xh\..xt, b)))
         | b\ => Eq/refl()
         | b\yh\..yt =>
             Eq/trans(
@@ -156,7 +155,7 @@ let reduce_whole(@a : Bits, @b : Bits, @s : Order, e : Eq(raw(a, b), s), @E : Or
     Eq/subst((r : Order) => Eq(match r | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), e, p);
 
 let cons_lt(xh : Bool, zh : Bool, @xt : Bits, @zt : Bits, tail_lt : Eq(raw(xt, zt), Order/lt()))
-    -> Eq(raw(cons(xh, xt), cons(zh, zt)), Order/lt()) =
+    -> Eq(raw(b\.xh\..xt, b\.zh\..zt), Order/lt()) =
     match xh
     | true => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
     | false => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
@@ -165,20 +164,20 @@ let cons_lt(xh : Bool, zh : Bool, @xt : Bits, @zt : Bits, tail_lt : Eq(raw(xt, z
 let trans_cons(@xh : Bool, @xt : Bits, @yh : Bool, @yt : Bits, @zh : Bool, @zt : Bits,
     s1 : Order, e1 : Eq(raw(xt, yt), s1),
     s2 : Order, e2 : Eq(raw(yt, zt), s2),
-    p : Eq(raw(cons(xh, xt), cons(yh, yt)), Order/lt()),
-    q : Eq(raw(cons(yh, yt), cons(zh, zt)), Order/lt()),
+    p : Eq(raw(b\.xh\..xt, b\.yh\..yt), Order/lt()),
+    q : Eq(raw(b\.yh\..yt, b\.zh\..zt), Order/lt()),
     ih : (pl : Eq(raw(xt, yt), Order/lt())) -> (ql : Eq(raw(yt, zt), Order/lt())) -> Eq(raw(xt, zt), Order/lt()))
-    -> Eq(raw(cons(xh, xt), cons(zh, zt)), Order/lt()) =
-    match s1 : (r1) => Eq(raw(cons(xh, xt), cons(zh, zt)), Order/lt())
+    -> Eq(raw(b\.xh\..xt, b\.zh\..zt), Order/lt()) =
+    match s1 : (r1) => Eq(raw(b\.xh\..xt, b\.zh\..zt), Order/lt())
     | gt() => False/absurd(gt_neq_lt(reduce_whole(e1, p)))
     | lt() =>
-        match s2 : (r2) => Eq(raw(cons(xh, xt), cons(zh, zt)), Order/lt())
+        match s2 : (r2) => Eq(raw(b\.xh\..xt, b\.zh\..zt), Order/lt())
         | gt() => False/absurd(gt_neq_lt(reduce_whole(e2, q)))
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
         | eq() => cons_lt(xh, zh, Eq/subst((w : Bits) => Eq(raw(xt, w), Order/lt()), raw_to_eq(yt, zt, e2), e1))
         end
     | eq() =>
-        match s2 : (r3) => Eq(raw(cons(xh, xt), cons(zh, zt)), Order/lt())
+        match s2 : (r3) => Eq(raw(b\.xh\..xt, b\.zh\..zt), Order/lt())
         | gt() => False/absurd(gt_neq_lt(reduce_whole(e2, q)))
         | lt() => cons_lt(xh, zh, Eq/subst((w : Bits) => Eq(raw(w, zt), Order/lt()), Eq/sym(raw_to_eq(xt, yt, e1)), e2))
         | eq() => False/absurd(false_neq_true(Eq/trans(

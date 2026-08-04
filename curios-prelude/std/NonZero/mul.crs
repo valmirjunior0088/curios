@@ -2,7 +2,6 @@
 
 use /std/{Bool, Bits, Eq, False, True, BigNat, NonZero};
 use /std/Bool/{false_neq_true};
-use /std/Bits/{cons};
 use /std/BigNat/{is_trimmed, trim};
 use /std/NonZero/{is_cons, nz_trimmed, trim_head_non_zero, add};
 
@@ -13,7 +12,7 @@ rec raw_trim_cons(p : Bits, q : Bits,
     | b\ => False/absurd(np)
     | b\ph\..pt =>
         match ph
-        | true => add/trim_non_zero(q, cons(false, BigNat/mul/raw(pt, q)), false, tq, nq)
+        | true => add/trim_non_zero(q, b\0\..BigNat/mul/raw(pt, q), false, tq, nq)
         | false =>
             match pt
             | b\ => False/absurd(false_neq_true(tp))

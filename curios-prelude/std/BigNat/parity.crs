@@ -1,7 +1,6 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/Bits/{cons};
 use /std/BigNat/{BigNat, view, zero};
 
 pub rec is_even(a : BigNat) -> Bool =

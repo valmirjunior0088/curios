@@ -1,16 +1,15 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/Bits/{cons};
 use /std/BigNat/{BigNat, cong_cons2, cons_inj_head, cons_inj_tail, is_trimmed, is_trimmed_cons, nonempty, of_bits, refl_at, tail_is_trimmed};
 
 pub rec raw(x : Bits) -> Bits =
     match x
-    | b\ => cons(true, b\)
+    | b\ => b\1
     | b\h\..t =>
         match h
-        | true => cons(false, raw(t))
-        | false => cons(true, t)
+        | true => b\0\..raw(t)
+        | false => b\1\..t
         end
     end;
 
@@ -36,25 +35,25 @@ pub rec raw_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(
     | b\h\..t =>
         match h
         | true =>
-            match t : (u) => Eq(is_trimmed(raw(cons(true, u))), true)
+            match t : (u) => Eq(is_trimmed(raw(b\1\..u)), true)
             | b\ => Eq/refl()
-            | b\th\..tt => is_trimmed_cons(false, raw(cons(th, tt)),
-                raw_trimmed(cons(th, tt), p), raw_nonempty(cons(th, tt)))
+            | b\th\..tt => is_trimmed_cons(false, raw(b\.th\..tt),
+                raw_trimmed(b\.th\..tt, p), raw_nonempty(b\.th\..tt))
             end
         | false =>
-            match t : (u) => Eq(is_trimmed(raw(cons(false, u))), true)
+            match t : (u) => Eq(is_trimmed(raw(b\0\..u)), true)
             | b\ => Eq/refl()
             | b\_\.._ => p
             end
         end
     end;
 
-let raw_inj_absurd(zh : Bool, zt : Bits, pz : Eq(is_trimmed(cons(zh, zt)), true),
-    p : Eq(raw(b\), raw(cons(zh, zt)))) -> False =
+let raw_inj_absurd(zh : Bool, zt : Bits, pz : Eq(is_trimmed(b\.zh\..zt), true),
+    p : Eq(raw(b\), raw(b\.zh\..zt))) -> False =
     match zh
     | true => false_neq_true(Eq/sym(cons_inj_head(@true, @(b\), @false, @(raw(zt)), p)))
     | false =>
-        let shifted : Eq(is_trimmed(cons(false, b\)), true) =
+        let shifted : Eq(is_trimmed(b\0), true) =
             Eq/subst((w : Bits) => Eq(is_trimmed(w), true),
                 cong_cons2(refl_at(false), Eq/sym(cons_inj_tail(@true, @(b\), @true, @zt, p))),
                 pz);
@@ -71,7 +70,7 @@ pub rec raw_inj(y : Bits, z : Bits,
         | b\zh\..zt => False/absurd(raw_inj_absurd(zh, zt, pz, p))
         end
     | b\yh\..yt =>
-        match z : (d) => Eq(cons(yh, yt), d)
+        match z : (d) => Eq(b\.yh\..yt, d)
         | b\ => False/absurd(raw_inj_absurd(yh, yt, py, Eq/sym(p)))
         | b\zh\..zt =>
             match yh

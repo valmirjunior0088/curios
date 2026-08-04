@@ -1,20 +1,19 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/Bits/{cons};
 use /std/BigNat/{BigNat, cong_cons2, cong_is_trimmed, cong_of_bits, cong_rep, cons_inj_head, cons_inj_tail, eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_bits, refl_at, tail_is_trimmed, trim_of_trimmed, xor3, mod succ};
 
 pub rec raw(x : Bits, y : Bits, carry : Bool) -> Bits =
     match x
     | b\ =>
         match y
-        | b\ => match carry | true => cons(true, b\) | false => b\ end
-        | b\yh\..yt => cons(xor3(false, yh, carry), raw(b\, yt, maj3(false, yh, carry)))
+        | b\ => match carry | true => b\1 | false => b\ end
+        | b\yh\..yt => b\.xor3(false, yh, carry)\..raw(b\, yt, maj3(false, yh, carry))
         end
     | b\xh\..xt =>
         match y
-        | b\ => cons(xor3(xh, false, carry), raw(xt, b\, maj3(xh, false, carry)))
-        | b\yh\..yt => cons(xor3(xh, yh, carry), raw(xt, yt, maj3(xh, yh, carry)))
+        | b\ => b\.xor3(xh, false, carry)\..raw(xt, b\, maj3(xh, false, carry))
+        | b\yh\..yt => b\.xor3(xh, yh, carry)\..raw(xt, yt, maj3(xh, yh, carry))
         end
     end;
 
@@ -81,14 +80,14 @@ pub rec raw_comm(x : Bits, y : Bits, c : Bool) -> Eq(raw(x, y, c), raw(y, x, c))
         | b\yh\..yt => raw_swap_step(b\, yt, false, yh, c)
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(raw(cons(xh, xt), b, c), raw(b, cons(xh, xt), c))
+        match y : (b) => Eq(raw(b\.xh\..xt, b, c), raw(b, b\.xh\..xt, c))
         | b\ => raw_swap_step(xt, b\, xh, false, c)
         | b\yh\..yt => raw_swap_step(xt, yt, xh, yh, c)
         end
     end
 and raw_swap_step(x : Bits, y : Bits, h1 : Bool, h2 : Bool, c : Bool)
-    -> Eq(cons(xor3(h1, h2, c), raw(x, y, maj3(h1, h2, c))),
-          cons(xor3(h2, h1, c), raw(y, x, maj3(h2, h1, c)))) =
+    -> Eq(b\.xor3(h1, h2, c)\..raw(x, y, maj3(h1, h2, c)),
+          b\.xor3(h2, h1, c)\..raw(y, x, maj3(h2, h1, c))) =
     cong_cons2(xor3_comm(h1, h2, c),
         Eq/trans(raw_comm(x, y, maj3(h1, h2, c)), cong_raw_c(y, x, maj3_comm(h1, h2, c))));
 
@@ -152,7 +151,7 @@ pub rec raw_carry_spec(x : Bits, y : Bits) -> Eq(raw(x, y, true), succ/raw(raw(x
             end
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(raw(cons(xh, xt), b, true), succ/raw(raw(cons(xh, xt), b, false)))
+        match y : (b) => Eq(raw(b\.xh\..xt, b, true), succ/raw(raw(b\.xh\..xt, b, false)))
         | b\ =>
             match xh
             | true => cong_cons2(refl_at(false), raw_carry_spec(xt, b\))
@@ -201,7 +200,7 @@ pub rec raw_succ_out_l(u : Bits, v : Bits, c : Bool)
     | b\uh\..ut =>
         match uh
         | true =>
-            match v : (b) => Eq(raw(succ/raw(cons(true, ut)), b, c), succ/raw(raw(cons(true, ut), b, c)))
+            match v : (b) => Eq(raw(succ/raw(b\1\..ut), b, c), succ/raw(raw(b\1\..ut, b, c)))
             | b\ =>
                 match c
                 | true => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_l(ut, b\, false), Eq/sym(raw_carry_spec(ut, b\))))
@@ -222,7 +221,7 @@ pub rec raw_succ_out_l(u : Bits, v : Bits, c : Bool)
                 end
             end
         | false =>
-            match v : (b) => Eq(raw(succ/raw(cons(false, ut)), b, c), succ/raw(raw(cons(false, ut), b, c)))
+            match v : (b) => Eq(raw(succ/raw(b\0\..ut), b, c), succ/raw(raw(b\0\..ut, b, c)))
             | b\ =>
                 match c
                 | true => cong_cons2(refl_at(false), raw_carry_spec(ut, b\))
@@ -272,7 +271,7 @@ pub rec raw_succ_out_r(u : Bits, v : Bits, c : Bool)
     | b\vh\..vt =>
         match vh
         | true =>
-            match u : (a) => Eq(raw(a, succ/raw(cons(true, vt)), c), succ/raw(raw(a, cons(true, vt), c)))
+            match u : (a) => Eq(raw(a, succ/raw(b\1\..vt), c), succ/raw(raw(a, b\1\..vt, c)))
             | b\ =>
                 match c
                 | true => cong_cons2(refl_at(true), Eq/trans(raw_succ_out_r(b\, vt, false), Eq/sym(raw_carry_spec(b\, vt))))
@@ -293,7 +292,7 @@ pub rec raw_succ_out_r(u : Bits, v : Bits, c : Bool)
                 end
             end
         | false =>
-            match u : (a) => Eq(raw(a, succ/raw(cons(false, vt)), c), succ/raw(raw(a, cons(false, vt), c)))
+            match u : (a) => Eq(raw(a, succ/raw(b\0\..vt), c), succ/raw(raw(a, b\0\..vt, c)))
             | b\ =>
                 match c
                 | true => cong_cons2(refl_at(false), raw_carry_spec(b\, vt))
@@ -342,12 +341,12 @@ pub rec raw_assoc(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                 end
             | b\zh\..zt =>
                 match c1
-                | true => Eq/trans(raw_succ_out_l(b\, cons(zh, zt), c2), Eq/sym(Eq/trans(cong_raw_r(b\, raw_carry_spec(b\, cons(zh, zt)), c2), Eq/trans(raw_succ_out_r(b\, raw(b\, cons(zh, zt), false), c2), succ/cong_raw(cong_raw_r(b\, raw_zero_l(cons(zh, zt)), c2))))))
-                | false => Eq/sym(cong_raw_r(b\, raw_zero_l(cons(zh, zt)), c2))
+                | true => Eq/trans(raw_succ_out_l(b\, b\.zh\..zt, c2), Eq/sym(Eq/trans(cong_raw_r(b\, raw_carry_spec(b\, b\.zh\..zt), c2), Eq/trans(raw_succ_out_r(b\, raw(b\, b\.zh\..zt, false), c2), succ/cong_raw(cong_raw_r(b\, raw_zero_l(b\.zh\..zt), c2))))))
+                | false => Eq/sym(cong_raw_r(b\, raw_zero_l(b\.zh\..zt), c2))
                 end
             end
         | b\yh\..yt =>
-            match z : (zv) => Eq(raw(raw(b\, cons(yh, yt), c1), zv, c2), raw(b\, raw(cons(yh, yt), zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(b\, b\.yh\..yt, c1), zv, c2), raw(b\, raw(b\.yh\..yt, zv, c1), c2))
             | b\ =>
                 match yh
                 | true =>
@@ -465,13 +464,13 @@ pub rec raw_assoc(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
             end
         end
     | b\xh\..xt =>
-        match y : (yv) => Eq(raw(raw(cons(xh, xt), yv, c1), z, c2), raw(cons(xh, xt), raw(yv, z, c1), c2))
+        match y : (yv) => Eq(raw(raw(b\.xh\..xt, yv, c1), z, c2), raw(b\.xh\..xt, raw(yv, z, c1), c2))
         | b\ =>
-            match z : (zv) => Eq(raw(raw(cons(xh, xt), b\, c1), zv, c2), raw(cons(xh, xt), raw(b\, zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(b\.xh\..xt, b\, c1), zv, c2), raw(b\.xh\..xt, raw(b\, zv, c1), c2))
             | b\ =>
                 match c1
-                | true => Eq/trans(cong_raw_l(raw_succ_r(cons(xh, xt)), b\, c2), Eq/trans(raw_succ_out_l(cons(xh, xt), b\, c2), Eq/sym(raw_succ_out_r(cons(xh, xt), b\, c2))))
-                | false => cong_raw_l(raw_zero_r(cons(xh, xt)), b\, c2)
+                | true => Eq/trans(cong_raw_l(raw_succ_r(b\.xh\..xt), b\, c2), Eq/trans(raw_succ_out_l(b\.xh\..xt, b\, c2), Eq/sym(raw_succ_out_r(b\.xh\..xt, b\, c2))))
+                | false => cong_raw_l(raw_zero_r(b\.xh\..xt), b\, c2)
                 end
             | b\zh\..zt =>
                 match xh
@@ -552,7 +551,7 @@ pub rec raw_assoc(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
                 end
             end
         | b\yh\..yt =>
-            match z : (zv) => Eq(raw(raw(cons(xh, xt), cons(yh, yt), c1), zv, c2), raw(cons(xh, xt), raw(cons(yh, yt), zv, c1), c2))
+            match z : (zv) => Eq(raw(raw(b\.xh\..xt, b\.yh\..yt, c1), zv, c2), raw(b\.xh\..xt, raw(b\.yh\..yt, zv, c1), c2))
             | b\ =>
                 match xh
                 | true =>
@@ -791,8 +790,8 @@ pub rec raw_assoc(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
         end
     end;
 
-pub rec raw_one_r(x : Bits) -> Eq(raw(x, cons(true, b\), false), succ/raw(x)) =
-    match x : (a) => Eq(raw(a, cons(true, b\), false), succ/raw(a))
+pub rec raw_one_r(x : Bits) -> Eq(raw(x, b\1, false), succ/raw(x)) =
+    match x : (a) => Eq(raw(a, b\1, false), succ/raw(a))
     | b\ => Eq/refl()
     | b\h\..t =>
         match h
@@ -802,15 +801,15 @@ pub rec raw_one_r(x : Bits) -> Eq(raw(x, cons(true, b\), false), succ/raw(x)) =
     end;
 
 let raw_nonempty_l(xh : Bool, xt : Bits, y : Bits, c : Bool)
-    -> Eq(nonempty(raw(cons(xh, xt), y, c)), true) =
-    match y : (b) => Eq(nonempty(raw(cons(xh, xt), b, c)), true)
+    -> Eq(nonempty(raw(b\.xh\..xt, y, c)), true) =
+    match y : (b) => Eq(nonempty(raw(b\.xh\..xt, b, c)), true)
     | b\ => Eq/refl()
     | b\_\.._ => Eq/refl()
     end;
 
 let raw_nonempty_r(x : Bits, yh : Bool, yt : Bits, c : Bool)
-    -> Eq(nonempty(raw(x, cons(yh, yt), c)), true) =
-    match x : (a) => Eq(nonempty(raw(a, cons(yh, yt), c)), true)
+    -> Eq(nonempty(raw(x, b\.yh\..yt, c)), true) =
+    match x : (a) => Eq(nonempty(raw(a, b\.yh\..yt, c)), true)
     | b\ => Eq/refl()
     | b\_\.._ => Eq/refl()
     end;
@@ -825,17 +824,17 @@ pub rec raw_trimmed(x : Bits, y : Bits, c : Bool,
         | false => Eq/trans(cong_is_trimmed(raw_zero_l(y)), py)
         end
     | b\xh\..xt =>
-        match y : (b) => Eq(is_trimmed(raw(cons(xh, xt), b, c)), true)
+        match y : (b) => Eq(is_trimmed(raw(b\.xh\..xt, b, c)), true)
         | b\ =>
             match c
-            | true => Eq/trans(cong_is_trimmed(raw_succ_r(cons(xh, xt))),
-                succ/raw_trimmed(cons(xh, xt), px))
-            | false => Eq/trans(cong_is_trimmed(raw_zero_r(cons(xh, xt))), px)
+            | true => Eq/trans(cong_is_trimmed(raw_succ_r(b\.xh\..xt)),
+                succ/raw_trimmed(b\.xh\..xt, px))
+            | false => Eq/trans(cong_is_trimmed(raw_zero_r(b\.xh\..xt)), px)
             end
         | b\yh\..yt =>
-            match xt : (u) => Eq(is_trimmed(raw(cons(xh, u), cons(yh, yt), c)), true)
+            match xt : (u) => Eq(is_trimmed(raw(b\.xh\..u, b\.yh\..yt, c)), true)
             | b\ =>
-                match yt : (v) => Eq(is_trimmed(raw(cons(xh, b\), cons(yh, v), c)), true)
+                match yt : (v) => Eq(is_trimmed(raw(b\.xh, b\.yh\..v, c)), true)
                 | b\ =>
                     match xh
                     | true =>
@@ -845,18 +844,18 @@ pub rec raw_trimmed(x : Bits, y : Bits, c : Bool,
                         end
                     | false => False/absurd(false_neq_true(px))
                     end
-                | b\a2\..b2 => is_trimmed_cons(xor3(xh, yh, c), raw(b\, cons(a2, b2), maj3(xh, yh, c)),
-                    raw_trimmed(b\, cons(a2, b2), maj3(xh, yh, c), refl_at(true), py),
+                | b\a2\..b2 => is_trimmed_cons(xor3(xh, yh, c), raw(b\, b\.a2\..b2, maj3(xh, yh, c)),
+                    raw_trimmed(b\, b\.a2\..b2, maj3(xh, yh, c), refl_at(true), py),
                     raw_nonempty_r(b\, a2, b2, maj3(xh, yh, c)))
                 end
             | b\a2\..b2 =>
-                match yt : (v) => Eq(is_trimmed(raw(cons(xh, cons(a2, b2)), cons(yh, v), c)), true)
-                | b\ => is_trimmed_cons(xor3(xh, yh, c), raw(cons(a2, b2), b\, maj3(xh, yh, c)),
-                    raw_trimmed(cons(a2, b2), b\, maj3(xh, yh, c), px, refl_at(true)),
+                match yt : (v) => Eq(is_trimmed(raw(b\.xh\.a2\..b2, b\.yh\..v, c)), true)
+                | b\ => is_trimmed_cons(xor3(xh, yh, c), raw(b\.a2\..b2, b\, maj3(xh, yh, c)),
+                    raw_trimmed(b\.a2\..b2, b\, maj3(xh, yh, c), px, refl_at(true)),
                     raw_nonempty_l(a2, b2, b\, maj3(xh, yh, c)))
-                | b\d2\..e2 => is_trimmed_cons(xor3(xh, yh, c), raw(cons(a2, b2), cons(d2, e2), maj3(xh, yh, c)),
-                    raw_trimmed(cons(a2, b2), cons(d2, e2), maj3(xh, yh, c), px, py),
-                    raw_nonempty_l(a2, b2, cons(d2, e2), maj3(xh, yh, c)))
+                | b\d2\..e2 => is_trimmed_cons(xor3(xh, yh, c), raw(b\.a2\..b2, b\.d2\..e2, maj3(xh, yh, c)),
+                    raw_trimmed(b\.a2\..b2, b\.d2\..e2, maj3(xh, yh, c), px, py),
+                    raw_nonempty_l(a2, b2, b\.d2\..e2, maj3(xh, yh, c)))
                 end
             end
         end
@@ -901,7 +900,7 @@ pub rec raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bool,
             | b\zh\..zt => False/absurd(raw_cancel_absurd(xh, xt, zh, zt, c, pz, p))
             end
         | b\yh\..yt =>
-            match z : (d) => Eq(cons(yh, yt), d)
+            match z : (d) => Eq(b\.yh\..yt, d)
             | b\ => False/absurd(raw_cancel_absurd(xh, xt, yh, yt, c, py, Eq/sym(p)))
             | b\zh\..zt =>
                 cong_cons2(xor3_inj_mid(xh, c, cons_inj_head(p)),
@@ -915,9 +914,9 @@ pub rec raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bool,
         end
     end
 and raw_cancel_absurd(xh : Bool, xt : Bits, zh : Bool, zt : Bits, c : Bool,
-    pz : Eq(is_trimmed(cons(zh, zt)), true),
-    p : Eq(raw(cons(xh, xt), b\, c), raw(cons(xh, xt), cons(zh, zt), c))) -> False =
-    let shifted : Eq(is_trimmed(cons(false, b\)), true) =
+    pz : Eq(is_trimmed(b\.zh\..zt), true),
+    p : Eq(raw(b\.xh\..xt, b\, c), raw(b\.xh\..xt, b\.zh\..zt, c))) -> False =
+    let shifted : Eq(is_trimmed(b\0), true) =
         Eq/subst((w : Bits) => Eq(is_trimmed(w), true),
             cong_cons2(
                 Eq/sym(xor3_inj_mid(xh, @false, @zh, c, cons_inj_head(p))),

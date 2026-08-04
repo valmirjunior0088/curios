@@ -3,7 +3,7 @@
 use /std/{Bits, True, BigNat, NonZero};
 use /std/NonZero/{is_cons, nz_trimmed, raw_non_zero};
 
--- the raw successor is always cons-headed (`BigNat/succ/raw(b\) = cons(true, b\)`)
+-- the raw successor is always cons-headed (`BigNat/succ/raw(b\) = b\1`)
 let raw_cons(x : Bits) -> is_cons(BigNat/succ/raw(x)) =
     match x : (r) => is_cons(BigNat/succ/raw(r))
     | b\ => True/qed()

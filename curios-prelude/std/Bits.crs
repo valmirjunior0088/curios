@@ -10,9 +10,6 @@ pub let get(b : Bits, i : Nat) -> Option(Bool) =
     | false => Option/none()
     end;
 
-pub let cons(head : Bool, tail : Bits) -> Bits =
-    b\..append(b\, head)\..tail;
-
 pub let flatten(parts : Lst(Bits)) -> Bits =
     Lst/fold(parts, b\, (bits, acc) => b\..acc\..bits);
 
