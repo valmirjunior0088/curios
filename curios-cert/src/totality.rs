@@ -711,27 +711,44 @@ fn flatten(term: &Term) -> (Term, Vec<Term>) {
 }
 
 /// Whether a sort is extractable from this type: reachable by peeling arrows to the codomain, or by projecting a tuple component. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
-pub fn yields_a_sort(type_: &Term) -> bool {
-    match &**type_ {
+///
+/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — yields a sort and says so only once forced, and so does `(n : Nat) -> U`. Reading the spelling let a member escape the descent gate by being declared through an alias, and the gate is what stops a member erasure deletes from being assumed at its own type before its body is checked against it. An alias is not a different claim.
+///
+/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
+///
+/// A reduction that fails answers **yes**. The gate then demands descent, which is the refusing direction, and a declared type that cannot be reduced is not one to take on trust.
+pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> bool {
+    let Ok(reduced) = env.force(type_) else {
+        return true;
+    };
+
+    match &*reduced {
         Subterm::Type(_) | Subterm::Prop => true,
         Subterm::FuncType(FuncType { telescope, .. }) => {
-            let mut telescope = telescope;
+            let mut telescope = telescope.clone();
             loop {
                 match telescope {
-                    Telescope::Done(body) => break yields_a_sort(body),
-                    Telescope::Cons(_, rest) => telescope = rest.body(),
+                    Telescope::Done(body) => break yields_a_sort(env, &body),
+                    Telescope::Cons(_, rest) => {
+                        let binder = env.fresh(rest.first_hint());
+                        telescope = rest.open(&[&Term::free_var(&binder)]);
+                    }
                 }
             }
         }
         Subterm::TupleType(tuple) => {
-            let mut telescope = &tuple.telescope;
+            let mut telescope = tuple.telescope.clone();
             loop {
                 match telescope {
                     Telescope::Done(_) => break false,
-                    Telescope::Cons(entry, rest) => match yields_a_sort(entry) {
-                        true => break true,
-                        false => telescope = rest.body(),
-                    },
+                    Telescope::Cons(entry, rest) => {
+                        if yields_a_sort(env, &entry) {
+                            break true;
+                        }
+
+                        let binder = env.fresh(rest.first_hint());
+                        telescope = rest.open(&[&Term::free_var(&binder)]);
+                    }
                 }
             }
         }

@@ -66,7 +66,7 @@ pub(crate) fn check_group<R>(
             let type_ = group.member_type(index);
             let sort = infer_type(kernel, &type_)?;
 
-            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(&type_)) {
+            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(kernel, &type_)) {
                 erased_member = Some(type_.clone());
             }
 

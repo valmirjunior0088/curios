@@ -757,3 +757,48 @@ fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
         "#;
     assert_eq!(run(source), b"100000000-3");
 }
+
+// The descent gate reads a declared type, and a declared type is a term like any other.
+//
+// A `rec` member that erasure deletes must descend, or assuming it at its own type certifies `rec f : False = f`. Which members those are was decided in two halves: whether the type is a *proposition*, asked semantically, and whether it *yields a sort*, read off the spelling. So `U` — an ordinary definition whose value is `Type` — reached neither. `Bad` below is productive and does not descend, and both checkers let it be assumed at a type that is `Type` in every sense but the syntactic one.
+//
+// Nothing was forged from it here, and that is the honest statement: the whole-module obligation still refuses the *use* of a partial type, so what the gate's omission costs is the local guarantee it exists to give — `check_group`'s own claim that a member erasure deletes has been shown to terminate before its body is checked against it. An alias is not a different claim, and reading the spelling made it one.
+//
+// Its control is `an_aliased_sort_that_descends_is_still_accepted`, which keeps the same alias at a recursion that does descend: refusing every member declared through one would pass this and fail that.
+#[test]
+fn a_sort_reached_through_an_alias_still_needs_descent() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat, Option};
+
+        let U : Type = Type;
+
+        let wrap(A : U) -> U = Option(A);
+
+        rec Bad(n : Nat) -> U = wrap(Bad(n));
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// The control for the fixture above: the same aliased sort at a recursion that descends is ordinary code and still compiles.
+#[test]
+fn an_aliased_sort_that_descends_is_still_accepted() {
+    let source = r#"
+        use /std/{Nat};
+
+        let U : Type = Type;
+
+        rec Good(n : Nat) -> U =
+            match n
+            | 0 => {}
+            | _ => Good(n - 1)
+            end;
+
+        let held : Good(2) = ();
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}

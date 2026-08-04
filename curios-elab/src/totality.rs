@@ -380,12 +380,13 @@ pub fn check_rec_totality(
     group: &RecGroup,
     names: &[String],
 ) -> Result<(), Error> {
-    let extractable = group
-        .iter()
-        .enumerate()
-        .filter(|(_, member)| yields_a_sort(member.type_.body()))
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
+    // `RecGroup::member_type` rather than the member's scope body: the body carries loose indices where it names the group, and the question is now asked of a term that reduces. It is also the spelling `curios-cert`'s own gate asks about, so the two checkers put the same question to the same term.
+    let mut extractable = Vec::new();
+    for index in 0..group.length() {
+        if yields_a_sort(context, &group.member_type(index)) {
+            extractable.push(index);
+        }
+    }
 
     if extractable.is_empty() || group_totality(context, group).is_total() {
         return Ok(());
