@@ -216,12 +216,14 @@ fn packed_atom_splices_are_the_cons_and_append_spellings() {
 
 #[test]
 fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
-    // `peel_front` (`core::free_monoid`) recognised an append only over the EMPTY base, so `append(x\48, b)` — what `x\48\.b` lowers to — went opaque and no eliminator over it could reduce, while `core::spine`'s two-value peel had always decoded the same term. The `BinConcat` arm beside it already peeled its first operand and rejoined the residual; the append arm now does the same. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and the appended atom is SYMBOLIC, so nothing here is literal folding.
+    // `peel_front` (`core::free_monoid`) recognised an append only over the EMPTY base, so `append(x\48, b)` — what `x\48\.b` lowers to — went opaque and no eliminator over it could reduce, while `core::spine`'s two-value peel had always decoded the same term. The `BinConcat` arm beside it already peeled its first operand and rejoined the residual; the append arm now does the same. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Bool, Bits, Option};
         let lead : Byte = 0x48;
         let byte_head(b : Byte) -> Eq(Bytes/get(x\48\.b, 0), Option/some(lead)) = Eq/refl();
         let bit_head(b : Bool) -> Eq(Bits/get(b\1\.b, 0), Option/some(true)) = Eq/refl();
+        let chained(a : Byte, b : Byte) -> Eq(Bytes/get(x\48\.a\.b, 0), Option/some(lead)) = Eq/refl();
+        let chained_len(a : Byte, b : Byte) -> Eq(Bytes/len(x\.a\.b), 2) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
