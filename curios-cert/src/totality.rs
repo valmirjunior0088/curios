@@ -36,12 +36,10 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// How many times a boolean guard may unfold a definition before giving up.
+/// How many times shape reading may unfold a definition before giving up.
 ///
-/// The operator spellings (`n < 10`) elaborate straight to a primitive, but the named ones (`Nat/lt(n, 10)`) stay applications of a one-line `/sys` wrapper, so bounded weak-head unfolding is what makes both readable — `/std/Nat/to_str` descends on one. Two more are slack for a wrapper over a wrapper. The bound exists so reading a guard can never become an unbounded reduction.
-///
-/// Shape reading used to unfold too, because the corpus built free-monoid conses through ordinary functions: `/std/Bits/cons` was a `let`, so `cons(a2, b2)` was an application whose layer only appeared once unfolded. Those conses are packed literals now, which [`Walk::shape_of`] reads directly, so that half is gone and this is the only place totality still reduces.
-const GUARD_UNFOLD_FUEL: usize = 3;
+/// One unfold is what `/std/Bits/cons` needs: it is an ordinary `let`, not a constructor, so `cons(a2, b2)` only exposes its free-monoid layer once the call is unfolded. Two more are slack for a wrapper over a wrapper. The bound exists so a shape read can never become an unbounded reduction.
+const UNFOLD_FUEL: usize = 3;
 
 /// How deep a refinement chain may be expanded.
 ///
@@ -154,7 +152,7 @@ impl<E: Env> Walk<'_, E> {
             .collect::<Vec<_>>();
 
         for (column, argument) in arguments.iter().enumerate().take(columns) {
-            let shape = self.shape_of(argument);
+            let shape = self.shape_of(argument, UNFOLD_FUEL);
             for (row, parameter) in expanded.iter().enumerate() {
                 matrix.set(row, column, shape.against(parameter));
             }
@@ -191,8 +189,8 @@ impl<E: Env> Walk<'_, E> {
 
     /// Read a term as a constructor tree.
     ///
-    /// Purely syntactic: a term that is not a constructor, a free-monoid layer, or a recognised arithmetic decrease reads `Opaque`, and nothing here reduces. It used to unfold a bounded number of definitions, because the corpus built its free-monoid conses through ordinary functions — `/std/Bits/cons` was a `let`, so `add/raw_trimmed`'s descent was invisible until the call was unfolded once. Those are packed literals now, read directly by the `Bin` arm below, so the fallback has no remaining consumer and totality no longer touches the reduction budget here (see [`GUARD_UNFOLD_FUEL`] for the one place that still does).
-    fn shape_of(&mut self, term: &Term) -> Shape {
+    /// Definitions are unfolded up to [`UNFOLD_FUEL`] times, because the corpus builds free-monoid conses through ordinary functions rather than constructors: `/std/Bits/cons` is a `let`, so `cons(a2, b2)` is an application, and `add/raw_trimmed`'s descent is invisible until it is unfolded once. Unfolding is weak-head only and bounded, so it cannot become a reduction; a reduction that fails or exhausts the budget leaves the term unread rather than failing the compile.
+    fn shape_of(&mut self, term: &Term, fuel: usize) -> Shape {
         match &**term {
             Subterm::Var(var) => {
                 if let Some(free) = var.as_free() {
@@ -205,64 +203,76 @@ impl<E: Env> Walk<'_, E> {
                 let payload = payload.clone();
                 let kids = payload
                     .iter()
-                    .map(|argument| self.shape_of(argument))
+                    .map(|argument| self.shape_of(argument, fuel))
                     .collect();
                 Shape::Node(Tag::Variant(tag.clone()), kids)
             }
 
             Subterm::Struct(Struct { name, fields, .. }) => {
                 let (name, fields) = (name.clone(), fields.clone());
-                let kids = fields.iter().map(|field| self.shape_of(field)).collect();
+                let kids = fields
+                    .iter()
+                    .map(|field| self.shape_of(field, fuel))
+                    .collect();
                 Shape::Node(Tag::Struct(name), kids)
             }
 
             Subterm::Tuple(Tuple { fields, .. }) => {
                 let fields = fields.clone();
-                let kids = fields.iter().map(|field| self.shape_of(field)).collect();
+                let kids = fields
+                    .iter()
+                    .map(|field| self.shape_of(field, fuel))
+                    .collect();
                 Shape::Node(Tag::Tuple, kids)
             }
 
             Subterm::Prim(Prim::Bool(value)) => Shape::Node(Tag::Bool(*value), Vec::new()),
 
-            Subterm::Prim(Prim::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term),
+            Subterm::Prim(Prim::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term, fuel),
 
             Subterm::Prim(
                 Prim::Bin(grain, _)
                 | Prim::BinAppend(grain, ..)
                 | Prim::BinConcat(grain, ..)
                 | Prim::BinSlice(grain, ..),
-            ) => self.monoid_shape(FreeMonoid::Bin(*grain), term),
+            ) => self.monoid_shape(FreeMonoid::Bin(*grain), term, fuel),
 
             Subterm::Prim(
                 Prim::Lst(..) | Prim::LstAppend(..) | Prim::LstConcat(..) | Prim::LstSlice(..),
-            ) => self.monoid_shape(FreeMonoid::Lst, term),
+            ) => self.monoid_shape(FreeMonoid::Lst, term, fuel),
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `BigUint` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
             Subterm::Prim(Prim::NatDiv(left, right)) => {
                 let (left, right) = (left.clone(), right.clone());
-                self.arithmetic_shape(&left, &right, &BigUint::from(2usize))
+                self.arithmetic_shape(&left, &right, &BigUint::from(2usize), fuel)
             }
 
             Subterm::Prim(Prim::NatSub(left, right)) => {
                 let (left, right) = (left.clone(), right.clone());
-                self.arithmetic_shape(&left, &right, &BigUint::from(1usize))
+                self.arithmetic_shape(&left, &right, &BigUint::from(1usize), fuel)
             }
 
-            _ => Shape::Opaque,
+            _ => self.unfolded_shape(term, fuel),
         }
     }
 
     /// Read `left op right` as a decrease on the binder `left` stands for.
     ///
     /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread — which is what this term read as before the rule existed.
-    fn arithmetic_shape(&mut self, left: &Term, right: &Term, least: &BigUint) -> Shape {
+    fn arithmetic_shape(
+        &mut self,
+        left: &Term,
+        right: &Term,
+        least: &BigUint,
+        fuel: usize,
+    ) -> Shape {
         let Some(divisor) = right.as_nat().and_then(|nat| nat.to_big_uint()) else {
             return Shape::Opaque;
         };
         if divisor < *least {
             return Shape::Opaque;
         }
-        match self.shape_of(left) {
+        match self.shape_of(left, fuel) {
             // `n` itself, and an arm has ruled out zero.
             Shape::Atom(atom) if self.nonzero.contains(&atom) => Shape::Smaller(atom),
             // Already below `below`, and these operations never grow: dividing or subtracting again keeps it below.
@@ -272,7 +282,7 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Decode one free-monoid layer, and the tail beneath it.
-    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Shape {
+    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term, fuel: usize) -> Shape {
         let carriers = match carrier {
             FreeMonoid::Unary => Carriers::Unary,
             FreeMonoid::Bin(_) => Carriers::Bin,
@@ -284,13 +294,27 @@ impl<E: Env> Walk<'_, E> {
                 // `Nat`'s generator carries no payload, so its cons node has exactly one child and `pred + 1` is one level over `pred`.
                 let mut kids = Vec::new();
                 if let Some(head) = head {
-                    kids.push(self.shape_of(&head));
+                    kids.push(self.shape_of(&head, fuel));
                 }
-                kids.push(self.shape_of(&tail));
+                kids.push(self.shape_of(&tail, fuel));
                 Shape::Node(Tag::Cons(carriers), kids)
             }
-            Layer::Stuck(_) => Shape::Opaque,
+            Layer::Stuck(_) => self.unfolded_shape(term, fuel),
         }
+    }
+
+    /// Unfold one weak-head step and re-read, or give up.
+    fn unfolded_shape(&mut self, term: &Term, fuel: usize) -> Shape {
+        if fuel == 0 || !forceable(term) {
+            return Shape::Opaque;
+        }
+        let Ok(reduced) = self.env.force(term) else {
+            return Shape::Opaque;
+        };
+        if reduced == *term {
+            return Shape::Opaque;
+        }
+        self.shape_of(&reduced, fuel - 1)
     }
 
     /// Read a boolean scrutinee as a comparison against a literal.
@@ -530,7 +554,7 @@ impl<E: Env> Walk<'_, E> {
                 // A boolean arm carries no binder, but when the scrutinee compares a binder against a literal the arm still settles whether that binder can be zero — which is what an arithmetic decrease on it needs.
                 for (taken, body) in [(false, false_case), (true, true_case)] {
                     let atom = self
-                        .guard(head, GUARD_UNFOLD_FUEL)
+                        .guard(head, UNFOLD_FUEL)
                         .filter(|guard| guard.establishes_nonzero(taken))
                         .map(|guard| guard.atom);
                     let shape = Shape::Node(Tag::Bool(taken), Vec::new());
@@ -541,7 +565,7 @@ impl<E: Env> Walk<'_, E> {
             Cases::Switch { cases, default } => {
                 for (value, body) in cases {
                     let literal = Term::prim(Prim::Nat(Nat::new(*value)));
-                    let shape = self.shape_of(&literal);
+                    let shape = self.shape_of(&literal, UNFOLD_FUEL);
                     self.refine(scrutinee, shape, body);
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
