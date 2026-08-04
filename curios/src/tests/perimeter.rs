@@ -684,6 +684,60 @@ fn a_match_on_a_cell_read_still_compiles() {
     assert_eq!(run(A_MATCH_ON_A_CELL_READ_STILL_COMPILES), b"t");
 }
 
+// The same premise, past the guard that closed the entry above, because that guard asks a question weak-head reduction cannot answer. `refuses_type_level_reduction` reduces the scrutinee and reads the refusal, and `reduce` stops at a *stuck head* handing the application back with its arguments untouched — so `f(Cell/get(c))`, a variable-headed application carrying the effect in an argument, never reaches `reduce_prim`, answers `Ok`, and is registered as a spelling that fixes a value. The effect is then inside a type: `Eq(g(Cell/get(c)), true)` is admitted on those terms exactly as `Eq(Cell/get(c), true)` was.
+//
+// `curios-cert` has the same hole for the same reason and is not the backstop here: `assume_case_value` records at its own `whnf`, whose `step_apply` likewise stops at a stuck head without visiting an argument. Both checkers register the equation, which is what makes this agreement on a wrong rule rather than a disagreement — and why, unlike the entry above, it compiled.
+//
+// Two heads rather than one because a nested refinement of a *single* key is dropped by the kernel by accident: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a local-free-less key. Refining `f(...)` outside and `g(...)` inside sidesteps that, and `h` carries the outer arm's knowledge across — so in `| true =>` the outer equation reads `h(Cell/get(c))` at `Eq(g(Cell/get(c)), true)`, which is `step`'s parameter type as written. After `Cell/set(c, false)` the inner `match g(Cell/get(c))` refines that same spelling to `false`, `p` re-reads at `Eq(false, true)`, and `/std/Bool/false_neq_true` turns it into `/syn/False`.
+//
+// Verified while the hole was open: the program **compiled**, the compile-path recheck raised nothing, and running it trapped in the Wasm — `False/absurd` on the forged proof erasing to the `unreachable` the arm reaches. The arm is reachable rather than merely well-typed: with the derivation replaced by a string the same program printed `REACHED: second read false`. And the acceptance was the refinement's doing rather than a fixture that never reached the check — the identical program with the derivation moved to the inner `| true =>` arm, where the spelling refines to `true`, was refused with `type mismatch`, `inferred Eq(true, true)` against `expected Eq(false, true)`.
+const AN_EFFECT_BEHIND_A_STUCK_HEAD_DOES_NOT_REFINE: &str = r#"
+    use /std/{Cell, Eq, Bool, False, Str};
+
+    /std/print(
+        ((f : (Bool) -> Bool,
+          g : (Bool) -> Bool,
+          h : (x : Bool) -> Eq(g(x), f(x)),
+          c : Cell(Bool)) =>
+            match f(Cell/get(@Bool, c))
+            | true =>
+                let step(p : Eq(g(Cell/get(@Bool, c)), true)) -> Str =
+                    let done = Cell/set(c, false);
+                    match g(Cell/get(@Bool, c))
+                    | true => "second read true"
+                    | false => False/absurd(Bool/false_neq_true(p))
+                    end;
+                step(h(Cell/get(@Bool, c)))
+            | false => "first read false"
+            end
+        )((b) => b, (b) => b, (x) => Eq/refl(), Cell/new(true))
+    )
+    "#;
+
+/// The control, and it guards the brick this fix could have been: a scrutinee whose head is stuck is the *ordinary* case — `f(b)` for a `f` nothing can unfold — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. Only the effect carried in an argument is at issue, so a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
+const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
+    use /std/{Eq, Bool, False, Str};
+
+    let refined(f : (Bool) -> Bool, b : Bool, p : Eq(f(b), true)) -> Str =
+        match f(b)
+        | true => "t"
+        | false => False/absurd(Bool/false_neq_true(p))
+        end;
+
+    /std/print(refined((x) => x, true, Eq/refl()))
+    "#;
+
+/// Asserted on the *unrefined spelling*, and not on the entry above's `cannot appear at the type level`, because in this shape the effect never meets the type level: nothing reduces `g(Cell/get(c))` past its stuck head, which is the whole reason the reducer-based guard missed it. What the rule does here is withhold an equation, so the program fails where it needed one — and the discriminator is that `p`'s type still reads the effectful application rather than the `false` the withheld equation would have rewritten it to. A fixture that never reached the rule does not produce that.
+#[test]
+fn an_effect_behind_a_stuck_head_does_not_refine() {
+    rejected_by(AN_EFFECT_BEHIND_A_STUCK_HEAD_DOES_NOT_REFINE, "g(Cell/get");
+}
+
+#[test]
+fn a_stuck_application_scrutinee_still_refines() {
+    assert_eq!(run(A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES), b"t");
+}
+
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so before the erasure obligations moved into `curios-cert` these were the class the trusted base took entirely on the elaborator's word.
 const PARTIAL_DIRECT: &str = r#"
     use /std/{Nat, False};

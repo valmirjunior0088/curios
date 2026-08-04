@@ -24,7 +24,7 @@ use {
     },
     std::{
         cell::Cell,
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         ops::{Deref, DerefMut},
         rc::Rc,
@@ -637,6 +637,11 @@ impl Context {
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
         self.caches.invalidate_for_refinement();
         self.frames.refine_projection(base, index, value);
+    }
+
+    /// Where `curios_cert::carries_effect` remembers what a definition reaches. See [`Caches::effects_mut`] for what refreshes it.
+    pub(crate) fn effect_memo(&mut self) -> &mut HashMap<Free, bool> {
+        self.caches.effects_mut()
     }
 
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {

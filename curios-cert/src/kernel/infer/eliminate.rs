@@ -24,8 +24,8 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        InductAt, Invert, Kernel, KernelError, Sort, carries_information, invert_indices,
-        invert_indices_outer, pinned_by_targets,
+        InductAt, Invert, Kernel, KernelError, Sort, carries_effect, carries_information,
+        invert_indices, invert_indices_outer, pinned_by_targets,
     },
     curios_core::{
         Atom, Bound, Free, InductArm, InductType, Many, Reducer, Scope, Subterm, Telescope, Term,
@@ -140,7 +140,9 @@ fn check_arm(
 
 /// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.
 ///
-/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for a primitive carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead; an effectful scrutinee refuses type-level reduction and its equation is recorded at the spelling it has, which admits nothing — a missed key only checks the arm under fewer assumptions.
+/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for a primitive carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead.
+///
+/// An *effectful* scrutinee gets no equation at all, and the shared [`carries_effect`](crate::carries_effect) is what decides that. This used to rest on reduction refusing the spelling first, which held only for a scrutinee reduction actually reaches: `whnf` stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` was recorded here exactly as it was in the elaborator, and one term denoting two values followed. Withholding the equation checks the arm under strictly fewer assumptions, which is the incomplete direction.
 ///
 /// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and free-monoid — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
 ///
@@ -158,6 +160,10 @@ pub(super) fn assume_case_value(
         && kernel.local_type(var.unwrap()).is_some()
     {
         solutions.push((var.unwrap().clone(), value));
+        return;
+    }
+
+    if carries_effect(kernel, scrutinee) {
         return;
     }
 

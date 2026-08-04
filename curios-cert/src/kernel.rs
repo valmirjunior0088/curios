@@ -51,7 +51,7 @@ use {
         Atom, Free, Global, InductDecl, Level, LevelHead, Polarity, ReduceError, Reducer,
         StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
     },
-    std::fmt,
+    std::{collections::HashMap, fmt},
 };
 
 /// Why the kernel refused a term.
@@ -252,6 +252,10 @@ impl Env for Kernel {
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         Kernel::struct_decl(self, name)
     }
+
+    fn effect_memo(&mut self) -> &mut HashMap<Free, bool> {
+        self.globals.effects_mut()
+    }
 }
 
 impl Judge for Kernel {
@@ -429,6 +433,7 @@ impl Kernel {
     ) {
         if self.globals.insert(name, type_, value, universes) {
             self.memos.invalidate();
+            self.globals.forget_effects();
         }
     }
 

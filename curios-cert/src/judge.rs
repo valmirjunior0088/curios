@@ -18,7 +18,10 @@
 //!
 //! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `KernelError`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
-use curios_core::{Bound, Free, Global, InductDecl, StructDecl, Subterm, Term};
+use {
+    curios_core::{Bound, Free, Global, InductDecl, StructDecl, Subterm, Term},
+    std::collections::HashMap,
+};
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
 ///
@@ -66,6 +69,11 @@ pub trait Env {
 
     /// The registry entry for a `struct` declaration, or `None` when the name is not one.
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl>;
+
+    /// Where [`carries_effect`](crate::carries_effect) remembers its per-definition answer.
+    ///
+    /// The one method here that is storage rather than a question, and it argues for itself on cost: the caller is every match arm, the closure of one scrutinee reaches most of the standard library, and re-walking it each time measured a third of the fixed prelude's build. Owned by the driver because it lives as long as the compilation and must be dropped exactly when a definition body stops being what it was — which is the driver's event, not this crate's.
+    fn effect_memo(&mut self) -> &mut HashMap<Free, bool>;
 }
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.

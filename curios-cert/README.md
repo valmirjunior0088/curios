@@ -1,6 +1,6 @@
 # curios-cert
 
-The Curios certifier: every rule that can admit a program, as one crate — the kernel deciding, from a finished term alone, whether the elaborator's output is well-typed, and the analyses both checkers share (index inversion and the singleton determination walk, strict positivity, size-change totality, the level entailment oracle). `curios-core` owns what a term *is*; this crate owns what one *means*. The two-checker decision and its rationale are cross-cutting and stay in [DESIGN.md](../documentation/DESIGN.md) ("An independent kernel re-checks what the elaborator accepts"); what the kernel covers at any moment belongs to [ROADMAP.md](../documentation/ROADMAP.md); local architecture belongs to the crate rustdoc.
+The Curios certifier: every rule that can admit a program, as one crate — the kernel deciding, from a finished term alone, whether the elaborator's output is well-typed, and the analyses both checkers share (index inversion and the singleton determination walk, strict positivity, size-change totality, the purity premise a scrutinee refinement rests on, the level entailment oracle). `curios-core` owns what a term *is*; this crate owns what one *means*. The two-checker decision and its rationale are cross-cutting and stay in [DESIGN.md](../documentation/DESIGN.md) ("An independent kernel re-checks what the elaborator accepts"); what the kernel covers at any moment belongs to [ROADMAP.md](../documentation/ROADMAP.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 
