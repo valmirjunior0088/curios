@@ -54,7 +54,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
             | _ => d + 1
             end;
         [last]
-    | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
+    | false => [d, ..generate(rem, s, mp10, mm10, even)]
     end;
 
 let digits_to_str(ds : Lst(Nat)) -> Str =
@@ -73,9 +73,9 @@ rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bool} =
         | false =>
             let (rest, carry) = normalize(t);
             choose
-            | Bool/not(carry) => (Lst/cons(h, rest), false)
-            | h == 9 => (Lst/cons(0, rest), true)
-            | _ => (Lst/cons(h + 1, rest), false)
+            | Bool/not(carry) => ([h, ..rest], false)
+            | h == 9 => ([0, ..rest], true)
+            | _ => ([h + 1, ..rest], false)
             end
         end
     end;
@@ -134,7 +134,7 @@ let render(f_mant : Nat, exp_field : Nat, even : Bool) -> Str =
     let digits = generate(r1, s1, mp1, mm1, even);
     let (norm, carry) = normalize(digits);
     match carry
-    | true => layout(digits_to_str(Lst/cons(1, norm)), k2 + 1)
+    | true => layout(digits_to_str([1, ..norm]), k2 + 1)
     | false => layout(digits_to_str(norm), k2)
     end;
 

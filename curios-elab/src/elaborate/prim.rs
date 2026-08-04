@@ -262,7 +262,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let sort = crate::sort_term(context, &former)?;
             (Prim::LstType(elem), sort)
         }
-        // Inferring: the element type is unknown, so mint a fresh metavar — the implicit `@T` a `nil`/`cons` constructor would insert — which the elements solve (an empty `[]` leaves it for a later unification to ground, exactly as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which borrows the concrete element type from `expected` before reaching here.
+        // Inferring: the element type is unknown, so mint a fresh metavar — the implicit `@T` a `nil`/`cons` constructor would insert — which the elements solve, an empty `[]` leaving it for a later unification to ground. Checking goes through `elaborate_prim`, which borrows the concrete element type from `expected` before reaching here.
         Prim::Lst(_, elems) => {
             let classifier = context.fresh_classifier_type("list element classifier");
             let elem_type = context.fresh_metavar(

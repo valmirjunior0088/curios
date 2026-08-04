@@ -2,12 +2,6 @@ pub use /sys/{Lst};
 pub use /sys/Lst/{len, slice, append, concat, map};
 use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
 
-pub let nil(@A : Type) -> Lst(A) =
-    [];
-
-pub let cons(@A : Type, x : A, l : Lst(A)) -> Lst(A) =
-    [x, ..l];
-
 pub let at(@T : Type, a : Lst(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
     /sys/Lst/get(a, i);
 

@@ -79,7 +79,7 @@ fn recursion_through_a_covariant_primitive_is_admitted() {
         | node(kids : Lst(Tree))
         end
 
-        let branch : Tree = Tree/node(Lst/cons(Tree/leaf(), Lst/nil()));
+        let branch : Tree = Tree/node([Tree/leaf()]);
 
         match branch
         | leaf() => /std/print("no")
@@ -100,7 +100,7 @@ fn recursion_through_an_anonymous_tuple_is_admitted() {
         | fields(Lst({Nat, Doc}))
         end
 
-        match Doc/fields(Lst/nil())
+        match Doc/fields([])
         | atom(_) => /std/print("no")
         | fields(_) => /std/print("tupled")
         end
