@@ -158,7 +158,7 @@ pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =
                 | success((next, a)) =>
                     match next == cur
                     | true => Result/success((cur, acc))
-                    | false => go(Lst/append(acc, a), next)
+                    | false => go([..acc, a], next)
                     end
                 end;
             go([], pos)
@@ -179,7 +179,7 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
                         | success((next, x)) =>
                             match next == cur
                             | true => Result/success((cur, acc))
-                            | false => go(Lst/append(acc, x), next)
+                            | false => go([..acc, x], next)
                             end
                         end
                     end;
@@ -188,6 +188,6 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
     };
 
 satisfy Monad(Parse) {
-    pure(x) = pure(x),
-    bind(m, f) = bind(m, f)
+    pure = pure,
+    bind = bind
 }

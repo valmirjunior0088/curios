@@ -149,7 +149,7 @@ fn bin_append_is_concat_with_a_single_byte() {
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes};
         let law(xs : Bytes, y : Byte)
-            -> Eq(Bytes/concat(xs, Bytes/append(x\, y)), Bytes/append(xs, y)) =
+            -> Eq(x\..xs\..(x\.y), x\..xs\.y) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -176,11 +176,11 @@ fn bin_len_reduces_across_a_cons_spine() {
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Nat};
         let len(h : Byte, t : Bytes)
-            -> Eq(Bytes/len(Bytes/concat(Bytes/append(x\, h), t)), Nat/add(1, Bytes/len(t))) = Eq/refl();
+            -> Eq(Bytes/len(x\.h\..t), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let guard(h : Byte, t : Bytes)
-            -> Eq(Nat/lt(0, Bytes/len(Bytes/concat(Bytes/append(x\, h), t))), true) = Eq/refl();
+            -> Eq(Nat/lt(0, Bytes/len(x\.h\..t)), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
-            -> Eq(Nat/lt(Bytes/len(Bytes/concat(Bytes/append(x\, h), t)), 0), false) = Eq/refl();
+            -> Eq(Nat/lt(Bytes/len(x\.h\..t), 0), false) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
@@ -502,7 +502,7 @@ fn bin_spread_operand_hoists_bangs() {
 fn bin_fold_sums_bytes() {
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes};
-        let b = Bytes/append(Bytes/append(Bytes/append(x\, 10), 20), 30);
+        let b = x\0a\14\1e;
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))
         "#;
     let (system, io) = MockHost::builder().build();

@@ -459,6 +459,6 @@ pub let timeout(@A : Type, d : Duration, body : () -> Async(A)) -> Async(Option(
     ]), (w) => w.1);
 
 satisfy Monad(Async) {
-    pure(x) = pure(x),
-    bind(m, f) = bind(m, f)
+    pure = pure,
+    bind = bind
 }

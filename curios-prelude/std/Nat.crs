@@ -64,42 +64,42 @@ pub let cmp(x : Nat, y : Nat) -> Order =
     end;
 
 satisfy Eql(Nat) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Cmp(Nat) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt = lt,
+    lte = lte,
+    gt = gt,
+    gte = gte
 }
 
 satisfy Add(Nat) {
-    add(a, b) = add(a, b)
+    add = add
 }
 
 satisfy Sub(Nat) {
-    sub(a, b) = sub(a, b)
+    sub = sub
 }
 
 satisfy Mul(Nat) {
-    mul(a, b) = mul(a, b)
+    mul = mul
 }
 
 satisfy Div(Nat) {
-    div(a, b) = div(a, b)
+    div = div
 }
 
 satisfy Rem(Nat) {
-    rem(a, b) = rem(a, b)
+    rem = rem
 }
 
 satisfy Show(Nat) {
-    show(n) = to_str(n)
+    show = to_str
 }
 
 satisfy Ord(Nat) {
-    cmp(a, b) = cmp(a, b)
+    cmp = cmp
 }
 
 -- The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lte` is the `a <= b` family and `Nat/Lte/trans` its transitivity, `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it.

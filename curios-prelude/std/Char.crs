@@ -124,27 +124,27 @@ rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
     | true => acc
     | false =>
         let group = codepoint / shift % 0x40;
-        emit_continuations(Bytes/append(acc, Nat/to_byte(0x80 + group)), codepoint, Nat/div(shift, 0x40))
+        emit_continuations(x\..acc\.Nat/to_byte(0x80 + group), codepoint, Nat/div(shift, 0x40))
     end;
 
 pub let to_utf8(c : Char) -> Bytes =
     let codepoint = c.code;
     choose
-    | codepoint < 0x80 => Bytes/append(x\, Nat/to_byte(codepoint))
-    | codepoint < 0x800 => emit_continuations(Bytes/append(x\, Nat/to_byte(0xC0 + codepoint / 0x40)), codepoint, 1)
-    | codepoint < 0x10000 => emit_continuations(Bytes/append(x\, Nat/to_byte(0xE0 + codepoint / 0x1000)), codepoint, 0x40)
-    | _ => emit_continuations(Bytes/append(x\, Nat/to_byte(0xF0 + codepoint / 0x40000)), codepoint, 0x1000)
+    | codepoint < 0x80 => x\.Nat/to_byte(codepoint)
+    | codepoint < 0x800 => emit_continuations(x\.Nat/to_byte(0xC0 + codepoint / 0x40), codepoint, 1)
+    | codepoint < 0x10000 => emit_continuations(x\.Nat/to_byte(0xE0 + codepoint / 0x1000), codepoint, 0x40)
+    | _ => emit_continuations(x\.Nat/to_byte(0xF0 + codepoint / 0x40000), codepoint, 0x1000)
     end;
 
 satisfy Eql(Char) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Cmp(Char) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt = lt,
+    lte = lte,
+    gt = gt,
+    gte = gte
 }
 
 satisfy Show(Char) {
@@ -152,5 +152,5 @@ satisfy Show(Char) {
 }
 
 satisfy Ord(Char) {
-    cmp(a, b) = cmp(a, b)
+    cmp = cmp
 }

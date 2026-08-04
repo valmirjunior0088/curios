@@ -44,7 +44,7 @@ pub let join(sep : Bytes, parts : Lst(Bytes)) -> Bytes =
         (l, r) => x\..l\..sep\..r);
 
 satisfy Eql(Bytes) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Show(Bytes) {

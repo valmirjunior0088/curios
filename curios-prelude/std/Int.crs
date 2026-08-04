@@ -44,40 +44,40 @@ pub let cmp(x : Int, y : Int) -> Order =
     end;
 
 satisfy Eql(Int) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Cmp(Int) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt = lt,
+    lte = lte,
+    gt = gt,
+    gte = gte
 }
 
 satisfy Add(Int) {
-    add(a, b) = add(a, b)
+    add = add
 }
 
 satisfy Sub(Int) {
-    sub(a, b) = sub(a, b)
+    sub = sub
 }
 
 satisfy Mul(Int) {
-    mul(a, b) = mul(a, b)
+    mul = mul
 }
 
 satisfy Div(Int) {
-    div(a, b) = div(a, b)
+    div = div
 }
 
 satisfy Rem(Int) {
-    rem(a, b) = rem(a, b)
+    rem = rem
 }
 
 satisfy Show(Int) {
-    show(n) = to_str(n)
+    show = to_str
 }
 
 satisfy Ord(Int) {
-    cmp(a, b) = cmp(a, b)
+    cmp = cmp
 }

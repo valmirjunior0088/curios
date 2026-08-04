@@ -21,7 +21,7 @@ satisfy Key(Bytes) {
 }
 
 satisfy Key(Str) {
-    to_bin(s) = Str/to_bytes(s)
+    to_bin = Str/to_bytes
 }
 
 satisfy Key(Nat) {
@@ -29,7 +29,7 @@ satisfy Key(Nat) {
         rec go(x : Nat) -> Bytes =
             match x
             | 0 => x\
-            | _ => Bytes/append(go(x / 256), Nat/to_byte(x % 256))
+            | _ => x\..go(x / 256)\.Nat/to_byte(x % 256)
             end;
         go(n)
 }

@@ -23,17 +23,17 @@ pub let false_neq_true(p : Eq(false, true)) -> False =
     Eq/subst((b : Bool) => match b | true => False | false => True end, p, True/qed());
 
 satisfy Eql(Bool) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Or(Bool) {
-    or(a, b) = or(a, b)
+    or = or
 }
 
 satisfy And(Bool) {
-    and(a, b) = and(a, b)
+    and = and
 }
 
 satisfy Show(Bool) {
-    show(b) = to_str(b)
+    show = to_str
 }

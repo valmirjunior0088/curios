@@ -10,14 +10,14 @@ pub let cmp(a : Byte, b : Byte) -> Order =
     end;
 
 satisfy Eql(Byte) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Cmp(Byte) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt = lt,
+    lte = lte,
+    gt = gt,
+    gte = gte
 }
 
 satisfy Show(Byte) {
@@ -25,5 +25,5 @@ satisfy Show(Byte) {
 }
 
 satisfy Ord(Byte) {
-    cmp(a, b) = cmp(a, b)
+    cmp = cmp
 }

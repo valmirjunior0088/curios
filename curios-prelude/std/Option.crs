@@ -46,6 +46,6 @@ satisfy (@A : Type, use Show(A)) => Show(Option(A)) {
 }
 
 satisfy Monad(Option) {
-    pure(x) = some(x),
-    bind(m, f) = bind(m, f)
+    pure = some,
+    bind = bind
 }

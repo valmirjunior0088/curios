@@ -157,32 +157,32 @@ pub let to_str(a : BigInt) -> Str =
     end;
 
 satisfy Eql(BigInt) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Cmp(BigInt) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt = lt,
+    lte = lte,
+    gt = gt,
+    gte = gte
 }
 
 satisfy Add(BigInt) {
-    add(a, b) = add(a, b)
+    add = add
 }
 
 satisfy Sub(BigInt) {
-    sub(a, b) = sub(a, b)
+    sub = sub
 }
 
 satisfy Mul(BigInt) {
-    mul(a, b) = mul(a, b)
+    mul = mul
 }
 
 satisfy Show(BigInt) {
-    show(n) = to_str(n)
+    show = to_str
 }
 
 satisfy Ord(BigInt) {
-    cmp(a, b) = cmp(a, b)
+    cmp = cmp
 }

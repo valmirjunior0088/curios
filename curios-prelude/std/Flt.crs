@@ -237,40 +237,40 @@ pub let of_str(s : Str) -> Option(Flt) =
     end;
 
 satisfy Eql(Flt) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Cmp(Flt) {
-    lt(a, b) = lt(a, b),
-    lte(a, b) = lte(a, b),
-    gt(a, b) = gt(a, b),
-    gte(a, b) = gte(a, b)
+    lt = lt,
+    lte = lte,
+    gt = gt,
+    gte = gte
 }
 
 satisfy Add(Flt) {
-    add(a, b) = add(a, b)
+    add = add
 }
 
 satisfy Sub(Flt) {
-    sub(a, b) = sub(a, b)
+    sub = sub
 }
 
 satisfy Mul(Flt) {
-    mul(a, b) = mul(a, b)
+    mul = mul
 }
 
 satisfy Div(Flt) {
-    div(a, b) = div(a, b)
+    div = div
 }
 
 satisfy Rem(Flt) {
-    rem(a, b) = rem(a, b)
+    rem = rem
 }
 
 satisfy Show(Flt) {
-    show(f) = to_str(f)
+    show = to_str
 }
 
 satisfy Ord(Flt) {
-    cmp(a, b) = cmp(a, b)
+    cmp = cmp
 }

@@ -36,32 +36,32 @@ pub let to_str(a : BigNat) -> Str =
     end;
 
 satisfy Eql(BigNat) {
-    eql(a, b) = cmp/eql(a, b)
+    eql = cmp/eql
 }
 
 satisfy Cmp(BigNat) {
-    lt(a, b) = cmp/lt(a, b),
-    lte(a, b) = cmp/lte(a, b),
-    gt(a, b) = cmp/gt(a, b),
-    gte(a, b) = cmp/gte(a, b)
+    lt = cmp/lt,
+    lte = cmp/lte,
+    gt = cmp/gt,
+    gte = cmp/gte
 }
 
 satisfy Add(BigNat) {
-    add(a, b) = add/add(a, b)
+    add = add/add
 }
 
 satisfy Sub(BigNat) {
-    sub(a, b) = sub/sub(a, b)
+    sub = sub/sub
 }
 
 satisfy Mul(BigNat) {
-    mul(a, b) = mul/mul(a, b)
+    mul = mul/mul
 }
 
 satisfy Show(BigNat) {
-    show(n) = to_str(n)
+    show = to_str
 }
 
 satisfy Ord(BigNat) {
-    cmp(a, b) = cmp/cmp(a, b)
+    cmp = cmp/cmp
 }

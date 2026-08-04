@@ -23,10 +23,10 @@ let escape_content(byte : Byte) -> Bytes =
     | _ =>
         match n < 0x20 || n == 0x7F
         | true =>
-            Bytes/append(
-                Bytes/append(Str/to_bytes("\\u00"), Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0)),
-                Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0))
-        | false => Bytes/append(x\, byte)
+            let hi = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0);
+            let lo = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0);
+            x\..Str/to_bytes("\\u00")\.hi\.lo
+        | false => x\.byte
         end
     end;
 

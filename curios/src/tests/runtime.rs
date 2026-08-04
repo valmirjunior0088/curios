@@ -169,14 +169,14 @@ fn bang_std_parse_threads_bangs_left_to_right() {
 
 #[test]
 fn bang_region_mixes_action_types() {
-    // A single region sequences two actions of *different* payload types: a `Parse(Bytes)` (`take_while`) and a `Parse(Byte)` (`any_byte`). Each `!` site elaborates its own `/syn/Monad/bind` application with fresh implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while the shared continuation typing forces one monad for the region. On "AB": `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bytes/append("A", 66)` is "AB".
+    // A single region sequences two actions of *different* payload types: a `Parse(Bytes)` (`take_while`) and a `Parse(Byte)` (`any_byte`). Each `!` site elaborates its own `/syn/Monad/bind` application with fresh implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while the shared continuation typing forces one monad for the region. On "AB": `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); splicing the byte onto the run gives "AB".
     let source = r#"
         use /std/{Parse, Byte, Bytes, Bool, Result, Handle, Str};
 
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
         let parser : Parse/Parse(Bytes) =
-            Parse/pure(Bytes/append(Parse/take_while(is_a)!, Parse/any_byte!));
+            Parse/pure(x\..Parse/take_while(is_a)!\.Parse/any_byte!);
 
         match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => {}
         | success(s) =>

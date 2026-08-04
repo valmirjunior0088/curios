@@ -53,7 +53,7 @@ let lower_ascii_byte(byte : Byte) -> Byte =
     end;
 
 let lower_ascii_bytes(b : Bytes) -> Bytes =
-    Bytes/fold(b, x\, (byte, acc) => Bytes/append(acc, lower_ascii_byte(byte)));
+    Bytes/fold(b, x\, (byte, acc) => x\..acc\.lower_ascii_byte(byte));
 
 pub let eql_ascii_ci(a : Str, b : Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
@@ -177,7 +177,7 @@ pub let trim(s : Str) -> Str =
     end;
 
 satisfy Eql(Str) {
-    eql(a, b) = eql(a, b)
+    eql = eql
 }
 
 satisfy Show(Str) {
