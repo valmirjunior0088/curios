@@ -502,15 +502,24 @@ fn check_cases(
             )
         }
 
+        // The carrier a case form names is a claim about the scrutinee, established here for the same reason [`check_free_monoid`] establishes its own: the arms are typed at the case values while the result is typed at the motive of the *scrutinee*, so a form that does not match the carrier types the arms at one type and runs them at another.
         Cases::Bool {
             false_case,
             true_case,
         } => {
+            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::BoolType)) {
+                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+            }
+
             at(kernel, Term::prim(Prim::Bool(false)), false_case)?;
             at(kernel, Term::prim(Prim::Bool(true)), true_case)
         }
 
         Cases::Switch { cases, default } => {
+            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::NatType)) {
+                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+            }
+
             for (key, body) in cases {
                 let literal = Term::prim(Prim::Nat(Nat::new(*key as usize)));
                 at(kernel, literal, body)?;

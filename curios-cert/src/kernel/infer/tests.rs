@@ -826,3 +826,59 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
     );
     assert_eq!(check(&mut kernel, &Term::tuple([nat(7)]), &exact), Ok(()));
 }
+
+/// A case form names the carrier it eliminates, and that claim needs establishing like any other.
+///
+/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::Lst` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The other two forms read the claim and checked nothing, which is the same shape as every count the boundary now checks: no typing rule looks at a case form, so no ordering discipline would ever have caught it.
+///
+/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_prim_head`, which is why no surface program reaches them and why the certifier's copy of the rule went unwritten.
+#[test]
+fn a_boolean_elimination_requires_a_boolean_scrutinee() {
+    let mut kernel = kernel();
+
+    // `match (0 : Nat) : (_) => Nat | false => 1 | true => 2 end`
+    let eliminated = Term::bool_match(nat(0), None, nat_type(), nat(1), nat(2));
+
+    assert!(
+        infer(&mut kernel, &eliminated).is_err(),
+        "the kernel typed a boolean elimination of a `Nat`",
+    );
+}
+
+/// The same for the dispatch form, whose default is checked at the scrutinee's own instance while its enumerated arms are checked at `Nat` literals.
+#[test]
+fn a_dispatch_requires_a_natural_scrutinee() {
+    let mut kernel = kernel();
+
+    // `match (true : Bool) : (_) => Nat | 0 => 1 | _ => 2 end`
+    let eliminated = Term::switch(
+        Term::prim(Prim::Bool(true)),
+        None,
+        nat_type(),
+        [(0u32, nat(1))],
+        nat(2),
+    );
+
+    assert!(
+        infer(&mut kernel, &eliminated).is_err(),
+        "the kernel typed a `Nat` dispatch on a `Bool`",
+    );
+}
+
+/// The control for both, and it is what a fix by brick would fail: each form at its own carrier is ordinary code and must keep typing.
+#[test]
+fn each_primitive_elimination_at_its_own_carrier_is_still_accepted() {
+    let mut kernel = kernel();
+
+    let boolean = Term::bool_match(
+        Term::prim(Prim::Bool(true)),
+        None,
+        nat_type(),
+        nat(1),
+        nat(2),
+    );
+    assert_eq!(infer(&mut kernel, &boolean), Ok(nat_type()));
+
+    let dispatch = Term::switch(nat(0), None, nat_type(), [(0u32, nat(1))], nat(2));
+    assert_eq!(infer(&mut kernel, &dispatch), Ok(nat_type()));
+}
