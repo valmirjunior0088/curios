@@ -35,10 +35,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Unification solver
   - [x] Pattern unification for higher-order metavariable spines
   - [x] Re-validate solutions in checking mode
-  - [ ] [Pruning of out-of-scope metavariables](compiler/06_UNIFICATION_REFINEMENTS_SPEC.md)
-  - [ ] [η-equate metavariable heads](compiler/06_UNIFICATION_REFINEMENTS_SPEC.md)
-  - [ ] [Surface residual unification constraints](compiler/06_UNIFICATION_REFINEMENTS_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
-- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](match_ergonomics/01_LAMBDA_INFERENCE_SPEC.md) (park structurally blocked inference within one enclosing item)
+  - [ ] [Pruning of out-of-scope metavariables](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
+  - [ ] [η-equate metavariable heads](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
+  - [ ] [Surface residual unification constraints](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
+  - [ ] [Right-biased partial imitation for flex-apply](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (solve `?M(?A) ≟ T(b̄, ī)` under-applied, abstracting the argument suffix)
+  - [ ] [Witness keying through a partially applied type constructor](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (`satisfy (@S) => Monad((A) => Free(S, A))`; key on the head of a stuck application under a binder)
+- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (park structurally blocked inference within one enclosing item)
 
 ## Pattern Matching
 
@@ -50,7 +52,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
-- [ ] [Anonymous match functions](match_ergonomics/02_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference)_
+- [ ] [Anonymous match functions](compiler/06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference)_
 
 ## Syntax Sugar
 
@@ -171,6 +173,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] concurrent `both`/`race`/`select`
   - [x] result cell (`Cell`)
   - [x] `sleep`/`timeout`
+- [ ] [Algebraic effects and handlers](compiler/01_EFFECTS_SPEC.md) (signatures as indexed inductives, a free-monad carrier whose reified continuation makes multi-shot resumption ordinary, and resumption discipline decided per carrier by representation visibility; staged from a `std/Effect` library through a sealed `std/Io` that retypes the host surface and deletes `carries_effect`, leaving `/std`'s blocking and async IO as two handlers of one signature)
+  - [ ] Stage 1–2: `std/Effect`, then `!` over the generic carrier _(needs the witness-keying and partial-imitation items above)_
+  - [ ] Stage 3–4: host operations as a sealed signature, `curios-cert/src/purity.rs` deleted, `Handle`/`Async` unified _(breaking: the entrypoint becomes an `Io({})`)_
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)
 - [x] Host-service modules (`std/time` `Instant`/`Duration`, `std/proc` `args`/`env`/`exit`, `std/rand`)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
