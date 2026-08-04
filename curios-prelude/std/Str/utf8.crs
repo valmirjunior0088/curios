@@ -174,10 +174,10 @@ let step_scans(c : Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c)))
     Eq/refl(@Scan, @step(c, Scan/lead()));
 
 -- The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
-pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Nat =
+pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x\.c\..t)) -> Nat =
     let peeled = Eq/subst(@Scan, @step(c, Scan/lead()), @scan_of_class(classify(c)),
         (sc : Scan) => Utf8(sc, t), step_scans(c),
-        peel_byte(@Scan/lead(), @Bytes/cons(c, t), True/qed(), w));
+        peel_byte(@Scan/lead(), @x\.c\..t, True/qed(), w));
     (match classify(c) : (cl) => (w2 : Utf8(scan_of_class(cl), t)) -> Nat
     | ascii() => (w2) => Byte/to_nat(c)
     | lead(k, lo, hi, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0
@@ -187,7 +187,7 @@ pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c
 pub let certify_decoded(code : Nat) -> Char =
     Option/unwrap_or(Char/of_nat(code), '?');
 
-pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Char =
+pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x\.c\..t)) -> Char =
     certify_decoded(decode_head_raw(c, w));
 
 pub rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
