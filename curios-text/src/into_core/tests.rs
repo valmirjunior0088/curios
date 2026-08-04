@@ -2044,6 +2044,21 @@ fn nat_literal_mixed_with_succ_is_rejected() {
 }
 
 #[test]
+fn constant_atoms_fold_into_the_packed_run() {
+    // A constant written as a term denotes the same packed value as the escaped spelling: `fold_bin_constants` rejoins it to the neighbouring run, so the literal stays one `Prim::Bin` rather than an append onto one. Conversion equates the two spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
+    assert_eq!(run(r"x[\48, 0x69]"), run(r"x[\48, \69]"));
+    assert_eq!(run(r"b[\1, false]"), run(r"b[\1, \0]"));
+    assert!(!format!("{:?}", run(r"x[\48, 0x69]")).contains("BinAppend"));
+
+    // A symbolic atom cannot fold, and keeps the append the fold exists to avoid.
+    assert!(format!("{:?}", run(r"x[\48, b]")).contains("BinAppend"));
+
+    // Past `Byte` range, or carrying a written sign, an entry stays an atom — elaboration reports it against the expected element type instead of the fold silently truncating it.
+    assert!(format!("{:?}", run(r"x[300]")).contains("BinAppend"));
+    assert!(format!("{:?}", run(r"x[+1]")).contains("BinAppend"));
+}
+
+#[test]
 fn bang_in_a_type_is_rejected() {
     // Types have no region to hoist an action to, so a `!` in an annotation is rejected during desugaring.
     assert!(run_err("let a : e! = x; a").contains("not allowed inside a type"));
