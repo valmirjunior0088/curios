@@ -23,7 +23,8 @@ mod tests;
 
 use {
     super::{
-        Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort, synth_neutral,
+        Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort, sort::infer_sort,
+        synth_neutral,
     },
     curios_base::{Grain, PackedBin},
     curios_core::{
@@ -96,8 +97,8 @@ fn infer_node(
             .cloned()
             .ok_or_else(|| KernelError::Unbound(var.unwrap().clone())),
 
-        // A type former is a type, at the universe `Sort::of` computes for it — the join of its parts, or `Prop` when it lands there.
-        Subterm::FuncType(_) | Subterm::TupleType(_) => Ok(Sort::of(kernel, term)?.term()),
+        // A type former is a type, at the universe its parts join to — computed by the judgment role, which types those parts, rather than by the lookup, which only classifies them.
+        Subterm::FuncType(_) | Subterm::TupleType(_) => Ok(infer_sort(kernel, term)?.term()),
 
         // λ: check each domain is a type, then the body under those binders. The result is the Π over the same telescope.
         Subterm::Func(Func {
@@ -194,7 +195,7 @@ fn infer_node(
         //
         // Every rule that consults a declaration reads those arguments — `Sort::of` for the sort, the arm rule for a constructor's signature, inversion for its index targets, `induct_type_args` for a comparison — and each reads them at the declared domain. Nothing established they inhabit it. Counts are the boundary's job and were checked there; the shapes are typing's, and reading one unestablished is what admitted `Eq(@True, 0, 1)` as a type: `0` and `1` are `Nat`s claiming a `Prop`-sorted domain, so `induct_type_args` discharges both by irrelevance and `refl` inhabits the forgery, whose elimination then transports between two instances of a relevant family.
         Subterm::InductType(family) => {
-            let sort = Sort::of(kernel, term)?;
+            let sort = infer_sort(kernel, term)?;
             let at = kernel.induct_at(family)?;
 
             let mut obligations = Vec::with_capacity(family.params.len() + family.indices.len());
@@ -228,7 +229,7 @@ fn infer_node(
             universes,
             params,
         }) => {
-            let sort = Sort::of(kernel, term)?;
+            let sort = infer_sort(kernel, term)?;
             let at = kernel.struct_at(name, universes, params)?;
 
             let mut obligations = Vec::with_capacity(params.len());

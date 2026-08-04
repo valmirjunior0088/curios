@@ -1675,7 +1675,7 @@ fn lying_motive(sort: Term) -> Module {
 ///
 /// `check_induct_arms` skips the large-elimination guard for a vacuous elimination — no arms, no catch-all — and the reason is good: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The question this fixture settles is whether the *motive* clause inherits that skip.
 ///
-/// It does not, and the reason is not an exploit. No route from a vacuous elimination to a forged term was demonstrated, and the honest reading of that is the weak one: an attempt failed, which is not the same as a proof that none exists. What makes the clause unconditional is that `infer` reads the elimination's **type** off the motive and hands it to the caller whether or not the elimination can run — so a motive nothing validated means a term whose type nothing validated, and `Sort::of` will classify it downstream. The module below was certified with **zero refusals** while the clause did not run: a vacuous elimination at an uninhabited `Held(Two/b())`, whose motive states `Prop` over arms inhabiting `Type`, declared as the codomain of a definition so no ordinary mismatch fires first.
+/// It does not, and the reason is not an exploit. No route from a vacuous elimination to a forged term was demonstrated, and the honest reading of that is the weak one: an attempt failed, which is not the same as a proof that none exists. What makes the clause unconditional is that `infer` reads the elimination's **type** off the motive and hands it to the caller whether or not the elimination can run — so a motive nothing validated means a term whose type nothing validated, and `Sort::of` will classify it downstream. The module below was certified with **zero refusals** while the clause did not run: a vacuous elimination at an uninhabited `Held(Two/b())`, whose motive states `Prop` over arms inhabiting `Type`. What keeps the fixture pointed at the motive is the order `check` and `infer` run in, not the shape of the definition around it — see the note at the definition, and the one thing about it that had to change once `infer` began typing a type former's parts rather than classifying them.
 ///
 /// It also costs nothing. The clause sits in [`check_cases`](crate::infer) above the dispatch, where every `Cases` form shares one `motive` binding, so *not* running it here would mean pushing it down into `check_induct_arms`, guarding it with the vacuous condition, and duplicating it into the three primitive-carrier arms. Unconditional is the cheap implementation; the skip would have been the deliberate exception.
 #[test]
@@ -1741,7 +1741,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     };
     let subject = Free::local(902, Some("s"));
 
-    // The declared codomain *is* the lying motive, so no ordinary mismatch can refuse this first.
+    // The codomain is honest, and the ordering is what keeps this about the motive: `check` reaches `infer` before it can subsume, and `infer` runs `check_cases` — hence the motive clause — before there is a type to subsume with. Making the codomain *be* the lying motive, which is how this read before a former's parts were typed, now refuses a step earlier on that codomain's own arms and never reaches the body.
     let vacuous = authored(
         &Global::Authored(Qualifier::from(["vacuous"])),
         Term::func_type(
@@ -1749,7 +1749,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
                 (outer.clone(), Term::prim(Prim::NatType)),
                 (subject.clone(), at_b.clone()),
             ],
-            lying(),
+            Term::prim(Prim::NatType),
         ),
         Term::func(
             [
@@ -2789,4 +2789,95 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     };
 
     assert_eq!(recheck_module_verdicts(&module, 1_000_000), Vec::new());
+}
+
+/// The same bogus occurrence, smuggled past [`a_nominal_occurrence_types_its_arguments`] through a Σ field.
+///
+/// Typing an occurrence's arguments closes the route only where something *types* the occurrence. A type former's parts are not typed: `infer` answers for a `FuncType` or a `TupleType` with `Sort::of`, which classifies each domain — consulting a declaration for its sort and checking nothing else — and that is the second, weaker way to accept a type `curios-cert/README.md` says this crate no longer has.
+///
+/// So `{Eq(True, 0, 1)}` is admitted, and the projection rule hands the field's declared type straight back: `v.0` is a scrutinee at the forged equation, and the rest of [`index_forgery`]'s derivation is unchanged. The codomain half is the same shape — `(Nat) -> Eq(True, 0, 1)` is admitted, and an application hands the codomain back — so both a `Proj` and an `Apply` reach it.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero** refusals for this module.
+#[test]
+fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
+    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
+    let nat = |n: usize| Term::prim(Prim::Nat(curios_core::Nat::new(n)));
+
+    let true_name = Global::Authored(Qualifier::from(["True"]));
+    let equality_name = Global::Authored(Qualifier::from(["Eq"]));
+    let true_type = Term::induct_type(true_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(
+        true_name.clone(),
+        Vec::<Term>::new(),
+        "qed",
+        Vec::<Term>::new(),
+    );
+
+    let true_decl = proposition(vec![(
+        Atom::from("qed"),
+        InductParam {
+            telescope: Telescope::done(Vec::new()),
+            plicities: Vec::new(),
+        },
+    )]);
+
+    let carrier = Free::local(20, Some("A"));
+    let left = Free::local(21, Some("x"));
+    let right = Free::local(22, Some("y"));
+    let value = Free::local(23, Some("z"));
+    let mut equality_decl = proposition(vec![(
+        Atom::from("refl"),
+        InductParam {
+            telescope: Telescope::build(
+                [
+                    (carrier.clone(), type_1.clone()),
+                    (value.clone(), Term::free_var(&carrier)),
+                ],
+                vec![Term::free_var(&value), Term::free_var(&value)],
+            ),
+            plicities: vec![Plicity::Implicit, Plicity::Explicit],
+        },
+    )]);
+    equality_decl.arity = Telescope::build(
+        [(carrier.clone(), type_1.clone())],
+        Telescope::build(
+            [
+                (left, Term::free_var(&carrier)),
+                (right, Term::free_var(&carrier)),
+            ],
+            (),
+        ),
+    );
+
+    // v : {Eq(True, 0, 1)} = (refl(True, qed()))
+    let bogus = Term::induct_type(equality_name.clone(), [true_type.clone()], [nat(0), nat(1)]);
+    let wrapped = authored(
+        &Global::Authored(Qualifier::from(["v"])),
+        Term::tuple_type(vec![(Free::local(30, Some("b")), bogus)]),
+        Term::tuple([Term::variant(
+            equality_name.clone(),
+            [true_type],
+            "refl",
+            [qed],
+        )]),
+    );
+
+    let module = Module {
+        items: vec![wrapped],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::prim(Prim::NatType),
+    };
+
+    let verdicts = recheck_module_verdicts(&module, 1_000_000);
+    println!("VERDICTS: {verdicts:?}");
+    assert!(
+        !verdicts.is_empty(),
+        "PROBE: a bogus occurrence passed as a tuple field type",
+    );
 }

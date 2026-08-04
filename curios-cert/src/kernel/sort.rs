@@ -5,12 +5,20 @@
 //! Answering it in full would need [`infer`](super::infer), which needs conversion, which is a cycle. The way out is the same one the elaborator takes: a *synthesis-only* type computation for neutral spines ([`synth_neutral`]) that reads types off binders and declarations without ever checking anything, and therefore never reaches conversion. It answers "what type does this spine have, if it has one" and nothing else.
 //!
 //! Unlike the elaborator's, neither function here guesses. Where a shape cannot be classified the kernel refuses; see the module documentation on [`kernel`](super) for why a guessed level is the unsound direction.
+//!
+//! # Two roles, one body
+//!
+//! Asking a type's sort is two different questions depending on who asks, and they were one function for as long as that went unnoticed. [`Sort::of`] is a **lookup**: it classifies a type something has already checked, which is the only thing conversion can afford to call, since typing reaches conversion and the cycle would close. [`infer_sort`] is a **judgment**: it accepts a term *as* a type, and is what [`infer`](super::infer) calls.
+//!
+//! They differ in exactly one function — [`Establish`], which says whether a type former's parts are classified or typed — and share everything else, the Π and Σ rules included. That is deliberate: the rules are subtle enough that a second copy would be a second chance to get them wrong, while the role is a one-word choice a caller has to make at the call site.
+//!
+//! The split exists because the roles were confused. `infer` answered for a `FuncType` and a `TupleType` with the lookup, so a former was admitted whatever its parts said — and `curios-cert/README.md`'s claim that the lookup "is reached only where typing has already run" was false of the four sites that were supposed to establish it. A Σ whose field type was a nominal occurrence with ill-typed arguments passed, and the projection rule then handed that field type back as a scrutinee at a forged equation.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    super::{Kernel, KernelError, whnf::whnf},
+    super::{Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
         Apply, Bound, Field, FuncType, InductType, Level, Prim, Proj, Reducer, StructType, Subterm,
         Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
@@ -100,35 +108,12 @@ impl Sort {
 
             // A *non-empty* record of propositions is a proposition. The empty tuple is unit rather than a proposition: it is what an effect returns (`/std/print : .. -> {}`), so it must be kept at runtime, and calling it a proposition would erase it.
             Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
-                let telescope = telescope.clone();
-
-                // Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
-                kernel.scoped(|kernel| {
-                    sort_of_binders(kernel, telescope, |_, levels, ()| {
-                        Ok(match levels.is_empty() {
-                            true => Sort::Prop,
-                            false => Sort::Type(Level::max(levels)),
-                        })
-                    })
-                })
+                tuple_sort(kernel, telescope.clone(), Sort::of)
             }
             Subterm::TupleType(_) => Ok(Sort::Type(Level::zero())),
 
-            // Π into a proposition is a proposition, regardless of what it quantifies over — that is what makes `(n : Nat) -> P(n)` erasable. Otherwise the level is the join of the domains and the codomain.
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                let telescope = telescope.clone();
-
-                kernel.scoped(|kernel| {
-                    sort_of_binders(kernel, telescope, |kernel, mut levels, codomain| {
-                        Ok(match Sort::of(kernel, &codomain)? {
-                            Sort::Prop => Sort::Prop,
-                            Sort::Type(output) => {
-                                levels.push(output);
-                                Sort::Type(Level::max(levels))
-                            }
-                        })
-                    })
-                })
+                func_sort(kernel, telescope.clone(), Sort::of)
             }
 
             Subterm::Prim(prim) => sort_of_prim(kernel, prim),
@@ -163,6 +148,70 @@ impl Sort {
     }
 }
 
+/// How a type former's parts are established before its universe is computed from them.
+///
+/// This is the *whole* of what the two roles in this module differ in. [`Sort::of`] is a lookup — it classifies a type that something has already checked — and passes itself. [`infer_sort`] is a judgment — it accepts a term *as* a type — and passes [`infer_type`]. Everything else, the Π and Σ rules included, is shared.
+///
+/// Naming the difference is what keeps a caller from inheriting the wrong role. `infer`'s type-former arms inherited the lookup for as long as they existed, and the sentence in `curios-cert/README.md` saying `Sort::of` "is reached only where typing has already run" was false of them: a Σ whose field type was a nominal occurrence with ill-typed arguments was admitted, because computing a former's universe only ever classified its parts, and the projection rule then handed that field type back as a scrutinee.
+type Establish = fn(&mut Kernel, &Term) -> Result<Sort, KernelError>;
+
+/// Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
+fn tuple_sort(
+    kernel: &mut Kernel,
+    telescope: Telescope<()>,
+    establish: Establish,
+) -> Result<Sort, KernelError> {
+    kernel.scoped(|kernel| {
+        sort_of_binders(kernel, telescope, establish, |_, levels, ()| {
+            Ok(match levels.is_empty() {
+                true => Sort::Prop,
+                false => Sort::Type(Level::max(levels)),
+            })
+        })
+    })
+}
+
+/// Π into a proposition is a proposition, regardless of what it quantifies over — that is what makes `(n : Nat) -> P(n)` erasable. Otherwise the level is the join of the domains and the codomain.
+fn func_sort(
+    kernel: &mut Kernel,
+    telescope: Telescope<Term>,
+    establish: Establish,
+) -> Result<Sort, KernelError> {
+    kernel.scoped(|kernel| {
+        sort_of_binders(
+            kernel,
+            telescope,
+            establish,
+            |kernel, mut levels, codomain| {
+                Ok(match establish(kernel, &codomain)? {
+                    Sort::Prop => Sort::Prop,
+                    Sort::Type(output) => {
+                        levels.push(output);
+                        Sort::Type(Level::max(levels))
+                    }
+                })
+            },
+        )
+    })
+}
+
+/// The sort of `type_`, having **typed** every part a type former binds rather than classifying it — [`Sort::of`]'s judgment counterpart, and the one `infer` calls.
+///
+/// Only the two binder-carrying formers differ from the lookup, because only they hold a part nothing else establishes: a nominal occurrence's arguments are typed where the occurrence is inferred, a primitive former's element type by `infer_prim`, and a neutral's sort is read off a binder that was assumed at a type its own telescope had checked. So every other shape delegates, on the *already reduced* term, and the memo makes that second reduction free.
+pub(super) fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
+    let reduced = kernel.reduce_forced(type_.clone())?;
+
+    match &*reduced {
+        Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
+            tuple_sort(kernel, telescope.clone(), infer_type)
+        }
+        Subterm::FuncType(FuncType { telescope, .. }) => {
+            func_sort(kernel, telescope.clone(), infer_type)
+        }
+        _ => Sort::of(kernel, &reduced),
+    }
+}
+
 /// The sort of a neutral type: what [`synth_neutral`] reads off its head *is* its sort.
 fn sort_of_neutral(kernel: &mut Kernel, reduced: &Term) -> Result<Sort, KernelError> {
     let synthesized = synth_neutral(kernel, reduced)?
@@ -176,9 +225,12 @@ fn sort_of_neutral(kernel: &mut Kernel, reduced: &Term) -> Result<Sort, KernelEr
 /// A domain that is itself a proposition contributes no level: `Prop` sits below the hierarchy rather than in it. Each binder joins the local scope carrying its own type before the walk descends, because a later domain may mention an earlier one — and opening with a variable nothing can type would leave [`synth_neutral`] unable to classify every occurrence of it further in, which here is not imprecision but a refusal.
 ///
 /// Σ and Π share every line of that and differ only in the terminal clause, which is exactly where the two rules genuinely differ: a record is a proposition when *all* its fields are, a function when its *codomain* is. Splitting there keeps that difference the only thing either caller states.
+///
+/// `establish` is the other axis, and it is orthogonal: it says whether a domain is *classified* or *typed*, which is the lookup/judgment split [`Establish`] documents. The rules above are written once and both roles run them.
 fn sort_of_binders<B: Bound>(
     kernel: &mut Kernel,
     telescope: Telescope<B>,
+    establish: Establish,
     terminal: impl FnOnce(&mut Kernel, Vec<Level>, B) -> Result<Sort, KernelError>,
 ) -> Result<Sort, KernelError> {
     let mut telescope = telescope;
@@ -187,7 +239,7 @@ fn sort_of_binders<B: Bound>(
     loop {
         match telescope {
             Telescope::Cons(domain, rest) => {
-                if let Sort::Type(level) = Sort::of(kernel, &domain)? {
+                if let Sort::Type(level) = establish(kernel, &domain)? {
                     levels.push(level);
                 }
 
