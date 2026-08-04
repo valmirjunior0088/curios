@@ -1,4 +1,4 @@
-pub use /sys/Bits/{let Bits, len, eql, slice, append, concat};
+pub use /sys/Bits/{let Bits, len, eql, slice};
 use /std/{Lst, Nat, Bool, Option, Eq, Str, Eql, Show};
 
 pub let at(b : Bits, i : Nat, ok : Nat/Lt(i, len(b))) -> Bool =

@@ -33,7 +33,7 @@ fn lst_map_distributes_over_cons() {
     let source = r#"
         use /std/{Handle, Str, Eq, Nat, Lst};
         let step(f : (Nat) -> Nat, x : Nat, t : Lst(Nat))
-            -> Eq(Lst/map(Lst/concat([x], t), f), Lst/concat([f(x)], Lst/map(t, f))) =
+            -> Eq(Lst/map([x, ..t], f), [f(x), ..Lst/map(t, f)]) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -58,16 +58,16 @@ fn bin_match_is_a_foldr() {
 
 #[test]
 fn bin_concat_is_a_free_monoid() {
-    // `peel_bin` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: `concat` associates, the empty bytestring `x\` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BinConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
+    // `peel_bin` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `x\` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BinConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BinConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes};
         let assoc(a : Bytes, b : Bytes, c : Bytes)
-            -> Eq(Bytes/concat(a, Bytes/concat(b, c)), Bytes/concat(Bytes/concat(a, b), c)) =
+            -> Eq(x\..a\..(x\..b\..c), x\..(x\..a\..b)\..c) =
             Eq/refl();
-        let left_id(a : Bytes) -> Eq(Bytes/concat(x\, a), a) = Eq/refl();
-        let right_id(a : Bytes) -> Eq(Bytes/concat(a, x\), a) = Eq/refl();
+        let left_id(a : Bytes) -> Eq(x\..(x\)\..a, a) = Eq/refl();
+        let right_id(a : Bytes) -> Eq(x\..a\..(x\), a) = Eq/refl();
         let resegment(x : Bytes)
-            -> Eq(Bytes/concat(x\01\02, x), Bytes/concat(x\01, Bytes/concat(x\02, x))) =
+            -> Eq(x\01\02\..x, x\01\..(x\02\..x)) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -79,7 +79,7 @@ fn bin_concat_leading_byte_clash_is_rejected() {
     // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `x\01 ++ x` and `x\02 ++ x` are never convertible and the `refl` is rejected. Guards `peel_bin` against deciding unequal values equal.
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes};
-        let bad(x : Bytes) -> Eq(Bytes/concat(x\01, x), Bytes/concat(x\02, x)) = Eq/refl();
+        let bad(x : Bytes) -> Eq(x\01\..x, x\02\..x) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
@@ -92,7 +92,7 @@ fn bin_slice_is_a_monoid_citizen() {
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes, Nat};
         let split(b : Bytes, s : Nat, m : Nat, e : Nat)
-            -> Eq(Bytes/concat(Bytes/slice(b, s, m), Bytes/slice(b, m, e)), Bytes/slice(b, s, e)) =
+            -> Eq(x\..Bytes/slice(b, s, m)\..Bytes/slice(b, m, e), Bytes/slice(b, s, e)) =
             Eq/refl();
         let empty(b : Bytes, i : Nat) -> Eq(Bytes/slice(b, i, i), x\) = Eq/refl();
         let full(b : Bytes) -> Eq(Bytes/slice(b, 0, Bytes/len(b)), b) = Eq/refl();
@@ -107,7 +107,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes, Nat};
         let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq(Bytes/concat(Bytes/slice(b, s, m), Bytes/slice(b, n, e)), Bytes/slice(b, s, e)) =
+            -> Eq(x\..Bytes/slice(b, s, m)\..Bytes/slice(b, n, e), Bytes/slice(b, s, e)) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -121,7 +121,7 @@ fn lst_slice_is_a_monoid_citizen() {
     let source = r#"
         use /std/{Handle, Str, Eq, Lst, Nat};
         let split(@T : Type, a : Lst(T), s : Nat, m : Nat, e : Nat)
-            -> Eq(Lst/concat(Lst/slice(a, s, m), Lst/slice(a, m, e)), Lst/slice(a, s, e)) =
+            -> Eq([..Lst/slice(a, s, m), ..Lst/slice(a, m, e)], Lst/slice(a, s, e)) =
             Eq/refl();
         let empty(@T : Type, a : Lst(T), i : Nat) -> Eq(Lst/slice(a, i, i), []) = Eq/refl();
         let full(@T : Type, a : Lst(T)) -> Eq(Lst/slice(a, 0, Lst/len(a)), a) = Eq/refl();
@@ -132,11 +132,11 @@ fn lst_slice_is_a_monoid_citizen() {
 
 #[test]
 fn lst_append_is_concat_with_a_single() {
-    // `Lst/append` now rides the spine as `base ++ [e]` (`core::spine`), so it converts to the `concat`-with-`single` form by `refl` even for a symbolic base and element — `append(xs, y) ≡ concat(xs, single(y))`.
+    // An element entry rides the spine as `base ++ [e]` (`core::spine`), so it converts to the spread-of-a-singleton form by `refl` even for a symbolic base and element — `xs ++ y ≡ xs ++ [y]`.
     let source = r#"
         use /std/{Handle, Str, Eq, Lst};
         let law(@T : Type, xs : Lst(T), y : T)
-            -> Eq(Lst/concat(xs, [y]), Lst/append(xs, y)) =
+            -> Eq([..xs, y], [..xs, ..[y]]) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -145,7 +145,7 @@ fn lst_append_is_concat_with_a_single() {
 
 #[test]
 fn bin_append_is_concat_with_a_single_byte() {
-    // The `Bytes` twin of `lst_append_is_concat_with_a_single`: `Bytes/append` rides the spine as `base ++ b`, so it converts to the `concat`-with-a-one-byte form by `refl` even for a symbolic base and a symbolic byte.
+    // The `Bytes` twin of `lst_append_is_concat_with_a_single`: an atom splice rides the spine as `base ++ b`, so it converts to the concatenation-with-a-one-byte form by `refl` even for a symbolic base and a symbolic byte.
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes};
         let law(xs : Bytes, y : Byte)
@@ -162,7 +162,7 @@ fn lst_slice_window_seam_mismatch_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Eq, Lst, Nat};
         let bad(@T : Type, a : Lst(T), s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq(Lst/concat(Lst/slice(a, s, m), Lst/slice(a, n, e)), Lst/slice(a, s, e)) =
+            -> Eq([..Lst/slice(a, s, m), ..Lst/slice(a, n, e)], Lst/slice(a, s, e)) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -243,16 +243,16 @@ fn nat_sub_peels_a_successor_spine() {
 
 #[test]
 fn lst_concat_is_a_free_monoid() {
-    // `peel_arr` (core::spine) makes `Lst` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `LstConcat`s to a common normal form.
+    // `peel_arr` (core::spine) makes `Lst` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `LstConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
     let source = r#"
         use /std/{Handle, Str, Eq, Lst};
         let assoc(@T : Type, a : Lst(T), b : Lst(T), c : Lst(T))
-            -> Eq(Lst/concat(a, Lst/concat(b, c)), Lst/concat(Lst/concat(a, b), c)) =
+            -> Eq([..a, ..[..b, ..c]], [..[..a, ..b], ..c]) =
             Eq/refl();
-        let left_id(@T : Type, a : Lst(T)) -> Eq(Lst/concat([], a), a) = Eq/refl();
-        let right_id(@T : Type, a : Lst(T)) -> Eq(Lst/concat(a, []), a) = Eq/refl();
+        let left_id(@T : Type, a : Lst(T)) -> Eq([..[], ..a], a) = Eq/refl();
+        let right_id(@T : Type, a : Lst(T)) -> Eq([..a, ..[]], a) = Eq/refl();
         let resegment(@T : Type, a : T, b : T, c : Lst(T))
-            -> Eq(Lst/concat([a, b], c), Lst/concat([a], Lst/concat([b], c))) =
+            -> Eq([a, b, ..c], [a, ..[b, ..c]]) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -276,7 +276,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        r#"std/Handle/write(std/Handle/stdout, std/Bytes/concat(x\, /std/Str/to_bytes("ok")))"#,
+        r#"std/Handle/write(std/Handle/stdout, x\../std/Str/to_bytes("ok"))"#,
         system,
     )
     .expect("expected result");

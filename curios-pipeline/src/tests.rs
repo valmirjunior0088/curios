@@ -872,14 +872,15 @@ fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
 
 #[test]
 fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
-    // `pick([], Lst/concat)`: the inserted implicit `?A` is the empty array's type *and* `combine`'s domain. The empty-array literal `[]` borrows its element type from the expected (check-only intro), so against the bare metavar `?A` it cannot elaborate. Elaboration must postpone it until the sibling `Lst/concat` grounds `?A := Lst(?T)`, then re-check — at which point the `Lst(Nat)` result pins `?T`. Exercises the array arm of `blocked_on_metavar`; without it this fails "type mismatch" eagerly.
+    // `pick([], cat)`: the inserted implicit `?A` is the empty array's type *and* `combine`'s domain. The empty-array literal `[]` borrows its element type from the expected (check-only intro), so against the bare metavar `?A` it cannot elaborate. Elaboration must postpone it until the sibling `cat` grounds `?A := Lst(?T)`, then re-check — at which point the `Lst(Nat)` result pins `?T`. Exercises the array arm of `blocked_on_metavar`; without it this fails "type mismatch" eagerly. `cat` is declared here rather than taken from `/std` because concatenation is literal syntax, which cannot be passed as a value.
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
+        let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
         let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
             combine(fallback, fallback);
         let go : Lst(Nat) =
-            pick([], Lst/concat);
+            pick([], cat);
         go
     "#;
 
@@ -934,13 +935,14 @@ fn closure_returning_a_bare_projection_lowers() {
 
 #[test]
 fn bare_polymorphic_function_inserts_implicits_in_value_position() {
-    // Passing a bare `Lst/concat : (@T, Lst T, Lst T) -> Lst T` where an explicit `(Lst Nat, Lst Nat) -> Lst Nat` is expected: the check turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and eta-expands over the explicit binders, so no hand-written `(l, r) => concat(l, r)` wrapper is needed. Lowers end-to-end — the eta-expansion is an ordinary closure over a saturated call.
+    // Passing a bare `cat : (@T, Lst T, Lst T) -> Lst T` where an explicit `(Lst Nat, Lst Nat) -> Lst Nat` is expected: the check turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and eta-expands over the explicit binders, so no hand-written `(l, r) => cat(l, r)` wrapper is needed. Lowers end-to-end — the eta-expansion is an ordinary closure over a saturated call.
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
+        let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
         let pairwise(f : (Lst(Nat), Lst(Nat)) -> Lst(Nat), a : Lst(Nat)) -> Lst(Nat) =
             f(a, a);
-        pairwise(Lst/concat, [1])
+        pairwise(cat, [1])
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -952,7 +954,8 @@ fn polymorphic_value_assignment_keeps_its_implicit() {
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
-        let g : (@T : Type, Lst(T), Lst(T)) -> Lst(T) = Lst/concat;
+        let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
+        let g : (@T : Type, Lst(T), Lst(T)) -> Lst(T) = cat;
         g(@Nat, [1], [2])
     "#;
 

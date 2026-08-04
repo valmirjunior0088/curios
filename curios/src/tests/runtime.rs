@@ -704,7 +704,7 @@ fn match_reads_an_effectful_scrutinee_once() {
 
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
-    // The rope representation's whole promise: a naive 100k-step `Bytes/concat` accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step (Θ(n²), tens of minutes at this size); a regression fails on the timeout. The final slice + print also pins the force → memo → host-write path end to end.
+    // The rope representation's whole promise: a naive 100k-step packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step (Θ(n²), tens of minutes at this size); a regression fails on the timeout. The final slice + print also pins the force → memo → host-write path end to end.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -712,7 +712,7 @@ fn accumulation_loops_are_linear_by_construction() {
         rec go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => go(k, Bytes/concat(acc, Str/to_bytes("0123456789")))
+            | k + 1; ih => go(k, x\..acc\..Str/to_bytes("0123456789"))
             end;
         let built = go(100000, x\);
         let head = Bytes/slice(built, 0, 10);
@@ -735,7 +735,7 @@ fn peel_loops_are_linear_by_construction() {
         rec build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => build(k, Bytes/concat(acc, Str/to_bytes("0123456789")))
+            | k + 1; ih => build(k, x\..acc\..Str/to_bytes("0123456789"))
             end;
         let built = build(10000, x\);
         let c = Cell/new(built);

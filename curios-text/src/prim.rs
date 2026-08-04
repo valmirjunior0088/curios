@@ -5,7 +5,7 @@ use {
     std::sync::Arc,
 };
 
-/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `Lst` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `Lst/concat`; a spread-free literal lowers to a plain `Lst` exactly as before.
+/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `Lst` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `LstConcat` primitive; a spread-free literal lowers to a plain `Lst` exactly as before.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LstEntry {
     Elem(Term),

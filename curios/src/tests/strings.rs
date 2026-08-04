@@ -46,7 +46,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x\)
         | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(Byte/to_nat(c), st), t))
-            : (st, Bytes/concat(x\.c, t))
+            : (st, x\.c\..t)
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
@@ -440,14 +440,14 @@ fn utf8_inductive_spike() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x\)
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, Bytes/concat(x\.Nat/to_byte(c), t))
+            : (st, x\.Nat/to_byte(c)\..t)
         end
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
-            -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
+            -> Utf8(s, x\..a\..b) =
+            match va : (q, x, w) => Utf8(q, x\..x\..b)
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(rest, vb))
             end;
 
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
@@ -463,7 +463,7 @@ fn utf8_construction_spike() {
 
         induct All : (b : Bytes) -> Type
         | empty() : (x\)
-        | snoc(c : Nat, t : Bytes, rest : All(t)) : (Bytes/concat(x\.Nat/to_byte(c), t))
+        | snoc(c : Nat, t : Bytes, rest : All(t)) : (x\.Nat/to_byte(c)\..t)
         end
 
         rec build(b : Bytes) -> All(b) =
@@ -537,20 +537,20 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x\)
         | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(Byte/to_nat(c), st), t))
-            : (st, Bytes/concat(x\.c, t))
+            : (st, x\.c\..t)
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
+            -> Utf8(s, x\..a\..b) =
+            match va : (q, x, w) => Utf8(q, x\..x\..b)
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(Bytes/concat(a, b)) =
+            -> Valid(x\..a\..b) =
             seq(va, vb);
 
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
@@ -618,7 +618,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x\)
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, Bytes/concat(x\.Nat/to_byte(c), t))
+            : (st, x\.Nat/to_byte(c)\..t)
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
@@ -632,7 +632,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
                 | bad() => Option/none()
                 end
             | x\h\..t; ih => (s) =>
-                match ih(step(/std/Byte/to_nat(h), s)) : (_) => Option(Utf8(s, Bytes/concat(x\.h, t)))
+                match ih(step(/std/Byte/to_nat(h), s)) : (_) => Option(Utf8(s, x\.h\..t))
                 | some(rest) => Option/some(Utf8/more(/std/Byte/to_nat(h), s, t, rest))
                 | none() => Option/none()
                 end
@@ -647,7 +647,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | none() => Str/to_bytes("no")
             end;
 
-        Handle/write(Handle/stdout, Bytes/concat(decide(x\68\69), decide(x\80)))
+        Handle/write(Handle/stdout, x\..decide(x\68\69)\..decide(x\80))
         "#;
     assert_eq!(run(source), b"yesno");
 }
@@ -712,20 +712,20 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x\)
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, Bytes/concat(x\.Nat/to_byte(c), t))
+            : (st, x\.Nat/to_byte(c)\..t)
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
+            -> Utf8(s, x\..a\..b) =
+            match va : (q, x, w) => Utf8(q, x\..x\..b)
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(Bytes/concat(a, b)) =
+            -> Valid(x\..a\..b) =
             seq(va, vb);
 
         let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
@@ -758,7 +758,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
             | false =>
                 let hi = decimal(Nat/div(n, 10));
                 let lo = single_digit(Nat/rem(n, 10));
-                (Bytes/concat(hi.b, lo.b), concat_closed(@hi.b, @lo.b, hi.v, lo.v))
+                (x\..hi.b\..lo.b, concat_closed(@hi.b, @lo.b, hi.v, lo.v))
             end;
 
         let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
@@ -823,20 +823,20 @@ fn utf8_slice_closed_peels_codepoints() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x\)
         | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(Byte/to_nat(c), st), t))
-            : (st, Bytes/concat(x\.c, t))
+            : (st, x\.c\..t)
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
+            -> Utf8(s, x\..a\..b) =
+            match va : (q, x, w) => Utf8(q, x\..x\..b)
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(Bytes/concat(a, b)) =
+            -> Valid(x\..a\..b) =
             seq(va, vb);
 
         rec take_to_lead(@s : Scan, @b : Bytes, d : Utf8(s, b))
@@ -849,14 +849,14 @@ fn utf8_slice_closed_peels_codepoints() {
                     match d : (_, _, _) => { mid : Bytes, tail : Bytes, midd : Utf8(Scan/cont(rem, lo, hi), mid), tv : Valid(tail) }
                     | more(c, st, t, rest) =>
                         let w = take_to_lead(rest);
-                        (Bytes/concat(x\.c, w.mid), w.tail,
+                        (x\.c\..w.mid, w.tail,
                          Utf8/more(c, st, w.mid, w.midd), w.tv)
                     end
                 | bad() => (d) =>
                     match d : (_, _, _) => { mid : Bytes, tail : Bytes, midd : Utf8(Scan/bad(), mid), tv : Valid(tail) }
                     | more(c, st, t, rest) =>
                         let w = take_to_lead(rest);
-                        (Bytes/concat(x\.c, w.mid), w.tail,
+                        (x\.c\..w.mid, w.tail,
                          Utf8/more(c, st, w.mid, w.midd), w.tv)
                     end
                 end;
@@ -867,7 +867,7 @@ fn utf8_slice_closed_peels_codepoints() {
             | stop() => (x\, Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);
-                (Bytes/concat(x\.c, w.mid), Utf8/more(c, st, w.mid, w.midd))
+                (x\.c\..w.mid, Utf8/more(c, st, w.mid, w.midd))
             end;
 
         let drop1(@b : Bytes, d : Valid(b)) -> { rest : Bytes, v : Valid(rest) } =
@@ -893,7 +893,7 @@ fn utf8_slice_closed_peels_codepoints() {
                 let hd = take1(d);
                 let tl = drop1(d);
                 let tn = take_n(Nat/sub(n, 1), @tl.rest, tl.v);
-                (Bytes/concat(hd.cp, tn.r), concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
+                (x\..hd.cp\..tn.r, concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
             end;
 
         let slice(@b : Bytes, d : Valid(b), x : Nat, y : Nat) -> { r : Bytes, v : Valid(r) } =
