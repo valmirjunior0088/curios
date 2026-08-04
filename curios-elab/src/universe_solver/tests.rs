@@ -629,6 +629,17 @@ fn both_checkers_decide_universe_context_validity_alike() {
                 constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
             },
         ),
+        // A ceiling with no floor: `P1 ≤ 0` forces `P0 + 1 ≤ 0`, which only the zero floor refutes. "Constant bounds that cross" above carries `3 ≤ P0`, whose return arc closes a negative cycle, so it is decided without that floor and cannot separate the two solvers.
+        (
+            "ceiling with no floor",
+            UniverseContext {
+                parameter_count: 2,
+                constraints: vec![
+                    leq(param(0).succ().expect("successor"), param(1)),
+                    leq(param(1), Level::zero()),
+                ],
+            },
+        ),
     ];
 
     let mut verdicts = Vec::new();

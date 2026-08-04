@@ -16,7 +16,7 @@
 //!
 //! A constraint is `max(lower parts) ≤ max(upper parts)`, where a part is a constant or a parameter at an offset. Left maxima decompose exactly — every lower part must hold — so each constraint contributes one *clause* per lower part, and a clause is the disjunction over the upper parts of "this lower part is bounded by that one". Comparing two parts yields one of three things: the relation holds outright, it is impossible, or it holds exactly when a difference `to - from ≤ weight` does.
 //!
-//! Satisfying the whole set means choosing one alternative from every clause such that the chosen differences have a solution, which they do exactly when they close no negative cycle. The search commits one alternative at a time against a feasible potential and backtracks when a commitment closes such a cycle; the potential it carries is a model of everything committed so far, so reaching the last clause needs no separate check.
+//! Satisfying the whole set means choosing one alternative from every clause such that the chosen differences have a solution, which they do exactly when they close no negative cycle — against a graph that already grounds every head at `0 - head ≤ 0`, since a parameter ranges over the naturals and no clause says so. The search commits one alternative at a time against a feasible potential and backtracks when a commitment closes such a cycle; the potential it carries is a model of everything committed so far, so reaching the last clause needs no separate check.
 //!
 //! Right-hand maxima are what make this a search rather than a walk: `max(1, P0) ≤ max(1, P1)` bounds `P0` by either `P1` or the constant, and nothing local says which. A set whose clauses are all single-alternative is decided without branching at all.
 
@@ -61,6 +61,25 @@ pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
     }
 
     let mut search = Search::new(nodes.len());
+
+    // A parameter ranges over the naturals, and no clause states it: `0 - head ≤ 0` for every head. It holds under every branch assignment, so it grounds the base potential rather than joining the search — and without it `Zero` may sit above the parameter that bounds it, leaving a set with no natural model looking feasible. `bound` reads the same fact locally, which decides only the constraint that states the contradiction on its own.
+    let zero = position(&nodes, Node::Zero);
+    for from in 0..nodes.len() {
+        if from == zero {
+            continue;
+        }
+        if search
+            .commit(Arc {
+                from,
+                to: zero,
+                weight: 0,
+            })
+            .is_err()
+        {
+            return false;
+        }
+    }
+
     let mut budget = BUDGET;
 
     choose(&clauses, 0, &mut search, &mut budget)
