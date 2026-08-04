@@ -153,13 +153,18 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
                 },
             },
         },
-        // `append(empty, atom)`: a single symbolic atom.
-        Subterm::Prim(Prim::BinAppend(found, base, atom))
-            if *found == grain && is_empty_bin(grain, base) =>
-        {
-            Front::Cons {
-                head: Head::Symbolic(atom.clone()),
-                tail: Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into(),
+        // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(x\, a), b)` and a run-based `append(x\48, b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this arm the same term was transparent to conversion and opaque to reduction.
+        Subterm::Prim(Prim::BinAppend(found, base, atom)) if *found == grain => {
+            match peel_front(grain, base) {
+                Front::Empty => Front::Cons {
+                    head: Head::Symbolic(atom.clone()),
+                    tail: Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into(),
+                },
+                Front::Cons { head, tail } => Front::Cons {
+                    head,
+                    tail: Subterm::Prim(Prim::BinAppend(grain, tail, atom.clone())).into(),
+                },
+                Front::Opaque => Front::Opaque,
             }
         }
         // A concatenation: peel the leading generator off its first operand; the residual first-operand tail rejoins the rest.
