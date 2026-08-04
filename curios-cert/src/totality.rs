@@ -38,7 +38,9 @@ use {
 
 /// How many times shape reading may unfold a definition before giving up.
 ///
-/// One unfold is what `/std/Bits/cons` needs: it is an ordinary `let`, not a constructor, so `cons(a2, b2)` only exposes its free-monoid layer once the call is unfolded. Two more are slack for a wrapper over a wrapper. The bound exists so a shape read can never become an unbounded reduction.
+/// **An operator is not a primitive.** Operator notation always resolves a witness, primitive operands included, so `n - 1` arrives as `(witness).0(n, 1)` — a projection out of the resolved `Sub` — and one unfold is what turns it into the `NatSub` the arithmetic rung reads. Every decrease the corpus writes with an operator depends on this, which makes the fallback load-bearing across the whole size order rather than at some corner of it. The remaining two unfolds are slack for a wrapper over a wrapper: a named comparison (`Nat/lt(n, 10)`) is a one-line `/sys` wrapper over its primitive, and a sort can be reached through an alias. The bound exists so a shape read can never become an unbounded reduction.
+///
+/// This once cited `/std/Bits/cons` — an ordinary `let` whose free-monoid layer appeared only when unfolded — and removing the fallback was tried when those conses became packed literals [`Walk::shape_of`] reads directly. The fixed prelude does elaborate without it. `tests::soundness`'s accepting controls do not, nor do `/std/Str`'s `decimal_is_ascii` or the `Prop`-law witnesses, because those descend on operators. The prelude alone is not evidence about what this reads.
 const UNFOLD_FUEL: usize = 3;
 
 /// How deep a refinement chain may be expanded.
@@ -319,7 +321,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Read a boolean scrutinee as a comparison against a literal.
     ///
-    /// The operator spellings (`n < 10`) elaborate straight to a primitive, but the named ones (`Nat/lt(n, 10)`) stay applications of a one-line `/sys` wrapper, so the same bounded weak-head unfolding [`Walk::shape_of`] uses is what makes both readable.
+    /// Neither spelling arrives as a primitive: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same bounded weak-head unfolding [`Walk::shape_of`] uses is what exposes the primitive under both.
     fn guard(&mut self, head: &Term, fuel: usize) -> Option<Guard> {
         if let Some(guard) = Guard::read(head) {
             return Some(guard);
