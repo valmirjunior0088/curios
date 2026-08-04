@@ -862,7 +862,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).
     ///
-    /// A `\.` atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it: `x\48\.b` is one append rather than a two-operand concatenation, and `x\..acc\.b` is the append it spells out. Leading, or following another atom, it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b\.h\..t` meets a refined motive without unfolding anything.
+    /// A `\.` atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto the run or spliced value it follows: `x\48\.b` is one append rather than a two-operand concatenation, and `x\..acc\.b` is the append it spells out. Leading, or following another atom, it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b\.h\..t` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
         grain: Grain,
         segments: &[BinSegment],
@@ -896,21 +896,35 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         };
 
         let mut operands: Vec<curios_core::Term> = Vec::new();
+        // Whether the operand on top came from an atom. An append is decoded front-first through its base, and only an append onto the *empty* value is recognised as a symbolic one-atom chunk (`core::free_monoid`), so chaining a second atom onto the first would build `append(append(\\, a), b)` — opaque to that decode, and with it to every eliminator over the literal. Each atom therefore starts its own singleton unless it can fuse onto a run or a spliced value, both of which stay decodable.
+        let mut fused_atom = false;
         for segment in segments {
             match segment {
-                BinSegment::Bytes(run) => operands.push(curios_core::Term::prim(
-                    curios_core::Prim::Bin(grain, packed(run)),
-                )),
+                BinSegment::Bytes(run) => {
+                    operands.push(curios_core::Term::prim(curios_core::Prim::Bin(
+                        grain,
+                        packed(run),
+                    )));
+                    fused_atom = false;
+                }
                 BinSegment::Atom(term) => {
-                    let base = operands.pop().unwrap_or_else(|| {
+                    let base = match fused_atom {
+                        false => operands.pop(),
+                        true => None,
+                    };
+                    let base = base.unwrap_or_else(|| {
                         curios_core::Term::prim(curios_core::Prim::Bin(grain, PackedBin::empty()))
                     });
                     let atom = lower(term)?;
                     operands.push(curios_core::Term::prim(curios_core::Prim::bin_append(
                         grain, base, atom,
                     )));
+                    fused_atom = true;
                 }
-                BinSegment::Spread(term) => operands.push(lower(term)?),
+                BinSegment::Spread(term) => {
+                    operands.push(lower(term)?);
+                    fused_atom = false;
+                }
             }
         }
 
