@@ -724,3 +724,25 @@ fn an_under_bound_motive_reports_its_binder_count() {
         "unexpected error: {error}"
     );
 }
+
+// A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. They did not when an argument carried an *inferred* implicit: `g(b)` elaborates to `g(@?m, b)`, and a second occurrence mints its own `?m'`, so two terms solved to the same thing keyed differently and the arm silently refined nothing — while the identical scrutinee with the implicit written out, `g(@Bool, b)`, refined. Solved metavariables are now materialized into the key, which is what makes the two spellings one.
+//
+// The scrutinee's head is stuck on purpose: an unfoldable head would reduce the whole term and never reach the store at all.
+#[test]
+fn an_inferred_implicit_does_not_break_a_refinement_key() {
+    let source = r#"
+        use /std/{Eq, Bool, Str};
+        let refined(f : (Bool) -> Bool, g : (@A : Type, A) -> Bool, b : Bool) -> Str =
+            match f(g(b))
+            | true =>
+                let p : Eq(f(g(b)), true) = Eq/refl();
+                "refined"
+            | false => "unrefined"
+            end;
+        /std/print(refined((x) => x, (@A, x) => true, true))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"refined");
+}

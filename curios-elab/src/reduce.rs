@@ -2,7 +2,7 @@
 mod tests;
 
 use {
-    super::Context,
+    super::{Context, zonk_solved_term_metas},
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl,
         InductType, Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError,
@@ -200,6 +200,8 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
         }
         _ => Ok(term.clone()),
     }?;
+    // A *solved* metavariable is materialized rather than left standing as its identity, for the same reason the levels below are erased: two occurrences of one written term elaborate to two independently minted metavariables, and an inferred implicit one level down — `g(@?m, b)` against `g(@?m', b)` with both solved to `Bool` — then stores a key no probe can match. The refinement silently did not fire, while the identical term with the implicit supplied explicitly did. Cheap where it does not apply: the walk returns at a cached `has_metavar` bit.
+    let canonical = zonk_solved_term_metas(context, &canonical);
     // Universe arguments cannot affect computation: Curios has no universe reflection and erasure removes them. Refinement keys therefore compare the same applied definition across independently fresh scheme instances by its computational spelling, not by inference-local level ids.
     Ok(project_erased_universes(&canonical))
 }
