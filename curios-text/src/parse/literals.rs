@@ -204,12 +204,14 @@ pub(super) fn parse_bin_spread_operand<'a>() -> Parser<'a, Term> {
     )
 }
 
-// One segment of a `Bits`/`Bytes` literal: a literal atom, or a `\..` spread. Adjacent bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
+// One segment of a `Bits`/`Bytes` literal: a literal atom, a `\.` single-atom splice, or a `\..` spread. Adjacent bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
 pub(super) enum RawBinSegment {
     Byte(u8),
+    Atom(Term),
     Spread(Term),
 }
 
+// `\..` is tried before `\.` so the longer marker wins: `\..xs` is a spread, never an atom splice of a term beginning `.xs`.
 pub(super) fn parse_bin_segment<'a>() -> Parser<'a, RawBinSegment> {
     catch(parse_hex_byte())
         .map(RawBinSegment::Byte)
@@ -218,6 +220,11 @@ pub(super) fn parse_bin_segment<'a>() -> Parser<'a, RawBinSegment> {
             parse_bin_spread_operand()
                 .map_err("Expected a glued name or parenthesized term after '\\..'")
                 .map(RawBinSegment::Spread),
+        ))
+        .or(catch(take_exact("\\.")).and_keep(
+            parse_bin_spread_operand()
+                .map_err("Expected a glued name or parenthesized term after '\\.'")
+                .map(RawBinSegment::Atom),
         ))
 }
 
@@ -230,6 +237,11 @@ pub(super) fn parse_bit_segment<'a>() -> Parser<'a, RawBinSegment> {
                 .map_err("Expected a glued name or parenthesized term after '\\..'")
                 .map(RawBinSegment::Spread),
         ))
+        .or(catch(take_exact("\\.")).and_keep(
+            parse_bin_spread_operand()
+                .map_err("Expected a glued name or parenthesized term after '\\.'")
+                .map(RawBinSegment::Atom),
+        ))
 }
 
 pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> {
@@ -241,6 +253,7 @@ pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> 
                 Some(BinSegment::Bytes(run)) => run.push(byte),
                 _ => segments.push(BinSegment::Bytes(vec![byte])),
             },
+            RawBinSegment::Atom(term) => segments.push(BinSegment::Atom(term)),
             RawBinSegment::Spread(term) => segments.push(BinSegment::Spread(term)),
         }
     }

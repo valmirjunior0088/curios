@@ -12,11 +12,13 @@ pub enum LstEntry {
     Spread(Term),
 }
 
-/// One segment of a `Bytes` literal `x\00\..bytes\01` — a run of literal bytes, or a `\..`-spread whose term contributes a whole `Bytes` run. The literal is a single whitespace-free lexical unit; a spread operand is a glued name path (projections included) or a parenthesized term.
+/// One segment of a `Bytes` literal `x\00\.byte\..bytes\01` — a run of literal bytes, a `\.`-spliced single atom, or a `\..`-spread whose term contributes a whole `Bytes` run. The literal is a single whitespace-free lexical unit; an atom or spread operand is a glued name path (projections included) or a parenthesized term.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinSegment {
     /// A run of literal bytes. Invariant (maintained by the parser): never empty, and never adjacent to another `Bytes` run.
     Bytes(Vec<u8>),
+    /// A `\.`-spliced single atom: a `Bool` under `Grain::B`, a `Byte` under `Grain::X`. The free monoid's generator, where [`BinSegment::Spread`] carries a whole element — a literal run is this same generator at values the parser already knows.
+    Atom(Term),
     Spread(Term),
 }
 

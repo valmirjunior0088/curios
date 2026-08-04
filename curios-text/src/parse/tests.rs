@@ -1724,6 +1724,79 @@ fn bin_literal_spread_segments() {
 }
 
 #[test]
+fn bin_literal_atom_segments() {
+    let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
+
+    // A `\.` atom splices one generator between literal runs, in either grain.
+    assert_eq!(
+        r"x\48\.b\00".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(
+            Grain::X,
+            vec![
+                BinSegment::Bytes(vec![0x48]),
+                BinSegment::Atom(name("b")),
+                BinSegment::Bytes(vec![0x00]),
+            ]
+        ))
+        .into()
+    );
+    assert_eq!(
+        r"b\1\.flag\0".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(
+            Grain::B,
+            vec![
+                BinSegment::Bytes(vec![1]),
+                BinSegment::Atom(name("flag")),
+                BinSegment::Bytes(vec![0]),
+            ]
+        ))
+        .into()
+    );
+    assert_eq!(
+        r"x\.b".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
+    );
+
+    // The longer marker wins: `\..` is a spread even though `\.` is a viable prefix of it.
+    assert_eq!(
+        r"x\..xs\.b".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(
+            Grain::X,
+            vec![BinSegment::Spread(name("xs")), BinSegment::Atom(name("b")),]
+        ))
+        .into()
+    );
+
+    // The operand grammar is the spread's: glued projections, calls, and parenthesized terms.
+    let term = r"x\.hdr.byte\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    assert!(
+        matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Proj(_)))
+    );
+    assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
+    let term = r"x\.f( x , y )\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    assert!(
+        matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
+    );
+
+    // TIGHT, exactly as the spread is: the marker and its operand are one lexical unit.
+    assert!(r"x\. b".parse::<Term>().is_err());
+    assert!(r"x\.".parse::<Term>().is_err());
+
+    // The operand is the spread's glued-name grammar, in which a digit is an ordinary identifier character — so `x\.0` references the name `0` that no scope binds, exactly as `x\..0` already did. `x\00` is how that byte is written.
+    let term = r"x\.0".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    assert!(matches!(&segments[0], BinSegment::Atom(_)));
+}
+
+#[test]
 fn list_bits_and_bytes_spreads_round_trip() {
     // String equality pins the printer's canonical tight, glued forms for both grains, including their distinct empty literals.
     for source in [
@@ -1739,6 +1812,13 @@ fn list_bits_and_bytes_spreads_round_trip() {
         r"b\0\..xs\1",
         r"b\..bits",
         r"b\",
+        r"x\48\.b\00",
+        r"x\.b",
+        r"x\..acc\.b",
+        r"x\.hdr.byte",
+        r"x\.pick(f, a, b)",
+        r"b\1\.flag\0",
+        r"b\.h\..t",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }

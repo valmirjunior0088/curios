@@ -473,6 +473,9 @@ fn print_prim(prim: Prim) -> Printer {
                                 .map(|byte| format!("\\{byte:02x}"))
                                 .collect::<String>(),
                         }),
+                        BinSegment::Atom(operand) => {
+                            flat([pure("\\."), print_bin_spread_operand(operand)])
+                        }
                         BinSegment::Spread(operand) => {
                             flat([pure("\\.."), print_bin_spread_operand(operand)])
                         }

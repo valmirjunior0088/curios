@@ -202,7 +202,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, \\)` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core primitive.
+    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x\)` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core primitive.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
             Syn::Char(character) => Ok(self.char_literal(*character)),
@@ -860,7 +860,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Prim::LstConcat(element(), operands))
     }
 
-    /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and spreads splice their packed runs into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).
+    /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).
+    ///
+    /// A `\.` atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it: `x\48\.b` is one append rather than a two-operand concatenation, and `x\..acc\.b` is the append it spells out. Leading, or following another atom, it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b\.h\..t` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
         grain: Grain,
         segments: &[BinSegment],
@@ -875,7 +877,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 .iter()
                 .flat_map(|segment| match segment {
                     BinSegment::Bytes(run) => run.iter().copied(),
-                    BinSegment::Spread(_) => unreachable!("all segments are byte runs"),
+                    BinSegment::Atom(_) | BinSegment::Spread(_) => {
+                        unreachable!("all segments are byte runs")
+                    }
                 })
                 .collect();
 
@@ -886,21 +890,36 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             return Ok(curios_core::Prim::Bin(grain, value));
         }
 
-        let operands = segments
-            .iter()
-            .map(|segment| match segment {
-                BinSegment::Bytes(run) => {
-                    let value = match grain {
-                        Grain::B => PackedBin::from_bits(run.iter().map(|atom| *atom != 0)),
-                        Grain::X => PackedBin::from_bytes(run.clone()),
-                    };
-                    Ok(curios_core::Term::prim(curios_core::Prim::Bin(
-                        grain, value,
-                    )))
+        let packed = |run: &[u8]| match grain {
+            Grain::B => PackedBin::from_bits(run.iter().map(|atom| *atom != 0)),
+            Grain::X => PackedBin::from_bytes(run.to_vec()),
+        };
+
+        let mut operands: Vec<curios_core::Term> = Vec::new();
+        for segment in segments {
+            match segment {
+                BinSegment::Bytes(run) => operands.push(curios_core::Term::prim(
+                    curios_core::Prim::Bin(grain, packed(run)),
+                )),
+                BinSegment::Atom(term) => {
+                    let base = operands.pop().unwrap_or_else(|| {
+                        curios_core::Term::prim(curios_core::Prim::Bin(grain, PackedBin::empty()))
+                    });
+                    let atom = lower(term)?;
+                    operands.push(curios_core::Term::prim(curios_core::Prim::bin_append(
+                        grain, base, atom,
+                    )));
                 }
-                BinSegment::Spread(term) => lower(term),
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+                BinSegment::Spread(term) => operands.push(lower(term)?),
+            }
+        }
+
+        // A lone operand is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away.
+        if operands.len() == 1
+            && let curios_core::Subterm::Prim(prim) = &*operands[0]
+        {
+            return Ok(prim.clone());
+        }
 
         Ok(curios_core::Prim::BinConcat(grain, operands))
     }

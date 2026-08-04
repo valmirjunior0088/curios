@@ -187,6 +187,34 @@ fn bin_len_reduces_across_a_cons_spine() {
 }
 
 #[test]
+fn packed_atom_splice_builds_the_written_sequence() {
+    // `\.` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are symbolic, so the run is genuinely spliced rather than folded at parse time.
+    let source = r#"
+        use /std/{Handle, Str, Byte, Bytes};
+        let i : Byte = 0x69;
+        let bang : Byte = 0x21;
+        Handle/write(Handle/stdout, x\48\.i\.bang)
+        "#;
+    assert_eq!(run(source), b"Hi!");
+}
+
+#[test]
+fn packed_atom_splices_are_the_cons_and_append_spellings() {
+    // An atom leading a spread lowers to the cons spelling `curios_elab`'s packed-match refinement builds — the singleton `append(x\, h)` concatenated with the tail — so a literal written that way is the cons spine, not merely equal to one. Stated for SYMBOLIC operands through `len` and `get`, the two observations that reduce across that spine, so nothing here is reached by folding literals.
+    let source = r#"
+        use /std/{Handle, Str, Eq, Byte, Bytes, Bool, Bits, Nat, Option};
+        let cons_len(h : Byte, t : Bytes)
+            -> Eq(Bytes/len(x\.h\..t), Nat/add(1, Bytes/len(t))) = Eq/refl();
+        let cons_head(h : Byte, t : Bytes)
+            -> Eq(Bytes/get(x\.h\..t, 0), Option/some(h)) = Eq/refl();
+        let bits_len(h : Bool, t : Bits)
+            -> Eq(Bits/len(b\.h\..t), Nat/add(1, Bits/len(t))) = Eq/refl();
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn nat_sub_peels_a_successor_spine() {
     // The subtraction twin of `NatAdd`'s successor peeling: `(s + inner) - k` reduces to `(s - k) + inner` when the literal `k` is within the successor floor `s`, even for a SYMBOLIC `inner` that `reduce` cannot fold. This is what turns the `succ e - 1` bounds the cons slice rule emits back into `e`, so a slice over a symbolic cons keeps reducing. `peel` thins the floor; `to_zero` exhausts it, leaving the bare tail.
     let source = r#"
