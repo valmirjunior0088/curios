@@ -1,4 +1,4 @@
-//! The `run` façade over the JS harness. The heavy lifting — instantiating the program, satisfying the host imports, catching the exit signal — lives in `js/harness.js` (shipped as a wasm-bindgen snippet); this module assembles its `config` from the same `curios-abi`-derived code tables as the native runtime, so a playground calling `run` never spells a wire code itself.
+//! The `run` façade over the JS harness. The heavy lifting — instantiating the program, satisfying the host imports, catching the exit signal — lives in `harness.js` (shipped as a wasm-bindgen snippet); this module assembles its `config` from the same `curios-abi`-derived code tables as the native runtime, so a playground calling `run` never spells a wire code itself.
 
 use {
     crate::{abi, bridge_bytes, set},
@@ -6,7 +6,7 @@ use {
     wasm_bindgen::prelude::*,
 };
 
-#[wasm_bindgen(module = "/js/harness.js")]
+#[wasm_bindgen(module = "/src/harness.js")]
 extern "C" {
     #[wasm_bindgen(js_name = run)]
     fn harness_run(config: Object) -> Promise;
