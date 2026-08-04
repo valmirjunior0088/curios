@@ -2547,3 +2547,246 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
         body: Term::prim(Prim::NatType),
     }
 }
+
+/// `Held : (n : Nat) -> Type 0 | yes() : (0)`, the family whose two instances the forged equation coerces between.
+fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) -> InductDecl {
+    InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build([(index, nat_type)], ())),
+        constructors: vec![(
+            Atom::from("yes"),
+            InductParam {
+                telescope: Telescope::done(vec![zero]),
+                plicities: Vec::new(),
+            },
+        )],
+        result_sort,
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    }
+}
+
+/// The module the doc comment below describes: four declarations, and the four definitions that close on `False`.
+fn index_forgery() -> Module {
+    let type_0 = Term::type_ground();
+    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
+    let nat_type = Term::prim(Prim::NatType);
+    let nat = |n: usize| Term::prim(Prim::Nat(curios_core::Nat::new(n)));
+
+    let true_name = Global::Authored(Qualifier::from(["True"]));
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let equality_name = Global::Authored(Qualifier::from(["Eq"]));
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+
+    let true_type = Term::induct_type(true_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(
+        true_name.clone(),
+        Vec::<Term>::new(),
+        "qed",
+        Vec::<Term>::new(),
+    );
+    let held_at = |index: Term| Term::induct_type(held_name.clone(), Vec::<Term>::new(), [index]);
+    let yes = Term::variant(
+        held_name.clone(),
+        Vec::<Term>::new(),
+        "yes",
+        Vec::<Term>::new(),
+    );
+    let equality = |carrier: Term, left: Term, right: Term| {
+        Term::induct_type(equality_name.clone(), [carrier], [left, right])
+    };
+    let reflexivity = |carrier: Term, value: Term| {
+        Term::variant(equality_name.clone(), [carrier], "refl", [value])
+    };
+
+    // induct True : Prop | qed() end, and the empty induct False : Prop end
+    let true_decl = proposition(vec![(
+        Atom::from("qed"),
+        InductParam {
+            telescope: Telescope::done(Vec::new()),
+            plicities: Vec::new(),
+        },
+    )]);
+    let false_decl = proposition(Vec::new());
+
+    // induct Eq(A : Type 1) : (x : A, y : A) -> Prop | refl(@z : A) : (z, z) end
+    let carrier = Free::local(20, Some("A"));
+    let left = Free::local(21, Some("x"));
+    let right = Free::local(22, Some("y"));
+    let value = Free::local(23, Some("z"));
+    let mut equality_decl = proposition(vec![(
+        Atom::from("refl"),
+        InductParam {
+            telescope: Telescope::build(
+                [
+                    (carrier.clone(), type_1.clone()),
+                    (value.clone(), Term::free_var(&carrier)),
+                ],
+                vec![Term::free_var(&value), Term::free_var(&value)],
+            ),
+            plicities: vec![Plicity::Implicit, Plicity::Explicit],
+        },
+    )]);
+    equality_decl.arity = Telescope::build(
+        [(carrier.clone(), type_1.clone())],
+        Telescope::build(
+            [
+                (left, Term::free_var(&carrier)),
+                (right, Term::free_var(&carrier)),
+            ],
+            (),
+        ),
+    );
+
+    let held_decl = indexed_family(
+        Free::local(70, Some("n")),
+        nat_type.clone(),
+        nat(0),
+        type_0.clone(),
+    );
+
+    // forged : Eq(True, 0, 1) = refl(True, qed())
+    let forged_name = Global::Authored(Qualifier::from(["forged"]));
+    let forged = authored(
+        &forged_name,
+        equality(true_type.clone(), nat(0), nat(1)),
+        reflexivity(true_type.clone(), qed),
+    );
+
+    // cast : (Held(0)) -> Held(1)
+    //   = match forged : (s, t, q) => (Held(s)) -> Held(t) | refl(z) => (w) => w end
+    let cast_name = Global::Authored(Qualifier::from(["cast"]));
+    let motive_left = Free::local(80, Some("s"));
+    let motive_right = Free::local(81, Some("t"));
+    let motive_proof = Free::local(82, Some("q"));
+    let arm_value = Free::local(83, Some("z"));
+    let carried = Free::local(84, Some("w"));
+    let identity = Free::local(85, Some("w"));
+    let cast = authored(
+        &cast_name,
+        Term::func_type([(carried.clone(), held_at(nat(0)))], held_at(nat(1))),
+        Term::induct_match_scoped_marked(
+            Term::free_var(&Free::from(&forged_name)),
+            Scope::close(
+                Many(3),
+                &[&motive_left, &motive_right, &motive_proof],
+                Term::func_type(
+                    [(carried, held_at(Term::free_var(&motive_left)))],
+                    held_at(Term::free_var(&motive_right)),
+                ),
+            ),
+            [(
+                "refl",
+                vec![(Plicity::Explicit, arm_value.clone())],
+                Term::func(
+                    [(identity.clone(), held_at(Term::free_var(&arm_value)))],
+                    Term::free_var(&identity),
+                ),
+            )],
+            None,
+        ),
+    );
+
+    // held : Held(1) = cast(yes())
+    let held_value_name = Global::Authored(Qualifier::from(["held"]));
+    let held_value = authored(
+        &held_value_name,
+        held_at(nat(1)),
+        Term::apply(Term::free_var(&Free::from(&cast_name)), [yes]),
+    );
+
+    // boom : False = match held : (n, w) => False end
+    let boom_name = Global::Authored(Qualifier::from(["boom"]));
+    let boom_index = Free::local(90, Some("n"));
+    let boom_scrutinee = Free::local(91, Some("w"));
+    let boom = authored(
+        &boom_name,
+        false_type.clone(),
+        Term::induct_match_scoped_marked(
+            Term::free_var(&Free::from(&held_value_name)),
+            Scope::close(Many(2), &[&boom_index, &boom_scrutinee], false_type.clone()),
+            Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
+            None,
+        ),
+    );
+
+    Module {
+        items: vec![forged, cast, held_value, boom],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([
+            (true_name, true_decl),
+            (false_name, false_decl),
+            (equality_name, equality_decl),
+            (held_name, held_decl),
+        ]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::prim(Prim::NatType),
+    }
+}
+
+/// A nominal occurrence's parameters and indices are read by every rule that consults its declaration, and nothing typed them.
+///
+/// `at.rs` states the discipline this violated: an occurrence is meaningful only once what it carries has been checked against what the declaration declares, and three things had to hold. Two of them — the universe instance, and the parameter and index *counts* — moved behind the handle. The third was never written: that each argument inhabits the domain the arity states it at. Counts are the boundary's job because no typing rule reads a length; a *shape* is typing's, and this one had no rule at all.
+///
+/// The forgery is what reading one unestablished buys. `Eq(True, 0, 1)` is admitted as a type — `Sort::of` consults the declaration for its `result_sort` and hands back `Prop`, having checked two counts and nothing else — although `0` and `1` are `Nat`s standing in a domain the declaration says is `True`. It is then *inhabited*, and by the rule working correctly: `induct_type_args` compares the indices at the declared domain, that domain is `Prop`-sorted, and proof irrelevance discharges both without looking, so `refl(True, qed())` subsumes into it. From there every step is ordinary. Eliminating the forged equation under the motive `(s, t, q) => (Held(s)) -> Held(t)` — where the same gap lets `s` and `t`, typed `True`, stand in `Held`'s `Nat` index — yields `(Held(0)) -> Held(1)`, and `Held(1)` is uninhabited by construction, so the vacuous elimination coverage licenses (its only constructor targets `0`, which `peel_nat` clashes against `1`) proves `False`.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero** refusals for exactly this module, `let boom : False` included. No surface program reaches it — `curios-elab` elaborates a nominal occurrence as an application against the arity's telescope and checks every argument — which is why the certifier's copy of the rule went unwritten, and why the second opinion was worth nothing here.
+///
+/// Its control is [`an_indexed_occurrence_at_a_well_typed_index_is_accepted`], which keeps the same family at an index that genuinely inhabits `Nat`: without it, refusing every indexed occurrence would pass this.
+#[test]
+fn a_nominal_occurrence_types_its_arguments() {
+    let verdicts = recheck_module_verdicts(&index_forgery(), 1_000_000);
+
+    assert!(
+        !verdicts.is_empty(),
+        "the kernel certified a closed inhabitant of `False`",
+    );
+}
+
+/// The control: an index that really is a `Nat` still types, so the guard above rejects a wrong argument rather than every argument.
+#[test]
+fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let held_decl = indexed_family(
+        Free::local(70, Some("n")),
+        Term::prim(Prim::NatType),
+        Term::prim(Prim::Nat(curios_core::Nat::new(0usize))),
+        Term::type_ground(),
+    );
+
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        Term::induct_type(
+            held_name.clone(),
+            Vec::<Term>::new(),
+            [Term::prim(Prim::Nat(curios_core::Nat::new(0usize)))],
+        ),
+        Term::variant(
+            held_name.clone(),
+            Vec::<Term>::new(),
+            "yes",
+            Vec::<Term>::new(),
+        ),
+    );
+
+    let module = Module {
+        items: vec![held],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(held_name, held_decl)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::prim(Prim::NatType),
+    };
+
+    assert_eq!(recheck_module_verdicts(&module, 1_000_000), Vec::new());
+}

@@ -190,8 +190,61 @@ fn infer_node(
             }
         }
 
-        // A fully applied nominal family has the sort its declaration states.
-        Subterm::InductType(_) | Subterm::StructType(_) => Ok(Sort::of(kernel, term)?.term()),
+        // A fully applied nominal family has the sort its declaration states, and its arguments have the types the declaration states *them* at.
+        //
+        // Every rule that consults a declaration reads those arguments — `Sort::of` for the sort, the arm rule for a constructor's signature, inversion for its index targets, `induct_type_args` for a comparison — and each reads them at the declared domain. Nothing established they inhabit it. Counts are the boundary's job and were checked there; the shapes are typing's, and reading one unestablished is what admitted `Eq(@True, 0, 1)` as a type: `0` and `1` are `Nat`s claiming a `Prop`-sorted domain, so `induct_type_args` discharges both by irrelevance and `refl` inhabits the forgery, whose elimination then transports between two instances of a relevant family.
+        Subterm::InductType(family) => {
+            let sort = Sort::of(kernel, term)?;
+            let at = kernel.induct_at(family)?;
+
+            let mut obligations = Vec::with_capacity(family.params.len() + family.indices.len());
+            let mut parameters = at.parameters();
+            for param in &family.params {
+                let Telescope::Cons(domain, rest) = parameters else {
+                    unreachable!("the handle checked the parameter count")
+                };
+
+                obligations.push((param.clone(), domain));
+                parameters = rest.open(&[param]);
+            }
+
+            // The index telescope arrives already opened at those parameters, which is what makes a later index able to mention an earlier one.
+            let mut indices = at.indices();
+            for index in &family.indices {
+                let Telescope::Cons(domain, rest) = indices else {
+                    unreachable!("the handle checked the index count")
+                };
+
+                obligations.push((index.clone(), domain));
+                indices = rest.open(&[index]);
+            }
+            defer(deferred, obligations);
+
+            Ok(sort.term())
+        }
+
+        Subterm::StructType(StructType {
+            name,
+            universes,
+            params,
+        }) => {
+            let sort = Sort::of(kernel, term)?;
+            let at = kernel.struct_at(name, universes, params)?;
+
+            let mut obligations = Vec::with_capacity(params.len());
+            let mut parameters = at.parameters();
+            for param in params {
+                let Telescope::Cons(domain, rest) = parameters else {
+                    unreachable!("the handle checked the parameter count")
+                };
+
+                obligations.push((param.clone(), domain));
+                parameters = rest.open(&[param]);
+            }
+            defer(deferred, obligations);
+
+            Ok(sort.term())
+        }
 
         // A constructor application: its signature, instantiated at the declaration's parameters, ends in the type it constructs — including the index targets this particular case aims at.
         Subterm::Variant(Variant {

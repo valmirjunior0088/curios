@@ -43,6 +43,13 @@ impl InductAt {
         &self.declaration.result_sort
     }
 
+    /// The declaration's own parameter telescope, at this occurrence's universes.
+    ///
+    /// What [`InductAt::indices`] and [`StructAt::fields`] hand back is the *terminal*, already opened at the parameters this handle holds. This is the telescope those parameters were declared at, which is what a rule needs to type the arguments the constructor above only counted.
+    pub(crate) fn parameters(&self) -> Telescope<Telescope<()>> {
+        self.declaration.arity.clone()
+    }
+
     /// `tag`'s signature at this occurrence's parameters, or `None` when the family has no such constructor.
     pub(crate) fn signature(&self, tag: &Atom) -> Option<Telescope<Vec<Term>>> {
         self.declaration.instantiate(tag, &self.params)
@@ -64,6 +71,11 @@ impl StructAt {
     /// The family's declared result sort, at these universes.
     pub(crate) fn result_sort(&self) -> &Term {
         &self.declaration.result_sort
+    }
+
+    /// The declaration's own parameter telescope, at this occurrence's universes — [`InductAt::parameters`] for a structure.
+    pub(crate) fn parameters(&self) -> Telescope<Telescope<()>> {
+        self.declaration.arity.clone()
     }
 
     /// The structure's field telescope at this occurrence's parameters.
