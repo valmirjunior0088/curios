@@ -20,7 +20,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 description = "The Curios programming language: a dependently typed functional language compiled to WebAssembly-GC"
 license = "Apache-2.0"
