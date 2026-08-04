@@ -11,7 +11,7 @@ pub let get(b : Bytes, i : Nat) -> Option(Byte) =
     end;
 
 pub let flatten(parts : Lst(Bytes)) -> Bytes =
-    Lst/fold(parts, x\, (b, acc) => x\..acc\..b);
+    Lst/fold(parts, x[], (b, acc) => x[..acc, ..b]);
 
 pub let fold(@A : Type, b : Bytes, init : A, f : (Byte, A) -> A) -> A =
     let n = len(b);
@@ -40,8 +40,8 @@ pub let find_index(b : Bytes, pred : (Byte) -> Bool) -> Option(Nat) =
     found;
 
 pub let join(sep : Bytes, parts : Lst(Bytes)) -> Bytes =
-    Lst/balanced(Lst/len(parts), x\, (i) => Option/unwrap_or(Lst/get(parts, i), x\),
-        (l, r) => x\..l\..sep\..r);
+    Lst/balanced(Lst/len(parts), x[], (i) => Option/unwrap_or(Lst/get(parts, i), x[]),
+        (l, r) => x[..l, ..sep, ..r]);
 
 satisfy Eql(Bytes) {
     eql = eql
@@ -49,9 +49,9 @@ satisfy Eql(Bytes) {
 
 satisfy Show(Bytes) {
     show(b) =
-        Option/unwrap_or(Str/of_bytes(fold(b, x\, (byte, acc) =>
+        Option/unwrap_or(Str/of_bytes(fold(b, x[], (byte, acc) =>
             let n = Byte/to_nat(byte);
             let hi = Char/to_utf8(Char/hex_digit(n / 0x10));
             let lo = Char/to_utf8(Char/hex_digit(n % 0x10));
-            x\..acc\..hi\..lo)), "")
+            x[..acc, ..hi, ..lo])), "")
 }

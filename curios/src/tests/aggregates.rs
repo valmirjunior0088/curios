@@ -42,14 +42,14 @@ fn lst_map_distributes_over_cons() {
 
 #[test]
 fn bin_match_is_a_foldr() {
-    // Native `Bytes` induction (slice 2): the `| x\ | (h, t), ih` eliminator, erased exactly like `Lst` — `Nat`-induction on the byte length, reusing the loop. The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `lst_match_is_a_foldr`: the bytes `x\01\02\03\04` fold to `4321`, not `1234`, pinning head = first byte and ih = fold of the tail.
+    // Native `Bytes` induction (slice 2): the `| x[] | (h, t), ih` eliminator, erased exactly like `Lst` — `Nat`-induction on the byte length, reusing the loop. The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `lst_match_is_a_foldr`: the bytes `x[\01, \02, \03, \04]` fold to `4321`, not `1234`, pinning head = first byte and ih = fold of the tail.
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes};
-        let bytes : Bytes = x\01\02\03\04;
+        let bytes : Bytes = x[\01, \02, \03, \04];
         let digits : Nat =
             match bytes : (_) => Nat
-            | x\ => 0
-            | x\h\..t; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
+            | x[] => 0
+            | x[h, ..t]; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
             end;
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
         "#;
@@ -58,16 +58,16 @@ fn bin_match_is_a_foldr() {
 
 #[test]
 fn bin_concat_is_a_free_monoid() {
-    // `peel_bin` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `x\` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BinConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BinConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
+    // `peel_bin` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `x[]` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BinConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BinConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes};
         let assoc(a : Bytes, b : Bytes, c : Bytes)
-            -> Eq(x\..a\..(x\..b\..c), x\..(x\..a\..b)\..c) =
+            -> Eq(x[..a, ..(x[..b, ..c])], x[..(x[..a, ..b]), ..c]) =
             Eq/refl();
-        let left_id(a : Bytes) -> Eq(x\..(x\)\..a, a) = Eq/refl();
-        let right_id(a : Bytes) -> Eq(x\..a\..(x\), a) = Eq/refl();
+        let left_id(a : Bytes) -> Eq(x[..(x[]), ..a], a) = Eq/refl();
+        let right_id(a : Bytes) -> Eq(x[..a, ..(x[])], a) = Eq/refl();
         let resegment(x : Bytes)
-            -> Eq(x\01\02\..x, x\01\..(x\02\..x)) =
+            -> Eq(x[\01, \02, ..x], x[\01, ..(x[\02, ..x])]) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -76,10 +76,10 @@ fn bin_concat_is_a_free_monoid() {
 
 #[test]
 fn bin_concat_leading_byte_clash_is_rejected() {
-    // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `x\01 ++ x` and `x\02 ++ x` are never convertible and the `refl` is rejected. Guards `peel_bin` against deciding unequal values equal.
+    // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `x[\01] ++ x` and `x[\02] ++ x` are never convertible and the `refl` is rejected. Guards `peel_bin` against deciding unequal values equal.
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes};
-        let bad(x : Bytes) -> Eq(x\01\..x, x\02\..x) = Eq/refl();
+        let bad(x : Bytes) -> Eq(x[\01, ..x], x[\02, ..x]) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
@@ -92,9 +92,9 @@ fn bin_slice_is_a_monoid_citizen() {
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes, Nat};
         let split(b : Bytes, s : Nat, m : Nat, e : Nat)
-            -> Eq(x\..Bytes/slice(b, s, m)\..Bytes/slice(b, m, e), Bytes/slice(b, s, e)) =
+            -> Eq(x[..Bytes/slice(b, s, m), ..Bytes/slice(b, m, e)], Bytes/slice(b, s, e)) =
             Eq/refl();
-        let empty(b : Bytes, i : Nat) -> Eq(Bytes/slice(b, i, i), x\) = Eq/refl();
+        let empty(b : Bytes, i : Nat) -> Eq(Bytes/slice(b, i, i), x[]) = Eq/refl();
         let full(b : Bytes) -> Eq(Bytes/slice(b, 0, Bytes/len(b)), b) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -107,7 +107,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes, Nat};
         let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq(x\..Bytes/slice(b, s, m)\..Bytes/slice(b, n, e), Bytes/slice(b, s, e)) =
+            -> Eq(x[..Bytes/slice(b, s, m), ..Bytes/slice(b, n, e)], Bytes/slice(b, s, e)) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -149,7 +149,7 @@ fn bin_append_is_concat_with_a_single_byte() {
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes};
         let law(xs : Bytes, y : Byte)
-            -> Eq(x\..xs\..(x\.y), x\..xs\.y) =
+            -> Eq(x[..xs, ..(x[y])], x[..xs, y]) =
             Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
@@ -176,11 +176,11 @@ fn bin_len_reduces_across_a_cons_spine() {
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Nat};
         let len(h : Byte, t : Bytes)
-            -> Eq(Bytes/len(x\.h\..t), Nat/add(1, Bytes/len(t))) = Eq/refl();
+            -> Eq(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let guard(h : Byte, t : Bytes)
-            -> Eq(Nat/lt(0, Bytes/len(x\.h\..t)), true) = Eq/refl();
+            -> Eq(Nat/lt(0, Bytes/len(x[h, ..t])), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
-            -> Eq(Nat/lt(Bytes/len(x\.h\..t), 0), false) = Eq/refl();
+            -> Eq(Nat/lt(Bytes/len(x[h, ..t]), 0), false) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
@@ -193,22 +193,22 @@ fn packed_atom_splice_builds_the_written_sequence() {
         use /std/{Handle, Str, Byte, Bytes};
         let i : Byte = 0x69;
         let bang : Byte = 0x21;
-        Handle/write(Handle/stdout, x\48\.i\.bang)
+        Handle/write(Handle/stdout, x[\48, i, bang])
         "#;
     assert_eq!(run(source), b"Hi!");
 }
 
 #[test]
 fn packed_atom_splices_are_the_cons_and_append_spellings() {
-    // An atom leading a spread lowers to the cons spelling `curios_elab`'s packed-match refinement builds — the singleton `append(x\, h)` concatenated with the tail — so a literal written that way is the cons spine, not merely equal to one. Stated for SYMBOLIC operands through `len` and `get`, the two observations that reduce across that spine, so nothing here is reached by folding literals.
+    // An atom leading a spread lowers to the cons spelling `curios_elab`'s packed-match refinement builds — the singleton `append(x[], h)` concatenated with the tail — so a literal written that way is the cons spine, not merely equal to one. Stated for SYMBOLIC operands through `len` and `get`, the two observations that reduce across that spine, so nothing here is reached by folding literals.
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Bool, Bits, Nat, Option};
         let cons_len(h : Byte, t : Bytes)
-            -> Eq(Bytes/len(x\.h\..t), Nat/add(1, Bytes/len(t))) = Eq/refl();
+            -> Eq(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let cons_head(h : Byte, t : Bytes)
-            -> Eq(Bytes/get(x\.h\..t, 0), Option/some(h)) = Eq/refl();
+            -> Eq(Bytes/get(x[h, ..t], 0), Option/some(h)) = Eq/refl();
         let bits_len(h : Bool, t : Bits)
-            -> Eq(Bits/len(b\.h\..t), Nat/add(1, Bits/len(t))) = Eq/refl();
+            -> Eq(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
@@ -216,14 +216,14 @@ fn packed_atom_splices_are_the_cons_and_append_spellings() {
 
 #[test]
 fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
-    // `peel_front` (`core::free_monoid`) recognised an append only over the EMPTY base, so `append(x\48, b)` — what `x\48\.b` lowers to — went opaque and no eliminator over it could reduce, while `core::spine`'s two-value peel had always decoded the same term. The `BinConcat` arm beside it already peeled its first operand and rejoined the residual; the append arm now does the same. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
+    // `peel_front` (`core::free_monoid`) recognised an append only over the EMPTY base, so `append(x[\48], b)` — what `x[\48, b]` lowers to — went opaque and no eliminator over it could reduce, while `core::spine`'s two-value peel had always decoded the same term. The `BinConcat` arm beside it already peeled its first operand and rejoined the residual; the append arm now does the same. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Bool, Bits, Option};
         let lead : Byte = 0x48;
-        let byte_head(b : Byte) -> Eq(Bytes/get(x\48\.b, 0), Option/some(lead)) = Eq/refl();
-        let bit_head(b : Bool) -> Eq(Bits/get(b\1\.b, 0), Option/some(true)) = Eq/refl();
-        let chained(a : Byte, b : Byte) -> Eq(Bytes/get(x\48\.a\.b, 0), Option/some(lead)) = Eq/refl();
-        let chained_len(a : Byte, b : Byte) -> Eq(Bytes/len(x\.a\.b), 2) = Eq/refl();
+        let byte_head(b : Byte) -> Eq(Bytes/get(x[\48, b], 0), Option/some(lead)) = Eq/refl();
+        let bit_head(b : Bool) -> Eq(Bits/get(b[\1, b], 0), Option/some(true)) = Eq/refl();
+        let chained(a : Byte, b : Byte) -> Eq(Bytes/get(x[\48, a, b], 0), Option/some(lead)) = Eq/refl();
+        let chained_len(a : Byte, b : Byte) -> Eq(Bytes/len(x[a, b]), 2) = Eq/refl();
         Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
@@ -276,7 +276,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        r#"std/Handle/write(std/Handle/stdout, x\../std/Str/to_bytes("ok"))"#,
+        r#"std/Handle/write(std/Handle/stdout, x[../std/Str/to_bytes("ok")])"#,
         system,
     )
     .expect("expected result");
@@ -446,11 +446,11 @@ fn lst_spread_operand_hoists_bangs() {
 
 #[test]
 fn bin_spread_concats_segments() {
-    // `x\01\..b\04` splices the bytes of `b` between the literal runs, and the glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
+    // `x[\01, ..b, \04]` splices the bytes of `b` between the literal runs, and the glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
     let source = r#"
         use /std/{Handle, Nat, Bytes};
-        let b : Bytes = x\02\03;
-        Handle/write(Handle/stdout, x\01\..b\04\..Bytes/slice(b, 1, 2))
+        let b : Bytes = x[\02, \03];
+        Handle/write(Handle/stdout, x[\01, ..b, \04, ..Bytes/slice(b, 1, 2)])
         "#;
     assert_eq!(run(source), b"\x01\x02\x03\x04\x03");
 }
@@ -459,9 +459,9 @@ fn bin_spread_concats_segments() {
 fn bin_spread_identity_and_multi() {
     let source = r#"
         use /std/{Handle, Bytes};
-        let b : Bytes = x\48\65;
-        let c : Bytes = x\..b;
-        Handle/write(Handle/stdout, x\..c\..c)
+        let b : Bytes = x[\48, \65];
+        let c : Bytes = x[..b];
+        Handle/write(Handle/stdout, x[..c, ..c])
         "#;
     assert_eq!(run(source), b"HeHe");
 }
@@ -472,7 +472,7 @@ fn bin_spread_of_non_bin_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Nat, Lst, Bytes};
         let xs : Lst(Nat) = [1, 2];
-        let bad : Bytes = x\00\..xs;
+        let bad : Bytes = x[\00, ..xs];
         Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
@@ -487,7 +487,7 @@ fn bin_spread_operand_hoists_bangs() {
         r#"
         use /std/{Async, Handle, Bytes};
         let prog : Async({}) =
-            let out : Bytes = x\3e\..Async/pure(x\68\69)!\3c;
+            let out : Bytes = x[\3e, ..Async/pure(x[\68, \69])!, \3c];
             let wrote = Handle/write(Handle/stdout, out);
             Async/pure(());
         Async/run(prog)
@@ -502,7 +502,7 @@ fn bin_spread_operand_hoists_bangs() {
 fn bin_fold_sums_bytes() {
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes};
-        let b = x\0a\14\1e;
+        let b = x[\0a, \14, \1e];
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))
         "#;
     let (system, io) = MockHost::builder().build();

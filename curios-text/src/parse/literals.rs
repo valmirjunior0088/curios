@@ -132,15 +132,6 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-pub(super) fn parse_hex_byte<'a>() -> Parser<'a, u8> {
-    take_exact("\\").and_keep(take_while(|char| char.is_ascii_hexdigit()).flat_map(|hex| {
-        match hex.len() {
-            2 => pure(u8::from_str_radix(hex, 16).expect("valid hex pair")),
-            _ => fail("Expected exactly 2 hex digits after \\"),
-        }
-    }))
-}
-
 pub(super) fn parse_string_chunk<'a>() -> Parser<'a, String> {
     catch(
         take_while(|char| char != '\\' && char != '"').flat_map(|chunk| match chunk.is_empty() {
@@ -190,58 +181,45 @@ pub(super) fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A `Bin` spread operand under the TIGHT rule: it must end without consuming any whitespace, so the segment loop can require the next segment to begin immediately with `\` (`\..xs \01` ends the literal at `xs`). The operand is an atomic term in glued form: a name path or a parenthesized term, followed by glued suffixes — projections, calls, `!` (`\..hdr.bytes`, `\..f(x)`, `\..read()!`). Self-delimiting parts (a call's argument list, the parens form) admit interior whitespace freely; only the operand's edges are tight, with every closing delimiter matched raw. Anything else — an infix chain, a lambda — takes the parenthesized form.
-pub(super) fn parse_bin_spread_operand<'a>() -> Parser<'a, Term> {
-    with_span(
-        parse_name_raw()
-            .map(|name| Term::from(Subterm::Name(name)))
-            .or(take_exact("(")
-                .and_drop(parse_whitespace())
-                .and_keep(lazy(parse_term))
-                .and_drop(take_exact(")")))
-            .and(many0(parse_suffix_raw))
-            .map(|(head, suffixes)| apply_suffixes(head, suffixes)),
-    )
-}
-
-// One segment of a `Bits`/`Bytes` literal: a literal atom, a `\.` single-atom splice, or a `\..` spread. Adjacent bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
+// One segment of a `Bits`/`Bytes` literal: an escaped constant atom, a term contributing one atom, or a spread contributing a whole packed value. Adjacent bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
 pub(super) enum RawBinSegment {
     Byte(u8),
     Atom(Term),
     Spread(Term),
 }
 
-// `\..` is tried before `\.` so the longer marker wins: `\..xs` is a spread, never an atom splice of a term beginning `.xs`.
-pub(super) fn parse_bin_segment<'a>() -> Parser<'a, RawBinSegment> {
-    catch(parse_hex_byte())
+// A `\`-escaped constant atom: `\0`/`\1` for `Bits`, `\` and exactly two hexadecimal digits for `Bytes`. `\` begins an atom and nothing else — no term does — so the parser commits once it sees one and reports a malformed atom rather than backtracking into the term case and blaming the leftovers.
+fn parse_bin_atom<'a>(grain: Grain) -> Parser<'a, RawBinSegment> {
+    catch(take_exact("\\"))
+        .and_keep(match grain {
+            Grain::B => parse_bit_atom(),
+            Grain::X => parse_hex_atom(),
+        })
+        .and_drop(parse_whitespace())
         .map(RawBinSegment::Byte)
-        // Committed after `\..`: an operand failure is fatal (no inner `catch`), so the error points at the segment rather than at whatever the surrounding grammar makes of the leftovers.
-        .or(catch(take_exact("\\..")).and_keep(
-            parse_bin_spread_operand()
-                .map_err("Expected a glued name or parenthesized term after '\\..'")
-                .map(RawBinSegment::Spread),
-        ))
-        .or(catch(take_exact("\\.")).and_keep(
-            parse_bin_spread_operand()
-                .map_err("Expected a glued name or parenthesized term after '\\.'")
-                .map(RawBinSegment::Atom),
-        ))
 }
 
-pub(super) fn parse_bit_segment<'a>() -> Parser<'a, RawBinSegment> {
-    catch(take_exact("\\0"))
-        .map(|()| RawBinSegment::Byte(0))
-        .or(catch(take_exact("\\1")).map(|()| RawBinSegment::Byte(1)))
-        .or(catch(take_exact("\\..")).and_keep(
-            parse_bin_spread_operand()
-                .map_err("Expected a glued name or parenthesized term after '\\..'")
-                .map(RawBinSegment::Spread),
-        ))
-        .or(catch(take_exact("\\.")).and_keep(
-            parse_bin_spread_operand()
-                .map_err("Expected a glued name or parenthesized term after '\\.'")
-                .map(RawBinSegment::Atom),
-        ))
+fn parse_bit_atom<'a>() -> Parser<'a, u8> {
+    take_exact("0")
+        .map(|()| 0u8)
+        .or(take_exact("1").map(|()| 1u8))
+        .map_err("Expected '\\0' or '\\1' in a Bits literal")
+}
+
+fn parse_hex_atom<'a>() -> Parser<'a, u8> {
+    take_while(|char: char| char.is_ascii_hexdigit()).flat_map(|hex| match hex.len() {
+        2 => pure(u8::from_str_radix(hex, 16).expect("valid hex pair")),
+        _ => fail("Expected exactly 2 hexadecimal digits after '\\' in a Bytes literal"),
+    })
+}
+
+// One entry of a `Bits`/`Bytes` literal, mirroring `parse_lst_entry`: an escaped constant atom, a `..` spread contributing a whole packed value, or a plain term contributing a single atom. The escape has no term spelling of its own on purpose — it is what marks compile-time constant data, which lowering keeps as a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
+fn parse_bin_entry<'a>(grain: Grain) -> Parser<'a, RawBinSegment> {
+    parse_bin_atom(grain)
+        .or(catch(parse_literal(".."))
+            .and_keep(lazy(parse_term))
+            .map(RawBinSegment::Spread))
+        .or(lazy(parse_term).map(RawBinSegment::Atom))
 }
 
 pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> {
@@ -261,24 +239,19 @@ pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> 
     segments
 }
 
-// A `Bits`/`Bytes` literal: a prefixed empty form, or one-or-more glued atom and `\..operand` segments. One whitespace-free lexical unit: after a spread operand the literal continues only when the very next character is `\`.
+// A `Bits`/`Bytes` literal `b[\1, flag, ..rest]` (empty `b[]`) — the packed siblings of the `Lst` literal, told apart by the grain letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `b` and `x` usable as ordinary binders — `b [1]` is the binder `b` followed by a list, not a `Bits` literal — and an identifier merely ending in the grain letter never starts one, since the name parser reaches `nb[…]` first.
 pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
-    let empty_bits =
-        catch(take_exact("b\\").and_drop(parse_whitespace())).map(|()| (Grain::B, Vec::new()));
-    let bits = catch(take_exact("b").and_keep(many1(parse_bit_segment).map(coalesce_bin_segments)))
-        .and_drop(parse_whitespace())
-        .map(|segments| (Grain::B, segments));
-    let empty_bytes =
-        catch(take_exact("x\\").and_drop(parse_whitespace())).map(|()| (Grain::X, Vec::new()));
-    let bytes =
-        catch(take_exact("x").and_keep(many1(parse_bin_segment).map(coalesce_bin_segments)))
-            .and_drop(parse_whitespace())
-            .map(|segments| (Grain::X, segments));
+    parse_bin_literal_grain(Grain::B, "b[").or(parse_bin_literal_grain(Grain::X, "x["))
+}
 
-    bits.or(empty_bits)
-        .or(bytes)
-        .or(empty_bytes)
-        .map(|(grain, segments)| Subterm::Prim(Prim::Bin(grain, segments)))
+fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> Parser<'a, Term> {
+    catch(parse_literal(prefix))
+        .and_keep(sep_by0_trailing(
+            move || parse_bin_entry(grain),
+            || parse_literal(","),
+        ))
+        .and_drop(parse_literal("]"))
+        .map(move |segments| Subterm::Prim(Prim::Bin(grain, coalesce_bin_segments(segments))))
         .map(Into::into)
 }
 

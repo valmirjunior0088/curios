@@ -2093,7 +2093,7 @@ fn foreign_declaration_call_lowers() {
     // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Prim::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
     let _ = run(r#"
         foreign frobnicate : (Nat, Bytes) -> Nat;
-        frobnicate(5, x\00\01)
+        frobnicate(5, x[\00, \01])
     "#);
 }
 

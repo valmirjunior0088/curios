@@ -347,7 +347,7 @@ pub enum LstPattern {
 /// The two shapes a nested `Bits`/`Bytes` leaf can take — see [`MatchPattern::Bin`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinPattern {
-    /// The `b\`/`x\` leaf.
+    /// The `b[]`/`x[]` leaf.
     End(Grain),
     /// The `\head\..tail[; ih]` leaf; `ih_label` is optional exactly as on the `Lst` cons leaf.
     Atom {

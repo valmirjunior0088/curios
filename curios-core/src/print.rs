@@ -551,13 +551,14 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
         Prim::FltToInt(i) => print_unary("Flt.to_int ", i, depth),
         Prim::BinType(Grain::X) => pure("Bytes"),
         Prim::Bin(Grain::X, bytes) => pure(format!(
-            "x{}",
+            "x[{}]",
             bytes
                 .as_bytes()
                 .unwrap()
                 .iter()
                 .map(|b| format!("\\{:02x}", b))
-                .collect::<String>()
+                .collect::<Vec<_>>()
+                .join(", ")
         )),
         Prim::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, depth),
         Prim::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, depth),
@@ -578,20 +579,16 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
             }),
         ]),
         Prim::BinType(Grain::B) => pure("Bits"),
-        Prim::Bin(Grain::B, bits) => pure(
+        Prim::Bin(Grain::B, bits) => pure(format!(
+            "b[{}]",
             (0..bits.bit_length())
-                .map(|index| {
-                    if bits.bit(index).unwrap() {
-                        "\\1"
-                    } else {
-                        "\\0"
-                    }
+                .map(|index| match bits.bit(index).unwrap() {
+                    true => "\\1",
+                    false => "\\0",
                 })
-                .fold(String::from("b"), |mut out, bit| {
-                    out.push_str(bit);
-                    out
-                }),
-        ),
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
         Prim::BinLen(Grain::B, b) => print_unary("Bits.len ", b, depth),
         Prim::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, depth),
         Prim::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, depth),
@@ -1083,19 +1080,19 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     }
                 }
                 Cases::FreeMonoid { carrier } => {
-                    // The cons arm mirrors each carrier's own literal delimiters: `\head\..tail; ih` for `Bin`, `[head, ..tail]; ih` for `Lst`.
+                    // The cons arm mirrors each carrier's own literal delimiters: `b[head, ..tail]; ih` for `Bin`, `[head, ..tail]; ih` for `Lst` — the same bracketed shape, told apart by the grain letter.
                     let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case) =
                             open_scope_three(cons_case, depth);
                         flat([
                             pure(match grain {
-                                Grain::B => "\n| b\\",
-                                Grain::X => "\n| x\\",
+                                Grain::B => "\n| b[",
+                                Grain::X => "\n| x[",
                             }),
                             pure(display_label(&head_label)),
-                            pure("\\.."),
+                            pure(", .."),
                             pure(display_label(&tail_label)),
-                            pure("; "),
+                            pure("]; "),
                             pure(display_label(&ih_label)),
                             pure(" =>\n"),
                             indent(flat([sub(cons_case, depth), pure(";")])),
@@ -1140,8 +1137,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                             cons_case,
                         } => (
                             match grain {
-                                Grain::B => "\n| b\\ =>\n",
-                                Grain::X => "\n| x\\ =>\n",
+                                Grain::B => "\n| b[] =>\n",
+                                Grain::X => "\n| x[] =>\n",
                             },
                             empty_case,
                             cons_bin(grain, cons_case),

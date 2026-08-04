@@ -28,8 +28,8 @@ satisfy Key(Nat) {
     to_bin(n) =
         rec go(x : Nat) -> Bytes =
             match x
-            | 0 => x\
-            | _ => x\..go(x / 256)\.Nat/to_byte(x % 256)
+            | 0 => x[]
+            | _ => x[..go(x / 256), Nat/to_byte(x % 256)]
             end;
         go(n)
 }

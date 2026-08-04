@@ -11,7 +11,7 @@ pub let get(b : Bits, i : Nat) -> Option(Bool) =
     end;
 
 pub let flatten(parts : Lst(Bits)) -> Bits =
-    Lst/fold(parts, b\, (bits, acc) => b\..acc\..bits);
+    Lst/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);
 
 pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
     let n = len(b);

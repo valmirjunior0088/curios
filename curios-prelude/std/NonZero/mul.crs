@@ -9,14 +9,14 @@ rec raw_trim_cons(p : Bits, q : Bits,
     tp : Eq(is_trimmed(p), true), np : is_cons(p),
     tq : Eq(is_trimmed(q), true), nq : is_cons(q)) -> is_cons(trim(BigNat/mul/raw(p, q))) =
     match p
-    | b\ => False/absurd(np)
-    | b\ph\..pt =>
+    | b[] => False/absurd(np)
+    | b[ph, ..pt] =>
         match ph
-        | true => add/trim_non_zero(q, b\0\..BigNat/mul/raw(pt, q), false, tq, nq)
+        | true => add/trim_non_zero(q, b[\0, ..BigNat/mul/raw(pt, q)], false, tq, nq)
         | false =>
             match pt
-            | b\ => False/absurd(false_neq_true(tp))
-            | b\_\.._ => trim_head_non_zero(false, BigNat/mul/raw(pt, q),
+            | b[] => False/absurd(false_neq_true(tp))
+            | b[_, .._] => trim_head_non_zero(false, BigNat/mul/raw(pt, q),
                 raw_trim_cons(pt, q, tp, True/qed(), tq, nq))
             end
         end

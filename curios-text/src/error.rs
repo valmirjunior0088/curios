@@ -212,7 +212,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::MatrixMixedBinGrain => {
-                write!(f, "binary match arms mix `b\\` and `x\\` patterns")
+                write!(f, "binary match arms mix `b[…]` and `x[…]` patterns")
             }
             Error::BindArmIrrefutable => {
                 write!(

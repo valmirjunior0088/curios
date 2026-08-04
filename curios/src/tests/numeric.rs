@@ -9,8 +9,8 @@ fn tainted(body: &str) -> String {
         use /std/{{Handle, Nat, Int, Flt, Byte, Bytes, Str, Option}};
         let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
             | chunk(b) => b
-            | eof() => x\
-            | error(_) => x\
+            | eof() => x[]
+            | error(_) => x[]
             end;
         let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0)), 65);
         let i = Nat/to_int(n);

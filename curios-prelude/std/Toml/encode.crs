@@ -25,13 +25,13 @@ let escape_content(byte : Byte) -> Bytes =
         | true =>
             let hi = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0);
             let lo = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0);
-            x\..Str/to_bytes("\\u00")\.hi\.lo
-        | false => x\.byte
+            x[..Str/to_bytes("\\u00"), hi, lo]
+        | false => x[byte]
         end
     end;
 
 let quote_str(s : Str) -> Str =
-    let body = Bytes/fold(Str/to_bytes(s), x\, (byte, acc) => x\..acc\..escape_content(byte));
+    let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_content(byte)]);
     Str/flatten(["\"", Option/unwrap_or(Str/of_bytes(body), ""), "\""]);
 
 let spell_key(kb : Bytes) -> Result(Str, Str) =

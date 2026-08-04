@@ -169,20 +169,6 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
         .map(|()| Suffix::Bang))
 }
 
-// [`parse_suffix`] in glued form for the tight positions: no whitespace is consumed after a suffix, so the caller can see whether the next characters touch. A call's argument list is self-delimiting, so its interior stays whitespace-friendly — only the closing `)` is matched raw.
-pub(super) fn parse_suffix_raw<'a>() -> Parser<'a, Suffix> {
-    parse_proj_suffix_raw()
-        .map(Suffix::Proj)
-        .or(catch(take_exact("("))
-            .and_drop(parse_whitespace())
-            .and_keep(sep_by0_trailing(parse_apply_argument, || {
-                parse_literal(",")
-            }))
-            .and_drop(take_exact(")"))
-            .map(Suffix::Apply))
-        .or(catch(take_exact("!").and_drop(not_ahead("="))).map(|()| Suffix::Bang))
-}
-
 pub(super) fn apply_suffixes(head: Term, suffixes: Vec<Suffix>) -> Term {
     suffixes
         .into_iter()

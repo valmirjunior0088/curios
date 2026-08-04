@@ -15,10 +15,10 @@ let seg_key(pre : Bytes, seg : Seg) -> Bytes =
     match seg
     | plain(name) =>
         let nb = Str/to_bytes(name);
-        x\..pre\70\..Str/to_bytes(Nat/to_str(Bytes/len(nb)))\3a\..nb
+        x[..pre, \70, ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), \3a, ..nb]
     | at(name, index) =>
         let nb = Str/to_bytes(name);
-        x\..pre\61\..Str/to_bytes(Nat/to_str(Bytes/len(nb)))\3a\..nb\23\..Str/to_bytes(Nat/to_str(index))\3b
+        x[..pre, \61, ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), \3a, ..nb, \23, ..Str/to_bytes(Nat/to_str(index)), \3b]
     end;
 
 let seg_name(seg : Seg) -> Str =
@@ -243,19 +243,19 @@ let plains(names : Lst(Str)) -> Lst(Seg) =
     Lst/map(names, (n) => Seg/plain(n));
 
 pub let apply_assign(b : Build, path : Lst(Str), v : Toml) -> Result(Build, Str) =
-    match walk(b.root, b.side, x\, [..b.scope, ..plains(path)], Lst/len(b.scope), Act/act_value(v))
+    match walk(b.root, b.side, x[], [..b.scope, ..plains(path)], Lst/len(b.scope), Act/act_value(v))
     | success((root2, side2, _)) => Result/success(Build { root = root2, side = side2, scope = b.scope })
     | failure(msg) => Result/failure(msg)
     end;
 
 pub let apply_header(b : Build, path : Lst(Str)) -> Result(Build, Str) =
-    match walk(b.root, b.side, x\, plains(path), 0, Act/act_table())
+    match walk(b.root, b.side, x[], plains(path), 0, Act/act_table())
     | success((root2, side2, resolved)) => Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(msg) => Result/failure(msg)
     end;
 
 pub let apply_aot(b : Build, path : Lst(Str)) -> Result(Build, Str) =
-    match walk(b.root, b.side, x\, plains(path), 0, Act/act_many())
+    match walk(b.root, b.side, x[], plains(path), 0, Act/act_many())
     | success((root2, side2, resolved)) => Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(msg) => Result/failure(msg)
     end;

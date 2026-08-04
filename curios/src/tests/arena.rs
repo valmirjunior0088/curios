@@ -90,15 +90,15 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         use /std/{{Handle, Nat, Str, Bytes}};
         rec count(b : Bytes) -> Nat =
             match b : (_) => Nat
-            | x\ => 0
-            | x\h\..t; ih => count(t) + 1
+            | x[] => 0
+            | x[h, ..t]; ih => count(t) + 1
             end;
         rec build(n : Nat, acc : Bytes) -> Bytes =
             match n : (_) => Bytes
             | 0 => acc
-            | p + 1; ih => build(p, x\61\..acc)
+            | p + 1; ih => build(p, x[\61, ..acc])
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x\)))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))
         "#
         )
     };

@@ -70,12 +70,12 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
         use /std/{Bits, Nat, Handle};
         let value(bits : Bits) -> Nat =
             match bits
-            | b\ => 0
-            | b\head\..tail; ih =>
+            | b[] => 0
+            | b[head, ..tail]; ih =>
                 let digit : Nat = match head | false => 0 | true => 1 end;
                 digit + 2 * ih
             end;
-        /std/print(Nat/to_str(value(b\1\0\1\1\0\0\1\0\1\1)))
+        /std/print(Nat/to_str(value(b[\1, \0, \1, \1, \0, \0, \1, \0, \1, \1])))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -327,15 +327,15 @@ fn nested_lst_pattern_dispatches_by_shape() {
     assert_eq!(io.output(), b"7");
 }
 
-// A `Bytes` literal leaf (`x\`/`x\h\..t`) nested inside a tuple field.
+// A `Bytes` literal leaf (`x[]`/`x[h, ..t]`) nested inside a tuple field.
 #[test]
 fn nested_bin_pattern_dispatches_by_shape() {
     let source = r#"
         use /std/{Nat, Byte, Bytes, Str, Handle};
         let f(p : { Nat, Bytes }) -> Nat =
             match p
-            | (x, x\) => x
-            | (x, x\h\..t) => Byte/to_nat(h)
+            | (x, x[]) => x
+            | (x, x[h, ..t]) => Byte/to_nat(h)
             end;
         /std/print(Nat/to_str(f((0, Str/to_bytes("A")))))
         "#;

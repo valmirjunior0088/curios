@@ -11,21 +11,21 @@ let borrow_out(a : Bool, b : Bool, bw : Bool) -> Bool =
 
 pub rec raw(x : Bits, y : Bits, borrow : Bool) -> {Bits, Bool} =
     match x
-    | b\ =>
+    | b[] =>
         match y
-        | b\ => (b\, borrow)
-        | b\yh\..yt =>
-            let (rest, bw) = raw(b\, yt, borrow_out(false, yh, borrow));
-            (b\.xor3(false, yh, borrow)\..rest, bw)
+        | b[] => (b[], borrow)
+        | b[yh, ..yt] =>
+            let (rest, bw) = raw(b[], yt, borrow_out(false, yh, borrow));
+            (b[xor3(false, yh, borrow), ..rest], bw)
         end
-    | b\xh\..xt =>
+    | b[xh, ..xt] =>
         match y
-        | b\ =>
-            let (rest, bw) = raw(xt, b\, borrow_out(xh, false, borrow));
-            (b\.xor3(xh, false, borrow)\..rest, bw)
-        | b\yh\..yt =>
+        | b[] =>
+            let (rest, bw) = raw(xt, b[], borrow_out(xh, false, borrow));
+            (b[xor3(xh, false, borrow), ..rest], bw)
+        | b[yh, ..yt] =>
             let (rest, bw) = raw(xt, yt, borrow_out(xh, yh, borrow));
-            (b\.xor3(xh, yh, borrow)\..rest, bw)
+            (b[xor3(xh, yh, borrow), ..rest], bw)
         end
     end;
 

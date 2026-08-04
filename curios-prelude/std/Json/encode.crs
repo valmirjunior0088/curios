@@ -23,14 +23,14 @@ let escape_byte(byte : Byte) -> Bytes =
         | true =>
             let hi = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0);
             let lo = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0);
-            x\..Str/to_bytes("\\u00")\.hi\.lo
-        | false => x\.byte
+            x[..Str/to_bytes("\\u00"), hi, lo]
+        | false => x[byte]
         end
     end;
 
 let encode_str(s : Str) -> Str =
     let body =
-        Bytes/fold(Str/to_bytes(s), x\, (byte, acc) => x\..acc\..escape_byte(byte));
+        Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
 
 pub rec encode(v : Json) -> Str =

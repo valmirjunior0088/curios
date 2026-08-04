@@ -6,11 +6,11 @@ use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 
 pub rec is_trimmed(rep : Bits) -> Bool =
     match rep
-    | b\ => true
-    | b\head\..tail; ih =>
+    | b[] => true
+    | b[head, ..tail]; ih =>
         match tail
-        | b\ => head
-        | b\_\.._ => ih
+        | b[] => head
+        | b[_, .._] => ih
         end
     end;
 
@@ -22,34 +22,34 @@ pub let Canonical(rep : Bits) -> Prop =
 
 pub let combine(head : Bool, t : Bits) -> Bits =
     match t
-    | b\ =>
+    | b[] =>
         match head
-        | true => b\.head
-        | false => b\
+        | true => b[head]
+        | false => b[]
         end
-    | b\_\.._ => b\.head\..t
+    | b[_, .._] => b[head, ..t]
     end;
 
 pub rec trim(rep : Bits) -> Bits =
     match rep
-    | b\ => b\
-    | b\head\..tail; ih => combine(head, ih)
+    | b[] => b[]
+    | b[head, ..tail]; ih => combine(head, ih)
     end;
 
 rec combine_is_trimmed(head : Bool, t : Bits, p : Eq(is_trimmed(t), true)) -> Eq(is_trimmed(combine(head, t)), true) =
     match t : (u) => Eq(is_trimmed(combine(head, u)), true)
-    | b\ =>
-        match head : (h) => Eq(is_trimmed(combine(h, b\)), true)
+    | b[] =>
+        match head : (h) => Eq(is_trimmed(combine(h, b[])), true)
         | true => Eq/refl()
         | false => Eq/refl()
         end
-    | b\_\.._ => p
+    | b[_, .._] => p
     end;
 
 pub rec trim_is_trimmed(rep : Bits) -> Eq(is_trimmed(trim(rep)), true) =
     match rep : (r) => Eq(is_trimmed(trim(r)), true)
-    | b\ => Eq/refl()
-    | b\head\..tail; ih => combine_is_trimmed(head, trim(tail), ih)
+    | b[] => Eq/refl()
+    | b[head, ..tail]; ih => combine_is_trimmed(head, trim(tail), ih)
     end;
 
 let canonical_of_is_trimmed(rep : Bits, p : Eq(is_trimmed(rep), true)) -> Canonical(rep) =
@@ -71,11 +71,11 @@ pub induct View : pub Type
 | succ(low : Bool, tail : BigNat)
 end
 
-let tail_is_trimmed(head : Bool, tail : Bits, p : Eq(is_trimmed(b\.head\..tail), true))
+let tail_is_trimmed(head : Bool, tail : Bits, p : Eq(is_trimmed(b[head, ..tail]), true))
     -> Eq(is_trimmed(tail), true) =
     match tail : (t) => Eq(is_trimmed(t), true)
-    | b\ => Eq/refl()
-    | b\_\.._ => p
+    | b[] => Eq/refl()
+    | b[_, .._] => p
     end;
 
 pub let is_trimmed_of_canonical(rep : Bits, c : Canonical(rep)) -> Eq(is_trimmed(rep), true) =
@@ -89,8 +89,8 @@ pub let of_trimmed_bits(rep : Bits, p : Eq(is_trimmed(rep), true)) -> BigNat =
 
 pub let view(a : BigNat) -> View =
     match a.rep
-    | b\ => View/zero()
-    | b\head\..tail =>
+    | b[] => View/zero()
+    | b[head, ..tail] =>
         View/succ(head, of_trimmed_bits(tail,
             tail_is_trimmed(head, tail, is_trimmed_of_canonical(a.rep, a.canonical))))
     end;
@@ -98,7 +98,7 @@ pub let view(a : BigNat) -> View =
 let refl_at(@A : Type, x : A) -> Eq(x, x) =
     Eq/refl();
 
-pub let zero : BigNat = of_bits(b\);
+pub let zero : BigNat = of_bits(b[]);
 
 pub let is_zero(a : BigNat) -> Bool =
     match view(a)
@@ -107,10 +107,10 @@ pub let is_zero(a : BigNat) -> Bool =
     end;
 
 let dbl_raw(x : Bits) -> Bits =
-    b\0\..x;
+    b[\0, ..x];
 
 let dbl_succ_raw(x : Bits) -> Bits =
-    b\1\..x;
+    b[\1, ..x];
 
 let dbl(a : BigNat) -> BigNat =
     of_bits(dbl_raw(a.rep));
@@ -142,10 +142,10 @@ pub let eq(a : BigNat, b : BigNat, p : Eq(a.rep, b.rep)) -> Eq(a, b) =
              (c : Canonical(a.rep)) => Eq/refl())(b.canonical);
 
 pub let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
-    -> Eq(b\.h1\..t1, b\.h2\..t2) =
-    match ph : (a, b, q) => Eq(b\.a\..t1, b\.b\..t2)
+    -> Eq(b[h1, ..t1], b[h2, ..t2]) =
+    match ph : (a, b, q) => Eq(b[a, ..t1], b[b, ..t2])
     | refl(@z) =>
-        match pt : (a2, b2, q2) => Eq(b\.h1\..a2, b\.h1\..b2)
+        match pt : (a2, b2, q2) => Eq(b[h1, ..a2], b[h1, ..b2])
         | refl(@z2) => Eq/refl()
         end
     end;
@@ -161,23 +161,23 @@ let cong_rep(@s : BigNat, @t : BigNat, p : Eq(s, t)) -> Eq(s.rep, t.rep) =
 
 let head_of(x : Bits) -> Bool =
     match x
-    | b\ => false
-    | b\h\.._ => h
+    | b[] => false
+    | b[h, .._] => h
     end;
 
 let tail_of(x : Bits) -> Bits =
     match x
-    | b\ => b\
-    | b\_\..t => t
+    | b[] => b[]
+    | b[_, ..t] => t
     end;
 
-let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b\.h1\..t1, b\.h2\..t2))
+let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b[h1, ..t1], b[h2, ..t2]))
     -> Eq(h1, h2) =
     match p : (s, t, q) => Eq(head_of(s), head_of(t))
     | refl(@z) => Eq/refl()
     end;
 
-let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b\.h1\..t1, b\.h2\..t2))
+let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b[h1, ..t1], b[h2, ..t2]))
     -> Eq(t1, t2) =
     match p : (s, t, q) => Eq(tail_of(s), tail_of(t))
     | refl(@z) => Eq/refl()
@@ -185,31 +185,31 @@ let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b\.h1\.
 
 let nonempty(x : Bits) -> Bool =
     match x
-    | b\ => false
-    | b\_\.._ => true
+    | b[] => false
+    | b[_, .._] => true
     end;
 
 let cong_is_trimmed(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(is_trimmed(s), is_trimmed(t)) =
     Eq/cong(is_trimmed, p);
 
 let is_trimmed_cons(head : Bool, u : Bits, pt : Eq(is_trimmed(u), true), pn : Eq(nonempty(u), true))
-    -> Eq(is_trimmed(b\.head\..u), true) =
-    match u : (v) => Eq(is_trimmed(b\.head\..v), true)
-    | b\ => False/absurd(false_neq_true(pn))
-    | b\_\.._ => pt
+    -> Eq(is_trimmed(b[head, ..u]), true) =
+    match u : (v) => Eq(is_trimmed(b[head, ..v]), true)
+    | b[] => False/absurd(false_neq_true(pn))
+    | b[_, .._] => pt
     end;
 
 pub rec trim_of_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
     match x : (a) => Eq(trim(a), a)
-    | b\ => Eq/refl()
-    | b\h\..t =>
-        match t : (u) => Eq(trim(b\.h\..u), b\.h\..u)
-        | b\ =>
-            match h : (g) => Eq(trim(b\.g), b\.g)
+    | b[] => Eq/refl()
+    | b[h, ..t] =>
+        match t : (u) => Eq(trim(b[h, ..u]), b[h, ..u])
+        | b[] =>
+            match h : (g) => Eq(trim(b[g]), b[g])
             | true => Eq/refl()
             | false => False/absurd(false_neq_true(p))
             end
-        | b\th\..tt => cong_combine(h, trim_of_trimmed(b\.th\..tt, p))
+        | b[th, ..tt] => cong_combine(h, trim_of_trimmed(b[th, ..tt], p))
         end
     end;
 

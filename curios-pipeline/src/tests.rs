@@ -47,7 +47,7 @@ fn foreign_declaration_produces_a_wasm_import() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat, Bytes) -> Nat;
-            frobnicate(5, x\00\01)
+            frobnicate(5, x[\00, \01])
         "#,
         None,
     )
@@ -69,7 +69,7 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
-            let _ = /std/Handle/write(/std/Handle/stdout, x\00);
+            let _ = /std/Handle/write(/std/Handle/stdout, x[\00]);
             frobnicate(5)
         "#,
         None,

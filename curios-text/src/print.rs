@@ -16,50 +16,6 @@ use {
     num_traits::One,
 };
 
-/// A `Bin` spread operand under the TIGHT grammar: a suffix chain — projections, calls, `!` — bottoming out at a `Name` re-parses unparenthesized, but only printed GLUED (`hdr.bytes`, `f(x)`, `read()!`): `print_term`'s `(head).field` projection and `(term)!` bang forms would end the literal at their `)`. Anything else is wrapped in parens, matching the `\..(term)` operand form.
-fn print_bin_spread_operand(term: Term) -> Printer {
-    fn is_bare(term: &Term) -> bool {
-        match term.as_subterm() {
-            Subterm::Name(_) => true,
-            Subterm::Proj(Proj { head, .. }) => is_bare(head),
-            Subterm::Apply(Apply { head, .. }) => is_bare(head),
-            Subterm::Bang(inner) => is_bare(inner),
-            _ => false,
-        }
-    }
-
-    fn print_bare(term: Term) -> Printer {
-        match term.into_subterm() {
-            Subterm::Name(name) => pure(name.join()),
-            Subterm::Proj(Proj { head, field }) => flat([
-                print_bare(head),
-                pure(match field {
-                    Field::Index(index) => format!(".{index}"),
-                    Field::Label(label) => format!(".{label}"),
-                }),
-            ]),
-            Subterm::Apply(Apply { head, params }) => flat([
-                print_bare(head),
-                pure("("),
-                sep_flat(
-                    params
-                        .into_iter()
-                        .map(|(plicity, param)| flat([print_plicity(plicity), print_term(param)])),
-                    || pure(", "),
-                ),
-                pure(")"),
-            ]),
-            Subterm::Bang(inner) => flat([print_bare(inner), pure("!")]),
-            _ => unreachable!("guarded by is_bare"),
-        }
-    }
-
-    match is_bare(&term) {
-        true => print_bare(term),
-        false => flat([pure("("), print_term(term), pure(")")]),
-    }
-}
-
 fn print_plicity(plicity: Plicity) -> Printer {
     match plicity {
         Plicity::Implicit => pure("@"),
@@ -262,13 +218,10 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             pure("]"),
             print_cons_ih(ih_label),
         ]),
-        MatchPattern::Bin(BinPattern::End(grain)) => pure(format!(
-            "{}\\",
-            match grain {
-                Grain::B => "b",
-                Grain::X => "x",
-            }
-        )),
+        MatchPattern::Bin(BinPattern::End(grain)) => pure(match grain {
+            Grain::B => "b[]",
+            Grain::X => "x[]",
+        }),
         MatchPattern::Bin(BinPattern::Atom {
             grain,
             head_label,
@@ -276,12 +229,13 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             ih_label,
         }) => flat([
             pure(match grain {
-                Grain::B => "b\\",
-                Grain::X => "x\\",
+                Grain::B => "b[",
+                Grain::X => "x[",
             }),
             pure(head_label),
-            pure("\\.."),
+            pure(", .."),
             pure(tail_label),
+            pure("]"),
             print_cons_ih(ih_label),
         ]),
     }
@@ -457,31 +411,29 @@ fn print_prim(prim: Prim) -> Printer {
             Grain::B => "Bits",
             Grain::X => "Bytes",
         }),
+        // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization, and a coalesced run prints one escaped atom per entry — the glued spelling has no bracketed counterpart, and lowering re-coalesces the run either way. An empty segment list prints `b[]`/`x[]` on its own.
         Prim::Bin(grain, segments) => flat([
-            pure(format!("{grain:?}").to_lowercase()),
-            match segments.is_empty() {
-                true => pure("\\"),
-                false => flat(segments.into_iter().map(move |segment| {
-                    match segment {
-                        BinSegment::Bytes(atoms) => pure(match grain {
-                            Grain::B => atoms
-                                .iter()
-                                .map(|bit| format!("\\{bit}"))
-                                .collect::<String>(),
-                            Grain::X => atoms
-                                .iter()
-                                .map(|byte| format!("\\{byte:02x}"))
-                                .collect::<String>(),
-                        }),
-                        BinSegment::Atom(operand) => {
-                            flat([pure("\\."), print_bin_spread_operand(operand)])
-                        }
-                        BinSegment::Spread(operand) => {
-                            flat([pure("\\.."), print_bin_spread_operand(operand)])
-                        }
-                    }
-                })),
-            },
+            pure(match grain {
+                Grain::B => "b[",
+                Grain::X => "x[",
+            }),
+            sep_flat(
+                segments.into_iter().flat_map(move |segment| match segment {
+                    BinSegment::Bytes(atoms) => atoms
+                        .into_iter()
+                        .map(move |atom| {
+                            pure(match grain {
+                                Grain::B => format!("\\{atom}"),
+                                Grain::X => format!("\\{atom:02x}"),
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                    BinSegment::Atom(operand) => vec![print_term(operand)],
+                    BinSegment::Spread(operand) => vec![flat([pure(".."), print_term(operand)])],
+                }),
+                || pure(", "),
+            ),
+            pure("]"),
         ]),
         Prim::BinLen(grain, operand) => print_prim_call(
             format!(

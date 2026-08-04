@@ -43,7 +43,7 @@ Option/some         -- member of Option
 /sys/Handle         -- absolute primitive declaration
 ```
 
-Whitespace may appear around ordinary path separators. Packed `Bits` and `Bytes` spread operands use a separate tight grammar and must be written without whitespace; see [Packed literals](#packed-literals).
+Whitespace may appear around ordinary path separators. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
 
 ## Literals
 
@@ -121,40 +121,35 @@ Spreads may appear in any position and may be repeated. Every element and spread
 
 ### Packed literals
 
-A `Bits` literal begins with `b`; each atom is `\0` or `\1`. A `Bytes` literal begins with `x`; each atom is `\` followed by exactly two hexadecimal digits.
+Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `Lst`.
+
+An entry is a constant atom, a term, or a spread. A constant atom is escaped: `\0` or `\1` in a `Bits` literal, `\` followed by exactly two hexadecimal digits in a `Bytes` literal.
 
 ```crs
-b\                 -- empty Bits
-b\0\1\1
-x\                 -- empty Bytes
-x\48\69
+b[]                -- empty Bits
+b[\0, \1, \1]
+x[]                -- empty Bytes
+x[\48, \69]
 ```
 
 Packed atoms are written least-significant first. The first bit written occupies the least-significant available packed bit.
 
-`\..` spreads another packed value of the same kind:
+An unescaped entry is an ordinary term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — and `..` spreads a whole packed value of the same kind:
 
 ```crs
-b\1\..rest\0
-x\48\..suffix\00
-x\..header.bytes
-x\..make_bytes(n)
-x\..(pick(flag, a, b))
+b[head, ..tail]
+x[\48, ..suffix, \00]
+x[..header.bytes]
+x[..make_bytes(n)]
+x[..prefix, b]
+x[pick(flag, a, b)]
 ```
 
-`\.` splices a single atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — where `\..` splices a whole packed value:
+`b[h, ..t]` is the cons of `h` onto `t`, and `x[..acc, b]` appends `b` to `acc`; neither operation has a separate named form.
 
-```crs
-b\.head\..tail
-x\.head\..tail
-x\48\.b\00
-x\..prefix\.b
-x\.(pick(flag, a, b))
-```
+Only the grain letter's junction with `[` is tight: `b [\1]` is the binder `b` followed by a list literal, and an identifier merely ending in the grain letter never begins a packed literal. Past the `[`, the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and entry and spread operands are arbitrary terms needing no parentheses. `Bits` and `Bytes` cannot be mixed.
 
-`\.h\..t` is the cons of `h` onto `t`, and `x\..acc\.b` appends `b` to `acc`; neither operation has a separate named form.
-
-The entire packed literal is whitespace-free. An unparenthesized atom or spread operand must be a glued name, projection, application, or postfix-`!` chain. Parentheses admit an arbitrary term. A following `\` resumes the literal. `Bits` and `Bytes` cannot be mixed.
+A `Byte`-typed numeric literal is also a legal entry, so `x[0x48]` and `x[\48]` denote the same value; the escape is the spelling that marks constant data, and the compiler folds a constant term entry into the same packed run.
 
 ## Sorts and types
 
@@ -545,17 +540,17 @@ end
 
 ### Packed folds
 
-`Bits` and `Bytes` use their literal prefixes to select the carrier. The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
+`Bits` and `Bytes` use their literal grain letters to select the carrier, and their arms take the same shape as a [list fold](#list-fold-and-case-split). The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
 
 ```crs
 match bits
-| b\ => base
-| b\head\..tail; hypothesis => step(head, hypothesis)
+| b[] => base
+| b[head, ..tail]; hypothesis => step(head, hypothesis)
 end
 
 match bytes
-| x\ => base
-| x\head\..tail => inspect(head, tail)
+| x[] => base
+| x[head, ..tail] => inspect(head, tail)
 end
 ```
 

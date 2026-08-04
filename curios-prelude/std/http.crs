@@ -34,7 +34,7 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         port = port,
         path = path,
         headers = [],
-        body = x\,
+        body = x[],
         settings = Settings/default
     };
 
@@ -80,14 +80,14 @@ let content_length(body : Bytes) -> Str =
     end;
 
 pub let render(request : Request) -> Bytes =
-    x\..Str/to_bytes(Str/flatten([
+    x[..Str/to_bytes(Str/flatten([
         method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
         "Host: ", request.host, "\r\n",
         "Connection: close\r\n",
         content_length(request.body),
         Str/flatten(Lst/map(request.headers, render_header)),
         "\r\n"
-    ]))\..request.body;
+    ])), ..request.body];
 
 pub struct Status : pub Type {
     version : Str,

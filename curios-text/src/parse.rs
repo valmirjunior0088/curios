@@ -116,27 +116,6 @@ fn parse_name<'a>() -> Parser<'a, Name> {
     .map(|(span, name)| name.with_span(span))
 }
 
-// A strictly glued name path — no whitespace anywhere, not even trailing. The tight sibling of [`parse_name`] (whose segments each eat trailing whitespace, so `Foo /bar` is the path `Foo/bar` there), used where the surrounding grammar is whitespace-sensitive: a `Bits`/`Bytes` literal's `\..` spread operand.
-fn parse_name_raw<'a>() -> Parser<'a, Name> {
-    spanned(
-        catch(take_exact("/"))
-            .map(|()| true)
-            .or(pure(false))
-            .and(parse_identifier_raw().and(many0(|| {
-                catch(take_exact("/").and_keep(parse_identifier_raw()))
-            })))
-            .flat_map(|(is_abs, (first, rest))| {
-                let segments = iter::once(first)
-                    .chain(rest)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>();
-
-                name_from_segments(is_abs, segments)
-            }),
-    )
-    .map(|(span, name)| name.with_span(span))
-}
-
 fn parse_qualified_name<'a>() -> Parser<'a, Name> {
     catch(parse_name().flat_map(|name| match name.is_single() {
         true => fail("expected a qualified path"),

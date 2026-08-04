@@ -19,7 +19,7 @@ pub let of_bytes(b : Bytes) -> Option(Str) =
 
 pub let concat(a : Str, b : Str) -> Str =
     Str {
-        bytes = x\..a.bytes\..b.bytes,
+        bytes = x[..a.bytes, ..b.bytes],
         valid = concat_closed(a.valid, b.valid)
     };
 
@@ -53,7 +53,7 @@ let lower_ascii_byte(byte : Byte) -> Byte =
     end;
 
 let lower_ascii_bytes(b : Bytes) -> Bytes =
-    Bytes/fold(b, x\, (byte, acc) => x\..acc\.lower_ascii_byte(byte));
+    Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
 
 pub let eql_ascii_ci(a : Str, b : Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
@@ -63,12 +63,12 @@ pub let repeat(s : Str, n : Nat) -> Str =
 
 pub let fold(@A : Type, s : Str, init : A, f : (Char, A) -> A) -> A =
     (match s.bytes : (b) => (sc : Scan, valid : Utf8(sc, b), acc : {A, Nat}) -> {A, Nat}
-    | x\ => (sc, valid, acc) => acc
-    | x\h\..t; ih => (sc, valid, acc) =>
+    | x[] => (sc, valid, acc) => acc
+    | x[h, ..t]; ih => (sc, valid, acc) =>
         match sc
         | lead() =>
             ih(step(h, Scan/lead()),
-                peel_byte(@Scan/lead(), @x\.h\..t, True/qed(), valid),
+                peel_byte(@Scan/lead(), @x[h, ..t], True/qed(), valid),
                 match classify(h)
                 | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
                 | lead(width, lo, hi, payload) => (acc.0, payload)
@@ -77,14 +77,14 @@ pub let fold(@A : Type, s : Str, init : A, f : (Char, A) -> A) -> A =
         | cont(rem, lo, hi) =>
             let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
             ih(step(h, Scan/cont(rem, lo, hi)),
-                peel_byte(@Scan/cont(rem, lo, hi), @x\.h\..t, True/qed(), valid),
+                peel_byte(@Scan/cont(rem, lo, hi), @x[h, ..t], True/qed(), valid),
                 match rem == 1
                 | true => (f(certify_decoded(partial), acc.0), 0)
                 | false => (acc.0, partial)
                 end)
         | bad() =>
             ih(step(h, Scan/bad()),
-                peel_byte(@Scan/bad(), @x\.h\..t, True/qed(), valid), acc)
+                peel_byte(@Scan/bad(), @x[h, ..t], True/qed(), valid), acc)
         end
     end)(Scan/lead(), s.valid, (init, 0)).0;
 
@@ -125,25 +125,25 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
     rec go(sc : Scan, b : Bytes, valid : Utf8(sc, b), i : Nat,
         le : Nat/Lte(i + 1, count_scalars(sc, b))) -> Char =
         match b
-        | x\ => match le end
-        | x\h\..t =>
+        | x[] => match le end
+        | x[h, ..t] =>
             match sc
             | lead() =>
                 match i
                 | 0 => decode_head(h, valid)
                 | pred + 1 =>
                     go(step(h, Scan/lead()), t,
-                        peel_byte(@Scan/lead(), @x\.h\..t, True/qed(), valid), pred,
+                        peel_byte(@Scan/lead(), @x[h, ..t], True/qed(), valid), pred,
                         match le : (x, y, le) => Nat/Lte(x - 1, y - 1)
                         | s(@a, @c, prev) => prev
                         end)
                 end
             | cont(rem, lo, hi) =>
                 go(step(h, Scan/cont(rem, lo, hi)), t,
-                    peel_byte(@Scan/cont(rem, lo, hi), @x\.h\..t, True/qed(), valid), i, le)
+                    peel_byte(@Scan/cont(rem, lo, hi), @x[h, ..t], True/qed(), valid), i, le)
             | bad() =>
                 go(step(h, Scan/bad()), t,
-                    peel_byte(@Scan/bad(), @x\.h\..t, True/qed(), valid), i, le)
+                    peel_byte(@Scan/bad(), @x[h, ..t], True/qed(), valid), i, le)
             end
         end;
     go(Scan/lead(), s.bytes, s.valid, i,

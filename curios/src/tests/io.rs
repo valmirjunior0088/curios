@@ -142,8 +142,8 @@ fn file_read_pulls_bytes_inside_the_bracket() {
             Async/bind(File/read(f, 1024), (r) =>
                 match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
-                | eof() => Async/pure(x\)
-                | error(_) => Async/pure(x\)
+                | eof() => Async/pure(x[])
+                | error(_) => Async/pure(x[])
                 end)))
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
@@ -165,7 +165,7 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 fn proc_args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `Lst(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
-    crate::run_text(r#"std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x\))"#,
+    crate::run_text(r#"std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x[]))"#,
         system,
     )
     .expect("expected result");
@@ -284,7 +284,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 let k = Cell/get(calls);
                 let _ = Cell/set(calls, k + 1);
                 match k
-                | 0 => Async/pure(Handle/Read/chunk(x\41\42))
+                | 0 => Async/pure(Handle/Read/chunk(x[\41, \42]))
                 | _ => Async/pure(Handle/Read/error(Handle/error_of(255)))
                 end;
         let chunk_then_eof() -> (Nat) -> Async(Handle/Read) =
@@ -293,7 +293,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 let k = Cell/get(calls);
                 let _ = Cell/set(calls, k + 1);
                 match k
-                | 0 => Async/pure(Handle/Read/chunk(x\41\42\43))
+                | 0 => Async/pure(Handle/Read/chunk(x[\41, \42, \43]))
                 | _ => Async/pure(Handle/Read/eof())
                 end;
         let _ = print(show(Async/block_on(Async/drain(error_first))));

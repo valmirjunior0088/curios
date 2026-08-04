@@ -140,7 +140,7 @@ fn a_guard_written_with_its_literal_first_reads_the_same() {
 
 #[test]
 fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
-    // The three call matrices of `/std/BigNat/add/raw`, over `(x, y, carry)`. In the empty-`x` arm the literal argument `b\` grades `Same` against `x` *because* the arm refined `x` to `b\`.
+    // The three call matrices of `/std/BigNat/add/raw`, over `(x, y, carry)`. In the empty-`x` arm the literal argument `b[]` grades `Same` against `x` *because* the arm refined `x` to `b[]`.
     let refined = [
         matrix(&[
             &[SAME, NONE, NONE],

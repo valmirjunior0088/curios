@@ -47,9 +47,9 @@ pub let step(c : Byte, s : Scan) -> Scan =
     end;
 
 pub induct Utf8 : (Scan, Bytes) -> pub Prop
-| stop() : (Scan/lead(), x\)
+| stop() : (Scan/lead(), x[])
 | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-    : (st, x\.c\..t)
+    : (st, x[c, ..t])
 end
 
 pub let Valid(b : Bytes) -> Prop =
@@ -58,8 +58,8 @@ pub let Valid(b : Bytes) -> Prop =
 -- Scanning as a fold rather than as a derivation: the state after running `step` over every byte of `b`, starting from `s`.
 pub rec scan_from(s : Scan, b : Bytes) -> Scan =
     match b
-    | x\ => s
-    | x\h\..t => scan_from(step(h, s), t)
+    | x[] => s
+    | x[h, ..t] => scan_from(step(h, s), t)
     end;
 
 -- The reflection bridge, and the reason it exists.
@@ -70,10 +70,10 @@ pub rec scan_from(s : Scan, b : Bytes) -> Scan =
 pub rec of_scan_eq_from(s : Scan, b : Bytes, p : Eq(scan_from(s, b), Scan/lead()))
     -> Utf8(s, b) =
     match b
-    -- `scan_from(s, x\)` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
-    | x\ => Eq/subst((q) => Utf8(q, x\), Eq/sym(p), Utf8/stop())
-    -- `scan_from(s, x\h\..t)` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
-    | x\h\..t => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
+    -- `scan_from(s, x[])` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
+    | x[] => Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
+    -- `scan_from(s, x[h, ..t])` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
+    | x[h, ..t] => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
     end;
 
 pub let of_scan_eq(b : Bytes, p : Eq(scan_from(Scan/lead(), b), Scan/lead()))

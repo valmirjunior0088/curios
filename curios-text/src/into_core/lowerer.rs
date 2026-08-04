@@ -3,10 +3,12 @@ use {
     super::{Context, MatchCompiler},
     crate::{
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Let, LetBinding, LstEntry, Name,
-        Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        Nat, NatLiteral, NumLit, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn,
+        Term,
     },
     curios_base::{Grain, PackedBin, Plicity, Qualifier, Span},
     num_bigint::BigUint,
+    num_traits::ToPrimitive,
     std::{cell::RefCell, sync::Arc},
 };
 
@@ -202,7 +204,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x\)` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core primitive.
+    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core primitive.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
             Syn::Char(character) => Ok(self.char_literal(*character)),
@@ -820,7 +822,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Flush the pending elements onto `operands`.
     ///
-    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `LstAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x\..xs\.y` lower alike. Two or more go into an `Lst` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
+    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `LstAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `Lst` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
     fn flush_lst_run(
         &self,
         operands: &mut Vec<curios_core::Term>,
@@ -884,14 +886,61 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
+    /// A constant element folded back into the literal's byte run. Escaped as `\48`/`\1` it is already a run; written as a term (`0x48`, `true`) the parser cannot tell it from a computed one, and left as an atom it would build an append chain where the escaped spelling builds a single packed value. `core::spine` decodes a concrete appended atom as a length-1 literal run, so conversion equates the two spellings either way — this is compaction, not meaning.
+    ///
+    /// A written sign excludes `Byte` (see `SYNTAX.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
+    fn bin_constant_atom(grain: Grain, term: &Term) -> Option<u8> {
+        match (grain, term.as_subterm()) {
+            (Grain::B, Subterm::Prim(Prim::Bool(bit))) => Some(u8::from(*bit)),
+            (Grain::X, Subterm::Prim(Prim::Byte(byte))) => Some(*byte),
+            (
+                Grain::X,
+                Subterm::NumLit(NumLit {
+                    magnitude, signed, ..
+                }),
+            ) => match signed {
+                true => None,
+                false => magnitude.to_u8(),
+            },
+            _ => None,
+        }
+    }
+
+    /// Constant atoms rejoined to their neighbouring runs, so [`Self::lower_bin_literal`]'s spread-free fast path sees `x[\48, 0x69]` as the one packed value it is. The merge itself mirrors `parse::coalesce_bin_segments`, which does the same for the atoms the parser already knew were constant.
+    fn fold_bin_constants(grain: Grain, segments: &[BinSegment]) -> Vec<BinSegment> {
+        let mut folded = Vec::new();
+
+        for segment in segments {
+            let run = match segment {
+                BinSegment::Bytes(run) => Some(run.clone()),
+                BinSegment::Atom(term) => {
+                    Self::bin_constant_atom(grain, term).map(|atom| vec![atom])
+                }
+                BinSegment::Spread(_) => None,
+            };
+
+            match run {
+                Some(run) => match folded.last_mut() {
+                    Some(BinSegment::Bytes(previous)) => previous.extend(run),
+                    _ => folded.push(BinSegment::Bytes(run)),
+                },
+                None => folded.push(segment.clone()),
+            }
+        }
+
+        folded
+    }
+
     /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).
     ///
-    /// A `\.` atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x\48\.b` is one append rather than a two-operand concatenation, `x\..acc\.b` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b\.h\..t` meets a refined motive without unfolding anything.
+    /// An atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[\48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b[h, ..t]` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
         grain: Grain,
         segments: &[BinSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Prim, Error> {
+        let segments = Self::fold_bin_constants(grain, segments);
+
         if segments
             .iter()
             .all(|segment| matches!(segment, BinSegment::Bytes(_)))
@@ -920,7 +969,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         };
 
         let mut operands: Vec<curios_core::Term> = Vec::new();
-        for segment in segments {
+        for segment in &segments {
             match segment {
                 BinSegment::Bytes(run) => operands.push(curios_core::Term::prim(
                     curios_core::Prim::Bin(grain, packed(run)),

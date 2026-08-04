@@ -251,51 +251,42 @@ pub(super) fn parse_lst_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
-// The `b\`/`x\` leaf of a nested `Bin` pattern (the grain's empty literal).
+// The `b[]`/`x[]` leaf of a nested `Bin` pattern (the grain's empty literal) — the packed counterpart of `parse_lst_nil_match_pattern`, and glued exactly as `[]` is.
 pub(super) fn parse_bin_end_match_pattern<'a>() -> Parser<'a, MatchPattern> {
-    catch(take_exact("b\\").and_drop(parse_whitespace()))
+    catch(parse_literal("b[]"))
         .map(|()| MatchPattern::Bin(BinPattern::End(Grain::B)))
-        .or(catch(take_exact("x\\").and_drop(parse_whitespace()))
-            .map(|()| MatchPattern::Bin(BinPattern::End(Grain::X))))
+        .or(catch(parse_literal("x[]")).map(|()| MatchPattern::Bin(BinPattern::End(Grain::X))))
 }
 
-// The `\head\..tail[; ih]` leaf of a nested `Bin` pattern — mirrors `parse_bin_cons_branch` minus the leading `|` and trailing `=> body`.
+// The `b[head, ..tail][; ih]` leaf of a nested `Bin` pattern — the packed counterpart of `parse_lst_cons_match_pattern`, differing only in the grain letter that selects the carrier.
 pub(super) fn parse_bin_byte_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    parse_bin_cons_match_pattern(Grain::B, "b[").or(parse_bin_cons_match_pattern(Grain::X, "x["))
+}
+
+fn parse_bin_cons_match_pattern<'a>(
+    grain: Grain,
+    prefix: &'static str,
+) -> Parser<'a, MatchPattern> {
     catch(
-        take_exact("b\\")
-            .and_keep(parse_identifier_raw())
-            .and_drop(take_exact("\\"))
-            .and_drop(take_exact("..")),
+        parse_literal(prefix)
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal(","))
+            .and_drop(parse_literal("..")),
     )
     .and(parse_identifier())
+    .and_drop(parse_literal("]"))
     .and(parse_cons_ih())
-    .map(|((head, tail), ih_label)| {
+    .map(move |((head, tail), ih_label)| {
         MatchPattern::Bin(BinPattern::Atom {
-            grain: Grain::B,
+            grain,
             head_label: head.to_string(),
             tail_label: tail.to_string(),
             ih_label,
         })
     })
-    .or(catch(
-        take_exact("x\\")
-            .and_keep(parse_identifier_raw())
-            .and_drop(take_exact("\\"))
-            .and_drop(take_exact("..")),
-    )
-    .and(parse_identifier())
-    .and(parse_cons_ih())
-    .map(|((head, tail), ih_label)| {
-        MatchPattern::Bin(BinPattern::Atom {
-            grain: Grain::X,
-            head_label: head.to_string(),
-            tail_label: tail.to_string(),
-            ih_label,
-        })
-    }))
 }
 
-// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`Lst`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `\`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for `NatSucc` specifically, before `Binder` (see its own doc comment).
+// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`Lst`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for `NatSucc` specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows.
 pub(super) fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner())
 }

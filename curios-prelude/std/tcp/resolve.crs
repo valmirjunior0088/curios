@@ -8,7 +8,7 @@ pub let resolve(host : Str, port : Nat) -> Async(Result(Bytes, Handle/Error)) =
             Async/bind(Async/wait(r.handle, /sys/Poll/read), (_) =>
                 let a = /sys/resolve(r.handle);
                 match a.status == /sys/Status/ok
-                | true => Async/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x\)))
+                | true => Async/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x[])))
                 | false => Async/pure(Result/failure(Handle/error_of(a.status)))
                 end))
     | false => Async/pure(Result/failure(Handle/error_of(r.status)))

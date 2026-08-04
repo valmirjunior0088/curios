@@ -164,7 +164,7 @@ fn against_identity<E>(atom: &Atom<E>) -> Peel {
 
 /// `Bin` is the free monoid on its bytes. Two values reduce by stripping their longest common prefix — concrete bytes byte-for-byte, identical symbolic chunks whole, and equal slice windows whole (after `bin_atoms` has fused adjacent windows of one base) — and the residual tails ride back on `Continue` (so the inverter can solve a flex binder forced to equal a leftover suffix, and conversion can enqueue the rest). A definite byte disagreement, or a positive run meeting the empty bytestring, is a `Clash`; a symbolic chunk or window facing an unlike one or the identity is `Stuck` (its length is unknown, so peeling cannot decide). `None` means the pair is not two `Bin` values, so the caller keeps its own handling.
 ///
-/// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ x\01 ~ y ++ x\01`) is sound to cancel but not yet attempted. Symbolic chunks and windows are matched by syntactic equality, so two convertible-but-unequal chunks (`append(x\, h1)` vs `append(x\, h2)`) — or two windows whose bounds differ only up to arithmetic — are left to the caller's structural comparison rather than decided here.
+/// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ x[\01] ~ y ++ x[\01]`) is sound to cancel but not yet attempted. Symbolic chunks and windows are matched by syntactic equality, so two convertible-but-unequal chunks (`append(x[], h1)` vs `append(x[], h2)`) — or two windows whose bounds differ only up to arithmetic — are left to the caller's structural comparison rather than decided here.
 pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
     let grain = bin_grain(left)?;
     if bin_grain(right) != Some(grain) {
@@ -283,7 +283,7 @@ fn bin_collect_prim(grain: Grain, prim: &Prim, out: &mut Vec<Atom<u8>>) {
                 hi: hi.clone(),
             },
         ),
-        // `append(base, b) = base ++ [b]`: decode the base, then the appended byte. A concrete byte is a length-1 literal run (so it merges with an abutting run and unifies with `concat(base, \b)`); a symbolic byte is the canonical one-byte chunk `append(x\, b)` — opaque, so its emptiness stays undecidable.
+        // `append(base, b) = base ++ [b]`: decode the base, then the appended byte. A concrete byte is a length-1 literal run (so it merges with an abutting run and unifies with `concat(base, \b)`); a symbolic byte is the canonical one-byte chunk `append(x[], b)` — opaque, so its emptiness stays undecidable.
         Prim::BinAppend(found, base, atom) if *found == grain => {
             bin_collect_term(grain, base, out);
 

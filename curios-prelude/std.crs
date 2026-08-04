@@ -100,7 +100,6 @@ pub use Eq/{let Eq};
 pub mod False;
 pub use False/{let False};
 
-
 pub mod True;
 pub use True/{let True};
 
@@ -147,6 +146,6 @@ pub let read() -> Option(Bytes) =
         | r.status != /sys/Status/ok && Bytes/len(acc) == 0 => Option/none()
         | r.status != /sys/Status/ok => Option/some(acc)
         | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == 0x0A => Option/some(acc)
-        | _ => go(x\..acc\..r.bytes)
+        | _ => go(x[..acc, ..r.bytes])
         end;
-    go(x\);
+    go(x[]);

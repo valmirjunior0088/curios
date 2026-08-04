@@ -22,7 +22,7 @@ pub(super) enum Tag {
     Tuple,
     /// One generator of a free-monoid carrier: `Nat`'s successor, a `Bin` byte, an `Lst` element.
     Cons(Carriers),
-    /// A free-monoid carrier's identity: zero, `b\`, `[]`.
+    /// A free-monoid carrier's identity: zero, `b[]`, `[]`.
     Empty(Carriers),
     /// A boolean literal.
     Bool(bool),

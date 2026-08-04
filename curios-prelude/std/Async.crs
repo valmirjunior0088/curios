@@ -144,11 +144,11 @@ pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/
     rec go(acc : Bytes) -> Async(Result(Bytes, Handle/Error)) =
         bind(read(4096), (r) =>
             match r
-            | chunk(bytes) => go(x\..acc\..bytes)
+            | chunk(bytes) => go(x[..acc, ..bytes])
             | eof() => pure(Result/success(acc))
             | error(e) => pure(Result/failure(e))
             end);
-    go(x\);
+    go(x[]);
 
 pub rec await(@A : Type, f : Future(A)) -> Async(A) =
     match Future/poll(f)

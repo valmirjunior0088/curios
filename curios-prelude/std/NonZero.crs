@@ -7,7 +7,7 @@ use /std/BigNat/{of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_canonical,
 
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold), so it reduces on any cons-headed rep, even one with an opaque tail.
 pub let is_cons(rep : Bits) -> Prop =
-    match rep | b\ => False | b\_\.._ => True end;
+    match rep | b[] => False | b[_, .._] => True end;
 
 pub struct NonZero : pub Type {
     magnitude : BigNat,
@@ -23,8 +23,8 @@ pub let nz_trimmed(t : NonZero) -> Eq(is_trimmed(t.magnitude.rep), true) =
     is_trimmed_of_canonical(t.magnitude.rep, t.magnitude.canonical);
 
 let cons_low_trimmed(low : Bool, rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(rep))
-    -> Eq(is_trimmed(b\.low\..rep), true) =
-    match rep | b\ => False/absurd(ne) | b\_\.._ => tr end;
+    -> Eq(is_trimmed(b[low, ..rep]), true) =
+    match rep | b[] => False/absurd(ne) | b[_, .._] => tr end;
 
 -- is_cons transports along the of_bits trim, given the raw is trimmed and cons-headed
 pub let raw_non_zero(rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(rep))
@@ -33,32 +33,32 @@ pub let raw_non_zero(rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(re
 
 -- combine / trim-head helpers for the mul-nonzero proof
 let combine_non_zero(h : Bool, w : Bits, ne : is_cons(w)) -> is_cons(combine(h, w)) =
-    match w | b\ => False/absurd(ne) | b\_\.._ => True/qed() end;
+    match w | b[] => False/absurd(ne) | b[_, .._] => True/qed() end;
 
 let combine_true_non_zero(w : Bits) -> is_cons(combine(true, w)) =
-    match w | b\ => True/qed() | b\_\.._ => True/qed() end;
+    match w | b[] => True/qed() | b[_, .._] => True/qed() end;
 
-let trim_head_non_zero(h : Bool, r : Bits, ne : is_cons(trim(r))) -> is_cons(trim(b\.h\..r)) =
+let trim_head_non_zero(h : Bool, r : Bits, ne : is_cons(trim(r))) -> is_cons(trim(b[h, ..r])) =
     combine_non_zero(h, trim(r), ne);
 
-let trim_head_true(r : Bits) -> is_cons(trim(b\1\..r)) =
+let trim_head_true(r : Bits) -> is_cons(trim(b[\1, ..r])) =
     combine_true_non_zero(trim(r));
 
 -- ===================== smart constructors =====================
 
 pub let one : NonZero =
-    NonZero { magnitude = of_trimmed_bits(b\1, Eq/refl()), non_zero = True/qed() };
+    NonZero { magnitude = of_trimmed_bits(b[\1], Eq/refl()), non_zero = True/qed() };
 
 pub let dbl(t : NonZero) -> NonZero =
     NonZero {
-        magnitude = of_trimmed_bits(b\0\..t.magnitude.rep,
+        magnitude = of_trimmed_bits(b[\0, ..t.magnitude.rep],
             cons_low_trimmed(false, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };
 
 pub let dbl_succ(t : NonZero) -> NonZero =
     NonZero {
-        magnitude = of_trimmed_bits(b\1\..t.magnitude.rep,
+        magnitude = of_trimmed_bits(b[\1, ..t.magnitude.rep],
             cons_low_trimmed(true, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };

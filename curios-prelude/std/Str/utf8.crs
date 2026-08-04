@@ -5,25 +5,25 @@ use /syn/{True, False};
 use /std/{Char, Nat, Byte, Bytes, Eq, Option};
 
 rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-    -> Utf8(s, x\..a\..b) =
-    match va : (q, x, w) => Utf8(q, x\..x\..b)
+    -> Utf8(s, x[..a, ..b]) =
+    match va : (q, x, w) => Utf8(q, x[..x, ..b])
     | stop() => vb
-    | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(@step(c, st), @t, @b, rest, vb))
+    | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(@step(c, st), @t, @b, rest, vb))
     end;
 
 pub let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-    -> Valid(x\..a\..b) =
+    -> Valid(x[..a, ..b]) =
     seq(va, vb);
 
 pub let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =
     match b
-    | x\ => (s) =>
+    | x[] => (s) =>
         match s
         | lead() => Option/some(Utf8/stop())
         | cont(rem, lo, hi) => Option/none()
         | bad() => Option/none()
         end
-    | x\h\..t; ih => (s) =>
+    | x[h, ..t]; ih => (s) =>
         match ih(step(h, s))
         | some(rest) => Option/some(Utf8/more(h, s, t, rest))
         | none() => Option/none()
@@ -32,8 +32,8 @@ pub let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =
 
 pub rec drop_width(n : Nat, s : Scan, b : Bytes) -> Nat =
     match b
-    | x\ => 0
-    | x\h\..t =>
+    | x[] => 0
+    | x[h, ..t] =>
         match s
         | lead() =>
             match n
@@ -147,14 +147,14 @@ pub rec peel_byte(@s : Scan, @b : Bytes, nz : Nat/Lt(0, Bytes/len(b)), w : Utf8(
     -> Utf8(step(Bytes/at(b, 0, nz), s), Bytes/slice(b, 1, Bytes/len(b))) =
     match w
     | stop() =>
-        False/absurd(@Utf8(step(Bytes/at(x\, 0, nz), Scan/lead()), Bytes/slice(x\, 1, Bytes/len(x\))), nz)
+        False/absurd(@Utf8(step(Bytes/at(x[], 0, nz), Scan/lead()), Bytes/slice(x[], 1, Bytes/len(x[]))), nz)
     | more(c, st, t, rest) => rest
     end;
 
 pub rec count_scalars(s : Scan, b : Bytes) -> Nat =
     match b
-    | x\ => 0
-    | x\h\..t =>
+    | x[] => 0
+    | x[h, ..t] =>
         match s
         | lead() => count_scalars(step(h, Scan/lead()), t) + 1
         | cont(rem, lo, hi) => count_scalars(step(h, Scan/cont(rem, lo, hi)), t)
@@ -174,10 +174,10 @@ let step_scans(c : Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c)))
     Eq/refl(@Scan, @step(c, Scan/lead()));
 
 -- The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
-pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x\.c\..t)) -> Nat =
+pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x[c, ..t])) -> Nat =
     let peeled = Eq/subst(@Scan, @step(c, Scan/lead()), @scan_of_class(classify(c)),
         (sc : Scan) => Utf8(sc, t), step_scans(c),
-        peel_byte(@Scan/lead(), @x\.c\..t, True/qed(), w));
+        peel_byte(@Scan/lead(), @x[c, ..t], True/qed(), w));
     (match classify(c) : (cl) => (w2 : Utf8(scan_of_class(cl), t)) -> Nat
     | ascii() => (w2) => Byte/to_nat(c)
     | lead(k, lo, hi, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0
@@ -187,7 +187,7 @@ pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x\.c\..t)) -
 pub let certify_decoded(code : Nat) -> Char =
     Option/unwrap_or(Char/of_nat(code), '?');
 
-pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x\.c\..t)) -> Char =
+pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), x[c, ..t])) -> Char =
     certify_decoded(decode_head_raw(c, w));
 
 pub rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =

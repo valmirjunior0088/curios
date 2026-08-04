@@ -176,7 +176,7 @@ fn bang_region_mixes_action_types() {
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
         let parser : Parse/Parse(Bytes) =
-            Parse/pure(x\..Parse/take_while(is_a)!\.Parse/any_byte!);
+            Parse/pure(x[..Parse/take_while(is_a)!, Parse/any_byte!]);
 
         match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => {}
         | success(s) =>
@@ -712,9 +712,9 @@ fn accumulation_loops_are_linear_by_construction() {
         rec go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => go(k, x\..acc\..Str/to_bytes("0123456789"))
+            | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let built = go(100000, x\);
+        let built = go(100000, x[]);
         let head = Bytes/slice(built, 0, 10);
         let _ = Handle/write(Handle/stdout, head);
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))
@@ -735,17 +735,17 @@ fn peel_loops_are_linear_by_construction() {
         rec build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => build(k, x\..acc\..Str/to_bytes("0123456789"))
+            | k + 1; ih => build(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let built = build(10000, x\);
+        let built = build(10000, x[]);
         let c = Cell/new(built);
         rec drain(fuel : Nat, acc : Nat) -> Nat =
             match fuel
             | 0 => acc
             | f + 1; ih =>
                 match Cell/get(c)
-                | x\ => acc
-                | x\h\..t; ih2 =>
+                | x[] => acc
+                | x[h, ..t]; ih2 =>
                     let _ = Cell/set(c, t);
                     drain(f, acc + (Byte/to_nat(h) - 48))
                 end

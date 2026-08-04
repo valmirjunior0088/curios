@@ -69,8 +69,8 @@ fn net_with_custom_timeout_config_reads_response() {
             Async/bind(Socket/read(s, 64), (r) =>
                 match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
-                | eof() => Async/pure(x\)
-                | error(_) => Async/pure(x\)
+                | eof() => Async/pure(x[])
+                | error(_) => Async/pure(x[])
                 end)))
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
@@ -98,7 +98,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
             Async/bind(Socket/read(c, 64), (r) =>
                 match r : (_) => Async({})
                 | chunk(bytes) =>
-                    Async/bind(Socket/write(c, x\..Str/to_bytes("echo: ")\..bytes), (wrote) => Async/pure(()))
+                    Async/bind(Socket/write(c, x[..Str/to_bytes("echo: "), ..bytes]), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
                 | error(_) => Async/pure(())
                 end)))
@@ -132,8 +132,8 @@ fn net_with_tls_upgrades_and_reads() {
             Async/bind(Socket/read(s, 64), (r) =>
                 match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
-                | eof() => Async/pure(x\)
-                | error(_) => Async/pure(x\)
+                | eof() => Async/pure(x[])
+                | error(_) => Async/pure(x[])
                 end)))
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
@@ -161,7 +161,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
             Async/bind(Socket/read(c, 64), (r) =>
                 match r : (_) => Async({})
                 | chunk(bytes) =>
-                    Async/bind(Socket/write(c, x\..Str/to_bytes("tls: ")\..bytes), (wrote) => Async/pure(()))
+                    Async/bind(Socket/write(c, x[..Str/to_bytes("tls: "), ..bytes]), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
                 | error(_) => Async/pure(())
                 end)))

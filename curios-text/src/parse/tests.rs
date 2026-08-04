@@ -1631,7 +1631,7 @@ fn bin_literal_spread_segments() {
 
     // Bytes coalesce into runs around the spread segments.
     assert_eq!(
-        r"x\00\..xs\01".parse::<Term>().unwrap(),
+        r"x[\00, ..xs, \01]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(
             Grain::X,
             vec![
@@ -1643,7 +1643,7 @@ fn bin_literal_spread_segments() {
         .into()
     );
     assert_eq!(
-        r"x\00\01\..x\02\03".parse::<Term>().unwrap(),
+        r"x[\00, \01, ..x, \02, \03]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(
             Grain::X,
             vec![
@@ -1655,9 +1655,9 @@ fn bin_literal_spread_segments() {
         .into()
     );
 
-    // The glued operand admits projections and absolute paths.
+    // A spread operand is an ordinary term: projections and absolute paths need no special grammar.
     assert_eq!(
-        r"x\..hdr.bytes".parse::<Term>().unwrap(),
+        r"x[..hdr.bytes]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(
             Grain::X,
             vec![BinSegment::Spread(
@@ -1670,7 +1670,7 @@ fn bin_literal_spread_segments() {
         ))
         .into()
     );
-    let term = r"x\../std/x".parse::<Term>().unwrap();
+    let term = r"x[../std/x]".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
@@ -1679,16 +1679,16 @@ fn bin_literal_spread_segments() {
     };
     assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
 
-    // A call is atomic: its argument list is self-delimiting, so it glues without parens — interior whitespace included — and the literal continues at the raw closing paren. A glued `!` binds to the operand.
-    let term = r"x\..f( x , y )\01".parse::<Term>().unwrap();
+    // Commas delimit, so an operand that the tight grammar could only take parenthesized — an infix chain — is now written bare.
+    let term = r"x[..x + y, \01]".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
-        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
+        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Infix(_)))
     );
     assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
-    let term = r"x\..read()!\01".parse::<Term>().unwrap();
+    let term = r"x[..read()!, \01]".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
@@ -1696,40 +1696,43 @@ fn bin_literal_spread_segments() {
         matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Bang(_)))
     );
 
-    // A parenthesized operand takes a full term (interior whitespace is invisible), for the non-atomic shapes — and admits glued suffixes.
-    let term = r"x\..( f(x) )\01".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
-    };
-    assert!(
-        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
-    );
-    assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
-
-    // Each grain has an empty prefixed literal.
+    // Each grain has an empty literal, spelled like `[]` behind its grain letter.
     assert_eq!(
-        "x\\".parse::<Term>().unwrap(),
+        "x[]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(Grain::X, vec![])).into()
     );
     assert_eq!(
-        "b\\".parse::<Term>().unwrap(),
+        "b[]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(Grain::B, vec![])).into()
     );
 
-    // TIGHT: the literal is one whitespace-free lexical unit. A spaced byte after an operand is not part of the literal (and strands as trailing junk here), and the operand itself must be glued to the `\..`.
-    assert!(r"x\..xs \01".parse::<Term>().is_err());
-    assert!(r"x\.. xs".parse::<Term>().is_err());
-    // A reserved keyword is not a name, glued or otherwise.
-    assert!(r"x\..use".parse::<Term>().is_err());
+    // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
+    assert_eq!(
+        r"x[ \00 , ..xs , \01 ]".parse::<Term>().unwrap(),
+        r"x[\00, ..xs, \01]".parse::<Term>().unwrap()
+    );
+    assert_eq!(
+        r"x[\00,]".parse::<Term>().unwrap(),
+        r"x[\00]".parse::<Term>().unwrap()
+    );
+
+    // Only the prefix-to-bracket junction is tight. Spaced, `b` is an ordinary binder followed by a list (leaving trailing junk here), and an identifier merely ending in the grain letter never starts a literal.
+    assert!(r"b [\1]".parse::<Term>().is_err());
+    assert!(r"nb[\1]".parse::<Term>().is_err());
+
+    // The tight spelling is gone rather than deprecated.
+    for tight in [r"x\00", r"b\1", r"x\", r"b\", r"x\..xs", r"b\.h\..t"] {
+        assert!(tight.parse::<Term>().is_err());
+    }
 }
 
 #[test]
 fn bin_literal_atom_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
-    // A `\.` atom splices one generator between literal runs, in either grain.
+    // A bare term entry splices one generator between literal runs, in either grain.
     assert_eq!(
-        r"x\48\.b\00".parse::<Term>().unwrap(),
+        r"x[\48, b, \00]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(
             Grain::X,
             vec![
@@ -1741,7 +1744,7 @@ fn bin_literal_atom_segments() {
         .into()
     );
     assert_eq!(
-        r"b\1\.flag\0".parse::<Term>().unwrap(),
+        r"b[\1, flag, \0]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(
             Grain::B,
             vec![
@@ -1753,13 +1756,13 @@ fn bin_literal_atom_segments() {
         .into()
     );
     assert_eq!(
-        r"x\.b".parse::<Term>().unwrap(),
+        r"x[b]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
     );
 
-    // The longer marker wins: `\..` is a spread even though `\.` is a viable prefix of it.
+    // `..` marks the spread; without it the same operand contributes a single atom.
     assert_eq!(
-        r"x\..xs\.b".parse::<Term>().unwrap(),
+        r"x[..xs, b]".parse::<Term>().unwrap(),
         Subterm::Prim(Prim::Bin(
             Grain::X,
             vec![BinSegment::Spread(name("xs")), BinSegment::Atom(name("b")),]
@@ -1767,8 +1770,8 @@ fn bin_literal_atom_segments() {
         .into()
     );
 
-    // The operand grammar is the spread's: glued projections, calls, and parenthesized terms.
-    let term = r"x\.hdr.byte\01".parse::<Term>().unwrap();
+    // An atom operand is an ordinary term, exactly as a spread operand is.
+    let term = r"x[hdr.byte, \01]".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
@@ -1776,7 +1779,7 @@ fn bin_literal_atom_segments() {
         matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Proj(_)))
     );
     assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
-    let term = r"x\.f( x , y )\01".parse::<Term>().unwrap();
+    let term = r"x[f( x , y ), \01]".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
@@ -1784,51 +1787,50 @@ fn bin_literal_atom_segments() {
         matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
     );
 
-    // TIGHT, exactly as the spread is: the marker and its operand are one lexical unit.
-    assert!(r"x\. b".parse::<Term>().is_err());
-    assert!(r"x\.".parse::<Term>().is_err());
-
-    // The operand is the spread's glued-name grammar, in which a digit is an ordinary identifier character — so `x\.0` references the name `0` that no scope binds, exactly as `x\..0` already did. `x\00` is how that byte is written.
-    let term = r"x\.0".parse::<Term>().unwrap();
+    // The escape is the only constant spelling the parser recognises. A numeric element stays an `Atom` here — the surface keeps what was written, and `into_core` folds a constant one back into the run — so the two spellings stay distinguishable in the text IR.
+    let term = r"x[\48, 0x69]".parse::<Term>().unwrap();
     let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
-    assert!(matches!(&segments[0], BinSegment::Atom(_)));
+    assert!(matches!(&segments[0], BinSegment::Bytes(bytes) if bytes == &vec![0x48]));
+    assert!(matches!(&segments[1], BinSegment::Atom(_)));
+
+    // `\` begins an atom and nothing else, so a malformed one is an error rather than a backtrack into the term case.
+    for malformed in [r"x[\]", r"x[\0]", r"x[\000]", r"b[\2]", r"b[\00]"] {
+        assert!(malformed.parse::<Term>().is_err());
+    }
 }
 
 #[test]
 fn list_bits_and_bytes_spreads_round_trip() {
-    // String equality pins the printer's canonical tight, glued forms for both grains, including their distinct empty literals.
+    // String equality pins the printer's canonical bracketed form for all three carriers, including their distinct empty literals. A coalesced run prints one escaped atom per entry, and a numeric element prints back as written rather than as an escape. Operands print in the ordinary term style — a parenthesized projection or bang head — which the tight grammar had to avoid, since its own closing paren would have ended the literal.
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
-        r"x\00\..xs\01",
-        r"x\..hdr.bytes",
-        r"x\../std/x",
-        r"x\..f(x)",
-        r"x\..Io/read!.bytes",
-        r"x\..(x + y)",
-        r"x\",
-        r"b\0\..xs\1",
-        r"b\..bits",
-        r"b\",
-        r"x\48\.b\00",
-        r"x\.b",
-        r"x\..acc\.b",
-        r"x\.hdr.byte",
-        r"x\.pick(f, a, b)",
-        r"b\1\.flag\0",
-        r"b\.h\..t",
+        r"x[\00, ..xs, \01]",
+        "x[..(hdr).bytes]",
+        r"x[../std/x]",
+        r"x[..f(x)]",
+        "x[..((Io/read)!).bytes]",
+        r"x[..x + y]",
+        "x[]",
+        r"b[\0, ..xs, \1]",
+        r"b[..bits]",
+        "b[]",
+        r"x[\48, b, \00]",
+        "x[b]",
+        r"x[..acc, b]",
+        "x[(hdr).byte]",
+        "x[pick(f, a, b)]",
+        r"b[\1, flag, \0]",
+        "b[h, ..t]",
+        r"x[\48, 0x69]",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }
 
-    for removed in [r"\00", r"\0", r"\\", r"\..xs"] {
+    for removed in [r"\00", r"\0", r"\\", r"\..xs", r"[\00]"] {
         assert!(removed.parse::<Term>().is_err());
-    }
-
-    for malformed in [r"b\2", r"b\00", r"x\0", r"x\000"] {
-        assert!(malformed.parse::<Term>().is_err());
     }
 }
 
@@ -1927,8 +1929,8 @@ fn matrix_match_round_trips() {
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
         "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
         // Bits and Bytes literal leaves nested inside a constructor payload.
-        r#"match o | some(x\) => y | some(x\h\..t) => y | none() => y end"#,
-        r#"match o | some(b\h\..t; ih) => y | some(b\) => y | none() => y end"#,
+        "match o | some(x[]) => y | some(x[h, ..t]) => y | none() => y end",
+        "match o | some(b[h, ..t]; ih) => y | some(b[]) => y | none() => y end",
         // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
         // The four hardcoded carriers as *headed* matches — no longer separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
@@ -1938,8 +1940,8 @@ fn matrix_match_round_trips() {
         // Nat literal dispatch (the old `NatMatch::Dispatch`): literal cases and the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t]; ih => c end",
-        r#"match a | x\ => b | x\h\..t; ih => c end"#,
-        r#"match a | b\ => b | b\h\..t; ih => c end"#,
+        "match a | x[] => b | x[h, ..t]; ih => c end",
+        "match a | b[] => b | b[h, ..t]; ih => c end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
