@@ -695,10 +695,10 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 ///
 /// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 ///
-/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_local_fits`](super::suggest_local_fits)), displayed through the same pipeline.
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`](super::suggest_candidates)), displayed through the same pipeline.
 pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Vec<GoalReport> {
-    /// Collected goal sites in discovery order: each goal's id with its first occurrence's span, shared into the scan closures.
-    type GoalSites = Rc<RefCell<Vec<(MetaId, Option<Span>)>>>;
+    /// Collected goal sites in discovery order: each goal's id, its first occurrence's span, and its owning definition when it sits inside one (the suggestion pools exclude the owner), shared into the scan closures.
+    type GoalSites = Rc<RefCell<Vec<(MetaId, Option<Span>, Option<Global>)>>>;
 
     let goals: GoalSites = Rc::new(RefCell::new(Vec::new()));
     let seen_goals = Rc::new(RefCell::new(BTreeSet::new()));
@@ -707,6 +707,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
 
     fn scan<B: Bound>(
         value: &B,
+        owner: Option<&Global>,
         goals: &GoalSites,
         seen_goals: &Rc<RefCell<BTreeSet<MetaId>>>,
         referenced: &Rc<RefCell<Vec<MetaId>>>,
@@ -714,6 +715,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
         let goals = Rc::clone(goals);
         let seen_goals = Rc::clone(seen_goals);
         let referenced = Rc::clone(referenced);
+        let owner = owner.cloned();
         let mut visit = Visit::rewriting(
             |_, _| None,
             Box::new(move |_, term| {
@@ -721,7 +723,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
                     match origin {
                         Some(MetavarOrigin::Goal) => {
                             if seen_goals.borrow_mut().insert(*id) {
-                                goals.borrow_mut().push((*id, term.span()));
+                                goals.borrow_mut().push((*id, term.span(), owner.clone()));
                             }
                         }
                         _ => referenced.borrow_mut().push(*id),
@@ -734,8 +736,14 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
     }
 
     let mut scan_definition = |def: &Definition| {
-        scan(&def.type_, &goals, &seen_goals, &referenced);
-        scan(&def.body, &goals, &seen_goals, &referenced);
+        scan(
+            &def.type_,
+            Some(&def.name),
+            &goals,
+            &seen_goals,
+            &referenced,
+        );
+        scan(&def.body, Some(&def.name), &goals, &seen_goals, &referenced);
     };
     for item in &module.items {
         match item {
@@ -743,23 +751,35 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
         }
     }
-    scan(&module.body, &goals, &seen_goals, &referenced);
+    scan(&module.body, None, &goals, &seen_goals, &referenced);
     if let Some(type_) = &module.type_ {
-        scan(type_, &goals, &seen_goals, &referenced);
+        scan(type_, None, &goals, &seen_goals, &referenced);
     }
     for induct_decl in module.induct_decls.values() {
-        scan(&induct_decl.arity, &goals, &seen_goals, &referenced);
+        scan(&induct_decl.arity, None, &goals, &seen_goals, &referenced);
         for (_, param) in &induct_decl.constructors {
-            scan(&param.telescope, &goals, &seen_goals, &referenced);
+            scan(&param.telescope, None, &goals, &seen_goals, &referenced);
         }
-        scan(&induct_decl.result_sort, &goals, &seen_goals, &referenced);
+        scan(
+            &induct_decl.result_sort,
+            None,
+            &goals,
+            &seen_goals,
+            &referenced,
+        );
     }
     for struct_decl in module.struct_decls.values() {
-        scan(&struct_decl.arity, &goals, &seen_goals, &referenced);
-        scan(&struct_decl.result_sort, &goals, &seen_goals, &referenced);
+        scan(&struct_decl.arity, None, &goals, &seen_goals, &referenced);
+        scan(
+            &struct_decl.result_sort,
+            None,
+            &goals,
+            &seen_goals,
+            &referenced,
+        );
     }
     for concept in module.concepts.values() {
-        scan(&concept.params, &goals, &seen_goals, &referenced);
+        scan(&concept.params, None, &goals, &seen_goals, &referenced);
     }
 
     let mut scanned = BTreeSet::new();
@@ -777,15 +797,15 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             continue;
         }
         if let Some(solution) = context.metavar_solution(id) {
-            scan(solution, &goals, &seen_goals, &referenced);
+            scan(solution, None, &goals, &seen_goals, &referenced);
         }
     }
 
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
-    let goal_sites: Vec<(MetaId, Option<Span>)> = goals.borrow().clone();
+    let goal_sites: Vec<(MetaId, Option<Span>, Option<Global>)> = goals.borrow().clone();
     context.restore_budget();
     let mut all_candidates: Vec<Vec<Term>> = Vec::with_capacity(goal_sites.len());
-    for (id, _) in &goal_sites {
+    for (id, _, owner) in &goal_sites {
         if context.metavar_solution(*id).is_some() {
             all_candidates.push(Vec::new());
             continue;
@@ -796,7 +816,13 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
                 .expect("a collected goal has a birth entry");
             (Rc::clone(&entry.telescope), entry.result.clone())
         };
-        all_candidates.push(super::suggest_local_fits(context, &telescope, &result));
+        all_candidates.push(super::suggest_candidates(
+            context,
+            &telescope,
+            &result,
+            module,
+            owner.as_ref(),
+        ));
     }
 
     // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, and the fold handles both.
@@ -811,7 +837,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
     goal_sites
         .iter()
         .zip(all_candidates)
-        .map(|((id, span), candidates)| {
+        .map(|((id, span, _), candidates)| {
             // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
             let entry = context
                 .metavar_entry(*id)

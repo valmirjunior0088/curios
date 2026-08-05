@@ -369,6 +369,43 @@ fn a_solved_goal_gets_no_suggestions() {
 }
 
 #[test]
+fn a_module_function_fitting_the_goal_is_suggested_with_pinned_arguments() {
+    // The application-fit pool: `mk`'s output `Eq(n, n)` unifies with the goal `Eq(3, 3)`, pinning `n := 3` — and the pinned argument displays filled because the candidate is materialized before the transaction rolls back. Complete fits rank by pool order, so the constructor fit leads.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let mk(n : Nat) -> Eq(n, n) = Eq/refl();
+        let claim : Eq(3, 3) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} Eq/refl()"),
+        "unexpected error: {error}"
+    );
+    assert!(error.contains("mk(3)"), "unexpected error: {error}");
+    let refl = error.find("\u{2248} Eq/refl()").expect("refl suggested");
+    let mk = error.find("mk(3)").expect("mk suggested");
+    assert!(refl < mk, "complete pool order broken: {error}");
+}
+
+#[test]
+fn the_goals_own_definition_is_not_suggested() {
+    // Suggesting the definition a goal sits inside would be circular for a plain `let`; the pools exclude the owner. The scope binder still fits.
+    let source = r#"
+        use /std/{Nat};
+        let f(x : Nat) -> Nat = ?;
+        f(1)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("? \u{2248} x"), "unexpected error: {error}");
+    assert!(!error.contains("/f("), "own definition suggested: {error}");
+}
+
+#[test]
 fn a_suggested_complete_candidate_compiles_when_pasted() {
     // The paste-and-recheck contract: the candidate suggested for the fixture in `a_computed_equality_goal_suggests_refl`'s base shape compiles.
     let source = r#"
