@@ -191,7 +191,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Algebra and order theorem corpus](big_flt_dyadic_proofs/02_LAWS_SPEC.md)
   - [ ] [Correctly rounded exact quotient conversion to binary32](big_flt_dyadic_proofs/03_RATIO_NARROWING_SPEC.md)
   - [ ] [Binary32 round-trip and correct-rounding proofs](big_flt_dyadic_proofs/04_BOUNDARY_PROOFS_SPEC.md)
-- [ ] General rational `BigFlt` sequence _(explicitly after `wonder`; no umbrella-only implementation step)_
+- [ ] General rational `BigFlt` sequence _(explicitly after the program-analysis interface; no umbrella-only implementation step)_
   - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](big_flt_general/01_BIG_NAT_EUCLIDEAN_SPEC.md)
   - [ ] [General `BigFlt` reduced rational representation and exact operations](big_flt_general/02_CORE_SPEC.md)
   - [ ] [General canonical uniqueness, ring, and order laws](big_flt_general/03_LAWS_SPEC.md)
@@ -215,7 +215,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Internal benchmarks
   - [x] Cross-language benchmarks (Docker harness vs. Rust/OCaml/Node/Lean 4 native and Rust/Grain/AssemblyScript on wasmtime)
 - [ ] Developer tooling
-  - [ ] [`curios wonder` structured program-analysis interface](program_analysis/02_WONDER_SPEC.md) (source and semantic indexes, diagnostics, references, dependencies, witnesses, and snapshot queries)
+  - [ ] Structured program-analysis interface: symbols, references, dependencies, witnesses, and exact source ranges over a reusable analysis crate — respec fresh when scheduled (the retired `wonder` draft lives in git history; its durable insights are source-versus-semantic tagging and snapshot-bound identities). Goal reports already cover the diagnostics slice, and `let _ : ? = f;` answers ad-hoc type queries through the solved-goal report.
   - [ ] Code formatter
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
