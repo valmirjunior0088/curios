@@ -773,6 +773,10 @@ impl Context {
         self.program.is_witness_declaration(name)
     }
 
+    pub(crate) fn witness_entries(&self) -> impl Iterator<Item = (&Global, &Witness)> {
+        self.program.witness_entries()
+    }
+
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
         self.program.witness(concept, key)
     }

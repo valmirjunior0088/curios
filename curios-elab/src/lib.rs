@@ -32,6 +32,9 @@ pub use context::*;
 mod convert;
 pub(crate) use convert::*;
 
+mod denoise;
+pub(crate) use denoise::*;
+
 mod error;
 pub use error::*;
 

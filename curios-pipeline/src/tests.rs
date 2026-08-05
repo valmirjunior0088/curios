@@ -276,6 +276,38 @@ fn solved_and_unsolved_goals_share_one_batch() {
 }
 
 #[test]
+fn goal_types_spell_operators_as_infix_not_witness_projections() {
+    // The concept-dispatch rebuild (`a + b` ≙ a witness projection call — `elaborate_infix`) folds back to its source spelling in reports, nested operands parenthesized, and no anonymous witness name leaks.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let claim : Eq((1 + 2) * 3, 9) = ?;
+        claim
+    "#;
+
+    let error = compile(source, None).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("(1 + 2) * 3"), "unexpected error: {error}");
+    assert!(!error.contains("witness"), "unexpected error: {error}");
+}
+
+#[test]
+fn goal_types_spell_negated_equality_as_neq() {
+    // `a != b` elaborates as an xor-negated equality call (no `BoolNot` prim exists); the report folds the pair back to `!=`.
+    let source = r#"
+        use /std/{Nat, Bool, Eq};
+        let claim : Eq(1 != 2, true) = ?;
+        claim
+    "#;
+
+    let error = compile(source, None).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("1 != 2"), "unexpected error: {error}");
+    assert!(!error.contains("witness"), "unexpected error: {error}");
+}
+
+#[test]
 fn a_hard_error_preempts_the_goal_batch() {
     // A goal already registered does not soften a later hard failure: the interrupted elaboration established no complete batch, so only the hard error reports.
     let source = r#"

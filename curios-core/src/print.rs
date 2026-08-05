@@ -1232,11 +1232,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             };
             pure(format!("{sign}{}", num_lit.magnitude))
         }
-        Subterm::Infix(Infix { op, left, right }) => flat([
-            sub(left, depth),
-            pure(format!(" {} ", op.symbol())),
-            sub(right, depth),
-        ]),
+        // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the prim operators; display folds (`denoise`) nest these nodes.
+        Subterm::Infix(Infix { op, left, right }) => print_infix(op.symbol(), left, right, depth),
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing.
         Subterm::Metavar(metavar) => {
             if metavar

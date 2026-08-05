@@ -777,7 +777,11 @@ pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<Go
         }
     }
 
-    let display = |term: &Term| zonk_solved_term_metas(context, term);
+    // Materialize committed substitutions tolerantly, then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, and the fold handles both.
+    let operators = super::operator_witness_table(context);
+    let display = |term: &Term| {
+        super::denoise_for_display(&operators, &zonk_solved_term_metas(context, term))
+    };
     let goals = goals.borrow();
     goals
         .iter()

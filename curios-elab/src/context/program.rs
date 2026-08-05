@@ -150,6 +150,13 @@ impl Program {
         self.witness_table.get(&(concept.clone(), key.clone()))
     }
 
+    /// Every registered witness with the concept it witnesses — the display path's raw material for folding operator projections back to infix.
+    pub(crate) fn witness_entries(&self) -> impl Iterator<Item = (&Global, &Witness)> {
+        self.witness_table
+            .iter()
+            .map(|((concept, _), witness)| (concept, witness))
+    }
+
     /// Insert a witness under its key, returning the previous occupant's declaring module on a collision (the caller reports `DuplicateWitness`, which reports modules rather than the anonymous witnesses' compiler-minted names). The façade stamps the write on an actual insert.
     pub(crate) fn insert_witness(
         &mut self,

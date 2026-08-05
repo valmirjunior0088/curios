@@ -25,6 +25,36 @@ pub enum NumOp {
 }
 
 impl NumOp {
+    /// Every operator, in declaration order — the roster the reverse lookups below derive from.
+    const ALL: [NumOp; 13] = [
+        NumOp::Add,
+        NumOp::Sub,
+        NumOp::Mul,
+        NumOp::Div,
+        NumOp::Rem,
+        NumOp::Eql,
+        NumOp::Neq,
+        NumOp::Lt,
+        NumOp::Gt,
+        NumOp::Lte,
+        NumOp::Gte,
+        NumOp::And,
+        NumOp::Or,
+    ];
+
+    /// The operator spelled `symbol`, if any — [`NumOp::symbol`]'s reverse, for display folding. Precise because operator symbols and identifiers never overlap.
+    pub fn from_symbol(symbol: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|op| op.symbol() == symbol)
+    }
+
+    /// The operator dispatching through `concept`'s `field` — [`NumOp::concept_field`]'s reverse, for display folding. `Neq` shares `Eql`'s entry, so the equality spelling wins; negating is the caller's business, exactly as it was when the call was built.
+    pub fn from_concept_field(concept: &Qualifier, field: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|op| {
+            let (op_concept, op_field) = op.concept_field();
+            op_concept == *concept && op_field == field
+        })
+    }
+
     /// The operator's source spelling, for printing and error messages.
     pub fn symbol(self) -> &'static str {
         match self {
