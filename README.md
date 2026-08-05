@@ -68,6 +68,8 @@ curios compile hello.crs -o hello
 ./hello
 ```
 
+Exit codes are a tri-state: `0` means the program compiled and (for `run`) exited 0 itself — a running program's own exit code passes through untouched — `2` means the program contains written goals (`?`) and their report was printed to stderr, and `1` means a hard error. Tooling can therefore distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
+
 ## Build from source
 
 Building requires Rust, a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and may take several minutes.

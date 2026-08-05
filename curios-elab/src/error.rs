@@ -736,6 +736,17 @@ impl Error {
         Self::Goals(reports)
     }
 
+    /// Whether this failure is a written-goal batch — incomplete development state rather than a hard error. The process boundary reports the two distinctly (the CLI exits 2 for incomplete, 1 for hard), so the distinction must survive formatting.
+    pub fn is_incomplete(&self) -> bool {
+        match self {
+            Self::Goals(_) => true,
+            Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
+                error.is_incomplete()
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) fn duplicate_witness(
         concept: String,
         key: super::WitnessKey,

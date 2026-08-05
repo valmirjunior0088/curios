@@ -984,7 +984,7 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
         RootSource::none(),
     ) {
         // Refused before a module existed: type-checking proper, not an erasure obligation.
-        Err(error) => (Verdict::Refuses(error), Verdict::NotAsked),
+        Err(error) => (Verdict::Refuses(error.into()), Verdict::NotAsked),
         Ok((module, checked_from, obligations)) => {
             let elaborator = match obligations.into_iter().next() {
                 Some(error) => Verdict::Refuses(error),

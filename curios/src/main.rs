@@ -12,6 +12,7 @@ use pipeline::*;
 use {
     clap::Parser,
     curios::{run_wasm, to_cwasm},
+    curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost},
     std::{
         iter,
@@ -19,7 +20,28 @@ use {
     },
 };
 
-fn dispatch() -> Result<(), String> {
+/// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
+enum Failure {
+    Incomplete(String),
+    Error(String),
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Failure::Error(message)
+    }
+}
+
+impl From<CompileError> for Failure {
+    fn from(error: CompileError) -> Self {
+        match error {
+            CompileError::Incomplete(message) => Failure::Incomplete(message),
+            CompileError::Failure(message) => Failure::Error(message),
+        }
+    }
+}
+
+fn dispatch() -> Result<(), Failure> {
     let Cli {
         budget,
         print,
@@ -84,11 +106,17 @@ fn dispatch() -> Result<(), String> {
 }
 
 fn main() -> ExitCode {
-    if let Err(error) = dispatch() {
-        eprintln!("{error}");
+    match dispatch() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(Failure::Incomplete(report)) => {
+            eprintln!("{report}");
 
-        return ExitCode::FAILURE;
+            ExitCode::from(2)
+        }
+        Err(Failure::Error(error)) => {
+            eprintln!("{error}");
+
+            ExitCode::FAILURE
+        }
     }
-
-    ExitCode::SUCCESS
 }

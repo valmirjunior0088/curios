@@ -13,7 +13,41 @@ use {
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},
+    std::fmt,
 };
+
+/// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr. Both carry the fully formatted report; an embedder that does not care converts to it via `Display` or the `String` conversion.
+#[derive(Debug)]
+pub enum CompileError {
+    Incomplete(String),
+    Failure(String),
+}
+
+impl CompileError {
+    /// Classify a front-end error by [`curios_elab::Error::is_incomplete`], pairing it with its already-formatted report.
+    fn of(error: &curios_elab::Error, message: String) -> Self {
+        match error.is_incomplete() {
+            true => Self::Incomplete(message),
+            false => Self::Failure(message),
+        }
+    }
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Incomplete(message) | Self::Failure(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl From<CompileError> for String {
+    fn from(error: CompileError) -> Self {
+        match error {
+            CompileError::Incomplete(message) | CompileError::Failure(message) => message,
+        }
+    }
+}
 
 /// Lower and type-check `entrypoint`, reporting the erasure obligations rather than raising them.
 ///
@@ -24,11 +58,11 @@ pub fn typecheck_reporting(
     budget: u64,
     entrypoint: &Entrypoint,
     loader: RootSource,
-) -> Result<(curios_core::Module, usize, Vec<String>), String> {
+) -> Result<(curios_core::Module, usize, Vec<String>), CompileError> {
     let (lowered, metavars, universe_floor, _foreigns) = with_prelude(|prelude| {
         into_core_with_prelude(entrypoint, &loader, prelude.prepared(), &SYNTAX)
     })
-    .map_err(|error| error.format())?;
+    .map_err(|error| CompileError::Failure(error.format()))?;
 
     let core_mode = match &lowered.type_ {
         Some(type_) => Mode::Check(type_.clone()),
@@ -47,7 +81,7 @@ pub fn typecheck_reporting(
             core_mode,
         )
     })
-    .map_err(|error| error.format_with(&lowered))?;
+    .map_err(|error| CompileError::of(&error, error.format_with(&lowered)))?;
 
     let obligations = obligations
         .into_iter()
@@ -67,7 +101,7 @@ pub(crate) fn elaborate_and_zonk<O>(
     entrypoint: &Entrypoint,
     loader: RootSource,
     observe: &mut O,
-) -> Result<(curios_core::Module, Term, ForeignStore), String>
+) -> Result<(curios_core::Module, Term, ForeignStore), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -77,7 +111,7 @@ where
     let (lowered, metavars, universe_floor, user_foreigns) = with_prelude(|prelude| {
         into_core_with_prelude(entrypoint, &loader, prelude.prepared(), &SYNTAX)
     })
-    .map_err(|error| error.format())?;
+    .map_err(|error| CompileError::Failure(error.format()))?;
 
     observe(Stage::Core(&lowered));
 
@@ -98,7 +132,7 @@ where
             core_mode,
         )
     })
-    .map_err(|error| error.format_with(&lowered))?;
+    .map_err(|error| CompileError::of(&error, error.format_with(&lowered)))?;
 
     observe(Stage::CoreElab(&module));
 
@@ -142,7 +176,7 @@ pub fn compile_entrypoint<O>(
     entrypoint: &Entrypoint,
     loader: RootSource,
     mut observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore), String>
+) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -158,10 +192,10 @@ where
             .into_iter()
             .next()
         {
-            return Err(match &verdict.name {
+            return Err(CompileError::Failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {}", verdict.error),
                 None => format!("the kernel refused the entrypoint: {}", verdict.error),
-            });
+            }));
         }
     }
 
@@ -174,7 +208,7 @@ where
             prelude.ersd(),
         )
     })
-    .map_err(|error| error.format_with(&module))?;
+    .map_err(|error| CompileError::Failure(error.format_with(&module)))?;
 
     Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
 }

@@ -16,6 +16,7 @@ fn entrypoint_type_is_used_as_expected_type() {
         .with_type("/std/Bool".parse().unwrap());
 
     let error = compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+        .map_err(String::from)
         .unwrap_err();
 
     assert!(error.contains("type mismatch"));
@@ -31,6 +32,25 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
 
     compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
         .map(|(module, _foreigns)| module)
+        .map_err(String::from)
+}
+
+#[test]
+fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
+    // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
+    let goals = "let m : /std/Nat = ?; m".parse::<Entrypoint>().unwrap();
+    assert!(matches!(
+        compile_entrypoint(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
+        Err(CompileError::Incomplete(_))
+    ));
+
+    let mismatch = "let bad : /std/Nat = true; bad"
+        .parse::<Entrypoint>()
+        .unwrap();
+    assert!(matches!(
+        compile_entrypoint(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
+        Err(CompileError::Failure(_))
+    ));
 }
 
 #[test]
@@ -1302,6 +1322,7 @@ fn typecheck(source: &str) -> Result<(), String> {
         &mut |_| {},
     )
     .map(|_| ())
+    .map_err(String::from)
 }
 
 #[test]
