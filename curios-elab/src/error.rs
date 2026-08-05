@@ -1376,6 +1376,14 @@ impl fmt::Display for Error {
                 }
             }
             Error::Goals(reports) => {
+                // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
+                const WIDTH: usize = 100;
+                let clause = |term: &Term| {
+                    term.display_within(WIDTH)
+                        .to_string()
+                        .replace('\n', "\n    ")
+                };
+
                 // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `render` orders a `Located` diagnostic. Entries are separated by a blank line.
                 for (index, report) in reports.iter().enumerate() {
                     if index > 0 {
@@ -1383,11 +1391,11 @@ impl fmt::Display for Error {
                     }
                     write!(f, "goal `?`")?;
                     for (name, type_) in &report.scope {
-                        write!(f, "\n  {name} : {type_}")?;
+                        write!(f, "\n  {name} : {}", clause(type_))?;
                     }
-                    write!(f, "\n  ? : {}", report.goal)?;
+                    write!(f, "\n  ? : {}", clause(&report.goal))?;
                     if let Some(solution) = &report.solution {
-                        write!(f, "\n  ? = {solution}")?;
+                        write!(f, "\n  ? = {}", clause(solution))?;
                     }
                     if let Some(span) = &report.span {
                         write!(f, "\n\n{}", span.render_snippet())?;

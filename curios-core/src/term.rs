@@ -14,7 +14,10 @@ use {
         Three, Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
         instantiate_universe_levels_scoped, print_term,
     },
-    curios_base::{Grain, Int, Mint, NumOp, Plicity, Span, printer::run_printer},
+    curios_base::{
+        Grain, Int, Mint, NumOp, Plicity, Span,
+        printer::{run_printer, run_printer_within},
+    },
     num_bigint::BigUint,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -1276,6 +1279,19 @@ impl From<Subterm> for Term {
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         run_printer(print_term(self.clone(), 0), formatter, 2)
+    }
+}
+
+impl Term {
+    /// A `Display` adapter rendering this term within `width` columns: the printer's groups fit or break against the target instead of the unbounded flat layout plain `Display` keeps. Diagnostics that print large terms render through this; the width is a target, not a guarantee, since content with no break point still overruns.
+    pub fn display_within(&self, width: usize) -> impl fmt::Display {
+        struct Within(Term, usize);
+        impl fmt::Display for Within {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                run_printer_within(print_term(self.0.clone(), 0), formatter, 2, self.1)
+            }
+        }
+        Within(self.clone(), width)
     }
 }
 

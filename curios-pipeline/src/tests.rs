@@ -308,6 +308,24 @@ fn goal_types_spell_negated_equality_as_neq() {
 }
 
 #[test]
+fn a_wide_goal_type_breaks_across_lines_in_the_report() {
+    // The report renders terms within a fixed width, so a function type too wide for one line breaks one binder per line, while short goal types (every other goal test) stay on one.
+    let source = r#"
+        use /std/{Nat};
+        let f : (first_argument : Nat, second_argument : Nat, third_argument : Nat, fourth_argument : Nat, fifth_argument : Nat) -> Nat = ?;
+        f(1, 2, 3, 4, 5)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(
+        error.contains("first_argument : Nat,\n"),
+        "expected a broken binder list: {error}"
+    );
+}
+
+#[test]
 fn a_hard_error_preempts_the_goal_batch() {
     // A goal already registered does not soften a later hard failure: the interrupted elaboration established no complete batch, so only the hard error reports.
     let source = r#"
