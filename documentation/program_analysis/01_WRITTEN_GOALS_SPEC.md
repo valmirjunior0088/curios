@@ -1,303 +1,130 @@
-# Written goals (`?label`) — design
+# Written goals (`?`) — batched reports, readable display, and the printing substrate
 
-This document specifies Curios's labeled written-goal form, complete goal reporting after successful elaboration, and the typed incomplete outcome shared by compilation and program analysis.
+This document specifies the completion of the written-goal workflow: one compilation reports every written goal it reaches, each report is identified by its source location and rendered in source-shaped spelling, and the printing layer gains the width-aware substrate that diagnostics, IR dumps, and a future formatter share.
 
-Written goals are a front-end capability rather than an interactive prover. They let a programmer or agent ask what belongs at several source locations, receive every answer one successful elaboration can establish, and then edit the source and analyze the new snapshot. The general `wonder` interface consumes these reports through its diagnostic model.
+It replaces the earlier labeled-goal design (`?label`, a typed incomplete checking outcome, and analysis-interface coupling). That design is superseded rather than deferred: the ideas that survive are restated here in their new form, and the rest are recorded as non-goals.
+
+## Problem
+
+Observed use of the current implementation shows three deficiencies:
+
+1. **One goal per compilation.** Zonk fails at the first `Goal`-origin metavariable it meets, so a program holding several goals costs one full compile per goal, and the author watches the error walk forward one hole at a time.
+2. **Reports spell elaborator internals.** A goal whose author-visible type is `Eq(0 + 0, 0 * 2)` reports as `Eq(@Nat, (witness2).0(0, 0), (witness4).0(0, 2))`: concept-dispatched operators surface as anonymous witness projections that no reader should have to decode.
+3. **Display is all-or-nothing.** Report terms render through strict zonk with a whole-term fallback, so a single residual metavariable hides every substitution elaboration did commit.
+
+Beneath the second and third deficiencies sits a structural one: every printer fixes its layout at document-build time, so large terms render as single lines (the Ersd printer today makes almost no layout decisions at all), and no mechanism lets one printer definition adapt between an inline diagnostic and a readable dump.
 
 ## Objective
 
-A programmer or agent should be able to leave several explicitly labeled goals in a program and receive one deterministic batch containing every reached goal's label, source location, local scope, expected type, and inferred solution.
+A programmer or agent leaves `?` at several source locations, runs one compilation, and receives one deterministic batch containing every reached goal's location, local scope, expected type, and inferred solution — each spelled the way the author would write it. They edit the source and repeat.
 
-The workflow is:
-
-```text
-write `?label`
-  → compile or request wonder diagnostics
-  → inspect every reported scope, expected type, and solution
-  → replace goals in source
-  → analyze the new source snapshot
-```
-
-“Every goal” means every written goal reached by one otherwise-successful elaboration. Reporting useful typing information for syntax that parsing, lowering, or elaboration never reached would require general recovery and speculative contexts, which are outside this design.
+“Every goal” means every written goal reached by one otherwise-successful elaboration. Reporting for syntax that parsing, lowering, or elaboration never reached would require general recovery, which stays outside this design.
 
 ## Current behavior
 
-Today:
+- Bare `?` parses to `Subterm::Goal`; lowering mints a fresh metavariable with `MetavarOrigin::Goal`; elaboration may solve it like an inference hole; zonk errors at the first one with `Error::Goal` carrying the frozen scope, expected type, optional solution, and span.
+- `zonk_solved_term_metas` already implements tolerant materialization — it substitutes solved metavariables through their spines, preserves `Goal`-origin and unsolved metavariables as visible terms, keeps spans, and never fails — but the goal display path does not use it.
+- An infix operator elaborates to `Apply(Proj(witness, index), [left, right])`, and the witness metavariable's `WitnessOrigin` carries the operator symbol and method name.
+- The printer document is `Text`/`Concat`/`Indent`/`Deferred` with an iterative interpreter and an iterative `Drop`; no layout choice exists in the algebra.
+- `parse_whitespace` consumes comments and discards them; `Span` carries its `Rc<Source>`.
 
-- Bare `?` parses to `Subterm::Goal` in `curios-text`.
-- Lowering mints a fresh core metavariable tagged `MetavarOrigin::Goal`.
-- Elaboration may solve that metavariable exactly like an inference hole.
-- Zonk reports a written goal unconditionally, whether solved or unsolved, because writing a goal requests a report rather than silent substitution.
-- `Error::Goal` carries the frozen local scope, expected type, optional solution, and the goal term's source span.
-- Multiple goals parse and elaborate, but ordinary `Result` propagation makes zonk stop at the first goal it visits.
+## Syntax: unchanged
 
-The existing distinction between written goals and silent compiler-generated inference holes is foundational. This design makes the written form labeled, makes reporting complete, and represents incompleteness separately from hard failure.
+Bare `?` remains the only written-goal form. `?label` (glued) is unclaimed syntax today and remains a compatible future extension; nothing in this design needs it.
 
-## Syntax
+A goal's identity in reports is its source location — file, line, and column — the same coordinate every other diagnostic uses. Location is the label: it is unique by construction, requires no new grammar, no scoping rules, and no metadata-versus-identity distinction.
 
-The only written form is:
+`Subterm::Hole` remains desugar-only, and the printer's `?` spelling for both forms is unchanged.
 
-```text
-?label
-```
+## Batched goal reports
 
-The grammar is:
+The semantics is defined by equivalence: one successful elaboration reports exactly the set of written goals strict zonking would have encountered — all of them at once, instead of the first.
 
-```text
-goal  := "?" label
-label := non-keyword identifier
-```
+Collection runs after elaboration and its parked and deferred obligations complete, while the context is still available. It materializes committed solutions tolerantly over the whole module (`zonk_solved_term_metas` already recurses through solutions transitively and preserves `Goal`-origin metavariables by construction), then walks the result once, collecting `Goal`-origin metavariables in traversal order — items in order, then the entrypoint body — deduplicated by metavariable ID, the first occurrence's span winning. The order is deterministic by construction and follows source order in practice.
 
-The label is glued to `?`; whitespace is not permitted between them. It follows the ordinary single-identifier grammar and receives no goal-specific character restrictions.
+The outcome is one batched error — conceptually `Error::Goals(Vec<GoalReport>)` — carrying, per goal: the occurrence span, the frozen local scope in binding order, the expected type, and the optional solution.
 
-Examples:
+- `run` and `compile` continue rejecting every goal-bearing program; a batch is a complete report, not a compilation product.
+- A solved goal still reports: writing `?` requests the answer, and silently substituting it would erase the answer and let deliberately unfinished source compile.
+- Hard errors keep full precedence. An elaboration a hard failure interrupted established no complete batch, so nothing of one is reported.
 
-```text
-?elementType
-?step2
-?_proof
-```
+Each entry renders headed by its location (path, 1-based line and column, columns counting Unicode scalar values) with the ordinary caret snippet, followed by the existing turnstile idiom — hypotheses as `name : type` lines, `? : type` for the obligation, `? = term` when a solution landed. All names within one entry share the collision-aware pretty-name environment.
 
-Bare `?` is removed immediately rather than accepted through a warning period. Once the parser consumes `?`, it commits to the goal production and requires the glued label. Both `?` and `? label` produce a targeted parse diagnostic such as:
+## Tolerant, denoised display
 
-```text
-written goals require a label; write `?name`
-```
+Two independent fixes to how report terms are spelled:
 
-The surface representation is conceptually `Subterm::Goal(String)`. Its span covers the complete `?label` spelling, and the printer emits that spelling exactly.
+**Tolerant.** Scope, expected type, and solution render through the tolerant materializer instead of strict-zonk-or-original-term. Committed substitutions always appear; goal-origin and unsolved metavariables stay visible as neutral terms; one residual never discards unrelated progress.
 
-## Meaning of labels
+**Denoised.** A display-only rewrite runs before witness solutions are spliced, folding `Apply(Proj(w, index), [left, right])` back into the core `Infix` node when `w` is a witness metavariable whose origin's function is an operator symbol — the origin already carries everything needed, so the fold works for solved and unsolved witnesses alike and no anonymous witness name ever reaches the report. `!=` reverse-maps its `BoolXor` wrapping. The folded term is for observation only and never re-enters checking: core `Infix` is elaboration-transient, and here it only ever meets the printer. Non-operator witness projections keep their current spelling; naming them through their concepts is a possible follow-up, not scoped here.
 
-A label is required descriptive correlation metadata, not a semantic metavariable name.
+## The printing substrate
 
-- Every written occurrence mints its own metavariable.
-- Repeating a label does not share a metavariable or add an equality constraint.
-- Duplicate labels are legal, including within one declaration.
-- Consumers filtering by label must accept that the result can contain several goals.
-- Renaming a label changes report metadata but has no typing effect.
+The layout mechanism is the Wadler document algebra, adopted into the existing printer document in `curios-base`. The engine stays IR-agnostic; each IR's `print.rs` expresses its own layout rules by where it places groups and lines. That placement is the per-IR customization — no style traits, no configuration, no per-IR engines.
 
-Required labels make every probe intentional and give humans and tools an authored name to display. Requiring uniqueness would instead create a new namespace with scoping rules across local declarations, mutual groups, entrypoint tails, and multiple source roots. Source location and snapshot-local occurrence identity already disambiguate duplicates, so uniqueness is not part of this feature.
+- Two variants join the document: `Line` — a space (or nothing, or a mandatory break) when rendered flat, a newline plus indentation when broken — and `Group` — rendered flat when its flat spelling fits the remaining width, broken otherwise.
+- Width is the mode. Rendering at infinite width keeps every group flat and reproduces today's output byte-for-byte; a finite width yields adaptive layout. There is no separate compact/expanded switch.
+- The fits scan is iterative and materializing. It walks a group's document in flat spelling, counting characters against the remaining width, and stops at the first overflow or mandatory break. Forcing a `Deferred` to measure it replaces the node in place with the built document, so nothing is built twice and no `FnOnce` is lost; the scan never looks past one line width, so the extra materialization per decision is bounded.
+- A group containing a mandatory break never renders flat, because the scan fails on the break. Break propagation is derived at the decision point, never cached at build time.
+- The new variants join the iterative `Drop` dismantling, and every walk over the document — printing, measuring, freeing — stays iterative.
+- Goal reports render at fixed width 100. The pipeline is pure and stays terminal-blind; no width detection exists anywhere.
 
-Shared named metavariables would be a separate language feature with different typing and scoping obligations.
+Adoption is opportunistic and safe by construction: converting a printer (replacing a literal separator with a line inside a group) is output-neutral at infinite width, so the faithful `Display` paths and every test pinned to them are unchanged. The core term printer converts first, because it feeds diagnostics; the Ersd printer second, because its dumps currently render without line breaks; the remaining printers follow as need arises.
 
-## Surface holes remain structural
+## Comment capture
 
-Rejecting bare `?` means the surface printer must never use it to spell a silent inference hole.
+A formatter that reprints a parsed module must not delete comments, so capturing them is this design's one piece of parser work. Comments die in exactly one place — `parse_whitespace` — and the capture happens there:
 
-The parsed surface AST contains `Subterm::Goal(String)` for written goals. Omitted syntax remains structural metadata such as `LetSignature::Name { type_: None, .. }`; lowering turns that absence directly into an unmarked core metavariable. Desugarings that need inference placeholders likewise mint unmarked core metavariables directly.
+- `parse_whitespace` records each consumed comment's span in a per-parse side table; nothing else about parsing changes.
+- A captured comment is a bare `Span`. `Span` carries its `Rc<Source>`, so the comment text is a slice of text already held, never a copy.
+- The vehicle mirrors the packrat memo table's precedent: a thread-local map keyed by start offset, owned by `curios-text`, cleared at the start of each parse run, drained by the parse entry. `curios-base` is untouched.
+- Offset keying makes recording idempotent under backtracking, and memoized jumps are harmless: the cache-miss run already recorded what the replay skips.
+- The capture is sound because the whitespace parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
+- Comments surface as a parse product beside the module — conceptually `(Module, Vec<Span>)` — not as fields of the syntax tree. Structural equality, printing, lowering, and every existing test are untouched.
+- Attachment — deciding which comment leads, trails, or sits inside which node — is a formatter decision and out of scope. Any attachment policy is expressible over the span table later.
 
-The current desugaring-only `Subterm::Hole`, whose printer also emits `?`, is removed from the printable term language. This keeps the invariant that every printed surface term is valid source and that every source `?` begins a labeled written goal.
+## The formatter seam
 
-## Core representation
-
-Lowering turns each `Subterm::Goal(label)` into one fresh core metavariable with `MetavarOrigin::Goal { label }` and preserves the complete source span on its term occurrence.
-
-The label rides with the metavariable origin through rebuilding, but it does not create typing constraints or replace the uniquely minted metavariable ID as occurrence identity. Silent metavariables retain their existing origins or remain unmarked.
-
-## Registration at metavariable birth
-
-Written goals are registered when elaboration births their metavariables. The elaboration context is the authoritative collection point because its metavariable store already owns:
-
-- The metavariable ID.
-- The local telescope frozen at birth.
-- The expected type recorded at birth.
-- The optional solution committed later by unification.
-
-At the first birth of a goal metavariable, the context records a goal site containing its ID, label, complete source span, and deterministic registration order. Rebuilding the same metavariable is idempotent and must agree with the existing label and span.
-
-The goal registry is keyed by metavariable ID. It therefore deduplicates naturally, remains valid if elaboration rewrites the containing term, and avoids an exhaustive post-hoc traversal over module items, registry telescopes, the entrypoint body, and any future core structure that can contain terms.
-
-A goal that was parsed but never birthed because a hard failure stopped elaboration has no trustworthy scope or expected type and does not enter an incomplete batch.
-
-## Collection semantics
-
-Goal collection runs after elaboration and its ordinary parked and deferred obligations have completed successfully, while the context and metavariable store are still available. It runs before strict whole-program zonking.
-
-The front end has the conceptual control flow:
-
-```text
-elaborate and finish obligations
-  → hard failure: Error
-  → registered goals exist: Incomplete(Vec<GoalReport>)
-  → no registered goals: strict zonk
-      → success: Clean(CheckedProgram)
-      → failure: Error
-```
-
-Collection follows these rules:
-
-1. Read every registered written goal in deterministic registration order.
-2. Read its frozen scope, expected type, and optional solution from the metavariable store.
-3. Reify those report terms tolerantly, substituting useful solutions without demanding a meta-free result.
-4. Return `Incomplete` when at least one report exists and do not hand a module to erasure.
-5. Run the existing strict whole-program zonk path unchanged only when no written goals exist.
-
-Deterministic registration order follows deterministic elaboration order and never depends on hash-map iteration. An analysis consumer may reorder reports by its stable source identity and byte offset for source-oriented presentation, but it must use an explicit deterministic key.
-
-## Tolerant report reification
-
-Goal reports may legitimately mention unsolved metavariables, especially when a goal appeared in synthesis position or influenced surrounding inference. Strict zonk is therefore the wrong operation for report terms.
-
-The report reifier follows a separate policy:
-
-- Recursively substitute solved ordinary metavariables at the appropriate occurrence spine.
-- Preserve written-goal metavariables as visible neutral terms.
-- Preserve unsolved ordinary metavariables as visible neutral terms.
-- Preserve spans and binding relationships needed for later rendering.
-- Never discard all partial progress merely because one residual metavariable remains.
-
-The current best-effort pattern of attempting strict zonk and falling back to the entire original term is insufficient: one unresolved subterm can hide unrelated substitutions that elaboration successfully committed.
-
-Report reification is for observation only. It does not produce a checked term and cannot be passed to erasure.
-
-## Typed checking outcome
-
-Written goals are incomplete development state rather than ordinary compiler errors. The reusable checked front end returns a typed outcome conceptually equivalent to:
-
-```rust
-pub enum CheckOutcome {
-    Clean(CheckedProgram),
-    Incomplete(Vec<GoalReport>),
-}
-
-pub type CheckResult = Result<CheckOutcome, Error>;
-```
-
-`CheckedProgram` contains the strictly zonked, meta-free core module and entrypoint type needed by later compilation stages. `Incomplete` contains no checked program.
-
-This separation gives each state one meaning:
-
-- `clean`: elaboration and strict zonking completed with no written goals or hard errors.
-- `incomplete`: elaboration completed and at least one written goal was registered, but strict zonking was deliberately not attempted.
-- `error`: a hard failure prevented either clean checking or a completed goal-only result.
-
-Consumers must inspect the typed outcome rather than infer incompleteness from an error string or special-case `Error::Goal`.
-
-## Goal report
-
-The compiler-core report contains only facts owned by elaboration:
-
-```text
-GoalReport
-  internal metavar ID
-  label
-  source span
-  frozen scope in binding order
-  expected type
-  optional solution
-```
-
-The metavariable ID is an internal correlation key for the duration of the check. It is not a public stable identifier and need not survive conversion into an analysis response.
-
-`solution` is absent precisely when elaboration committed no solution for the written-goal metavariable. A residual metavariable inside a present solution does not make the solution absent; the tolerant reifier preserves that residual structure.
-
-All scope names and displayed terms in one human report share a collision-aware pretty-name environment so a binder is spelled consistently throughout its scope, expected type, and solution.
-
-One possible human rendering is:
-
-```text
-goal `?step`
-  xs : Lst(A)
-  ?step : Nat
-  ?step = Lst/len(xs)
-```
-
-Each report retains its own source snippet. A batch renderer prints every report rather than returning after the first.
-
-## Solved goals remain incomplete
-
-A written goal is a request for information, not an ordinary inference hole. Even if elaboration determines a unique solution, its report remains present and the program remains incomplete until the written goal is removed or replaced.
-
-This supports using a goal as an explicit query:
-
-```text
-?elementType : Type
-?elementType = Nat
-```
-
-Silently substituting a solved written goal would erase the answer the author requested and allow deliberately unfinished source to compile.
-
-## Error precedence and deferred validation
-
-Parsing, loading, resolution, lowering, elaboration, witness resolution, conversion, and final parked-obligation failures remain fail-fast. A hard error takes precedence over any written goals registered before it because the interrupted elaboration did not establish a complete goal batch.
-
-When elaboration succeeds and goals exist, strict zonking is deferred. A written goal in synthesis position can leave metavariables in its expected type or surrounding inferred structure; blindly suppressing only the goal node can misreport those dependencies as unrelated `CannotInfer` errors.
-
-This means a genuinely unrelated residual inference error that only strict zonking would discover can remain hidden until the written goals are filled. Distinguishing independent residual errors from goal-dependent ones would require metavariable dependency provenance or a more general recovery system. That validation is intentionally deferred rather than approximated unsoundly.
-
-## Compilation integration
-
-`curios-pipeline` requests a `CheckOutcome` from the reusable front end.
-
-- `Clean(CheckedProgram)` continues through erasure, Ersd, continuations, and wasm.
-- `Incomplete(reports)` formats the complete report batch and stops before erasure.
-- `Error` follows the existing hard-error path.
-
-`run` and `compile` therefore continue rejecting every program containing a written goal, but they report all reached goals instead of only the first.
-
-A dedicated typecheck-only CLI command is not required by this design. It can later consume the same outcome without changing goal semantics.
-
-## `wonder` integration
-
-The compiler converts core reports into durable, transport-neutral diagnostics before dropping the elaboration context. The analysis layer then adds facts it owns:
-
-- Snapshot-local public goal IDs.
-- Stable source identities and byte ranges within the snapshot.
-- Enclosing source-item and semantic-symbol ownership when available.
-- Display and canonical term renderings.
-- JSON schema fields and pagination behavior.
-
-The label is always a string in a valid written-goal diagnostic; it is never `null`. It remains metadata rather than identity, so a label filter may return several reports.
-
-A `wonder` analysis reports goal diagnostics with kind `goal`, severity `incomplete`, and the analysis status `incomplete`. Query transport still succeeds when the analyzed program is incomplete.
-
-Goal IDs and source ranges are snapshot-local. After an edit, a consumer reruns analysis rather than assuming the same label denotes the same scope, expected type, or occurrence.
-
-## Untouched inference holes
-
-Silent inference placeholders remain distinct from written goals:
-
-- Omitted local annotations.
-- Inserted implicit arguments.
-- Inserted witness arguments.
-- Match motives and other compiler-generated placeholders.
-- Literal element types and similar inferred structure.
-
-They carry their existing provenance and are substituted silently when solved. When unsolved in a goal-free program, strict zonking produces the specific hard diagnostic associated with their origin, such as an uninferred implicit or missing witness. They never enter the written-goal registry merely because they are metavariables.
+The eventual formatter needs four things, and this design leaves each in a known state: expanded rendering (provided — finite-width printing over the surface printer, whose output round-trips already), comments (provided — the capture above), universal item source ranges (a separate substrate, deliberately unclaimed here), and trailing-comment re-emission in the `lineSuffix` style (future work, expressible over the algebra without changing it). Nothing in this specification obstructs any of the four.
 
 ## Non-goals
 
-This design does not add:
+- Labels (`?label`), shared named metavariables, and label uniqueness or scoping.
+- A typed incomplete checking outcome: goals remain an error, and `run`/`compile` reject them.
+- Program-analysis integration, tactics, or automatic replacement of solved goals.
+- `fill`, `conditionalGroup`, and any width-fitting refinement beyond greedy groups.
+- Build-time break-propagation caching and terminal-width detection.
+- Comment attachment policy and the formatter itself.
+- Witness-projection naming beyond the operator fold.
+- General multi-error recovery.
 
-- Shared named metavariables.
-- Label uniqueness or label scoping rules.
-- Tactics or interactive refinement commands.
-- Automatic replacement of a solved goal.
-- Public goal IDs stable across source edits.
-- General multi-error elaboration or parser recovery.
-- Proof that a goal-bearing program has no independent residual inference errors.
-- A dedicated typecheck-only CLI command.
-- Editor integration beyond the structured analysis report.
+## Relation to the analysis specification
 
-These capabilities can consume the typed outcome or goal reports later without changing the meaning of `?label`.
+[02_WONDER_SPEC.md](02_WONDER_SPEC.md) presumes required labeled goals and a non-null label field in its diagnostic schema. Both premises are superseded by this document; the analysis specification absorbs the location-is-the-label model whenever it is next revised.
 
 ## Tests
 
-The implementation is pinned at four levels:
-
-- Parser and printer tests for required labels, glued spelling, full-span preservation, keyword rejection, targeted rejection of `?` and `? label`, and round trips.
-- Lowering tests proving one fresh metavariable per occurrence, label threading, duplicate-label independence, direct lowering of structural omissions to silent metavariables, and the absence of a printable bare-hole term.
-- Core tests for birth-time registration, idempotent rebuilding, solved and unsolved reports, scope preservation, tolerant reification, deterministic ordering, complete batching, elaboration-error precedence, goal-dependent type metavariables, and deferred residual-hole errors.
-- Pipeline and analysis tests for clean, incomplete, and error outcomes; rejection before erasure; complete human batches; required non-null JSON labels; source ownership; and snapshot-local goal identity.
+- **Batching:** several goals report together in source order; solved and unsolved entries; a goal in synthesis position; a hard error preempting the batch; goals in the entrypoint tail; the per-entry location header.
+- **Display:** committed substitutions appear even when residuals remain; the operator fold for each operator form including `!=`; folding with an unsolved witness; non-operator projections unchanged.
+- **Printer:** grouped documents render identically to their ungrouped spelling at infinite width; fits boundaries (exactly fits, overflows by one); a mandatory break forces every enclosing group; the deep-document print and drop tests extended to the new variants; measurement forces each thunk at most once.
+- **Comment capture:** leading, trailing, and interior comments; backtracking-heavy positions record once; a comment-free parse yields an empty table; literals containing `--` record nothing.
 
 ## Milestones
 
-1. **Required labeled syntax.** Replace the written form with `?label`, remove bare `?`, keep structural omissions out of the printable term language, and thread labels and spans into core goal origins.
-2. **Complete typed outcome.** Register goals at metavariable birth, add tolerant report reification and structured `GoalReport`, return clean versus incomplete outcomes, and route compilation only through a clean checked program.
-3. **Analysis integration.** Convert reports into the shared diagnostic schema, assign snapshot-local IDs, correlate source ownership, and expose the complete batch through `wonder diagnostics`.
+Three independent tracks; the suggested landing order is A1, A2, B1, B2, B3, B4, C1.
 
-The first milestone is deliberately breaking: unlabeled written goals become parse errors immediately. The later milestones improve reporting and expose it to tools without adding tactics, recovery, or another goal language.
+- **A1 — Batched goal reports** (`curios-elab`, `curios-pipeline`): tolerant collection, the batched error, location-headed rendering.
+- **A2 — Operator denoise** (`curios-elab`): the display-only fold.
+- **B1 — Engine** (`curios-base`): `Line`, `Group`, the materializing fits scan, the width-parameterized entry.
+- **B2 — Core printer conversion** (`curios-core`): output-neutral at infinite width.
+- **B3 — Goal reports at width 100** (`curios-elab`).
+- **B4 — Ersd printer conversion** (`curios-ersd`): readable dumps.
+- **C1 — Comment capture** (`curios-text`): the side table and parse product.
+
+## Documentation
+
+Each fact lands at its narrowest authoritative home as its milestone lands: the algebra and scan invariants in the printer module's documentation beside the existing depth-and-drop rationale; the cross-cutting layout decision and its rejected alternatives (per-construct visitor formatting, penalty-based line breaking, refusing width limits, cached break propagation) in `DESIGN.md`; goal-report behavior in the owning module documentation and tests.
 
 ## Retirement criteria
 
-- Before this specification is deleted, written-goal syntax is recorded in `SYNTAX.md`, checking outcomes and report contracts are recorded in the owning text, core, pipeline, and analysis documentation and tests, remaining plans refer to the landed diagnostics API rather than this file, the roadmap subitem is a checked unlinked summary, and no reference to this filename remains.
+- Before this specification is deleted: goal-report behavior, the printing algebra, and comment capture are recorded in the owning crate and module documentation and tests; `DESIGN.md` records the layout decision; the roadmap subitem is a checked unlinked summary; the analysis specification no longer presumes labeled goals; and no reference to this filename remains.
