@@ -696,14 +696,17 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 ///
 /// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms.
 pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<GoalReport> {
-    let goals: Rc<RefCell<Vec<(MetaId, Option<Span>)>>> = Rc::new(RefCell::new(Vec::new()));
+    /// Collected goal sites in discovery order: each goal's id with its first occurrence's span, shared into the scan closures.
+    type GoalSites = Rc<RefCell<Vec<(MetaId, Option<Span>)>>>;
+
+    let goals: GoalSites = Rc::new(RefCell::new(Vec::new()));
     let seen_goals = Rc::new(RefCell::new(BTreeSet::new()));
     // Append-only discovery log of ordinary metavariables, drained below by index so solution scans that append more keep a stable order.
     let referenced: Rc<RefCell<Vec<MetaId>>> = Rc::new(RefCell::new(Vec::new()));
 
     fn scan<B: Bound>(
         value: &B,
-        goals: &Rc<RefCell<Vec<(MetaId, Option<Span>)>>>,
+        goals: &GoalSites,
         seen_goals: &Rc<RefCell<BTreeSet<MetaId>>>,
         referenced: &Rc<RefCell<Vec<MetaId>>>,
     ) {
