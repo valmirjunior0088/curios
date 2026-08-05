@@ -695,8 +695,8 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 ///
 /// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 ///
-/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it.
-pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<GoalReport> {
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_local_fits`](super::suggest_local_fits)), displayed through the same pipeline.
+pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Vec<GoalReport> {
     /// Collected goal sites in discovery order: each goal's id with its first occurrence's span, shared into the scan closures.
     type GoalSites = Rc<RefCell<Vec<(MetaId, Option<Span>)>>>;
 
@@ -781,18 +781,37 @@ pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<Go
         }
     }
 
+    // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
+    let goal_sites: Vec<(MetaId, Option<Span>)> = goals.borrow().clone();
+    context.restore_budget();
+    let mut all_candidates: Vec<Vec<Term>> = Vec::with_capacity(goal_sites.len());
+    for (id, _) in &goal_sites {
+        if context.metavar_solution(*id).is_some() {
+            all_candidates.push(Vec::new());
+            continue;
+        }
+        let (telescope, result) = {
+            let entry = context
+                .metavar_entry(*id)
+                .expect("a collected goal has a birth entry");
+            (Rc::clone(&entry.telescope), entry.result.clone())
+        };
+        all_candidates.push(super::suggest_local_fits(context, &telescope, &result));
+    }
+
     // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, and the fold handles both.
     let operators = super::operator_witness_table(context);
+    let context = &*context;
     let display = |term: &Term| {
         super::denoise_for_display(
             &operators,
             &project_erased_universes(&zonk_solved_term_metas(context, term)),
         )
     };
-    let goals = goals.borrow();
-    goals
+    goal_sites
         .iter()
-        .map(|(id, span)| {
+        .zip(all_candidates)
+        .map(|((id, span), candidates)| {
             // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
             let entry = context
                 .metavar_entry(*id)
@@ -806,6 +825,7 @@ pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<Go
                     .collect(),
                 goal: display(&entry.result),
                 solution: context.metavar_solution(*id).map(display),
+                candidates: candidates.iter().map(display).collect(),
             }
         })
         .collect()

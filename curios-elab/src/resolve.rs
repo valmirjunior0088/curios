@@ -66,14 +66,18 @@ fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Vec<Le
         .map(|_| (name.clone(), universes.clone(), params.clone()))
 }
 
-enum Probe {
+pub(crate) enum Probe {
     Yes,
     No,
     Undecided,
 }
 
-/// Whether `candidate` converts with `goal`, *without* committing: solutions the comparison lands are rolled back regardless of the verdict. Used to test every same-depth superclass projection before committing the unique match.
-fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
+/// Whether `candidate` converts with `goal`, *without* committing: solutions the comparison lands are rolled back regardless of the verdict. Used to test every same-depth superclass projection before committing the unique match, and by the goal-suggestion pass to test scope binders against a goal type.
+pub(crate) fn probe_match(
+    context: &mut Context,
+    candidate: &Term,
+    goal: &Term,
+) -> Result<Probe, Error> {
     let mark = context.solution_mark();
     let outcome =
         convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {

@@ -292,6 +292,95 @@ fn goal_types_spell_operators_as_infix_not_witness_projections() {
 }
 
 #[test]
+fn a_computed_equality_goal_suggests_refl() {
+    // The motivating base case: `? : Eq(0 + 0, 0 * 2)` — the indices unify through reduction, so the report suggests the complete candidate. The step case's indices are distinct stuck terms, so `refl` is filtered there and the step goal gets no constructor suggestion.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let double(n : Nat) -> Nat = n + n;
+        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
+            match n : (m) => Eq(m + m, m * 2)
+            | 0 => ?
+            | p + 1; ih => ?
+            end;
+        double(21)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} Eq/refl()"),
+        "unexpected error: {error}"
+    );
+    // The step case gets no suggestion: its sides are distinct stuck terms, so `refl` fails index validation there.
+    assert_eq!(
+        error.matches('\u{2248}').count(),
+        1,
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn impossible_constructors_are_not_suggested() {
+    // At `Vec(Nat, 0)` inversion refutes `cons` (a successor target clashes with `0`) and admits `nil` completely.
+    let source = r#"
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> Type
+        | nil() : (0)
+        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+        end
+        let v : Vec(Nat, 0) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} /Vec/nil()"),
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains("cons"), "unexpected error: {error}");
+}
+
+#[test]
+fn a_scope_binder_fitting_the_goal_is_suggested() {
+    let source = r#"
+        use /std/{Nat};
+        let f(x : Nat) -> Nat = ?;
+        f(1)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("? \u{2248} x"), "unexpected error: {error}");
+}
+
+#[test]
+fn a_solved_goal_gets_no_suggestions() {
+    // A suggestion beside a `? =` answer is noise; solved goals carry none.
+    let source = r#"
+        let id(A : Type, a : A) -> A = a;
+        id(?, 5)
+    "#;
+
+    let error = compile(source, None).unwrap_err();
+
+    assert!(error.contains("? ="), "unexpected error: {error}");
+    assert!(!error.contains('\u{2248}'), "unexpected error: {error}");
+}
+
+#[test]
+fn a_suggested_complete_candidate_compiles_when_pasted() {
+    // The paste-and-recheck contract: the candidate suggested for the fixture in `a_computed_equality_goal_suggests_refl`'s base shape compiles.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let claim : Eq(1 + 2, 3) = Eq/refl();
+        0
+    "#;
+
+    assert!(compile(source, Some("/std/Nat")).is_ok());
+}
+
+#[test]
 fn goal_reports_spell_no_universe_instances() {
     // A goal under a match motive over a universe-polymorphic family used to report `Eq.{?u311}(…)` — an instance spelling the surface language does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
     let source = r#"

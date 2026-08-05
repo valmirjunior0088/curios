@@ -16,6 +16,8 @@ pub struct GoalReport {
     pub scope: Vec<(Term, Term)>,
     pub goal: Term,
     pub solution: Option<Term>,
+    /// Sandboxed candidate fits for an unsolved goal, display-ready and rendered as `? ≈` lines; empty for a solved goal. Observation-only: the compiler re-checks whatever the author pastes.
+    pub candidates: Vec<Term>,
 }
 
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
@@ -968,6 +970,7 @@ impl Error {
                     }
                     out.push(&report.goal);
                     out.extend(report.solution.as_ref());
+                    out.extend(&report.candidates);
                 }
             }
             Self::AmbiguousWitness {
@@ -1396,6 +1399,9 @@ impl fmt::Display for Error {
                     write!(f, "\n  ? : {}", clause(&report.goal))?;
                     if let Some(solution) = &report.solution {
                         write!(f, "\n  ? = {}", clause(solution))?;
+                    }
+                    for candidate in &report.candidates {
+                        write!(f, "\n  ? \u{2248} {}", clause(candidate))?;
                     }
                     if let Some(span) = &report.span {
                         write!(f, "\n\n{}", span.render_snippet())?;

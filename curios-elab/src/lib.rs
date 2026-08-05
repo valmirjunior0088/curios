@@ -44,6 +44,9 @@ pub(crate) use typing::*;
 mod resolve;
 pub(crate) use resolve::*;
 
+mod suggest;
+pub(crate) use suggest::*;
+
 mod elaborate;
 pub use elaborate::*;
 
