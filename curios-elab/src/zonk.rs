@@ -2,8 +2,8 @@
 mod tests;
 
 use {
-    super::{Context, Error, UniverseSolver, universe_context_validate},
-    curios_base::Grain,
+    super::{Context, Error, GoalReport, UniverseSolver, universe_context_validate},
+    curios_base::{Grain, Span},
     curios_core::{
         Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
         FuncType, Global, InductDecl, InductParam, InductType, Item, Let, LetBinding, Level,
@@ -688,6 +688,116 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
         type_,
         body,
     })
+}
+
+/// Collect every written goal one successful elaboration reached — the same set strict zonking would meet — as display-ready reports.
+///
+/// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
+///
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms.
+pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<GoalReport> {
+    let goals: Rc<RefCell<Vec<(MetaId, Option<Span>)>>> = Rc::new(RefCell::new(Vec::new()));
+    let seen_goals = Rc::new(RefCell::new(BTreeSet::new()));
+    // Append-only discovery log of ordinary metavariables, drained below by index so solution scans that append more keep a stable order.
+    let referenced: Rc<RefCell<Vec<MetaId>>> = Rc::new(RefCell::new(Vec::new()));
+
+    fn scan<B: Bound>(
+        value: &B,
+        goals: &Rc<RefCell<Vec<(MetaId, Option<Span>)>>>,
+        seen_goals: &Rc<RefCell<BTreeSet<MetaId>>>,
+        referenced: &Rc<RefCell<Vec<MetaId>>>,
+    ) {
+        let goals = Rc::clone(goals);
+        let seen_goals = Rc::clone(seen_goals);
+        let referenced = Rc::clone(referenced);
+        let mut visit = Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term| {
+                if let Subterm::Metavar(Metavar { id, origin, .. }) = &**term {
+                    match origin {
+                        Some(MetavarOrigin::Goal) => {
+                            if seen_goals.borrow_mut().insert(*id) {
+                                goals.borrow_mut().push((*id, term.span()));
+                            }
+                        }
+                        _ => referenced.borrow_mut().push(*id),
+                    }
+                }
+                None
+            }),
+        );
+        let _: B = value.traverse(&mut visit);
+    }
+
+    let mut scan_definition = |def: &Definition| {
+        scan(&def.type_, &goals, &seen_goals, &referenced);
+        scan(&def.body, &goals, &seen_goals, &referenced);
+    };
+    for item in &module.items {
+        match item {
+            Item::Let(def) => scan_definition(def),
+            Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
+        }
+    }
+    scan(&module.body, &goals, &seen_goals, &referenced);
+    if let Some(type_) = &module.type_ {
+        scan(type_, &goals, &seen_goals, &referenced);
+    }
+    for induct_decl in module.induct_decls.values() {
+        scan(&induct_decl.arity, &goals, &seen_goals, &referenced);
+        for (_, param) in &induct_decl.constructors {
+            scan(&param.telescope, &goals, &seen_goals, &referenced);
+        }
+        scan(&induct_decl.result_sort, &goals, &seen_goals, &referenced);
+    }
+    for struct_decl in module.struct_decls.values() {
+        scan(&struct_decl.arity, &goals, &seen_goals, &referenced);
+        scan(&struct_decl.result_sort, &goals, &seen_goals, &referenced);
+    }
+    for concept in module.concepts.values() {
+        scan(&concept.params, &goals, &seen_goals, &referenced);
+    }
+
+    let mut scanned = BTreeSet::new();
+    let mut index = 0;
+    loop {
+        let id = {
+            let referenced = referenced.borrow();
+            match referenced.get(index) {
+                Some(id) => *id,
+                None => break,
+            }
+        };
+        index += 1;
+        if !scanned.insert(id) {
+            continue;
+        }
+        if let Some(solution) = context.metavar_solution(id) {
+            scan(solution, &goals, &seen_goals, &referenced);
+        }
+    }
+
+    let display = |term: &Term| zonk_solved_term_metas(context, term);
+    let goals = goals.borrow();
+    goals
+        .iter()
+        .map(|(id, span)| {
+            // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
+            let entry = context
+                .metavar_entry(*id)
+                .expect("a collected goal has a birth entry");
+            GoalReport {
+                span: span.clone(),
+                scope: entry
+                    .telescope
+                    .iter()
+                    .map(|(name, type_)| (Term::free_var(name), display(type_)))
+                    .collect(),
+                goal: display(&entry.result),
+                solution: context.metavar_solution(*id).map(display),
+            }
+        })
+        .collect()
 }
 
 /// The report a written goal `?` errors out with: the local scope frozen at its birth, the goal's type, and the solution elaboration committed (if any) — each zonked for *display*, keeping the raw spelling where unsolved holes survive (the same tolerance the no-witness report uses).

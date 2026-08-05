@@ -60,7 +60,25 @@ impl Span {
         Self { source, start, end }
     }
 
-    /// Renders the span as a compiler diagnostic: a `--> path:line` header when the source is a file (omitted for inline sources), the 1-based-numbered source line containing the span's start, and a caret underline. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
+    /// The 1-based line and column of the span's start — the coordinate a diagnostic names a location by. Columns count Unicode scalar values on the line, matching the caret position in [`Span::render_snippet`].
+    pub fn line_column(&self) -> (usize, usize) {
+        let source = &self.source.text;
+
+        let line_start = source[..self.start]
+            .rfind('\n')
+            .map(|index| 1 + index)
+            .unwrap_or(0);
+
+        let line = 1 + source[..line_start]
+            .bytes()
+            .filter(|&byte| byte == b'\n')
+            .count();
+        let column = 1 + source[line_start..self.start].chars().count();
+
+        (line, column)
+    }
+
+    /// Renders the span as a compiler diagnostic: a `--> path:line:column` header when the source is a file (omitted for inline sources), the 1-based-numbered source line containing the span's start, and a caret underline. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
     pub fn render_snippet(&self) -> String {
         let source = &self.source.text;
         let start = self.start;
@@ -76,10 +94,7 @@ impl Span {
             .map(|index| start + index)
             .unwrap_or(source.len());
 
-        let number = 1 + source[..line_start]
-            .bytes()
-            .filter(|&byte| byte == b'\n')
-            .count();
+        let (number, column) = self.line_column();
 
         let width = end.max(start.saturating_add(1)).min(line_end) - start;
         let caret = format!(
@@ -96,7 +111,7 @@ impl Span {
         );
 
         match &self.source.path {
-            Some(path) => format!("   --> {}:{number}\n{snippet}", path.display()),
+            Some(path) => format!("   --> {}:{number}:{column}\n{snippet}", path.display()),
             None => snippet,
         }
     }
@@ -117,5 +132,24 @@ impl Hash for Span {
         (Rc::as_ptr(&self.source) as usize).hash(state);
         self.start.hash(state);
         self.end.hash(state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_column_is_one_based_and_counts_scalars() {
+        let source = Source::inline("first\nsécond line\n");
+
+        // `l` of "line": line 2, after "sécond " — seven scalars in, so column 8 despite the two-byte `é`.
+        let offset = source.text.find("line").unwrap();
+        let span = Span::new(Rc::clone(&source), offset, offset + 4);
+        assert_eq!(span.line_column(), (2, 8));
+
+        // The very first byte.
+        let span = Span::new(source, 0, 1);
+        assert_eq!(span.line_column(), (1, 1));
     }
 }

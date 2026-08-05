@@ -2,10 +2,10 @@ use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
         check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, finish_deferred_witnesses, is_prop,
-        record_definition_totality, record_totality, recorded_totality, reduce_with,
-        register_witness, retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module,
-        zonk_solved_term_metas,
+        check_type_totality, check_written_type_totality, collect_goal_reports,
+        finish_deferred_witnesses, is_prop, record_definition_totality, record_totality,
+        recorded_totality, reduce_with, register_witness, retry_deferred_witnesses, sort_term,
+        zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     curios_cert::group_totality,
@@ -1161,6 +1161,12 @@ fn finalize_and_check(
         module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
     }
     let body_type = entry_terms.next().expect("entry body type was finalized");
+
+    // Written goals report as one complete batch before zonking: collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`collect_goal_reports`).
+    let goal_reports = collect_goal_reports(context, &module);
+    if !goal_reports.is_empty() {
+        return Err(Error::goals(goal_reports));
+    }
 
     let mut module = zonk_module(context, &module)?;
     let body_type = zonk(context, &body_type)?;

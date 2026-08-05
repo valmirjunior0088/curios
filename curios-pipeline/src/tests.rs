@@ -214,6 +214,84 @@ fn goal_in_synthesis_position_reports_a_meta_type() {
 }
 
 #[test]
+fn several_goals_report_together_in_declaration_order() {
+    // Two written goals in different declarations: one elaboration reports both — in declaration order — instead of stopping at the first.
+    let source = r#"
+        use /std/{Nat, Bool};
+        let m : Nat = ?;
+        let b : Bool = ?;
+        m
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert_eq!(
+        error.matches("goal `?`").count(),
+        2,
+        "unexpected error: {error}"
+    );
+    let nat = error.find("? : Nat").expect("the Nat goal is reported");
+    let bool_ = error.find("? : Bool").expect("the Bool goal is reported");
+    assert!(nat < bool_, "goals out of declaration order: {error}");
+}
+
+#[test]
+fn item_and_entrypoint_tail_goals_share_one_batch() {
+    // A goal in a declaration and a goal in the entrypoint tail: both land in the same report.
+    let source = r#"
+        use /std/{Nat};
+        let m : Nat = ?;
+        /std/Nat/add(m, ?)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert_eq!(
+        error.matches("goal `?`").count(),
+        2,
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn solved_and_unsolved_goals_share_one_batch() {
+    // An unconstrained goal and a solved one: the batch keeps each entry's own verdict — no solution line for the first, `? = Nat` for the second.
+    let source = r#"
+        use /std/{Nat};
+        let id(A : Type, a : A) -> A = a;
+        let m : Nat = ?;
+        id(?, 5)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert_eq!(
+        error.matches("goal `?`").count(),
+        2,
+        "unexpected error: {error}"
+    );
+    assert!(error.contains("? : Nat"), "unexpected error: {error}");
+    assert!(error.contains("? : Type"), "unexpected error: {error}");
+    assert!(error.contains("? ="), "unexpected error: {error}");
+}
+
+#[test]
+fn a_hard_error_preempts_the_goal_batch() {
+    // A goal already registered does not soften a later hard failure: the interrupted elaboration established no complete batch, so only the hard error reports.
+    let source = r#"
+        use /std/{Nat};
+        let m : Nat = ?;
+        let bad : Nat = true;
+        m
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+    assert!(!error.contains("goal `?`"), "unexpected error: {error}");
+}
+
+#[test]
 fn omitted_motive_mentioning_a_type_param_lowers() {
     // `pick` is polymorphic in `A`, and the `match c` omits its motive. The motive metavar is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards the zonk binder-realignment fix.
     let source = r#"

@@ -9,6 +9,15 @@ use {
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
 
+/// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`]; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
+#[derive(Debug)]
+pub struct GoalReport {
+    pub span: Option<Span>,
+    pub scope: Vec<(Term, Term)>,
+    pub goal: Term,
+    pub solution: Option<Term>,
+}
+
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
@@ -272,11 +281,15 @@ pub enum Error {
         binder: String,
     },
     /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently.
+    ///
+    /// The compile path batches goals via [`Error::Goals`] before zonk runs, so this single-goal form survives as the safety net for direct zonk callers.
     Goal {
         scope: Vec<(Term, Term)>,
         goal: Box<Term>,
         solution: Option<Box<Term>>,
     },
+    /// Every written goal `?` one elaboration reached, batched: collection replaces zonk's first-goal error on the compile path, so a program holding several goals reports them all in one run. Entries are deterministically ordered (items in declaration order, then the entrypoint tail) and each carries its own occurrence span rather than a shared `Located` wrapper — a goal's identity is its source location.
+    Goals(Vec<GoalReport>),
     /// Two witnesses registered under the same `(concept, key)` — global coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
         concept: String,
@@ -717,6 +730,10 @@ impl Error {
         }
     }
 
+    pub(crate) fn goals(reports: Vec<GoalReport>) -> Self {
+        Self::Goals(reports)
+    }
+
     pub(crate) fn duplicate_witness(
         concept: String,
         key: super::WitnessKey,
@@ -942,6 +959,16 @@ impl Error {
                 }
                 out.push(goal);
                 out.extend(solution.as_deref());
+            }
+            Self::Goals(reports) => {
+                for report in reports {
+                    for (name, type_) in &report.scope {
+                        out.push(name);
+                        out.push(type_);
+                    }
+                    out.push(&report.goal);
+                    out.extend(report.solution.as_ref());
+                }
             }
             Self::AmbiguousWitness {
                 goal,
@@ -1347,6 +1374,26 @@ impl fmt::Display for Error {
                     Some(solution) => write!(f, "\n  ? = {solution}"),
                     None => Ok(()),
                 }
+            }
+            Error::Goals(reports) => {
+                // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `render` orders a `Located` diagnostic. Entries are separated by a blank line.
+                for (index, report) in reports.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, "\n\n")?;
+                    }
+                    write!(f, "goal `?`")?;
+                    for (name, type_) in &report.scope {
+                        write!(f, "\n  {name} : {type_}")?;
+                    }
+                    write!(f, "\n  ? : {}", report.goal)?;
+                    if let Some(solution) = &report.solution {
+                        write!(f, "\n  ? = {solution}")?;
+                    }
+                    if let Some(span) = &report.span {
+                        write!(f, "\n\n{}", span.render_snippet())?;
+                    }
+                }
+                Ok(())
             }
             Error::DuplicateWitness {
                 concept,
