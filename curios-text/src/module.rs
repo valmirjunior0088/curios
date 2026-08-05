@@ -3,7 +3,7 @@ use {
         FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, Subterm, Term,
         TupleTypeParam, print_module_items, print_term,
     },
-    crate::parse::{parse_term, parse_top_item, parse_whitespace},
+    crate::parse::{clear_comments, parse_term, parse_top_item, parse_whitespace, take_comments},
     curios_abi::WireSignature,
     curios_base::{
         Plicity, Source, Span,
@@ -202,13 +202,20 @@ pub struct Module {
 
 impl Module {
     pub(crate) fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
-        run_parser(
+        Self::parse_with_comments(source).map(|(module, _)| module)
+    }
+
+    /// [`Module::parse`] (by way of `FromStr`), additionally returning every comment the parse consumed — spans into `source`, ascending — the parse product a formatter needs to reprint a file without deleting its comments. Comments are not syntax: they live beside the module, never in it, so the parsed module is identical either way and nothing downstream changes.
+    pub fn parse_with_comments(source: &Rc<Source>) -> Result<(Self, Vec<Span>), ParserError> {
+        clear_comments();
+        let module = run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
                 .and_drop(take_eof())
                 .map(|items| Module { items }),
             source,
-        )
+        )?;
+        Ok((module, take_comments()))
     }
 
     /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/syn` and `/std`; ordinary compilation reaches file-backed modules through [`RootSource`](crate::RootSource).
@@ -265,14 +272,21 @@ impl Entrypoint {
 
 impl Entrypoint {
     fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
-        run_parser(
+        Self::parse_with_comments(source).map(|(entrypoint, _)| entrypoint)
+    }
+
+    /// The entrypoint counterpart of [`Module::parse_with_comments`]: parse plus every consumed comment as spans into `source`, ascending.
+    pub fn parse_with_comments(source: &Rc<Source>) -> Result<(Self, Vec<Span>), ParserError> {
+        clear_comments();
+        let entrypoint = run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
                 .and(lazy(parse_term))
                 .and_drop(take_eof())
                 .map(|(items, tail)| Entrypoint::new(items, tail)),
             source,
-        )
+        )?;
+        Ok((entrypoint, take_comments()))
     }
 
     /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.

@@ -2399,3 +2399,57 @@ fn lone_comma_is_not_an_empty_list() {
     assert!("(,) => x".parse::<Term>().is_err());
     assert!("use /std/{,};".parse::<Module>().is_err());
 }
+
+/// The captured comment texts of one parse, in offset order.
+fn comments_of(source: &str) -> Vec<String> {
+    let source = curios_base::Source::inline(source);
+    let (_, comments) = Module::parse_with_comments(&source).expect("fixture parses");
+    comments
+        .iter()
+        .map(|span| span.source.text[span.start..span.end].to_string())
+        .collect()
+}
+
+#[test]
+fn comments_are_captured_as_a_parse_product() {
+    // Leading, interior, and trailing comments all record, in offset order, each spanning `--` through end of line.
+    let source = "-- leading\nlet x : Nat = ( -- interior\n    5\n); -- trailing\n";
+    assert_eq!(
+        comments_of(source),
+        ["-- leading", "-- interior", "-- trailing"]
+    );
+}
+
+#[test]
+fn a_comment_free_parse_yields_no_comments() {
+    assert_eq!(comments_of("let x : Nat = 5;"), Vec::<String>::new());
+}
+
+#[test]
+fn a_literal_containing_dashes_records_nothing() {
+    // `--` inside a string literal is content, not a comment: the whitespace parser never runs inside a literal's interior.
+    assert_eq!(
+        comments_of(r#"let s : Str = "a -- b";"#),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn backtracked_positions_record_a_comment_once() {
+    // A parenthesized position is probed by several alternatives (dependent function type, plain parens, lambda); offset keying keeps the comment recorded once however many probes consume it.
+    assert_eq!(
+        comments_of("let x : Nat = ( -- probed\n    5\n);"),
+        ["-- probed"]
+    );
+}
+
+#[test]
+fn entrypoint_parses_capture_tail_comments() {
+    let source = curios_base::Source::inline("let x : Nat = 5; -- item\nx -- tail\n");
+    let (_, comments) = Entrypoint::parse_with_comments(&source).expect("fixture parses");
+    let texts = comments
+        .iter()
+        .map(|span| span.source.text[span.start..span.end].to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["-- item", "-- tail"]);
+}

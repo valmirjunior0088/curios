@@ -33,7 +33,7 @@ use {
     },
     curios_abi::{WireLeaf, WireSignature, WireType},
     curios_base::{
-        Flt, Grain, NumOp, Plicity, Qualifier,
+        Flt, Grain, NumOp, Plicity, Qualifier, Span,
         parser::{
             Parser, catch, fail, lazy, many0, many1, mark, memoize, not_ahead, preceded_by_space,
             pure, sep_by0_trailing, sep_by1, sep_by1_trailing, spanned, take_exact, take_n,
@@ -42,7 +42,7 @@ use {
     },
     num_bigint::BigUint,
     num_traits::{ToPrimitive, Zero},
-    std::iter,
+    std::{cell::RefCell, collections::BTreeMap, iter},
 };
 
 const CHARACTERS: &[char] = &['_'];
@@ -52,12 +52,35 @@ const KEYWORDS: &[&str] = &[
     "struct", "foreign",
 ];
 
+thread_local! {
+    /// Every comment the current parse run has consumed, keyed by start offset — recorded by [`parse_whitespace`], the single place comments die, and drained by the `parse_with_comments` entries. The packrat-memo pattern: per-thread and cleared per run, so runs never see each other's comments. Offset keying makes re-recording under backtracking idempotent, and memoized jumps that skip re-running whitespace are harmless because the cache-miss run already recorded.
+    static COMMENTS: RefCell<BTreeMap<usize, Span>> = RefCell::new(BTreeMap::new());
+}
+
+fn record_comment(span: Span) {
+    COMMENTS.with(|comments| comments.borrow_mut().insert(span.start, span));
+}
+
+pub(crate) fn clear_comments() {
+    COMMENTS.with(|comments| comments.borrow_mut().clear());
+}
+
+/// The recorded comments in ascending offset order, leaving the table empty.
+pub(crate) fn take_comments() -> Vec<Span> {
+    COMMENTS.with(|comments| {
+        std::mem::take(&mut *comments.borrow_mut())
+            .into_values()
+            .collect()
+    })
+}
+
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
     take_while(|char| char.is_whitespace())
         .and(
             catch(
-                take_exact("--")
-                    .and_keep(take_while(|char| char != '\n'))
+                // The span covers `--` through the end of the line, newline excluded. Recording is sound here because this parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
+                spanned(take_exact("--").and_keep(take_while(|char| char != '\n')))
+                    .map(|(span, _)| record_comment(span))
                     .and_keep(lazy(parse_whitespace)),
             )
             .or(pure(())),
