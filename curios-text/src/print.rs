@@ -629,8 +629,7 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
         | Subterm::Match(_)
         | Subterm::Choose(_)
         | Subterm::FuncType(_)
-        | Subterm::Func(_)
-        | Subterm::Effects(_) => true,
+        | Subterm::Func(_) => true,
         _ => false,
     };
     match parenthesized {

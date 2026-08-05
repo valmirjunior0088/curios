@@ -12,22 +12,26 @@ pub induct Error : pub Type
 | other(Nat)
 end
 
-let errors : Lst({Nat, Error}) =
+let errors : Lst({ Nat, Error }) =
     [
         (/sys/Status/not_found, Error/not_found()),
         (/sys/Status/permission_denied, Error/permission_denied()),
         (/sys/Status/exists, Error/exists()),
         (/sys/Status/refused, Error/refused()),
         (/sys/Status/tls, Error/tls()),
-        (/sys/Status/would_block, Error/would_block())
+        (/sys/Status/would_block, Error/would_block()),
     ];
 
 pub let error_of(status : Nat) -> Error =
-    Lst/fold(errors, Error/other(status), (entry, acc) =>
-        match status == entry.0
-        | true => entry.1
-        | false => acc
-        end);
+    Lst/fold(
+        errors,
+        Error/other(status),
+        (entry, acc) =>
+            match status == entry.0
+            | true => entry.1
+            | false => acc
+            end,
+    );
 
 pub induct Read : pub Type
 | chunk(Bytes)

@@ -1,7 +1,7 @@
 use /std/{Str};
 
 pub concept Show(A : Type) : pub Type {
-    show(A) -> Str
+    show(A) -> Str,
 }
 
 pub use Show/*;

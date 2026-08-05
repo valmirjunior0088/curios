@@ -7,19 +7,28 @@ end
 
 pub use Result/*;
 
-pub let map_success(@A : Type, @B : Type, @E : Type, r : Result(A, E), f : (A) -> B) -> Result(B, E) =
+pub let map_success(@A : Type, @B : Type, @E : Type, r : Result(A, E), f : (A) -> B) -> Result(
+    B,
+    E,
+) =
     match r
     | success(a) => Result/success(f(a))
     | failure(e) => Result/failure(e)
     end;
 
-pub let map_failure(@A : Type, @E : Type, @F : Type, r : Result(A, E), f : (E) -> F) -> Result(A, F) =
+pub let map_failure(@A : Type, @E : Type, @F : Type, r : Result(A, E), f : (E) -> F) -> Result(
+    A,
+    F,
+) =
     match r
     | success(a) => Result/success(a)
     | failure(e) => Result/failure(f(e))
     end;
 
-pub let bind(@A : Type, @B : Type, @E : Type, m : Result(A, E), f : (A) -> Result(B, E)) -> Result(B, E) =
+pub let bind(@A : Type, @B : Type, @E : Type, m : Result(A, E), f : (A) -> Result(B, E)) -> Result(
+    B,
+    E,
+) =
     match m
     | success(a) => f(a)
     | failure(e) => Result/failure(e)
@@ -54,5 +63,5 @@ satisfy (@A : Type, @E : Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
         match r
         | success(x) => Str/concat("success(", Str/concat(Show/show(x), ")"))
         | failure(e) => Str/concat("failure(", Str/concat(Show/show(e), ")"))
-        end
+        end,
 }

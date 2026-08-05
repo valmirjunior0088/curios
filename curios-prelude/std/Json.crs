@@ -6,7 +6,7 @@ pub induct Json : pub Type
 | num(Flt)
 | str(Str)
 | arr(Lst(Json))
-| obj(Lst({Str, Json}))
+| obj(Lst({ Str, Json }))
 end
 
 pub use Json/*;

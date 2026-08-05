@@ -9,33 +9,31 @@
 --   Finite floats honor at most nine significant decimal digits, accumulated exactly in `Nat`; further fraction digits are discarded and further integer digits shift the decimal exponent. Decimal exponents saturate at +/-2000 (binary32 overflows to infinity / underflows to zero well before that bound), and the significand is scaled by repeated binary32 multiplication — deterministic, not correctly rounded. `inf`, `nan`, and signed zero use explicit `Flt/of_le_bytes` bit patterns, never arithmetic; `-nan` maps to the single implementation-defined NaN encoding.
 --
 -- Product limits: integer range is the i31 envelope (narrower than TOML's recommended 64-bit support); finite floats are binary32 with the nine-digit, not-correctly-rounded conversion above; NaN payload and sign are implementation-defined. Calendar types are owned here because `/std/time` is monotonic-only; `offset_minutes` covers RFC 3339's -23:59 through +23:59, and `nanosecond` truncates (never rounds) past nine fractional digits.
-
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
 
 -- ===================== data model =====================
-
 pub struct Date : pub Type {
     year : Nat,
     month : Nat,
-    day : Nat
+    day : Nat,
 }
 
 pub struct Time : pub Type {
     hour : Nat,
     minute : Nat,
     second : Nat,
-    nanosecond : Nat
+    nanosecond : Nat,
 }
 
 pub struct OffsetDateTime : pub Type {
     date : Date,
     time : Time,
-    offset_minutes : Int
+    offset_minutes : Int,
 }
 
 pub struct LocalDateTime : pub Type {
     date : Date,
-    time : Time
+    time : Time,
 }
 
 pub induct Toml : pub Type
@@ -52,7 +50,6 @@ pub induct Toml : pub Type
 end
 
 pub use Toml/*;
-
 
 -- Construction state for the semantic fold. Declared here, not in `Build`, because `Decode` folds statements into a `Build` and reads its root map: the representation has to be transparent across this subtree, and nowhere else. A resolved path segment: `at` carries the array-of-tables element index the segment addresses, so repeated `[[a]]` elements have distinct side-table keys.
 induct Seg : Type
@@ -72,17 +69,24 @@ end
 struct Build : Type {
     root : Map(Toml),
     side : Map(State),
-    scope : Lst(Seg)
+    scope : Lst(Seg),
 }
 
 -- Every stage below is private: the scanners, escape tables, numeric ladders and table-construction rules are implementation, visible throughout this subtree and nowhere else. Only the two entry points are re-exported.
 mod calendar;
+
 mod build;
+
 mod scan;
+
 mod strings;
+
 mod keys;
+
 mod numbers;
+
 mod datetime;
+
 mod values;
 
 mod decode;

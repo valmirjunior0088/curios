@@ -20,9 +20,23 @@ pub let fold(@T : Type, @A : Type, l : Lst(T), init : A, f : (T, A) -> A) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
-            go(kp, i + 1,
-                f(at(l, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)))), acc),
-                inv)
+            go(
+                kp,
+                i + 1,
+                f(
+                    at(
+                        l,
+                        i,
+                        Eq/subst(
+                            (x) => Nat/Lt(i, x),
+                            inv,
+                            Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)),
+                        ),
+                    ),
+                    acc,
+                ),
+                inv,
+            )
         end;
     go(n, 0, init, Eq/refl());
 
@@ -55,11 +69,10 @@ pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (
     go(0, n);
 
 satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
-    show(l) =
-        Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]"))
+    show(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]")),
 }
 
 satisfy Monad(Lst) {
     pure(x) = [x],
-    bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)])
+    bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }

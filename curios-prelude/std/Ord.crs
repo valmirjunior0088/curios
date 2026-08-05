@@ -2,7 +2,7 @@ use /std/{Order, Eql};
 
 pub concept Ord(A : Type) : pub Type {
     use Eql(A),
-    cmp(A, A) -> Order
+    cmp(A, A) -> Order,
 }
 
 pub use Ord/*;

@@ -1,5 +1,4 @@
 -- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a transparent record pairing an LSB-first `Bits` rep with a `Canonical` proof that the rep is trimmed (no redundant high zero bit), so equality is decided at the `.rep` level and the certificate erases away. `View` (zero / succ low tail) is the structural accessor consumers and single-operand recursions go through; two-operand ops match `.rep` directly, build a raw untrimmed result, and route it through `of_bits` — a single `trim` — at the public boundary.
-
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
@@ -36,7 +35,10 @@ pub rec trim(rep : Bits) -> Bits =
     | b[head, ..tail]; ih => combine(head, ih)
     end;
 
-rec combine_is_trimmed(head : Bool, t : Bits, p : Eq(is_trimmed(t), true)) -> Eq(is_trimmed(combine(head, t)), true) =
+rec combine_is_trimmed(head : Bool, t : Bits, p : Eq(is_trimmed(t), true)) -> Eq(
+    is_trimmed(combine(head, t)),
+    true,
+) =
     match t : (u) => Eq(is_trimmed(combine(head, u)), true)
     | b[] =>
         match head : (h) => Eq(is_trimmed(combine(h, b[])), true)
@@ -53,14 +55,22 @@ pub rec trim_is_trimmed(rep : Bits) -> Eq(is_trimmed(trim(rep)), true) =
     end;
 
 let canonical_of_is_trimmed(rep : Bits, p : Eq(is_trimmed(rep), true)) -> Canonical(rep) =
-    Eq/subst((b : Bool) => match b : (_) => Prop | true => True | false => False end, Eq/sym(p), True/qed());
+    Eq/subst(
+        (b : Bool) =>
+            match b : (_) => Prop
+            | true => True
+            | false => False
+            end,
+        Eq/sym(p),
+        True/qed(),
+    );
 
 let canonical_of_trim(rep : Bits) -> Canonical(trim(rep)) =
     canonical_of_is_trimmed(trim(rep), trim_is_trimmed(rep));
 
 pub struct BigNat : pub Type {
     rep : Bits,
-    canonical : Canonical(rep)
+    canonical : Canonical(rep),
 }
 
 pub let of_bits(rep : Bits) -> BigNat =
@@ -71,8 +81,10 @@ pub induct View : pub Type
 | succ(low : Bool, tail : BigNat)
 end
 
-let tail_is_trimmed(head : Bool, tail : Bits, p : Eq(is_trimmed(b[head, ..tail]), true))
-    -> Eq(is_trimmed(tail), true) =
+let tail_is_trimmed(head : Bool, tail : Bits, p : Eq(is_trimmed(b[head, ..tail]), true)) -> Eq(
+    is_trimmed(tail),
+    true,
+) =
     match tail : (t) => Eq(is_trimmed(t), true)
     | b[] => Eq/refl()
     | b[_, .._] => p
@@ -91,14 +103,20 @@ pub let view(a : BigNat) -> View =
     match a.rep
     | b[] => View/zero()
     | b[head, ..tail] =>
-        View/succ(head, of_trimmed_bits(tail,
-            tail_is_trimmed(head, tail, is_trimmed_of_canonical(a.rep, a.canonical))))
+        View/succ(
+            head,
+            of_trimmed_bits(
+                tail,
+                tail_is_trimmed(head, tail, is_trimmed_of_canonical(a.rep, a.canonical)),
+            ),
+        )
     end;
 
 let refl_at(@A : Type, x : A) -> Eq(x, x) =
     Eq/refl();
 
-pub let zero : BigNat = of_bits(b[]);
+pub let zero : BigNat =
+    of_bits(b[]);
 
 pub let is_zero(a : BigNat) -> Bool =
     match view(a)
@@ -126,23 +144,55 @@ pub rec of_nat(n : Nat) -> BigNat =
 
 pub let xor3(a : Bool, b : Bool, c : Bool) -> Bool =
     match a
-    | true => match b | true => c | false => match c | true => false | false => true end end
-    | false => match b | true => match c | true => false | false => true end | false => c end
+    | true =>
+        match b
+        | true => c
+        | false =>
+            match c
+            | true => false
+            | false => true
+            end
+        end
+    | false =>
+        match b
+        | true =>
+            match c
+            | true => false
+            | false => true
+            end
+        | false => c
+        end
     end;
 
 pub let maj3(a : Bool, b : Bool, c : Bool) -> Bool =
     match a
-    | true => match b | true => true | false => c end
-    | false => match b | true => c | false => false end
+    | true =>
+        match b
+        | true => true
+        | false => c
+        end
+    | false =>
+        match b
+        | true => c
+        | false => false
+        end
     end;
 
 pub let eq(a : BigNat, b : BigNat, p : Eq(a.rep, b.rep)) -> Eq(a, b) =
-    Eq/subst((r : Bits) => (c : Canonical(r)) -> Eq(a, BigNat { rep = r, canonical = c }),
-             p,
-             (c : Canonical(a.rep)) => Eq/refl())(b.canonical);
+    Eq/subst(
+        (r : Bits) => (c : Canonical(r)) -> Eq(a, BigNat { rep = r, canonical = c }),
+        p,
+        (c : Canonical(a.rep)) => Eq/refl(),
+    )(b.canonical);
 
-pub let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
-    -> Eq(b[h1, ..t1], b[h2, ..t2]) =
+pub let cong_cons2(
+    @h1 : Bool,
+    @h2 : Bool,
+    ph : Eq(h1, h2),
+    @t1 : Bits,
+    @t2 : Bits,
+    pt : Eq(t1, t2),
+) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
     match ph : (a, b, q) => Eq(b[a, ..t1], b[b, ..t2])
     | refl(@z) =>
         match pt : (a2, b2, q2) => Eq(b[h1, ..a2], b[h1, ..b2])
@@ -150,7 +200,10 @@ pub let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bi
         end
     end;
 
-pub let cong_combine(h : Bool, @s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
+pub let cong_combine(h : Bool, @s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(
+    combine(h, s),
+    combine(h, t),
+) =
     Eq/cong((w) => combine(h, w), p);
 
 let cong_of_bits(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(of_bits(s), of_bits(t)) =
@@ -171,14 +224,24 @@ let tail_of(x : Bits) -> Bits =
     | b[_, ..t] => t
     end;
 
-let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b[h1, ..t1], b[h2, ..t2]))
-    -> Eq(h1, h2) =
+let cons_inj_head(
+    @h1 : Bool,
+    @t1 : Bits,
+    @h2 : Bool,
+    @t2 : Bits,
+    p : Eq(b[h1, ..t1], b[h2, ..t2]),
+) -> Eq(h1, h2) =
     match p : (s, t, q) => Eq(head_of(s), head_of(t))
     | refl(@z) => Eq/refl()
     end;
 
-let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(b[h1, ..t1], b[h2, ..t2]))
-    -> Eq(t1, t2) =
+let cons_inj_tail(
+    @h1 : Bool,
+    @t1 : Bits,
+    @h2 : Bool,
+    @t2 : Bits,
+    p : Eq(b[h1, ..t1], b[h2, ..t2]),
+) -> Eq(t1, t2) =
     match p : (s, t, q) => Eq(tail_of(s), tail_of(t))
     | refl(@z) => Eq/refl()
     end;
@@ -192,8 +255,12 @@ let nonempty(x : Bits) -> Bool =
 let cong_is_trimmed(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(is_trimmed(s), is_trimmed(t)) =
     Eq/cong(is_trimmed, p);
 
-let is_trimmed_cons(head : Bool, u : Bits, pt : Eq(is_trimmed(u), true), pn : Eq(nonempty(u), true))
-    -> Eq(is_trimmed(b[head, ..u]), true) =
+let is_trimmed_cons(
+    head : Bool,
+    u : Bits,
+    pt : Eq(is_trimmed(u), true),
+    pn : Eq(nonempty(u), true),
+) -> Eq(is_trimmed(b[head, ..u]), true) =
     match u : (v) => Eq(is_trimmed(b[head, ..v]), true)
     | b[] => False/absurd(false_neq_true(pn))
     | b[_, .._] => pt
@@ -213,9 +280,7 @@ pub rec trim_of_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(trim(x), x)
         end
     end;
 
-
 -- Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the untrimmed `Bits` ladder it is built from.
-
 pub mod add;
 pub use add/{let add};
 

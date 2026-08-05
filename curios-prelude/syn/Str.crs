@@ -9,15 +9,31 @@ end
 pub let classify(c : Byte) -> Class =
     let n = Byte/to_nat(c);
     choose
-    | Nat/in_range(n, 0x00, 0x7F) => Class/ascii()
+    | Nat/in_range(n, 0x0, 0x7F) => Class/ascii()
     | Nat/in_range(n, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, n - 0xC0)
     | Nat/in_range(n, 0xE0, 0xEF) =>
-        let lo = choose | n == 0xE0 => 0xA0 | _ => 0x80 end;
-        let hi = choose | n == 0xED => 0x9F | _ => 0xBF end;
+        let lo =
+            choose
+            | n == 0xE0 => 0xA0
+            | _ => 0x80
+            end;
+        let hi =
+            choose
+            | n == 0xED => 0x9F
+            | _ => 0xBF
+            end;
         Class/lead(2, lo, hi, n - 0xE0)
     | Nat/in_range(n, 0xF0, 0xF4) =>
-        let lo = choose | n == 0xF0 => 0x90 | _ => 0x80 end;
-        let hi = choose | n == 0xF4 => 0x8F | _ => 0xBF end;
+        let lo =
+            choose
+            | n == 0xF0 => 0x90
+            | _ => 0x80
+            end;
+        let hi =
+            choose
+            | n == 0xF4 => 0x8F
+            | _ => 0xBF
+            end;
         Class/lead(3, lo, hi, n - 0xF0)
     | _ => Class/bad()
     end;
@@ -48,8 +64,7 @@ pub let step(c : Byte, s : Scan) -> Scan =
 
 pub induct Utf8 : (Scan, Bytes) -> pub Prop
 | stop() : (Scan/lead(), x[])
-| more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-    : (st, x[c, ..t])
+| more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(c, st), t)) : (st, x[c, ..t])
 end
 
 pub let Valid(b : Bytes) -> Prop =
@@ -67,27 +82,26 @@ pub rec scan_from(s : Scan, b : Bytes) -> Scan =
 -- A `Utf8` derivation is one `more` link per byte, so writing one out for a literal makes the *term* linear in the data — and everything that walks a term inherits that: elaboration, zonking, both erasure obligations, and the kernel's typing judgment. This says the same thing in constant size: `b` scans to `lead` iff it is valid, so a proof *by computation* stands in for the derivation, and the derivation is rebuilt by reduction only where some proof actually eliminates it.
 --
 -- The recursion is on `b` and not on a derivation, which is what keeps `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation — working untouched.
-pub rec of_scan_eq_from(s : Scan, b : Bytes, p : Eq(scan_from(s, b), Scan/lead()))
-    -> Utf8(s, b) =
+pub rec of_scan_eq_from(s : Scan, b : Bytes, p : Eq(scan_from(s, b), Scan/lead())) -> Utf8(s, b) =
     match b
-    -- `scan_from(s, x[])` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
-    | x[] => Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
-    -- `scan_from(s, x[h, ..t])` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
-    | x[h, ..t] => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
+    | x[] =>
+        -- `scan_from(s, x[])` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
+        Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
+    | x[h, ..t] =>
+        -- `scan_from(s, x[h, ..t])` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
+        Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
     end;
 
-pub let of_scan_eq(b : Bytes, p : Eq(scan_from(Scan/lead(), b), Scan/lead()))
-    -> Valid(b) =
+pub let of_scan_eq(b : Bytes, p : Eq(scan_from(Scan/lead(), b), Scan/lead())) -> Valid(b) =
     of_scan_eq_from(Scan/lead(), b, p);
 
 -- The reflexivity the lowerer hands to `of_scan_eq`.
 --
 -- Stated at `scan_from(lead, b)` on both sides so it is provable for *any* `b`; it converts to the proof `of_scan_eq` wants exactly when `b` scans to `lead`, which is where the computation happens. It lives in `/syn` because Rust lowering emits it, which is what `/syn` membership means.
-pub let refl_scan(b : Bytes)
-    -> Eq(scan_from(Scan/lead(), b), scan_from(Scan/lead(), b)) =
+pub let refl_scan(b : Bytes) -> Eq(scan_from(Scan/lead(), b), scan_from(Scan/lead(), b)) =
     Eq/refl();
 
 pub struct Str : pub Type {
     bytes : Bytes,
-    valid : Valid(bytes)
+    valid : Valid(bytes),
 }

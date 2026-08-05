@@ -1,5 +1,4 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
-
 use /std/{Bytes, Byte, Nat, Bool, Str, Lst, Option};
 
 induct Node(V : Type) : Type
@@ -9,19 +8,19 @@ end
 
 pub struct Map(V : Type) : Type {
     size : Nat,
-    root : Option(Node(V))
+    root : Option(Node(V)),
 }
 
 pub concept Key(K : Type) : pub Type {
-    to_bin(K) -> Bytes
+    to_bin(K) -> Bytes,
 }
 
 satisfy Key(Bytes) {
-    to_bin(b) = b
+    to_bin(b) = b,
 }
 
 satisfy Key(Str) {
-    to_bin = Str/to_bytes
+    to_bin = Str/to_bytes,
 }
 
 satisfy Key(Nat) {
@@ -31,7 +30,7 @@ satisfy Key(Nat) {
             | 0 => x[]
             | _ => x[..go(x / 256), Nat/to_byte(x % 256)]
             end;
-        go(n)
+        go(n),
 }
 
 let bit(k : Bytes, j : Nat) -> Nat =
@@ -62,7 +61,7 @@ let crit(a : Bytes, b : Bytes) -> Nat =
         end;
     bytes(0);
 
-rec lookup(@V : Type, t : Node(V), k : Bytes) -> {Bytes, V} =
+rec lookup(@V : Type, t : Node(V), k : Bytes) -> { Bytes, V } =
     match t
     | leaf(k0, v0) => (k0, v0)
     | fork(c, z, o) =>
@@ -179,7 +178,7 @@ pub let fold(@V : Type, @A : Type, m : Map(V), init : A, f : (Bytes, V, A) -> A)
         go(n, init)
     end;
 
-pub let entries(@V : Type, m : Map(V)) -> Lst({Bytes, V}) =
+pub let entries(@V : Type, m : Map(V)) -> Lst({ Bytes, V }) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
 pub let keys(@V : Type, m : Map(V)) -> Lst(Bytes) =
@@ -188,5 +187,5 @@ pub let keys(@V : Type, m : Map(V)) -> Lst(Bytes) =
 pub let values(@V : Type, m : Map(V)) -> Lst(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
-pub let of(@K : Type, @V : Type, use Key(K), l : Lst({K, V})) -> Map(V) =
+pub let of(@K : Type, @V : Type, use Key(K), l : Lst({ K, V })) -> Map(V) =
     Lst/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));

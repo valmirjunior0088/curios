@@ -42,10 +42,10 @@ satisfy (@A : Type, use Show(A)) => Show(Option(A)) {
         match m
         | some(x) => Str/concat("some(", Str/concat(Show/show(x), ")"))
         | none() => "none()"
-        end
+        end,
 }
 
 satisfy Monad(Option) {
     pure = some,
-    bind = bind
+    bind = bind,
 }

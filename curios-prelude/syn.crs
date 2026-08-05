@@ -1,43 +1,43 @@
 use /std/{Bool};
 
 pub concept Add(A : Type) : pub Type {
-    add(A, A) -> A
+    add(A, A) -> A,
 }
 
 pub concept Sub(A : Type) : pub Type {
-    sub(A, A) -> A
+    sub(A, A) -> A,
 }
 
 pub concept Mul(A : Type) : pub Type {
-    mul(A, A) -> A
+    mul(A, A) -> A,
 }
 
 pub concept Div(A : Type) : pub Type {
-    div(A, A) -> A
+    div(A, A) -> A,
 }
 
 pub concept Rem(A : Type) : pub Type {
-    rem(A, A) -> A
+    rem(A, A) -> A,
 }
 
 pub concept And(A : Type) : pub Type {
-    and(A, A) -> A
+    and(A, A) -> A,
 }
 
 pub concept Or(A : Type) : pub Type {
-    or(A, A) -> A
+    or(A, A) -> A,
 }
 
 pub concept Cmp(A : Type) : pub Type {
     lt(A, A) -> Bool,
     lte(A, A) -> Bool,
     gt(A, A) -> Bool,
-    gte(A, A) -> Bool
+    gte(A, A) -> Bool,
 }
 
 pub concept Monad(M : (Type) -> Type) : pub Type {
     pure(@A : Type, A) -> M(A),
-    bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
+    bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B),
 }
 
 pub mod Eql;

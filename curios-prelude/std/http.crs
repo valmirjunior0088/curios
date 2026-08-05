@@ -22,9 +22,9 @@ pub struct Request : pub Type {
     host : Str,
     port : Nat,
     path : Str,
-    headers : Lst({Str, Str}),
+    headers : Lst({ Str, Str }),
     body : Bytes,
-    settings : Settings
+    settings : Settings,
 }
 
 pub let get(host : Str, port : Nat, path : Str) -> Request =
@@ -35,7 +35,7 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         path = path,
         headers = [],
         body = x[],
-        settings = Settings/default
+        settings = Settings/default,
     };
 
 pub let post(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
@@ -46,7 +46,7 @@ pub let post(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
         path = path,
         headers = [],
         body = body,
-        settings = Settings/default
+        settings = Settings/default,
     };
 
 let with_tls(s : Settings) -> Settings =
@@ -64,13 +64,13 @@ pub let post_tls(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
 let until(target : Byte) -> (Byte) -> Bool =
     (byte) => Bool/not(byte == target);
 
-let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
+let header_lookup(headers : Lst({ Str, Str }), name : Str) -> Option(Str) =
     Option/map(Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)), ((_, value)) => value);
 
 let is_ascii_digit(byte : Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
 
-let render_header((name, value) : {Str, Str}) -> Str =
+let render_header((name, value) : { Str, Str }) -> Str =
     Str/flatten([name, ": ", value, "\r\n"]);
 
 let content_length(body : Bytes) -> Str =
@@ -80,19 +80,31 @@ let content_length(body : Bytes) -> Str =
     end;
 
 pub let render(request : Request) -> Bytes =
-    x[..Str/to_bytes(Str/flatten([
-        method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
-        "Host: ", request.host, "\r\n",
-        "Connection: close\r\n",
-        content_length(request.body),
-        Str/flatten(Lst/map(request.headers, render_header)),
-        "\r\n"
-    ])), ..request.body];
+    x[
+        ..Str/to_bytes(
+            Str/flatten(
+                [
+                    method_str(request.method),
+                    " ",
+                    request.path,
+                    " HTTP/1.1\r\n",
+                    "Host: ",
+                    request.host,
+                    "\r\n",
+                    "Connection: close\r\n",
+                    content_length(request.body),
+                    Str/flatten(Lst/map(request.headers, render_header)),
+                    "\r\n",
+                ],
+            ),
+        ),
+        ..request.body,
+    ];
 
 pub struct Status : pub Type {
     version : Str,
     code : Nat,
-    reason : Str
+    reason : Str,
 }
 
 pub let status_line : Parse(Status) =
@@ -100,63 +112,69 @@ pub let status_line : Parse(Status) =
     let _ = Parse/take_byte(0x20)!;
     let digits = Parse/take_while(is_ascii_digit)!;
     let _ = Parse/take_byte(0x20)!;
-    let reason = Parse/take_while(until(0x0D))!;
-    let _ = Parse/take_byte(0x0D)!;
-    let _ = Parse/take_byte(0x0A)!;
-    Parse/pure(Status {
-        version = Option/unwrap_or(Str/of_bytes(version), ""),
-        code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bytes(digits), "")), 0),
-        reason = Option/unwrap_or(Str/of_bytes(reason), "")
-    });
+    let reason = Parse/take_while(until(0xD))!;
+    let _ = Parse/take_byte(0xD)!;
+    let _ = Parse/take_byte(0xA)!;
+    Parse/pure(
+        Status {
+            version = Option/unwrap_or(Str/of_bytes(version), ""),
+            code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bytes(digits), "")), 0),
+            reason = Option/unwrap_or(Str/of_bytes(reason), ""),
+        },
+    );
 
 pub struct Response : pub Type {
     status : Status,
-    headers : Lst({Str, Str}),
-    body : Bytes
+    headers : Lst({ Str, Str }),
+    body : Bytes,
 }
 
 let rest : Parse(Bytes) =
     Parse {
-        run(input, pos) =
-            Result/success((Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input))))
+        run(input, pos) = Result/success(
+            (Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input))),
+        ),
     };
 
 let guard_header : Parse({}) =
     Parse {
-        run(input, pos) =
-            match Nat/Lt/try(pos, Bytes/len(input))
-            | none() => Result/failure("unexpected end of headers")
-            | some(ok) =>
-                match Bytes/at(input, pos, ok) == 0x0D
-                | true => Result/failure("end of header block")
-                | false => Result/success((pos, ()))
-                end
+        run(input, pos) = match Nat/Lt/try(pos, Bytes/len(input))
+        | none() => Result/failure("unexpected end of headers")
+        | some(ok) =>
+            match Bytes/at(input, pos, ok) == 0xD
+            | true => Result/failure("end of header block")
+            | false => Result/success((pos, ()))
             end
+        end,
     };
 
-let header_line : Parse({Str, Str}) =
+let header_line : Parse({ Str, Str }) =
     let _ = guard_header!;
     let name = Parse/take_while(until(0x3A))!;
     let _ = Parse/take_byte(0x3A)!;
-    let value = Parse/take_while(until(0x0D))!;
-    let _ = Parse/take_byte(0x0D)!;
-    let _ = Parse/take_byte(0x0A)!;
-    Parse/pure((Option/unwrap_or(Str/of_bytes(name), ""), Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
+    let value = Parse/take_while(until(0xD))!;
+    let _ = Parse/take_byte(0xD)!;
+    let _ = Parse/take_byte(0xA)!;
+    Parse/pure(
+        (
+            Option/unwrap_or(Str/of_bytes(name), ""),
+            Str/trim(Option/unwrap_or(Str/of_bytes(value), "")),
+        ),
+    );
 
 let take_n(n : Nat) -> Parse(Bytes) =
     Parse {
-        run(input, pos) =
-            let stop = Nat/min(pos + n, Bytes/len(input));
-            Result/success((stop, Bytes/slice(input, pos, stop)))
+        run(input, pos) = let stop = Nat/min(pos + n, Bytes/len(input));
+        Result/success((stop, Bytes/slice(input, pos, stop))),
     };
 
-let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
+let content_length_of(headers : Lst({ Str, Str })) -> Option(Nat) =
     match header_lookup(headers, "Content-Length")
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
-let body_parser(headers : Lst({Str, Str})) -> Parse(Bytes) =
+let body_parser(headers : Lst({ Str, Str })) -> Parse(Bytes) =
     match content_length_of(headers)
     | some(n) => take_n(n)
     | none() => rest
@@ -165,25 +183,24 @@ let body_parser(headers : Lst({Str, Str})) -> Parse(Bytes) =
 pub let decode : Parse(Response) =
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
-    let _ = Parse/take_byte(0x0D)!;
-    let _ = Parse/take_byte(0x0A)!;
+    let _ = Parse/take_byte(0xD)!;
+    let _ = Parse/take_byte(0xA)!;
     let body = body_parser(headers)!;
-    Parse/pure(Response {
-        status = status,
-        headers = headers,
-        body = body
-    });
+    Parse/pure(Response { status = status, headers = headers, body = body });
 
 pub let header(resp : Response, name : Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
 pub let perform(request : Request) -> Async(Result(Response, Error)) =
-    Async/bind(Socket/call(request.settings, request.host, request.port, render(request)), (r) =>
-        match r
-        | success(bytes) =>
-            match Parse/run(decode, bytes)
-            | success(response) => Async/pure(Result/success(response))
-            | failure(message) => Async/pure(Result/failure(Error/malformed(message)))
-            end
-        | failure(error) => Async/pure(Result/failure(Error/net(error)))
-        end);
+    Async/bind(
+        Socket/call(request.settings, request.host, request.port, render(request)),
+        (r) =>
+            match r
+            | success(bytes) =>
+                match Parse/run(decode, bytes)
+                | success(response) => Async/pure(Result/success(response))
+                | failure(message) => Async/pure(Result/failure(Error/malformed(message)))
+                end
+            | failure(error) => Async/pure(Result/failure(Error/net(error)))
+            end,
+    );
