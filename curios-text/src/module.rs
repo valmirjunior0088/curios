@@ -3,11 +3,14 @@ use {
         FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, Subterm, Term,
         TupleTypeParam, print_module_items, print_term,
     },
-    crate::parse::{clear_comments, parse_term, parse_top_item, parse_whitespace, take_comments},
+    crate::parse::{
+        clear_comments, parse_optional_term, parse_term, parse_top_item, parse_whitespace,
+        take_comments,
+    },
     curios_abi::WireSignature,
     curios_base::{
         Plicity, Source, Span,
-        parser::{ParserError, lazy, many0, run_parser, take_eof},
+        parser::{ParserError, lazy, many0, run_parser, spanned, take_eof},
         printer::{flat, pure, run_printer},
     },
     std::{fmt, path::Path, rc::Rc, str::FromStr},
@@ -288,7 +291,41 @@ impl Entrypoint {
         )?;
         Ok((entrypoint, take_comments()))
     }
+}
 
+/// The formatter's parse product, one grammar for both file kinds: top-level items followed by an *optional* tail expression — a program has one, a prelude-style module file does not. The item/tail interlock is the entrypoint grammar's own: a top-level `let` requires its annotation, so an unannotated binding falls through to the tail as a local `let` term.
+pub(crate) struct FormatInput {
+    pub(crate) module: Module,
+    /// Each item's span, parallel to `module.items` — the items themselves carry none.
+    pub(crate) item_spans: Vec<Span>,
+    /// The tail expression when the file is a program; its own term span carries its position.
+    pub(crate) tail: Option<Term>,
+    /// Every comment the parse consumed, ascending.
+    pub(crate) comments: Vec<Span>,
+}
+
+pub(crate) fn parse_for_format(source: &Rc<Source>) -> Result<FormatInput, ParserError> {
+    clear_comments();
+    let (module, item_spans, tail) = run_parser(
+        parse_whitespace()
+            .and_keep(many0(|| spanned(parse_top_item())))
+            .and(parse_optional_term())
+            .and_drop(take_eof())
+            .map(|(items, tail)| {
+                let (spans, items): (Vec<_>, Vec<_>) = items.into_iter().unzip();
+                (Module { items }, spans, tail)
+            }),
+        source,
+    )?;
+    Ok(FormatInput {
+        module,
+        item_spans,
+        tail,
+        comments: take_comments(),
+    })
+}
+
+impl Entrypoint {
     /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         let path = path.as_ref();

@@ -10,10 +10,14 @@ use {
         Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
         TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
+    crate::format::claim_comments_before,
     curios_abi::{WireSignature, WireType},
     curios_base::{
         Grain, Plicity,
-        printer::{Printer, flat, group, if_break, indent, line, pure, sep_flat, soft_line},
+        printer::{
+            Printer, flat, group, hard_line, if_break, indent, line, line_suffix, pure, sep_flat,
+            soft_line,
+        },
     },
     num_bigint::BigUint,
     num_traits::One,
@@ -576,6 +580,30 @@ fn print_prim(prim: Prim) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term) -> Printer {
+    // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed comment written before its own start — a leading comment breaks onto its own line before the term, a trailing one rides its line's end through the suffix channel. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run the claim is empty and printing is unchanged.
+    let comments = match term.span() {
+        Some(span) => claim_comments_before(span.start),
+        None => Vec::new(),
+    };
+    let doc = print_term_inner(term);
+    if comments.is_empty() {
+        return doc;
+    }
+    let mut parts: Vec<Printer> = comments
+        .into_iter()
+        .map(|(text, trailing)| {
+            if trailing {
+                line_suffix(format!(" {text}"))
+            } else {
+                flat([pure(text), hard_line()])
+            }
+        })
+        .collect();
+    parts.push(doc);
+    flat(parts)
+}
+
+fn print_term_inner(term: Term) -> Printer {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
@@ -1215,7 +1243,7 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
     }
 }
 
-fn print_top_item(item: TopItem) -> Printer {
+pub(crate) fn print_top_item(item: TopItem) -> Printer {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),

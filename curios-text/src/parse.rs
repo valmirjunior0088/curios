@@ -74,6 +74,11 @@ pub(crate) fn take_comments() -> Vec<Span> {
     })
 }
 
+/// The formatter's optional tail: a whole term when one follows, `None` at end of input. `catch` downgrades a mid-term failure so the alternative backtracks — a garbled tail then surfaces as the entry's end-of-input error at the right position.
+pub(crate) fn parse_optional_term<'a>() -> Parser<'a, Option<Term>> {
+    catch(lazy(parse_term)).map(Some).or(pure(None))
+}
+
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
     take_while(|char| char.is_whitespace())
         .and(
