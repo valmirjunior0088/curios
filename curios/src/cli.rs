@@ -39,6 +39,22 @@ pub(crate) enum Mode {
         output_path: Option<PathBuf>,
     },
 
+    #[command(about = "Format .crs files canonically, in place")]
+    Format {
+        #[arg(
+            value_name = "PATHS",
+            required = true,
+            help = "The .crs files to format"
+        )]
+        paths: Vec<PathBuf>,
+
+        #[arg(
+            long,
+            help = "Write nothing; exit nonzero when any file would change (for CI)"
+        )]
+        check: bool,
+    },
+
     /// Present only in profiling builds: the mode exists exactly when the spans it collects do.
     #[cfg(feature = "profile")]
     #[command(about = "Profile one compilation and print per-span aggregates")]

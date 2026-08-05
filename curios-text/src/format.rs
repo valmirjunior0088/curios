@@ -5,14 +5,54 @@
 //! Comments are classified once, from the source text: a comment with source content earlier on its own line is *trailing* — it rides that line's end via the printer's line-suffix channel — and every other comment *leads* the next element, breaking onto its own line. A trailing comment's suffix fails the fits scan, so the group it lands in always breaks: the comment-is-a-hard-break law needs no special-casing. The weave is a thread-local present only during a `format` run; `Display` paths never consult it, so ordinary printing is untouched.
 
 use {
-    super::{FormatInput, parse_for_format},
+    super::{FormatInput, TopItem, parse_for_format},
     crate::print::{print_term, print_top_item},
     curios_base::{
         Source, Span,
         printer::{Printer, run_printer_within},
     },
-    std::{cell::RefCell, fmt, rc::Rc},
+    std::{cell::RefCell, fmt, path::Path, rc::Rc},
 };
+
+/// The formatter's verdict on one source: the canonical text, tagged by whether it differs from what was read. The formatter itself is pure — whether a `Changed` result fails a check or rewrites a file is the caller's policy.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Formatted {
+    Unchanged(String),
+    Changed(String),
+}
+
+impl Formatted {
+    /// Format `source` canonically. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same program with the same comments — in which case nothing should be written.
+    pub fn from_source(source: &Rc<Source>) -> Result<Self, String> {
+        let input = parse_for_format(source).map_err(|error| error.format())?;
+        let comments = classify(&source.text, input.comments.clone());
+        let expected_comments = comments.len();
+
+        WEAVER.with(|weaver| *weaver.borrow_mut() = Some(comments));
+        let output = emit(&input);
+        WEAVER.with(|weaver| *weaver.borrow_mut() = None);
+
+        verify(&input, expected_comments, &output)?;
+        Ok(match output == source.text {
+            true => Formatted::Unchanged(output),
+            false => Formatted::Changed(output),
+        })
+    }
+
+    /// [`Formatted::from_source`] for the file at `path`, errors located by it. Writing a `Changed` result back is the caller's policy.
+    pub fn from_path(path: &Path) -> Result<Self, String> {
+        let located = |error: String| format!("{}: {error}", path.display());
+        let source = Source::read(path).map_err(|error| located(error.to_string()))?;
+        Self::from_source(&source).map_err(located)
+    }
+
+    /// The canonical text, either way.
+    pub fn into_text(self) -> String {
+        match self {
+            Formatted::Unchanged(text) | Formatted::Changed(text) => text,
+        }
+    }
+}
 
 /// The canonical width — the same target goal reports render within.
 const WIDTH: usize = 100;
@@ -28,7 +68,7 @@ struct Comment {
 }
 
 thread_local! {
-    /// The active weave: comments not yet claimed, in offset order. Present only while [`format_source`] renders, so `Display` printing never consults it.
+    /// The active weave: comments not yet claimed, in offset order. Present only while [`Formatted::from_source`] renders, so `Display` printing never consults it.
     static WEAVER: RefCell<Option<Vec<Comment>>> = const { RefCell::new(None) };
 }
 
@@ -77,27 +117,13 @@ fn render(printer: Printer) -> String {
     Within(RefCell::new(Some(printer))).to_string()
 }
 
-/// Format `source` canonically. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same program with the same comments — in which case nothing should be written.
-pub fn format_source(source: &Rc<Source>) -> Result<String, String> {
-    let input = parse_for_format(source).map_err(|error| error.format())?;
-    let comments = classify(&source.text, input.comments.clone());
-    let expected_comments = comments.len();
-
-    WEAVER.with(|weaver| *weaver.borrow_mut() = Some(comments));
-    let output = emit(&input);
-    WEAVER.with(|weaver| *weaver.borrow_mut() = None);
-
-    verify(&input, expected_comments, &output)?;
-    Ok(output)
-}
-
-/// Render the parsed file: items separated by exactly one blank line, each preceded by its leading comments, trailing comments riding their lines, dangling comments closing the file. Element-boundary comments are claimed by this driver — a trailing one appends to the previous element's final line, a leading one gets its own lines before the next element — while comments *interior* to an element are claimed during its document's build (an interior trailing comment surfaces at the following break, one line later than written: conserved and valid, a known coarseness).
+/// Render the parsed file: items separated by exactly one blank line — except consecutive `use` declarations, which stack with none, as the corpus writes its import heads — each preceded by its leading comments, trailing comments riding their lines, dangling comments closing the file. Element-boundary comments are claimed by this driver — a trailing one appends to the previous element's final line, a leading one gets its own lines before the next element — while comments *interior* to an element are claimed during its document's build (an interior trailing comment surfaces at the following break, one line later than written: conserved and valid, a known coarseness).
 fn emit(input: &FormatInput) -> String {
     let mut out = String::new();
-    let mut first = true;
+    let mut previous: Option<&TopItem> = None;
 
     // Split a boundary claim: trailing comments ride the previous element's last line, leading ones return as the next element's preamble.
-    let mut boundary = |out: &mut String, upto: usize| -> Vec<String> {
+    let boundary = |out: &mut String, upto: usize| -> Vec<String> {
         let mut lead = Vec::new();
         for (text, trailing) in claim_comments_before(upto) {
             if trailing {
@@ -110,28 +136,28 @@ fn emit(input: &FormatInput) -> String {
         lead
     };
 
-    let mut separate = |out: &mut String, first: &mut bool| {
-        if !*first {
-            out.push_str("\n\n");
-        }
-        *first = false;
-    };
-
     for (item, span) in input.module.items.iter().zip(&input.item_spans) {
         // Claimed before the item's document builds, or the item's first term would weave these into its own middle.
         let lead = boundary(&mut out, span.start);
-        separate(&mut out, &mut first);
+        match previous {
+            None => {}
+            Some(TopItem::Use(_)) if matches!(item, TopItem::Use(_)) => out.push('\n'),
+            Some(_) => out.push_str("\n\n"),
+        }
         for text in lead {
             out.push_str(&text);
             out.push('\n');
         }
         out.push_str(&render(print_top_item(item.clone())));
+        previous = Some(item);
     }
 
     if let Some(tail) = &input.tail {
         let upto = tail.span().map(|span| span.start).unwrap_or(usize::MAX);
         let lead = boundary(&mut out, upto);
-        separate(&mut out, &mut first);
+        if previous.is_some() {
+            out.push_str("\n\n");
+        }
         for text in lead {
             out.push_str(&text);
             out.push('\n');

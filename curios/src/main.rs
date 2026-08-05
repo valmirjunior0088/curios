@@ -78,6 +78,26 @@ fn dispatch() -> Result<(), Failure> {
 
             emit_exe(&cwasm, &output)?;
         }
+        Mode::Format { paths, check } => {
+            // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
+            let mut dirty = Vec::new();
+            for path in &paths {
+                match curios_text::Formatted::from_path(path)? {
+                    curios_text::Formatted::Unchanged(_) => {}
+                    curios_text::Formatted::Changed(text) => match check {
+                        true => dirty.push(path.display().to_string()),
+                        false => std::fs::write(path, text)
+                            .map_err(|error| format!("{}: {error}", path.display()))?,
+                    },
+                }
+            }
+            if !dirty.is_empty() {
+                return Err(Failure::Error(format!(
+                    "would reformat: {}",
+                    dirty.join(", ")
+                )));
+            }
+        }
         #[cfg(feature = "profile")]
         Mode::Profile { input_path } => {
             let (entrypoint, loader) = curios::load(&input_path)?;

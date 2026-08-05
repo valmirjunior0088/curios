@@ -1,7 +1,9 @@
-use {super::format_source, curios_base::Source};
+use {super::Formatted, curios_base::Source};
 
 fn formatted(source: &str) -> String {
-    format_source(&Source::inline(source)).expect("fixture formats")
+    Formatted::from_source(&Source::inline(source))
+        .expect("fixture formats")
+        .into_text()
 }
 
 #[test]
@@ -52,12 +54,19 @@ fn a_trailing_comment_rides_its_line() {
 
 #[test]
 fn an_interior_comment_survives_and_forces_a_break() {
-    // The comment claims into the argument's document; its hard break keeps the call broken.
+    // The comment claims into the argument's document; its hard break keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.
     let source = "let one : /std/Nat = f( -- why\n    1);\none\n";
-    let output = format_source(&Source::inline(source));
-    // `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.
-    let output = output.expect("formats");
+    let output = formatted(source);
     assert!(output.contains("-- why"), "comment lost: {output}");
+}
+
+#[test]
+fn consecutive_use_declarations_stack_without_blank_lines() {
+    let source = "use /std/{Nat};\n\n\nuse /std/{Bool};\nuse /std/{Str};\nlet a : Nat = 1;\na\n";
+    assert_eq!(
+        formatted(source),
+        "use /std/{Nat};\nuse /std/{Bool};\nuse /std/{Str};\n\nlet a : Nat =\n    1;\n\na\n"
+    );
 }
 
 #[test]

@@ -70,6 +70,8 @@ curios compile hello.crs -o hello
 
 Exit codes are a tri-state: `0` means the program compiled and (for `run`) exited 0 itself — a running program's own exit code passes through untouched — `2` means the program contains written goals (`?`) and their report was printed to stderr, and `1` means a hard error. Tooling can therefore distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
 
+`curios format <files…>` rewrites sources into the one canonical style, in place; `--check` writes nothing and exits nonzero when any file would change. Formatting is verified before anything is written — the output must reparse to exactly the same program, with every comment preserved — so a formatter defect refuses rather than corrupts.
+
 ## Build from source
 
 Building requires Rust, a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and may take several minutes.

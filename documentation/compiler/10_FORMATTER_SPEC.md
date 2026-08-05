@@ -13,7 +13,7 @@ This document specifies the canonical source formatter: zero-configuration, corp
 
 - **Width 100** — the same target the goal reports render within, so diagnostics and formatted source read identically.
 - **Indent 4**, unified: every printer entry in the workspace (`Display` impls, `display_within`, the stage dumps) moves from step 2 to step 4 alongside the formatter, with the affected test expectations updated. One indentation everywhere.
-- **Exactly one blank line** between adjacent top-level items; author grouping is not consulted. Inside bodies, blank lines are not emitted.
+- **Exactly one blank line** between adjacent top-level items — except between consecutive `use` declarations, which stack with none, as the corpus writes its import heads; author grouping is not consulted. Inside bodies, blank lines are not emitted.
 - **Trailing commas in every broken comma-list**; flat lists carry none.
 
 ## Construct rules
