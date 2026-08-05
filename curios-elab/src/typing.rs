@@ -2,7 +2,7 @@
 mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
-use curios_cert::carries_effect;
+use curios_cert::fixes_no_value;
 use curios_core::{
     Apply, Field, Free, Func, FuncType, Global, Level, Many, MetaId, Metavar, Prim, PrimHead, Proj,
     ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
@@ -429,9 +429,9 @@ fn retry_checking(
 ///
 /// So an effectful scrutinee refines nothing, which is what `curios-cert`'s `assume_case_value` says of its own store: the arm is checked under strictly fewer assumptions, and a program that needed the refinement is refused rather than admitted. *Where* it is refused depends on the shape — an effect written into a type directly is refused as one, while an effect reduction never reaches is refused wherever the withheld equation was needed, as an ordinary mismatch.
 ///
-/// The premise is asked of the *term*, through the shared [`carries_effect`], rather than of the reducer. Asking the reducer was the first spelling of this guard and it read a question weak-head reduction cannot answer: reduction stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` reduced cleanly and refined. Both checkers now put the same question to the same walk, which is what keeps them from agreeing on the wrong answer to it.
+/// The premise is asked of the *term*, through the shared [`fixes_no_value`], rather than of the reducer — and of the callees the term would reach, since effectfulness of `f(true)` is not a property of `f(true)` when `f` is a binder. Asking the reducer was the first spelling of this guard and it read a question weak-head reduction cannot answer: reduction stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` reduced cleanly and refined. Both checkers now put the same question to the same walk, which is what keeps them from agreeing on the wrong answer to it.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
-    if carries_effect(context, head) {
+    if fixes_no_value(context, head) {
         return Ok(());
     }
 

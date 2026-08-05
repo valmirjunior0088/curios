@@ -725,21 +725,33 @@ fn an_under_bound_motive_reports_its_binder_count() {
     );
 }
 
-// A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. They did not when an argument carried an *inferred* implicit: `g(b)` elaborates to `g(@?m, b)`, and a second occurrence mints its own `?m'`, so two terms solved to the same thing keyed differently and the arm silently refined nothing — while the identical scrutinee with the implicit written out, `g(@Bool, b)`, refined. Solved metavariables are now materialized into the key, which is what makes the two spellings one.
+// A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. They did not when the scrutinee carried an *inferred* metavariable: `Pred/test(t, b)` elaborates to `(?w).0(t, b)`, and a second occurrence mints its own `?w'`, so two terms solved to the same witness keyed differently and the arm silently refined nothing. Solved metavariables are now materialized into the key, which is what makes the two spellings one.
 //
-// The scrutinee's head is stuck on purpose: an unfoldable head would reduce the whole term and never reach the store at all.
+// Three constraints shape the scrutinee, and they pull against each other. It must carry a metavariable, or there is nothing to materialize. It must not reduce away, or the store is never reached — hence a method whose body eliminates the *symbolic* `b`. And its head must be one `curios_cert::fixes_no_value` reads, which a function parameter stopped being once `an_effect_behind_a_function_parameter_does_not_refine` landed. A concept dispatch is all three at once, and it is what `/std/Str/utf8/cont_len` refines on in production rather than a shape invented here.
+//
+// Mutation-checked: dropping `zonk_solved_term_metas` from `canonical_scrutinee` refuses this program, with `p`'s expected type still reading the unrefined method body.
 #[test]
 fn an_inferred_implicit_does_not_break_a_refinement_key() {
     let source = r#"
-        use /std/{Eq, Bool, Str};
-        let refined(f : (Bool) -> Bool, g : (@A : Type, A) -> Bool, b : Bool) -> Str =
-            match f(g(b))
+        use /std/{Eq, Bool, Nat, Str};
+
+        concept Pred(A : Type) : pub Type {
+            test(A, Bool) -> Bool,
+        }
+
+        satisfy Pred(Nat) {
+            test(n, b) = match b | true => true | false => false end,
+        }
+
+        let refined(t : Nat, b : Bool) -> Str =
+            match Pred/test(t, b)
             | true =>
-                let p : Eq(f(g(b)), true) = Eq/refl();
+                let p : Eq(true, Pred/test(t, b)) = Eq/refl();
                 "refined"
             | false => "unrefined"
             end;
-        /std/print(refined((x) => x, (@A, x) => true, true))
+
+        /std/print(refined(7, true))
         "#;
 
     let (system, io) = MockHost::builder().build();

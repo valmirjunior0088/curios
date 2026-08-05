@@ -639,7 +639,7 @@ impl Context {
         self.frames.refine_projection(base, index, value);
     }
 
-    /// Where `curios_cert::carries_effect` remembers what a definition reaches. See [`Caches::effects_mut`] for what refreshes it.
+    /// Where `curios_cert::fixes_no_value` remembers what a definition's body reaches and calls. See [`Caches::effects_mut`] for what refreshes it.
     pub(crate) fn effect_memo(&mut self) -> &mut HashMap<Free, bool> {
         self.caches.effects_mut()
     }

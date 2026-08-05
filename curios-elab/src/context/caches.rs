@@ -36,7 +36,7 @@ pub(crate) struct ElaborationStamp {
 pub(crate) struct Caches {
     reduction: HashMap<Term, Term>,
     elaboration: HashMap<ElaborationKey, (Term, Term)>,
-    /// Whether a definition reaches an operation the host performs — `curios_cert::carries_effect`'s memo. Unstamped: it reads definition *bodies* only, which is the one ambient fact a pure run may read, and it is refreshed by exactly the two events that can change a body out from under it.
+    /// Whether a definition's body fails to fix a value — `curios_cert::fixes_no_value`'s memo. Unstamped: it reads definition *bodies* only, which is the one ambient fact a pure run may read, and it is refreshed by exactly the two events that can change a body out from under it.
     effects: HashMap<Free, bool>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
@@ -132,7 +132,7 @@ impl Caches {
         self.effects.clear();
     }
 
-    /// Where `curios_cert::carries_effect` remembers what a definition reaches.
+    /// Where `curios_cert::fixes_no_value` remembers what a definition's body reaches and calls.
     pub(crate) fn effects_mut(&mut self) -> &mut HashMap<Free, bool> {
         &mut self.effects
     }

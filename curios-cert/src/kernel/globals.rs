@@ -28,7 +28,7 @@ pub(super) struct Globals {
     definitions: HashMap<Free, Definition>,
     inducts: HashMap<Global, InductDecl>,
     structs: HashMap<Global, StructDecl>,
-    /// Whether a definition reaches an operation the host performs — `carries_effect`'s memo, kept here because it is a derived fact about *these* definitions and so is invalidated by exactly the event that invalidates a remembered reduct.
+    /// Whether a definition's body fails to fix a value — `fixes_no_value`'s memo, kept here because it is a derived fact about *these* definitions and so is invalidated by exactly the event that invalidates a remembered reduct.
     effects: HashMap<Free, bool>,
 }
 
@@ -96,7 +96,7 @@ impl Globals {
             .and_then(|definition| definition.value.as_ref())
     }
 
-    /// Where `carries_effect` remembers what a definition reaches. Cleared by the same overwrite that invalidates a reduct, since a replaced body is a different closure.
+    /// Where `fixes_no_value` remembers what a definition's body reaches and calls. Cleared by the same overwrite that invalidates a reduct, since a replaced body is a different closure.
     pub(super) fn effects_mut(&mut self) -> &mut HashMap<Free, bool> {
         &mut self.effects
     }

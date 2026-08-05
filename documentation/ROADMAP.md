@@ -173,7 +173,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] concurrent `both`/`race`/`select`
   - [x] result cell (`Cell`)
   - [x] `sleep`/`timeout`
-- [ ] [Algebraic effects and handlers](compiler/01_EFFECTS_SPEC.md) (signatures as indexed inductives, a free-monad carrier whose reified continuation makes multi-shot resumption ordinary, and resumption discipline decided per carrier by representation visibility; staged from a `std/Effect` library through a sealed `std/Io` that retypes the host surface and deletes `carries_effect`, leaving `/std`'s blocking and async IO as two handlers of one signature)
+- [ ] [Algebraic effects and handlers](compiler/01_EFFECTS_SPEC.md) (signatures as indexed inductives, a free-monad carrier whose reified continuation makes multi-shot resumption ordinary, and resumption discipline decided per carrier by representation visibility; staged from a `std/Effect` library through a sealed `std/Io` that retypes the host surface and deletes `fixes_no_value`, leaving `/std`'s blocking and async IO as two handlers of one signature)
   - [ ] Stage 1–2: `std/Effect`, then `!` over the generic carrier _(needs the witness-keying and partial-imitation items above)_
   - [ ] Stage 3–4: host operations as a sealed signature, `curios-cert/src/purity.rs` deleted, `Handle`/`Async` unified _(breaking: the entrypoint becomes an `Io({})`)_
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)

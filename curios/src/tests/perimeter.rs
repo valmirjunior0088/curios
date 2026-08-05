@@ -714,17 +714,21 @@ const AN_EFFECT_BEHIND_A_STUCK_HEAD_DOES_NOT_REFINE: &str = r#"
     )
     "#;
 
-/// The control, and it guards the brick this fix could have been: a scrutinee whose head is stuck is the *ordinary* case — `f(b)` for a `f` nothing can unfold — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. Only the effect carried in an argument is at issue, so a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
+/// The control, and it guards the brick this fix could have been: a scrutinee whose head is stuck is the *ordinary* case — `flip(b)` for a `b` nothing can instantiate — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. So a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
+///
+/// The head is a *definition* rather than a parameter, which is the whole of what the entry below changed: `flip` is one [`fixes_no_value`](curios_cert::fixes_no_value) unfolding away, so the walk reads the callee and the application fixes whatever the callee fixes. The parameter spelling this control used to carry is the derivation below, not a control.
 const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     use /std/{Eq, Bool, False, Str};
 
-    let refined(f : (Bool) -> Bool, b : Bool, p : Eq(f(b), true)) -> Str =
-        match f(b)
+    let flip(b : Bool) -> Bool = Bool/not(b);
+
+    let refined(b : Bool, p : Eq(flip(b), true)) -> Str =
+        match flip(b)
         | true => "t"
         | false => False/absurd(Bool/false_neq_true(p))
         end;
 
-    /std/print(refined((x) => x, true, Eq/refl()))
+    /std/print(refined(false, Eq/refl()))
     "#;
 
 /// Asserted on the *unrefined spelling*, and not on the entry above's `cannot appear at the type level`, because in this shape the effect never meets the type level: nothing reduces `g(Cell/get(c))` past its stuck head, which is the whole reason the reducer-based guard missed it. What the rule does here is withhold an equation, so the program fails where it needed one — and the discriminator is that `p`'s type still reads the effectful application rather than the `false` the withheld equation would have rewritten it to. A fixture that never reached the rule does not produce that.
@@ -736,6 +740,46 @@ fn an_effect_behind_a_stuck_head_does_not_refine() {
 #[test]
 fn a_stuck_application_scrutinee_still_refines() {
     assert_eq!(run(A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES), b"t");
+}
+
+// The same premise again, past the guard that closed the two entries above, and this time nothing a search over the term could have found. The scrutinee is `f(true)` for a *parameter* `f`: no `Prim::CellGet` in it, none in anything it names, so `fixes_no_value`'s effect half answered *pure* and both checkers recorded the equation. The caller then binds `f := (b) => Cell/get(c)`, and one spelling reads `true` before the `Cell/set` and `false` after.
+//
+// Effectfulness of `f(true)` is not a property of `f(true)`. At the moment the arm records its equation the binder has no value, so no improvement to the walk reaches this — which is why the cure is the second question `fixes_no_value` now asks: does the walk read the body of every function the term would call. A binder's does not exist yet.
+//
+// Two implementation facts the derivation has to route around, and both are why the shape is this one rather than the entry above's. The kernel's `let` **substitutes**, so a locally `let`-bound proof is delta-expanded and its ascription stops being load-bearing — `p` must be a parameter. And `Scope::refine` skips a key with no local free variable, so an inner match on the *same* key collapses under the outer arm's equation; putting the derivation in a **top-level item**, which is checked with an empty refinement store, sidesteps that without the entry above's second head.
+//
+// Verified while the hole was open: the program **compiled**, `curios compile` produced a native executable, and running it trapped in the Wasm at the `unreachable` that `False/absurd` erases to. The arm is reachable rather than merely well-typed — with the derivation replaced by a string the same program printed `REACHED: second read false`. And the acceptance was the refinement's doing: the identical program with the derivation moved to the `| true` arm, where the spelling refines to `true`, was refused with `inferred Eq(true, true)` against `expected Eq(false, true)`.
+const AN_EFFECT_BEHIND_A_FUNCTION_PARAMETER_DOES_NOT_REFINE: &str = r#"
+    use /std/{Cell, Eq, Bool, False, Str};
+
+    let forge(f : (Bool) -> Bool, c : Cell(Bool), p : Eq(f(true), true)) -> Str =
+        let done = Cell/set(c, false);
+        match f(true)
+        | false =>
+            let contradiction : False = Bool/false_neq_true(p);
+            False/absurd(contradiction)
+        | true => "no contradiction"
+        end;
+
+    /std/print(
+        ((c : Cell(Bool)) =>
+            ((f : (Bool) -> Bool) =>
+                match f(true)
+                | true => forge(f, c, Eq/refl())
+                | false => "first read false"
+                end
+            )((b) => Cell/get(c))
+        )(Cell/new(true))
+    )
+    "#;
+
+/// Asserted on the *unrefined spelling*, as the entry above is and for the same reason: the rule withholds an equation, so the program fails where it needed one, and the discriminator is that `p`'s type still reads `f(true)` rather than the `false` the withheld equation would have rewritten it to.
+#[test]
+fn an_effect_behind_a_function_parameter_does_not_refine() {
+    rejected_by(
+        AN_EFFECT_BEHIND_A_FUNCTION_PARAMETER_DOES_NOT_REFINE,
+        "f(true)",
+    );
 }
 
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so before the erasure obligations moved into `curios-cert` these were the class the trusted base took entirely on the elaborator's word.

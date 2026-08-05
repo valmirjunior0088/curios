@@ -24,7 +24,7 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        InductAt, Invert, Kernel, KernelError, Sort, carries_effect, carries_information,
+        InductAt, Invert, Kernel, KernelError, Sort, carries_information, fixes_no_value,
         invert_indices, invert_indices_outer, pinned_by_targets,
     },
     curios_core::{
@@ -142,7 +142,7 @@ fn check_arm(
 ///
 /// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for a primitive carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead.
 ///
-/// An *effectful* scrutinee gets no equation at all, and the shared [`carries_effect`](crate::carries_effect) is what decides that. This used to rest on reduction refusing the spelling first, which held only for a scrutinee reduction actually reaches: `whnf` stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` was recorded here exactly as it was in the elaborator, and one term denoting two values followed. Withholding the equation checks the arm under strictly fewer assumptions, which is the incomplete direction.
+/// A scrutinee whose spelling does not fix a value gets no equation at all, and the shared [`fixes_no_value`](crate::fixes_no_value) is what decides that — an operation the host performs, or a call whose callee that walk does not read, since `f(true)` for a parameter `f` computes whatever the caller bound. This used to rest on reduction refusing the spelling first, which held only for a scrutinee reduction actually reaches: `whnf` stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` was recorded here exactly as it was in the elaborator, and one term denoting two values followed. Withholding the equation checks the arm under strictly fewer assumptions, which is the incomplete direction.
 ///
 /// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and free-monoid — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
 ///
@@ -163,7 +163,7 @@ pub(super) fn assume_case_value(
         return;
     }
 
-    if carries_effect(kernel, scrutinee) {
+    if fixes_no_value(kernel, scrutinee) {
         return;
     }
 

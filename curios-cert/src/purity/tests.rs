@@ -1,5 +1,5 @@
 use {
-    crate::{Kernel, carries_effect},
+    crate::{Kernel, fixes_no_value},
     curios_core::{Prim, Term, UniverseContext},
 };
 
@@ -30,22 +30,38 @@ fn an_effect_inside_a_definition_body_is_reached_through_its_name() {
     let mut kernel = kernel();
     let read = reader(&mut kernel);
 
-    assert!(carries_effect(&mut kernel, &read));
+    assert!(fixes_no_value(&mut kernel, &read));
+}
+
+/// A definition with no body of its own, standing for the readable head the two rungs below need: naming it resolves, so the verdict there is about the argument rather than about the callee.
+fn callee(kernel: &mut Kernel, hint: &str) -> Term {
+    let name = kernel.fresh(Some(hint));
+
+    kernel.define(
+        &name,
+        &Term::prim(Prim::NatType),
+        &Term::prim(Prim::NatType),
+        &UniverseContext::default(),
+    );
+
+    Term::free_var(&name)
 }
 
 /// The rung weak-head reduction cannot reach, and the one the old question got wrong: an application whose head is stuck hands its arguments back untouched, so reducing this term succeeds and reports nothing. Asking the term rather than the reducer is what makes the answer independent of how far it reduces.
+///
+/// The head is readable, so the head clause is not what decides this — without that the assertion would hold for the wrong reason and the argument would go unread.
 #[test]
 fn an_effect_in_a_stuck_heads_argument_is_still_reached() {
     let mut kernel = kernel();
     let read = reader(&mut kernel);
-    let stuck = Term::free_var(&kernel.fresh(Some("f")));
+    let head = callee(&mut kernel, "f");
 
-    assert!(carries_effect(&mut kernel, &Term::apply(stuck, [read])));
+    assert!(fixes_no_value(&mut kernel, &Term::apply(head, [read])));
 }
 
 /// The control, and it is what keeps the two rungs above from being satisfied by a walk that answers *yes* to everything: a definition chain of the same depth, ending in a value rather than an effect, still refines. Without it a guard that refused every named scrutinee would pass both tests above and silently withdraw every refinement in the standard library.
 #[test]
-fn a_pure_definition_chain_carries_no_effect() {
+fn a_pure_definition_chain_fixes_a_value() {
     let mut kernel = kernel();
 
     let inner = kernel.fresh(Some("inner"));
@@ -64,11 +80,45 @@ fn a_pure_definition_chain_carries_no_effect() {
         &UniverseContext::default(),
     );
 
-    let stuck = Term::free_var(&kernel.fresh(Some("f")));
+    let head = callee(&mut kernel, "f");
 
-    assert!(!carries_effect(
+    assert!(!fixes_no_value(
         &mut kernel,
-        &Term::apply(stuck, [Term::free_var(&outer)]),
+        &Term::apply(head, [Term::free_var(&outer)]),
+    ));
+}
+
+/// The second premise, at the term. Everything written here is pure and everything it names is pure, so the effect search alone answers *fixes a value* — and it is wrong about the value, because the callee is whatever a caller binds to the binder. `curios/src/tests/perimeter.rs`'s `an_effect_behind_a_function_parameter_does_not_refine` is the derivation this refuses.
+///
+/// Mutation-checked against the control above, which shares its shape and differs only in whether the head resolves: dropping the head clause leaves that one green and fails this.
+#[test]
+fn a_call_through_a_binder_fixes_no_value() {
+    let mut kernel = kernel();
+    let binder = Term::free_var(&kernel.fresh(Some("f")));
+
+    assert!(fixes_no_value(
+        &mut kernel,
+        &Term::apply(binder, [Term::prim(Prim::Bool(true))]),
+    ));
+}
+
+/// The head clause has to run inside a followed body, not only at the scrutinee. Here the scrutinee's own head is a definition and resolves; what does not is the parameter that definition applies, so a clause reading the outermost head alone would admit `apply(g, x)` and the derivation would come straight back one call deeper.
+#[test]
+fn a_definition_that_applies_its_parameter_fixes_no_value() {
+    let mut kernel = kernel();
+
+    let parameter = kernel.fresh(Some("g"));
+    let apply = kernel.fresh(Some("apply"));
+    kernel.define(
+        &apply,
+        &Term::prim(Prim::NatType),
+        &Term::apply(Term::free_var(&parameter), [Term::prim(Prim::Bool(true))]),
+        &UniverseContext::default(),
+    );
+
+    assert!(fixes_no_value(
+        &mut kernel,
+        &Term::apply(Term::free_var(&apply), [Term::prim(Prim::Bool(true))]),
     ));
 }
 
@@ -99,6 +149,6 @@ fn a_definition_answered_under_a_cycle_is_not_remembered() {
         &UniverseContext::default(),
     );
 
-    assert!(carries_effect(&mut kernel, &Term::free_var(&f)));
-    assert!(carries_effect(&mut kernel, &Term::free_var(&g)));
+    assert!(fixes_no_value(&mut kernel, &Term::free_var(&f)));
+    assert!(fixes_no_value(&mut kernel, &Term::free_var(&g)));
 }
