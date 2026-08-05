@@ -288,6 +288,14 @@ Dropping the constant rung is what buys the absence of a disambiguation rule: a 
 
 **Rationale.** A printed identity must read back unambiguously and must never collide with a user's name; reserving the separator makes clash-freedom structural rather than probabilistic, and hints stay display-only so behavior cannot grow back onto spellings. The scheme spans three crates, so it is stated once here rather than independently in each.
 
+### One document algebra decides layout for every printer
+
+**Decision.** Pretty-printing layout is the Wadler document algebra in `curios-base`'s printer: documents carry layout hints — `line`/`soft_line`/`hard_line` choice points and `group` fit-or-break units — and one IR-agnostic engine resolves them against a line width. Width is the mode: the unbounded `Display` path renders every group flat and stays byte-identical to the fixed layouts it replaced, while the width-bearing entry (`run_printer_within`) adapts. Each printer expresses its own layout rules solely by where it places groups and lines; semantic readability — folding elaboration internals back to source spelling — stays in per-IR display rewrites that run before printing, never in the engine.
+
+**Rationale.** One engine serves every document-based printer and the future formatter, and a printer opts in one separator at a time with no output change until a caller asks for a width. The bounded fits scan — one line of lookahead, failing on mandatory breaks — keeps layout linear and materializes `Deferred` thunks in place exactly as far as printing needs them, preserving the stack-safety story the printer module documents; the scan's mechanics belong to `curios-base`'s printer rustdoc.
+
+**Rejected.** Per-construct visitor formatting with hand-threaded width budgets, which smears layout across every node's printer. Penalty-based optimal line breaking, whose style emerges from tuned weights rather than declared structure. Refusing width limits altogether. Build-time propagation of "contains a mandatory break", which the fits scan derives at each decision instead — a cache the `FnOnce` deferred nodes could not maintain. Rewriting the hand-rolled statement-dump renderers (`curios-ersd`, `curios-cont`) onto the algebra: their output is already line-per-statement and diff-stable, so conversion would be churn without a readability gain.
+
 ### Curios owns the language, Rust owns the host
 
 **Decision.** Rust owns the native host — Binaryen optimization, Wasmtime precompilation and execution, bundling, the CLI, and operating-system services — and the self-hosting objective claims only the language-specific stages. The frozen Rust baseline compiler remains as bootstrap seed and differential oracle.

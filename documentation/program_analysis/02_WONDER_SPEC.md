@@ -4,7 +4,7 @@ This document specifies `curios wonder`, a read-only interface through which an 
 
 The goal is not to replace text search or file reads. It is to expose facts the compiler uniquely knows, return the exact source associated with those facts when useful, and keep every answer tied to one coherent compilation snapshot.
 
-Required labeled written goals (`?label`) are a landed checked-front-end capability. `wonder` reports them through the ordinary diagnostic model while leaving their compiler semantics to that front end.
+Batched written-goal reports (`?`, located by source position) are a landed checked-front-end capability. `wonder` reports them through the ordinary diagnostic model while leaving their compiler semantics to that front end.
 
 ## Objective
 
@@ -182,7 +182,7 @@ A public type value initially has two textual forms:
 
 Diagnostics are public records rather than serialized `curios_text::Error` or `curios_elab::Error` values. Every diagnostic has a stable code, kind, severity, compiler phase, message, optional primary location, and zero or more related locations. Variant-specific payloads carry structured facts such as inferred and expected types, witness keys, or written-goal scopes.
 
-Written goals use diagnostic kind `goal`. Every written-goal diagnostic carries its required source label; labels are metadata rather than unique identities, so the same label may occur in several diagnostics.
+Written goals use diagnostic kind `goal`. A goal's identity is its source location — file, line, and column — the same coordinate every other diagnostic carries; no separate label exists.
 
 ## Analysis phases and status
 
@@ -203,7 +203,7 @@ The overall program status is:
 
 Each query declares its minimum required phase. If that phase was not reached, the response contains no fabricated result and reports the phase-limiting diagnostic. For example, `item` can succeed after parsing while a symbol's elaborated type cannot be returned after a lowering error.
 
-The initial parser and elaborator remain fail-fast for hard errors. The schema permits multiple diagnostics, but the first implementation does not claim general multi-error recovery. Written goals are the deliberate exception implemented by the typed incomplete checking outcome.
+The initial parser and elaborator remain fail-fast for hard errors. The schema permits multiple diagnostics, but the first implementation does not claim general multi-error recovery. Written goals are the deliberate exception: the front end batches every reached goal today (as one error), and the typed incomplete outcome distinguishing `incomplete` from `error` is this specification's obligation to introduce.
 
 ## Query surface
 

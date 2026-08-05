@@ -150,7 +150,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Span-based error quality across all stages
 - [x] Diagnostic terms printed with names in scope
 - [x] Bare written goals (`?`) report their local scope, expected type, and optional inferred solution
-- [ ] [Required labeled written goals (`?label`), complete goal batches, and a typed incomplete checking outcome](program_analysis/01_WRITTEN_GOALS_SPEC.md) _(after the Curios elaborator is authoritative, so the feature has one production implementation)_
+- [x] Complete written-goal batches: one elaboration reports every reached goal, located by file, line, and column, tolerantly materialized, with operator witness projections folded back to infix and terms rendered within a fixed width through the printer's width-aware document layer _(labels and a typed incomplete checking outcome remain possible extensions)_
 
 ## Standard Library
 
