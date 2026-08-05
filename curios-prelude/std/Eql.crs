@@ -1,2 +1,2 @@
 pub use /syn/{Eql};
-pub use /syn/Eql/{eql};
+pub use /syn/Eql/{eql, neq};

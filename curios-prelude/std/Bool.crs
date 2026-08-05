@@ -22,8 +22,10 @@ pub let of_str(s : Str) -> Option(Bool) =
 pub let false_neq_true(p : Eq(false, true)) -> False =
     Eq/subst((b : Bool) => match b | true => False | false => True end, p, True/qed());
 
+-- `xor` is disequality on one bit, so `!=` needs no negation here.
 satisfy Eql(Bool) {
-    eql = eql
+    eql = eql,
+    neq = xor
 }
 
 satisfy Or(Bool) {

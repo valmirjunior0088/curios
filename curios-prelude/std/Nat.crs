@@ -64,7 +64,8 @@ pub let cmp(x : Nat, y : Nat) -> Order =
     end;
 
 satisfy Eql(Nat) {
-    eql = eql
+    eql = eql,
+    neq = neq
 }
 
 satisfy Cmp(Nat) {

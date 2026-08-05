@@ -237,7 +237,8 @@ pub let of_str(s : Str) -> Option(Flt) =
     end;
 
 satisfy Eql(Flt) {
-    eql = eql
+    eql = eql,
+    neq = neq
 }
 
 satisfy Cmp(Flt) {

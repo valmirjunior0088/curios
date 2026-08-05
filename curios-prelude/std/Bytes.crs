@@ -44,7 +44,8 @@ pub let join(sep : Bytes, parts : Lst(Bytes)) -> Bytes =
         (l, r) => x[..l, ..sep, ..r]);
 
 satisfy Eql(Bytes) {
-    eql = eql
+    eql = eql,
+    neq(a, b) = Bool/not(eql(a, b))
 }
 
 satisfy Show(Bytes) {

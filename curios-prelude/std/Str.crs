@@ -177,7 +177,8 @@ pub let trim(s : Str) -> Str =
     end;
 
 satisfy Eql(Str) {
-    eql = eql
+    eql = eql,
+    neq(a, b) = Bool/not(eql(a, b))
 }
 
 satisfy Show(Str) {

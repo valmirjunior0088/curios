@@ -288,23 +288,128 @@ pub(super) fn infix_default_type(infix: &Infix) -> Prim {
     }
 }
 
-/// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for arithmetic operators, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
+/// The concept method an infix operator dispatches through, resolved against the concept's own declaration.
 ///
-/// Dispatch is then **one path**: every operator, `&&`/`||` included, desugars to a projection of a witness of its `/syn` concept ([`NumOp::concept_field`](NumOp::concept_field)) — `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). `!=` rebuilds as `BoolXor(Eql/eql(a, b), true)` — no `BoolNot` prim exists. The node never survives elaboration; witness projections over the statically-known primitive witnesses collapse back to bare `Prim` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
+/// What the operator *returns* is read here rather than restated beside [`NumOp`]: the method's type at the operand type `?T` comes out of the concept's lowered field telescope, so `eql(A, A) -> Bool` and `add(A, A) -> A` are told apart by what `/syn` declares and not by a Rust-side list of which operators yield `Bool`.
+struct InfixMethod {
+    /// The witness metavariable slot, filled by [`attempt_witness_goal`] once the operand type is pinned.
+    slot: MetaId,
+    goal: Term,
+    witness: Term,
+    provenance: WitnessOrigin,
+    /// The method's position among the concept's fields — the projection index.
+    index: usize,
+    /// The method's type at `?T`, as a telescope: the two operand domains and the codomain that is the operator's result type.
+    signature: Telescope<Term>,
+}
+
+impl InfixMethod {
+    /// Whether the method returns the concept parameter itself (`add(A, A) -> A`) rather than a fixed type (`eql(A, A) -> Bool`).
+    ///
+    /// Read from the terminal payload without opening the telescope: `operand_type` is a metavariable term and therefore closed, so it carries no bound variable an opening would have to substitute for, and comparing it to the codomain *under* the binders is exact. A codomain that genuinely mentions an operand binder can never equal it, and is classified as not returning the operand — the conservative answer, since all it forgoes is an early pin.
+    fn returns_operand(&self, operand_type: &Term) -> bool {
+        self.signature.terminal() == operand_type
+    }
+
+    /// The operator's result type at its elaborated operands.
+    fn result_type(&self, left: &Term, right: &Term) -> Term {
+        self.signature.open(&[left, right])
+    }
+}
+
+/// Resolve the concept method an infix operator dispatches through, and mint its witness goal.
+///
+/// `None` when the concept has no registry entry — an exotic embedding that elaborates without the embedded prelude, where the operator has nothing to dispatch through. The caller reports that once the operands are elaborated, so the diagnostic still names a reduced operand type.
+///
+/// Minting the witness metavar here, before the operands are elaborated, is what lets the method's declared type decide whether an expected result type may pin `?T`; the witness *attempt* still waits until the operands have pinned it.
+fn infix_method(
+    context: &mut Context,
+    op: NumOp,
+    concept_name: &Global,
+    field_name: &str,
+    operand_type: &Term,
+    term: &Term,
+) -> Result<Option<InfixMethod>, Error> {
+    let (Some(concept), Some(struct_decl)) = (
+        context.concept(concept_name).cloned(),
+        context.struct_decl(concept_name).cloned(),
+    ) else {
+        return Ok(None);
+    };
+
+    // Projection is positional over the *instantiated* field telescope (`Structure::fields_at` peels the leading parameter binders, exactly as `elaborate_proj` resolves a label), so the method's position among the concept's fields is the index — no parameter offset.
+    let index = concept
+        .fields
+        .iter()
+        .position(|field| field == field_name)
+        .expect("the syn operator concepts declare their table fields");
+
+    // Mint the witness goal exactly like an omitted `use` argument.
+    let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
+    let goal = Term::struct_type_at(
+        concept_name.clone(),
+        universes.clone(),
+        vec![operand_type.clone()],
+    );
+    let provenance = WitnessOrigin {
+        func: op.symbol().to_string(),
+        binder: field_name.to_string(),
+    };
+    let (slot, witness) =
+        context.fresh_witness_metavar(goal.clone(), term.span(), provenance.clone());
+
+    // The method's type at `?T`, read out of the concept's lowered structure — the same field telescope `elaborate_proj` reads, opened at the goal's own universes and parameter so the two agree by construction.
+    let arity = context.instantiate_universe_bound_at(
+        &struct_decl.universe_context,
+        &struct_decl.arity,
+        &universes,
+    )?;
+    let method_type = arity
+        .open(&[operand_type])
+        .nth(index, |j| Term::proj(witness.clone(), j))
+        .expect("a concept's own field index is in range");
+    let Subterm::FuncType(FuncType { telescope, .. }) = &*method_type else {
+        panic!("a syn operator concept declares its method as an arrow");
+    };
+
+    Ok(Some(InfixMethod {
+        slot,
+        goal,
+        witness,
+        provenance,
+        index,
+        signature: telescope.clone(),
+    }))
+}
+
+/// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
+///
+/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/syn` concept ([`NumOp::concept_field`](NumOp::concept_field)) — `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known primitive witnesses collapse back to bare `Prim` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let bool_type: Term = Subterm::Prim(Prim::BoolType).into();
-
     // `?T`: the operand type shared by both sides.
     let classifier = context.fresh_classifier_type("infix operand classifier");
     let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.span());
 
-    // An arithmetic operator returns its operand type, so an expected result type pins `?T` straight away; a comparison returns `Bool`, which says nothing about the operands, so only the operands can pin it.
-    if !infix.op.result_is_bool()
+    let (concept_path, field_name) = infix.op.concept_field();
+    let concept_name = Global::Authored(concept_path);
+    let method = infix_method(
+        context,
+        infix.op,
+        &concept_name,
+        field_name,
+        &operand_type,
+        term,
+    )?;
+
+    // An operator whose method returns the concept parameter is pinned by an expected result type straight away; one that returns a fixed type says nothing about its operands, so only the operands can pin it. The concept declaration is the single source of that distinction.
+    if method
+        .as_ref()
+        .is_some_and(|method| method.returns_operand(&operand_type))
         && let Mode::Check(expected) = &mode
     {
         expect(context, term, &operand_type, expected)?;
@@ -340,11 +445,8 @@ pub(super) fn elaborate_infix(
     let left = left.unwrap();
     let right = right.unwrap();
 
-    let (concept_path, field_name) = infix.op.concept_field();
-    let concept_name = Global::Authored(concept_path);
-
-    // The concept registry entry — absent only in an exotic embedding that elaborates without the embedded prelude, where the operator has nothing to dispatch through.
-    let Some(concept) = context.concept(&concept_name).cloned() else {
+    // The registry entry was absent — report it now that the operand type has structure to name.
+    let Some(method) = method else {
         let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
         return Err(Error::operator_undefined(
             infix.op.symbol().to_string(),
@@ -352,36 +454,20 @@ pub(super) fn elaborate_infix(
         ));
     };
 
-    // Projection is positional over the *instantiated* field telescope (`Structure::fields_at` peels the leading parameter binders, exactly as `elaborate_proj` resolves a label), so the method's position among the concept's fields is the index — no parameter offset.
-    let projection_index = concept
-        .fields
-        .iter()
-        .position(|field| field == field_name)
-        .expect("the syn operator concepts declare their table fields");
+    // Attempt the witness goal exactly like an omitted `use` argument: it resolves, parks on a flex operand type, or defers to a later witness registration, and a definite miss reports `no witness of Add(Point)` — the single operator error vocabulary.
+    attempt_witness_goal(
+        context,
+        method.slot,
+        &method.goal,
+        method.provenance.clone(),
+        term,
+    )?;
 
-    // Mint and attempt the witness goal exactly like an omitted `use` argument: it resolves, parks on a flex operand type, or defers to a later witness registration, and a definite miss reports `no witness of Add(Point)` — the single operator error vocabulary.
-    let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
-    let goal = Term::struct_type_at(concept_name.clone(), universes, vec![operand_type.clone()]);
-    let provenance = WitnessOrigin {
-        func: infix.op.symbol().to_string(),
-        binder: field_name.to_string(),
-    };
-    let (slot, witness) =
-        context.fresh_witness_metavar(goal.clone(), term.span(), provenance.clone());
-    attempt_witness_goal(context, slot, &goal, provenance, term)?;
-
-    let call = Term::apply(Term::proj(witness, projection_index), [left, right]);
-    // No `BoolNot` prim exists; `!=` is the xor-negated equality.
-    let rebuilt = match infix.op {
-        NumOp::Neq => Term::prim(Prim::BoolXor(call, Term::prim(Prim::Bool(true)))),
-        _ => call,
-    };
-
-    let result_type = if infix.op.result_is_bool() {
-        bool_type
-    } else {
-        operand_type
-    };
+    let rebuilt = Term::apply(
+        Term::proj(method.witness.clone(), method.index),
+        [left.clone(), right.clone()],
+    );
+    let result_type = method.result_type(&left, &right);
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &result_type, expected)?;

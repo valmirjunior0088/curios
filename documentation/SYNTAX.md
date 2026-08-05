@@ -389,7 +389,7 @@ All infix operators require whitespace on both sides and associate to the left.
 | 4 | `+`, `-` | `Add`, `Sub` |
 | 5, tightest | `*`, `/`, `%` | `Mul`, `Div`, `Rem` |
 
-Both operands of an operator have the same type. `!=` negates the result of `Eql/eql`; it is not a separate concept method.
+Both operands of an operator have the same type. `==` and `!=` are two separate methods of `Eql`, `eql` and `neq`, so a witness supplies both; `!=` is not a negation applied to `eql`.
 
 Operator notation always uses witness resolution, including primitive operands. Standard witnesses cover the primitive types, while a `satisfy` declaration enables the same notation for a user-defined type.
 

@@ -1,6 +1,6 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, lte, gt, gte};
-use /std/{Order, Eql, Cmp, Nat, Show, Ord};
+use /std/{Order, Eql, Cmp, Nat, Bool, Show, Ord};
 
 pub let cmp(a : Byte, b : Byte) -> Order =
     choose
@@ -10,7 +10,8 @@ pub let cmp(a : Byte, b : Byte) -> Order =
     end;
 
 satisfy Eql(Byte) {
-    eql = eql
+    eql = eql,
+    neq(a, b) = Bool/not(eql(a, b))
 }
 
 satisfy Cmp(Byte) {

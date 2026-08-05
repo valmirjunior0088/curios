@@ -44,7 +44,8 @@ pub let cmp(x : Int, y : Int) -> Order =
     end;
 
 satisfy Eql(Int) {
-    eql = eql
+    eql = eql,
+    neq = neq
 }
 
 satisfy Cmp(Int) {

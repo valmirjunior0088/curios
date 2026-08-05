@@ -157,7 +157,8 @@ pub let to_str(a : BigInt) -> Str =
     end;
 
 satisfy Eql(BigInt) {
-    eql = eql
+    eql = eql,
+    neq(a, b) = Bool/not(eql(a, b))
 }
 
 satisfy Cmp(BigInt) {

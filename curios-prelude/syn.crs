@@ -28,10 +28,6 @@ pub concept Or(A : Type) : pub Type {
     or(A, A) -> A
 }
 
-pub concept Eql(A : Type) : pub Type {
-    eql(A, A) -> Bool
-}
-
 pub concept Cmp(A : Type) : pub Type {
     lt(A, A) -> Bool,
     lte(A, A) -> Bool,
@@ -43,6 +39,9 @@ pub concept Monad(M : (Type) -> Type) : pub Type {
     pure(@A : Type, A) -> M(A),
     bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
 }
+
+pub mod Eql;
+pub use Eql/{let Eql};
 
 pub mod True;
 pub use True/{let True};

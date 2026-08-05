@@ -26,7 +26,8 @@ pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
     go(n, 0, init, Eq/refl());
 
 satisfy Eql(Bits) {
-    eql = eql
+    eql = eql,
+    neq(a, b) = Bool/not(eql(a, b))
 }
 
 satisfy Show(Bits) {

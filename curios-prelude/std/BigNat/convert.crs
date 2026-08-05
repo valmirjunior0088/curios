@@ -36,7 +36,8 @@ pub let to_str(a : BigNat) -> Str =
     end;
 
 satisfy Eql(BigNat) {
-    eql = cmp/eql
+    eql = cmp/eql,
+    neq(a, b) = Bool/not(cmp/eql(a, b))
 }
 
 satisfy Cmp(BigNat) {

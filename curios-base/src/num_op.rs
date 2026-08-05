@@ -44,15 +44,7 @@ impl NumOp {
         }
     }
 
-    /// Comparison and equality operators yield `Bool` regardless of operand type; arithmetic operators yield the operand type.
-    pub fn result_is_bool(self) -> bool {
-        matches!(
-            self,
-            NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte
-        )
-    }
-
-    /// The `/syn` concept (by module segments) and method field this operator dispatches through — the whole operator→concept table backing `elaborate_infix`. Every operator, `&&`/`||` included, resolves through a witness projection of its concept: infix dispatch is one path, with no carved-out exceptions. `Neq` shares `Eql`'s entry; negating the rebuilt equality is the caller's job.
+    /// The `/syn` concept (by module segments) and method field this operator dispatches through — the whole operator→concept table backing `elaborate_infix`. Every operator resolves through a witness projection of its concept: infix dispatch is one path, with no carved-out exceptions and no operator whose result the elaborator has to know on its own. `&&`/`||` are ordinary entries, and so is `!=` — it projects `Eql`'s `neq` rather than negating a rebuilt `eql`, which is what lets a carrier with a native disequality instruction name it directly.
     pub fn concept_field(self) -> (Qualifier, &'static str) {
         match self {
             NumOp::Add => (Qualifier::from(["syn", "Add"]), "add"),
@@ -60,7 +52,8 @@ impl NumOp {
             NumOp::Mul => (Qualifier::from(["syn", "Mul"]), "mul"),
             NumOp::Div => (Qualifier::from(["syn", "Div"]), "div"),
             NumOp::Rem => (Qualifier::from(["syn", "Rem"]), "rem"),
-            NumOp::Eql | NumOp::Neq => (Qualifier::from(["syn", "Eql"]), "eql"),
+            NumOp::Eql => (Qualifier::from(["syn", "Eql", "Eql"]), "eql"),
+            NumOp::Neq => (Qualifier::from(["syn", "Eql", "Eql"]), "neq"),
             NumOp::Lt => (Qualifier::from(["syn", "Cmp"]), "lt"),
             NumOp::Gt => (Qualifier::from(["syn", "Cmp"]), "gt"),
             NumOp::Lte => (Qualifier::from(["syn", "Cmp"]), "lte"),
