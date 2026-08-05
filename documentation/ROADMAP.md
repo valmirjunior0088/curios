@@ -217,7 +217,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Cross-language benchmarks (Docker harness vs. Rust/OCaml/Node/Lean 4 native and Rust/Grain/AssemblyScript on wasmtime)
 - [ ] Developer tooling
   - [ ] Structured program-analysis interface: symbols, references, dependencies, witnesses, and exact source ranges over a reusable analysis crate — respec fresh when scheduled (the retired `wonder` draft lives in git history; its durable insights are source-versus-semantic tagging and snapshot-bound identities). Goal reports already cover the diagnostics slice, and `let _ : ? = f;` answers ad-hoc type queries through the solved-goal report.
-  - [ ] [Code formatter](compiler/10_FORMATTER_SPEC.md) (canonical `curios format` over the comment-capturing parse product and the width-aware printing algebra; the prelude as style corpus)
+  - [x] Code formatter (`curios format`, in-place with `--check`: canonical width-100/indent-4 style over the comment-capturing parse product and the width-aware printing algebra, verified by reparse before anything is written; the prelude stands formatted as the style corpus)
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
   - [ ] Package manager
