@@ -5,7 +5,7 @@ use {
         Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
         RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
-    curios_base::printer::{Printer, flat, group, indent, line, pure, sep_flat},
+    curios_base::printer::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
 };
 
 fn print_dollar_ident(name: &str) -> Printer {
@@ -94,18 +94,19 @@ fn print_val_type(val_type: &ValType) -> Printer {
     }
 }
 
+/// A `(param …)`/`(result …)` list as a group: flat when it fits, one value type per line when a wide signature overflows the width.
 fn print_result_type<'a>(keyword: &'a str, result_type: &'a ResultType) -> Printer {
-    flat([
+    group(flat([
         pure("("),
         pure(keyword),
-        flat(
+        indent(flat(
             result_type
                 .val_types
                 .iter()
-                .map(|val_type| flat([pure(" "), print_val_type(val_type)])),
-        ),
+                .map(|val_type| flat([line(), print_val_type(val_type)])),
+        )),
         pure(")"),
-    ])
+    ]))
 }
 
 fn print_packed_type(packed_type: &PackedType) -> Printer {
@@ -141,13 +142,15 @@ fn print_array_type(array_type: &ArrayType) -> Printer {
     ])
 }
 
+/// A struct type as a group: a small field list shares the type's line, a wide one breaks one field per line.
 fn print_struct_type(struct_type: &StructType) -> Printer {
-    flat([
+    group(flat([
         pure("(struct"),
         indent(flat(struct_type.fields.iter().map(
             |(field_name, field_type)| {
                 flat([
-                    pure("\n(field "),
+                    line(),
+                    pure("(field "),
                     print_field_name(field_name),
                     pure(" "),
                     print_field_type(field_type),
@@ -156,7 +159,7 @@ fn print_struct_type(struct_type: &StructType) -> Printer {
             },
         ))),
         pure(")"),
-    ])
+    ]))
 }
 
 fn print_func_type(func_type: &FuncType) -> Printer {
@@ -220,13 +223,14 @@ fn print_rec_type(rec_type: &RecType) -> Printer {
     if let [(type_name, sub_type)] = &rec_type.sub_types[..] {
         print_sub_type(type_name, sub_type)
     } else {
-        flat([
+        // A genuine recursion group as a group: small families share the `rec` line, wide ones break one member per line.
+        group(flat([
             pure("(rec"),
             indent(flat(rec_type.sub_types.iter().map(
-                |(type_name, sub_type)| flat([pure("\n"), print_sub_type(type_name, sub_type)]),
+                |(type_name, sub_type)| flat([line(), print_sub_type(type_name, sub_type)]),
             ))),
             pure(")"),
-        ])
+        ]))
     }
 }
 
@@ -310,19 +314,16 @@ fn print_instr(instr: &Instr) -> Printer {
         ]),
         Instr::Br { label_name } => flat([pure("br "), print_label_name(label_name)]),
         Instr::BrIf { label_name } => flat([pure("br_if "), print_label_name(label_name)]),
+        // The label list as a group: a wide table breaks one label per line instead of running off the dump's edge.
         Instr::BrTable {
             label_names,
             label_name,
-        } => flat([
+        } => group(flat([
             pure("br_table"),
-            flat(
-                label_names
-                    .iter()
-                    .map(|label_name| flat([pure(" "), print_label_name(label_name)])),
-            ),
-            pure(" "),
-            print_label_name(label_name),
-        ]),
+            indent(flat(label_names.iter().chain([label_name]).map(
+                |label_name| flat([line(), print_label_name(label_name)]),
+            ))),
+        ])),
         Instr::Return => pure("return"),
         Instr::Call { func_name } => flat([pure("call "), print_func_name(func_name)]),
         Instr::CallRef { type_name } => flat([pure("call_ref "), print_type_name(type_name)]),
@@ -616,8 +617,9 @@ fn print_instr(instr: &Instr) -> Printer {
     }
 }
 
+// Hard breaks, not literal newlines: a group holding a multi-instruction sequence (a global's initializer) must refuse to flatten rather than ride its first instruction.
 fn print_instrs(instrs: &[Instr]) -> Printer {
-    sep_flat(instrs.iter().map(print_instr), || pure("\n"))
+    sep_flat(instrs.iter().map(print_instr), hard_line)
 }
 
 fn print_expr(expr: &Expr) -> Printer {
@@ -722,16 +724,16 @@ fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -
     ])
 }
 
+/// A global as a group: a constant-sized initializer shares the declaration's line, a wide one breaks onto the next.
 fn print_global<'a>(global_name: &'a GlobalName, global: &'a Global) -> Printer {
-    flat([
+    group(flat([
         pure("(global "),
         print_global_name(global_name),
         pure(" "),
         print_global_type(&global.global_type),
-        pure("\n"),
-        indent(print_expr(&global.expr)),
+        indent(flat([line(), print_expr(&global.expr)])),
         pure(")"),
-    ])
+    ]))
 }
 
 fn print_data_segment<'a>(name: &'a DataName, segment: &'a DataSegment) -> Printer {
