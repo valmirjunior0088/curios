@@ -6,7 +6,7 @@ use {
     },
     curios_base::{
         Flt, Grain, Plicity, Qualifier,
-        printer::{Printer, deferred, flat, indent, pure, sep_flat},
+        printer::{Printer, deferred, flat, group, indent, line, pure, sep_flat, soft_line},
     },
     std::{
         cell::RefCell,
@@ -691,6 +691,20 @@ fn sub(term: Term, depth: usize) -> Printer {
     deferred(move || print_term(term, depth))
 }
 
+/// A delimited comma-list that fits on one line or breaks one item per line, indented — `f(a, b)` against `f(\n  a,\n  b\n)`. `spaced` spells the flat padding inside the delimiters so the flat form stays byte-identical to the fixed layout it replaced: `false` for parenthesized lists, `true` for brace literals (`S { a, b }`). Behavior-neutral on the unbounded `Display` path, where every group renders flat.
+fn listed(open: String, spaced: bool, items: Vec<Printer>, close: &'static str) -> Printer {
+    let lead = if spaced { line } else { soft_line };
+    group(flat([
+        pure(open),
+        indent(flat([
+            lead(),
+            sep_flat(items, || flat([pure(","), line()])),
+        ])),
+        lead(),
+        pure(close),
+    ]))
+}
+
 /// [`sub`] for a primitive's operands.
 fn sub_prim(prim: Prim, depth: usize) -> Printer {
     deferred(move || print_prim(prim, depth))
@@ -760,9 +774,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             let mut printers = Vec::with_capacity(n);
             let output = walk(telescope, &plicities, depth, n, 0, &mut printers);
             flat([
-                pure("("),
-                sep_flat(printers, || pure(", ")),
-                pure(") -> "),
+                listed("(".into(), false, printers, ")"),
+                pure(" -> "),
                 sub(output, depth + n),
             ])
         }
@@ -798,8 +811,9 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             plicities,
         }) => flat([
             sub(head, depth),
-            pure("("),
-            sep_flat(
+            listed(
+                "(".into(),
+                false,
                 params
                     .into_iter()
                     .zip(plicities)
@@ -809,9 +823,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         Plicity::Explicit => sub(p, depth),
                     })
                     .collect::<Vec<_>>(),
-                || pure(", "),
+                ")",
             ),
-            pure(")"),
         ]),
         Subterm::TupleType(TupleType { telescope, .. }) => {
             fn walk(
@@ -844,19 +857,18 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
         }
         Subterm::Tuple(Tuple { fields, names }) => {
             let mut names = names.into_iter().chain(std::iter::repeat(None));
-            flat([
-                pure("("),
-                sep_flat(
-                    fields
-                        .into_iter()
-                        .map(move |f| match names.next().flatten() {
-                            Some(name) => flat([pure(name), pure(" = "), sub(f, depth)]),
-                            None => sub(f, depth),
-                        }),
-                    || pure(", "),
-                ),
-                pure(")"),
-            ])
+            listed(
+                "(".into(),
+                false,
+                fields
+                    .into_iter()
+                    .map(move |f| match names.next().flatten() {
+                        Some(name) => flat([pure(name), pure(" = "), sub(f, depth)]),
+                        None => sub(f, depth),
+                    })
+                    .collect(),
+                ")",
+            )
         }
         Subterm::Proj(Proj { head, field }) => {
             let field = match field {
@@ -876,19 +888,16 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             if params.is_empty() && indices.is_empty() {
                 pure(name)
             } else {
-                flat([
-                    pure(name),
-                    pure("("),
-                    sep_flat(
-                        params
-                            .into_iter()
-                            .chain(indices)
-                            .map(|p| sub(p, depth))
-                            .collect::<Vec<_>>(),
-                        || pure(", "),
-                    ),
-                    pure(")"),
-                ])
+                listed(
+                    format!("{name}("),
+                    false,
+                    params
+                        .into_iter()
+                        .chain(indices)
+                        .map(|p| sub(p, depth))
+                        .collect(),
+                    ")",
+                )
             }
         }
         // Prints as the constructor-function call, instantiated type params hidden — `Result/success(42)`.
@@ -903,18 +912,12 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             if payload.is_empty() {
                 pure(format!("{name}/{tag}"))
             } else {
-                flat([
-                    pure(format!("{name}/{tag}")),
-                    pure("("),
-                    sep_flat(
-                        payload
-                            .into_iter()
-                            .map(|p| sub(p, depth))
-                            .collect::<Vec<_>>(),
-                        || pure(", "),
-                    ),
-                    pure(")"),
-                ])
+                listed(
+                    format!("{name}/{tag}("),
+                    false,
+                    payload.into_iter().map(|p| sub(p, depth)).collect(),
+                    ")",
+                )
             }
         }
         // Like `InductType` but with no indices: `Pair(Nat, Bin)`.
@@ -927,18 +930,12 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             if params.is_empty() {
                 pure(name)
             } else {
-                flat([
-                    pure(name),
-                    pure("("),
-                    sep_flat(
-                        params
-                            .into_iter()
-                            .map(|p| sub(p, depth))
-                            .collect::<Vec<_>>(),
-                        || pure(", "),
-                    ),
-                    pure(")"),
-                ])
+                listed(
+                    format!("{name}("),
+                    false,
+                    params.into_iter().map(|p| sub(p, depth)).collect(),
+                    ")",
+                )
             }
         }
         // Prints as the brace literal, instantiated type params hidden — `Pair { 0, "" }`.
@@ -947,21 +944,16 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             universes,
             fields,
             ..
-        }) => flat([
-            pure(format!(
-                "{}{} {{ ",
+        }) => listed(
+            format!(
+                "{}{} {{",
                 display_symbol(&name),
                 universe_suffix(&universes)
-            )),
-            sep_flat(
-                fields
-                    .into_iter()
-                    .map(|f| sub(f, depth))
-                    .collect::<Vec<_>>(),
-                || pure(", "),
             ),
-            pure(" }"),
-        ]),
+            true,
+            fields.into_iter().map(|f| sub(f, depth)).collect(),
+            "}",
+        ),
         Subterm::Match(Match {
             head,
             motive,
