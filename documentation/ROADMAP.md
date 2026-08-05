@@ -151,6 +151,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Diagnostic terms printed with names in scope
 - [x] Bare written goals (`?`) report their local scope, expected type, and optional inferred solution
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located by file, line, and column, tolerantly materialized, with operator witness projections folded back to infix and terms rendered within a fixed width through the printer's width-aware document layer _(labels and a typed incomplete checking outcome remain possible extensions)_
+- [ ] [Goal suggestions (`? ≈`): sandboxed local and application candidate fits in goal reports](program_analysis/03_GOAL_SUGGESTIONS_SPEC.md)
 
 ## Standard Library
 
