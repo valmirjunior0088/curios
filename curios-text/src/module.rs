@@ -243,7 +243,7 @@ impl FromStr for Module {
 
 impl fmt::Display for Module {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_module_items(self.clone().items), formatter, 2)
+        run_printer(print_module_items(self.clone().items), formatter, 4)
     }
 }
 
@@ -358,6 +358,6 @@ impl fmt::Display for Entrypoint {
                 print_term(entrypoint.tail),
             ])
         };
-        run_printer(printer, formatter, 2)
+        run_printer(printer, formatter, 4)
     }
 }

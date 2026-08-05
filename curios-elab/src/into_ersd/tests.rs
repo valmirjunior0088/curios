@@ -75,8 +75,8 @@ fn a_scalar_expression_erases_in_evaluation_order() {
         erased.to_string(),
         "\
 entry {
-  ~v0 = NatAdd(2, 3)
-  return ~v0
+    ~v0 = NatAdd(2, 3)
+    return ~v0
 }
 "
     );
@@ -108,9 +108,9 @@ fn bool_and_byte_keep_their_shapes() {
         erased.to_string(),
         "\
 entry {
-  ~v0$b = BoolAnd(true, false)
-  ~v1 = ByteEql(7:byte, 8:byte)
-  return ~v1
+    ~v0$b = BoolAnd(true, false)
+    ~v1 = ByteEql(7:byte, 8:byte)
+    return ~v1
 }
 "
     );
@@ -133,8 +133,8 @@ fn a_nat_spine_over_a_variable_erases_to_one_addition() {
         erased.to_string(),
         "\
 entry {
-  ~v0 = NatAdd(3, 5)
-  return ~v0
+    ~v0 = NatAdd(3, 5)
+    return ~v0
 }
 "
     );
@@ -162,7 +162,7 @@ fn items_erase_in_dominance_order() {
         "\
 ~v0$/a = NatAdd(2, 1)
 entry {
-  return ~v0$/a
+    return ~v0$/a
 }
 "
     );
@@ -188,7 +188,7 @@ fn an_exit_seals_the_block_and_drops_dead_code() {
         erased.to_string(),
         "\
 entry {
-  exit 3
+    exit 3
 }
 "
     );
@@ -219,9 +219,9 @@ fn sequences_transcribe_without_carrier_choices() {
         erased.to_string(),
         "\
 entry {
-  ~v0$lst = LstBuild(1, 2)
-  ~v1 = LstLen(~v0$lst)
-  return ~v1
+    ~v0$lst = LstBuild(1, 2)
+    ~v1 = LstLen(~v0$lst)
+    return ~v1
 }
 "
     );
@@ -331,11 +331,11 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
         "\
 functions ~f0$/id
 entry {
-  ~v1 = apply ~f0$/id(4)
-  return ~v1
+    ~v1 = apply ~f0$/id(4)
+    return ~v1
 }
 function ~f0$/id(~v0$x) {
-  return ~v0$x
+    return ~v0$x
 }
 "
     );
@@ -465,8 +465,8 @@ fn a_variant_constructs_with_its_registered_schema() {
         "\
 family ~d0$/Opt { ~t0$none() ~t1$some(x) }
 entry {
-  ~v0 = construct ~t1(6)
-  return ~v0
+    ~v0 = construct ~t1(6)
+    return ~v0
 }
 "
     );
@@ -498,9 +498,9 @@ fn a_multi_field_tuple_shares_the_width_schema() {
         "\
 product ~p0(0, 1)
 entry {
-  ~v0$pair = product ~p0(1, 2)
-  ~v1 = project ~p0.1 ~v0$pair
-  return ~v1
+    ~v0$pair = product ~p0(1, 2)
+    ~v1 = project ~p0.1 ~v0$pair
+    return ~v1
 }
 "
     );
@@ -532,7 +532,7 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
         erased.to_string(),
         "\
 entry {
-  return 9
+    return 9
 }
 "
     );
@@ -557,15 +557,15 @@ fn a_bool_match_erases_to_a_switch_bool() {
         erased.to_string(),
         "\
 entry {
-  ~v0 = switch-bool true {
-    false => {
-      return 10
+    ~v0 = switch-bool true {
+        false => {
+            return 10
+        }
+        true => {
+            return 20
+        }
     }
-    true => {
-      return 20
-    }
-  }
-  return ~v0
+    return ~v0
 }
 "
     );
@@ -596,16 +596,16 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
         erased.to_string(),
         "\
 entry {
-  ~v1 = switch-nat 5 {
-    0 => {
-      return 0
+    ~v1 = switch-nat 5 {
+        0 => {
+            return 0
+        }
+        default => {
+            ~v0 = NatSub(5, 1)
+            return ~v0
+        }
     }
-    default => {
-      ~v0 = NatSub(5, 1)
-      return ~v0
-    }
-  }
-  return ~v1
+    return ~v1
 }
 "
     );
@@ -636,16 +636,16 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
         erased.to_string(),
         "\
 entry {
-  ~v3 = fold-nat 5 {
-    zero => {
-      return 0
+    ~v3 = fold-nat 5 {
+        zero => {
+            return 0
+        }
+        step(~v0$pred, ~v1$ih) => {
+            ~v2 = NatAdd(~v1$ih, 2)
+            return ~v2
+        }
     }
-    step(~v0$pred, ~v1$ih) => {
-      ~v2 = NatAdd(~v1$ih, 2)
-      return ~v2
-    }
-  }
-  return ~v3
+    return ~v3
 }
 "
     );
@@ -685,16 +685,16 @@ fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
         "\
 ~v0$/xs = LstBuild(1)
 entry {
-  ~v5 = fold-seq[lst] ~v0$/xs {
-    empty => {
-      return 0
+    ~v5 = fold-seq[lst] ~v0$/xs {
+        empty => {
+            return 0
+        }
+        step(~v1$h, ~v2$t, ~v3$ih) => {
+            ~v4 = NatAdd(~v3$ih, 1)
+            return ~v4
+        }
     }
-    step(~v1$h, ~v2$t, ~v3$ih) => {
-      ~v4 = NatAdd(~v3$ih, 1)
-      return ~v4
-    }
-  }
-  return ~v5
+    return ~v5
 }
 "
     );
@@ -742,16 +742,16 @@ fn a_variant_match_binds_payload_without_projections() {
         "\
 family ~d0$/Opt { ~t0$none() ~t1$some(x) }
 entry {
-  ~v0$scrutinee = construct ~t1(6)
-  ~v2 = match ~d0 ~v0$scrutinee {
-    ~t0() => {
-      return 0
+    ~v0$scrutinee = construct ~t1(6)
+    ~v2 = match ~d0 ~v0$scrutinee {
+        ~t0() => {
+            return 0
+        }
+        ~t1(~v1$x) => {
+            return ~v1$x
+        }
     }
-    ~t1(~v1$x) => {
-      return ~v1$x
-    }
-  }
-  return ~v2
+    return ~v2
 }
 "
     );
@@ -825,13 +825,13 @@ fn a_recursive_function_group_erases_to_functions() {
         erased.to_string(),
         "\
 entry {
-  functions ~f0$f
-  ~v2 = apply ~f0$f(3)
-  return ~v2
+    functions ~f0$f
+    ~v2 = apply ~f0$f(3)
+    return ~v2
 }
 function ~f0$f(~v0$x) {
-  ~v1 = apply ~f0$f(~v0$x)
-  return ~v1
+    ~v1 = apply ~f0$f(~v0$x)
+    return ~v1
 }
 "
     );
@@ -871,16 +871,16 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
         erased.to_string(),
         "\
 entry {
-  rec ~r0 {
-    functions ~f0$produce
-    ~v0$consume = init {
-      return ~f0$produce
+    rec ~r0 {
+        functions ~f0$produce
+        ~v0$consume = init {
+            return ~f0$produce
+        }
     }
-  }
-  return ~v0$consume
+    return ~v0$consume
 }
 function ~f0$produce(~v1$u) {
-  return 5
+    return 5
 }
 "
     );
@@ -940,12 +940,12 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         "\
 functions ~f0$/go
 entry {
-  ~v2 = apply ~f0$/go(1)
-  return ~v2
+    ~v2 = apply ~f0$/go(1)
+    return ~v2
 }
 function ~f0$/go(~v0$x) {
-  ~v1 = apply ~f0$/go(~v0$x)
-  return ~v1
+    ~v1 = apply ~f0$/go(~v0$x)
+    return ~v1
 }
 "
     );

@@ -1278,7 +1278,7 @@ impl From<Subterm> for Term {
 
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_term(self.clone(), 0), formatter, 2)
+        run_printer(print_term(self.clone(), 0), formatter, 4)
     }
 }
 
@@ -1288,7 +1288,7 @@ impl Term {
         struct Within(Term, usize);
         impl fmt::Display for Within {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                run_printer_within(print_term(self.0.clone(), 0), formatter, 2, self.1)
+                run_printer_within(print_term(self.0.clone(), 0), formatter, 4, self.1)
             }
         }
         Within(self.clone(), width)
@@ -2708,7 +2708,7 @@ impl Subterm {
 
 impl fmt::Display for Subterm {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_term(self.clone().into(), 0), formatter, 2)
+        run_printer(print_term(self.clone().into(), 0), formatter, 4)
     }
 }
 

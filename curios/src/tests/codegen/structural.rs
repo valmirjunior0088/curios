@@ -149,9 +149,9 @@ impl Function<'_> {
     }
 }
 
-/// Split the module WAT into its emitted functions. Each starts at a `  (func ` line (module indent); its text runs to the next one. Module items after the last function (exports, `$start`) never open a `  (func ` line, so they ride along on the final entry without introducing calls or refs of their own.
+/// Split the module WAT into its emitted functions. Each starts at a `    (func ` line (module indent); its text runs to the next one. Module items after the last function (exports, `$start`) never open a `    (func ` line, so they ride along on the final entry without introducing calls or refs of their own.
 fn functions(wat: &str) -> Vec<Function<'_>> {
-    const MARKER: &str = "\n  (func ";
+    const MARKER: &str = "\n    (func ";
     let mut starts = Vec::new();
     let mut cursor = 0;
     while let Some(offset) = wat[cursor..].find(MARKER) {

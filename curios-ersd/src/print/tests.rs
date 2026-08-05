@@ -24,8 +24,8 @@ fn a_representative_module_prints_exactly() {
         "\
 ~v0$one = alias 1
 entry {
-  ~v1$doubled = NatAdd(~v0$one, ~v0$one)
-  return ~v1$doubled
+    ~v1$doubled = NatAdd(~v0$one, ~v0$one)
+    return ~v1$doubled
 }
 "
     );
@@ -89,21 +89,21 @@ fn a_recursive_module_prints_exactly() {
         "\
 functions ~f0$loop
 entry {
-  ~v4 = apply ~f0$loop(10)
-  return ~v4
+    ~v4 = apply ~f0$loop(10)
+    return ~v4
 }
 function ~f0$loop(~v0$n) {
-  ~v3 = switch-nat ~v0$n {
-    0 => {
-      return 0
+    ~v3 = switch-nat ~v0$n {
+        0 => {
+            return 0
+        }
+        default => {
+            ~v1$predecessor = NatSub(~v0$n, 1)
+            ~v2 = apply ~f0$loop(~v1$predecessor)
+            return ~v2
+        }
     }
-    default => {
-      ~v1$predecessor = NatSub(~v0$n, 1)
-      ~v2 = apply ~f0$loop(~v1$predecessor)
-      return ~v2
-    }
-  }
-  return ~v3
+    return ~v3
 }
 "
     );
@@ -145,9 +145,9 @@ fn schemas_and_constants_print_deterministically() {
 product ~p0$Pair(lhs, 1)
 family ~d0$Shape { ~t0$circle(radius) }
 entry {
-  ~v0 = product ~p0(-0.0:flt, 7:byte)
-  ~v1 = construct ~t0(~v0)
-  return ~v1
+    ~v0 = product ~p0(-0.0:flt, 7:byte)
+    ~v1 = construct ~t0(~v0)
+    return ~v1
 }
 "
     );

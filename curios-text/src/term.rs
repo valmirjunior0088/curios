@@ -82,7 +82,7 @@ impl FromStr for Term {
 
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_term(self.clone()), formatter, 2)
+        run_printer(print_term(self.clone()), formatter, 4)
     }
 }
 

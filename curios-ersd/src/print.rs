@@ -110,7 +110,7 @@ impl Printer<'_, '_, '_> {
             match job {
                 Job::Line(line) => {
                     for _ in 0..indent.min(INDENT_SATURATION) {
-                        self.out.write_str("  ")?;
+                        self.out.write_str("    ")?;
                     }
                     self.out.write_str(&line)?;
                     self.out.write_str("\n")?;
@@ -136,7 +136,7 @@ impl Printer<'_, '_, '_> {
                         Terminator::Unreachable => "unreachable".into(),
                     };
                     for _ in 0..indent.min(INDENT_SATURATION) {
-                        self.out.write_str("  ")?;
+                        self.out.write_str("    ")?;
                     }
                     self.out.write_str(&line)?;
                     self.out.write_str("\n")?;

@@ -205,7 +205,7 @@ impl Module {
 
 impl fmt::Display for Module {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_module(self), formatter, 2)?;
+        run_printer(print_module(self), formatter, 4)?;
 
         Ok(())
     }
@@ -217,7 +217,7 @@ impl Module {
         struct Within<'a>(&'a Module, usize);
         impl fmt::Display for Within<'_> {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                run_printer_within(print_module(self.0), formatter, 2, self.1)
+                run_printer_within(print_module(self.0), formatter, 4, self.1)
             }
         }
         Within(self, width)
