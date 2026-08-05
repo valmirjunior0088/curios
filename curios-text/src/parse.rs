@@ -54,7 +54,7 @@ const KEYWORDS: &[&str] = &[
 
 thread_local! {
     /// Every comment the current parse run has consumed, keyed by start offset — recorded by [`parse_whitespace`], the single place comments die, and drained by the `parse_with_comments` entries. The packrat-memo pattern: per-thread and cleared per run, so runs never see each other's comments. Offset keying makes re-recording under backtracking idempotent, and memoized jumps that skip re-running whitespace are harmless because the cache-miss run already recorded.
-    static COMMENTS: RefCell<BTreeMap<usize, Span>> = RefCell::new(BTreeMap::new());
+    static COMMENTS: RefCell<BTreeMap<usize, Span>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 fn record_comment(span: Span) {
