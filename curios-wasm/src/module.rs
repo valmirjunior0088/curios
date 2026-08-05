@@ -6,7 +6,7 @@ use {
         DataName, Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName,
         ValType, print_module,
     },
-    curios_base::printer::run_printer,
+    curios_base::printer::{run_printer, run_printer_within},
     std::fmt,
 };
 
@@ -208,5 +208,18 @@ impl fmt::Display for Module {
         run_printer(print_module(self), formatter, 2)?;
 
         Ok(())
+    }
+}
+
+impl Module {
+    /// A `Display` adapter rendering the module within `width` columns — long runs (a wide function signature's `param` bindings) break one per line instead of sharing one. The `--print wasm` inspection path; plain `Display` keeps the unbounded flat layout.
+    pub fn display_within(&self, width: usize) -> impl fmt::Display + '_ {
+        struct Within<'a>(&'a Module, usize);
+        impl fmt::Display for Within<'_> {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                run_printer_within(print_module(self.0), formatter, 2, self.1)
+            }
+        }
+        Within(self, width)
     }
 }

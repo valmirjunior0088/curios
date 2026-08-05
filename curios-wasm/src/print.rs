@@ -5,7 +5,7 @@ use {
         Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
         RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
-    curios_base::printer::{Printer, flat, indent, pure, sep_flat},
+    curios_base::printer::{Printer, flat, group, indent, line, pure, sep_flat},
 };
 
 fn print_dollar_ident(name: &str) -> Printer {
@@ -657,34 +657,30 @@ fn print_import<'a>(module_name: &'a str, name: &'a str, import: &'a Import) -> 
     ])
 }
 
-/// Prints a `(param $name type)`/`(local $name type)` run: the first binding leads with a newline (so it starts its own line under the enclosing `indent`), every later one with a plain space (so they share that line) — the one layout `param`s and `local`s both use in `print_func`.
+/// Prints a `(param $name type)`/`(local $name type)` run: the first binding leads with a newline (so it starts its own line under the enclosing `indent`), and the run is one group — every later binding shares that line while the run fits, and each takes its own line when it does not — the one layout `param`s and `local`s both use in `print_func`. Behavior-neutral on the unbounded `Display` path; [`Module::display_within`](super::Module::display_within) is where the width bites.
 fn print_bindings<'a>(
     keyword: &'static str,
     mut bindings: impl Iterator<Item = (&'a LocalName, &'a ValType)> + 'a,
 ) -> Printer {
-    flat(
-        bindings
-            .next()
-            .into_iter()
-            .map(move |(local_name, val_type)| {
-                flat([
-                    pure(format!("\n({keyword} ")),
-                    print_local_name(local_name),
-                    pure(" "),
-                    print_val_type(val_type),
-                    pure(")"),
-                ])
-            })
-            .chain(bindings.map(move |(local_name, val_type)| {
-                flat([
-                    pure(format!(" ({keyword} ")),
-                    print_local_name(local_name),
-                    pure(" "),
-                    print_val_type(val_type),
-                    pure(")"),
-                ])
-            })),
-    )
+    let binding = move |(local_name, val_type): (&'a LocalName, &'a ValType)| {
+        flat([
+            pure(format!("({keyword} ")),
+            print_local_name(local_name),
+            pure(" "),
+            print_val_type(val_type),
+            pure(")"),
+        ])
+    };
+    match bindings.next() {
+        None => flat([]),
+        Some(first) => flat([
+            pure("\n"),
+            group(sep_flat(
+                std::iter::once(first).chain(bindings).map(binding),
+                line,
+            )),
+        ]),
+    }
 }
 
 fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -> Printer {

@@ -56,7 +56,8 @@ impl fmt::Display for Stage<'_> {
             Stage::ErsdOptm(module) => write!(f, "{module}"),
             Stage::Cont(module) => write!(f, "{module}"),
             Stage::ContOptm(module) => write!(f, "{module}"),
-            Stage::Wasm(module) => write!(f, "{module}"),
+            // The one stage dump rendered within a width: `--print wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps keep the unbounded layout until their printers grow break points worth fitting.
+            Stage::Wasm(module) => write!(f, "{}", module.display_within(100)),
         }
     }
 }
