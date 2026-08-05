@@ -282,7 +282,7 @@ pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
     rewrite_universe_levels_scoped(value, move |_, level| rewrite(level))
 }
 
-/// Structural implementation used only by the validated Core-to-Ersd projection. Nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative.
+/// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. Two callers: the validated Core-to-Ersd projection, and goal-report display — the surface language has no spelling for an instance, so reports erase them.
 pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }

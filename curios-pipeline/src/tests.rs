@@ -292,6 +292,31 @@ fn goal_types_spell_operators_as_infix_not_witness_projections() {
 }
 
 #[test]
+fn goal_reports_spell_no_universe_instances() {
+    // A goal under a match motive over a universe-polymorphic family used to report `Eq.{?u311}(…)` — an instance spelling the surface language does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let double(n : Nat) -> Nat = n + n;
+        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
+            match n : (m) => Eq(m + m, m * 2)
+            | 0 => ?
+            | p + 1; ih => ?
+            end;
+        double(21)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert_eq!(
+        error.matches("goal `?`").count(),
+        2,
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains(".{"), "universe instance leaked: {error}");
+    assert!(!error.contains("?u"), "universe meta leaked: {error}");
+}
+
+#[test]
 fn goal_types_spell_negated_equality_as_neq() {
     // `a != b` elaborates as an xor-negated equality call (no `BoolNot` prim exists); the report folds the pair back to `!=`.
     let source = r#"

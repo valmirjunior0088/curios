@@ -10,7 +10,8 @@ use {
         LevelHead, Match, MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecGroup,
         RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Variant, Visit,
-        rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
+        project_erased_universes, rewrite_universe_levels_scoped, shift_universe_params,
+        universe_metas,
     },
     std::{
         cell::RefCell,
@@ -694,7 +695,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 ///
 /// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 ///
-/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms.
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it.
 pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<GoalReport> {
     /// Collected goal sites in discovery order: each goal's id with its first occurrence's span, shared into the scan closures.
     type GoalSites = Rc<RefCell<Vec<(MetaId, Option<Span>)>>>;
@@ -780,10 +781,13 @@ pub(crate) fn collect_goal_reports(context: &Context, module: &Module) -> Vec<Go
         }
     }
 
-    // Materialize committed substitutions tolerantly, then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, and the fold handles both.
+    // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, and the fold handles both.
     let operators = super::operator_witness_table(context);
     let display = |term: &Term| {
-        super::denoise_for_display(&operators, &zonk_solved_term_metas(context, term))
+        super::denoise_for_display(
+            &operators,
+            &project_erased_universes(&zonk_solved_term_metas(context, term)),
+        )
     };
     let goals = goals.borrow();
     goals
