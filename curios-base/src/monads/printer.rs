@@ -8,15 +8,25 @@ struct PrinterState<'a, 'b> {
     indent_step: usize,
     indent_by: usize,
     should_indent: bool,
+    /// Characters emitted since the last newline, indentation included — what a [`Printer::Group`]'s fits scan subtracts from `width` to learn the room left on the line.
+    column: usize,
+    /// The line width [`Printer::Group`]s try to fit; `None` is unbounded, so every group renders flat.
+    width: Option<usize>,
 }
 
 impl<'a, 'b> PrinterState<'a, 'b> {
-    fn new(formatter: &'a mut fmt::Formatter<'b>, indent_step: usize) -> Self {
+    fn new(
+        formatter: &'a mut fmt::Formatter<'b>,
+        indent_step: usize,
+        width: Option<usize>,
+    ) -> Self {
         Self {
             formatter,
             indent_step,
             indent_by: 0,
             should_indent: true,
+            column: 0,
+            width,
         }
     }
 
@@ -25,6 +35,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
             if self.should_indent {
                 for _ in 0..self.indent_by {
                     self.formatter.write_str(" ")?;
+                    self.column += 1;
                 }
 
                 self.should_indent = false;
@@ -34,6 +45,9 @@ impl<'a, 'b> PrinterState<'a, 'b> {
 
             if char == '\n' {
                 self.should_indent = true;
+                self.column = 0;
+            } else {
+                self.column += 1;
             }
         }
 
@@ -61,6 +75,10 @@ pub enum Printer {
     ///
     /// `Option` so the interpreter can take the thunk out: a type with a `Drop` impl cannot have a field moved away.
     Deferred(Option<Box<dyn FnOnce() -> Printer>>),
+    /// A layout choice point: `flat` when the enclosing [`Printer::Group`] renders on one line, a newline (plus pending indentation) when it breaks — or unconditionally when no group encloses it, since the top of a document is broken context. `hard` marks a mandatory break: it always emits a newline, and the fits scan fails on it, so no group containing one ever renders flat.
+    Line { flat: String, hard: bool },
+    /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
+    Group(Box<Printer>),
 }
 
 impl Printer {
@@ -76,9 +94,12 @@ impl Printer {
         match self {
             Printer::Text(_) => true,
             Printer::Concat(parts) => parts.is_empty(),
-            Printer::Indent(inner) => matches!(**inner, Printer::Text(_)),
+            Printer::Indent(inner) | Printer::Group(inner) => {
+                matches!(**inner, Printer::Text(_))
+            }
             // Holds a thunk, never a child document.
             Printer::Deferred(_) => true,
+            Printer::Line { .. } => true,
         }
     }
 }
@@ -99,8 +120,9 @@ impl Drop for Printer {
             match &mut printer {
                 Printer::Text(_) => {}
                 Printer::Concat(parts) => pending.extend(mem::take(parts)),
-                Printer::Indent(inner) => pending.push(inner.take()),
+                Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
                 Printer::Deferred(_) => {}
+                Printer::Line { .. } => {}
             }
             // `printer` is dismantled now, so its own drop returns at once.
         }
@@ -109,13 +131,70 @@ impl Drop for Printer {
 
 /// One entry of [`run_printer`]'s work stack.
 ///
-/// `Dedent` is what replaces the closure nesting that used to restore the indentation level on the way out: pushed under a document, it runs after it.
+/// `Dedent` is what replaces the closure nesting that used to restore the indentation level on the way out: pushed under a document, it runs after it. `Print`'s flag is the layout mode the document renders under: `true` inside a fitting [`Printer::Group`], where every soft [`Printer::Line`] emits its flat spelling.
 enum Step {
-    Print(Printer),
+    Print(Printer, bool),
     Dedent,
 }
 
+/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision, looking no further than the end of the current line (a literal newline in a [`Printer::Text`] ends the line within budget, so the scan succeeds early). A hard [`Printer::Line`] fails the scan outright: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation.
+///
+/// Measuring forces every [`Printer::Deferred`] it reaches, replacing the node in place with the built document — the thunk is `FnOnce`, so a peek that discarded the result would lose it. The bounded lookahead is what keeps that cheap: at most one line width of document is ever materialized per decision, and what is materialized is exactly what printing consumes next. Iterative, like every other walk over this type.
+fn fits(root: &mut Printer, available: usize) -> bool {
+    let mut used = 0usize;
+    let mut stack: Vec<&mut Printer> = Vec::from([root]);
+
+    while let Some(node) = stack.pop() {
+        // Materialization is handled before the descent match: the arms below push reborrows of `node`'s interior onto the shared stack, which makes the scrutinee borrow loop-wide — an in-match `*node = built` could never coexist with it.
+        if matches!(*node, Printer::Deferred(_)) {
+            let Printer::Deferred(slot) = &mut *node else {
+                unreachable!("just matched");
+            };
+            let thunk = slot
+                .take()
+                .expect("a deferred thunk is present until forced");
+            *node = thunk();
+            stack.push(node);
+            continue;
+        }
+
+        match &mut *node {
+            Printer::Text(text) => {
+                for char in text.chars() {
+                    if char == '\n' {
+                        return true;
+                    }
+                    used += 1;
+                    if used > available {
+                        return false;
+                    }
+                }
+            }
+            Printer::Line { flat, hard } => {
+                if *hard {
+                    return false;
+                }
+                used += flat.chars().count();
+                if used > available {
+                    return false;
+                }
+            }
+            // Reversed, because the stack pops last-in first.
+            Printer::Concat(parts) => stack.extend(parts.iter_mut().rev()),
+            // Indentation adds characters only after a newline, and the flat rendering has none.
+            Printer::Indent(inner) => stack.push(inner),
+            // A nested group inside a fitting parent renders flat with it, so it is measured flat too.
+            Printer::Group(inner) => stack.push(inner),
+            Printer::Deferred(_) => unreachable!("materialized above"),
+        }
+    }
+
+    true
+}
+
 /// The entry point: executes a printer against `formatter`, with `indent_step` spaces added per [`indent`] level. Typically the entire body of a `Display::fmt` impl — every IR crate's `print.rs` builds a [`Printer`] and hands it here.
+///
+/// Unbounded width: every [`group`] renders flat, so a document without [`line`]s renders exactly as it did before the layout variants existed. [`run_printer_within`] is the width-fitting entry.
 ///
 /// Iterative by construction: the work stack holds what is left to emit, so a document's nesting costs heap rather than native frames.
 pub fn run_printer<'b, 'c>(
@@ -123,27 +202,67 @@ pub fn run_printer<'b, 'c>(
     formatter: &'b mut fmt::Formatter<'c>,
     indent_step: usize,
 ) -> Result<(), fmt::Error> {
-    let mut state = PrinterState::new(formatter, indent_step);
-    let mut stack = Vec::from([Step::Print(printer)]);
+    run(printer, formatter, indent_step, None)
+}
+
+/// [`run_printer`] against a line width: each [`group`] renders flat only when its flat form fits what remains of the line. The width is a target, not a guarantee — content with no break point still overruns.
+pub fn run_printer_within<'b, 'c>(
+    printer: Printer,
+    formatter: &'b mut fmt::Formatter<'c>,
+    indent_step: usize,
+    width: usize,
+) -> Result<(), fmt::Error> {
+    run(printer, formatter, indent_step, Some(width))
+}
+
+fn run<'b, 'c>(
+    printer: Printer,
+    formatter: &'b mut fmt::Formatter<'c>,
+    indent_step: usize,
+    width: Option<usize>,
+) -> Result<(), fmt::Error> {
+    let mut state = PrinterState::new(formatter, indent_step, width);
+    let mut stack = Vec::from([Step::Print(printer, false)]);
 
     while let Some(step) = stack.pop() {
         // Children are taken out rather than moved out: `Printer` has a `Drop` impl, so its fields cannot be moved away. What is left behind is childless and costs nothing to drop at the end of the arm.
         match step {
-            Step::Print(mut printer) => match &mut printer {
+            Step::Print(mut printer, flat) => match &mut printer {
                 Printer::Text(text) => state.write(text)?,
                 // Reversed, because the stack pops last-in first.
                 Printer::Concat(parts) => {
-                    stack.extend(mem::take(parts).into_iter().rev().map(Step::Print));
+                    stack.extend(
+                        mem::take(parts)
+                            .into_iter()
+                            .rev()
+                            .map(|part| Step::Print(part, flat)),
+                    );
                 }
                 Printer::Indent(inner) => {
                     state.indent_by += state.indent_step;
                     stack.push(Step::Dedent);
-                    stack.push(Step::Print(inner.take()));
+                    stack.push(Step::Print(inner.take(), flat));
                 }
                 Printer::Deferred(thunk) => {
                     if let Some(thunk) = thunk.take() {
-                        stack.push(Step::Print(thunk()));
+                        stack.push(Step::Print(thunk(), flat));
                     }
+                }
+                // A hard line breaks even under a fitting group — the fits scan only guarantees the first line, and a mandatory break is mandatory.
+                Printer::Line { hard: true, .. } => state.write("\n")?,
+                Printer::Line { flat: spelling, .. } => match flat {
+                    true => state.write(spelling)?,
+                    false => state.write("\n")?,
+                },
+                Printer::Group(inner) => {
+                    let mut inner = inner.take();
+                    let inner_fits = flat
+                        || match state.width {
+                            // Unbounded: everything fits.
+                            None => true,
+                            Some(width) => fits(&mut inner, width.saturating_sub(state.column)),
+                        };
+                    stack.push(Step::Print(inner, inner_fits));
                 }
             },
             Step::Dedent => state.indent_by -= state.indent_step,
@@ -207,9 +326,41 @@ pub fn indent(printer: Printer) -> Printer {
     Printer::Indent(Box::new(printer))
 }
 
+/// A soft separator: a single space when the enclosing [`group`] renders flat, a newline (plus indentation) when it breaks — or unconditionally, when no group encloses it.
+pub fn line() -> Printer {
+    Printer::Line {
+        flat: " ".into(),
+        hard: false,
+    }
+}
+
+/// A [`line`] that vanishes when flat: nothing on one line, a newline when broken.
+pub fn soft_line() -> Printer {
+    Printer::Line {
+        flat: String::new(),
+        hard: false,
+    }
+}
+
+/// A mandatory break: always a newline, and no [`group`] containing one renders flat — the fits scan fails on it.
+pub fn hard_line() -> Printer {
+    Printer::Line {
+        flat: String::new(),
+        hard: true,
+    }
+}
+
+/// The width-adaptive unit: renders `printer` flat — every enclosed [`line`] as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
+pub fn group(printer: Printer) -> Printer {
+    Printer::Group(Box::new(printer))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {
+        super::*,
+        std::{cell::Cell, rc::Rc},
+    };
 
     /// A document nests as deep as the term it prints, and both walks over it — printing and freeing — must survive that. Depth is not steps, so no reduction budget bounds either one; only an explicit stack does.
     fn nested(depth: usize) -> Printer {
@@ -218,6 +369,25 @@ mod tests {
             document = indent(flat([pure("("), document, pure(")")]));
         }
         document
+    }
+
+    fn render(printer: Printer, width: Option<usize>) -> String {
+        struct Render(Cell<Option<(Printer, Option<usize>)>>);
+        impl fmt::Display for Render {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let (printer, width) = self.0.take().expect("rendered once");
+                match width {
+                    Some(width) => run_printer_within(printer, formatter, 2, width),
+                    None => run_printer(printer, formatter, 2),
+                }
+            }
+        }
+        Render(Cell::new(Some((printer, width)))).to_string()
+    }
+
+    /// `a` and `b` separated by soft lines under one group — the canonical fits-or-breaks document.
+    fn pair() -> Printer {
+        group(flat([pure("aaa"), line(), pure("bbb")]))
     }
 
     #[test]
@@ -238,5 +408,111 @@ mod tests {
 
         assert_eq!(printed.matches('(').count(), 100_000);
         assert_eq!(printed.matches(')').count(), 100_000);
+    }
+
+    /// The layout variants must survive the same depth as the rest of the algebra, in all three walks: drop, unbounded print, and the measuring print. No `indent` here — a broken 100k-deep document would otherwise write quadratically many indentation spaces, and depth is what this exercises, not volume.
+    fn nested_groups(depth: usize) -> Printer {
+        let mut document = pure("x");
+        for _ in 0..depth {
+            document = group(flat([pure("("), soft_line(), document, pure(")")]));
+        }
+        document
+    }
+
+    #[test]
+    fn a_deep_grouped_document_is_freed_without_recursing() {
+        drop(nested_groups(100_000));
+    }
+
+    #[test]
+    fn a_deep_grouped_document_is_printed_and_measured_without_recursing() {
+        let printed = render(nested_groups(100_000), Some(30));
+        assert_eq!(printed.matches('(').count(), 100_000);
+    }
+
+    #[test]
+    fn without_a_width_every_group_is_flat() {
+        assert_eq!(render(pair(), None), "aaa bbb");
+    }
+
+    #[test]
+    fn a_group_that_exactly_fits_stays_flat() {
+        // "aaa bbb" is seven characters.
+        assert_eq!(render(pair(), Some(7)), "aaa bbb");
+    }
+
+    #[test]
+    fn a_group_one_short_of_fitting_breaks() {
+        assert_eq!(render(pair(), Some(6)), "aaa\nbbb");
+    }
+
+    #[test]
+    fn a_soft_line_vanishes_flat_and_breaks_broken() {
+        let document = || group(flat([pure("aaa"), soft_line(), pure("bbb")]));
+        assert_eq!(render(document(), Some(6)), "aaabbb");
+        assert_eq!(render(document(), Some(5)), "aaa\nbbb");
+    }
+
+    #[test]
+    fn a_hard_line_forces_every_enclosing_group() {
+        let document = group(flat([
+            pure("aaa"),
+            line(),
+            group(flat([pure("bbb"), hard_line(), pure("ccc")])),
+        ]));
+        // Width 100 fits everything by count, but the mandatory break refuses flatness all the way up.
+        assert_eq!(render(document, Some(100)), "aaa\nbbb\nccc");
+    }
+
+    #[test]
+    fn a_line_outside_any_group_breaks() {
+        let document = flat([pure("aaa"), line(), pure("bbb")]);
+        assert_eq!(render(document, None), "aaa\nbbb");
+    }
+
+    #[test]
+    fn a_broken_group_indents_its_continuation_lines() {
+        let document = || {
+            group(flat([
+                pure("head("),
+                indent(flat([soft_line(), pure("argument")])),
+                soft_line(),
+                pure(")"),
+            ]))
+        };
+        assert_eq!(render(document(), Some(10)), "head(\n  argument\n)");
+        assert_eq!(render(document(), Some(20)), "head(argument)");
+    }
+
+    #[test]
+    fn measurement_forces_each_thunk_at_most_once() {
+        let forced = Rc::new(Cell::new(0usize));
+        let counter = Rc::clone(&forced);
+        let document = group(flat([
+            pure("aaa"),
+            line(),
+            deferred(move || {
+                counter.set(counter.get() + 1);
+                pure("bbb")
+            }),
+        ]));
+
+        // The scan forces the thunk to measure it; printing then consumes the materialized document rather than forcing again.
+        assert_eq!(render(document, Some(7)), "aaa bbb");
+        assert_eq!(forced.get(), 1);
+    }
+
+    #[test]
+    fn a_newline_in_literal_text_ends_the_scan_within_budget() {
+        // The scan only guarantees the first line, so a literal newline before the budget runs out means the group fits.
+        let document = group(flat([
+            pure("aaa\nlong tail beyond any width"),
+            line(),
+            pure("bbb"),
+        ]));
+        assert_eq!(
+            render(document, Some(4)),
+            "aaa\nlong tail beyond any width bbb"
+        );
     }
 }
