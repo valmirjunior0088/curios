@@ -14,8 +14,7 @@ use {
     curios_base::Plicity,
     curios_cert::{Invert, case_target_indices, invert_indices},
     curios_core::{
-        Bound, Free, FuncType, Global, InductType, Item, Module, StructType, Subterm, Telescope,
-        Term, Var,
+        Free, FuncType, Global, InductType, Item, Module, StructType, Subterm, Telescope, Term, Var,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
