@@ -117,7 +117,7 @@ fn render(printer: Printer) -> String {
     Within(RefCell::new(Some(printer))).to_string()
 }
 
-/// Render the parsed file: items separated by exactly one blank line — except consecutive `use` declarations, which stack with none, as the corpus writes its import heads — each preceded by its leading comments, trailing comments riding their lines, dangling comments closing the file. Element-boundary comments are claimed by this driver — a trailing one appends to the previous element's final line, a leading one gets its own lines before the next element — while comments *interior* to an element are claimed during its document's build (an interior trailing comment surfaces at the following break, one line later than written: conserved and valid, a known coarseness).
+/// Render the parsed file: items separated by exactly one blank line — except consecutive `use` declarations and a `use` directly following a `mod`, which stack with none, as the corpus writes its import heads and its `mod X; use X/{…}` pairs — each preceded by its leading comments, trailing comments riding their lines, dangling comments closing the file. Element-boundary comments are claimed by this driver — a trailing one appends to the previous element's final line, a leading one gets its own lines before the next element — while comments *interior* to an element are claimed during its document's build (an interior trailing comment surfaces at the following break, one line later than written: conserved and valid, a known coarseness).
 fn emit(input: &FormatInput) -> String {
     let mut out = String::new();
     let mut previous: Option<&TopItem> = None;
@@ -141,7 +141,9 @@ fn emit(input: &FormatInput) -> String {
         let lead = boundary(&mut out, span.start);
         match previous {
             None => {}
-            Some(TopItem::Use(_)) if matches!(item, TopItem::Use(_)) => out.push('\n'),
+            Some(TopItem::Use(_) | TopItem::Mod(_)) if matches!(item, TopItem::Use(_)) => {
+                out.push('\n')
+            }
             Some(_) => out.push_str("\n\n"),
         }
         for text in lead {

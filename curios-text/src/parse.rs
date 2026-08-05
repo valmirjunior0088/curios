@@ -11,8 +11,8 @@ mod match_expr;
 use match_expr::*;
 
 mod expr;
-pub(crate) use expr::parse_term;
 use expr::*;
+pub(crate) use expr::{op_precedence, parse_term};
 
 mod top_level;
 pub(crate) use top_level::parse_top_item;

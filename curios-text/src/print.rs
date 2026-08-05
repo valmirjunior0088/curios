@@ -10,7 +10,7 @@ use {
         Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
         TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
-    crate::format::claim_comments_before,
+    crate::{format::claim_comments_before, parse::op_precedence},
     curios_abi::{WireSignature, WireType},
     curios_base::{
         Grain, Plicity,
@@ -53,6 +53,23 @@ fn listed(
         lead(),
         pure(close),
     ]))
+}
+
+/// The always-broken brace block a `struct`, `concept`, or `satisfy` body is: one field per line at the next indent with a trailing comma, the closing brace at the opening's column, regardless of how little would fit flat. An empty body prints the bare delimiters.
+fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
+    if items.is_empty() {
+        return pure(format!("{open}{close}"));
+    }
+    flat([
+        pure(open),
+        indent(flat([
+            hard_line(),
+            sep_flat(items, || flat([pure(","), hard_line()])),
+            pure(","),
+        ])),
+        hard_line(),
+        pure(close),
+    ])
 }
 
 /// A body that rides its introducer — ` => body`, ` = body` — inline when it fits, on the next line one level deeper when it does not.
@@ -603,6 +620,35 @@ pub(crate) fn print_term(term: Term) -> Printer {
     flat(parts)
 }
 
+/// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a match, a lambda, an arrow, an effect form) parenthesizes unconditionally, since the operand grammar cannot produce it bare.
+fn print_operand(term: Term, min_prec: u8) -> Printer {
+    let parenthesized = match term.as_subterm() {
+        Subterm::Infix(infix) => op_precedence(infix.op) < min_prec,
+        Subterm::Rec(_)
+        | Subterm::Let(_)
+        | Subterm::Match(_)
+        | Subterm::Choose(_)
+        | Subterm::FuncType(_)
+        | Subterm::Func(_)
+        | Subterm::Effects(_) => true,
+        _ => false,
+    };
+    match parenthesized {
+        true => flat([pure("("), print_term(term), pure(")")]),
+        false => print_term(term),
+    }
+}
+
+/// [`print_operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
+fn print_suffix_head(term: Term) -> Printer {
+    match term.as_subterm() {
+        Subterm::NumLit(_) | Subterm::Prim(Prim::Flt(_)) => {
+            flat([pure("("), print_term(term), pure(")")])
+        }
+        _ => print_operand(term, u8::MAX),
+    }
+}
+
 fn print_term_inner(term: Term) -> Printer {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
@@ -657,7 +703,7 @@ fn print_term_inner(term: Term) -> Printer {
             attached_body(" =>", print_term(body)),
         ]),
         Subterm::Apply(Apply { head, params }) => flat([
-            print_term(head),
+            print_suffix_head(head),
             listed(
                 "(",
                 false,
@@ -691,10 +737,10 @@ fn print_term_inner(term: Term) -> Printer {
         }
         Subterm::Proj(Proj { head, field }) => {
             let field = match field {
-                Field::Index(index) => format!(").{index}"),
-                Field::Label(label) => format!(").{label}"),
+                Field::Index(index) => format!(".{index}"),
+                Field::Label(label) => format!(".{label}"),
             };
-            flat([pure("("), print_term(head), pure(field)])
+            flat([print_suffix_head(head), pure(field)])
         }
         Subterm::StructLit(StructLit {
             head,
@@ -720,7 +766,7 @@ fn print_term_inner(term: Term) -> Printer {
                 "}",
             ),
         ]),
-        // Arms always own their lines; each arm's body rides its arrow — inline when it fits, next line one level deeper when it does not.
+        // Arms always own their lines — the breaks are hard, so any group holding a match or choose is forced broken; each arm's body rides its arrow — inline when it fits, next line one level deeper when it does not.
         Subterm::Choose(Choose { arms, default }) => flat([
             pure("choose"),
             flat(
@@ -728,10 +774,11 @@ fn print_term_inner(term: Term) -> Printer {
                     .map(|ChooseArm { test, body }| {
                         let head = match test {
                             ChooseTest::Cond(condition) => {
-                                flat([pure("\n| "), print_term(condition)])
+                                flat([hard_line(), pure("| "), print_term(condition)])
                             }
                             ChooseTest::Bind { pattern, value } => flat([
-                                pure("\n| "),
+                                hard_line(),
+                                pure("| "),
                                 print_match_pattern(pattern),
                                 pure(" = "),
                                 print_term(value),
@@ -741,9 +788,11 @@ fn print_term_inner(term: Term) -> Printer {
                     })
                     .collect::<Vec<_>>(),
             ),
-            pure("\n| _"),
+            hard_line(),
+            pure("| _"),
             attached_body(" =>", print_term(default)),
-            pure("\nend"),
+            hard_line(),
+            pure("end"),
         ]),
         Subterm::Match(Match { head, motive, arms }) => flat([
             pure("match "),
@@ -753,14 +802,16 @@ fn print_term_inner(term: Term) -> Printer {
                 arms.into_iter()
                     .map(|arm| {
                         flat([
-                            pure("\n| "),
+                            hard_line(),
+                            pure("| "),
                             print_match_pattern(arm.pattern),
                             attached_body(" =>", print_term(arm.body)),
                         ])
                     })
                     .collect::<Vec<_>>(),
             ),
-            pure("\nend"),
+            hard_line(),
+            pure("end"),
         ]),
         Subterm::Let(Let { bindings, tail }) => flat(
             bindings
@@ -771,7 +822,7 @@ fn print_term_inner(term: Term) -> Printer {
                         print_pattern(binding.binder),
                         print_let_signature(binding.signature, false),
                         pure(";"),
-                        pure("\n"),
+                        hard_line(),
                     ])
                 })
                 .chain([print_term(tail)]),
@@ -782,21 +833,25 @@ fn print_term_inner(term: Term) -> Printer {
                 .map(|item| flat([pure(item.label), print_let_signature(item.signature, false)]));
             flat([
                 pure("rec "),
-                sep_flat(bindings, || pure("\nand ")),
-                pure(";\n"),
+                sep_flat(bindings, || flat([hard_line(), pure("and ")])),
+                pure(";"),
+                hard_line(),
                 print_term(tail),
             ])
         }
-        Subterm::Bang(term) => flat([pure("("), print_term(term), pure(")!")]),
+        Subterm::Bang(term) => flat([print_suffix_head(term), pure("!")]),
         // An overflowing operator chain breaks with the operator leading the continuation line.
-        Subterm::Infix(Infix { op, left, right }) => group(flat([
-            print_term(left),
-            indent(flat([
-                line(),
-                pure(format!("{} ", op.symbol())),
-                print_term(right),
-            ])),
-        ])),
+        Subterm::Infix(Infix { op, left, right }) => {
+            let precedence = op_precedence(op);
+            group(flat([
+                print_operand(left, precedence),
+                indent(flat([
+                    line(),
+                    pure(format!("{} ", op.symbol())),
+                    print_operand(right, precedence + 1),
+                ])),
+            ]))
+        }
         Subterm::NumLit(NumLit {
             magnitude,
             radix,
@@ -819,7 +874,7 @@ fn print_term_inner(term: Term) -> Printer {
 fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
     let bound = |body: Term| {
         if top {
-            flat([pure(" =\n"), indent(print_term(body))])
+            flat([pure(" ="), hard_line(), indent(print_term(body))])
         } else {
             attached_body(" =", print_term(body))
         }
@@ -868,14 +923,16 @@ fn print_top_use(item: TopUse) -> Printer {
         pure("use "),
         pure(item.name.join()),
         match item.group {
-            UseGroup::Named(items) => pure(format!(
-                "/{{{}}}",
+            // The shared delimited-list shape, like any bracketed sequence: a wide import head breaks one name per line.
+            UseGroup::Named(items) => listed(
+                "/{",
+                false,
                 items
                     .iter()
-                    .map(print_group_item)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
+                    .map(|item| pure(print_group_item(item)))
+                    .collect(),
+                "}",
+            ),
             UseGroup::Glob => pure("/*"),
         },
         pure(";"),
@@ -956,7 +1013,8 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
             rest.into_iter()
                 .map(|item| {
                     flat([
-                        pure("\nand "),
+                        hard_line(),
+                        pure("and "),
                         print_pub(item.vis_pub),
                         pure(item.label),
                         print_let_signature(item.signature, true),
@@ -980,15 +1038,16 @@ fn print_top_mod(item: TopMod) -> Printer {
             print_pub(item.vis_pub),
             pure("mod "),
             pure(item.label),
-            pure("\n"),
+            hard_line(),
             indent(print_module_items(module.items)),
-            pure("\nend"),
+            hard_line(),
+            pure("end"),
         ]),
     }
 }
 
 pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
-    sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
+    sep_flat(items.into_iter().map(print_top_item), hard_line)
 }
 
 fn print_top_induct_case(case: TopCase) -> Printer {
@@ -1017,7 +1076,8 @@ fn print_top_induct_case(case: TopCase) -> Printer {
     };
 
     flat([
-        pure(format!("\n| {}", case.label)),
+        hard_line(),
+        pure(format!("| {}", case.label)),
         listed("(", false, payload, ")"),
         target,
     ])
@@ -1092,7 +1152,7 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
             rest.into_iter()
                 .map(|u| {
                     flat([
-                        pure("\n"),
+                        hard_line(),
                         print_pub(u.vis_pub),
                         pure("and "),
                         pure(u.label),
@@ -1108,7 +1168,8 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
                 })
                 .collect::<Vec<_>>(),
         ),
-        pure("\nend"),
+        hard_line(),
+        pure("end"),
     ])
 }
 
@@ -1122,12 +1183,7 @@ fn print_top_struct(item: TopStruct) -> Printer {
         print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
-        listed(
-            "{",
-            true,
-            item.fields.into_iter().map(print_field).collect(),
-            "}",
-        ),
+        listed_hard("{", item.fields.into_iter().map(print_field).collect(), "}"),
     ])
 }
 
@@ -1163,9 +1219,8 @@ fn print_top_concept(item: TopConcept) -> Printer {
         print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
-        listed(
+        listed_hard(
             "{",
-            true,
             item.fields.into_iter().map(print_concept_field).collect(),
             "}",
         ),
@@ -1211,9 +1266,8 @@ fn print_top_witness(item: TopWitness) -> Printer {
         pure(" "),
         app,
         pure(" "),
-        listed(
+        listed_hard(
             "{",
-            true,
             item.entries.into_iter().map(print_witness_entry).collect(),
             "}",
         ),
@@ -1236,10 +1290,12 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
                 params.into_iter().map(print_func_param).collect(),
                 ")",
             ),
-            pure(" = "),
-            print_term(field.value),
+            attached_body(" =", print_term(field.value)),
         ]),
-        None => flat([pure(field.label), pure(" = "), print_term(field.value)]),
+        None => flat([
+            pure(field.label),
+            attached_body(" =", print_term(field.value)),
+        ]),
     }
 }
 

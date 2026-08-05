@@ -241,8 +241,8 @@ pub(super) fn parse_num_op<'a>() -> Parser<'a, NumOp> {
         .or(symbol(">", NumOp::Gt))
 }
 
-// Operator precedence: higher binds tighter. Every operator is left-associative.
-pub(super) fn op_precedence(op: NumOp) -> u8 {
+// Operator precedence: higher binds tighter. Every operator is left-associative. The printer consumes this table too, reinserting exactly the parentheses the climb would need to reparse its output.
+pub(crate) fn op_precedence(op: NumOp) -> u8 {
     match op {
         NumOp::Or => 1,
         NumOp::And => 2,

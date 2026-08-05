@@ -61,6 +61,14 @@ impl<'a, 'b> PrinterState<'a, 'b> {
 
         Ok(())
     }
+
+    /// The column the next character will actually land at: a fresh line still owes its indentation, which [`PrinterState::write`] emits lazily, so the pending spaces must be counted before a [`Printer::Group`] measures the room left on the line.
+    fn effective_column(&self) -> usize {
+        match self.should_indent {
+            true => self.column + self.indent_by,
+            false => self.column,
+        }
+    }
 }
 
 /// A pretty-printing document: what to emit, as data.
@@ -153,14 +161,30 @@ enum Step {
     Dedent,
 }
 
-/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision, looking no further than the end of the current line (a literal newline in a [`Printer::Text`] ends the line within budget, so the scan succeeds early). A hard [`Printer::Line`] fails the scan outright: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation.
+/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] or a [`Printer::LineSuffix`] fails the scan outright: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation.
+///
+/// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a pending suffix is skipped rather than counted — a trailing comment never reflows the code it rides.
 ///
 /// Measuring forces every [`Printer::Deferred`] it reaches, replacing the node in place with the built document — the thunk is `FnOnce`, so a peek that discarded the result would lose it. The bounded lookahead is what keeps that cheap: at most one line width of document is ever materialized per decision, and what is materialized is exactly what printing consumes next. Iterative, like every other walk over this type.
-fn fits(root: &mut Printer, available: usize) -> bool {
+fn fits(root: &mut Printer, rest: &mut [Step], available: usize) -> bool {
     let mut used = 0usize;
-    let mut stack: Vec<&mut Printer> = Vec::from([root]);
+    // (node, flat-mode, inside): `inside` marks the measured group's own subtree; `flat` is the layout mode look-ahead content renders under.
+    let mut stack: Vec<(&mut Printer, bool, bool)> = Vec::from([(root, true, true)]);
+    let mut rest_iter = rest.iter_mut().rev();
 
-    while let Some(node) = stack.pop() {
+    loop {
+        let Some((node, flat, inside)) = stack.pop() else {
+            match rest_iter.next() {
+                // The whole document fits on this line.
+                None => return true,
+                Some(Step::Dedent) => continue,
+                Some(Step::Print(printer, mode)) => {
+                    stack.push((printer, *mode, false));
+                    continue;
+                }
+            }
+        };
+
         // Materialization is handled before the descent match: the arms below push reborrows of `node`'s interior onto the shared stack, which makes the scrutinee borrow loop-wide — an in-match `*node = built` could never coexist with it.
         if matches!(*node, Printer::Deferred(_)) {
             let Printer::Deferred(slot) = &mut *node else {
@@ -170,7 +194,7 @@ fn fits(root: &mut Printer, available: usize) -> bool {
                 .take()
                 .expect("a deferred thunk is present until forced");
             *node = thunk();
-            stack.push(node);
+            stack.push((node, flat, inside));
             continue;
         }
 
@@ -186,35 +210,50 @@ fn fits(root: &mut Printer, available: usize) -> bool {
                     }
                 }
             }
-            Printer::Line { flat, hard } => {
+            Printer::Line {
+                flat: spelling,
+                hard,
+            } => {
                 if *hard {
-                    return false;
+                    return !inside;
                 }
-                used += flat.chars().count();
+                if !flat {
+                    // Broken surroundings render this as a newline, ending the line within budget. Unreachable inside the group, whose subtree is measured flat throughout.
+                    return true;
+                }
+                used += spelling.chars().count();
                 if used > available {
                     return false;
                 }
             }
-            // Not a break point: measured at its flat spelling.
-            Printer::IfBreak { flat, .. } => {
-                used += flat.chars().count();
+            // Not a break point: measured at the spelling its mode selects.
+            Printer::IfBreak {
+                flat: on_flat,
+                broken,
+            } => {
+                let spelling = if flat { &*on_flat } else { &*broken };
+                used += spelling.chars().count();
                 if used > available {
                     return false;
                 }
             }
-            // A pending suffix means the line must end here — the comment-is-a-hard-break law.
-            Printer::LineSuffix(_) => return false,
+            // A pending suffix means the line must end here — the comment-is-a-hard-break law. Beyond the group it flushes at the line's eventual end without reflowing what precedes it.
+            Printer::LineSuffix(_) => {
+                if inside {
+                    return false;
+                }
+            }
             // Reversed, because the stack pops last-in first.
-            Printer::Concat(parts) => stack.extend(parts.iter_mut().rev()),
+            Printer::Concat(parts) => {
+                stack.extend(parts.iter_mut().rev().map(|part| (part, flat, inside)));
+            }
             // Indentation adds characters only after a newline, and the flat rendering has none.
-            Printer::Indent(inner) => stack.push(inner),
-            // A nested group inside a fitting parent renders flat with it, so it is measured flat too.
-            Printer::Group(inner) => stack.push(inner),
+            Printer::Indent(inner) => stack.push((inner, flat, inside)),
+            // A nested group inside a fitting parent renders flat with it; a look-ahead group is measured flat too — if its flat form shares the line, the line holds either rendering of it.
+            Printer::Group(inner) => stack.push((inner, flat, inside)),
             Printer::Deferred(_) => unreachable!("materialized above"),
         }
     }
-
-    true
 }
 
 /// The entry point: executes a printer against `formatter`, with `indent_step` spaces added per [`indent`] level. Typically the entire body of a `Display::fmt` impl — every IR crate's `print.rs` builds a [`Printer`] and hands it here.
@@ -285,7 +324,11 @@ fn run<'b, 'c>(
                         || match state.width {
                             // Unbounded: everything fits.
                             None => true,
-                            Some(width) => fits(&mut inner, width.saturating_sub(state.column)),
+                            Some(width) => fits(
+                                &mut inner,
+                                &mut stack,
+                                width.saturating_sub(state.effective_column()),
+                            ),
                         };
                     stack.push(Step::Print(inner, inner_fits));
                 }
@@ -506,6 +549,26 @@ mod tests {
         let document = || group(flat([pure("aaa"), soft_line(), pure("bbb")]));
         assert_eq!(render(document(), Some(6)), "aaabbb");
         assert_eq!(render(document(), Some(5)), "aaa\nbbb");
+    }
+
+    #[test]
+    fn a_group_breaks_for_the_unbreakable_content_trailing_it() {
+        // The group alone fits width 9 exactly, but the look-ahead sees " tail" with no break point before it — flat would overrun, so the group breaks.
+        let document = |tail| flat([group(flat([pure("aaa"), line(), pure("bbb")])), pure(tail)]);
+        assert_eq!(render(document(" tail"), Some(9)), "aaa\nbbb tail");
+        assert_eq!(render(document(""), Some(9)), "aaa bbb");
+    }
+
+    #[test]
+    fn look_ahead_stops_at_the_next_break_opportunity() {
+        // The trailing content ends this line at its own soft line (broken mode outside any fitting group), so only " t" counts against the first group's budget.
+        let document = flat([
+            group(flat([pure("aaa"), line(), pure("bbb")])),
+            pure(" t"),
+            line(),
+            pure("cccccccccc"),
+        ]);
+        assert_eq!(render(document, Some(9)), "aaa bbb t\ncccccccccc");
     }
 
     #[test]

@@ -1803,15 +1803,15 @@ fn bin_literal_atom_segments() {
 
 #[test]
 fn list_bits_and_bytes_spreads_round_trip() {
-    // String equality pins the printer's canonical bracketed form for all three carriers, including their distinct empty literals. A coalesced run prints one escaped atom per entry, and a numeric element prints back as written rather than as an escape. Operands print in the ordinary term style — a parenthesized projection or bang head — which the tight grammar had to avoid, since its own closing paren would have ended the literal.
+    // String equality pins the printer's canonical bracketed form for all three carriers, including their distinct empty literals. A coalesced run prints one escaped atom per entry, and a numeric element prints back as written rather than as an escape. Operands print in the ordinary term style — projection and bang heads bare, parenthesized only where the grammar demands it.
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
         r"x[\00, ..xs, \01]",
-        "x[..(hdr).bytes]",
+        "x[..hdr.bytes]",
         r"x[../std/x]",
         r"x[..f(x)]",
-        "x[..((Io/read)!).bytes]",
+        "x[..Io/read!.bytes]",
         r"x[..x + y]",
         "x[]",
         r"b[\0, ..xs, \1]",
@@ -1820,7 +1820,7 @@ fn list_bits_and_bytes_spreads_round_trip() {
         r"x[\48, b, \00]",
         "x[b]",
         r"x[..acc, b]",
-        "x[(hdr).byte]",
+        "x[hdr.byte]",
         "x[pick(f, a, b)]",
         r"b[\1, flag, \0]",
         "b[h, ..t]",
@@ -2271,9 +2271,13 @@ fn concept_witness_use_round_trip() {
 
 #[test]
 fn parameterized_witness_prints_separator_syntax() {
+    // The witness body is an always-broken brace block, so printing canonicalizes the flat source form.
     let source = "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) { show = g }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
-    assert_eq!(entrypoint.to_string(), source);
+    assert_eq!(
+        entrypoint.to_string(),
+        "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {\n    show = g,\n}\nu"
+    );
 }
 
 #[test]
