@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
@@ -10,7 +13,7 @@ use {
     curios_abi::{WireSignature, WireType},
     curios_base::{
         Grain, Plicity,
-        printer::{Printer, flat, indent, pure, sep_flat},
+        printer::{Printer, flat, group, if_break, indent, line, pure, sep_flat, soft_line},
     },
     num_bigint::BigUint,
     num_traits::One,
@@ -22,6 +25,35 @@ fn print_plicity(plicity: Plicity) -> Printer {
         Plicity::Witness => pure("use "),
         Plicity::Explicit => pure(""),
     }
+}
+
+/// The delimited comma-list shape every bracketed sequence shares: flat when the group fits (`f(a, b)`), one element per line at the next indent with a trailing comma when it breaks. `spaced` puts the corpus's brace padding inside the delimiters (`{ a, b }` flat); an empty sequence prints the bare delimiters and needs no group.
+fn listed(
+    open: impl Into<String>,
+    spaced: bool,
+    items: Vec<Printer>,
+    close: &'static str,
+) -> Printer {
+    let open = pure(open);
+    if items.is_empty() {
+        return flat([open, pure(close)]);
+    }
+    let lead = if spaced { line } else { soft_line };
+    group(flat([
+        open,
+        indent(flat([
+            lead(),
+            sep_flat(items, || flat([pure(","), line()])),
+            if_break("", ","),
+        ])),
+        lead(),
+        pure(close),
+    ]))
+}
+
+/// A body that rides its introducer — ` => body`, ` = body` — inline when it fits, on the next line one level deeper when it does not.
+fn attached_body(introducer: &'static str, body: Printer) -> Printer {
+    group(flat([pure(introducer), indent(flat([line(), body]))]))
 }
 
 /// Prints a match's optional motive — ` : ` and the written term (ordinarily a lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in the source.
@@ -88,9 +120,13 @@ fn print_tuple_field(field: TupleField) -> Printer {
     match (field.label, field.func_params) {
         (Some(label), Some(params)) => flat([
             pure(label),
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_param), || pure(", ")),
-            pure(") = "),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_param).collect(),
+                ")",
+            ),
+            pure(" = "),
             print_term(field.value),
         ]),
         (Some(label), None) => flat([pure(label), pure(" = "), print_term(field.value)]),
@@ -135,18 +171,23 @@ fn print_pattern(pattern: Pattern) -> Printer {
                 let trailer = if field.label.is_some() { ")" } else { ",)" };
                 flat([pure("("), print_pattern_field(field), pure(trailer)])
             } else {
-                flat([
-                    pure("("),
-                    sep_flat(fields.into_iter().map(print_pattern_field), || pure(", ")),
-                    pure(")"),
-                ])
+                listed(
+                    "(",
+                    false,
+                    fields.into_iter().map(print_pattern_field).collect(),
+                    ")",
+                )
             }
         }
         Pattern::Struct { head, fields } => flat([
             pure(head),
-            pure(" { "),
-            sep_flat(fields.into_iter().map(print_pattern_field), || pure(", ")),
-            pure(" }"),
+            pure(" "),
+            listed(
+                "{",
+                true,
+                fields.into_iter().map(print_pattern_field).collect(),
+                "}",
+            ),
         ]),
     }
 }
@@ -164,14 +205,16 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         MatchPattern::Binder(name) => pure(name),
         MatchPattern::Variant { tag, args } => flat([
             pure(tag),
-            pure("("),
-            sep_flat(
-                args.into_iter().map(|(plicity, pattern)| {
-                    flat([print_plicity(plicity), print_match_pattern(pattern)])
-                }),
-                || pure(", "),
+            listed(
+                "(",
+                false,
+                args.into_iter()
+                    .map(|(plicity, pattern)| {
+                        flat([print_plicity(plicity), print_match_pattern(pattern)])
+                    })
+                    .collect(),
+                ")",
             ),
-            pure(")"),
         ]),
         MatchPattern::Tuple(fields) => {
             if fields.len() == 1 {
@@ -180,22 +223,23 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
                 let trailer = if field.label.is_some() { ")" } else { ",)" };
                 flat([pure("("), print_match_pattern_field(field), pure(trailer)])
             } else {
-                flat([
-                    pure("("),
-                    sep_flat(fields.into_iter().map(print_match_pattern_field), || {
-                        pure(", ")
-                    }),
-                    pure(")"),
-                ])
+                listed(
+                    "(",
+                    false,
+                    fields.into_iter().map(print_match_pattern_field).collect(),
+                    ")",
+                )
             }
         }
         MatchPattern::Struct { head, fields } => flat([
             pure(head),
-            pure(" { "),
-            sep_flat(fields.into_iter().map(print_match_pattern_field), || {
-                pure(", ")
-            }),
-            pure(" }"),
+            pure(" "),
+            listed(
+                "{",
+                true,
+                fields.into_iter().map(print_match_pattern_field).collect(),
+                "}",
+            ),
         ]),
         MatchPattern::Bool(false) => pure("false"),
         MatchPattern::Bool(true) => pure("true"),
@@ -267,9 +311,13 @@ fn print_field(param: TupleTypeParam) -> Printer {
     match (param.label, param.func_params) {
         (Some(label), Some(params)) => flat([
             pure(label),
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
-            pure(") -> "),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_type_param).collect(),
+                ")",
+            ),
+            pure(" -> "),
             print_term(param.type_),
         ]),
         (Some(label), None) => flat([pure(label), pure(" : "), print_term(param.type_)]),
@@ -288,9 +336,7 @@ fn format_radix(n: &BigUint, radix: Radix) -> String {
 fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printer {
     flat([
         pure(name),
-        pure("("),
-        sep_flat(args.into_iter().map(print_term), || pure(", ")),
-        pure(")"),
+        listed("(", false, args.into_iter().map(print_term).collect(), ")"),
     ])
 }
 
@@ -412,13 +458,15 @@ fn print_prim(prim: Prim) -> Printer {
             Grain::X => "Bytes",
         }),
         // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization, and a coalesced run prints one escaped atom per entry — the glued spelling has no bracketed counterpart, and lowering re-coalesces the run either way. An empty segment list prints `b[]`/`x[]` on its own.
-        Prim::Bin(grain, segments) => flat([
-            pure(match grain {
+        Prim::Bin(grain, segments) => listed(
+            match grain {
                 Grain::B => "b[",
                 Grain::X => "x[",
-            }),
-            sep_flat(
-                segments.into_iter().flat_map(move |segment| match segment {
+            },
+            false,
+            segments
+                .into_iter()
+                .flat_map(move |segment| match segment {
                     BinSegment::Bytes(atoms) => atoms
                         .into_iter()
                         .map(move |atom| {
@@ -430,11 +478,10 @@ fn print_prim(prim: Prim) -> Printer {
                         .collect::<Vec<_>>(),
                     BinSegment::Atom(operand) => vec![print_term(operand)],
                     BinSegment::Spread(operand) => vec![flat([pure(".."), print_term(operand)])],
-                }),
-                || pure(", "),
-            ),
-            pure("]"),
-        ]),
+                })
+                .collect(),
+            "]",
+        ),
         Prim::BinLen(grain, operand) => print_prim_call(
             format!(
                 "{}.len",
@@ -496,17 +543,18 @@ fn print_prim(prim: Prim) -> Printer {
             vec![left, right],
         ),
         Prim::LstType(elem) => print_prim_call("Lst", vec![elem]),
-        Prim::Lst(entries) => flat([
-            pure("["),
-            sep_flat(
-                entries.into_iter().map(|entry| match entry {
+        Prim::Lst(entries) => listed(
+            "[",
+            false,
+            entries
+                .into_iter()
+                .map(|entry| match entry {
                     LstEntry::Elem(term) => print_term(term),
                     LstEntry::Spread(term) => flat([pure(".."), print_term(term)]),
-                }),
-                || pure(", "),
-            ),
-            pure("]"),
-        ]),
+                })
+                .collect(),
+            "]",
+        ),
         Prim::LstLen(ty, operand) => print_prim_call("Lst.len", vec![ty, operand]),
         Prim::LstGet(ty, list, index) => print_prim_call("Lst.get", vec![ty, list, index]),
         Prim::LstSlice(ty, list, start, end) => {
@@ -561,34 +609,43 @@ pub(crate) fn print_term(term: Term) -> Printer {
                 .collect::<String>()
         )),
         Subterm::FuncType(FuncType { params, output }) => flat([
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
-            pure(") -> "),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_type_param).collect(),
+                ")",
+            ),
+            pure(" -> "),
             print_term(output),
         ]),
+        // A lambda's body rides its arrow: inline when it fits, on the next line one level deeper when it does not — the corpus writes `(x, acc) => f(x)` inline.
         Subterm::Func(Func { params, body }) => flat([
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_pattern_param), || {
-                pure(", ")
-            }),
-            pure(") =>\n"),
-            indent(print_term(body)),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_pattern_param).collect(),
+                ")",
+            ),
+            attached_body(" =>", print_term(body)),
         ]),
         Subterm::Apply(Apply { head, params }) => flat([
             print_term(head),
-            pure("("),
-            sep_flat(
+            listed(
+                "(",
+                false,
                 params
                     .into_iter()
-                    .map(|(plicity, p)| flat([print_plicity(plicity), print_term(p)])),
-                || pure(", "),
+                    .map(|(plicity, p)| flat([print_plicity(plicity), print_term(p)]))
+                    .collect(),
+                ")",
             ),
-            pure(")"),
         ]),
-        Subterm::TupleType(TupleType { fields }) => {
-            let items = fields.into_iter().map(|param| indent(print_field(param)));
-            flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
-        }
+        Subterm::TupleType(TupleType { fields }) => listed(
+            "{",
+            true,
+            fields.into_iter().map(print_field).collect(),
+            "}",
+        ),
         Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
@@ -596,11 +653,12 @@ pub(crate) fn print_term(term: Term) -> Printer {
                 let trailer = if field.label.is_some() { ")" } else { ",)" };
                 flat([pure("("), print_tuple_field(field), pure(trailer)])
             } else {
-                flat([
-                    pure("("),
-                    sep_flat(fields.into_iter().map(print_tuple_field), || pure(", ")),
-                    pure(")"),
-                ])
+                listed(
+                    "(",
+                    false,
+                    fields.into_iter().map(print_tuple_field).collect(),
+                    ")",
+                )
             }
         }
         Subterm::Proj(Proj { head, field }) => {
@@ -619,16 +677,22 @@ pub(crate) fn print_term(term: Term) -> Printer {
             if params.is_empty() {
                 pure("")
             } else {
-                flat([
-                    pure("("),
-                    sep_flat(params.into_iter().map(print_term), || pure(", ")),
-                    pure(")"),
-                ])
+                listed(
+                    "(",
+                    false,
+                    params.into_iter().map(print_term).collect(),
+                    ")",
+                )
             },
-            pure(" { "),
-            sep_flat(entries.into_iter().map(print_struct_entry), || pure(", ")),
-            pure(" }"),
+            pure(" "),
+            listed(
+                "{",
+                true,
+                entries.into_iter().map(print_struct_entry).collect(),
+                "}",
+            ),
         ]),
+        // Arms always own their lines; each arm's body rides its arrow — inline when it fits, next line one level deeper when it does not.
         Subterm::Choose(Choose { arms, default }) => flat([
             pure("choose"),
             flat(
@@ -636,22 +700,21 @@ pub(crate) fn print_term(term: Term) -> Printer {
                     .map(|ChooseArm { test, body }| {
                         let head = match test {
                             ChooseTest::Cond(condition) => {
-                                flat([pure("\n| "), print_term(condition), pure(" =>\n")])
+                                flat([pure("\n| "), print_term(condition)])
                             }
                             ChooseTest::Bind { pattern, value } => flat([
                                 pure("\n| "),
                                 print_match_pattern(pattern),
                                 pure(" = "),
                                 print_term(value),
-                                pure(" =>\n"),
                             ]),
                         };
-                        flat([head, indent(print_term(body))])
+                        flat([head, attached_body(" =>", print_term(body))])
                     })
                     .collect::<Vec<_>>(),
             ),
-            pure("\n| _ =>\n"),
-            indent(print_term(default)),
+            pure("\n| _"),
+            attached_body(" =>", print_term(default)),
             pure("\nend"),
         ]),
         Subterm::Match(Match { head, motive, arms }) => flat([
@@ -664,8 +727,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
                         flat([
                             pure("\n| "),
                             print_match_pattern(arm.pattern),
-                            pure(" =>\n"),
-                            indent(print_term(arm.body)),
+                            attached_body(" =>", print_term(arm.body)),
                         ])
                     })
                     .collect::<Vec<_>>(),
@@ -679,7 +741,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
                     flat([
                         pure("let "),
                         print_pattern(binding.binder),
-                        print_let_signature(binding.signature),
+                        print_let_signature(binding.signature, false),
                         pure(";"),
                         pure("\n"),
                     ])
@@ -689,7 +751,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
         Subterm::Rec(Rec { items, tail }) => {
             let bindings = items
                 .into_iter()
-                .map(|item| flat([pure(item.label), print_let_signature(item.signature)]));
+                .map(|item| flat([pure(item.label), print_let_signature(item.signature, false)]));
             flat([
                 pure("rec "),
                 sep_flat(bindings, || pure("\nand ")),
@@ -698,11 +760,15 @@ pub(crate) fn print_term(term: Term) -> Printer {
             ])
         }
         Subterm::Bang(term) => flat([pure("("), print_term(term), pure(")!")]),
-        Subterm::Infix(Infix { op, left, right }) => flat([
+        // An overflowing operator chain breaks with the operator leading the continuation line.
+        Subterm::Infix(Infix { op, left, right }) => group(flat([
             print_term(left),
-            pure(format!(" {} ", op.symbol())),
-            print_term(right),
-        ]),
+            indent(flat([
+                line(),
+                pure(format!("{} ", op.symbol())),
+                print_term(right),
+            ])),
+        ])),
         Subterm::NumLit(NumLit {
             magnitude,
             radix,
@@ -721,29 +787,37 @@ pub(crate) fn print_term(term: Term) -> Printer {
     }
 }
 
-fn print_let_signature(signature: LetSignature) -> Printer {
+/// A `let`/`rec` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.
+fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
+    let bound = |body: Term| {
+        if top {
+            flat([pure(" =\n"), indent(print_term(body))])
+        } else {
+            attached_body(" =", print_term(body))
+        }
+    };
     match signature {
         LetSignature::Name { type_, body } => flat([
             match type_ {
                 Some(type_) => flat([pure(" : "), print_term(type_)]),
                 None => pure(""),
             },
-            pure(" =\n"),
-            indent(print_term(body)),
+            bound(body),
         ]),
         LetSignature::Func {
             params,
             output,
             body,
         } => flat([
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_sugar_param), || {
-                pure(", ")
-            }),
-            pure(") -> "),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_sugar_param).collect(),
+                ")",
+            ),
+            pure(" -> "),
             print_term(output),
-            pure(" =\n"),
-            indent(print_term(body)),
+            bound(body),
         ]),
     }
 }
@@ -785,7 +859,7 @@ fn print_top_let(item: TopLet) -> Printer {
         print_pub(item.vis_pub),
         pure("let "),
         pure(item.label),
-        print_let_signature(item.signature),
+        print_let_signature(item.signature, true),
         pure(";"),
     ])
 }
@@ -815,12 +889,16 @@ fn print_wire_signature(signature: WireSignature) -> Printer {
     }
 
     flat([
-        pure("("),
-        sep_flat(
-            params.into_iter().map(|(_, type_)| print_wire_type(type_)),
-            || pure(", "),
+        listed(
+            "(",
+            false,
+            params
+                .into_iter()
+                .map(|(_, type_)| print_wire_type(type_))
+                .collect(),
+            ")",
         ),
-        pure(") -> "),
+        pure(" -> "),
         print_wire_type(output),
     ])
 }
@@ -845,7 +923,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
         print_pub(first.vis_pub),
         pure("rec "),
         pure(first.label),
-        print_let_signature(first.signature),
+        print_let_signature(first.signature, true),
         flat(
             rest.into_iter()
                 .map(|item| {
@@ -853,7 +931,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
                         pure("\nand "),
                         print_pub(item.vis_pub),
                         pure(item.label),
-                        print_let_signature(item.signature),
+                        print_let_signature(item.signature, true),
                     ])
                 })
                 .collect::<Vec<_>>(),
@@ -886,8 +964,10 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
 }
 
 fn print_top_induct_case(case: TopCase) -> Printer {
-    let payload = sep_flat(
-        case.payload.into_iter().map(|param| {
+    let payload = case
+        .payload
+        .into_iter()
+        .map(|param| {
             // Plicity prefixes the name (`@x` = implicit) — shared with `print_field`.
             flat([
                 print_plicity(param.plicity),
@@ -897,23 +977,20 @@ fn print_top_induct_case(case: TopCase) -> Printer {
                     type_: param.type_,
                 }),
             ])
-        }),
-        || pure(", "),
-    );
+        })
+        .collect();
 
     let target = match case.target {
         Some(exprs) => flat([
-            pure(" : ("),
-            sep_flat(exprs.into_iter().map(print_term), || pure(", ")),
-            pure(")"),
+            pure(" : "),
+            listed("(", false, exprs.into_iter().map(print_term).collect(), ")"),
         ]),
         None => pure(""),
     };
 
     flat([
-        pure(format!("\n| {}(", case.label)),
-        payload,
-        pure(")"),
+        pure(format!("\n| {}", case.label)),
+        listed("(", false, payload, ")"),
         target,
     ])
 }
@@ -923,21 +1000,22 @@ fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
         return pure("");
     }
 
-    flat([
-        pure("("),
-        sep_flat(
-            params.into_iter().map(|(plicity, name, ty)| {
+    listed(
+        "(",
+        false,
+        params
+            .into_iter()
+            .map(|(plicity, name, ty)| {
                 flat([
                     print_plicity(plicity),
                     pure(name),
                     pure(" : "),
                     print_term(ty),
                 ])
-            }),
-            || pure(", "),
-        ),
-        pure(")"),
-    ])
+            })
+            .collect(),
+        ")",
+    )
 }
 
 /// The head's arity after the name: the (mandatory) result sort, preceded by an index telescope when the inductive is indexed. `: Sort` for a plain type, `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity` accepts, so a printed declaration round-trips.
@@ -951,9 +1029,14 @@ fn print_top_induct_arity(
     }
 
     flat([
-        pure(" : ("),
-        sep_flat(indices.into_iter().map(print_labeled), || pure(", ")),
-        pure(") -> "),
+        pure(" : "),
+        listed(
+            "(",
+            false,
+            indices.into_iter().map(print_labeled).collect(),
+            ")",
+        ),
+        pure(" -> "),
         print_pub(rep_pub),
         print_term(result_sort),
     ])
@@ -1011,9 +1094,12 @@ fn print_top_struct(item: TopStruct) -> Printer {
         print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
-        pure("{ "),
-        sep_flat(item.fields.into_iter().map(print_field), || pure(", ")),
-        pure(" }"),
+        listed(
+            "{",
+            true,
+            item.fields.into_iter().map(print_field).collect(),
+            "}",
+        ),
     ])
 }
 
@@ -1026,9 +1112,13 @@ fn print_concept_field(field: ConceptField) -> Printer {
     match field.func_params {
         Some(params) => flat([
             pure(field.label),
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
-            pure(") -> "),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_type_param).collect(),
+                ")",
+            ),
+            pure(" -> "),
             print_term(field.type_),
         ]),
         None => flat([pure(field.label), pure(" : "), print_term(field.type_)]),
@@ -1044,11 +1134,13 @@ fn print_top_concept(item: TopConcept) -> Printer {
         pure(" : "),
         print_pub(item.rep_pub),
         print_term(item.result_sort),
-        pure(" { "),
-        sep_flat(item.fields.into_iter().map(print_concept_field), || {
-            pure(", ")
-        }),
-        pure(" }"),
+        pure(" "),
+        listed(
+            "{",
+            true,
+            item.fields.into_iter().map(print_concept_field).collect(),
+            "}",
+        ),
     ])
 }
 
@@ -1057,11 +1149,17 @@ fn print_top_witness(item: TopWitness) -> Printer {
         pure("")
     } else {
         flat([
-            pure(" ("),
-            sep_flat(item.params.into_iter().map(print_func_sugar_param), || {
-                pure(", ")
-            }),
-            pure(") =>"),
+            pure(" "),
+            listed(
+                "(",
+                false,
+                item.params
+                    .into_iter()
+                    .map(print_func_sugar_param)
+                    .collect(),
+                ")",
+            ),
+            pure(" =>"),
         ])
     };
 
@@ -1070,9 +1168,12 @@ fn print_top_witness(item: TopWitness) -> Printer {
     } else {
         flat([
             pure(item.concept.join()),
-            pure("("),
-            sep_flat(item.args.into_iter().map(print_term), || pure(", ")),
-            pure(")"),
+            listed(
+                "(",
+                false,
+                item.args.into_iter().map(print_term).collect(),
+                ")",
+            ),
         ])
     };
 
@@ -1081,11 +1182,13 @@ fn print_top_witness(item: TopWitness) -> Printer {
         params,
         pure(" "),
         app,
-        pure(" { "),
-        sep_flat(item.entries.into_iter().map(print_witness_entry), || {
-            pure(", ")
-        }),
-        pure(" }"),
+        pure(" "),
+        listed(
+            "{",
+            true,
+            item.entries.into_iter().map(print_witness_entry).collect(),
+            "}",
+        ),
     ])
 }
 
@@ -1099,9 +1202,13 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
     match field.func_params {
         Some(params) => flat([
             pure(field.label),
-            pure("("),
-            sep_flat(params.into_iter().map(print_func_param), || pure(", ")),
-            pure(") = "),
+            listed(
+                "(",
+                false,
+                params.into_iter().map(print_func_param).collect(),
+                ")",
+            ),
+            pure(" = "),
             print_term(field.value),
         ]),
         None => flat([pure(field.label), pure(" = "), print_term(field.value)]),

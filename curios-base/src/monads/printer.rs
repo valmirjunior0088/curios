@@ -12,6 +12,8 @@ struct PrinterState<'a, 'b> {
     column: usize,
     /// The line width [`Printer::Group`]s try to fit; `None` is unbounded, so every group renders flat.
     width: Option<usize>,
+    /// [`Printer::LineSuffix`] text pending for the current line, flushed just before the next newline (or at the document's end).
+    suffix: String,
 }
 
 impl<'a, 'b> PrinterState<'a, 'b> {
@@ -27,11 +29,17 @@ impl<'a, 'b> PrinterState<'a, 'b> {
             should_indent: true,
             column: 0,
             width,
+            suffix: String::new(),
         }
     }
 
     fn write(&mut self, string: &str) -> Result<(), fmt::Error> {
         for char in string.chars() {
+            // A pending suffix rides at the end of the line it landed on: flush it before the newline. The suffix contains no newline itself, so the recursion is one level deep.
+            if char == '\n' && !self.suffix.is_empty() {
+                let suffix = mem::take(&mut self.suffix);
+                self.write(&suffix)?;
+            }
             if self.should_indent {
                 for _ in 0..self.indent_by {
                     self.formatter.write_str(" ")?;
@@ -79,6 +87,10 @@ pub enum Printer {
     Line { flat: String, hard: bool },
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
     Group(Box<Printer>),
+    /// Mode-dependent text that is *not* itself a break point: `flat` under a fitting group, `broken` under a broken one. The formatter's broken-only trailing comma is `IfBreak { flat: "", broken: "," }`. Measured at its flat spelling, so it never breaks a group by itself.
+    IfBreak { flat: String, broken: String },
+    /// Text buffered until just before the next emitted newline (or the document's end) — how a trailing comment rides at the end of whatever line it lands on, without its builder knowing where that line ends. Must not contain a newline itself. The fits scan fails on it: a line that must end cannot sit inside a flat group, which is the comment-is-a-hard-break law arriving mechanically.
+    LineSuffix(String),
 }
 
 impl Printer {
@@ -100,6 +112,8 @@ impl Printer {
             // Holds a thunk, never a child document.
             Printer::Deferred(_) => true,
             Printer::Line { .. } => true,
+            Printer::IfBreak { .. } => true,
+            Printer::LineSuffix(_) => true,
         }
     }
 }
@@ -123,6 +137,8 @@ impl Drop for Printer {
                 Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
                 Printer::Deferred(_) => {}
                 Printer::Line { .. } => {}
+                Printer::IfBreak { .. } => {}
+                Printer::LineSuffix(_) => {}
             }
             // `printer` is dismantled now, so its own drop returns at once.
         }
@@ -179,6 +195,15 @@ fn fits(root: &mut Printer, available: usize) -> bool {
                     return false;
                 }
             }
+            // Not a break point: measured at its flat spelling.
+            Printer::IfBreak { flat, .. } => {
+                used += flat.chars().count();
+                if used > available {
+                    return false;
+                }
+            }
+            // A pending suffix means the line must end here — the comment-is-a-hard-break law.
+            Printer::LineSuffix(_) => return false,
             // Reversed, because the stack pops last-in first.
             Printer::Concat(parts) => stack.extend(parts.iter_mut().rev()),
             // Indentation adds characters only after a newline, and the flat rendering has none.
@@ -264,9 +289,26 @@ fn run<'b, 'c>(
                         };
                     stack.push(Step::Print(inner, inner_fits));
                 }
+                Printer::IfBreak {
+                    flat: on_flat,
+                    broken,
+                } => {
+                    let spelling = mem::take(if flat { on_flat } else { broken });
+                    state.write(&spelling)?;
+                }
+                Printer::LineSuffix(text) => {
+                    debug_assert!(!text.contains('\n'), "a line suffix stays on one line");
+                    state.suffix.push_str(text);
+                }
             },
             Step::Dedent => state.indent_by -= state.indent_step,
         }
+    }
+
+    // A document that ends without a newline still owes its pending suffix.
+    if !state.suffix.is_empty() {
+        let suffix = mem::take(&mut state.suffix);
+        state.write(&suffix)?;
     }
 
     Ok(())
@@ -353,6 +395,19 @@ pub fn hard_line() -> Printer {
 /// The width-adaptive unit: renders `printer` flat — every enclosed [`line`] as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
 pub fn group(printer: Printer) -> Printer {
     Printer::Group(Box::new(printer))
+}
+
+/// Mode-dependent text without being a break point: `flat` under a fitting group, `broken` under a broken one. The broken-only trailing comma is `if_break("", ",")`.
+pub fn if_break(flat: impl Into<String>, broken: impl Into<String>) -> Printer {
+    Printer::IfBreak {
+        flat: flat.into(),
+        broken: broken.into(),
+    }
+}
+
+/// Buffers `text` until just before the next emitted newline (or the document's end) — how a trailing comment rides at the end of whatever line it lands on without its builder knowing where that line ends. `text` must not contain a newline; a pending suffix fails the fits scan, so the group it lands in always breaks.
+pub fn line_suffix(text: impl Into<String>) -> Printer {
+    Printer::LineSuffix(text.into())
 }
 
 #[cfg(test)]
@@ -500,6 +555,53 @@ mod tests {
         // The scan forces the thunk to measure it; printing then consumes the materialized document rather than forcing again.
         assert_eq!(render(document, Some(7)), "aaa bbb");
         assert_eq!(forced.get(), 1);
+    }
+
+    #[test]
+    fn if_break_spells_per_mode_without_breaking() {
+        // The broken-only trailing comma: absent flat, present broken — and never the cause of the break.
+        let document = || {
+            group(flat([
+                pure("("),
+                indent(flat([
+                    soft_line(),
+                    pure("a"),
+                    pure(","),
+                    line(),
+                    pure("b"),
+                    if_break("", ","),
+                ])),
+                soft_line(),
+                pure(")"),
+            ]))
+        };
+        assert_eq!(render(document(), Some(10)), "(a, b)");
+        assert_eq!(render(document(), Some(3)), "(\n  a,\n  b,\n)");
+    }
+
+    #[test]
+    fn a_line_suffix_rides_to_the_end_of_its_line() {
+        let document = flat([
+            pure("code"),
+            line_suffix(" -- trailing"),
+            pure(" more"),
+            hard_line(),
+            pure("next"),
+        ]);
+        assert_eq!(render(document, None), "code more -- trailing\nnext");
+    }
+
+    #[test]
+    fn a_line_suffix_flushes_at_document_end() {
+        let document = flat([pure("code"), line_suffix(" -- last")]);
+        assert_eq!(render(document, None), "code -- last");
+    }
+
+    #[test]
+    fn a_line_suffix_forces_its_group_to_break() {
+        // A trailing comment means the line must end, so the group cannot stay flat however wide the width.
+        let document = group(flat([pure("a"), line_suffix(" -- c"), line(), pure("b")]));
+        assert_eq!(render(document, Some(100)), "a -- c\nb");
     }
 
     #[test]
