@@ -19,9 +19,13 @@ pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
-            go(kp, i + 1,
-                f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)))), acc),
-                inv)
+            -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
+            let below = Eq/subst(
+                (x) => Nat/Lt(i, x),
+                inv,
+                Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)),
+            );
+            go(kp, i + 1, f(at(b, i, below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
 
