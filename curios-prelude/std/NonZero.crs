@@ -10,6 +10,7 @@ use /std/BigNat/{
     trim_of_trimmed,
     view,
     combine,
+    to_str,
 };
 
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold), so it reduces on any cons-headed rep, even one with an opaque tail.
@@ -128,5 +129,5 @@ pub mod cmp;
 pub use cmp/{let cmp};
 
 satisfy Show(NonZero) {
-    show(n) = /std/BigNat/to_str(n.magnitude),
+    show(n) = to_str(n.magnitude),
 }
