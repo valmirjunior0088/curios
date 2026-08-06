@@ -12,7 +12,7 @@ fn nominal(path: &str) -> curios_core::Global {
 }
 
 fn context() -> Context {
-    Context::with_default_budget()
+    Context::with_default_budget(crate::SYNTAX)
 }
 
 /// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.

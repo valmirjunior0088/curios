@@ -70,7 +70,7 @@ pub fn typecheck_reporting(
     };
 
     let (module, _core_type, obligations) = with_prelude(|prelude| {
-        let mut context = Context::new(budget);
+        let mut context = Context::new(budget, SYNTAX);
 
         elaborate_and_zonk_with_prelude_reporting(
             &mut context,
@@ -121,7 +121,7 @@ where
     };
 
     let (module, core_type) = with_prelude(|prelude| {
-        let mut context = Context::new(budget);
+        let mut context = Context::new(budget, SYNTAX);
 
         elaborate_and_zonk_with_prelude(
             &mut context,
@@ -201,7 +201,7 @@ where
 
     let ersd_module = with_prelude(|prelude| {
         erase_module_with_prelude(
-            &mut Context::new(budget),
+            &mut Context::new(budget, SYNTAX),
             prelude.core(),
             &module,
             &core_type,

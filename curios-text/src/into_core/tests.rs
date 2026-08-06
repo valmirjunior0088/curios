@@ -1,9 +1,9 @@
-use super::super::{
-    CharacterSyntax, Entrypoint, Error, MonadSyntax, PreludeModules, ProofSyntax, RootSource,
+use super::super::{Entrypoint, Error, PreludeModules, RootSource};
+use curios_abi::{WireType, host_ops};
+use curios_base::{
+    CharacterSyntax, ConceptField, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier, RootId,
     StringSyntax, SyntaxName, SyntaxRegistry,
 };
-use curios_abi::{WireType, host_ops};
-use curios_base::{Qualifier, RootId};
 use curios_elab::TermBuilders;
 use std::{
     fs,
@@ -15,8 +15,27 @@ const fn syn_name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)
 }
 
+const fn syn_field(segments: &'static [&'static str], label: &'static str) -> ConceptField {
+    ConceptField::new(syn_name(segments), label)
+}
+
 const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
     MonadSyntax::new(syn_name(&["syn", "Monad", "bind"])),
+    OperatorSyntax::new(
+        syn_field(&["syn", "Add"], "add"),
+        syn_field(&["syn", "Sub"], "sub"),
+        syn_field(&["syn", "Mul"], "mul"),
+        syn_field(&["syn", "Div"], "div"),
+        syn_field(&["syn", "Rem"], "rem"),
+        syn_field(&["syn", "Eql", "Eql"], "eql"),
+        syn_field(&["syn", "Eql", "Eql"], "neq"),
+        syn_field(&["syn", "Cmp"], "lt"),
+        syn_field(&["syn", "Cmp"], "gt"),
+        syn_field(&["syn", "Cmp"], "lte"),
+        syn_field(&["syn", "Cmp"], "gte"),
+        syn_field(&["syn", "And"], "and"),
+        syn_field(&["syn", "Or"], "or"),
+    ),
     CharacterSyntax::new(
         syn_name(&["syn", "Char", "Char"]),
         syn_name(&["syn", "Char", "Scalar", "below"]),
@@ -68,7 +87,7 @@ fn elaborate_source(src: &str) -> curios_core::Module {
         syntax(),
     )
     .unwrap();
-    let mut context = curios_elab::Context::with_default_budget();
+    let mut context = curios_elab::Context::with_default_budget(SYNTAX);
     curios_elab::elaborate_and_zonk_module(
         &mut context,
         &module,
@@ -98,7 +117,7 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     lowered_prefix.type_ = None;
     lowered_prefix.body = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero));
     let prelude = curios_elab::elaborate_and_zonk_module(
-        &mut curios_elab::Context::with_default_budget(),
+        &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
         metavar_floor,
         universe_floor,
@@ -108,7 +127,7 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     .0;
 
     let full = curios_elab::elaborate_and_zonk_module(
-        &mut curios_elab::Context::with_default_budget(),
+        &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered,
         metavar_floor,
         universe_floor,
@@ -117,7 +136,7 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     .unwrap()
     .0;
     let cached = curios_elab::elaborate_and_zonk_with_prelude(
-        &mut curios_elab::Context::with_default_budget(),
+        &mut curios_elab::Context::with_default_budget(SYNTAX),
         &prelude,
         &lowered,
         metavar_floor,

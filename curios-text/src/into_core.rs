@@ -17,7 +17,7 @@ mod tests;
 use {
     super::*,
     curios_abi::ForeignStore,
-    curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind},
+    curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind, SyntaxRegistry},
     curios_core::Bound,
     std::{
         cell::{Cell, RefCell},

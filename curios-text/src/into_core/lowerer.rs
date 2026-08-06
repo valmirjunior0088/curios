@@ -6,7 +6,7 @@ use {
         Nat, NatLiteral, NumLit, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn,
         Term,
     },
-    curios_base::{Grain, PackedBin, Plicity, Qualifier, Span},
+    curios_base::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName},
     num_bigint::BigUint,
     num_traits::ToPrimitive,
     std::{cell::RefCell, sync::Arc},
@@ -193,7 +193,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     // A constructor/function `Var` applied to `args` — the absolute core name as the parser would resolve it (privacy is a surface-resolution concern; these are already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
     pub(super) fn syn_call(
-        name: crate::SyntaxName,
+        name: SyntaxName,
         args: impl IntoIterator<Item = curios_core::Term>,
     ) -> curios_core::Term {
         curios_core::Term::apply(

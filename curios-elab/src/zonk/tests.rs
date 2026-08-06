@@ -2,7 +2,7 @@ use crate::*;
 use curios_core::*;
 
 fn context() -> Context {
-    Context::with_default_budget()
+    Context::with_default_budget(crate::SYNTAX)
 }
 
 fn nat() -> Term {

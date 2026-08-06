@@ -1,21 +1,21 @@
-//! Canonical compiler-known names owned by the authored `/syn` source tree.
+//! Test-only stand-in for the registry `curios-prelude` fills in production.
+//!
+//! This crate cannot see `curios-prelude` — the dependency runs the other way, which is the whole reason the registry is supplied rather than spelled — so its unit tests need their own values, exactly as `curios-text`'s lowering tests do. The spellings match the real prelude's so a test that does reach a type-directed feature reaches the same declarations; nothing here is authoritative, and production compilation never constructs it.
 
 use curios_base::{
     CharacterSyntax, ConceptField, MonadSyntax, OperatorSyntax, ProofSyntax, StringSyntax,
     SyntaxName, SyntaxRegistry,
 };
 
-/// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)
 }
 
-/// One concept method: the concept's segments, and the label of the field the elaborator projects out of its witness.
 const fn field(segments: &'static [&'static str], label: &'static str) -> ConceptField {
     ConceptField::new(name(segments), label)
 }
 
-pub const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
+pub(crate) const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
     MonadSyntax::new(name(&["syn", "Monad", "bind"])),
     OperatorSyntax::new(
         field(&["syn", "Add"], "add"),

@@ -4,6 +4,7 @@ use {
     super::*,
     curios_elab::{Context, erase_module},
     curios_ersd::Analysis,
+    curios_prelude::SYNTAX,
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
 };
@@ -1525,8 +1526,12 @@ fn erase_to_ir(source: &str) -> curios_ersd::Module {
         &mut |_| {},
     )
     .unwrap();
-    erase_module(&mut Context::with_default_budget(), &module, &core_type)
-        .expect("the elaborated module erases into a verified arena module")
+    erase_module(
+        &mut Context::with_default_budget(SYNTAX),
+        &module,
+        &core_type,
+    )
+    .expect("the elaborated module erases into a verified arena module")
 }
 
 #[test]

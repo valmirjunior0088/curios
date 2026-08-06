@@ -14,7 +14,7 @@ use {
     super::{
         Error, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
     },
-    curios_base::{Entropy, Qualifier, RootId, Span},
+    curios_base::{Entropy, Qualifier, RootId, Span, SyntaxRegistry},
     curios_core::ReduceError,
     curios_core::{
         Bound, ConceptDecl, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl,
@@ -100,18 +100,22 @@ pub struct Context {
     checked: Vec<(Term, Term, Rc<str>)>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
+    // The `/syn` names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
+    syntax: SyntaxRegistry,
 }
 
 impl Context {
     /// A fresh, empty context at [`DEFAULT_STEP_BUDGET`] — what every caller that is not threading a user-supplied budget wants.
-    pub fn with_default_budget() -> Self {
-        Self::new(DEFAULT_STEP_BUDGET)
+    pub fn with_default_budget(syntax: SyntaxRegistry) -> Self {
+        Self::new(DEFAULT_STEP_BUDGET, syntax)
     }
 
-    /// A fresh, empty context in which each declaration may spend `budget` reduction steps. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.
+    /// A fresh, empty context in which each declaration may spend `budget` reduction steps, synthesizing the `/syn` names `syntax` registers. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.
     ///
     /// The budget is *per declaration*, not per compilation: `elaborate_module_suffix` calls [`Context::restore_budget`] at every item boundary. A cumulative budget would make whether one declaration typechecks depend on how much the declarations before it had already spent, which is not a property of the declaration. Counting steps rather than elapsed time is what makes the answer a fact about the program instead of about the machine that ran it, so acceptance is reproducible across hosts, loads, and runs.
-    pub fn new(budget: u64) -> Self {
+    ///
+    /// The registry is a constructor argument rather than something a later call may or may not install, so an embedding cannot reach a type-directed feature with no vocabulary to emit. Whether the named declarations are actually *in scope* is a separate question the features already answer for themselves — a missing concept registration reports `no witness`, and row subsumption declines and lets the original mismatch speak.
+    pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             fresh_names: Entropy::<usize>::new(),
             budget,
@@ -124,7 +128,13 @@ impl Context {
             island: Some(Qualifier::empty()),
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
+            syntax,
         }
+    }
+
+    /// The `/syn` names this elaboration may synthesize.
+    pub(crate) fn syntax(&self) -> SyntaxRegistry {
+        self.syntax
     }
 
     /// Record one settled term and the type it settled at — obligation (V)'s seed, collected where elaboration already knows the answer.

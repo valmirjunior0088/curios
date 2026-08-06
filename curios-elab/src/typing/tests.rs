@@ -35,7 +35,7 @@ fn display_type_mismatch_shows_both_types() {
 /// The table spans the shapes the rule turns on: both universes, a proof, an impredicative `Π` into a proposition beside a `Π` into a *universe* — a type family, not a proposition — a `Σ` whose fields are all propositions, and the unit type, which is `Type`-sorted deliberately, being what an effect returns, so calling it a proposition would erase it.
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
-    let mut context = Context::new(100_000);
+    let mut context = Context::new(100_000, crate::SYNTAX);
     let mut kernel = curios_cert::Kernel::new(100_000);
     kernel.set_local_floor(1_000);
 

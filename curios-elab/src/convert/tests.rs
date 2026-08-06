@@ -11,7 +11,7 @@ fn nominal(path: &str) -> Global {
 }
 
 fn context() -> Context {
-    Context::new(100_000)
+    Context::new(100_000, crate::SYNTAX)
 }
 
 fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
@@ -410,7 +410,7 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
 #[test]
 fn convert_growing_recursive_unfolding_spends_the_budget() {
     // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, and this shape drives native recursion deep enough to overflow the stack somewhere above 20,000 steps — well under the shipped default. See the note in `Context::new`.
-    let mut context = Context::new(20_000);
+    let mut context = Context::new(20_000, crate::SYNTAX);
     let x = context.fresh(Some("x"));
     let m = context.fresh(Some("m"));
     let s = context.fresh(Some("s"));

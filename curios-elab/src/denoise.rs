@@ -27,7 +27,11 @@ pub(crate) fn operator_witness_table(context: &Context) -> OperatorWitnesses {
             continue;
         };
         for (index, field) in concept.fields.iter().enumerate() {
-            if let Some(op) = NumOp::from_concept_field(concept_path, field) {
+            if let Some(op) = context
+                .syntax()
+                .operator()
+                .operator_for(concept_path, field)
+            {
                 table.insert((witness.name.clone(), index), op);
             }
         }

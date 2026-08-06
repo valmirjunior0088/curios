@@ -11,7 +11,7 @@ fn nominal(path: &str) -> Global {
 }
 
 fn context() -> Context {
-    Context::with_default_budget()
+    Context::with_default_budget(crate::SYNTAX)
 }
 
 fn nat() -> Term {

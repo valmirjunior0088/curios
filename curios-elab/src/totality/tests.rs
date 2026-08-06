@@ -40,7 +40,7 @@ fn module(items: Vec<Item>) -> Module {
 #[test]
 fn a_partial_name_from_outside_the_module_still_taints_what_mentions_it() {
     // The replay path: `caller` is user code and `/std/Async/bind` is a prelude definition this module does not contain. Without the inherited verdict the walk sees an unresolvable name and calls `caller` total, which is the hole that would let a user proof mention a divergent prelude function.
-    let mut context = Context::with_default_budget();
+    let mut context = Context::with_default_budget(crate::SYNTAX);
     let module = module(vec![mentioning("caller", "prelude_partial")]);
 
     let inherited = BTreeMap::from([(name("prelude_partial"), Totality::Partial)]);
@@ -56,7 +56,7 @@ fn a_partial_name_from_outside_the_module_still_taints_what_mentions_it() {
 #[test]
 fn inherited_partiality_propagates_through_a_local_chain() {
     // `first → second → outside`. The taint has to cross the module boundary once and then travel the local closure, which is the fixpoint doing work a single ordered pass would miss.
-    let mut context = Context::with_default_budget();
+    let mut context = Context::with_default_budget(crate::SYNTAX);
     let module = module(vec![
         mentioning("first", "second"),
         mentioning("second", "outside"),
@@ -71,7 +71,7 @@ fn inherited_partiality_propagates_through_a_local_chain() {
 #[test]
 fn stamping_a_module_is_what_the_next_compilation_reads_back() {
     // `record_totality` writes the flag and `recorded_totality` reads it: the round trip the archive relies on to hand a user program the prelude's verdicts without re-analyzing `/std`.
-    let mut context = Context::with_default_budget();
+    let mut context = Context::with_default_budget(crate::SYNTAX);
     let mut module = module(vec![mentioning("caller", "prelude_partial")]);
     let inherited = BTreeMap::from([(name("prelude_partial"), Totality::Partial)]);
 

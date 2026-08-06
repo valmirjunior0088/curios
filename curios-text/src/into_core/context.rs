@@ -1,7 +1,7 @@
 use {
     super::PublicInterface,
-    crate::{Error, Name, SyntaxRegistry},
-    curios_base::{Entropy, Qualifier, RootId, Span},
+    crate::{Error, Name},
+    curios_base::{Entropy, Qualifier, RootId, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{HashMap, HashSet},

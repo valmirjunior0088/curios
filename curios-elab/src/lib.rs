@@ -8,6 +8,11 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Context`, not paths into the modules.
 
+#[cfg(test)]
+mod fixture;
+#[cfg(test)]
+pub(crate) use fixture::*;
+
 mod builders;
 pub use builders::*;
 

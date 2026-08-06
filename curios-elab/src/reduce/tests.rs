@@ -13,7 +13,7 @@ fn nominal(path: &str) -> Global {
 }
 
 fn context() -> Context {
-    Context::new(100_000)
+    Context::new(100_000, crate::SYNTAX)
 }
 
 fn nat(n: usize) -> Term {
@@ -292,7 +292,7 @@ fn reduce_let_shadowing_value_sees_the_outer_binding() {
 fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     // A long straight-line `let` sequence must lower to a single flat `Let` block, not a nest: `Term::let_` merges each binding into the block already built for its tail, so folding the chain bottom-up (as `into_core` and the elaborator's rebuild both do) yields one node. That flatness is what bounds every walk over it — `reduce` here, and `traverse` via `reach` — to a loop instead of one native stack frame per binding.
     let depth = 1000;
-    let mut context = Context::with_default_budget();
+    let mut context = Context::with_default_budget(crate::SYNTAX);
     let binders = (0..depth)
         .map(|i| context.fresh(Some(&format!("x{i}"))))
         .collect::<Vec<_>>();
@@ -871,7 +871,7 @@ mod prim {
     };
 
     fn context() -> Context {
-        Context::with_default_budget()
+        Context::with_default_budget(crate::SYNTAX)
     }
 
     fn lit(n: u32) -> Term {

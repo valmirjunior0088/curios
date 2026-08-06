@@ -92,7 +92,7 @@ fn build() {
         .unwrap_or_else(|error| panic!("lowered Text universe seeds are invalid: {error}"));
 
     let lowered = prepared.core().clone();
-    let mut context = Context::with_default_budget();
+    let mut context = Context::with_default_budget(SYNTAX);
     let (core, body_type) = elaborate_and_zonk_module(
         &mut context,
         &lowered,
@@ -122,8 +122,8 @@ fn build() {
         );
     }
 
-    let ersd =
-        erase_prelude_prefix(&mut Context::with_default_budget(), &core).unwrap_or_else(|error| {
+    let ersd = erase_prelude_prefix(&mut Context::with_default_budget(SYNTAX), &core)
+        .unwrap_or_else(|error| {
             panic!(
                 "fixed prelude failed to erase into the arena prefix: {}",
                 error.format_with(&core)
@@ -252,6 +252,25 @@ fn validate_syntax_targets(module: &curios_core::Module) {
                 .map(Global::symbol)
                 .filter(|name| name.contains(target.last()))
                 .collect::<Vec<_>>()
+        );
+    }
+
+    // A concept can exist under the registered name and still not declare the method the elaborator projects, which the presence check above cannot see. `elaborate_infix` resolves that method *positionally* against the declaration, so a drifted label is not a compile error here but a panic on the first program that writes the operator.
+    for target in SYNTAX.concept_fields() {
+        let symbol = target.concept().symbol();
+        let field = target.field();
+        let concept = module
+            .concepts
+            .get(&Global::Authored(target.concept().qualifier()))
+            .unwrap_or_else(|| {
+                panic!(
+                    "registered operator concept '{symbol}' is not a concept in the lowered prelude"
+                )
+            });
+        assert!(
+            concept.fields.iter().any(|declared| declared == field),
+            "registered operator concept '{symbol}' does not declare the method '{field}'; it declares: {:?}",
+            concept.fields
         );
     }
 }

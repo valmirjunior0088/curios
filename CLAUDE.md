@@ -49,7 +49,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 | Area | Owner | Responsibility |
 | --- | --- | --- |
-| Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, and other stage-independent primitives |
+| Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, the `SyntaxRegistry` shape the `/syn`-emitting stages read, and other stage-independent primitives |
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
 | Fixed prelude | `curios-prelude` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive |
@@ -100,7 +100,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
 - `/std` and `/syn` are owned by `curios-prelude` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
-- `/syn` ownership — which names it holds, and why — is `curios-prelude/README.md`'s decision to state. The registry contract belongs to `curios-text`, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`.
+- `/syn` ownership — which names it holds, and why — is `curios-prelude/README.md`'s decision to state. The registry contract belongs to `curios-base`, below both stages that read it, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`. No crate below `curios-prelude` may spell a `/syn` name: the registry states slots, the prelude states spellings, and the prelude build checks every slot against the sources.
 - Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
@@ -121,7 +121,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - Read [SYNTAX.md](documentation/SYNTAX.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
 - The surface grammar's syntax forms are closed: a new type never gets its own operator or keyword. It opts into an existing form (`+`, `==`, postfix `!`, …) by writing a `satisfy` witness against the form's `/syn` concept. See "Syntax forms are closed, semantics extend by witness" in `documentation/DESIGN.md` before proposing hardcoded syntax for a type.
 - Use `curios-prelude/std/` as the reference for idiomatic code.
-- Register a new `curios-prelude/std/Foo.crs` module in `curios-prelude/std.crs`. Apply the corresponding rule to `curios-prelude/syn/` and `curios-prelude/syn.crs`; update `curios-prelude/src/syntax.rs` only when Rust lowering directly emits the new `/syn` name.
+- Register a new `curios-prelude/std/Foo.crs` module in `curios-prelude/std.crs`. Apply the corresponding rule to `curios-prelude/syn/` and `curios-prelude/syn.crs`; update `curios-prelude/src/syntax.rs` only when Rust directly emits the new `/syn` name — from lowering, or from a type-directed feature in `curios-elab`.
 - Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `SYNTAX.md` for the full rules rather than extending this reminder list.
 - Run Curios programs through the native CLI: `cargo run --package curios -- run <file.crs>`.
 

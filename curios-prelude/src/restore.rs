@@ -217,4 +217,23 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn every_registered_concept_declares_its_method_after_restore() {
+        with_prelude(|prelude| {
+            for target in SYNTAX.concept_fields() {
+                let concept = prelude
+                    .core()
+                    .concepts
+                    .get(&Global::Authored(target.concept().qualifier()))
+                    .unwrap_or_else(|| panic!("missing concept {}", target.concept().symbol()));
+                assert!(
+                    concept.fields.iter().any(|field| field == target.field()),
+                    "concept {} does not declare {}",
+                    target.concept().symbol(),
+                    target.field()
+                );
+            }
+        });
+    }
 }
