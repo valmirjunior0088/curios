@@ -1,0 +1,8 @@
+pub use /sys/{Io};
+pub use /sys/Io/{pure, bind};
+use /std/{Monad};
+
+satisfy Monad(Io) {
+    pure = pure,
+    bind = bind,
+}

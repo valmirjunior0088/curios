@@ -1369,6 +1369,14 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, c)?,
         ),
         Prim::CellGet(a, b) => Prim::CellGet(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoType(a) => Prim::IoType(zonk_term(context, a)?),
+        Prim::IoPure(a, b) => Prim::IoPure(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoBind(a, b, action, f) => Prim::IoBind(
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+            zonk_term(context, action)?,
+            zonk_term(context, f)?,
+        ),
     })
 }
 

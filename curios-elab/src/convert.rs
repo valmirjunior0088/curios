@@ -328,11 +328,11 @@ impl Sort {
                 | Prim::FltType
                 | Prim::BinType(_)
                 | Prim::HandleType => Sort::Type(Level::zero()),
-                Prim::LstType(element) | Prim::CellType(element) => {
+                Prim::LstType(element) | Prim::CellType(element) | Prim::IoType(element) => {
                     let element = element.clone();
                     match Sort::of_in(context, opened, &element)? {
                         Sort::Type(level) => Sort::Type(level),
-                        // A list or cell of proofs is not itself a proposition — it has length, or identity, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` instead, and `Prop : Type 0`.
+                        // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` instead, and `Prop : Type 0`. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
                         Sort::Prop => Sort::Type(Level::zero()),
                     }
                 }
@@ -1639,6 +1639,10 @@ impl Convert {
                 vec![elem.clone()],
                 Box::new(|vars| Term::prim(Prim::CellType(vars[0].clone()))),
             ),
+            Subterm::Prim(Prim::IoType(elem)) => (
+                vec![elem.clone()],
+                Box::new(|vars| Term::prim(Prim::IoType(vars[0].clone()))),
+            ),
             _ => unreachable!("the callers pass a nominal or prim-former rigid side"),
         };
         let arity = rigid_args.len();
@@ -2032,13 +2036,13 @@ impl Convert {
                 }
                 (
                     Subterm::Apply(apply),
-                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_))),
+                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_) | Prim::IoType(_))),
                 ) => {
                     let rigid: Term = Subterm::Prim(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
                 }
                 (
-                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_))),
+                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_) | Prim::IoType(_))),
                     Subterm::Apply(apply),
                 ) => {
                     let rigid: Term = Subterm::Prim(rigid).into();

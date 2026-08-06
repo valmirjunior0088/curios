@@ -11,6 +11,7 @@ mod fmt;
 mod foreign;
 mod inference;
 mod io;
+mod io_monad;
 mod kernel;
 mod map;
 mod matching;

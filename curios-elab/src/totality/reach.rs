@@ -231,7 +231,9 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>) -> Ente
         }
 
         // The type formers name their element types.
-        Subterm::Prim(Prim::LstType(type_) | Prim::CellType(type_)) => push(positions, site, type_),
+        Subterm::Prim(Prim::LstType(type_) | Prim::CellType(type_) | Prim::IoType(type_)) => {
+            push(positions, site, type_)
+        }
 
         _ => {}
     }

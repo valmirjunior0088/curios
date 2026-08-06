@@ -650,6 +650,9 @@ fn print_prim(prim: Prim) -> Printer {
         Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),
         Prim::CellSet(type_, cell, value) => print_prim_call("Cell.set", vec![type_, cell, value]),
         Prim::CellGet(type_, cell) => print_prim_call("Cell.get", vec![type_, cell]),
+        Prim::IoType(result) => print_prim_call("Io", vec![result]),
+        Prim::IoPure(type_, value) => print_prim_call("Io.pure", vec![type_, value]),
+        Prim::IoBind(from, to, action, f) => print_prim_call("Io.bind", vec![from, to, action, f]),
     }
 }
 

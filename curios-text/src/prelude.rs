@@ -97,6 +97,10 @@ fn cell_of(elem: Term) -> Term {
     prim(Prim::CellType(elem))
 }
 
+fn io_of(result: Term) -> Term {
+    prim(Prim::IoType(result))
+}
+
 fn type_() -> Term {
     Subterm::Type.into()
 }
@@ -525,6 +529,32 @@ fn cell_ops() -> Vec<TopItem> {
     ]
 }
 
+// The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the `/sys` root stays the flat mirror of the `ForeignStore` and `/std` owns the taxonomy — and `Io` is only the type its result wears.
+fn io_ops() -> Vec<TopItem> {
+    vec![
+        pub_fn_marked(
+            "pure",
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "x", name("T")),
+            ],
+            io_of(name("T")),
+            prim(Prim::IoPure(name("T"), name("x"))),
+        ),
+        pub_fn_marked(
+            "bind",
+            vec![
+                (Plicity::Implicit, "A", type_()),
+                (Plicity::Implicit, "B", type_()),
+                (Plicity::Explicit, "m", io_of(name("A"))),
+                (Plicity::Explicit, "f", fn_of(name("A"), io_of(name("B")))),
+            ],
+            io_of(name("B")),
+            prim(Prim::IoBind(name("A"), name("B"), name("m"), name("f"))),
+        ),
+    ]
+}
+
 // The values and operations of the `/sys/Handle` type: the three standard streams and handle identity. The host operations that mint and consume handles live flat at the `/sys` root (see `host_operations`), not here.
 fn handle_ops() -> Vec<TopItem> {
     vec![
@@ -596,7 +626,7 @@ fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
     ops
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`) holds its type and operations and hoists the type to the `/sys` root; the host operations, `exit`, and the `Status`/`Poll`/`Mode` code modules sit flat at the root. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
+/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; the host operations, `exit`, and the `Status`/`Poll`/`Mode` code modules sit flat at the root. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore) -> Module {
     let mut items = vec![
         pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
@@ -644,6 +674,14 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
             ),
         ),
         pub_use("Cell"),
+        pub_mod(
+            "Io",
+            with_type(
+                pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
+                io_ops(),
+            ),
+        ),
+        pub_use("Io"),
     ];
 
     items.extend(host_operations(foreigns));

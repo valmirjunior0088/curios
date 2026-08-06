@@ -47,6 +47,10 @@ fn cell_type(element: Term) -> Term {
     Term::prim(Prim::CellType(element))
 }
 
+fn io_type(result: Term) -> Term {
+    Term::prim(Prim::IoType(result))
+}
+
 /// The type of `prim`, having checked every operand against the type this operation demands of it.
 pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, KernelError> {
     // A grain says what a `Bin` is a sequence *of*: bytes at `X`, bits at `B`. Every `Bin` operation is the same rule at two different element types.
@@ -65,8 +69,8 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         | Prim::BinType(_)
         | Prim::HandleType => Ok(Term::type_ground()),
 
-        // A parameterized former's sort is whatever `Sort::of` computes for it, asked here rather than restated: the element's own sort is *not* the answer, because a list or a cell of proofs has a length or an identity and so is not itself a proposition.
-        Prim::LstType(element) | Prim::CellType(element) => {
+        // A parameterized former's sort is whatever `Sort::of` computes for it, asked here rather than restated: the element's own sort is *not* the answer, because a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
+        Prim::LstType(element) | Prim::CellType(element) | Prim::IoType(element) => {
             let sort = sort_of_prim(kernel, prim)?;
             let _ = check_is_type(kernel, element)?;
 
@@ -328,6 +332,28 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
                         .collect::<Vec<_>>(),
                 ),
             })
+        }
+
+        // The two constructors of the opaque effect carrier. There is no third: nothing here or anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
+        Prim::IoPure(result, value) => {
+            let result = check_is_type(kernel, result)?;
+            check(kernel, value, &result)?;
+
+            Ok(io_type(result))
+        }
+        Prim::IoBind(from, to, action, continuation) => {
+            let from = check_is_type(kernel, from)?;
+            let to = check_is_type(kernel, to)?;
+            check(kernel, action, &io_type(from.clone()))?;
+
+            let binder = kernel.fresh(Some("x"));
+            check(
+                kernel,
+                continuation,
+                &Term::func_type([(binder, from)], io_type(to.clone())),
+            )?;
+
+            Ok(io_type(to))
         }
     }
 }

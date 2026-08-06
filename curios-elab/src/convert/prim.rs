@@ -157,7 +157,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::BinLen(Grain::X, this), Prim::BinLen(Grain::X, that))
         | (Prim::BinLen(Grain::B, this), Prim::BinLen(Grain::B, that))
         | (Prim::LstType(this), Prim::LstType(that))
-        | (Prim::CellType(this), Prim::CellType(that)) => {
+        | (Prim::CellType(this), Prim::CellType(that))
+        | (Prim::IoType(this), Prim::IoType(that)) => {
             cmp.enqueue(Term::type_ground(), this, that);
 
             Ok(true)
@@ -246,6 +247,24 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             for (this, that) in this_ops.into_iter().zip(that_ops) {
                 cmp.enqueue(Term::type_ground(), this, that);
             }
+            Ok(true)
+        }
+        // Descriptions compare congruently and by nothing else: no monad law fires here, so `bind(pure(x), f)` and `f(x)` are distinct terms. Nothing can be proven about an `Io`, so a law would buy no program anything, and admitting one would make conversion decide when an effect happens.
+        (Prim::IoPure(this_ty, this_value), Prim::IoPure(that_ty, that_value)) => {
+            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
+            cmp.enqueue(Term::type_ground(), this_value, that_value);
+
+            Ok(true)
+        }
+        (
+            Prim::IoBind(this_from, this_to, this_action, this_next),
+            Prim::IoBind(that_from, that_to, that_action, that_next),
+        ) => {
+            cmp.enqueue(Term::type_ground(), this_from, that_from);
+            cmp.enqueue(Term::type_ground(), this_to, that_to);
+            cmp.enqueue(Term::type_ground(), this_action, that_action);
+            cmp.enqueue(Term::type_ground(), this_next, that_next);
+
             Ok(true)
         }
         (_, _) => Ok(false),

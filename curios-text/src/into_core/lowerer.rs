@@ -1287,6 +1287,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::CellGet(type_, cell) => {
                 curios_core::Prim::cell_get(self.term(type_)?, self.term(cell)?)
             }
+            Prim::IoType(result) => curios_core::Prim::io_type(self.term(result)?),
+            Prim::IoPure(type_, value) => {
+                curios_core::Prim::io_pure(self.term(type_)?, self.term(value)?)
+            }
+            Prim::IoBind(from, to, action, f) => curios_core::Prim::io_bind(
+                self.term(from)?,
+                self.term(to)?,
+                self.term(action)?,
+                self.term(f)?,
+            ),
         })
     }
 }

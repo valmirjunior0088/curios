@@ -4,8 +4,8 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, InductDecl, Let, Subterm, Telescope, Term,
-        emitted, prim,
+        Binding, Bound, Context, Environment, Error, InductDecl, Let, Prim, Subterm, Telescope,
+        Term, emitted, prim, reduce_with,
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
@@ -239,6 +239,7 @@ pub fn erase_module(
 
         lowering.builder.open_block();
         let outcome = lowering.walk(context, &module.body, &expected, None)?;
+        let outcome = force_entry(&mut lowering, context, &expected, outcome)?;
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
 
@@ -248,6 +249,36 @@ pub fn erase_module(
             .finalize()
             .map_err(|error| Error::erased_module_invalid(error.to_string()))
     })
+}
+
+/// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one.
+///
+/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a pure tail still erases as it always did — what makes it mandatory on the compile path is `curios-pipeline` refusing a tail that is not an `Io`. The forced value is discarded and the entry yields unit: the runtime ignores `func/main`'s result, so a program's meaning is the effects its description performs.
+fn force_entry(
+    lowering: &mut Lowering,
+    context: &mut Context,
+    expected: &Term,
+    outcome: Outcome,
+) -> Result<Outcome, Error> {
+    let Outcome::Emitted(description) = outcome else {
+        return Ok(outcome);
+    };
+    if !matches!(
+        &*reduce_with(context, expected)?,
+        Subterm::Prim(Prim::IoType(_))
+    ) {
+        return Ok(Outcome::Emitted(description));
+    }
+
+    let _forced = lowering.bind(
+        None,
+        curios_ersd::Rhs::Apply {
+            callee: description,
+            arguments: Vec::new(),
+        },
+    );
+
+    Ok(Outcome::Emitted(lowering.unit()))
 }
 
 impl Lowering {
@@ -513,6 +544,7 @@ pub fn erase_module_with_prelude(
 
         lowering.builder.open_block();
         let outcome = lowering.walk(context, &module.body, &expected, None)?;
+        let outcome = force_entry(&mut lowering, context, &expected, outcome)?;
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
 

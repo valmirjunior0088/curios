@@ -1431,6 +1431,23 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
             kind: "CellGet".to_string(),
             span: cell.span(),
         }),
+        Prim::IoType(result) => {
+            let result = reducer.reduce(result.clone())?;
+            Ok(Subterm::Prim(Prim::io_type(result)))
+        }
+        // A description is an inert value: its operands reduce and the node rebuilds, and no monad law fires. `bind(pure(x), f)` is deliberately *not* definitionally `f(x)` — an `Io` supports no proof for a law to be useful about, and admitting one would make conversion decide when an effect happens.
+        Prim::IoPure(type_, value) => {
+            let type_ = reducer.reduce(type_.clone())?;
+            let value = reducer.reduce(value.clone())?;
+            Ok(Subterm::Prim(Prim::io_pure(type_, value)))
+        }
+        Prim::IoBind(from, to, action, f) => {
+            let from = reducer.reduce(from.clone())?;
+            let to = reducer.reduce(to.clone())?;
+            let action = reducer.reduce(action.clone())?;
+            let f = reducer.reduce(f.clone())?;
+            Ok(Subterm::Prim(Prim::io_bind(from, to, action, f)))
+        }
     }
 }
 

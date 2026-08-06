@@ -19,7 +19,9 @@ pub fn wire_term(wire_type: &WireType) -> Term {
     Subterm::Prim(prim).into()
 }
 
-/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `Exit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `Exit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+///
+/// A primitive that performs a host effect returns an `Io`. That is the invariant the whole effect discipline rests on and it is enforced nowhere but here and in the two checkers' per-variant arms, so a new effectful variant must be given an `IoType` result when it is added.
 ///
 /// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -153,6 +155,16 @@ pub enum Prim {
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value
     CellGet(Term, Term),       // type, cell
+    // The opaque carrier of a host effect: `Io(T)` is a *description* of a computation that yields a `T`, never the `T` itself.
+    //
+    // There is deliberately no eliminator from `Io(T)` to `T`, and there never may be. That absence is the whole of the referential-transparency story: a closure that performs an effect can only be given an `Io`-returning type, so every term of non-`Io` type denotes one value, and a scrutinee's spelling fixes it. The only consumer of an `Io(A)` is `IoBind`, which returns an `Io(B)`; nothing lowers the carrier to its content but the emitted entrypoint boundary, which forces the program's whole description exactly once.
+    IoType(Term),
+    // (@T, x : T) -> Io(T): the description that performs nothing and yields `x`.
+    IoPure(Term, Term), // type, value
+    // (@A, @B, m : Io(A), f : (A) -> Io(B)) -> Io(B): the description that performs `m`, then the description `f` computes from its result.
+    //
+    // Non-dependent in `B`, matching the `/syn/Monad` field it satisfies. Inert like the other two: no monad law holds definitionally, since nothing can be proven about an `Io` for a law to be useful about.
+    IoBind(Term, Term, Term, Term), // from, to, action, continuation
 }
 
 impl Prim {
@@ -371,6 +383,34 @@ impl Prim {
         Self::CellType(elem.into())
     }
 
+    /// An `IoType` node from a term-shaped result type.
+    pub fn io_type<T>(result: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::IoType(result.into())
+    }
+
+    /// An `IoPure` node from a term-shaped result type and value.
+    pub fn io_pure<T, V>(type_: T, value: V) -> Self
+    where
+        T: Into<Term>,
+        V: Into<Term>,
+    {
+        Self::IoPure(type_.into(), value.into())
+    }
+
+    /// An `IoBind` node from term-shaped source result type, target result type, action, and continuation.
+    pub fn io_bind<A, B, M, F>(a: A, b: B, action: M, f: F) -> Self
+    where
+        A: Into<Term>,
+        B: Into<Term>,
+        M: Into<Term>,
+        F: Into<Term>,
+    {
+        Self::IoBind(a.into(), b.into(), action.into(), f.into())
+    }
+
     /// Visit each `Term` operand of `self`, in field order. The single source of truth for which fields of a primitive are its term operands — `reach`, `any_metavar`, and `collect_construction_names` all read it. (`traverse` keeps its own match: it rebuilds rather than visits.) The closure is taken `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region hot path allocation- and indirection-free.
     fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
         match self {
@@ -419,6 +459,7 @@ impl Prim {
             | Prim::BinLen(Grain::X, t)
             | Prim::BinLen(Grain::B, t)
             | Prim::LstType(t)
+            | Prim::IoType(t)
             | Prim::Exit(t) => visit(t),
 
             Prim::HandleEql(a, b)
@@ -488,7 +529,8 @@ impl Prim {
             | Prim::BinEql(Grain::B, a, b)
             | Prim::BinGet(Grain::B, a, b)
             | Prim::BinAppend(Grain::B, a, b)
-            | Prim::LstLen(a, b) => {
+            | Prim::LstLen(a, b)
+            | Prim::IoPure(a, b) => {
                 visit(a);
                 visit(b);
             }
@@ -502,7 +544,7 @@ impl Prim {
                 visit(c);
             }
 
-            Prim::LstSlice(a, b, c, d) | Prim::LstMap(a, b, c, d) => {
+            Prim::LstSlice(a, b, c, d) | Prim::LstMap(a, b, c, d) | Prim::IoBind(a, b, c, d) => {
                 visit(a);
                 visit(b);
                 visit(c);
@@ -727,6 +769,14 @@ impl Prim {
                 visit.visit_subterm(a),
                 visit.visit_subterm(b),
                 visit.visit_subterm(c),
+            ),
+            Prim::IoType(a) => Prim::IoType(visit.visit_subterm(a)),
+            Prim::IoPure(a, b) => traverse_binary(a, b, visit, Prim::IoPure),
+            Prim::IoBind(a, b, action, f) => Prim::IoBind(
+                visit.visit_subterm(a),
+                visit.visit_subterm(b),
+                visit.visit_subterm(action),
+                visit.visit_subterm(f),
             ),
         }
     }

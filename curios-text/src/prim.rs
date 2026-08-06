@@ -144,4 +144,7 @@ pub enum Prim {
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value
     CellGet(Term, Term),       // type, cell
+    IoType(Term),
+    IoPure(Term, Term),             // type, value
+    IoBind(Term, Term, Term, Term), // from, to, action, continuation
 }

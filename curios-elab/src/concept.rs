@@ -70,6 +70,7 @@ pub enum HeadKey {
     Handle,
     Lst,
     Cell,
+    Io,
 }
 
 impl HeadKey {
@@ -116,6 +117,7 @@ impl HeadKey {
             Prim::HandleType => Some(HeadKey::Handle),
             Prim::LstType(_) => Some(HeadKey::Lst),
             Prim::CellType(_) => Some(HeadKey::Cell),
+            Prim::IoType(_) => Some(HeadKey::Io),
             _ => None,
         }
     }
@@ -135,6 +137,7 @@ impl fmt::Display for HeadKey {
             HeadKey::Handle => write!(f, "Handle"),
             HeadKey::Lst => write!(f, "Lst"),
             HeadKey::Cell => write!(f, "Cell"),
+            HeadKey::Io => write!(f, "Io"),
         }
     }
 }

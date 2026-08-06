@@ -558,6 +558,9 @@ impl<E: Env> Walk<'_, E> {
             // A cell is read *and* written, so it is invariant in its element.
             Prim::CellType(element) => self.walk(element, Polarity::Mixed),
 
+            // `Io` is invariant here by choice, not by derivation. Operationally it is a delayed `T`, which would make it covariant like `Lst`; but `bind` hands the result to a continuation, and no consumer needs an `Io` inside an inductive yet. Invariance only refuses more programs, so it is the direction to be wrong in until one appears with an argument.
+            Prim::IoType(result) => self.walk(result, Polarity::Mixed),
+
             // Everything remaining is a value or an operation over values, not a type former. Its operands are terms; whatever they mention, they mention at `Mixed`.
             Prim::Bool(_)
             | Prim::BoolAnd(..)
@@ -667,7 +670,9 @@ impl<E: Env> Walk<'_, E> {
             | Prim::Exit(..)
             | Prim::Cell(..)
             | Prim::CellSet(..)
-            | Prim::CellGet(..) => self.opaque(term),
+            | Prim::CellGet(..)
+            | Prim::IoPure(..)
+            | Prim::IoBind(..) => self.opaque(term),
         }
     }
 }

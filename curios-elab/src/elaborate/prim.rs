@@ -48,6 +48,10 @@ fn lst_type(elem: Term) -> Term {
     Subterm::Prim(Prim::LstType(elem)).into()
 }
 
+fn io_type(result: Term) -> Term {
+    Subterm::Prim(Prim::IoType(result)).into()
+}
+
 /// Check every element of an `Lst` literal against an already-determined element type, returning the rebuilt elements. Shared by the two ways the element type is fixed: borrowed from `expected` when checking, or a fresh metavar when inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Lst` arm).
 fn check_lst_elems(
     context: &mut Context,
@@ -72,7 +76,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let bool_type: Term = Subterm::Prim(Prim::BoolType).into();
     let bin_type: Term = Subterm::Prim(Prim::BinType(Grain::X)).into();
     let bin_b_type: Term = Subterm::Prim(Prim::BinType(Grain::B)).into();
-    let io_type: Term = Subterm::Prim(Prim::HandleType).into();
+    let handle_type: Term = Subterm::Prim(Prim::HandleType).into();
 
     Ok(match prim {
         Prim::BoolType => (prim.clone(), Term::type_ground()),
@@ -89,9 +93,14 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::ByteGt(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteGt)?,
         Prim::ByteGte(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteGte)?,
         Prim::NatEql(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatEql)?,
-        Prim::HandleEql(l, r) => {
-            binary(context, l, r, &io_type, bool_type.clone(), Prim::HandleEql)?
-        }
+        Prim::HandleEql(l, r) => binary(
+            context,
+            l,
+            r,
+            &handle_type,
+            bool_type.clone(),
+            Prim::HandleEql,
+        )?,
         Prim::NatNeq(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatNeq)?,
         Prim::NatLt(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatLt)?,
         Prim::NatGt(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatGt)?,
@@ -328,7 +337,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::LstMap(a, b, lst, f), lst_b)
         }
         Prim::HandleType => (prim.clone(), Term::type_ground()),
-        Prim::Handle(_) => (prim.clone(), io_type),
+        Prim::Handle(_) => (prim.clone(), handle_type),
         // `(n : Nat) -> {}`: exit ends the process. The result is unit rather than the caller's choice — see `Prim::Exit` in `curios-core` for why fixing it at an inhabited type is what makes the primitive sound.
         Prim::Exit(code) => {
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
@@ -391,6 +400,31 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
             let output = type_.clone();
             (Prim::CellGet(type_, cell), output)
+        }
+        // The same rule as `LstType` and `CellType` above, and for a third reason: a description has an effect, so it is not proof-irrelevant however propositional its result.
+        Prim::IoType(result) => {
+            let result = crate::check_is_sort(context, result)?.0;
+            let former: Term = Subterm::Prim(Prim::IoType(result.clone())).into();
+            let sort = crate::sort_term(context, &former)?;
+            (Prim::IoType(result), sort)
+        }
+        Prim::IoPure(type_, value) => {
+            let type_ = crate::check_is_sort(context, type_)?.0;
+            let value = elaborate(context, value, Mode::Check(type_.clone()))?.0;
+            let io_type = io_type(type_.clone());
+            (Prim::IoPure(type_, value), io_type)
+        }
+        Prim::IoBind(from, to, action, continuation) => {
+            let from = crate::check_is_sort(context, from)?.0;
+            let to = crate::check_is_sort(context, to)?.0;
+            let action = elaborate(context, action, Mode::Check(io_type(from.clone())))?.0;
+            let continuation_type = Term::func_type(
+                [(context.fresh(Some("x")), from.clone())],
+                io_type(to.clone()),
+            );
+            let continuation = elaborate(context, continuation, Mode::Check(continuation_type))?.0;
+            let io_to = io_type(to.clone());
+            (Prim::IoBind(from, to, action, continuation), io_to)
         }
     })
 }

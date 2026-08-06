@@ -681,6 +681,18 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
             sub(value, depth),
         ]),
         Prim::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, depth),
+        Prim::IoType(result) => print_unary("Io ", result, depth),
+        Prim::IoPure(type_, value) => print_binary("Io.pure ", type_, value, depth),
+        Prim::IoBind(a, b, action, f) => flat([
+            pure("Io.bind "),
+            sub(a, depth),
+            pure(" "),
+            sub(b, depth),
+            pure(" "),
+            sub(action, depth),
+            pure(" "),
+            sub(f, depth),
+        ]),
     }
 }
 

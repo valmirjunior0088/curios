@@ -28,6 +28,10 @@ pub use Cmp/{let Cmp};
 pub mod Monad;
 pub use Monad/{let Monad};
 
+-- Before every module that sequences an effect with `!`. A witness has no dependency edge from its consumers: it lands after its own body's dependencies, so a consumer earlier in this flat order would not see it.
+pub mod Io;
+pub use Io/{let Io};
+
 pub mod Show;
 pub use Show/{let Show};
 

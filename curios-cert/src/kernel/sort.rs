@@ -267,8 +267,10 @@ pub(crate) fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, Ker
         | Prim::BinType(_)
         | Prim::HandleType => Ok(Sort::Type(Level::zero())),
 
-        // A list or cell *of* proofs is not itself a proposition: it has a length, or an identity, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
-        Prim::LstType(element) | Prim::CellType(element) => {
+        // A list, cell, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
+        //
+        // For `Io` that is load-bearing rather than tidy. Erasure is sort-driven, so a `Prop`-sorted `Io(P)` would be dropped as proof content and its host effect would vanish with it.
+        Prim::LstType(element) | Prim::CellType(element) | Prim::IoType(element) => {
             let element = element.clone();
 
             Ok(match Sort::of(kernel, &element)? {

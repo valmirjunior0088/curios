@@ -46,7 +46,7 @@ fn bin_type(grain: Grain) -> Term {
     Term::prim(Prim::BinType(grain))
 }
 
-fn io_type() -> Term {
+fn handle_type() -> Term {
     Term::prim(Prim::HandleType)
 }
 
@@ -87,6 +87,38 @@ impl Lowering {
                 operands: atoms,
             },
         ))
+    }
+
+    /// Erase a description into the zero-argument closure that *is* its runtime representation.
+    ///
+    /// `body` runs with a fresh block open, so whatever it erases lands inside the thunk rather than at the construction site — which is what makes an `Io` a description: bound once and forced twice, it performs twice, and substituting a definition for its name never changes behavior. Its `Outcome` seals the block, so a diverging body (a process exit) keeps its own terminator instead of returning.
+    ///
+    /// What belongs inside is the *performance*, not the operands. `IoPure` erases its value eagerly and hands the closure an atom to return; `IoBind` puts the two forces and the continuation's application inside, because those are what must not happen until the description is run.
+    fn thunk(
+        &mut self,
+        hint: Option<&str>,
+        body: impl FnOnce(&mut Self) -> Result<Outcome, Error>,
+    ) -> Result<Outcome, Error> {
+        let function = self.builder.reserve_function();
+        self.builder.open_block();
+        let outcome = body(self)?;
+        let block = self.seal(outcome);
+        self.builder
+            .define_function(function, hint.map(str::to_string), Vec::new(), block);
+        self.builder.let_functions(vec![function]);
+
+        Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))
+    }
+
+    /// Force a description: apply the closure it erased to at zero arguments.
+    fn force(&mut self, action: curios_ersd::Atom) -> Outcome {
+        self.bind(
+            None,
+            curios_ersd::Rhs::Apply {
+                callee: action,
+                arguments: Vec::new(),
+            },
+        )
     }
 
     /// The sequence-family counterpart of [`operation`](Self::operation).
@@ -136,7 +168,8 @@ pub(super) fn erase_prim(
         | Prim::BinType(_)
         | Prim::LstType(_)
         | Prim::HandleType
-        | Prim::CellType(_) => Ok(Outcome::Emitted(lowering.unit())),
+        | Prim::CellType(_)
+        | Prim::IoType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
         &Prim::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
         Prim::BoolAnd(l, r) => op!(curios_ersd::Operation::BoolAnd, bool_type, l, r),
@@ -375,7 +408,7 @@ pub(super) fn erase_prim(
         }
 
         &Prim::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
-        Prim::HandleEql(l, r) => op!(curios_ersd::Operation::HandleEql, io_type, l, r),
+        Prim::HandleEql(l, r) => op!(curios_ersd::Operation::HandleEql, handle_type, l, r),
         // A process exit never yields a value: erase the code, then report the terminator that seals this block. Code after it is dead and is never erased.
         Prim::Exit(code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
@@ -436,5 +469,34 @@ pub(super) fn erase_prim(
                 },
             ))
         }
+
+        // The description that performs nothing: a closure yielding an already-computed value.
+        //
+        // The operand is erased at the construction site like every other primitive's, not inside the thunk. The language is eager: `/sys/Io/pure` is an ordinary call-by-value wrapper, so a surface `Io/pure(e)` has evaluated `e` before this node exists at all, and erasing the operand inside the closure would delay nothing while making this one arm's evaluation order differ from the rest of the roster. What delays a program's effect is `IoBind`.
+        Prim::IoPure(type_, value) => {
+            let value = emitted!(lowering.walk(context, value, type_, None)?);
+            lowering.thunk(hint, move |_| Ok(Outcome::Emitted(value)))
+        }
+        // The description that performs `action`, then the description `continuation` computes from its result. Both forces are zero-argument applications of the closures the operands erased to.
+        Prim::IoBind(from, to, action, continuation) => lowering.thunk(hint, |lowering| {
+            let io_from: Term = Subterm::Prim(Prim::IoType(from.clone())).into();
+            let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
+            let result = emitted!(lowering.force(action_atom));
+
+            let io_to: Term = Subterm::Prim(Prim::IoType(to.clone())).into();
+            let continuation_type =
+                Term::func_type([(context.fresh(Some("x")), from.clone())], io_to);
+            let continuation_atom =
+                emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
+            let next = emitted!(lowering.bind(
+                None,
+                curios_ersd::Rhs::Apply {
+                    callee: continuation_atom,
+                    arguments: vec![result],
+                },
+            ));
+
+            Ok(lowering.force(next))
+        }),
     }
 }
