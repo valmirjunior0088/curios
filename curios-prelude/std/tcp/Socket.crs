@@ -2,32 +2,35 @@ use /std/{Bytes, Str, Nat, Bool, Handle, Result, Option, Async};
 use /std/tcp/{Settings, resolve};
 use /std/time/{Duration};
 
-pub struct Socket : Type {
-    Handle
+pub struct Socket: Type {
+    Handle,
 }
 
 -- `Listener` is a sibling, so it cannot reach this representation; the constructor is the public seam through which it wraps an accepted handle.
-pub let new(h : Handle) -> Socket =
+pub let new(h: Handle) -> Socket =
     Socket { h };
 
-pub let read(c : Socket, n : Nat) -> Async(Handle/Read) =
+pub let read(c: Socket, n: Nat) -> Async(Handle/Read) =
     Async/read(c.0, n);
 
-pub let write(c : Socket, b : Bytes) -> Async(Result({}, Handle/Error)) =
+pub let write(c: Socket, b: Bytes) -> Async(Result({}, Handle/Error)) =
     Async/write(c.0, b);
 
-let configure(h : Handle, settings : Settings) -> {} =
-    let _ = /sys/set_recv_timeout(h, Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0));
-    let _ = /sys/set_send_timeout(h, Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0));
+let configure(h: Handle, settings: Settings) -> {} =
+    let _ =
+        /sys/set_recv_timeout(
+            h,
+            Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0));
+    let _ =
+        /sys/set_send_timeout(
+            h,
+            Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0));
     ();
 
-let upgrade(h : Handle, host : Str, tls : Bool) -> Nat =
-    match tls
-    | true => /sys/start_tls(h, Str/to_bytes(host))
-    | false => /sys/Status/ok
-    end;
+let upgrade(h: Handle, host: Str, tls: Bool) -> Nat =
+    match tls | true => /sys/start_tls(h, Str/to_bytes(host)) | false => /sys/Status/ok end;
 
-let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket, Handle/Error) =
+let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Result(Socket, Handle/Error) =
     let s = /sys/socket(addr);
     match s.status == /sys/Status/ok
     | true =>
@@ -60,44 +63,73 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
     | false => Result/failure(Handle/error_of(s.status))
     end;
 
-let connect_socket(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Handle/Error)) =
-    Async/bind(resolve(host, port), (resolved) =>
-        match resolved
-        | failure(e) => Async/pure(Result/failure(e))
-        | success(addr) => Async/pure(connect_addr(settings, host, addr))
-        end);
+let connect_socket(
+    settings: Settings,
+    host: Str,
+    port: Nat,
+) -> Async(Result(Socket, Handle/Error)) =
+    Async/bind(
+        resolve(host, port),
+        (resolved) =>
+            match resolved
+            | failure(e) => Async/pure(Result/failure(e))
+            | success(addr) => Async/pure(connect_addr(settings, host, addr))
+            end);
 
-pub let connect(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Handle/Error)) =
-    Async/defer(() =>
-        Async/bind(connect_socket(settings, host, port), (opened) =>
+pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Socket, Handle/Error)) =
+    Async/defer(
+        () =>
+            Async/bind(
+                connect_socket(settings, host, port),
+                (opened) =>
+                    match opened
+                    | failure(e) => Async/pure(Result/failure(e))
+                    | success(c) =>
+                        Async/bind(
+                            Async/acquire(c.0, () => /sys/close(c.0)),
+                            (_) => Async/pure(Result/success(c)))
+                    end));
+
+pub let close(c: Socket) -> Async({}) =
+    Async/release(c.0);
+
+pub let with(
+    @A: Type,
+    settings: Settings,
+    host: Str,
+    port: Nat,
+    f: (Socket) -> Async(A),
+) -> Async(Result(A, Handle/Error)) =
+    Async/bind(
+        connect(settings, host, port),
+        (opened) =>
             match opened
             | failure(e) => Async/pure(Result/failure(e))
             | success(c) =>
-                Async/bind(Async/acquire(c.0, () => /sys/close(c.0)), (_) => Async/pure(Result/success(c)))
-            end));
+                Async/bind(f(c), (a) => Async/bind(close(c), (_) => Async/pure(Result/success(a))))
+            end);
 
-pub let close(c : Socket) -> Async({}) =
-    Async/release(c.0);
-
-pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Async(A)) -> Async(Result(A, Handle/Error)) =
-    Async/bind(connect(settings, host, port), (opened) =>
-        match opened
-        | failure(e) => Async/pure(Result/failure(e))
-        | success(c) =>
-            Async/bind(f(c), (a) =>
-                Async/bind(close(c), (_) => Async/pure(Result/success(a))))
-        end);
-
-let drain(c : Socket) -> Async(Result(Bytes, Handle/Error)) =
+let drain(c: Socket) -> Async(Result(Bytes, Handle/Error)) =
     Async/drain((n) => read(c, n));
 
 -- `with` wraps the body's own failure channel in its connect/close one; flatten collapses the two so a caller sees one channel whichever stage failed.
-pub let call(settings : Settings, host : Str, port : Nat, request : Bytes) -> Async(Result(Bytes, Handle/Error)) =
+pub let call(
+    settings: Settings,
+    host: Str,
+    port: Nat,
+    request: Bytes,
+) -> Async(Result(Bytes, Handle/Error)) =
     Async/map(
-        with(settings, host, port, (c) =>
-            Async/bind(write(c, request), (w) =>
-                match w
-                | success(_) => drain(c)
-                | failure(e) => Async/pure(Result/failure(e))
-                end)),
+        with(
+            settings,
+            host,
+            port,
+            (c) =>
+                Async/bind(
+                    write(c, request),
+                    (w) =>
+                        match w
+                        | success(_) => drain(c)
+                        | failure(e) => Async/pure(Result/failure(e))
+                        end)),
         (r) => Result/flatten(r));

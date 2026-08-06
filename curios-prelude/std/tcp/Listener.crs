@@ -1,11 +1,11 @@
 use /std/{Bytes, Str, Nat, Handle, Result, Async};
 use /std/tcp/{resolve, Socket};
 
-pub struct Listener : Type {
-    Handle
+pub struct Listener: Type {
+    Handle,
 }
 
-let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
+let bind_listen(addr: Bytes) -> Result(Listener, Handle/Error) =
     let s = /sys/socket(addr);
     match s.status == /sys/Status/ok
     | true =>
@@ -33,55 +33,89 @@ let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
     | false => Result/failure(Handle/error_of(s.status))
     end;
 
-let listen(host : Str, port : Nat) -> Async(Result(Listener, Handle/Error)) =
-    Async/bind(resolve(host, port), (resolved) =>
-        match resolved
-        | failure(e) => Async/pure(Result/failure(e))
-        | success(addr) => Async/pure(bind_listen(addr))
-        end);
+let listen(host: Str, port: Nat) -> Async(Result(Listener, Handle/Error)) =
+    Async/bind(
+        resolve(host, port),
+        (resolved) =>
+            match resolved
+            | failure(e) => Async/pure(Result/failure(e))
+            | success(addr) => Async/pure(bind_listen(addr))
+            end);
 
-let listen_loop(host : Str, port : Nat, on_conn : (Handle) -> Async({})) -> Async(Result({}, Handle/Error)) =
-    Async/bind(listen(host, port), (opened) =>
-        match opened
-        | failure(e) => Async/pure(Result/failure(e))
-        | success(l) =>
-            Async/bind(
-                Async/using(l.0, () => /sys/close(l.0),
-                    rec go() -> Async({}) =
-                        Async/bind(Async/accept(l.0), (r) =>
-                            match r
-                            | failure(_) => Async/pure(())
-                            | success(h) => Async/bind(on_conn(h), (_) => go())
-                            end);
-                    go()),
-                (_) => Async/pure(Result/success(())))
-        end);
+let listen_loop(
+    host: Str,
+    port: Nat,
+    on_conn: (Handle) -> Async({}),
+) -> Async(Result({}, Handle/Error)) =
+    Async/bind(
+        listen(host, port),
+        (opened) =>
+            match opened
+            | failure(e) => Async/pure(Result/failure(e))
+            | success(l) =>
+                Async/bind(
+                    Async/using(
+                        l.0,
+                        () => /sys/close(l.0),
+                        rec go() -> Async({}) =
+                            Async/bind(
+                                Async/accept(l.0),
+                                (r) =>
+                                    match r
+                                    | failure(_) => Async/pure(())
+                                    | success(h) => Async/bind(on_conn(h), (_) => go())
+                                    end);
+                        go()),
+                    (_) => Async/pure(Result/success(())))
+            end);
 
-pub let serve(host : Str, port : Nat, handler : (Socket) -> Async({})) -> Async(Result({}, Handle/Error)) =
-    Async/defer(() =>
-        listen_loop(host, port, (h) =>
-            match Async/nonblocking(h)
-            | failure(_) =>
-                -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
-                let _ = /sys/close(h);
-                Async/pure(())
-            | success(_) =>
-                Async/go(() => Async/using(h, () => /sys/close(h), handler(Socket/new(h))))
-            end));
-
-pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (Socket) -> Async({})) -> Async(Result({}, Handle/Error)) =
-    Async/defer(() =>
-        let cfg = /sys/tls_server_config(cert, key);
-        match cfg.status == /sys/Status/ok
-        | true =>
-            Async/using(cfg.handle, () => let _ = /sys/close(cfg.handle); (),
-                listen_loop(host, port, (h) =>
-                    let status = /sys/start_tls_server(h, cfg.handle);
-                    match status == /sys/Status/ok
-                    | true => Async/using(h, () => /sys/close(h), handler(Socket/new(h)))
-                    | false =>
+pub let serve(
+    host: Str,
+    port: Nat,
+    handler: (Socket) -> Async({}),
+) -> Async(Result({}, Handle/Error)) =
+    Async/defer(
+        () =>
+            listen_loop(
+                host,
+                port,
+                (h) =>
+                    match Async/nonblocking(h)
+                    | failure(_) =>
+                        -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
                         let _ = /sys/close(h);
                         Async/pure(())
-                    end))
-        | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
-        end);
+                    | success(_) =>
+                        Async/go(() => Async/using(h, () => /sys/close(h), handler(Socket/new(h))))
+                    end));
+
+pub let serve_tls(
+    host: Str,
+    port: Nat,
+    cert: Bytes,
+    key: Bytes,
+    handler: (Socket) -> Async({}),
+) -> Async(Result({}, Handle/Error)) =
+    Async/defer(
+        () =>
+            let cfg = /sys/tls_server_config(cert, key);
+            match cfg.status == /sys/Status/ok
+            | true =>
+                Async/using(
+                    cfg.handle,
+                    () =>
+                        let _ = /sys/close(cfg.handle);
+                        (),
+                    listen_loop(
+                        host,
+                        port,
+                        (h) =>
+                            let status = /sys/start_tls_server(h, cfg.handle);
+                            match status == /sys/Status/ok
+                            | true => Async/using(h, () => /sys/close(h), handler(Socket/new(h)))
+                            | false =>
+                                let _ = /sys/close(h);
+                                Async/pure(())
+                            end))
+            | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
+            end);

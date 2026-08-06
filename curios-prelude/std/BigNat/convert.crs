@@ -3,25 +3,19 @@ use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, view, zero, mod add, mod cmp, mod mul, mod sub};
 
-pub rec bit_len(a : BigNat) -> Nat =
-    match view(a)
-    | zero() => 0
-    | succ(_, tail) => bit_len(tail) + 1
-    end;
+pub rec bit_len(a: BigNat) -> Nat =
+    match view(a) | zero() => 0 | succ(_, tail) => bit_len(tail) + 1 end;
 
-rec div10(a : BigNat) -> {BigNat, Nat} =
+rec div10(a: BigNat) -> {BigNat, Nat} =
     match view(a)
     | zero() => (zero, 0)
     | succ(low, tail) =>
         let (q, r) = div10(tail);
         let rr = match low | true => r * 2 + 1 | false => r * 2 end;
-        match rr < 10
-        | true => (dbl(q), rr)
-        | false => (dbl_succ(q), rr - 10)
-        end
+        match rr < 10 | true => (dbl(q), rr) | false => (dbl_succ(q), rr - 10) end
     end;
 
-rec to_str_go(a : BigNat, acc : Str) -> Str =
+rec to_str_go(a: BigNat, acc: Str) -> Str =
     match is_zero(a)
     | true => acc
     | false =>
@@ -29,40 +23,37 @@ rec to_str_go(a : BigNat, acc : Str) -> Str =
         to_str_go(q, Str/concat(Nat/to_str(r), acc))
     end;
 
-pub let to_str(a : BigNat) -> Str =
-    match is_zero(a)
-    | true => "0"
-    | false => to_str_go(a, "")
-    end;
+pub let to_str(a: BigNat) -> Str =
+    match is_zero(a) | true => "0" | false => to_str_go(a, "") end;
 
 satisfy Eql(BigNat) {
     eql = cmp/eql,
-    neq(a, b) = Bool/not(cmp/eql(a, b))
+    neq(a, b) = Bool/not(cmp/eql(a, b)),
 }
 
 satisfy Cmp(BigNat) {
     lt = cmp/lt,
     lte = cmp/lte,
     gt = cmp/gt,
-    gte = cmp/gte
+    gte = cmp/gte,
 }
 
 satisfy Add(BigNat) {
-    add = add/add
+    add = add/add,
 }
 
 satisfy Sub(BigNat) {
-    sub = sub/sub
+    sub = sub/sub,
 }
 
 satisfy Mul(BigNat) {
-    mul = mul/mul
+    mul = mul/mul,
 }
 
 satisfy Show(BigNat) {
-    show = to_str
+    show = to_str,
 }
 
 satisfy Ord(BigNat) {
-    cmp = cmp/cmp
+    cmp = cmp/cmp,
 }

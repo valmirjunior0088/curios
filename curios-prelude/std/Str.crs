@@ -5,125 +5,131 @@ use /std/{Char, Nat, Byte, Bytes, Bool, Lst, Option, Eql, Show};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
-use utf8/{check, concat_closed, drop_width, drop_valid, take_valid, peel_byte,
-    certify_decoded, decode_head, count_scalars, lte_succ_of_lt};
+use utf8/{
+    check, concat_closed, drop_width, drop_valid, take_valid, peel_byte, certify_decoded,
+    decode_head, count_scalars, lte_succ_of_lt};
 
-pub let to_bytes(s : Str) -> Bytes =
+pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
-pub let of_bytes(b : Bytes) -> Option(Str) =
+pub let of_bytes(b: Bytes) -> Option(Str) =
     match check(b)(Scan/lead())
     | some(v) => Option/some(Str { bytes = b, valid = v })
     | none() => Option/none()
     end;
 
-pub let concat(a : Str, b : Str) -> Str =
-    Str {
-        bytes = x[..a.bytes, ..b.bytes],
-        valid = concat_closed(a.valid, b.valid)
-    };
+pub let concat(a: Str, b: Str) -> Str =
+    Str { bytes = x[..a.bytes, ..b.bytes], valid = concat_closed(a.valid, b.valid) };
 
-let drop_n(n : Nat, s : Str) -> Str =
+let drop_n(n: Nat, s: Str) -> Str =
     Str {
         bytes = Bytes/slice(s.bytes, drop_width(n, Scan/lead(), s.bytes), Bytes/len(s.bytes)),
-        valid = drop_valid(n, Scan/lead(), s.valid)
+        valid = drop_valid(n, Scan/lead(), s.valid),
     };
 
-let take_n(n : Nat, s : Str) -> Str =
+let take_n(n: Nat, s: Str) -> Str =
     Str {
         bytes = Bytes/slice(s.bytes, 0, drop_width(n, Scan/lead(), s.bytes)),
-        valid = take_valid(n, Scan/lead(), s.valid)
+        valid = take_valid(n, Scan/lead(), s.valid),
     };
 
-pub let slice(s : Str, x : Nat, y : Nat) -> Str =
+pub let slice(s: Str, x: Nat, y: Nat) -> Str =
     take_n(y - x, drop_n(x, s));
 
-pub let flatten(parts : Lst(Str)) -> Str =
+pub let flatten(parts: Lst(Str)) -> Str =
     Lst/fold(parts, "", (p, acc) => concat(acc, p));
 
-pub let eql(a : Str, b : Str) -> Bool =
+pub let eql(a: Str, b: Str) -> Bool =
     Bytes/eql(to_bytes(a), to_bytes(b));
 
 -- ASCII-insensitive equality folds only encoded ASCII letters. Every non-ASCII UTF-8 byte is left untouched, so this is not Unicode case folding.
-let lower_ascii_byte(byte : Byte) -> Byte =
+let lower_ascii_byte(byte: Byte) -> Byte =
     let n = Byte/to_nat(byte);
-    match Nat/in_range(n, 0x41, 0x5A)
-    | true => Nat/to_byte(n + 0x20)
-    | false => byte
-    end;
+    match Nat/in_range(n, 0x41, 0x5A) | true => Nat/to_byte(n + 0x20) | false => byte end;
 
-let lower_ascii_bytes(b : Bytes) -> Bytes =
+let lower_ascii_bytes(b: Bytes) -> Bytes =
     Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
 
-pub let eql_ascii_ci(a : Str, b : Str) -> Bool =
+pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
-pub let repeat(s : Str, n : Nat) -> Str =
+pub let repeat(s: Str, n: Nat) -> Str =
     Lst/balanced(n, "", (i) => s, (l, r) => concat(l, r));
 
-pub let fold(@A : Type, s : Str, init : A, f : (Char, A) -> A) -> A =
-    (match s.bytes : (b) => (sc : Scan, valid : Utf8(sc, b), acc : {A, Nat}) -> {A, Nat}
+pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
+    (match s.bytes: (b) => (sc: Scan, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat}
     | x[] => (sc, valid, acc) => acc
-    | x[h, ..t]; ih => (sc, valid, acc) =>
-        match sc
-        | lead() =>
-            ih(step(h, Scan/lead()),
-                peel_byte(@Scan/lead(), @x[h, ..t], True/qed(), valid),
-                match classify(h)
-                | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
-                | lead(width, lo, hi, payload) => (acc.0, payload)
-                | bad() => acc
-                end)
-        | cont(rem, lo, hi) =>
-            let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
-            ih(step(h, Scan/cont(rem, lo, hi)),
-                peel_byte(@Scan/cont(rem, lo, hi), @x[h, ..t], True/qed(), valid),
-                match rem == 1
-                | true => (f(certify_decoded(partial), acc.0), 0)
-                | false => (acc.0, partial)
-                end)
-        | bad() =>
-            ih(step(h, Scan/bad()),
-                peel_byte(@Scan/bad(), @x[h, ..t], True/qed(), valid), acc)
-        end
+    | x[h, ..t]; ih =>
+        (sc, valid, acc) =>
+            match sc
+            | lead() =>
+                ih(
+                    step(h, Scan/lead()),
+                    peel_byte(@Scan/lead(), @x[h, ..t], True/qed(), valid),
+                    match classify(h)
+                    | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
+                    | lead(width, lo, hi, payload) => (acc.0, payload)
+                    | bad() => acc
+                    end)
+            | cont(rem, lo, hi) =>
+                let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
+                ih(
+                    step(h, Scan/cont(rem, lo, hi)),
+                    peel_byte(@Scan/cont(rem, lo, hi), @x[h, ..t], True/qed(), valid),
+                    match rem == 1
+                    | true => (f(certify_decoded(partial), acc.0), 0)
+                    | false => (acc.0, partial)
+                    end)
+            | bad() =>
+                ih(step(h, Scan/bad()), peel_byte(@Scan/bad(), @x[h, ..t], True/qed(), valid), acc)
+            end
     end)(Scan/lead(), s.valid, (init, 0)).0;
 
-pub let len(s : Str) -> Nat =
+pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
 
-pub let find_index(s : Str, pred : (Char) -> Bool) -> Option(Nat) =
-    let (_, found) : {Nat, Option(Nat)} =
-        fold(s, (0, Option/none()), (codepoint, (i, found)) =>
-            match found
-            | some(_) => (i, found)
-            | none() =>
-                (i + 1,
-                    match pred(codepoint)
-                    | true => Option/some(i)
-                    | false => Option/none()
-                    end)
-            end);
+pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
+    let (_, found): {Nat, Option(Nat)} =
+        fold(
+            s,
+            (0, Option/none()),
+            (codepoint, (i, found)) =>
+                match found
+                | some(_) => (i, found)
+                | none() =>
+                    (
+                        i + 1,
+                        match pred(codepoint) | true => Option/some(i) | false => Option/none() end)
+                end);
     found;
 
-pub let find(s : Str, target : Char) -> Option(Nat) =
+pub let find(s: Str, target: Char) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
 
-pub let get(s : Str, i : Nat) -> Option(Char) =
-    let (_, found) : {Nat, Option(Char)} =
-        fold(s, (0, Option/none()), (codepoint, (idx, found)) =>
-            match found
-            | some(_) => (idx, found)
-            | none() =>
-                match idx == i
-                | true => (idx + 1, Option/some(codepoint))
-                | false => (idx + 1, Option/none())
-                end
-            end);
+pub let get(s: Str, i: Nat) -> Option(Char) =
+    let (_, found): {Nat, Option(Char)} =
+        fold(
+            s,
+            (0, Option/none()),
+            (codepoint, (idx, found)) =>
+                match found
+                | some(_) => (idx, found)
+                | none() =>
+                    match idx == i
+                    | true => (idx + 1, Option/some(codepoint))
+                    | false => (idx + 1, Option/none())
+                    end
+                end);
     found;
 
-pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
-    rec go(sc : Scan, b : Bytes, valid : Utf8(sc, b), i : Nat,
-        le : Nat/Lte(i + 1, count_scalars(sc, b))) -> Char =
+pub let at(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
+    rec go(
+        sc: Scan,
+        b: Bytes,
+        valid: Utf8(sc, b),
+        i: Nat,
+        le: Nat/Lte(i + 1, count_scalars(sc, b)),
+    ) -> Char =
         match b
         | x[] => match le end
         | x[h, ..t] =>
@@ -132,55 +138,67 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
                 match i
                 | 0 => decode_head(h, valid)
                 | pred + 1 =>
-                    go(step(h, Scan/lead()), t,
-                        peel_byte(@Scan/lead(), @x[h, ..t], True/qed(), valid), pred,
-                        match le : (x, y, le) => Nat/Lte(x - 1, y - 1)
-                        | s(@a, @c, prev) => prev
-                        end)
+                    go(
+                        step(h, Scan/lead()),
+                        t,
+                        peel_byte(@Scan/lead(), @x[h, ..t], True/qed(), valid),
+                        pred,
+                        match le: (x, y, le) => Nat/Lte(x - 1, y - 1) | s(@a, @c, prev) => prev end)
                 end
             | cont(rem, lo, hi) =>
-                go(step(h, Scan/cont(rem, lo, hi)), t,
-                    peel_byte(@Scan/cont(rem, lo, hi), @x[h, ..t], True/qed(), valid), i, le)
+                go(
+                    step(h, Scan/cont(rem, lo, hi)),
+                    t,
+                    peel_byte(@Scan/cont(rem, lo, hi), @x[h, ..t], True/qed(), valid),
+                    i,
+                    le)
             | bad() =>
-                go(step(h, Scan/bad()), t,
-                    peel_byte(@Scan/bad(), @x[h, ..t], True/qed(), valid), i, le)
+                go(
+                    step(h, Scan/bad()),
+                    t,
+                    peel_byte(@Scan/bad(), @x[h, ..t], True/qed(), valid),
+                    i,
+                    le)
             end
         end;
-    go(Scan/lead(), s.bytes, s.valid, i,
+    go(
+        Scan/lead(),
+        s.bytes,
+        s.valid,
+        i,
         lte_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
-pub let join(sep : Str, parts : Lst(Str)) -> Str =
-    Lst/balanced(Lst/len(parts), "", (i) => Option/unwrap_or(Lst/get(parts, i), ""),
+pub let join(sep: Str, parts: Lst(Str)) -> Str =
+    Lst/balanced(
+        Lst/len(parts),
+        "",
+        (i) => Option/unwrap_or(Lst/get(parts, i), ""),
         (l, r) => concat(concat(l, sep), r));
 
-let trim_bounds(s : Str) -> {Nat, Nat} =
+let trim_bounds(s: Str) -> {Nat, Nat} =
     let n = len(s);
-    let (_, start, stop) : {Nat, Nat, Nat} =
-        fold(s, (0, n, 0), (codepoint, (i, start, stop)) =>
-            match Char/is_whitespace(codepoint)
-            | true => (i + 1, start, stop)
-            | false =>
-                let begin =
-                    match start < n
-                    | true => start
-                    | false => i
-                    end;
-                (i + 1, begin, i + 1)
-            end);
+    let (_, start, stop): {Nat, Nat, Nat} =
+        fold(
+            s,
+            (0, n, 0),
+            (codepoint, (i, start, stop)) =>
+                match Char/is_whitespace(codepoint)
+                | true => (i + 1, start, stop)
+                | false =>
+                    let begin = match start < n | true => start | false => i end;
+                    (i + 1, begin, i + 1)
+                end);
     (start, stop);
 
-pub let trim(s : Str) -> Str =
+pub let trim(s: Str) -> Str =
     let (lo, hi) = trim_bounds(s);
-    match lo < hi
-    | true => slice(s, lo, hi)
-    | false => ""
-    end;
+    match lo < hi | true => slice(s, lo, hi) | false => "" end;
 
 satisfy Eql(Str) {
     eql = eql,
-    neq(a, b) = Bool/not(eql(a, b))
+    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy Show(Str) {
-    show(s) = s
+    show(s) = s,
 }

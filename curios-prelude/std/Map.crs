@@ -1,17 +1,17 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
 use /std/{Bytes, Byte, Nat, Bool, Str, Lst, Option};
 
-induct Node(V : Type) : Type
-| leaf(key : Bytes, value : V)
-| fork(crit : Nat, zero : Node(V), one : Node(V))
+induct Node(V: Type): Type
+| leaf(key: Bytes, value: V)
+| fork(crit: Nat, zero: Node(V), one: Node(V))
 end
 
-pub struct Map(V : Type) : Type {
-    size : Nat,
-    root : Option(Node(V)),
+pub struct Map(V: Type): Type {
+    size: Nat,
+    root: Option(Node(V)),
 }
 
-pub concept Key(K : Type) : pub Type {
+pub concept Key(K: Type): pub Type {
     to_bin(K) -> Bytes,
 }
 
@@ -25,15 +25,12 @@ satisfy Key(Str) {
 
 satisfy Key(Nat) {
     to_bin(n) =
-        rec go(x : Nat) -> Bytes =
-            match x
-            | 0 => x[]
-            | _ => x[..go(x / 256), Nat/to_byte(x % 256)]
-            end;
+        rec go(x: Nat) -> Bytes =
+            match x | 0 => x[] | _ => x[..go(x / 256), Nat/to_byte(x % 256)] end;
         go(n),
 }
 
-let bit(k : Bytes, j : Nat) -> Nat =
+let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
     choose
@@ -42,36 +39,29 @@ let bit(k : Bytes, j : Nat) -> Nat =
     | _ => Nat/and(Nat/shr(Byte/to_nat(/sys/Bytes/get(k, g)), 8 - o), 1)
     end;
 
-let crit(a : Bytes, b : Bytes) -> Nat =
-    rec bits(x : Nat, y : Nat, g : Nat, o : Nat) -> Nat =
+let crit(a: Bytes, b: Bytes) -> Nat =
+    rec bits(x: Nat, y: Nat, g: Nat, o: Nat) -> Nat =
         match Nat/and(Nat/shr(x, 8 - o), 1) == Nat/and(Nat/shr(y, 8 - o), 1)
         | true => bits(x, y, g, o + 1)
         | false => g * 9 + o
         end;
-    rec bytes(g : Nat) -> Nat =
+    rec bytes(g: Nat) -> Nat =
         match g < Bytes/len(a) && g < Bytes/len(b)
         | true =>
             let x = Byte/to_nat(/sys/Bytes/get(a, g));
             let y = Byte/to_nat(/sys/Bytes/get(b, g));
-            match x == y
-            | true => bytes(g + 1)
-            | false => bits(x, y, g, 1)
-            end
+            match x == y | true => bytes(g + 1) | false => bits(x, y, g, 1) end
         | false => g * 9
         end;
     bytes(0);
 
-rec lookup(@V : Type, t : Node(V), k : Bytes) -> { Bytes, V } =
+rec lookup(@V: Type, t: Node(V), k: Bytes) -> {Bytes, V} =
     match t
     | leaf(k0, v0) => (k0, v0)
-    | fork(c, z, o) =>
-        match bit(k, c)
-        | 0 => lookup(z, k)
-        | _ => lookup(o, k)
-        end
+    | fork(c, z, o) => match bit(k, c) | 0 => lookup(z, k) | _ => lookup(o, k) end
     end;
 
-rec replace(@V : Type, t : Node(V), k : Bytes, v : V) -> Node(V) =
+rec replace(@V: Type, t: Node(V), k: Bytes, v: V) -> Node(V) =
     match t
     | leaf(k0, v0) => Node/leaf(k, v)
     | fork(c, z, o) =>
@@ -81,13 +71,10 @@ rec replace(@V : Type, t : Node(V), k : Bytes, v : V) -> Node(V) =
         end
     end;
 
-let wedge(@V : Type, c : Nat, b : Nat, k : Bytes, v : V, t : Node(V)) -> Node(V) =
-    match b
-    | 0 => Node/fork(c, Node/leaf(k, v), t)
-    | _ => Node/fork(c, t, Node/leaf(k, v))
-    end;
+let wedge(@V: Type, c: Nat, b: Nat, k: Bytes, v: V, t: Node(V)) -> Node(V) =
+    match b | 0 => Node/fork(c, Node/leaf(k, v), t) | _ => Node/fork(c, t, Node/leaf(k, v)) end;
 
-rec insert_node(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bytes, v : V) -> Node(V) =
+rec insert_node(@V: Type, t: Node(V), c: Nat, b: Nat, k: Bytes, v: V) -> Node(V) =
     match t
     | leaf(k0, v0) => wedge(c, b, k, v, Node/leaf(k0, v0))
     | fork(tc, z, o) =>
@@ -101,7 +88,7 @@ rec insert_node(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bytes, v : V) -> N
         end
     end;
 
-rec remove_node(@V : Type, t : Node(V), k : Bytes) -> Option(Node(V)) =
+rec remove_node(@V: Type, t: Node(V), k: Bytes) -> Option(Node(V)) =
     match t
     | leaf(k0, v0) => Option/none()
     | fork(c, z, o) =>
@@ -119,28 +106,25 @@ rec remove_node(@V : Type, t : Node(V), k : Bytes) -> Option(Node(V)) =
         end
     end;
 
-pub let empty(@V : Type) -> Map(V) =
+pub let empty(@V: Type) -> Map(V) =
     Map { size = 0, root = Option/none() };
 
-pub let len(@V : Type, m : Map(V)) -> Nat =
+pub let len(@V: Type, m: Map(V)) -> Nat =
     m.size;
 
-pub let get(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Option(V) =
+pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
     let k = Key/to_bin(key);
     match m.root
     | none() => Option/none()
     | some(n) =>
         let (k0, v0) = lookup(n, k);
-        match Bytes/eql(k0, k)
-        | true => Option/some(v0)
-        | false => Option/none()
-        end
+        match Bytes/eql(k0, k) | true => Option/some(v0) | false => Option/none() end
     end;
 
-pub let has(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Bool =
+pub let has(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Bool =
     Option/is_some(get(m, key));
 
-pub let insert(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map(V) =
+pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V) =
     let k = Key/to_bin(key);
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
@@ -154,7 +138,7 @@ pub let insert(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> 
         end
     end;
 
-pub let remove(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) =
+pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
     let k = Key/to_bin(key);
     match m.root
     | none() => m
@@ -166,26 +150,23 @@ pub let remove(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) 
         end
     end;
 
-pub let fold(@V : Type, @A : Type, m : Map(V), init : A, f : (Bytes, V, A) -> A) -> A =
+pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A =
     match m.root
     | none() => init
     | some(n) =>
-        rec go(t : Node(V), acc : A) -> A =
-            match t
-            | leaf(k, v) => f(k, v, acc)
-            | fork(c, z, o) => go(o, go(z, acc))
-            end;
+        rec go(t: Node(V), acc: A) -> A =
+            match t | leaf(k, v) => f(k, v, acc) | fork(c, z, o) => go(o, go(z, acc)) end;
         go(n, init)
     end;
 
-pub let entries(@V : Type, m : Map(V)) -> Lst({ Bytes, V }) =
+pub let entries(@V: Type, m: Map(V)) -> Lst({Bytes, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
-pub let keys(@V : Type, m : Map(V)) -> Lst(Bytes) =
+pub let keys(@V: Type, m: Map(V)) -> Lst(Bytes) =
     fold(m, [], (k, _, acc) => [..acc, k]);
 
-pub let values(@V : Type, m : Map(V)) -> Lst(V) =
+pub let values(@V: Type, m: Map(V)) -> Lst(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
-pub let of(@K : Type, @V : Type, use Key(K), l : Lst({ K, V })) -> Map(V) =
+pub let of(@K: Type, @V: Type, use Key(K), l: Lst({K, V})) -> Map(V) =
     Lst/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));

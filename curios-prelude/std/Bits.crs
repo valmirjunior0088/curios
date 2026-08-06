@@ -1,41 +1,34 @@
 pub use /sys/Bits/{let Bits, len, eql, slice};
 use /std/{Lst, Nat, Bool, Option, Eq, Str, Eql, Show};
 
-pub let at(b : Bits, i : Nat, ok : Nat/Lt(i, len(b))) -> Bool =
+pub let at(b: Bits, i: Nat, ok: Nat/Lt(i, len(b))) -> Bool =
     /sys/Bits/get(b, i);
 
-pub let get(b : Bits, i : Nat) -> Option(Bool) =
-    match i < len(b)
-    | true => Option/some(/sys/Bits/get(b, i))
-    | false => Option/none()
-    end;
+pub let get(b: Bits, i: Nat) -> Option(Bool) =
+    match i < len(b) | true => Option/some(/sys/Bits/get(b, i)) | false => Option/none() end;
 
-pub let flatten(parts : Lst(Bits)) -> Bits =
+pub let flatten(parts: Lst(Bits)) -> Bits =
     Lst/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);
 
-pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
+pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
     let n = len(b);
-    rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
+    rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
             -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
-            let below = Eq/subst(
-                (x) => Nat/Lt(i, x),
-                inv,
-                Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)),
-            );
+            let below =
+                Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)));
             go(kp, i + 1, f(at(b, i, below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
 
 satisfy Eql(Bits) {
     eql = eql,
-    neq(a, b) = Bool/not(eql(a, b))
+    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy Show(Bits) {
     show(b) =
-        fold(b, "", (bit, acc) =>
-            Str/concat(acc, match bit | true => "1" | false => "0" end))
+        fold(b, "", (bit, acc) => Str/concat(acc, match bit | true => "1" | false => "0" end)),
 }

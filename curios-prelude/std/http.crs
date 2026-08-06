@@ -1,33 +1,30 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, Lst, Parse, Result, Option, Handle, Async};
 use /std/tcp/{Settings, Socket};
 
-pub induct Method : pub Type
+pub induct Method: pub Type
 | get()
 | post()
 end
 
-let method_str(m : Method) -> Str =
-    match m
-    | get() => "GET"
-    | post() => "POST"
-    end;
+let method_str(m: Method) -> Str =
+    match m | get() => "GET" | post() => "POST" end;
 
-pub induct Error : pub Type
+pub induct Error: pub Type
 | net(Handle/Error)
 | malformed(Str)
 end
 
-pub struct Request : pub Type {
-    method : Method,
-    host : Str,
-    port : Nat,
-    path : Str,
-    headers : Lst({ Str, Str }),
-    body : Bytes,
-    settings : Settings,
+pub struct Request: pub Type {
+    method: Method,
+    host: Str,
+    port: Nat,
+    path: Str,
+    headers: Lst({Str, Str}),
+    body: Bytes,
+    settings: Settings,
 }
 
-pub let get(host : Str, port : Nat, path : Str) -> Request =
+pub let get(host: Str, port: Nat, path: Str) -> Request =
     Request {
         method = Method/get(),
         host = host,
@@ -38,7 +35,7 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         settings = Settings/default,
     };
 
-pub let post(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
+pub let post(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
     Request {
         method = Method/post(),
         host = host,
@@ -49,37 +46,37 @@ pub let post(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
         settings = Settings/default,
     };
 
-let with_tls(s : Settings) -> Settings =
+let with_tls(s: Settings) -> Settings =
     Settings { ..s, tls = true };
 
-pub let secure(request : Request) -> Request =
+pub let secure(request: Request) -> Request =
     Request { ..request, settings = with_tls(request.settings) };
 
-pub let get_tls(host : Str, port : Nat, path : Str) -> Request =
+pub let get_tls(host: Str, port: Nat, path: Str) -> Request =
     secure(get(host, port, path));
 
-pub let post_tls(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
+pub let post_tls(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
     secure(post(host, port, path, body));
 
-let until(target : Byte) -> (Byte) -> Bool =
+let until(target: Byte) -> (Byte) -> Bool =
     (byte) => Bool/not(byte == target);
 
-let header_lookup(headers : Lst({ Str, Str }), name : Str) -> Option(Str) =
+let header_lookup(headers: Lst({Str, Str}), name: Str) -> Option(Str) =
     Option/map(Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)), ((_, value)) => value);
 
-let is_ascii_digit(byte : Byte) -> Bool =
+let is_ascii_digit(byte: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
 
-let render_header((name, value) : { Str, Str }) -> Str =
+let render_header((name, value): {Str, Str}) -> Str =
     Str/flatten([name, ": ", value, "\r\n"]);
 
-let content_length(body : Bytes) -> Str =
+let content_length(body: Bytes) -> Str =
     match Bytes/len(body) == 0
     | true => ""
     | false => Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(body)), "\r\n"])
     end;
 
-pub let render(request : Request) -> Bytes =
+pub let render(request: Request) -> Bytes =
     x[
         ..Str/to_bytes(
             Str/flatten(
@@ -94,20 +91,16 @@ pub let render(request : Request) -> Bytes =
                     "Connection: close\r\n",
                     content_length(request.body),
                     Str/flatten(Lst/map(request.headers, render_header)),
-                    "\r\n",
-                ],
-            ),
-        ),
-        ..request.body,
-    ];
+                    "\r\n"])),
+        ..request.body];
 
-pub struct Status : pub Type {
-    version : Str,
-    code : Nat,
-    reason : Str,
+pub struct Status: pub Type {
+    version: Str,
+    code: Nat,
+    reason: Str,
 }
 
-pub let status_line : Parse(Status) =
+pub let status_line: Parse(Status) =
     let version = Parse/take_while(until(0x20))!;
     let _ = Parse/take_byte(0x20)!;
     let digits = Parse/take_while(is_ascii_digit)!;
@@ -120,23 +113,21 @@ pub let status_line : Parse(Status) =
             version = Option/unwrap_or(Str/of_bytes(version), ""),
             code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bytes(digits), "")), 0),
             reason = Option/unwrap_or(Str/of_bytes(reason), ""),
-        },
-    );
+        });
 
-pub struct Response : pub Type {
-    status : Status,
-    headers : Lst({ Str, Str }),
-    body : Bytes,
+pub struct Response: pub Type {
+    status: Status,
+    headers: Lst({Str, Str}),
+    body: Bytes,
 }
 
-let rest : Parse(Bytes) =
+let rest: Parse(Bytes) =
     Parse {
         run(input, pos) = Result/success(
-            (Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input))),
-        ),
+            (Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input)))),
     };
 
-let guard_header : Parse({}) =
+let guard_header: Parse({}) =
     Parse {
         run(input, pos) = match Nat/Lt/try(pos, Bytes/len(input))
         | none() => Result/failure("unexpected end of headers")
@@ -148,7 +139,7 @@ let guard_header : Parse({}) =
         end,
     };
 
-let header_line : Parse({ Str, Str }) =
+let header_line: Parse({Str, Str}) =
     let _ = guard_header!;
     let name = Parse/take_while(until(0x3A))!;
     let _ = Parse/take_byte(0x3A)!;
@@ -158,29 +149,24 @@ let header_line : Parse({ Str, Str }) =
     Parse/pure(
         (
             Option/unwrap_or(Str/of_bytes(name), ""),
-            Str/trim(Option/unwrap_or(Str/of_bytes(value), "")),
-        ),
-    );
+            Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
 
-let take_n(n : Nat) -> Parse(Bytes) =
+let take_n(n: Nat) -> Parse(Bytes) =
     Parse {
         run(input, pos) = let stop = Nat/min(pos + n, Bytes/len(input));
         Result/success((stop, Bytes/slice(input, pos, stop))),
     };
 
-let content_length_of(headers : Lst({ Str, Str })) -> Option(Nat) =
+let content_length_of(headers: Lst({Str, Str})) -> Option(Nat) =
     match header_lookup(headers, "Content-Length")
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
-let body_parser(headers : Lst({ Str, Str })) -> Parse(Bytes) =
-    match content_length_of(headers)
-    | some(n) => take_n(n)
-    | none() => rest
-    end;
+let body_parser(headers: Lst({Str, Str})) -> Parse(Bytes) =
+    match content_length_of(headers) | some(n) => take_n(n) | none() => rest end;
 
-pub let decode : Parse(Response) =
+pub let decode: Parse(Response) =
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
     let _ = Parse/take_byte(0xD)!;
@@ -188,10 +174,10 @@ pub let decode : Parse(Response) =
     let body = body_parser(headers)!;
     Parse/pure(Response { status = status, headers = headers, body = body });
 
-pub let header(resp : Response, name : Str) -> Option(Str) =
+pub let header(resp: Response, name: Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
-pub let perform(request : Request) -> Async(Result(Response, Error)) =
+pub let perform(request: Request) -> Async(Result(Response, Error)) =
     Async/bind(
         Socket/call(request.settings, request.host, request.port, render(request)),
         (r) =>
@@ -202,5 +188,4 @@ pub let perform(request : Request) -> Async(Result(Response, Error)) =
                 | failure(message) => Async/pure(Result/failure(Error/malformed(message)))
                 end
             | failure(error) => Async/pure(Result/failure(Error/net(error)))
-            end,
-    );
+            end);

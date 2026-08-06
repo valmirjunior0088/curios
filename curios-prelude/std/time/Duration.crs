@@ -1,54 +1,47 @@
 use /std/{Nat, Bool};
 
-pub struct Duration : Type {
-    secs : Nat,
-    nanos : Nat
+pub struct Duration: Type {
+    secs: Nat,
+    nanos: Nat,
 }
 
-pub let of(secs : Nat, nanos : Nat) -> Duration =
+pub let of(secs: Nat, nanos: Nat) -> Duration =
     Duration { secs = secs, nanos = nanos };
 
-pub let zero : Duration =
+pub let zero: Duration =
     Duration { secs = 0, nanos = 0 };
 
-pub let of_secs(secs : Nat) -> Duration =
+pub let of_secs(secs: Nat) -> Duration =
     Duration { secs = secs, nanos = 0 };
 
-pub let of_millis(ms : Nat) -> Duration =
-    Duration {
-        secs = ms / 1000,
-        nanos = ms % 1000 * 1000000
-    };
+pub let of_millis(ms: Nat) -> Duration =
+    Duration { secs = ms / 1000, nanos = ms % 1000 * 1000000 };
 
 -- The monotonic clock, read as elapsed time since an arbitrary epoch. Distinct from `Instant/now`, which reads the wall clock.
 pub let now() -> Duration =
     let r = /sys/clock_mono();
     of(r.secs, r.nanos);
 
-pub let secs(d : Duration) -> Nat =
+pub let secs(d: Duration) -> Nat =
     d.secs;
 
-pub let nanos(d : Duration) -> Nat =
+pub let nanos(d: Duration) -> Nat =
     d.nanos;
 
-pub let to_millis(d : Duration) -> Nat =
+pub let to_millis(d: Duration) -> Nat =
     d.secs * 1000 + d.nanos / 1000000;
 
-pub let add(a : Duration, b : Duration) -> Duration =
+pub let add(a: Duration, b: Duration) -> Duration =
     let nanos = a.nanos + b.nanos;
     match nanos < 1000000000
     | true => Duration { secs = a.secs + b.secs, nanos = nanos }
     | false => Duration { secs = a.secs + b.secs + 1, nanos = nanos - 1000000000 }
     end;
 
-pub let before(a : Duration, b : Duration) -> Bool =
-    choose
-    | a.secs < b.secs => true
-    | a.secs > b.secs => false
-    | _ => a.nanos < b.nanos
-    end;
+pub let before(a: Duration, b: Duration) -> Bool =
+    choose | a.secs < b.secs => true | a.secs > b.secs => false | _ => a.nanos < b.nanos end;
 
-pub let sub(a : Duration, b : Duration) -> Duration =
+pub let sub(a: Duration, b: Duration) -> Duration =
     match before(a, b)
     | true => zero
     | false =>

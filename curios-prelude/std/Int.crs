@@ -1,18 +1,17 @@
 pub use /sys/{Int};
-pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_nat, to_flt};
+pub use /sys/Int/{
+    eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz,
+    ctz, popcnt, to_nat, to_flt};
 use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
-pub let to_str(n : Int) -> Str =
+pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
-    match n >= +0
-    | true => Str/concat("+", mag)
-    | false => Str/concat("-", mag)
-    end;
+    match n >= +0 | true => Str/concat("+", mag) | false => Str/concat("-", mag) end;
 
-pub let not(x : Int) -> Int =
+pub let not(x: Int) -> Int =
     xor(x, -1);
 
-pub let of_str(s : Str) -> Option(Int) =
+pub let of_str(s: Str) -> Option(Int) =
     match Str/len(s) == 0
     | true => Option/none()
     | false =>
@@ -30,55 +29,48 @@ pub let of_str(s : Str) -> Option(Int) =
         end
     end;
 
-pub let abs(n : Int) -> Nat =
-    match n >= +0
-    | true => to_nat(n)
-    | false => to_nat(+0 - n)
-    end;
+pub let abs(n: Int) -> Nat =
+    match n >= +0 | true => to_nat(n) | false => to_nat(+0 - n) end;
 
-pub let cmp(x : Int, y : Int) -> Order =
-    choose
-    | x < y => Order/lt()
-    | x == y => Order/eq()
-    | _ => Order/gt()
-    end;
+pub let cmp(x: Int, y: Int) -> Order =
+    choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
 
 satisfy Eql(Int) {
     eql = eql,
-    neq = neq
+    neq = neq,
 }
 
 satisfy Cmp(Int) {
     lt = lt,
     lte = lte,
     gt = gt,
-    gte = gte
+    gte = gte,
 }
 
 satisfy Add(Int) {
-    add = add
+    add = add,
 }
 
 satisfy Sub(Int) {
-    sub = sub
+    sub = sub,
 }
 
 satisfy Mul(Int) {
-    mul = mul
+    mul = mul,
 }
 
 satisfy Div(Int) {
-    div = div
+    div = div,
 }
 
 satisfy Rem(Int) {
-    rem = rem
+    rem = rem,
 }
 
 satisfy Show(Int) {
-    show = to_str
+    show = to_str,
 }
 
 satisfy Ord(Int) {
-    cmp = cmp
+    cmp = cmp,
 }

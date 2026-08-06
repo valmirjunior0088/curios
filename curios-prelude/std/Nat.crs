@@ -1,8 +1,10 @@
 pub use /sys/{Nat};
-pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_int, to_flt, to_byte};
+pub use /sys/Nat/{
+    succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr,
+    clz, ctz, popcnt, to_int, to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
-let single_digit(d : Nat) -> Str =
+let single_digit(d: Nat) -> Str =
     match d
     | 0 => "0"
     | 1 => "1"
@@ -17,94 +19,83 @@ let single_digit(d : Nat) -> Str =
     | _ => "0"
     end;
 
-pub rec to_str(n : Nat) -> Str =
+pub rec to_str(n: Nat) -> Str =
     match n < 10
     | true => single_digit(n)
     | false => Str/concat(to_str(n / 10), single_digit(n % 10))
     end;
 
-pub let of_str(s : Str) -> Option(Nat) =
+pub let of_str(s: Str) -> Option(Nat) =
     match Str/len(s) == 0
     | true => Option/none()
     | false =>
-        Str/fold(s, Option/some(0), (cp, acc) =>
-            let n = acc!;
-            match Char/is_digit(cp)
-            | true => Option/some(n * 10 + (Char/to_nat(cp) - 0x30))
-            | false => Option/none()
-            end)
+        Str/fold(
+            s,
+            Option/some(0),
+            (cp, acc) =>
+                let n = acc!;
+                match Char/is_digit(cp)
+                | true => Option/some(n * 10 + (Char/to_nat(cp) - 0x30))
+                | false => Option/none()
+                end)
     end;
 
-pub let pred(a : Nat) -> Nat =
+pub let pred(a: Nat) -> Nat =
     a - 1;
 
-pub let min(a : Nat, b : Nat) -> Nat =
-    match a < b
-    | true => a
-    | false => b
-    end;
+pub let min(a: Nat, b: Nat) -> Nat =
+    match a < b | true => a | false => b end;
 
-pub let max(a : Nat, b : Nat) -> Nat =
-    match a < b
-    | true => b
-    | false => a
-    end;
+pub let max(a: Nat, b: Nat) -> Nat =
+    match a < b | true => b | false => a end;
 
-pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
-    match c >= lo
-    | true => c <= hi
-    | false => false
-    end;
+pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
+    match c >= lo | true => c <= hi | false => false end;
 
-pub let cmp(x : Nat, y : Nat) -> Order =
-    choose
-    | x < y => Order/lt()
-    | x == y => Order/eq()
-    | _ => Order/gt()
-    end;
+pub let cmp(x: Nat, y: Nat) -> Order =
+    choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
 
 satisfy Eql(Nat) {
     eql = eql,
-    neq = neq
+    neq = neq,
 }
 
 satisfy Cmp(Nat) {
     lt = lt,
     lte = lte,
     gt = gt,
-    gte = gte
+    gte = gte,
 }
 
 satisfy Add(Nat) {
-    add = add
+    add = add,
 }
 
 satisfy Sub(Nat) {
-    sub = sub
+    sub = sub,
 }
 
 satisfy Mul(Nat) {
-    mul = mul
+    mul = mul,
 }
 
 satisfy Div(Nat) {
-    div = div
+    div = div,
 }
 
 satisfy Rem(Nat) {
-    rem = rem
+    rem = rem,
 }
 
 satisfy Show(Nat) {
-    show = to_str
+    show = to_str,
 }
 
 satisfy Ord(Nat) {
-    cmp = cmp
+    cmp = cmp,
 }
 
 -- The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lte` is the `a <= b` family and `Nat/Lte/trans` its transitivity, `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it.
-
 pub mod Lte;
 pub use Lte/{let Lte};
 

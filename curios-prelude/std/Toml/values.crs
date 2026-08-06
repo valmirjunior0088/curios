@@ -7,26 +7,26 @@ use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
 use /std/Toml/datetime/{datetime_value};
 
-let val_str_basic : Parse(Toml) =
+let val_str_basic: Parse(Toml) =
     Parse/map(Parse/or(str_ml_basic, str_basic), (s) => Toml/str(s));
 
-let val_str_literal : Parse(Toml) =
+let val_str_literal: Parse(Toml) =
     Parse/map(Parse/or(str_ml_literal, str_literal), (s) => Toml/str(s));
 
-let val_true : Parse(Toml) =
+let val_true: Parse(Toml) =
     Parse/map(Parse/take_literal("true"), (_) => Toml/bool(true));
 
-let val_false : Parse(Toml) =
+let val_false: Parse(Toml) =
     Parse/map(Parse/take_literal("false"), (_) => Toml/bool(false));
 
-let val_number_signed : Parse(Toml) =
+let val_number_signed: Parse(Toml) =
     Parse/or(flt_special, Parse/or(flt_number, int_value));
 
-let val_number_digit : Parse(Toml) =
+let val_number_digit: Parse(Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
-rec array_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
-    rec go(cur : Nat, acc : Lst(Toml)) -> Result({Nat, Toml}, Str) =
+rec array_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
+    rec go(cur: Nat, acc: Lst(Toml)) -> Result({Nat, Toml}, Str) =
         match trivia.run(input, cur)
         | failure(msg) => Result/failure(msg)
         | success((c1, _)) =>
@@ -55,8 +55,8 @@ rec array_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
     | true => go(pos + 1, [])
     | false => Result/failure("expected array")
     end
-and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
-    rec go(cur : Nat, acc : Lst({Lst(Str), Toml})) -> Result({Nat, Toml}, Str) =
+and inline_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
+    rec go(cur: Nat, acc: Lst({Lst(Str), Toml})) -> Result({Nat, Toml}, Str) =
         match key_dotted.run(input, cur)
         | failure(msg) => Result/failure(msg)
         | success((c1, path)) =>
@@ -110,21 +110,21 @@ and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
         end
     | false => Result/failure("expected inline table")
     end
-pub and value_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+pub and value_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
     match Bytes/get(input, pos)
     | none() => Result/failure("expected value")
     | some(b) =>
         match Byte/to_nat(b)
-        | 0x22 => val_str_basic.run(input, pos)
-        | 0x27 => val_str_literal.run(input, pos)
-        | 0x74 => val_true.run(input, pos)
-        | 0x66 => val_false.run(input, pos)
-        | 0x5B => array_scan(input, pos)
-        | 0x7B => inline_scan(input, pos)
-        | 0x2B => val_number_signed.run(input, pos)
-        | 0x2D => val_number_signed.run(input, pos)
-        | 0x69 => flt_special.run(input, pos)
-        | 0x6E => flt_special.run(input, pos)
+        | 34 => val_str_basic.run(input, pos)
+        | 39 => val_str_literal.run(input, pos)
+        | 116 => val_true.run(input, pos)
+        | 102 => val_false.run(input, pos)
+        | 91 => array_scan(input, pos)
+        | 123 => inline_scan(input, pos)
+        | 43 => val_number_signed.run(input, pos)
+        | 45 => val_number_signed.run(input, pos)
+        | 105 => flt_special.run(input, pos)
+        | 110 => flt_special.run(input, pos)
         | _ => val_number_digit.run(input, pos)
         end
     end;

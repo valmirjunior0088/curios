@@ -1,46 +1,37 @@
 -- Arbitrary-precision integers: a sign tag over a strictly-positive `NonZero` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `NonZero`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md).
-
 use /std/{Nat, Int, Bool, Str, Order, BigNat, NonZero, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 
-pub induct BigInt : pub Type
+pub induct BigInt: pub Type
 | neg(NonZero)
 | zero()
 | pos(NonZero)
 end
 
-pub let zero : BigInt =
+pub let zero: BigInt =
     BigInt/zero();
 
-pub let is_zero(a : BigInt) -> Bool =
-    match a
-    | neg(_) => false
-    | zero() => true
-    | pos(_) => false
-    end;
+pub let is_zero(a: BigInt) -> Bool =
+    match a | neg(_) => false | zero() => true | pos(_) => false end;
 
 -- attach a sign to a BigNat magnitude, collapsing a zero magnitude to BigInt/zero
-let signed(negative : Bool, a : BigNat) -> BigInt =
+let signed(negative: Bool, a: BigNat) -> BigInt =
     match NonZero/of_big_nat(a)
     | zero() => BigInt/zero()
-    | pos(t) =>
-        match negative
-        | true => BigInt/neg(t)
-        | false => BigInt/pos(t)
-        end
+    | pos(t) => match negative | true => BigInt/neg(t) | false => BigInt/pos(t) end
     end;
 
-pub let of_big_nat(a : BigNat) -> BigInt =
+pub let of_big_nat(a: BigNat) -> BigInt =
     signed(false, a);
 
 -- x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
-pub let pos_sub(x : NonZero, y : NonZero) -> BigInt =
+pub let pos_sub(x: NonZero, y: NonZero) -> BigInt =
     match NonZero/cmp(x, y)
     | lt() => signed(true, y.magnitude - x.magnitude)
     | eq() => BigInt/zero()
     | gt() => signed(false, x.magnitude - y.magnitude)
     end;
 
-pub let add(a : BigInt, b : BigInt) -> BigInt =
+pub let add(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
     | (neg(p), neg(q)) => BigInt/neg(NonZero/add(p, q))
     | (neg(p), zero()) => BigInt/neg(p)
@@ -51,31 +42,19 @@ pub let add(a : BigInt, b : BigInt) -> BigInt =
     | (pos(p), pos(q)) => BigInt/pos(NonZero/add(p, q))
     end;
 
-pub let neg(a : BigInt) -> BigInt =
-    match a
-    | neg(p) => BigInt/pos(p)
-    | zero() => BigInt/zero()
-    | pos(p) => BigInt/neg(p)
-    end;
+pub let neg(a: BigInt) -> BigInt =
+    match a | neg(p) => BigInt/pos(p) | zero() => BigInt/zero() | pos(p) => BigInt/neg(p) end;
 
-pub let sub(a : BigInt, b : BigInt) -> BigInt =
+pub let sub(a: BigInt, b: BigInt) -> BigInt =
     add(a, neg(b));
 
-pub let abs(a : BigInt) -> BigInt =
-    match a
-    | neg(p) => BigInt/pos(p)
-    | zero() => BigInt/zero()
-    | pos(p) => BigInt/pos(p)
-    end;
+pub let abs(a: BigInt) -> BigInt =
+    match a | neg(p) => BigInt/pos(p) | zero() => BigInt/zero() | pos(p) => BigInt/pos(p) end;
 
-pub let magnitude(a : BigInt) -> BigNat =
-    match a
-    | neg(p) => p.magnitude
-    | zero() => BigNat/zero
-    | pos(p) => p.magnitude
-    end;
+pub let magnitude(a: BigInt) -> BigNat =
+    match a | neg(p) => p.magnitude | zero() => BigNat/zero | pos(p) => p.magnitude end;
 
-pub let mul(a : BigInt, b : BigInt) -> BigInt =
+pub let mul(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
     | (neg(p), neg(q)) => BigInt/pos(NonZero/mul(p, q))
     | (neg(_), zero()) => BigInt/zero()
@@ -86,7 +65,7 @@ pub let mul(a : BigInt, b : BigInt) -> BigInt =
     | (pos(p), pos(q)) => BigInt/pos(NonZero/mul(p, q))
     end;
 
-pub let cmp(a : BigInt, b : BigInt) -> Order =
+pub let cmp(a: BigInt, b: BigInt) -> Order =
     match (a, b)
     | (neg(p), neg(q)) => NonZero/cmp(q, p)
     | (neg(_), zero()) => Order/lt()
@@ -99,57 +78,39 @@ pub let cmp(a : BigInt, b : BigInt) -> Order =
     | (pos(p), pos(q)) => NonZero/cmp(p, q)
     end;
 
-pub let eql(a : BigInt, b : BigInt) -> Bool =
-    match cmp(a, b)
-    | eq() => true
-    | _ => false
-    end;
+pub let eql(a: BigInt, b: BigInt) -> Bool =
+    match cmp(a, b) | eq() => true | _ => false end;
 
-pub let lt(a : BigInt, b : BigInt) -> Bool =
-    match cmp(a, b)
-    | lt() => true
-    | _ => false
-    end;
+pub let lt(a: BigInt, b: BigInt) -> Bool =
+    match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a : BigInt, b : BigInt) -> Bool =
-    match cmp(a, b)
-    | gt() => false
-    | _ => true
-    end;
+pub let lte(a: BigInt, b: BigInt) -> Bool =
+    match cmp(a, b) | gt() => false | _ => true end;
 
-pub let gt(a : BigInt, b : BigInt) -> Bool =
-    match cmp(a, b)
-    | gt() => true
-    | _ => false
-    end;
+pub let gt(a: BigInt, b: BigInt) -> Bool =
+    match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a : BigInt, b : BigInt) -> Bool =
-    match cmp(a, b)
-    | lt() => false
-    | _ => true
-    end;
+pub let gte(a: BigInt, b: BigInt) -> Bool =
+    match cmp(a, b) | lt() => false | _ => true end;
 
-pub let of_nat(n : Nat) -> BigInt =
+pub let of_nat(n: Nat) -> BigInt =
     of_big_nat(BigNat/of_nat(n));
 
-pub let of_int(n : Int) -> BigInt =
+pub let of_int(n: Int) -> BigInt =
     let mag = of_big_nat(BigNat/of_nat(Int/abs(n)));
-    match n < +0
-    | true => neg(mag)
-    | false => mag
-    end;
+    match n < +0 | true => neg(mag) | false => mag end;
 
-pub let is_even(a : BigInt) -> Bool =
+pub let is_even(a: BigInt) -> Bool =
     BigNat/is_even(magnitude(a));
 
-pub let div2(a : BigInt) -> BigInt =
+pub let div2(a: BigInt) -> BigInt =
     match a
     | neg(p) => neg(of_big_nat(BigNat/div2(p.magnitude)))
     | zero() => BigInt/zero()
     | pos(p) => of_big_nat(BigNat/div2(p.magnitude))
     end;
 
-pub let to_str(a : BigInt) -> Str =
+pub let to_str(a: BigInt) -> Str =
     match a
     | neg(p) => Str/concat("-", BigNat/to_str(p.magnitude))
     | zero() => "+0"
@@ -158,32 +119,32 @@ pub let to_str(a : BigInt) -> Str =
 
 satisfy Eql(BigInt) {
     eql = eql,
-    neq(a, b) = Bool/not(eql(a, b))
+    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy Cmp(BigInt) {
     lt = lt,
     lte = lte,
     gt = gt,
-    gte = gte
+    gte = gte,
 }
 
 satisfy Add(BigInt) {
-    add = add
+    add = add,
 }
 
 satisfy Sub(BigInt) {
-    sub = sub
+    sub = sub,
 }
 
 satisfy Mul(BigInt) {
-    mul = mul
+    mul = mul,
 }
 
 satisfy Show(BigInt) {
-    show = to_str
+    show = to_str,
 }
 
 satisfy Ord(BigInt) {
-    cmp = cmp
+    cmp = cmp,
 }

@@ -1,46 +1,41 @@
 use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Result, Option, Lst};
 use /std/Json/{Json};
 
-let is_num_byte(byte : Byte) -> Bool =
+let is_num_byte(byte: Byte) -> Bool =
     match Byte/to_nat(byte)
-    | 0x2D => true
-    | 0x2B => true
-    | 0x2E => true
-    | 0x65 => true
-    | 0x45 => true
+    | 45 => true
+    | 43 => true
+    | 46 => true
+    | 101 => true
+    | 69 => true
     | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39)
     end;
 
-let parse_null : Parse(Json) =
+let parse_null: Parse(Json) =
     Parse/map(Parse/take_literal("null"), (_) => Json/null());
 
-let parse_true_val : Parse(Json) =
+let parse_true_val: Parse(Json) =
     Parse/map(Parse/take_literal("true"), (_) => Json/bool(true));
 
-let parse_false_val : Parse(Json) =
+let parse_false_val: Parse(Json) =
     Parse/map(Parse/take_literal("false"), (_) => Json/bool(false));
 
-let parse_num : Parse(Json) =
+let parse_num: Parse(Json) =
     Parse {
-        run(input, pos) =
-            match Parse/take_while(is_num_byte).run(input, pos)
-            | success((next, chunk)) =>
-                match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
-                | some(value) => Result/success((next, Json/num(value)))
-                | none() => Result/failure("expected number")
-                end
-            | failure(msg) => Result/failure(msg)
+        run(input, pos) = match Parse/take_while(is_num_byte).run(input, pos)
+        | success((next, chunk)) =>
+            match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
+            | some(value) => Result/success((next, Json/num(value)))
+            | none() => Result/failure("expected number")
             end
+        | failure(msg) => Result/failure(msg)
+        end,
     };
 
-let is_not_string_special(byte : Byte) -> Bool =
-    match Byte/to_nat(byte)
-    | 0x22 => false
-    | 0x5C => false
-    | _ => true
-    end;
+let is_not_string_special(byte: Byte) -> Bool =
+    match Byte/to_nat(byte) | 34 => false | 92 => false | _ => true end;
 
-let hex_digit : Parse(Nat) =
+let hex_digit: Parse(Nat) =
     let byte = Parse/any_byte!;
     match Char/of_ascii(byte)
     | some(c) =>
@@ -51,14 +46,14 @@ let hex_digit : Parse(Nat) =
     | none() => Parse/fail("invalid hex digit")
     end;
 
-let hex4 : Parse(Nat) =
+let hex4: Parse(Nat) =
     let a = hex_digit!;
     let b = hex_digit!;
     let c = hex_digit!;
     let d = hex_digit!;
     Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
-let parse_unicode : Parse(Bytes) =
+let parse_unicode: Parse(Bytes) =
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF
     | true =>
@@ -80,29 +75,29 @@ let parse_unicode : Parse(Bytes) =
         end
     end;
 
-let parse_str_escape : Parse(Bytes) =
+let parse_str_escape: Parse(Bytes) =
     let _ = Parse/take_byte(0x5C)!;
     let byte = Parse/any_byte!;
     match Byte/to_nat(byte)
-    | 0x22 => Parse/pure(Str/to_bytes("\""))
-    | 0x5C => Parse/pure(Str/to_bytes("\\"))
-    | 0x2F => Parse/pure(Str/to_bytes("/"))
-    | 0x62 => Parse/pure(x[\08])
-    | 0x66 => Parse/pure(x[\0c])
-    | 0x6E => Parse/pure(Str/to_bytes("\n"))
-    | 0x72 => Parse/pure(Str/to_bytes("\r"))
-    | 0x74 => Parse/pure(Str/to_bytes("\t"))
-    | 0x75 => parse_unicode
+    | 34 => Parse/pure(Str/to_bytes("\""))
+    | 92 => Parse/pure(Str/to_bytes("\\"))
+    | 47 => Parse/pure(Str/to_bytes("/"))
+    | 98 => Parse/pure(x[\08])
+    | 102 => Parse/pure(x[\0c])
+    | 110 => Parse/pure(Str/to_bytes("\n"))
+    | 114 => Parse/pure(Str/to_bytes("\r"))
+    | 116 => Parse/pure(Str/to_bytes("\t"))
+    | 117 => parse_unicode
     | _ => Parse/fail("unknown escape")
     end;
 
-let parse_str_segment : Parse(Bytes) =
+let parse_str_segment: Parse(Bytes) =
     Parse/take_while(is_not_string_special);
 
-let parse_str_body : Parse(Lst(Bytes)) =
+let parse_str_body: Parse(Lst(Bytes)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
-let parse_raw_str : Parse(Str) =
+let parse_raw_str: Parse(Str) =
     let _ = Parse/take_byte(0x22)!;
     let chunks = parse_str_body!;
     let _ = Parse/take_byte(0x22)!;
@@ -111,57 +106,56 @@ let parse_raw_str : Parse(Str) =
     | none() => Parse/fail("invalid UTF-8 in string")
     end;
 
-let parse_str_value : Parse(Json) =
+let parse_str_value: Parse(Json) =
     Parse/map(parse_raw_str, (s) => Json/str(s));
 
-let is_ws(byte : Byte) -> Bool =
+let is_ws(byte: Byte) -> Bool =
     match Byte/to_nat(byte)
-    | 0x20 => true
-    | 0x09 => true
-    | 0x0A => true
-    | 0x0D => true
+    | 32 => true
+    | 9 => true
+    | 10 => true
+    | 13 => true
     | _ => false
     end;
 
-let ws : Parse({}) =
+let ws: Parse({}) =
     Parse/map(Parse/take_while(is_ws), (_) => ());
 
-let symbol(b : Byte) -> Parse(Byte) =
+let symbol(b: Byte) -> Parse(Byte) =
     let _ = ws!;
     Parse/take_byte(b);
 
-pub rec decode : Parse(Json) =
+pub rec decode: Parse(Json) =
     Parse {
-        run(input, pos) =
-            match ws.run(input, pos)
-            | failure(msg) => Result/failure(msg)
-            | success((start, _)) =>
-                match Nat/Lt/try(start, Bytes/len(input))
-                | none() => Result/failure("unexpected end of input")
-                | some(ok) =>
-                    match Byte/to_nat(Bytes/at(input, start, ok))
-                    | 0x6E => parse_null.run(input, start)
-                    | 0x74 => parse_true_val.run(input, start)
-                    | 0x66 => parse_false_val.run(input, start)
-                    | 0x22 => parse_str_value.run(input, start)
-                    | 0x5B => parse_arr.run(input, start)
-                    | 0x7B => parse_obj.run(input, start)
-                    | _ => parse_num.run(input, start)
-                    end
+        run(input, pos) = match ws.run(input, pos)
+        | failure(msg) => Result/failure(msg)
+        | success((start, _)) =>
+            match Nat/Lt/try(start, Bytes/len(input))
+            | none() => Result/failure("unexpected end of input")
+            | some(ok) =>
+                match Byte/to_nat(Bytes/at(input, start, ok))
+                | 110 => parse_null.run(input, start)
+                | 116 => parse_true_val.run(input, start)
+                | 102 => parse_false_val.run(input, start)
+                | 34 => parse_str_value.run(input, start)
+                | 91 => parse_arr.run(input, start)
+                | 123 => parse_obj.run(input, start)
+                | _ => parse_num.run(input, start)
                 end
             end
+        end,
     }
-and parse_arr : Parse(Json) =
+and parse_arr: Parse(Json) =
     let _ = symbol(0x5B)!;
     let elems = Parse/sep_by0(decode, symbol(0x2C))!;
     let _ = symbol(0x5D)!;
     Parse/pure(Json/arr(elems))
-and parse_obj : Parse(Json) =
+and parse_obj: Parse(Json) =
     let _ = symbol(0x7B)!;
     let pairs = Parse/sep_by0(parse_pair, symbol(0x2C))!;
     let _ = symbol(0x7D)!;
     Parse/pure(Json/obj(pairs))
-and parse_pair : Parse({Str, Json}) =
+and parse_pair: Parse({Str, Json}) =
     let _ = ws!;
     let key = parse_raw_str!;
     let _ = symbol(0x3A)!;

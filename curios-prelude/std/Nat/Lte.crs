@@ -1,43 +1,30 @@
 -- `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`. The family is this module's namesake, so `Nat/Lte` is the proposition, `Nat/Lte/z` and `Nat/Lte/s` are its constructors, and the laws about it sit alongside them.
-
 use /std/{Nat};
 
-pub induct Lte : (Nat, Nat) -> pub Prop
-| z(@n : Nat) : (0, n)
-| s(@a : Nat, @b : Nat, prev : Lte(a, b)) : (a + 1, b + 1)
+pub induct Lte: (Nat, Nat) -> pub Prop
+| z(@n: Nat): (0, n)
+| s(@a: Nat, @b: Nat, prev: Lte(a, b)): (a + 1, b + 1)
 end
 
 pub use Lte/*;
 
-pub let refl(n : Nat) -> Lte(n, n) =
-    match n : (m) => Lte(m, m)
-    | 0 => Lte/z()
-    | pred + 1; ih => Lte/s(ih)
-    end;
+pub let refl(n: Nat) -> Lte(n, n) =
+    match n: (m) => Lte(m, m) | 0 => Lte/z() | pred + 1; ih => Lte/s(ih) end;
 
-pub rec succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
-    match p : (x, y, w) => Lte(x, y + 1)
+pub rec succ_r(@a: Nat, @b: Nat, p: Lte(a, b)) -> Lte(a, b + 1) =
+    match p: (x, y, w) => Lte(x, y + 1)
     | z(@_) => Lte/z()
     | s(@_, @_, prev) => Lte/s(succ_r(prev))
     end;
 
-pub let add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
-    match k : (m) => Lte(a, a + m)
-    | 0 => refl(a)
-    | pred + 1; ih => succ_r(ih)
-    end;
+pub let add_r(a: Nat, k: Nat) -> Lte(a, a + k) =
+    match k: (m) => Lte(a, a + m) | 0 => refl(a) | pred + 1; ih => succ_r(ih) end;
 
-pub rec trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) -> Lte(a, c) =
+pub rec trans(@a: Nat, @b: Nat, @c: Nat, p: Lte(a, b), q: Lte(b, c)) -> Lte(a, c) =
     match p
     | z(@_) => Lte/z()
-    | s(@a2, @b2, prev) =>
-        match q
-        | s(@b3, @c3, q2) => Lte/s(trans(prev, q2))
-        end
+    | s(@a2, @b2, prev) => match q | s(@b3, @c3, q2) => Lte/s(trans(prev, q2)) end
     end;
 
-pub let add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =
-    match n : (m) => Lte(m + a, m + b)
-    | 0 => p
-    | m + 1; ih => Lte/s(ih)
-    end;
+pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Lte(a, b)) -> Lte(n + a, n + b) =
+    match n: (m) => Lte(m + a, m + b) | 0 => p | m + 1; ih => Lte/s(ih) end;

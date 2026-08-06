@@ -1,9 +1,8 @@
-pub induct False : pub Prop
+pub induct False: pub Prop
 end
 
-pub let absurd(@A : Type, contradiction : False) -> A =
-    match contradiction
-    end;
+pub let absurd(@A: Type, contradiction: False) -> A =
+    match contradiction end;
 
-pub let Not(P : Type) -> Type =
+pub let Not(P: Type) -> Type =
     (P) -> False;

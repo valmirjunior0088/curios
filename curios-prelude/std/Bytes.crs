@@ -1,62 +1,64 @@
 pub use /sys/Bytes/{let Bytes, len, eql, slice};
 use /std/{Lst, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show};
 
-pub let at(b : Bytes, i : Nat, ok : Nat/Lt(i, len(b))) -> Byte =
+pub let at(b: Bytes, i: Nat, ok: Nat/Lt(i, len(b))) -> Byte =
     /sys/Bytes/get(b, i);
 
-pub let get(b : Bytes, i : Nat) -> Option(Byte) =
-    match i < len(b)
-    | true => Option/some(/sys/Bytes/get(b, i))
-    | false => Option/none()
-    end;
+pub let get(b: Bytes, i: Nat) -> Option(Byte) =
+    match i < len(b) | true => Option/some(/sys/Bytes/get(b, i)) | false => Option/none() end;
 
-pub let flatten(parts : Lst(Bytes)) -> Bytes =
+pub let flatten(parts: Lst(Bytes)) -> Bytes =
     Lst/fold(parts, x[], (b, acc) => x[..acc, ..b]);
 
-pub let fold(@A : Type, b : Bytes, init : A, f : (Byte, A) -> A) -> A =
+pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
     let n = len(b);
-    rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
+    rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
             -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
-            let below = Eq/subst(
-                (x) => Nat/Lt(i, x),
-                inv,
-                Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)),
-            );
+            let below =
+                Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)));
             go(kp, i + 1, f(at(b, i, below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
 
-pub let find_index(b : Bytes, pred : (Byte) -> Bool) -> Option(Nat) =
-    let (_, found) : {Nat, Option(Nat)} =
-        fold(b, (0, Option/none()), (byte, (i, found)) =>
-            match found
-            | some(_) => (i, found)
-            | none() =>
-                (i + 1,
-                    match pred(byte)
-                    | true => Option/some(i)
-                    | false => Option/none()
-                    end)
-            end);
+pub let find_index(b: Bytes, pred: (Byte) -> Bool) -> Option(Nat) =
+    let (_, found): {Nat, Option(Nat)} =
+        fold(
+            b,
+            (0, Option/none()),
+            (byte, (i, found)) =>
+                match found
+                | some(_) => (i, found)
+                | none() =>
+                    (i + 1, match pred(byte) | true => Option/some(i) | false => Option/none() end)
+                end);
     found;
 
-pub let join(sep : Bytes, parts : Lst(Bytes)) -> Bytes =
-    Lst/balanced(Lst/len(parts), x[], (i) => Option/unwrap_or(Lst/get(parts, i), x[]),
+pub let join(sep: Bytes, parts: Lst(Bytes)) -> Bytes =
+    Lst/balanced(
+        Lst/len(parts),
+        x[],
+        (i) => Option/unwrap_or(Lst/get(parts, i), x[]),
         (l, r) => x[..l, ..sep, ..r]);
 
 satisfy Eql(Bytes) {
     eql = eql,
-    neq(a, b) = Bool/not(eql(a, b))
+    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy Show(Bytes) {
     show(b) =
-        Option/unwrap_or(Str/of_bytes(fold(b, x[], (byte, acc) =>
-            let n = Byte/to_nat(byte);
-            let hi = Char/to_utf8(Char/hex_digit(n / 0x10));
-            let lo = Char/to_utf8(Char/hex_digit(n % 0x10));
-            x[..acc, ..hi, ..lo])), "")
+        Option/unwrap_or(
+            Str/of_bytes(
+                fold(
+                    b,
+                    x[],
+                    (byte, acc) =>
+                        let n = Byte/to_nat(byte);
+                        let hi = Char/to_utf8(Char/hex_digit(n / 0x10));
+                        let lo = Char/to_utf8(Char/hex_digit(n % 0x10));
+                        x[..acc, ..hi, ..lo])),
+            ""),
 }

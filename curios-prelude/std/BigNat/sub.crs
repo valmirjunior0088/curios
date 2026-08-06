@@ -3,13 +3,13 @@ use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, of_bits, xor3, zero};
 
-let borrow_out(a : Bool, b : Bool, bw : Bool) -> Bool =
+let borrow_out(a: Bool, b: Bool, bw: Bool) -> Bool =
     match a
     | true => match b | true => bw | false => false end
     | false => match b | true => true | false => bw end
     end;
 
-pub rec raw(x : Bits, y : Bits, borrow : Bool) -> {Bits, Bool} =
+pub rec raw(x: Bits, y: Bits, borrow: Bool) -> {Bits, Bool} =
     match x
     | b[] =>
         match y
@@ -29,10 +29,6 @@ pub rec raw(x : Bits, y : Bits, borrow : Bool) -> {Bits, Bool} =
         end
     end;
 
-pub let sub(a : BigNat, b : BigNat) -> BigNat =
+pub let sub(a: BigNat, b: BigNat) -> BigNat =
     let (bits, borrow) = raw(a.rep, b.rep, false);
-    match borrow
-    | true => zero
-    | false => of_bits(bits)
-    end;
-
+    match borrow | true => zero | false => of_bits(bits) end;

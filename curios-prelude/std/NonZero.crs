@@ -2,115 +2,90 @@
 use /std/{Bool, Bits, Eq, False, True, BigNat, Show};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{
-    of_bits,
-    of_trimmed_bits,
-    is_trimmed,
-    is_trimmed_of_canonical,
-    trim,
-    trim_of_trimmed,
-    view,
-    combine,
-    to_str,
-};
+    of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_canonical, trim, trim_of_trimmed, view,
+    combine};
 
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold), so it reduces on any cons-headed rep, even one with an opaque tail.
-pub let is_cons(rep : Bits) -> Prop =
-    match rep
-    | b[] => False
-    | b[_, .._] => True
-    end;
+pub let is_cons(rep: Bits) -> Prop =
+    match rep | b[] => False | b[_, .._] => True end;
 
-pub struct NonZero : pub Type {
-    magnitude : BigNat,
-    non_zero : is_cons(magnitude.rep),
+pub struct NonZero: pub Type {
+    magnitude: BigNat,
+    non_zero: is_cons(magnitude.rep),
 }
 
-pub let eq(a : NonZero, b : NonZero, p : Eq(a.magnitude, b.magnitude)) -> Eq(a, b) =
+pub let eq(a: NonZero, b: NonZero, p: Eq(a.magnitude, b.magnitude)) -> Eq(a, b) =
     Eq/subst(
-        (m : BigNat) => (nz : is_cons(m.rep)) -> Eq(a, NonZero { magnitude = m, non_zero = nz }),
+        (m: BigNat) => (nz: is_cons(m.rep)) -> Eq(a, NonZero { magnitude = m, non_zero = nz }),
         p,
-        (nz : is_cons(a.magnitude.rep)) => Eq/refl(),
-    )(b.non_zero);
+        (nz: is_cons(a.magnitude.rep)) => Eq/refl())(b.non_zero);
 
-pub let nz_trimmed(t : NonZero) -> Eq(is_trimmed(t.magnitude.rep), true) =
+pub let nz_trimmed(t: NonZero) -> Eq(is_trimmed(t.magnitude.rep), true) =
     is_trimmed_of_canonical(t.magnitude.rep, t.magnitude.canonical);
 
 let cons_low_trimmed(
-    low : Bool,
-    rep : Bits,
-    tr : Eq(is_trimmed(rep), true),
-    ne : is_cons(rep),
+    low: Bool,
+    rep: Bits,
+    tr: Eq(is_trimmed(rep), true),
+    ne: is_cons(rep),
 ) -> Eq(is_trimmed(b[low, ..rep]), true) =
-    match rep
-    | b[] => False/absurd(ne)
-    | b[_, .._] => tr
-    end;
+    match rep | b[] => False/absurd(ne) | b[_, .._] => tr end;
 
 -- is_cons transports along the of_bits trim, given the raw is trimmed and cons-headed
-pub let raw_non_zero(rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(rep)) -> is_cons(
-    of_bits(rep).rep,
-) =
-    Eq/subst((w : Bits) => is_cons(w), Eq/sym(trim_of_trimmed(rep, tr)), ne);
+pub let raw_non_zero(
+    rep: Bits,
+    tr: Eq(is_trimmed(rep), true),
+    ne: is_cons(rep),
+) -> is_cons(of_bits(rep).rep) =
+    Eq/subst((w: Bits) => is_cons(w), Eq/sym(trim_of_trimmed(rep, tr)), ne);
 
 -- combine / trim-head helpers for the mul-nonzero proof
-let combine_non_zero(h : Bool, w : Bits, ne : is_cons(w)) -> is_cons(combine(h, w)) =
-    match w
-    | b[] => False/absurd(ne)
-    | b[_, .._] => True/qed()
-    end;
+let combine_non_zero(h: Bool, w: Bits, ne: is_cons(w)) -> is_cons(combine(h, w)) =
+    match w | b[] => False/absurd(ne) | b[_, .._] => True/qed() end;
 
-let combine_true_non_zero(w : Bits) -> is_cons(combine(true, w)) =
-    match w
-    | b[] => True/qed()
-    | b[_, .._] => True/qed()
-    end;
+let combine_true_non_zero(w: Bits) -> is_cons(combine(true, w)) =
+    match w | b[] => True/qed() | b[_, .._] => True/qed() end;
 
-let trim_head_non_zero(h : Bool, r : Bits, ne : is_cons(trim(r))) -> is_cons(trim(b[h, ..r])) =
+let trim_head_non_zero(h: Bool, r: Bits, ne: is_cons(trim(r))) -> is_cons(trim(b[h, ..r])) =
     combine_non_zero(h, trim(r), ne);
 
-let trim_head_true(r : Bits) -> is_cons(trim(b[\1, ..r])) =
+let trim_head_true(r: Bits) -> is_cons(trim(b[\1, ..r])) =
     combine_true_non_zero(trim(r));
 
 -- ===================== smart constructors =====================
-pub let one : NonZero =
+pub let one: NonZero =
     NonZero { magnitude = of_trimmed_bits(b[\1], Eq/refl()), non_zero = True/qed() };
 
-pub let dbl(t : NonZero) -> NonZero =
+pub let dbl(t: NonZero) -> NonZero =
     NonZero {
         magnitude = of_trimmed_bits(
             b[\0, ..t.magnitude.rep],
-            cons_low_trimmed(false, t.magnitude.rep, nz_trimmed(t), t.non_zero),
-        ),
+            cons_low_trimmed(false, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };
 
-pub let dbl_succ(t : NonZero) -> NonZero =
+pub let dbl_succ(t: NonZero) -> NonZero =
     NonZero {
         magnitude = of_trimmed_bits(
             b[\1, ..t.magnitude.rep],
-            cons_low_trimmed(true, t.magnitude.rep, nz_trimmed(t), t.non_zero),
-        ),
+            cons_low_trimmed(true, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };
 
 -- ===================== BigNat bridge =====================
 -- reflect a BigNat as zero-or-nonzero, rebuilding the NonZero certificate bit by bit through the smart constructors (recursion over BigNat's view, as in bit_len).
-pub induct Split : pub Type
+pub induct Split: pub Type
 | zero()
 | pos(NonZero)
 end
 
-pub rec of_big_nat(a : BigNat) -> Split =
+pub rec of_big_nat(a: BigNat) -> Split =
     match view(a)
     | zero() => Split/zero()
     | succ(low, tail) =>
         match of_big_nat(tail)
         | zero() => Split/pos(one)
-        | pos(t) =>
-            match low
-            | true => Split/pos(dbl_succ(t))
-            | false => Split/pos(dbl(t))
-            end
+        | pos(t) => match low | true => Split/pos(dbl_succ(t)) | false => Split/pos(dbl(t)) end
         end
     end;
 
@@ -129,5 +104,5 @@ pub mod cmp;
 pub use cmp/{let cmp};
 
 satisfy Show(NonZero) {
-    show(n) = to_str(n.magnitude),
+    show(n) = /std/BigNat/to_str(n.magnitude),
 }

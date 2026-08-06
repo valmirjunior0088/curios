@@ -2,53 +2,44 @@ pub use /sys/{Lst};
 pub use /sys/Lst/{len, slice, map};
 use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
 
-pub let at(@T : Type, a : Lst(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
+pub let at(@T: Type, a: Lst(T), i: Nat, ok: Nat/Lt(i, len(a))) -> T =
     /sys/Lst/get(a, i);
 
-pub let get(@T : Type, a : Lst(T), i : Nat) -> Option(T) =
-    match i < len(a)
-    | true => Option/some(/sys/Lst/get(a, i))
-    | false => Option/none()
-    end;
+pub let get(@T: Type, a: Lst(T), i: Nat) -> Option(T) =
+    match i < len(a) | true => Option/some(/sys/Lst/get(a, i)) | false => Option/none() end;
 
-pub let flatten(@T : Type, parts : Lst(Lst(T))) -> Lst(T) =
+pub let flatten(@T: Type, parts: Lst(Lst(T))) -> Lst(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
 
-pub let fold(@T : Type, @A : Type, l : Lst(T), init : A, f : (T, A) -> A) -> A =
+pub let fold(@T: Type, @A: Type, l: Lst(T), init: A, f: (T, A) -> A) -> A =
     let n = len(l);
-    rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
+    rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
             -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
-            let below = Eq/subst(
-                (x) => Nat/Lt(i, x),
-                inv,
-                Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)),
-            );
+            let below =
+                Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)));
             go(kp, i + 1, f(at(l, i, below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
 
-pub let each(@T : Type, l : Lst(T), f : (T) -> {}) -> {} =
+pub let each(@T: Type, l: Lst(T), f: (T) -> {}) -> {} =
     fold(l, (), (x, acc) => f(x));
 
-pub let find(@T : Type, l : Lst(T), pred : (T) -> Bool) -> Option(T) =
+pub let find(@T: Type, l: Lst(T), pred: (T) -> Bool) -> Option(T) =
     let n = len(l);
-    rec go(i : Nat) -> Option(T) =
+    rec go(i: Nat) -> Option(T) =
         match i < n
         | true =>
             let x = /sys/Lst/get(l, i);
-            match pred(x)
-            | true => Option/some(x)
-            | false => go(i + 1)
-            end
+            match pred(x) | true => Option/some(x) | false => go(i + 1) end
         | false => Option/none()
         end;
     go(0);
 
-pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =
-    rec go(lo : Nat, hi : Nat) -> A =
+pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A) -> A) -> A =
+    rec go(lo: Nat, hi: Nat) -> A =
         choose
         | lo + 1 < hi =>
             let mid = (lo + hi) / 2;
@@ -58,7 +49,7 @@ pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (
         end;
     go(0, n);
 
-satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
+satisfy (@A: Type, use Show(A)) => Show(Lst(A)) {
     show(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]")),
 }
 

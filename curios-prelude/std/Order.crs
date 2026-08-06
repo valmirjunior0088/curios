@@ -1,7 +1,7 @@
 use /std/{Bool, Eq, False, Show};
 use /std/Bool/{false_neq_true};
 
-pub induct Order : pub Type
+pub induct Order: pub Type
 | lt()
 | eq()
 | gt()
@@ -9,84 +9,39 @@ end
 
 pub use Order/*;
 
-pub let flip(r : Order) -> Order =
-    match r
-    | lt() => Order/gt()
-    | eq() => Order/eq()
-    | gt() => Order/lt()
-    end;
+pub let flip(r: Order) -> Order =
+    match r | lt() => Order/gt() | eq() => Order/eq() | gt() => Order/lt() end;
 
-pub let cong_flip(@s : Order, @t : Order, p : Eq(s, t)) -> Eq(flip(s), flip(t)) =
+pub let cong_flip(@s: Order, @t: Order, p: Eq(s, t)) -> Eq(flip(s), flip(t)) =
     Eq/cong(flip, p);
 
-let is_lt(r : Order) -> Bool =
-    match r
-    | lt() => true
-    | eq() => false
-    | gt() => false
-    end;
+let is_lt(r: Order) -> Bool =
+    match r | lt() => true | eq() => false | gt() => false end;
 
-let is_eq(r : Order) -> Bool =
-    match r
-    | lt() => false
-    | eq() => true
-    | gt() => false
-    end;
+let is_eq(r: Order) -> Bool =
+    match r | lt() => false | eq() => true | gt() => false end;
 
-let is_gt(r : Order) -> Bool =
-    match r
-    | lt() => false
-    | eq() => false
-    | gt() => true
-    end;
+let is_gt(r: Order) -> Bool =
+    match r | lt() => false | eq() => false | gt() => true end;
 
-pub let lt_neq_eq(p : Eq(Order/lt(), Order/eq())) -> False =
-    false_neq_true(
-        match p : (s, t, q) => Eq(is_eq(s), is_eq(t))
-        | refl(@z) => Eq/refl()
-        end,
-    );
+pub let lt_neq_eq(p: Eq(Order/lt(), Order/eq())) -> False =
+    false_neq_true(match p: (s, t, q) => Eq(is_eq(s), is_eq(t)) | refl(@z) => Eq/refl() end);
 
-pub let gt_neq_eq(p : Eq(Order/gt(), Order/eq())) -> False =
-    false_neq_true(
-        match p : (s, t, q) => Eq(is_eq(s), is_eq(t))
-        | refl(@z) => Eq/refl()
-        end,
-    );
+pub let gt_neq_eq(p: Eq(Order/gt(), Order/eq())) -> False =
+    false_neq_true(match p: (s, t, q) => Eq(is_eq(s), is_eq(t)) | refl(@z) => Eq/refl() end);
 
-pub let eq_neq_lt(p : Eq(Order/eq(), Order/lt())) -> False =
-    false_neq_true(
-        match p : (s, t, q) => Eq(is_lt(s), is_lt(t))
-        | refl(@z) => Eq/refl()
-        end,
-    );
+pub let eq_neq_lt(p: Eq(Order/eq(), Order/lt())) -> False =
+    false_neq_true(match p: (s, t, q) => Eq(is_lt(s), is_lt(t)) | refl(@z) => Eq/refl() end);
 
-pub let gt_neq_lt(p : Eq(Order/gt(), Order/lt())) -> False =
-    false_neq_true(
-        match p : (s, t, q) => Eq(is_lt(s), is_lt(t))
-        | refl(@z) => Eq/refl()
-        end,
-    );
+pub let gt_neq_lt(p: Eq(Order/gt(), Order/lt())) -> False =
+    false_neq_true(match p: (s, t, q) => Eq(is_lt(s), is_lt(t)) | refl(@z) => Eq/refl() end);
 
-pub let eq_neq_gt(p : Eq(Order/eq(), Order/gt())) -> False =
-    false_neq_true(
-        match p : (s, t, q) => Eq(is_gt(s), is_gt(t))
-        | refl(@z) => Eq/refl()
-        end,
-    );
+pub let eq_neq_gt(p: Eq(Order/eq(), Order/gt())) -> False =
+    false_neq_true(match p: (s, t, q) => Eq(is_gt(s), is_gt(t)) | refl(@z) => Eq/refl() end);
 
-pub let lt_neq_gt(p : Eq(Order/lt(), Order/gt())) -> False =
-    false_neq_true(
-        match p : (s, t, q) => Eq(is_gt(s), is_gt(t))
-        | refl(@z) => Eq/refl()
-        end,
-    );
+pub let lt_neq_gt(p: Eq(Order/lt(), Order/gt())) -> False =
+    false_neq_true(match p: (s, t, q) => Eq(is_gt(s), is_gt(t)) | refl(@z) => Eq/refl() end);
 
 satisfy Show(Order) {
-    show(r) =
-        match r
-        | lt() => "lt"
-        | eq() => "eq"
-        | gt() => "gt"
-        end,
+    show(r) = match r | lt() => "lt" | eq() => "eq" | gt() => "gt" end,
 }

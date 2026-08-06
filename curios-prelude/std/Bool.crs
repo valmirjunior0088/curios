@@ -2,16 +2,13 @@ pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
 use /std/{Str, Option, Eq, False, True, Eql, Or, And, Show};
 
-pub let not(b : Bool) -> Bool =
+pub let not(b: Bool) -> Bool =
     xor(b, true);
 
-pub let to_str(b : Bool) -> Str =
-    match b
-    | true => "true"
-    | false => "false"
-    end;
+pub let to_str(b: Bool) -> Str =
+    match b | true => "true" | false => "false" end;
 
-pub let of_str(s : Str) -> Option(Bool) =
+pub let of_str(s: Str) -> Option(Bool) =
     choose
     | s == "true" => Option/some(true)
     | s == "false" => Option/some(false)
@@ -19,23 +16,23 @@ pub let of_str(s : Str) -> Option(Bool) =
     end;
 
 -- The two boolean constructors are distinct: a proof otherwise is absurd. Every `match b : Prop` decision procedure discharges its impossible branch through this.
-pub let false_neq_true(p : Eq(false, true)) -> False =
-    Eq/subst((b : Bool) => match b | true => False | false => True end, p, True/qed());
+pub let false_neq_true(p: Eq(false, true)) -> False =
+    Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
 -- `xor` is disequality on one bit, so `!=` needs no negation here.
 satisfy Eql(Bool) {
     eql = eql,
-    neq = xor
+    neq = xor,
 }
 
 satisfy Or(Bool) {
-    or = or
+    or = or,
 }
 
 satisfy And(Bool) {
-    and = and
+    and = and,
 }
 
 satisfy Show(Bool) {
-    show = to_str
+    show = to_str,
 }

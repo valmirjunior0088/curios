@@ -1,16 +1,14 @@
 -- Unicode scalar values are certified by /syn/Char. Classification and case conversion in this initial API are deliberately ASCII-only; Unicode database policy remains outside the foundational scalar type.
-
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
 use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Str, Eql, Cmp, Show, Ord};
 
-pub let to_nat(c : Char) -> Nat =
+pub let to_nat(c: Char) -> Nat =
     c.code;
 
-pub let of_nat(code : Nat) -> Option(Char) =
+pub let of_nat(code: Nat) -> Option(Char) =
     match code < 0xD800
-    | true =>
-        Option/some(Char { code = code, scalar = Scalar/below(@code, True/qed()) })
+    | true => Option/some(Char { code = code, scalar = Scalar/below(@code, True/qed()) })
     | false =>
         match code >= 0xE000
         | true =>
@@ -22,76 +20,58 @@ pub let of_nat(code : Nat) -> Option(Char) =
         end
     end;
 
-pub let eq_of_code(a : Char, b : Char, proof : Eq(a.code, b.code)) -> Eq(a, b) =
+pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
     Eq/subst(
-        (code : Nat) => (scalar : Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
+        (code: Nat) => (scalar: Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
         proof,
-        (scalar : Scalar(a.code)) => Eq/refl())(b.scalar);
+        (scalar: Scalar(a.code)) => Eq/refl())(b.scalar);
 
-pub let eql(a : Char, b : Char) -> Bool =
+pub let eql(a: Char, b: Char) -> Bool =
     a.code == b.code;
 
-pub let cmp(a : Char, b : Char) -> Order =
+pub let cmp(a: Char, b: Char) -> Order =
     Nat/cmp(a.code, b.code);
 
-pub let lt(a : Char, b : Char) -> Bool =
-    match cmp(a, b)
-    | lt() => true
-    | _ => false
-    end;
+pub let lt(a: Char, b: Char) -> Bool =
+    match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a : Char, b : Char) -> Bool =
-    match cmp(a, b)
-    | gt() => false
-    | _ => true
-    end;
+pub let lte(a: Char, b: Char) -> Bool =
+    match cmp(a, b) | gt() => false | _ => true end;
 
-pub let gt(a : Char, b : Char) -> Bool =
-    match cmp(a, b)
-    | gt() => true
-    | _ => false
-    end;
+pub let gt(a: Char, b: Char) -> Bool =
+    match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a : Char, b : Char) -> Bool =
-    match cmp(a, b)
-    | lt() => false
-    | _ => true
-    end;
+pub let gte(a: Char, b: Char) -> Bool =
+    match cmp(a, b) | lt() => false | _ => true end;
 
-pub let is_whitespace(c : Char) -> Bool =
-    c.code == 0x20 || Nat/in_range(c.code, 0x09, 0x0D);
+pub let is_whitespace(c: Char) -> Bool =
+    c.code == 0x20 || Nat/in_range(c.code, 0x9, 0xD);
 
-pub let is_digit(c : Char) -> Bool =
+pub let is_digit(c: Char) -> Bool =
     Nat/in_range(c.code, 0x30, 0x39);
 
-pub let is_lower(c : Char) -> Bool =
+pub let is_lower(c: Char) -> Bool =
     Nat/in_range(c.code, 0x61, 0x7A);
 
-pub let is_upper(c : Char) -> Bool =
+pub let is_upper(c: Char) -> Bool =
     Nat/in_range(c.code, 0x41, 0x5A);
 
-pub let is_alpha(c : Char) -> Bool =
+pub let is_alpha(c: Char) -> Bool =
     is_lower(c) || is_upper(c);
 
-pub let is_alphanumeric(c : Char) -> Bool =
+pub let is_alphanumeric(c: Char) -> Bool =
     is_alpha(c) || is_digit(c);
 
-pub let to_ascii_lower(c : Char) -> Char =
-    match is_upper(c)
-    | true => Option/unwrap_or(of_nat(c.code + 0x20), c)
-    | false => c
-    end;
+pub let to_ascii_lower(c: Char) -> Char =
+    match is_upper(c) | true => Option/unwrap_or(of_nat(c.code + 0x20), c) | false => c end;
 
-pub let to_ascii_upper(c : Char) -> Char =
-    match is_lower(c)
-    | true => Option/unwrap_or(of_nat(c.code - 0x20), c)
-    | false => c
-    end;
+pub let to_ascii_upper(c: Char) -> Char =
+    match is_lower(c) | true => Option/unwrap_or(of_nat(c.code - 0x20), c) | false => c end;
 
-let ascii_zero : Char =
+let ascii_zero: Char =
     Char { code = 0x30, scalar = Scalar/below(@0x30, True/qed()) };
 
-pub let hex_digit(nibble : Nat) -> Char =
+pub let hex_digit(nibble: Nat) -> Char =
     let digit =
         match nibble % 0x10 < 10
         | true => nibble % 0x10 + 0x30
@@ -99,7 +79,7 @@ pub let hex_digit(nibble : Nat) -> Char =
         end;
     Option/unwrap_or(of_nat(digit), ascii_zero);
 
-pub let of_hex_digit(c : Char) -> Option(Nat) =
+pub let of_hex_digit(c: Char) -> Option(Nat) =
     choose
     | is_digit(c) => Option/some(c.code - 0x30)
     | Nat/in_range(c.code, 0x61, 0x66) => Option/some(c.code - 0x61 + 10)
@@ -107,19 +87,13 @@ pub let of_hex_digit(c : Char) -> Option(Nat) =
     | _ => Option/none()
     end;
 
-pub let of_ascii(byte : Byte) -> Option(Char) =
-    match Byte/to_nat(byte) < 0x80
-    | true => of_nat(Byte/to_nat(byte))
-    | false => Option/none()
-    end;
+pub let of_ascii(byte: Byte) -> Option(Char) =
+    match Byte/to_nat(byte) < 0x80 | true => of_nat(Byte/to_nat(byte)) | false => Option/none() end;
 
-pub let to_ascii(c : Char) -> Option(Byte) =
-    match c.code < 0x80
-    | true => Option/some(Nat/to_byte(c.code))
-    | false => Option/none()
-    end;
+pub let to_ascii(c: Char) -> Option(Byte) =
+    match c.code < 0x80 | true => Option/some(Nat/to_byte(c.code)) | false => Option/none() end;
 
-rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
+rec emit_continuations(acc: Bytes, codepoint: Nat, shift: Nat) -> Bytes =
     match shift == 0
     | true => acc
     | false =>
@@ -127,31 +101,32 @@ rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
         emit_continuations(x[..acc, Nat/to_byte(0x80 + group)], codepoint, Nat/div(shift, 0x40))
     end;
 
-pub let to_utf8(c : Char) -> Bytes =
+pub let to_utf8(c: Char) -> Bytes =
     let codepoint = c.code;
     choose
     | codepoint < 0x80 => x[Nat/to_byte(codepoint)]
     | codepoint < 0x800 => emit_continuations(x[Nat/to_byte(0xC0 + codepoint / 0x40)], codepoint, 1)
-    | codepoint < 0x10000 => emit_continuations(x[Nat/to_byte(0xE0 + codepoint / 0x1000)], codepoint, 0x40)
+    | codepoint < 0x10000 =>
+        emit_continuations(x[Nat/to_byte(0xE0 + codepoint / 0x1000)], codepoint, 0x40)
     | _ => emit_continuations(x[Nat/to_byte(0xF0 + codepoint / 0x40000)], codepoint, 0x1000)
     end;
 
 satisfy Eql(Char) {
     eql = eql,
-    neq(a, b) = Bool/not(eql(a, b))
+    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy Cmp(Char) {
     lt = lt,
     lte = lte,
     gt = gt,
-    gte = gte
+    gte = gte,
 }
 
 satisfy Show(Char) {
-    show(c) = Option/unwrap_or(Str/of_bytes(to_utf8(c)), "")
+    show(c) = Option/unwrap_or(Str/of_bytes(to_utf8(c)), ""),
 }
 
 satisfy Ord(Char) {
-    cmp = cmp
+    cmp = cmp,
 }

@@ -1,25 +1,17 @@
-pub induct Eq(@A : Type) : (A, A) -> pub Prop
-| refl(@z : A) : (z, z)
+pub induct Eq(@A: Type): (A, A) -> pub Prop
+| refl(@z: A): (z, z)
 end
 
 pub use Eq/*;
 
-pub let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
-    match p : (s, t, q) => Eq(t, s)
-    | refl(@z) => Eq/refl()
-    end;
+pub let sym(@A: Type, @x: A, @y: A, p: Eq(x, y)) -> Eq(y, x) =
+    match p: (s, t, q) => Eq(t, s) | refl(@z) => Eq/refl() end;
 
-pub let trans(@A : Type, @x : A, @y : A, @z : A, p : Eq(x, y), q : Eq(y, z)) -> Eq(x, z) =
-    match q
-    | refl(@w) => p
-    end;
+pub let trans(@A: Type, @x: A, @y: A, @z: A, p: Eq(x, y), q: Eq(y, z)) -> Eq(x, z) =
+    match q | refl(@w) => p end;
 
-pub let cong(@A : Type, @B : Type, @x : A, @y : A, f : (A) -> B, p : Eq(x, y)) -> Eq(f(x), f(y)) =
-    match p
-    | refl(@z) => Eq/refl()
-    end;
+pub let cong(@A: Type, @B: Type, @x: A, @y: A, f: (A) -> B, p: Eq(x, y)) -> Eq(f(x), f(y)) =
+    match p | refl(@z) => Eq/refl() end;
 
-pub let subst(@A : Type, @x : A, @y : A, P : (A) -> Type, p : Eq(x, y), v : P(x)) -> P(y) =
-    match p
-    | refl(@z) => v
-    end;
+pub let subst(@A: Type, @x: A, @y: A, P: (A) -> Type, p: Eq(x, y), v: P(x)) -> P(y) =
+    match p | refl(@z) => v end;

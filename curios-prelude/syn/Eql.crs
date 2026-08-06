@@ -1,12 +1,11 @@
 -- The equality concept `==` and `!=` dispatch through.
 --
 -- Both operators are ordinary methods here. `!=` is `neq` rather than a negation the compiler synthesizes around `eql`: an operator whose meaning is a projection of the witness is one the elaborator can type from this declaration alone, and a carrier with a native disequality instruction (`Nat`, `Int`, `Flt`) gets to name it instead of paying for an equality and a negation.
-
 use /std/{Bool};
 
-pub concept Eql(A : Type) : pub Type {
+pub concept Eql(A: Type): pub Type {
     eql(A, A) -> Bool,
-    neq(A, A) -> Bool
+    neq(A, A) -> Bool,
 }
 
 pub use Eql/*;

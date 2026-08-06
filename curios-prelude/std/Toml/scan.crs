@@ -1,25 +1,23 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
 
-let is_ws_byte(b : Byte) -> Bool =
+let is_ws_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    n == 0x20 || n == 0x09;
+    n == 0x20 || n == 0x9;
 
-pub let is_bare_byte(b : Byte) -> Bool =
+pub let is_bare_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    Nat/in_range(n, 0x41, 0x5A) || Nat/in_range(n, 0x61, 0x7A)
-        || Nat/in_range(n, 0x30, 0x39) || n == 0x2D || n == 0x5F;
+    Nat/in_range(n, 0x41, 0x5A) || Nat/in_range(n, 0x61, 0x7A) || Nat/in_range(n, 0x30, 0x39)
+        || n == 0x2D
+        || n == 0x5F;
 
-let is_comment_byte(b : Byte) -> Bool =
+let is_comment_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    n == 0x09 || Nat/in_range(n, 0x20, 0x7E) || n >= 0x80;
+    n == 0x9 || Nat/in_range(n, 0x20, 0x7E) || n >= 0x80;
 
-pub let byte_at_is(input : Bytes, i : Nat, pred : (Nat) -> Bool) -> Bool =
-    match Bytes/get(input, i)
-    | some(b) => pred(Byte/to_nat(b))
-    | none() => false
-    end;
+pub let byte_at_is(input: Bytes, i: Nat, pred: (Nat) -> Bool) -> Bool =
+    match Bytes/get(input, i) | some(b) => pred(Byte/to_nat(b)) | none() => false end;
 
-pub let hex_val(n : Nat) -> Option(Nat) =
+pub let hex_val(n: Nat) -> Option(Nat) =
     choose
     | Nat/in_range(n, 0x30, 0x39) => Option/some(n - 0x30)
     | Nat/in_range(n, 0x61, 0x66) => Option/some(n - 0x61 + 10)
@@ -27,27 +25,27 @@ pub let hex_val(n : Nat) -> Option(Nat) =
     | _ => Option/none()
     end;
 
-pub let ws : Parse({}) =
+pub let ws: Parse({}) =
     Parse/map(Parse/take_while(is_ws_byte), (_) => ());
 
-let comment : Parse({}) =
+let comment: Parse({}) =
     let _ = Parse/take_byte(0x23)!;
     Parse/map(Parse/take_while(is_comment_byte), (_) => ());
 
-pub let newline : Parse({}) =
+pub let newline: Parse({}) =
     Parse/or(
-        Parse/map(Parse/and(Parse/take_byte(0x0D), Parse/take_byte(0x0A)), (_) => ()),
-        Parse/map(Parse/take_byte(0x0A), (_) => ()));
+        Parse/map(Parse/and(Parse/take_byte(0xD), Parse/take_byte(0xA)), (_) => ()),
+        Parse/map(Parse/take_byte(0xA), (_) => ()));
 
-pub let trivia : Parse({}) =
+pub let trivia: Parse({}) =
     Parse/map(
         Parse/many0(
-            Parse/or(Parse/map(Parse/take_byte(0x20), (_) => ()),
-            Parse/or(Parse/map(Parse/take_byte(0x09), (_) => ()),
-            Parse/or(newline, comment)))),
+            Parse/or(
+                Parse/map(Parse/take_byte(0x20), (_) => ()),
+                Parse/or(Parse/map(Parse/take_byte(0x9), (_) => ()), Parse/or(newline, comment)))),
         (_) => ());
 
-pub let line_end : Parse({}) =
+pub let line_end: Parse({}) =
     let _ = ws!;
     let _ = Parse/or(comment, Parse/pure(()))!;
     Parse/or(newline, Parse/eof);

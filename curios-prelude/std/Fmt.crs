@@ -1,19 +1,19 @@
 use /std/{Bytes, Byte, Str, Nat, Show};
 
-pub induct Fmt : pub Type
+pub induct Fmt: pub Type
 | nil()
-| lit(piece : Str, rest : Fmt)
+| lit(piece: Str, rest: Fmt)
 | show(Fmt)
 end
 
-pub rec format_type_with(T : Type, f : Fmt) -> Type =
+pub rec format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
-    | show(rest) => (@A : Type, use Show(A), a : A) -> format_type_with(T, rest)
+    | show(rest) => (@A: Type, use Show(A), a: A) -> format_type_with(T, rest)
     end;
 
-let flush(bytes : Bytes, start : Nat, stop : Nat, rest : Fmt) -> Fmt =
+let flush(bytes: Bytes, start: Nat, stop: Nat, rest: Fmt) -> Fmt =
     match Str/of_bytes(Bytes/slice(bytes, start, stop))
     | some(piece) => Fmt/lit(piece, rest)
     | none() => Fmt/nil()
@@ -22,7 +22,7 @@ let flush(bytes : Bytes, start : Nat, stop : Nat, rest : Fmt) -> Fmt =
 -- These three recur on `pos + 1` and `pos + 2` with `bytes` fixed, so nothing about their arguments gets structurally smaller and no size-change checker can accept them. `parse` feeds `format_type_with(Str, parse(s))`, the result type of `render` and `print`, which puts them in a *type* position — and everything a type reaches has to be total, or type formation may not terminate. The descending `fuel` is what supplies the decrease.
 --
 -- Each step either advances `pos` or hands off at the same `pos` (`parse_at` to `parse_lit_at` to `parse_esc_at`), so three units per byte plus a constant is a bound the parse cannot reach; the `0` arms are unreachable in practice and terminate the format rather than truncating a directive mid-way.
-rec parse_at(bytes : Bytes, pos : Nat, fuel : Nat) -> Fmt =
+rec parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => Fmt/nil()
     | rest + 1 =>
@@ -35,7 +35,7 @@ rec parse_at(bytes : Bytes, pos : Nat, fuel : Nat) -> Fmt =
             end
         end
     end
-and parse_lit_at(bytes : Bytes, start : Nat, pos : Nat, fuel : Nat) -> Fmt =
+and parse_lit_at(bytes: Bytes, start: Nat, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => flush(bytes, start, pos, Fmt/nil())
     | rest + 1 =>
@@ -49,7 +49,7 @@ and parse_lit_at(bytes : Bytes, start : Nat, pos : Nat, fuel : Nat) -> Fmt =
             end
         end
     end
-and parse_esc_at(bytes : Bytes, start : Nat, pos : Nat, fuel : Nat) -> Fmt =
+and parse_esc_at(bytes: Bytes, start: Nat, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => flush(bytes, start, pos, Fmt/nil())
     | rest + 1 =>
@@ -63,22 +63,22 @@ and parse_esc_at(bytes : Bytes, start : Nat, pos : Nat, fuel : Nat) -> Fmt =
         end
     end;
 
-pub let parse(s : Str) -> Fmt =
+pub let parse(s: Str) -> Fmt =
     let bytes = Str/to_bytes(s);
     parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
 
-rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_with(T, f) =
+rec go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =
     match f
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
     | show(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
     end;
 
-pub let render(s : Str) -> format_type_with(Str, parse(s)) =
+pub let render(s: Str) -> format_type_with(Str, parse(s)) =
     go_with(Str, (x) => x, parse(s), "");
 
-pub let print(s : Str) -> format_type_with({}, parse(s)) =
+pub let print(s: Str) -> format_type_with({}, parse(s)) =
     go_with({}, (x) => /std/print(x), parse(s), "");
 
-pub let print_err(s : Str) -> format_type_with({}, parse(s)) =
+pub let print_err(s: Str) -> format_type_with({}, parse(s)) =
     go_with({}, (x) => /std/print_err(x), parse(s), "");

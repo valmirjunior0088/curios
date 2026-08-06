@@ -1,23 +1,22 @@
 -- Addition of strictly-positive naturals. The magnitude adds as an ordinary `BigNat`; the work here is carrying the nonzero certificate through the same raw ripple-carry the `BigNat` ladder runs. `trim_non_zero` is the one helper a sibling needs — `mul` reduces its own certificate to an addition — so it is the only one this module exports.
-
 use /std/{Bool, Bits, Eq, False, True, BigNat, NonZero};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/NonZero/{is_cons, nz_trimmed, raw_non_zero, trim_head_non_zero, trim_head_true};
 
 -- the raw sum of a cons-headed left operand is cons-headed
-let raw_cons(x : Bits, y : Bits, c : Bool, ne : is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
-    match x : (r) => is_cons(BigNat/add/raw(r, y, c))
+let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
+    match x: (r) => is_cons(BigNat/add/raw(r, y, c))
     | b[] => False/absurd(ne)
     | b[xh, ..xt] =>
-        match y : (yy) => is_cons(BigNat/add/raw(b[xh, ..xt], yy, c))
+        match y: (yy) => is_cons(BigNat/add/raw(b[xh, ..xt], yy, c))
         | b[] => True/qed()
         | b[_, .._] => True/qed()
         end
     end;
 
 -- incrementing any suffix from an empty low half leaves something cons-headed
-rec carry_non_zero(x : Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
+rec carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
     match x
     | b[] => True/qed()
     | b[xh, ..xt] =>
@@ -27,8 +26,13 @@ rec carry_non_zero(x : Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
         end
     end;
 
-pub rec trim_non_zero(a : Bits, b : Bits, c : Bool,
-    tr : Eq(is_trimmed(a), true), ne : is_cons(a)) -> is_cons(trim(BigNat/add/raw(a, b, c))) =
+pub rec trim_non_zero(
+    a: Bits,
+    b: Bits,
+    c: Bool,
+    tr: Eq(is_trimmed(a), true),
+    ne: is_cons(a),
+) -> is_cons(trim(BigNat/add/raw(a, b, c))) =
     match a
     | b[] => False/absurd(ne)
     | b[ah, ..at] =>
@@ -43,11 +47,19 @@ pub rec trim_non_zero(a : Bits, b : Bits, c : Bool,
                     | true =>
                         match c
                         | true => trim_head_true(BigNat/add/raw(b[], bt, true))
-                        | false => trim_head_non_zero(false, BigNat/add/raw(b[], bt, true), carry_non_zero(bt))
+                        | false =>
+                            trim_head_non_zero(
+                                false,
+                                BigNat/add/raw(b[], bt, true),
+                                carry_non_zero(bt))
                         end
                     | false =>
                         match c
-                        | true => trim_head_non_zero(false, BigNat/add/raw(b[], bt, true), carry_non_zero(bt))
+                        | true =>
+                            trim_head_non_zero(
+                                false,
+                                BigNat/add/raw(b[], bt, true),
+                                carry_non_zero(bt))
                         | false => trim_head_true(BigNat/add/raw(b[], bt, false))
                         end
                     end
@@ -56,24 +68,39 @@ pub rec trim_non_zero(a : Bits, b : Bits, c : Bool,
             end
         | b[ath, ..att] =>
             match b
-            | b[] => trim_head_non_zero(xor3(ah, false, c), BigNat/add/raw(at, b[], maj3(ah, false, c)),
-                trim_non_zero(at, b[], maj3(ah, false, c), tr, True/qed()))
-            | b[bh, ..bt] => trim_head_non_zero(xor3(ah, bh, c), BigNat/add/raw(at, bt, maj3(ah, bh, c)),
-                trim_non_zero(at, bt, maj3(ah, bh, c), tr, True/qed()))
+            | b[] =>
+                trim_head_non_zero(
+                    xor3(ah, false, c),
+                    BigNat/add/raw(at, b[], maj3(ah, false, c)),
+                    trim_non_zero(at, b[], maj3(ah, false, c), tr, True/qed()))
+            | b[bh, ..bt] =>
+                trim_head_non_zero(
+                    xor3(ah, bh, c),
+                    BigNat/add/raw(at, bt, maj3(ah, bh, c)),
+                    trim_non_zero(at, bt, maj3(ah, bh, c), tr, True/qed()))
             end
         end
     end;
 
-pub let add(p : NonZero, q : NonZero) -> NonZero =
-    NonZero { magnitude = p.magnitude + q.magnitude,
-        non_zero = raw_non_zero(BigNat/add/raw(p.magnitude.rep, q.magnitude.rep, false),
-            BigNat/add/raw_trimmed(p.magnitude.rep, q.magnitude.rep, false, nz_trimmed(p), nz_trimmed(q)),
-            raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)) };
+pub let add(p: NonZero, q: NonZero) -> NonZero =
+    NonZero {
+        magnitude = p.magnitude + q.magnitude,
+        non_zero = raw_non_zero(
+            BigNat/add/raw(p.magnitude.rep, q.magnitude.rep, false),
+            BigNat/add/raw_trimmed(
+                p.magnitude.rep,
+                q.magnitude.rep,
+                false,
+                nz_trimmed(p),
+                nz_trimmed(q)),
+            raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)),
+    };
 
-pub let comm(p : NonZero, q : NonZero) -> Eq(add(p, q), add(q, p)) =
+pub let comm(p: NonZero, q: NonZero) -> Eq(add(p, q), add(q, p)) =
     NonZero/eq(add(p, q), add(q, p), BigNat/add/comm(p.magnitude, q.magnitude));
 
-pub let assoc(p : NonZero, q : NonZero, r : NonZero)
-    -> Eq(add(add(p, q), r), add(p, add(q, r))) =
-    NonZero/eq(add(add(p, q), r), add(p, add(q, r)),
+pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(add(add(p, q), r), add(p, add(q, r))) =
+    NonZero/eq(
+        add(add(p, q), r),
+        add(p, add(q, r)),
         BigNat/add/assoc(p.magnitude, q.magnitude, r.magnitude));

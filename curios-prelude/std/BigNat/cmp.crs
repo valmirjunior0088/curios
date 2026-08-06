@@ -3,13 +3,9 @@ use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, eq};
 
-pub rec raw(x : Bits, y : Bits) -> Order =
+pub rec raw(x: Bits, y: Bits) -> Order =
     match x
-    | b[] =>
-        match y
-        | b[] => Order/eq()
-        | b[_, .._] => Order/lt()
-        end
+    | b[] => match y | b[] => Order/eq() | b[_, .._] => Order/lt() end
     | b[xh, ..xt] =>
         match y
         | b[] => Order/gt()
@@ -26,30 +22,40 @@ pub rec raw(x : Bits, y : Bits) -> Order =
         end
     end;
 
-pub let cmp(a : BigNat, b : BigNat) -> Order =
+pub let cmp(a: BigNat, b: BigNat) -> Order =
     raw(a.rep, b.rep);
 
-pub let eql(a : BigNat, b : BigNat) -> Bool =
+pub let eql(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | eq() => true | _ => false end;
 
-pub let lt(a : BigNat, b : BigNat) -> Bool =
+pub let lt(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a : BigNat, b : BigNat) -> Bool =
+pub let lte(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
-pub let gt(a : BigNat, b : BigNat) -> Bool =
+pub let gt(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a : BigNat, b : BigNat) -> Bool =
+pub let gte(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
-let absorb_eq(o : Order, p : Eq(o, Order/eq()))
-    -> Eq(match o : (_) => Order | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()) =
-    Eq/subst((v : Order) => Eq(match v | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()), Eq/sym(p), Eq/refl());
+let absorb_eq(
+    o: Order,
+    p: Eq(o, Order/eq()),
+) -> Eq(
+    match o: (_) => Order | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end,
+    Order/eq()) =
+    Eq/subst(
+        (v: Order) =>
+            Eq(
+                match v | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end,
+                Order/eq()),
+        Eq/sym(p),
+        Eq/refl());
 
-pub rec raw_refl(x : Bits) -> Eq(raw(x, x), Order/eq()) =
-    match x : (a) => Eq(raw(a, a), Order/eq())
+pub rec raw_refl(x: Bits) -> Eq(raw(x, x), Order/eq()) =
+    match x: (a) => Eq(raw(a, a), Order/eq())
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -58,29 +64,35 @@ pub rec raw_refl(x : Bits) -> Eq(raw(x, x), Order/eq()) =
         end
     end;
 
-let sub_split(s : Order, @E : Order,
-    p : Eq(match s | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()))
-    -> Eq(s, Order/eq()) =
-    match s : (r) => Eq(r, Order/eq())
+let sub_split(
+    s: Order,
+    @E: Order,
+    p: Eq(match s | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()),
+) -> Eq(s, Order/eq()) =
+    match s: (r) => Eq(r, Order/eq())
     | eq() => Eq/refl()
     | lt() => False/absurd(lt_neq_eq(p))
     | gt() => False/absurd(gt_neq_eq(p))
     end;
 
-let cong_cmp_match(@s : Order, @t : Order, p : Eq(s, t), @E : Order)
-    -> Eq(match s : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
-          match t : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end) =
-    match p : (u, v, q) => Eq(match u : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, match v : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end)
+let cong_cmp_match(
+    @s: Order,
+    @t: Order,
+    p: Eq(s, t),
+    @E: Order,
+) -> Eq(
+    match s: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
+    match t: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end) =
+    match p: (u, v, q) =>
+        Eq(
+            match u: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
+            match v: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end)
     | refl(@z) => Eq/refl()
     end;
 
-pub rec raw_to_eq(x : Bits, y : Bits, p : Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
+pub rec raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
     match x
-    | b[] =>
-        match y
-        | b[] => Eq/refl()
-        | b[_, .._] => False/absurd(lt_neq_eq(p))
-        end
+    | b[] => match y | b[] => Eq/refl() | b[_, .._] => False/absurd(lt_neq_eq(p)) end
     | b[xh, ..xt] =>
         match y
         | b[] => False/absurd(gt_neq_eq(p))
@@ -90,38 +102,73 @@ pub rec raw_to_eq(x : Bits, y : Bits, p : Eq(raw(x, y), Order/eq())) -> Eq(x, y)
                 raw_to_eq(xt, yt, sub_split(raw(xt, yt), p)))
         end
     end
-and cmp_head_eq(xh : Bool, yh : Bool,
-    p : Eq(match xh | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end, Order/eq()))
-    -> Eq(xh, yh) =
+and cmp_head_eq(
+    xh: Bool,
+    yh: Bool,
+    p: Eq(
+        match xh
+        | true => match yh | true => Order/eq() | false => Order/gt() end
+        | false => match yh | true => Order/lt() | false => Order/eq() end
+        end,
+        Order/eq()),
+) -> Eq(xh, yh) =
     match xh
     | true => match yh | true => Eq/refl() | false => False/absurd(gt_neq_eq(p)) end
     | false => match yh | true => False/absurd(lt_neq_eq(p)) | false => Eq/refl() end
     end;
 
-let flip_heads(xh : Bool, yh : Bool)
-    -> Eq(match yh | true => match xh | true => Order/eq() | false => Order/gt() end | false => match xh | true => Order/lt() | false => Order/eq() end end,
-          Order/flip(match xh | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end)) =
+let flip_heads(
+    xh: Bool,
+    yh: Bool,
+) -> Eq(
+    match yh
+    | true => match xh | true => Order/eq() | false => Order/gt() end
+    | false => match xh | true => Order/lt() | false => Order/eq() end
+    end,
+    Order/flip(
+        match xh
+        | true => match yh | true => Order/eq() | false => Order/gt() end
+        | false => match yh | true => Order/lt() | false => Order/eq() end
+        end)) =
     match xh
     | true => match yh | true => Eq/refl() | false => Eq/refl() end
     | false => match yh | true => Eq/refl() | false => Eq/refl() end
     end;
 
-pub rec raw_flip(x : Bits, y : Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
-    match x : (a) => Eq(raw(y, a), Order/flip(raw(a, y)))
+pub rec raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
+    match x: (a) => Eq(raw(y, a), Order/flip(raw(a, y)))
     | b[] =>
-        match y : (b) => Eq(raw(b, b[]), Order/flip(raw(b[], b)))
+        match y: (b) => Eq(raw(b, b[]), Order/flip(raw(b[], b)))
         | b[] => Eq/refl()
         | b[_, .._] => Eq/refl()
         end
     | b[xh, ..xt] =>
-        match y : (b) => Eq(raw(b, b[xh, ..xt]), Order/flip(raw(b[xh, ..xt], b)))
+        match y: (b) => Eq(raw(b, b[xh, ..xt]), Order/flip(raw(b[xh, ..xt], b)))
         | b[] => Eq/refl()
         | b[yh, ..yt] =>
             Eq/trans(
                 cong_cmp_match(raw_flip(xt, yt)),
-                match raw(xt, yt) : (r) => Eq(
-                    match Order/flip(r) | eq() => match yh | true => match xh | true => Order/eq() | false => Order/gt() end | false => match xh | true => Order/lt() | false => Order/eq() end end | lt() => Order/lt() | gt() => Order/gt() end,
-                    Order/flip(match r | eq() => match xh | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end | lt() => Order/lt() | gt() => Order/gt() end))
+                match raw(xt, yt): (r) =>
+                    Eq(
+                        match Order/flip(r)
+                        | eq() =>
+                            match yh
+                            | true => match xh | true => Order/eq() | false => Order/gt() end
+                            | false => match xh | true => Order/lt() | false => Order/eq() end
+                            end
+                        | lt() => Order/lt()
+                        | gt() => Order/gt()
+                        end,
+                        Order/flip(
+                            match r
+                            | eq() =>
+                                match xh
+                                | true => match yh | true => Order/eq() | false => Order/gt() end
+                                | false => match yh | true => Order/lt() | false => Order/eq() end
+                                end
+                            | lt() => Order/lt()
+                            | gt() => Order/gt()
+                            end))
                 | eq() => flip_heads(xh, yh)
                 | lt() => Eq/refl()
                 | gt() => Eq/refl()
@@ -129,75 +176,140 @@ pub rec raw_flip(x : Bits, y : Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
         end
     end;
 
-let force_lt(@s : Order, @E : Order, p : Eq(s, Order/lt()))
-    -> Eq(match s : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
-    Eq/subst((v : Order) => Eq(match v | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), Eq/sym(p), Eq/refl());
+let force_lt(
+    @s: Order,
+    @E: Order,
+    p: Eq(s, Order/lt()),
+) -> Eq(
+    match s: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
+    Order/lt()) =
+    Eq/subst(
+        (v: Order) =>
+            Eq(match v | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()),
+        Eq/sym(p),
+        Eq/refl());
 
-let head_lt_yh(xh : Bool, yh : Bool,
-    p : Eq(match xh | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end, Order/lt()))
-    -> Eq(yh, true) =
+let head_lt_yh(
+    xh: Bool,
+    yh: Bool,
+    p: Eq(
+        match xh
+        | true => match yh | true => Order/eq() | false => Order/gt() end
+        | false => match yh | true => Order/lt() | false => Order/eq() end
+        end,
+        Order/lt()),
+) -> Eq(yh, true) =
     match xh
-    | true => match yh | true => False/absurd(eq_neq_lt(p)) | false => False/absurd(gt_neq_lt(p)) end
+    | true =>
+        match yh | true => False/absurd(eq_neq_lt(p)) | false => False/absurd(gt_neq_lt(p)) end
     | false => match yh | true => Eq/refl() | false => False/absurd(eq_neq_lt(p)) end
     end;
 
-let head_lt_xh(xh : Bool, yh : Bool,
-    p : Eq(match xh | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end, Order/lt()))
-    -> Eq(xh, false) =
+let head_lt_xh(
+    xh: Bool,
+    yh: Bool,
+    p: Eq(
+        match xh
+        | true => match yh | true => Order/eq() | false => Order/gt() end
+        | false => match yh | true => Order/lt() | false => Order/eq() end
+        end,
+        Order/lt()),
+) -> Eq(xh, false) =
     match xh
-    | true => match yh | true => False/absurd(eq_neq_lt(p)) | false => False/absurd(gt_neq_lt(p)) end
+    | true =>
+        match yh | true => False/absurd(eq_neq_lt(p)) | false => False/absurd(gt_neq_lt(p)) end
     | false => Eq/refl()
     end;
 
-let reduce_whole(@a : Bits, @b : Bits, @s : Order, e : Eq(raw(a, b), s), @E : Order,
-    p : Eq(match raw(a, b) | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()))
-    -> Eq(match s : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
-    Eq/subst((r : Order) => Eq(match r | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), e, p);
+let reduce_whole(
+    @a: Bits,
+    @b: Bits,
+    @s: Order,
+    e: Eq(raw(a, b), s),
+    @E: Order,
+    p: Eq(match raw(a, b) | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()),
+) -> Eq(
+    match s: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
+    Order/lt()) =
+    Eq/subst(
+        (r: Order) =>
+            Eq(match r | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()),
+        e,
+        p);
 
-let cons_lt(xh : Bool, zh : Bool, @xt : Bits, @zt : Bits, tail_lt : Eq(raw(xt, zt), Order/lt()))
-    -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
+let cons_lt(
+    xh: Bool,
+    zh: Bool,
+    @xt: Bits,
+    @zt: Bits,
+    tail_lt: Eq(raw(xt, zt), Order/lt()),
+) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
     match xh
     | true => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
     | false => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
     end;
 
-let trans_cons(@xh : Bool, @xt : Bits, @yh : Bool, @yt : Bits, @zh : Bool, @zt : Bits,
-    s1 : Order, e1 : Eq(raw(xt, yt), s1),
-    s2 : Order, e2 : Eq(raw(yt, zt), s2),
-    p : Eq(raw(b[xh, ..xt], b[yh, ..yt]), Order/lt()),
-    q : Eq(raw(b[yh, ..yt], b[zh, ..zt]), Order/lt()),
-    ih : (pl : Eq(raw(xt, yt), Order/lt())) -> (ql : Eq(raw(yt, zt), Order/lt())) -> Eq(raw(xt, zt), Order/lt()))
-    -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
-    match s1 : (r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
+let trans_cons(
+    @xh: Bool,
+    @xt: Bits,
+    @yh: Bool,
+    @yt: Bits,
+    @zh: Bool,
+    @zt: Bits,
+    s1: Order,
+    e1: Eq(raw(xt, yt), s1),
+    s2: Order,
+    e2: Eq(raw(yt, zt), s2),
+    p: Eq(raw(b[xh, ..xt], b[yh, ..yt]), Order/lt()),
+    q: Eq(raw(b[yh, ..yt], b[zh, ..zt]), Order/lt()),
+    ih: (pl: Eq(raw(xt, yt), Order/lt())) -> (ql: Eq(raw(yt, zt), Order/lt())) -> Eq(
+        raw(xt, zt),
+        Order/lt()),
+) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
+    match s1: (r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
     | gt() => False/absurd(gt_neq_lt(reduce_whole(e1, p)))
     | lt() =>
-        match s2 : (r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
+        match s2: (r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
         | gt() => False/absurd(gt_neq_lt(reduce_whole(e2, q)))
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
-        | eq() => cons_lt(xh, zh, Eq/subst((w : Bits) => Eq(raw(xt, w), Order/lt()), raw_to_eq(yt, zt, e2), e1))
+        | eq() =>
+            cons_lt(
+                xh,
+                zh,
+                Eq/subst((w: Bits) => Eq(raw(xt, w), Order/lt()), raw_to_eq(yt, zt, e2), e1))
         end
     | eq() =>
-        match s2 : (r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
+        match s2: (r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
         | gt() => False/absurd(gt_neq_lt(reduce_whole(e2, q)))
-        | lt() => cons_lt(xh, zh, Eq/subst((w : Bits) => Eq(raw(w, zt), Order/lt()), Eq/sym(raw_to_eq(xt, yt, e1)), e2))
-        | eq() => False/absurd(false_neq_true(Eq/trans(
-            Eq/sym(head_lt_xh(yh, zh, reduce_whole(e2, q))),
-            head_lt_yh(xh, yh, reduce_whole(e1, p)))))
+        | lt() =>
+            cons_lt(
+                xh,
+                zh,
+                Eq/subst(
+                    (w: Bits) => Eq(raw(w, zt), Order/lt()),
+                    Eq/sym(raw_to_eq(xt, yt, e1)),
+                    e2))
+        | eq() =>
+            False/absurd(
+                false_neq_true(
+                    Eq/trans(
+                        Eq/sym(head_lt_xh(yh, zh, reduce_whole(e2, q))),
+                        head_lt_yh(xh, yh, reduce_whole(e1, p)))))
         end
     end;
 
-pub rec raw_trans(x : Bits, y : Bits, z : Bits,
-    p : Eq(raw(x, y), Order/lt()), q : Eq(raw(y, z), Order/lt()))
-    -> Eq(raw(x, z), Order/lt()) =
+pub rec raw_trans(
+    x: Bits,
+    y: Bits,
+    z: Bits,
+    p: Eq(raw(x, y), Order/lt()),
+    q: Eq(raw(y, z), Order/lt()),
+) -> Eq(raw(x, z), Order/lt()) =
     match x
     | b[] =>
         match y
         | b[] => False/absurd(eq_neq_lt(p))
-        | b[yh, ..yt] =>
-            match z
-            | b[] => False/absurd(gt_neq_lt(q))
-            | b[_, .._] => Eq/refl()
-            end
+        | b[yh, ..yt] => match z | b[] => False/absurd(gt_neq_lt(q)) | b[_, .._] => Eq/refl() end
         end
     | b[xh, ..xt] =>
         match y
@@ -206,22 +318,32 @@ pub rec raw_trans(x : Bits, y : Bits, z : Bits,
             match z
             | b[] => False/absurd(gt_neq_lt(q))
             | b[zh, ..zt] =>
-                trans_cons(raw(xt, yt), Eq/refl(), raw(yt, zt), Eq/refl(), p, q,
+                trans_cons(
+                    raw(xt, yt),
+                    Eq/refl(),
+                    raw(yt, zt),
+                    Eq/refl(),
+                    p,
+                    q,
                     (pl) => (ql) => raw_trans(xt, yt, zt, pl, ql))
             end
         end
     end;
 
-pub let refl(a : BigNat) -> Eq(cmp(a, a), Order/eq()) =
+pub let refl(a: BigNat) -> Eq(cmp(a, a), Order/eq()) =
     raw_refl(a.rep);
 
-pub let to_eq(a : BigNat, b : BigNat, p : Eq(cmp(a, b), Order/eq())) -> Eq(a, b) =
+pub let to_eq(a: BigNat, b: BigNat, p: Eq(cmp(a, b), Order/eq())) -> Eq(a, b) =
     eq(a, b, raw_to_eq(a.rep, b.rep, p));
 
-pub let flip(a : BigNat, b : BigNat) -> Eq(cmp(b, a), Order/flip(cmp(a, b))) =
+pub let flip(a: BigNat, b: BigNat) -> Eq(cmp(b, a), Order/flip(cmp(a, b))) =
     raw_flip(a.rep, b.rep);
 
-pub let trans(a : BigNat, b : BigNat, c : BigNat,
-    p : Eq(cmp(a, b), Order/lt()), q : Eq(cmp(b, c), Order/lt())) -> Eq(cmp(a, c), Order/lt()) =
+pub let trans(
+    a: BigNat,
+    b: BigNat,
+    c: BigNat,
+    p: Eq(cmp(a, b), Order/lt()),
+    q: Eq(cmp(b, c), Order/lt()),
+) -> Eq(cmp(a, c), Order/lt()) =
     raw_trans(a.rep, b.rep, c.rep, p, q);
-

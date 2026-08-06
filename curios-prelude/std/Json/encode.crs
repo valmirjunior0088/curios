@@ -1,23 +1,23 @@
 use /std/{Bytes, Byte, Str, Bool, Char, Flt, Option, Lst};
 use /std/Json/{Json};
 
-let encode_num(n : Flt) -> Str =
+let encode_num(n: Flt) -> Str =
     let raw = Flt/to_str(n);
     match Option/unwrap_or(Str/get(raw, 0), '0') == '+'
     | true => Str/slice(raw, 1, Str/len(raw))
     | false => raw
     end;
 
-let escape_byte(byte : Byte) -> Bytes =
+let escape_byte(byte: Byte) -> Bytes =
     let n = Byte/to_nat(byte);
     match n
-    | 0x22 => Str/to_bytes("\\\"")
-    | 0x5C => Str/to_bytes("\\\\")
-    | 0x0A => Str/to_bytes("\\n")
-    | 0x0D => Str/to_bytes("\\r")
-    | 0x09 => Str/to_bytes("\\t")
-    | 0x08 => Str/to_bytes("\\b")
-    | 0x0C => Str/to_bytes("\\f")
+    | 34 => Str/to_bytes("\\\"")
+    | 92 => Str/to_bytes("\\\\")
+    | 10 => Str/to_bytes("\\n")
+    | 13 => Str/to_bytes("\\r")
+    | 9 => Str/to_bytes("\\t")
+    | 8 => Str/to_bytes("\\b")
+    | 12 => Str/to_bytes("\\f")
     | _ =>
         match n < 0x20
         | true =>
@@ -28,24 +28,26 @@ let escape_byte(byte : Byte) -> Bytes =
         end
     end;
 
-let encode_str(s : Str) -> Str =
-    let body =
-        Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
+let encode_str(s: Str) -> Str =
+    let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
 
-pub rec encode(v : Json) -> Str =
+pub rec encode(v: Json) -> Str =
     match v
     | null() => "null"
     | bool(b) => Bool/to_str(b)
     | num(n) => encode_num(n)
     | str(s) => encode_str(s)
-    | arr(xs) =>
-        Str/concat(Str/concat("[",
-            Str/join(",", Lst/map(xs, encode))), "]")
+    | arr(xs) => Str/concat(Str/concat("[", Str/join(",", Lst/map(xs, encode))), "]")
     | obj(ps) =>
-        Str/concat(Str/concat("{",
-            Str/join(",", Lst/map(
-                ps,
-                (pair : {Str, Json}) => Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),
+        Str/concat(
+            Str/concat(
+                "{",
+                Str/join(
+                    ",",
+                    Lst/map(
+                        ps,
+                        (pair: {Str, Json}) =>
+                            Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),
             "}")
     end;

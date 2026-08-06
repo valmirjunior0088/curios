@@ -1,50 +1,62 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
 use /std/Toml/{Toml, Seg, State, let Build};
 
-induct Act : Type
+induct Act: Type
 | act_table()
 | act_many()
 | act_value(Toml)
 end
 
-pub let build_empty : Build =
+pub let build_empty: Build =
     Build { root = Map/empty(), side = Map/empty(), scope = [] };
 
 -- Injective side-table key: tag, decimal name length, ':', name bytes, and for `at` a '#'-separated decimal element index closed by ';'.
-let seg_key(pre : Bytes, seg : Seg) -> Bytes =
+let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     match seg
     | plain(name) =>
         let nb = Str/to_bytes(name);
         x[..pre, \70, ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), \3a, ..nb]
     | at(name, index) =>
         let nb = Str/to_bytes(name);
-        x[..pre, \61, ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), \3a, ..nb, \23, ..Str/to_bytes(Nat/to_str(index)), \3b]
+        x[
+            ..pre,
+            \61,
+            ..Str/to_bytes(Nat/to_str(Bytes/len(nb))),
+            \3a,
+            ..nb,
+            \23,
+            ..Str/to_bytes(Nat/to_str(index)),
+            \3b]
     end;
 
-let seg_name(seg : Seg) -> Str =
-    match seg
-    | plain(name) => name
-    | at(name, _) => name
-    end;
+let seg_name(seg: Seg) -> Str =
+    match seg | plain(name) => name | at(name, _) => name end;
 
-let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : Act)
-    -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
+let walk_final(
+    m: Map(Toml),
+    side: Map(State),
+    pre: Bytes,
+    name: Str,
+    act: Act,
+) -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
     let kf = seg_key(pre, Seg/plain(name));
     match act
     | act_table() =>
         match Map/get(m, name)
         | none() =>
-            Result/success((
-                Map/insert(m, name, Toml/table(Map/empty())),
-                Map/insert(side, kf, State/header()),
-                [Seg/plain(name)]))
+            Result/success(
+                (
+                    Map/insert(m, name, Toml/table(Map/empty())),
+                    Map/insert(side, kf, State/header()),
+                    [Seg/plain(name)]))
         | some(existing) =>
             match existing
             | table(_) =>
                 match Map/get(side, kf)
                 | some(st) =>
                     match st
-                    | implicit() => Result/success((m, Map/insert(side, kf, State/header()), [Seg/plain(name)]))
+                    | implicit() =>
+                        Result/success((m, Map/insert(side, kf, State/header()), [Seg/plain(name)]))
                     | header() => Result/failure("table defined more than once")
                     | dotted() => Result/failure("cannot redefine a table created by dotted keys")
                     | _ => Result/failure("cannot extend an inline table")
@@ -58,10 +70,11 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
     | act_many() =>
         match Map/get(m, name)
         | none() =>
-            Result/success((
-                Map/insert(m, name, Toml/arr([Toml/table(Map/empty())])),
-                Map/insert(side, kf, State/many()),
-                [Seg/at(name, 0)]))
+            Result/success(
+                (
+                    Map/insert(m, name, Toml/arr([Toml/table(Map/empty())])),
+                    Map/insert(side, kf, State/many()),
+                    [Seg/at(name, 0)]))
         | some(existing) =>
             match existing
             | arr(items) =>
@@ -69,10 +82,11 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
                 | some(st) =>
                     match st
                     | many() =>
-                        Result/success((
-                            Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
-                            side,
-                            [Seg/at(name, Lst/len(items))]))
+                        Result/success(
+                            (
+                                Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
+                                side,
+                                [Seg/at(name, Lst/len(items))]))
                     | _ => Result/failure("cannot append to a static array")
                     end
                 | none() => Result/failure("cannot append to a static array")
@@ -84,19 +98,22 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
     | act_value(v) =>
         match Map/get(m, name)
         | none() =>
-            let side2 : Map(State) =
-                match v
-                | table(_) => Map/insert(side, kf, State/inline())
-                | _ => side
-                end;
+            let side2: Map(State) =
+                match v | table(_) => Map/insert(side, kf, State/inline()) | _ => side end;
             Result/success((Map/insert(m, name, v), side2, [Seg/plain(name)]))
         | some(_) => Result/failure("duplicate key")
         end
     end;
 
 -- Resolve a segment path against the root, rebuilding the map spine persistently and threading side-table updates. The first `unchecked` segments are the already-validated scope prefix and are traversed without construction checks.
-rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), unchecked : Nat, act : Act)
-    -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
+rec walk(
+    m: Map(Toml),
+    side: Map(State),
+    pre: Bytes,
+    segs: Lst(Seg),
+    unchecked: Nat,
+    act: Act,
+) -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
     match segs
     | [] => Result/failure("empty key path")
     | [seg, ..rest] =>
@@ -113,7 +130,8 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                         | table(inner) =>
                             match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
                             | success((inner2, side2, res)) =>
-                                Result/success((Map/insert(m, name, Toml/table(inner2)), side2, [seg, ..res]))
+                                Result/success(
+                                    (Map/insert(m, name, Toml/table(inner2)), side2, [seg, ..res]))
                             | failure(msg) => Result/failure(msg)
                             end
                         | _ => Result/failure("scope is not a table")
@@ -129,14 +147,24 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                             | some(elem) =>
                                 match elem
                                 | table(inner) =>
-                                    match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
+                                    match walk(
+                                        inner,
+                                        side,
+                                        seg_key(pre, seg),
+                                        rest,
+                                        unchecked - 1,
+                                        act)
                                     | success((inner2, side2, res)) =>
-                                        let items2 = [
-                                            ..Lst/slice(items, 0, index),
-                                            Toml/table(inner2),
-                                            ..Lst/slice(items, index + 1, Lst/len(items)),
-                                        ];
-                                        Result/success((Map/insert(m, name, Toml/arr(items2)), side2, [seg, ..res]))
+                                        let items2 =
+                                            [
+                                                ..Lst/slice(items, 0, index),
+                                                Toml/table(inner2),
+                                                ..Lst/slice(items, index + 1, Lst/len(items))];
+                                        Result/success(
+                                            (
+                                                Map/insert(m, name, Toml/arr(items2)),
+                                                side2,
+                                                [seg, ..res]))
                                     | failure(msg) => Result/failure(msg)
                                     end
                                 | _ => Result/failure("scope element is not a table")
@@ -153,20 +181,21 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                 let kp = seg_key(pre, Seg/plain(name));
                 match Map/get(m, name)
                 | none() =>
-                    let created : State =
-                        match act
-                        | act_value(_) => State/dotted()
-                        | _ => State/implicit()
-                        end;
+                    let created: State =
+                        match act | act_value(_) => State/dotted() | _ => State/implicit() end;
                     match walk(Map/empty(), Map/insert(side, kp, created), kp, rest, 0, act)
                     | success((inner2, side2, res)) =>
-                        Result/success((Map/insert(m, name, Toml/table(inner2)), side2, [Seg/plain(name), ..res]))
+                        Result/success(
+                            (
+                                Map/insert(m, name, Toml/table(inner2)),
+                                side2,
+                                [Seg/plain(name), ..res]))
                     | failure(msg) => Result/failure(msg)
                     end
                 | some(existing) =>
                     match existing
                     | table(inner) =>
-                        let permitted : Result({}, Str) =
+                        let permitted: Result({}, Str) =
                             match Map/get(side, kp)
                             | some(st) =>
                                 match act
@@ -174,13 +203,17 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                                     match st
                                     | dotted() => Result/success(())
                                     | inline() => Result/failure("cannot extend an inline table")
-                                    | _ => Result/failure("cannot extend a table defined elsewhere with dotted keys")
+                                    | _ =>
+                                        Result/failure(
+                                            "cannot extend a table defined elsewhere with dotted keys")
                                     end
                                 | _ =>
                                     match st
                                     | header() => Result/success(())
                                     | implicit() => Result/success(())
-                                    | dotted() => Result/failure("cannot extend a table created by dotted keys")
+                                    | dotted() =>
+                                        Result/failure(
+                                            "cannot extend a table created by dotted keys")
                                     | _ => Result/failure("cannot extend an inline table")
                                     end
                                 end
@@ -191,24 +224,25 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                         | success(_) =>
                             match walk(inner, side, kp, rest, 0, act)
                             | success((inner2, side2, res)) =>
-                                Result/success((Map/insert(m, name, Toml/table(inner2)), side2, [Seg/plain(name), ..res]))
+                                Result/success(
+                                    (
+                                        Map/insert(m, name, Toml/table(inner2)),
+                                        side2,
+                                        [Seg/plain(name), ..res]))
                             | failure(msg) => Result/failure(msg)
                             end
                         end
                     | arr(items) =>
-                        let is_many : Bool =
+                        let is_many: Bool =
                             match Map/get(side, kp)
-                            | some(st) =>
-                                match st
-                                | many() => true
-                                | _ => false
-                                end
+                            | some(st) => match st | many() => true | _ => false end
                             | none() => false
                             end;
                         match is_many
                         | true =>
                             match act
-                            | act_value(_) => Result/failure("cannot extend an array of tables with dotted keys")
+                            | act_value(_) =>
+                                Result/failure("cannot extend an array of tables with dotted keys")
                             | _ =>
                                 let index = Lst/len(items) - 1;
                                 let seg2 = Seg/at(name, index);
@@ -218,11 +252,13 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                                     | table(inner) =>
                                         match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
                                         | success((inner2, side2, res)) =>
-                                            let items2 = [
-                                                ..Lst/slice(items, 0, index),
-                                                Toml/table(inner2),
-                                            ];
-                                            Result/success((Map/insert(m, name, Toml/arr(items2)), side2, [seg2, ..res]))
+                                            let items2 =
+                                                [..Lst/slice(items, 0, index), Toml/table(inner2)];
+                                            Result/success(
+                                                (
+                                                    Map/insert(m, name, Toml/arr(items2)),
+                                                    side2,
+                                                    [seg2, ..res]))
                                         | failure(msg) => Result/failure(msg)
                                         end
                                     | _ => Result/failure("array element is not a table")
@@ -239,32 +275,37 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
         end
     end;
 
-let plains(names : Lst(Str)) -> Lst(Seg) =
+let plains(names: Lst(Str)) -> Lst(Seg) =
     Lst/map(names, (n) => Seg/plain(n));
 
-pub let apply_assign(b : Build, path : Lst(Str), v : Toml) -> Result(Build, Str) =
+pub let apply_assign(b: Build, path: Lst(Str), v: Toml) -> Result(Build, Str) =
     match walk(b.root, b.side, x[], [..b.scope, ..plains(path)], Lst/len(b.scope), Act/act_value(v))
-    | success((root2, side2, _)) => Result/success(Build { root = root2, side = side2, scope = b.scope })
+    | success((root2, side2, _)) =>
+        Result/success(Build { root = root2, side = side2, scope = b.scope })
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let apply_header(b : Build, path : Lst(Str)) -> Result(Build, Str) =
+pub let apply_header(b: Build, path: Lst(Str)) -> Result(Build, Str) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_table())
-    | success((root2, side2, resolved)) => Result/success(Build { root = root2, side = side2, scope = resolved })
+    | success((root2, side2, resolved)) =>
+        Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let apply_aot(b : Build, path : Lst(Str)) -> Result(Build, Str) =
+pub let apply_aot(b: Build, path: Lst(Str)) -> Result(Build, Str) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_many())
-    | success((root2, side2, resolved)) => Result/success(Build { root = root2, side = side2, scope = resolved })
+    | success((root2, side2, resolved)) =>
+        Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(msg) => Result/failure(msg)
     end;
 
 -- Inline tables reuse the same construction rules, scoped to the literal.
-pub let inline_fold(pairs : Lst({Lst(Str), Toml})) -> Result(Map(Toml), Str) =
-    let start : Result(Build, Str) = Result/success(build_empty);
-    match Lst/fold(pairs, start, (pair, acc) =>
-        Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))
+pub let inline_fold(pairs: Lst({Lst(Str), Toml})) -> Result(Map(Toml), Str) =
+    let start: Result(Build, Str) = Result/success(build_empty);
+    match Lst/fold(
+        pairs,
+        start,
+        (pair, acc) => Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))
     | success(b) => Result/success(b.root)
     | failure(msg) => Result/failure(msg)
     end;

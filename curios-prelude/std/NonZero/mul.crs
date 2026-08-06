@@ -1,13 +1,17 @@
 -- Multiplication of strictly-positive naturals. The certificate recurses on the left operand's bits: a set bit reduces the goal to `add`'s transport lemma, a clear bit to a shift of the recursive result.
-
 use /std/{Bool, Bits, Eq, False, True, BigNat, NonZero};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim};
 use /std/NonZero/{is_cons, nz_trimmed, trim_head_non_zero, add};
 
-rec raw_trim_cons(p : Bits, q : Bits,
-    tp : Eq(is_trimmed(p), true), np : is_cons(p),
-    tq : Eq(is_trimmed(q), true), nq : is_cons(q)) -> is_cons(trim(BigNat/mul/raw(p, q))) =
+rec raw_trim_cons(
+    p: Bits,
+    q: Bits,
+    tp: Eq(is_trimmed(p), true),
+    np: is_cons(p),
+    tq: Eq(is_trimmed(q), true),
+    nq: is_cons(q),
+) -> is_cons(trim(BigNat/mul/raw(p, q))) =
     match p
     | b[] => False/absurd(np)
     | b[ph, ..pt] =>
@@ -16,27 +20,42 @@ rec raw_trim_cons(p : Bits, q : Bits,
         | false =>
             match pt
             | b[] => False/absurd(false_neq_true(tp))
-            | b[_, .._] => trim_head_non_zero(false, BigNat/mul/raw(pt, q),
-                raw_trim_cons(pt, q, tp, True/qed(), tq, nq))
+            | b[_, .._] =>
+                trim_head_non_zero(
+                    false,
+                    BigNat/mul/raw(pt, q),
+                    raw_trim_cons(pt, q, tp, True/qed(), tq, nq))
             end
         end
     end;
 
-pub let mul(p : NonZero, q : NonZero) -> NonZero =
-    NonZero { magnitude = p.magnitude * q.magnitude,
-        non_zero = raw_trim_cons(p.magnitude.rep, q.magnitude.rep,
-            nz_trimmed(p), p.non_zero, nz_trimmed(q), q.non_zero) };
+pub let mul(p: NonZero, q: NonZero) -> NonZero =
+    NonZero {
+        magnitude = p.magnitude * q.magnitude,
+        non_zero = raw_trim_cons(
+            p.magnitude.rep,
+            q.magnitude.rep,
+            nz_trimmed(p),
+            p.non_zero,
+            nz_trimmed(q),
+            q.non_zero),
+    };
 
-pub let comm(p : NonZero, q : NonZero) -> Eq(mul(p, q), mul(q, p)) =
+pub let comm(p: NonZero, q: NonZero) -> Eq(mul(p, q), mul(q, p)) =
     NonZero/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.magnitude, q.magnitude));
 
-pub let assoc(p : NonZero, q : NonZero, r : NonZero)
-    -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
-    NonZero/eq(mul(mul(p, q), r), mul(p, mul(q, r)),
+pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
+    NonZero/eq(
+        mul(mul(p, q), r),
+        mul(p, mul(q, r)),
         BigNat/mul/assoc(p.magnitude, q.magnitude, r.magnitude));
 
-pub let distrib_l(p : NonZero, q : NonZero, r : NonZero)
-    -> Eq(mul(p, add(q, r)), add(mul(p, q), mul(p, r))) =
-    NonZero/eq(mul(p, add(q, r)),
+pub let distrib_l(
+    p: NonZero,
+    q: NonZero,
+    r: NonZero,
+) -> Eq(mul(p, add(q, r)), add(mul(p, q), mul(p, r))) =
+    NonZero/eq(
+        mul(p, add(q, r)),
         add(mul(p, q), mul(p, r)),
         BigNat/mul/distrib_l(p.magnitude, q.magnitude, r.magnitude));

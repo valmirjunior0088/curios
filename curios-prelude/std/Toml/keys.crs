@@ -2,34 +2,32 @@ use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result,
 use /std/Toml/scan/{is_bare_byte, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 
-let key_bare : Parse(Str) =
+let key_bare: Parse(Str) =
     Parse {
-        run(input, pos) =
-            match Parse/take_while(is_bare_byte).run(input, pos)
-            | success((next, chunk)) =>
-                match Bytes/len(chunk) == 0
-                | true => Result/failure("expected key")
-                | false =>
-                    match Str/of_bytes(chunk)
-                    | some(s) => Result/success((next, s))
-                    | none() => Result/failure("expected key")
-                    end
+        run(input, pos) = match Parse/take_while(is_bare_byte).run(input, pos)
+        | success((next, chunk)) =>
+            match Bytes/len(chunk) == 0
+            | true => Result/failure("expected key")
+            | false =>
+                match Str/of_bytes(chunk)
+                | some(s) => Result/success((next, s))
+                | none() => Result/failure("expected key")
                 end
-            | failure(msg) => Result/failure(msg)
             end
+        | failure(msg) => Result/failure(msg)
+        end,
     };
 
-pub let key_part : Parse(Str) =
+pub let key_part: Parse(Str) =
     Parse/or(key_bare, Parse/or(str_basic, str_literal));
 
-let dot_part : Parse(Str) =
+let dot_part: Parse(Str) =
     let _ = ws!;
     let _ = Parse/take_byte(0x2E)!;
     let _ = ws!;
     key_part;
 
-pub let key_dotted : Parse(Lst(Str)) =
+pub let key_dotted: Parse(Lst(Str)) =
     let first = key_part!;
     let rest = Parse/many0(dot_part)!;
     Parse/pure([first, ..rest]);
-

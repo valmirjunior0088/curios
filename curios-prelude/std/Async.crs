@@ -8,89 +8,86 @@ pub use Waker/{let Waker};
 mod Future;
 pub use Future/{let Future};
 
-struct Token : Type {
+struct Token: Type {
     Cell(Bool),
 }
 
-let cancel_token(t : Token) -> {} =
+let cancel_token(t: Token) -> {} =
     Cell/set(t.0, true);
 
-let is_cancelled(t : Token) -> Bool =
+let is_cancelled(t: Token) -> Bool =
     Cell/get(t.0);
 
-struct Guard : Type {
-    handle : Handle,
-    release : () -> {},
+struct Guard: Type {
+    handle: Handle,
+    release: () -> {},
 }
 
-induct Pause : Type
-| wait(handle : Handle, interest : Nat)
+induct Pause: Type
+| wait(handle: Handle, interest: Nat)
 | sleep(Duration)
-| fork(child : () -> Async({}), token : Token)
+| fork(child: () -> Async({}), token: Token)
 | park((Waker) -> {})
-| acquire(handle : Handle, release : () -> {})
+| acquire(handle: Handle, release: () -> {})
 | release(Handle)
 | defer()
 | yield_now()
-pub and Async(A : Type) : Type
+pub and Async(A: Type): Type
 | done(A)
-| step(pause : Pause, next : () -> Async(A))
+| step(pause: Pause, next: () -> Async(A))
 end
 
-pub let Fiber : Type =
+pub let Fiber: Type =
     () -> Async({});
 
-pub let pure(@A : Type, a : A) -> Async(A) =
+pub let pure(@A: Type, a: A) -> Async(A) =
     Async/done(a);
 
-pub rec bind(@A : Type, @B : Type, m : Async(A), f : (A) -> Async(B)) -> Async(B) =
-    match m
-    | done(a) => f(a)
-    | step(p, k) => Async/step(p, () => bind(k(), f))
-    end;
+pub rec bind(@A: Type, @B: Type, m: Async(A), f: (A) -> Async(B)) -> Async(B) =
+    match m | done(a) => f(a) | step(p, k) => Async/step(p, () => bind(k(), f)) end;
 
-pub let map(@A : Type, @B : Type, m : Async(A), f : (A) -> B) -> Async(B) =
+pub let map(@A: Type, @B: Type, m: Async(A), f: (A) -> B) -> Async(B) =
     bind(m, (a) => pure(f(a)));
 
-let fork_with(child : Fiber, t : Token) -> Async({}) =
+let fork_with(child: Fiber, t: Token) -> Async({}) =
     Async/step(Pause/fork(child, t), () => pure(()));
 
-pub let defer(@A : Type, body : () -> Async(A)) -> Async(A) =
+pub let defer(@A: Type, body: () -> Async(A)) -> Async(A) =
     Async/step(Pause/defer(), body);
 
-pub let wait(h : Handle, ev : Nat) -> Async({}) =
+pub let wait(h: Handle, ev: Nat) -> Async({}) =
     Async/step(Pause/wait(h, ev), () => pure(()));
 
-pub let sleep(d : Duration) -> Async({}) =
+pub let sleep(d: Duration) -> Async({}) =
     Async/step(Pause/sleep(d), () => pure(()));
 
-pub let park(register : (Waker) -> {}) -> Async({}) =
+pub let park(register: (Waker) -> {}) -> Async({}) =
     Async/step(Pause/park(register), () => pure(()));
 
-pub let yield_now : Async({}) =
+pub let yield_now: Async({}) =
     Async/step(Pause/yield_now(), () => pure(()));
 
-pub let acquire(h : Handle, fin : () -> {}) -> Async({}) =
+pub let acquire(h: Handle, fin: () -> {}) -> Async({}) =
     Async/step(Pause/acquire(h, fin), () => pure(()));
 
-pub let release(h : Handle) -> Async({}) =
+pub let release(h: Handle) -> Async({}) =
     Async/step(Pause/release(h), () => pure(()));
 
-pub let using(@A : Type, h : Handle, fin : () -> {}, body : Async(A)) -> Async(A) =
+pub let using(@A: Type, h: Handle, fin: () -> {}, body: Async(A)) -> Async(A) =
     bind(acquire(h, fin), (_) => bind(body, (a) => bind(release(h), (_) => pure(a))));
 
-pub let go(body : Fiber) -> Async({}) =
+pub let go(body: Fiber) -> Async({}) =
     defer(() => fork_with(body, Token { Cell/new(false) }));
 
 -- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and the next read stalls the whole single-threaded scheduler, so the status is reported rather than dropped.
-pub let nonblocking(h : Handle) -> Result({}, Handle/Error) =
+pub let nonblocking(h: Handle) -> Result({}, Handle/Error) =
     let status = /sys/set_nonblocking(h, true);
     match status == /sys/Status/ok
     | true => Result/success(())
     | false => Result/failure(Handle/error_of(status))
     end;
 
-pub let read(h : Handle, n : Nat) -> Async(Handle/Read) =
+pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
     match nonblocking(h)
     | failure(e) => pure(Handle/Read/error(e))
     | success(_) =>
@@ -104,16 +101,15 @@ pub let read(h : Handle, n : Nat) -> Async(Handle/Read) =
                     | r.status == /sys/Status/eof => pure(Handle/Read/eof())
                     | r.status == /sys/Status/ok => pure(Handle/Read/chunk(r.bytes))
                     | _ => pure(Handle/Read/error(Handle/error_of(r.status)))
-                    end,
-            );
+                    end);
         go()
     end;
 
-pub let write(h : Handle, b : Bytes) -> Async(Result({}, Handle/Error)) =
+pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
     match nonblocking(h)
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
-        rec go(rest : Bytes) -> Async(Result({}, Handle/Error)) =
+        rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
             defer(
                 () =>
                     let r = /sys/write(h, rest);
@@ -124,15 +120,13 @@ pub let write(h : Handle, b : Bytes) -> Async(Result({}, Handle/Error)) =
                     | r.written < Bytes/len(rest) =>
                         bind(
                             wait(h, /sys/Poll/write),
-                            (_) => go(Bytes/slice(rest, r.written, Bytes/len(rest))),
-                        )
+                            (_) => go(Bytes/slice(rest, r.written, Bytes/len(rest))))
                     | _ => pure(Result/success(()))
-                    end,
-            );
+                    end);
         go(b)
     end;
 
-pub let accept(l : Handle) -> Async(Result(Handle, Handle/Error)) =
+pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
     match nonblocking(l)
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
@@ -145,14 +139,13 @@ pub let accept(l : Handle) -> Async(Result(Handle, Handle/Error)) =
                         bind(wait(l, /sys/Poll/read), (_) => go())
                     | r.status == /sys/Status/ok => pure(Result/success(r.handle))
                     | _ => pure(Result/failure(Handle/error_of(r.status)))
-                    end,
-            );
+                    end);
         go()
     end;
 
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
-pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =
-    rec go(acc : Bytes) -> Async(Result(Bytes, Handle/Error)) =
+pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =
+    rec go(acc: Bytes) -> Async(Result(Bytes, Handle/Error)) =
         bind(
             read(4096),
             (r) =>
@@ -160,45 +153,44 @@ pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/
                 | chunk(bytes) => go(x[..acc, ..bytes])
                 | eof() => pure(Result/success(acc))
                 | error(e) => pure(Result/failure(e))
-                end,
-        );
+                end);
     go(x[]);
 
-pub rec await(@A : Type, f : Future(A)) -> Async(A) =
+pub rec await(@A: Type, f: Future(A)) -> Async(A) =
     match Future/poll(f)
     | some(a) => pure(a)
     | none() => bind(park((w) => Future/register(f, w)), (_) => await(f))
     end;
 
-struct Job : Type {
-    resume : Fiber,
-    token : Token,
-    guards : Lst(Guard),
+struct Job: Type {
+    resume: Fiber,
+    token: Token,
+    guards: Lst(Guard),
 }
 
-let Slot : Type =
+let Slot: Type =
     Cell(Option(Job));
 
-struct Parked : Type {
-    handle : Handle,
-    interest : Nat,
-    resume : Fiber,
-    token : Token,
-    guards : Lst(Guard),
+struct Parked: Type {
+    handle: Handle,
+    interest: Nat,
+    resume: Fiber,
+    token: Token,
+    guards: Lst(Guard),
 }
 
-struct Sleeper : Type {
-    due : Duration,
-    resume : Fiber,
-    token : Token,
-    guards : Lst(Guard),
+struct Sleeper: Type {
+    due: Duration,
+    resume: Fiber,
+    token: Token,
+    guards: Lst(Guard),
 }
 
-let run_guards(gs : Lst(Guard)) -> {} =
+let run_guards(gs: Lst(Guard)) -> {} =
     Lst/each(gs, (g) => g.release());
 
-let release_guard(h : Handle, gs : Lst(Guard)) -> Lst(Guard) =
-    rec each(rest : Lst(Guard)) -> Lst(Guard) =
+let release_guard(h: Handle, gs: Lst(Guard)) -> Lst(Guard) =
+    rec each(rest: Lst(Guard)) -> Lst(Guard) =
         match rest
         | [] => []
         | [g, ..more] =>
@@ -211,17 +203,17 @@ let release_guard(h : Handle, gs : Lst(Guard)) -> Lst(Guard) =
         end;
     each(gs);
 
-let drain_jobs(js : Lst(Job)) -> {} =
+let drain_jobs(js: Lst(Job)) -> {} =
     Lst/each(js, (j) => run_guards(j.guards));
 
-let drain_parked(ps : Lst(Parked)) -> {} =
+let drain_parked(ps: Lst(Parked)) -> {} =
     Lst/each(ps, (p) => run_guards(p.guards));
 
-let drain_sleeping(ss : Lst(Sleeper)) -> {} =
+let drain_sleeping(ss: Lst(Sleeper)) -> {} =
     Lst/each(ss, (s) => run_guards(s.guards));
 
-let drain_slots(ss : Lst(Slot)) -> {} =
-    rec each(rest : Lst(Slot)) -> {} =
+let drain_slots(ss: Lst(Slot)) -> {} =
+    rec each(rest: Lst(Slot)) -> {} =
         match rest
         | [] => ()
         | [s, ..more] =>
@@ -234,8 +226,8 @@ let drain_slots(ss : Lst(Slot)) -> {} =
         end;
     each(ss);
 
-let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
-    rec each(rest : Lst(Slot)) -> Lst(Slot) =
+let sweep_parked(ss: Lst(Slot)) -> Lst(Slot) =
+    rec each(rest: Lst(Slot)) -> Lst(Slot) =
         match rest
         | [] => []
         | [s, ..more] =>
@@ -253,17 +245,19 @@ let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
         end;
     each(ss);
 
-let is_ready(results : Nat, interest : Nat) -> Bool =
+let is_ready(results: Nat, interest: Nat) -> Bool =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/Poll/err), /sys/Poll/hup)) > 0;
 
-let poll_ready(blocked : Lst(Parked), timeout : Int) -> { Lst(Job), Lst(Parked) } =
-    let handles = Lst/map(blocked, (p : Parked) => p.handle);
-    let events = Lst/map(blocked, (p : Parked) => p.interest);
+let poll_ready(blocked: Lst(Parked), timeout: Int) -> {Lst(Job), Lst(Parked)} =
+    let handles = Lst/map(blocked, (p: Parked) => p.handle);
+    let events = Lst/map(blocked, (p: Parked) => p.interest);
     let results = /sys/poll(handles, events, timeout);
-    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {
-        Lst(Job),
-        Lst(Parked),
-    } =
+    rec walk(
+        rest: Lst(Parked),
+        i: Nat,
+        woken: Lst(Job),
+        still: Lst(Parked),
+    ) -> {Lst(Job), Lst(Parked)} =
         match rest
         | [] => (woken, still)
         | [p, ..tail] =>
@@ -278,16 +272,15 @@ let poll_ready(blocked : Lst(Parked), timeout : Int) -> { Lst(Job), Lst(Parked) 
                         tail,
                         i + 1,
                         [Job { resume = p.resume, token = p.token, guards = p.guards }, ..woken],
-                        still,
-                    )
+                        still)
                 | false => walk(tail, i + 1, woken, [p, ..still])
                 end
             end
         end;
     walk(blocked, 0, [], []);
 
-let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
-    rec earliest(rest : Lst(Sleeper), best : Option(Duration)) -> Option(Duration) =
+let sleep_timeout(sleeping: Lst(Sleeper)) -> Int =
+    rec earliest(rest: Lst(Sleeper), best: Option(Duration)) -> Option(Duration) =
         match rest
         | [] => best
         | [s, ..more] =>
@@ -311,12 +304,9 @@ let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
         end
     end;
 
-let expire_sleepers(sleeping : Lst(Sleeper)) -> { Lst(Job), Lst(Sleeper) } =
+let expire_sleepers(sleeping: Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
     let now = Duration/now();
-    rec walk(rest : Lst(Sleeper), woken : Lst(Job), still : Lst(Sleeper)) -> {
-        Lst(Job),
-        Lst(Sleeper),
-    } =
+    rec walk(rest: Lst(Sleeper), woken: Lst(Job), still: Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
         match rest
         | [] => (woken, still)
         | [s, ..tail] =>
@@ -331,23 +321,22 @@ let expire_sleepers(sleeping : Lst(Sleeper)) -> { Lst(Job), Lst(Sleeper) } =
                     walk(
                         tail,
                         [Job { resume = s.resume, token = s.token, guards = s.guards }, ..woken],
-                        still,
-                    )
+                        still)
                 end
             end
         end;
     walk(sleeping, [], []);
 
 -- No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. Nominal and empty — it records that the fact occurred, and leaves room to carry a diagnostic later without changing how callers match.
-pub struct Deadlock : pub Type {}
+pub struct Deadlock: pub Type {}
 
-pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
+pub let block_on(@A: Type, root: Async(A)) -> Result(A, Deadlock) =
     let runq = Cell/new([]);
     let blocked = Cell/new([]);
     let sleeping = Cell/new([]);
     let parked = Cell/new([]);
     let result = Cell/new(Option/none(@A));
-    let enqueue(j : Job) -> {} = Cell/set(runq, [j, ..Cell/get(runq)]);
+    let enqueue(j: Job) -> {} = Cell/set(runq, [j, ..Cell/get(runq)]);
     let _ =
         enqueue(
             Job {
@@ -356,13 +345,11 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
                         root,
                         (a) =>
                             let _ = Cell/set(result, Option/some(a));
-                            pure(()),
-                    ),
+                            pure(())),
                 token = Token { Cell/new(false) },
                 guards = [],
-            },
-        );
-    rec serve(job : Job) -> {} =
+            });
+    rec serve(job: Job) -> {} =
         match is_cancelled(job.token)
         | true => run_guards(job.guards)
         | false =>
@@ -381,9 +368,7 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
                                 token = job.token,
                                 guards = job.guards,
                             },
-                            ..Cell/get(blocked),
-                        ],
-                    )
+                            ..Cell/get(blocked)])
                 | sleep(d) =>
                     Cell/set(
                         sleeping,
@@ -394,9 +379,7 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
                                 token = job.token,
                                 guards = job.guards,
                             },
-                            ..Cell/get(sleeping),
-                        ],
-                    )
+                            ..Cell/get(sleeping)])
                 | fork(child, ct) =>
                     let _ = enqueue(Job { ..job, resume = k });
                     enqueue(Job { resume = child, token = ct, guards = [] })
@@ -417,8 +400,7 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
                             ..job,
                             resume = k,
                             guards = [Guard { handle = h, release = fin }, ..job.guards],
-                        },
-                    )
+                        })
                 | release(h) =>
                     serve(Job { ..job, resume = k, guards = release_guard(h, job.guards) })
                 | defer() => serve(Job { ..job, resume = k })
@@ -461,7 +443,7 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
         end;
     drive();
 
-pub let run(main : Async({})) -> {} =
+pub let run(main: Async({})) -> {} =
     match block_on(main)
     | success(_) => ()
     | failure(_) =>
@@ -469,17 +451,17 @@ pub let run(main : Async({})) -> {} =
         /sys/exit(1)
     end;
 
-pub struct Task(A : Type) : Type {
-    result : Future(A),
-    token : Token,
+pub struct Task(A: Type): Type {
+    result: Future(A),
+    token: Token,
 }
 
-pub let spawn(@A : Type, body : () -> Async(A)) -> Async(Task(A)) =
+pub let spawn(@A: Type, body: () -> Async(A)) -> Async(Task(A)) =
     defer(
         () =>
             let f = Future/new();
             let t = Token { Cell/new(false) };
-            let task : Task(A) = Task { result = f, token = t };
+            let task: Task(A) = Task { result = f, token = t };
             bind(
                 fork_with(
                     () =>
@@ -487,25 +469,21 @@ pub let spawn(@A : Type, body : () -> Async(A)) -> Async(Task(A)) =
                             body(),
                             (a) =>
                                 let _ = Future/fulfill(f, a);
-                                pure(()),
-                        ),
-                    t,
-                ),
-                (_) => pure(task),
-            ),
-    );
+                                pure(())),
+                    t),
+                (_) => pure(task)));
 
-pub let join(@A : Type, task : Task(A)) -> Async(A) =
+pub let join(@A: Type, task: Task(A)) -> Async(A) =
     await(task.result);
 
-pub let cancel(@A : Type, task : Task(A)) -> {} =
+pub let cancel(@A: Type, task: Task(A)) -> {} =
     cancel_token(task.token);
 
-let cancel_all(ts : Lst(Token)) -> {} =
+let cancel_all(ts: Lst(Token)) -> {} =
     Lst/each(ts, cancel_token);
 
-pub let join_all(@A : Type, tasks : Lst(() -> Async(A))) -> Async(Lst(A)) =
-    rec go(i : Nat) -> Async(Lst(A)) =
+pub let join_all(@A: Type, tasks: Lst(() -> Async(A))) -> Async(Lst(A)) =
+    rec go(i: Nat) -> Async(Lst(A)) =
         match Nat/Lt/try(i, Lst/len(tasks))
         | none() => pure([])
         | some(ok) =>
@@ -516,11 +494,11 @@ pub let join_all(@A : Type, tasks : Lst(() -> Async(A))) -> Async(Lst(A)) =
         end;
     go(0);
 
-pub let select(@A : Type, tasks : Lst(() -> Async(A))) -> Async({ Nat, A }) =
+pub let select(@A: Type, tasks: Lst(() -> Async(A))) -> Async({Nat, A}) =
     defer(
         () =>
             let winner = Future/new();
-            rec arm(i : Nat) -> Async(Lst(Token)) =
+            rec arm(i: Nat) -> Async(Lst(Token)) =
                 match Nat/Lt/try(i, Lst/len(tasks))
                 | none() => pure([])
                 | some(ok) =>
@@ -532,30 +510,25 @@ pub let select(@A : Type, tasks : Lst(() -> Async(A))) -> Async({ Nat, A }) =
                                     Lst/at(tasks, i, ok)(),
                                     (a) =>
                                         let _ = Future/fulfill(winner, (i, a));
-                                        pure(()),
-                                ),
-                            t,
-                        )!;
+                                        pure(())),
+                            t)!;
                     let rest = arm(i + 1)!;
                     pure([t, ..rest])
                 end;
             let tokens = arm(0)!;
             let w = await(winner)!;
             let _ = cancel_all(tokens);
-            pure(w),
-    );
+            pure(w));
 
-pub let race(@A : Type, tasks : Lst(() -> Async(A))) -> Async(A) =
+pub let race(@A: Type, tasks: Lst(() -> Async(A))) -> Async(A) =
     bind(select(tasks), (w) => pure(w.1));
 
-pub let timeout(@A : Type, d : Duration, body : () -> Async(A)) -> Async(Option(A)) =
+pub let timeout(@A: Type, d: Duration, body: () -> Async(A)) -> Async(Option(A)) =
     map(
         select(
             @Option(A),
-            [() => map(body(), (a) => Option/some(a)), () => map(sleep(d), (_) => Option/none())],
-        ),
-        (w) => w.1,
-    );
+            [() => map(body(), (a) => Option/some(a)), () => map(sleep(d), (_) => Option/none())]),
+        (w) => w.1);
 
 satisfy Monad(Async) {
     pure = pure,

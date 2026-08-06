@@ -3,15 +3,11 @@ use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, view, zero};
 
-pub rec is_even(a : BigNat) -> Bool =
+pub rec is_even(a: BigNat) -> Bool =
     match view(a)
     | zero() => true
     | succ(low, _) => match low | true => false | false => true end
     end;
 
-pub let div2(a : BigNat) -> BigNat =
-    match view(a)
-    | zero() => zero
-    | succ(_, tail) => tail
-    end;
-
+pub let div2(a: BigNat) -> BigNat =
+    match view(a) | zero() => zero | succ(_, tail) => tail end;

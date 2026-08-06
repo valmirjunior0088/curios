@@ -12,31 +12,31 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
 
 -- ===================== data model =====================
-pub struct Date : pub Type {
-    year : Nat,
-    month : Nat,
-    day : Nat,
+pub struct Date: pub Type {
+    year: Nat,
+    month: Nat,
+    day: Nat,
 }
 
-pub struct Time : pub Type {
-    hour : Nat,
-    minute : Nat,
-    second : Nat,
-    nanosecond : Nat,
+pub struct Time: pub Type {
+    hour: Nat,
+    minute: Nat,
+    second: Nat,
+    nanosecond: Nat,
 }
 
-pub struct OffsetDateTime : pub Type {
-    date : Date,
-    time : Time,
-    offset_minutes : Int,
+pub struct OffsetDateTime: pub Type {
+    date: Date,
+    time: Time,
+    offset_minutes: Int,
 }
 
-pub struct LocalDateTime : pub Type {
-    date : Date,
-    time : Time,
+pub struct LocalDateTime: pub Type {
+    date: Date,
+    time: Time,
 }
 
-pub induct Toml : pub Type
+pub induct Toml: pub Type
 | str(Str)
 | int(Int)
 | flt(Flt)
@@ -52,13 +52,13 @@ end
 pub use Toml/*;
 
 -- Construction state for the semantic fold. Declared here, not in `Build`, because `Decode` folds statements into a `Build` and reads its root map: the representation has to be transparent across this subtree, and nowhere else. A resolved path segment: `at` carries the array-of-tables element index the segment addresses, so repeated `[[a]]` elements have distinct side-table keys.
-induct Seg : Type
+induct Seg: Type
 | plain(Str)
-| at(name : Str, index : Nat)
+| at(name: Str, index: Nat)
 end
 
 -- Construction metadata for a path in the side table. Plain values and static arrays get no entry: their presence in the root rejects duplicates, and the absence of `many()` is what seals a static array.
-induct State : Type
+induct State: Type
 | header()
 | implicit()
 | dotted()
@@ -66,10 +66,10 @@ induct State : Type
 | many()
 end
 
-struct Build : Type {
-    root : Map(Toml),
-    side : Map(State),
-    scope : Lst(Seg),
+struct Build: Type {
+    root: Map(Toml),
+    side: Map(State),
+    scope: Lst(Seg),
 }
 
 -- Every stage below is private: the scanners, escape tables, numeric ladders and table-construction rules are implementation, visible throughout this subtree and nowhere else. Only the two entry points are re-exported.

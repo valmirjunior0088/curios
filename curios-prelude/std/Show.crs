@@ -1,6 +1,6 @@
 use /std/{Str};
 
-pub concept Show(A : Type) : pub Type {
+pub concept Show(A: Type): pub Type {
     show(A) -> Str,
 }
 

@@ -1,11 +1,9 @@
-pub struct Waker : Type {
-    () -> {}
+pub struct Waker: Type {
+    () -> {},
 }
 
-pub let new(resume : () -> {}) -> Waker =
-    Waker {
-        resume
-    };
+pub let new(resume: () -> {}) -> Waker =
+    Waker { resume };
 
-pub let wake(w : Waker) -> {} =
+pub let wake(w: Waker) -> {} =
     w.0();

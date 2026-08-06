@@ -1,22 +1,22 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bool, Lst, Option, Monad};
 
-pub struct Parse(A : Type) : pub Type {
-    run(input : Bytes, pos : Nat) -> Result({ Nat, A }, Str),
+pub struct Parse(A: Type): pub Type {
+    run(input: Bytes, pos: Nat) -> Result({Nat, A}, Str),
 }
 
-pub let run(@A : Type, p : Parse(A), input : Bytes) -> Result(A, Str) =
+pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(A, Str) =
     match p.run(input, 0)
     | success((_, a)) => Result/success(a)
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let pure(@A : Type, a : A) -> Parse(A) =
+pub let pure(@A: Type, a: A) -> Parse(A) =
     Parse { run(input, pos) = Result/success((pos, a)) };
 
-pub let fail(@A : Type, msg : Str) -> Parse(A) =
+pub let fail(@A: Type, msg: Str) -> Parse(A) =
     Parse { run(input, pos) = Result/failure(msg) };
 
-pub let map(@A : Type, @B : Type, p : Parse(A), f : (A) -> B) -> Parse(B) =
+pub let map(@A: Type, @B: Type, p: Parse(A), f: (A) -> B) -> Parse(B) =
     Parse {
         run(input, pos) = match p.run(input, pos)
         | success((next, a)) => Result/success((next, f(a)))
@@ -24,7 +24,7 @@ pub let map(@A : Type, @B : Type, p : Parse(A), f : (A) -> B) -> Parse(B) =
         end,
     };
 
-pub let bind(@A : Type, @B : Type, p : Parse(A), f : (A) -> Parse(B)) -> Parse(B) =
+pub let bind(@A: Type, @B: Type, p: Parse(A), f: (A) -> Parse(B)) -> Parse(B) =
     Parse {
         run(input, pos) = match p.run(input, pos)
         | success((next, a)) => f(a).run(input, next)
@@ -32,7 +32,7 @@ pub let bind(@A : Type, @B : Type, p : Parse(A), f : (A) -> Parse(B)) -> Parse(B
         end,
     };
 
-pub let or(@A : Type, p : Parse(A), q : Parse(A)) -> Parse(A) =
+pub let or(@A: Type, p: Parse(A), q: Parse(A)) -> Parse(A) =
     Parse {
         run(input, pos) = match p.run(input, pos)
         | success(pair) => Result/success(pair)
@@ -40,7 +40,7 @@ pub let or(@A : Type, p : Parse(A), q : Parse(A)) -> Parse(A) =
         end,
     };
 
-pub let and(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse({ A, B }) =
+pub let and(@A: Type, @B: Type, p: Parse(A), q: Parse(B)) -> Parse({A, B}) =
     Parse {
         run(input, pos) = match p.run(input, pos)
         | success((mid, a)) =>
@@ -52,7 +52,7 @@ pub let and(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse({ A, B })
         end,
     };
 
-pub let any_byte : Parse(Byte) =
+pub let any_byte: Parse(Byte) =
     Parse {
         run(input, pos) = match Nat/Lt/try(pos, Bytes/len(input))
         | none() => Result/failure("unexpected end of input")
@@ -60,7 +60,7 @@ pub let any_byte : Parse(Byte) =
         end,
     };
 
-pub let peek_byte : Parse(Byte) =
+pub let peek_byte: Parse(Byte) =
     Parse {
         run(input, pos) = match Nat/Lt/try(pos, Bytes/len(input))
         | none() => Result/failure("unexpected end of input")
@@ -68,7 +68,7 @@ pub let peek_byte : Parse(Byte) =
         end,
     };
 
-pub let take_byte(expected : Byte) -> Parse(Byte) =
+pub let take_byte(expected: Byte) -> Parse(Byte) =
     Parse {
         run(input, pos) = match Nat/Lt/try(pos, Bytes/len(input))
         | none() => Result/failure("unexpected end of input")
@@ -81,11 +81,11 @@ pub let take_byte(expected : Byte) -> Parse(Byte) =
         end,
     };
 
-pub let take_literal(literal : Str) -> Parse({}) =
+pub let take_literal(literal: Str) -> Parse({}) =
     Parse {
         run(input, pos) = let lit = Str/to_bytes(literal);
         let (stop, matched) =
-            match Bytes/len(lit) : (_) => { Nat, Bool }
+            match Bytes/len(lit): (_) => {Nat, Bool}
             | 0 => (pos, true)
             | step + 1; ih =>
                 let (cur, live) = ih;
@@ -108,7 +108,7 @@ pub let take_literal(literal : Str) -> Parse({}) =
         end,
     };
 
-pub let eof : Parse({}) =
+pub let eof: Parse({}) =
     Parse {
         run(input, pos) = match pos < Bytes/len(input)
         | true => Result/failure("expected end of input")
@@ -116,10 +116,10 @@ pub let eof : Parse({}) =
         end,
     };
 
-pub let take_while(pred : (Byte) -> Bool) -> Parse(Bytes) =
+pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
     Parse {
         run(input, pos) = let (stop, _) =
-            match Bytes/len(input) - pos : (_) => { Nat, Bool }
+            match Bytes/len(input) - pos: (_) => {Nat, Bool}
             | 0 => (pos, false)
             | step + 1; ih =>
                 let (cur, stopped) = ih;
@@ -139,9 +139,9 @@ pub let take_while(pred : (Byte) -> Bool) -> Parse(Bytes) =
         Result/success((stop, Bytes/slice(input, pos, stop))),
     };
 
-pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =
+pub let many0(@A: Type, p: Parse(A)) -> Parse(Lst(A)) =
     Parse {
-        run(input, pos) = rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Lst(A) }, Str) =
+        run(input, pos) = rec go(acc: Lst(A), cur: Nat) -> Result({Nat, Lst(A)}, Str) =
             match p.run(input, cur)
             | failure(_) => Result/success((cur, acc))
             | success((next, a)) =>
@@ -153,12 +153,12 @@ pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =
         go([], pos),
     };
 
-pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Lst(A)) =
+pub let sep_by0(@A: Type, @S: Type, elem: Parse(A), sep: Parse(S)) -> Parse(Lst(A)) =
     Parse {
         run(input, pos) = match elem.run(input, pos)
         | failure(_) => Result/success((pos, []))
         | success((first_end, first)) =>
-            rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Lst(A) }, Str) =
+            rec go(acc: Lst(A), cur: Nat) -> Result({Nat, Lst(A)}, Str) =
                 match sep.run(input, cur)
                 | failure(_) => Result/success((cur, acc))
                 | success((sep_end, _)) =>

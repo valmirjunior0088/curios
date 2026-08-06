@@ -1,12 +1,12 @@
 use /std/{Bool, Flt, Str, Lst};
 
-pub induct Json : pub Type
+pub induct Json: pub Type
 | null()
 | bool(Bool)
 | num(Flt)
 | str(Str)
 | arr(Lst(Json))
-| obj(Lst({ Str, Json }))
+| obj(Lst({Str, Json}))
 end
 
 pub use Json/*;

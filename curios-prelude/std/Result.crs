@@ -1,64 +1,40 @@
 use /std/{Bool, Show, Str};
 
-pub induct Result(A : Type, E : Type) : pub Type
+pub induct Result(A: Type, E: Type): pub Type
 | success(A)
 | failure(E)
 end
 
 pub use Result/*;
 
-pub let map_success(@A : Type, @B : Type, @E : Type, r : Result(A, E), f : (A) -> B) -> Result(
-    B,
-    E,
-) =
-    match r
-    | success(a) => Result/success(f(a))
-    | failure(e) => Result/failure(e)
-    end;
+pub let map_success(@A: Type, @B: Type, @E: Type, r: Result(A, E), f: (A) -> B) -> Result(B, E) =
+    match r | success(a) => Result/success(f(a)) | failure(e) => Result/failure(e) end;
 
-pub let map_failure(@A : Type, @E : Type, @F : Type, r : Result(A, E), f : (E) -> F) -> Result(
-    A,
-    F,
-) =
-    match r
-    | success(a) => Result/success(a)
-    | failure(e) => Result/failure(f(e))
-    end;
+pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(A, E), f: (E) -> F) -> Result(A, F) =
+    match r | success(a) => Result/success(a) | failure(e) => Result/failure(f(e)) end;
 
-pub let bind(@A : Type, @B : Type, @E : Type, m : Result(A, E), f : (A) -> Result(B, E)) -> Result(
-    B,
-    E,
-) =
-    match m
-    | success(a) => f(a)
-    | failure(e) => Result/failure(e)
-    end;
+pub let bind(
+    @A: Type,
+    @B: Type,
+    @E: Type,
+    m: Result(A, E),
+    f: (A) -> Result(B, E),
+) -> Result(B, E) =
+    match m | success(a) => f(a) | failure(e) => Result/failure(e) end;
 
-pub let flatten(@A : Type, @E : Type, r : Result(Result(A, E), E)) -> Result(A, E) =
-    match r
-    | success(inner) => inner
-    | failure(e) => Result/failure(e)
-    end;
+pub let flatten(@A: Type, @E: Type, r: Result(Result(A, E), E)) -> Result(A, E) =
+    match r | success(inner) => inner | failure(e) => Result/failure(e) end;
 
-pub let unwrap_or(@A : Type, @E : Type, r : Result(A, E), default : A) -> A =
-    match r
-    | success(a) => a
-    | failure(_) => default
-    end;
+pub let unwrap_or(@A: Type, @E: Type, r: Result(A, E), default: A) -> A =
+    match r | success(a) => a | failure(_) => default end;
 
-pub let is_success(@A : Type, @E : Type, r : Result(A, E)) -> Bool =
-    match r
-    | success(_) => true
-    | failure(_) => false
-    end;
+pub let is_success(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
+    match r | success(_) => true | failure(_) => false end;
 
-pub let is_failure(@A : Type, @E : Type, r : Result(A, E)) -> Bool =
-    match r
-    | success(_) => false
-    | failure(_) => true
-    end;
+pub let is_failure(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
+    match r | success(_) => false | failure(_) => true end;
 
-satisfy (@A : Type, @E : Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
     show(r) =
         match r
         | success(x) => Str/concat("success(", Str/concat(Show/show(x), ")"))

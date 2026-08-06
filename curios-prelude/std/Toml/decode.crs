@@ -5,14 +5,14 @@ use /std/Toml/scan/{byte_at_is, line_end, trivia, ws};
 use /std/Toml/keys/{key_part};
 use /std/Toml/values/{value_scan};
 
-induct Stmt : Type
-| assign(path : Lst(Str), value : Toml)
+induct Stmt: Type
+| assign(path: Lst(Str), value: Toml)
 | table_header(Lst(Str))
 | array_header(Lst(Str))
 end
 
 -- The statement layer is written as recursive scanners over positions: a recursive function applied to a symbolic input stays a residual application under type-level reduction, where an equivalent combinator constant would unfold its whole parser tree symbolically.
-rec key_path_scan(input : Bytes, cur : Nat, acc : Lst(Str)) -> Result({Nat, Lst(Str)}, Str) =
+rec key_path_scan(input: Bytes, cur: Nat, acc: Lst(Str)) -> Result({Nat, Lst(Str)}, Str) =
     match key_part.run(input, cur)
     | failure(msg) => Result/failure(msg)
     | success((c1, k)) =>
@@ -30,7 +30,7 @@ rec key_path_scan(input : Bytes, cur : Nat, acc : Lst(Str)) -> Result({Nat, Lst(
             end
         end
     end
-and header_scan(input : Bytes, cur : Nat, double : Bool) -> Result({Nat, Lst(Str)}, Str) =
+and header_scan(input: Bytes, cur: Nat, double: Bool) -> Result({Nat, Lst(Str)}, Str) =
     match ws.run(input, cur)
     | failure(msg) => Result/failure(msg)
     | success((c1, _)) =>
@@ -51,7 +51,7 @@ and header_scan(input : Bytes, cur : Nat, double : Bool) -> Result({Nat, Lst(Str
             end
         end
     end
-and stmt_scan(input : Bytes, cur : Nat) -> Result({Nat, Stmt}, Str) =
+and stmt_scan(input: Bytes, cur: Nat) -> Result({Nat, Stmt}, Str) =
     match byte_at_is(input, cur, (n) => n == 0x5B)
     | true =>
         match byte_at_is(input, cur + 1, (n) => n == 0x5B)
@@ -84,7 +84,7 @@ and stmt_scan(input : Bytes, cur : Nat) -> Result({Nat, Stmt}, Str) =
             end
         end
     end
-and stmts_scan(input : Bytes, cur : Nat, acc : Lst(Stmt)) -> Result(Lst(Stmt), Str) =
+and stmts_scan(input: Bytes, cur: Nat, acc: Lst(Stmt)) -> Result(Lst(Stmt), Str) =
     match trivia.run(input, cur)
     | failure(msg) => Result/failure(msg)
     | success((c1, _)) =>
@@ -102,18 +102,23 @@ and stmts_scan(input : Bytes, cur : Nat, acc : Lst(Stmt)) -> Result(Lst(Stmt), S
         end
     end;
 
-pub let decode(source : Str) -> Result(Map(Toml), Str) =
+pub let decode(source: Str) -> Result(Map(Toml), Str) =
     match stmts_scan(Str/to_bytes(source), 0, [])
     | failure(msg) => Result/failure(msg)
     | success(stmts) =>
-        let start : Result(Build, Str) = Result/success(build_empty);
-        match Lst/fold(stmts, start, (s, acc) =>
-            Result/bind(acc, (b) =>
-                match s
-                | assign(path, v) => apply_assign(b, path, v)
-                | table_header(path) => apply_header(b, path)
-                | array_header(path) => apply_aot(b, path)
-                end))
+        let start: Result(Build, Str) = Result/success(build_empty);
+        match Lst/fold(
+            stmts,
+            start,
+            (s, acc) =>
+                Result/bind(
+                    acc,
+                    (b) =>
+                        match s
+                        | assign(path, v) => apply_assign(b, path, v)
+                        | table_header(path) => apply_header(b, path)
+                        | array_header(path) => apply_aot(b, path)
+                        end))
         | success(b) => Result/success(b.root)
         | failure(msg) => Result/failure(msg)
         end

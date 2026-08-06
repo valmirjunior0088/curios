@@ -1,43 +1,28 @@
 use /std/{Bool, Show, Str, Monad};
 
-pub induct Option(A : Type) : pub Type
+pub induct Option(A: Type): pub Type
 | some(A)
 | none()
 end
 
 pub use Option/*;
 
-pub let bind(@A : Type, @B : Type, m : Option(A), f : (A) -> Option(B)) -> Option(B) =
-    match m
-    | some(a) => f(a)
-    | none() => Option/none()
-    end;
+pub let bind(@A: Type, @B: Type, m: Option(A), f: (A) -> Option(B)) -> Option(B) =
+    match m | some(a) => f(a) | none() => Option/none() end;
 
-pub let map(@A : Type, @B : Type, m : Option(A), f : (A) -> B) -> Option(B) =
-    match m
-    | some(a) => Option/some(f(a))
-    | none() => Option/none()
-    end;
+pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
+    match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
 
-pub let unwrap_or(@A : Type, m : Option(A), default : A) -> A =
-    match m
-    | some(a) => a
-    | none() => default
-    end;
+pub let unwrap_or(@A: Type, m: Option(A), default: A) -> A =
+    match m | some(a) => a | none() => default end;
 
-pub let is_some(@A : Type, m : Option(A)) -> Bool =
-    match m
-    | some(_) => true
-    | none() => false
-    end;
+pub let is_some(@A: Type, m: Option(A)) -> Bool =
+    match m | some(_) => true | none() => false end;
 
-pub let is_none(@A : Type, m : Option(A)) -> Bool =
-    match m
-    | some(_) => false
-    | none() => true
-    end;
+pub let is_none(@A: Type, m: Option(A)) -> Bool =
+    match m | some(_) => false | none() => true end;
 
-satisfy (@A : Type, use Show(A)) => Show(Option(A)) {
+satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
     show(m) =
         match m
         | some(x) => Str/concat("some(", Str/concat(Show/show(x), ")"))

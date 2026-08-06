@@ -1,28 +1,21 @@
 use /std/{Nat};
 use /syn/{True, False};
 
-pub let Below(code : Nat, bound : Nat) -> Prop =
-    match code < bound
-    | true => True
-    | false => False
-    end;
+pub let Below(code: Nat, bound: Nat) -> Prop =
+    match code < bound | true => True | false => False end;
 
-pub let InRange(code : Nat, lo : Nat, hi : Nat) -> Prop =
+pub let InRange(code: Nat, lo: Nat, hi: Nat) -> Prop =
     match code >= lo
-    | true =>
-        match code <= hi
-        | true => True
-        | false => False
-        end
+    | true => match code <= hi | true => True | false => False end
     | false => False
     end;
 
-pub induct Scalar : (Nat) -> pub Prop
-| below(@code : Nat, proof : Below(code, 0xD800)) : (code)
-| above(@code : Nat, proof : InRange(code, 0xE000, 0x10FFFF)) : (code)
+pub induct Scalar: (Nat) -> pub Prop
+| below(@code: Nat, proof: Below(code, 0xD800)): (code)
+| above(@code: Nat, proof: InRange(code, 0xE000, 0x10FFFF)): (code)
 end
 
-pub struct Char : pub Type {
-    code : Nat,
-    scalar : Scalar(code),
+pub struct Char: pub Type {
+    code: Nat,
+    scalar: Scalar(code),
 }
