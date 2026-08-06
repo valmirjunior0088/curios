@@ -759,7 +759,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         let typed = sub(ty, depth + total);
                         let printer = match raw {
                             Some(_) => {
-                                flat([pure(mark), pure(display_label(&label)), pure(" : "), typed])
+                                flat([pure(mark), pure(display_label(&label)), pure(": "), typed])
                             }
                             None => flat([pure(mark), typed]),
                         };
@@ -840,7 +840,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                         let label = binder_or(rest.binder(0), depth + idx);
                         items.push(indent(flat([
                             pure(display_label(&label)),
-                            pure(" : "),
+                            pure(": "),
                             sub(ty, depth + total),
                         ])));
                         let next = rest.open(&[&Term::free_var(&label)]);
@@ -853,7 +853,8 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             let mut items = Vec::with_capacity(n);
             walk(telescope, depth, n, 0, &mut items);
 
-            flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
+            // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/SYNTAX.md` spells. Unspaced for the same reason the surface printer is.
+            listed("{".into(), false, items, "}")
         }
         Subterm::Tuple(Tuple { fields, names }) => {
             let mut names = names.into_iter().chain(std::iter::repeat(None));
@@ -986,7 +987,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             let prefix = flat([
                 pure(keyword),
                 sub(head, depth),
-                pure(" : "),
+                pure(": "),
                 pure(motive_label),
                 pure(" => "),
                 sub(motive, depth + motive_arity),
@@ -1166,7 +1167,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
                     flat([
                         pure("let "),
                         pure(display_label(&labels[index])),
-                        pure(" : "),
+                        pure(": "),
                         sub(type_, depth + index),
                         pure(" =\n"),
                         indent(flat([sub(value, depth + index), pure(";")])),
@@ -1196,7 +1197,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
 
                     flat([
                         pure(display_label(&labels[index])),
-                        pure(" : "),
+                        pure(": "),
                         sub(type_, inner_depth),
                         pure(" =\n"),
                         indent(sub(body, inner_depth)),

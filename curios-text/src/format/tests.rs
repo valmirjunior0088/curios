@@ -12,7 +12,7 @@ fn a_program_normalizes_to_the_canonical_shape() {
     let source = "use /std/{Nat};\nlet double(n : Nat) -> Nat = n + n;\n\n\n\ndouble(21)\n";
     assert_eq!(
         formatted(source),
-        "use /std/{Nat};\n\nlet double(n : Nat) -> Nat =\n    n + n;\n\ndouble(21)\n"
+        "use /std/{Nat};\n\nlet double(n: Nat) -> Nat =\n    n + n;\n\ndouble(21)\n"
     );
 }
 
@@ -21,7 +21,7 @@ fn a_module_file_without_a_tail_formats() {
     let source = "use /std/{Nat};\nlet one : Nat = 1;";
     assert_eq!(
         formatted(source),
-        "use /std/{Nat};\n\nlet one : Nat =\n    1;\n"
+        "use /std/{Nat};\n\nlet one: Nat =\n    1;\n"
     );
 }
 
@@ -65,7 +65,7 @@ fn consecutive_use_declarations_stack_without_blank_lines() {
     let source = "use /std/{Nat};\n\n\nuse /std/{Bool};\nuse /std/{Str};\nlet a : Nat = 1;\na\n";
     assert_eq!(
         formatted(source),
-        "use /std/{Nat};\nuse /std/{Bool};\nuse /std/{Str};\n\nlet a : Nat =\n    1;\n\na\n"
+        "use /std/{Nat};\nuse /std/{Bool};\nuse /std/{Str};\n\nlet a: Nat =\n    1;\n\na\n"
     );
 }
 

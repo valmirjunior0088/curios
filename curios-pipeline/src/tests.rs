@@ -492,7 +492,7 @@ fn a_wide_goal_type_breaks_across_lines_in_the_report() {
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(
-        error.contains("first_argument : Nat,\n"),
+        error.contains("first_argument: Nat,\n"),
         "expected a broken binder list: {error}"
     );
 }

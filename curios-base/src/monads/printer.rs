@@ -93,6 +93,10 @@ pub enum Printer {
     Deferred(Option<Box<dyn FnOnce() -> Printer>>),
     /// A layout choice point: `flat` when the enclosing [`Printer::Group`] renders on one line, a newline (plus pending indentation) when it breaks — or unconditionally when no group encloses it, since the top of a document is broken context. `hard` marks a mandatory break: it always emits a newline, and the fits scan fails on it, so no group containing one ever renders flat.
     Line { flat: String, hard: bool },
+    /// The width-adaptive *sequence*: its items are laid out left to right, and each gap independently becomes a space or a newline according to whether the item after it still fits the line.
+    ///
+    /// A [`Printer::Group`] is all-or-nothing — when its flat form does not fit, every [`Printer::Line`] inside it breaks — which is right for a structure whose parts belong on separate lines once any of them does. It is wrong for a run of short interchangeable items: a twenty-name import does not fit on one line, so a group puts each name on a line of its own and spends twenty lines on what two would hold. Each item carries its own separator, so this variant inserts only the gap and never invents punctuation.
+    Fill(Vec<Printer>),
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
     Group(Box<Printer>),
     /// Mode-dependent text that is *not* itself a break point: `flat` under a fitting group, `broken` under a broken one. The formatter's broken-only trailing comma is `IfBreak { flat: "", broken: "," }`. Measured at its flat spelling, so it never breaks a group by itself.
@@ -113,7 +117,7 @@ impl Printer {
     fn is_dismantled(&self) -> bool {
         match self {
             Printer::Text(_) => true,
-            Printer::Concat(parts) => parts.is_empty(),
+            Printer::Concat(parts) | Printer::Fill(parts) => parts.is_empty(),
             Printer::Indent(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
             }
@@ -141,7 +145,7 @@ impl Drop for Printer {
         while let Some(mut printer) = pending.pop() {
             match &mut printer {
                 Printer::Text(_) => {}
-                Printer::Concat(parts) => pending.extend(mem::take(parts)),
+                Printer::Concat(parts) | Printer::Fill(parts) => pending.extend(mem::take(parts)),
                 Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
                 Printer::Deferred(_) => {}
                 Printer::Line { .. } => {}
@@ -158,6 +162,8 @@ impl Drop for Printer {
 /// `Dedent` is what replaces the closure nesting that used to restore the indentation level on the way out: pushed under a document, it runs after it. `Print`'s flag is the layout mode the document renders under: `true` inside a fitting [`Printer::Group`], where every soft [`Printer::Line`] emits its flat spelling.
 enum Step {
     Print(Printer, bool),
+    /// The remaining items of a [`Printer::Fill`], resumed after the one before them has been emitted — the gap decision needs the column the previous item actually left behind, which only exists once it is printed.
+    Fill(Vec<Printer>),
     Dedent,
 }
 
@@ -166,10 +172,10 @@ enum Step {
 /// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a pending suffix is skipped rather than counted — a trailing comment never reflows the code it rides.
 ///
 /// Measuring forces every [`Printer::Deferred`] it reaches, replacing the node in place with the built document — the thunk is `FnOnce`, so a peek that discarded the result would lose it. The bounded lookahead is what keeps that cheap: at most one line width of document is ever materialized per decision, and what is materialized is exactly what printing consumes next. Iterative, like every other walk over this type.
-fn fits(root: &mut Printer, rest: &mut [Step], available: usize) -> bool {
+fn fits(root: &mut Printer, rest: &mut [Step], available: usize, inside: bool) -> bool {
     let mut used = 0usize;
     // (node, flat-mode, inside): `inside` marks the measured group's own subtree; `flat` is the layout mode look-ahead content renders under.
-    let mut stack: Vec<(&mut Printer, bool, bool)> = Vec::from([(root, true, true)]);
+    let mut stack: Vec<(&mut Printer, bool, bool)> = Vec::from([(root, true, inside)]);
     let mut rest_iter = rest.iter_mut().rev();
 
     loop {
@@ -178,6 +184,11 @@ fn fits(root: &mut Printer, rest: &mut [Step], available: usize) -> bool {
                 // The whole document fits on this line.
                 None => return true,
                 Some(Step::Dedent) => continue,
+                // A pending fill measures as its items would print: flat, and separated by the space a fitting gap emits.
+                Some(Step::Fill(items)) => {
+                    stack.extend(items.iter_mut().rev().map(|item| (item, true, false)));
+                    continue;
+                }
                 Some(Step::Print(printer, mode)) => {
                     stack.push((printer, *mode, false));
                     continue;
@@ -247,7 +258,10 @@ fn fits(root: &mut Printer, rest: &mut [Step], available: usize) -> bool {
             Printer::Concat(parts) => {
                 stack.extend(parts.iter_mut().rev().map(|part| (part, flat, inside)));
             }
-            // Indentation adds characters only after a newline, and the flat rendering has none.
+            // A fill measures as it prints: each item flat, one space per gap. That is its *first-line* rendering, which is what a fits scan asks about — a fill that wraps ends the line, and a scan reaching the wrap has already decided.
+            Printer::Fill(items) => {
+                stack.extend(items.iter_mut().rev().map(|item| (item, true, inside)));
+            }
             Printer::Indent(inner) => stack.push((inner, flat, inside)),
             // A nested group inside a fitting parent renders flat with it; a look-ahead group is measured flat too — if its flat form shares the line, the line holds either rendering of it.
             Printer::Group(inner) => stack.push((inner, flat, inside)),
@@ -318,6 +332,17 @@ fn run<'b, 'c>(
                     true => state.write(spelling)?,
                     false => state.write("\n")?,
                 },
+                Printer::Fill(items) => {
+                    // The first item is printed directly, so `Step::Fill` always owns a *gap* and never has to ask whether one is due.
+                    let mut items = mem::take(items);
+                    if !items.is_empty() {
+                        let first = items.remove(0);
+                        if !items.is_empty() {
+                            stack.push(Step::Fill(items));
+                        }
+                        stack.push(Step::Print(first, true));
+                    }
+                }
                 Printer::Group(inner) => {
                     let mut inner = inner.take();
                     let inner_fits = flat
@@ -328,6 +353,7 @@ fn run<'b, 'c>(
                                 &mut inner,
                                 &mut stack,
                                 width.saturating_sub(state.effective_column()),
+                                true,
                             ),
                         };
                     stack.push(Step::Print(inner, inner_fits));
@@ -344,6 +370,24 @@ fn run<'b, 'c>(
                     state.suffix.push_str(text);
                 }
             },
+            // One item per turn: measure it against what is left of the line, emit the gap it earned, print it flat, and queue the remainder. Printing the item flat is what makes it atomic — a fill decides *between* items, never inside one.
+            Step::Fill(mut items) => {
+                let mut item = items.remove(0);
+                if !state.should_indent {
+                    let room = match state.width {
+                        None => usize::MAX,
+                        Some(width) => width.saturating_sub(state.effective_column() + 1),
+                    };
+                    match fits(&mut item, &mut [], room, true) {
+                        true => state.write(" ")?,
+                        false => state.write("\n")?,
+                    }
+                }
+                if !items.is_empty() {
+                    stack.push(Step::Fill(items));
+                }
+                stack.push(Step::Print(item, true));
+            }
             Step::Dedent => state.indent_by -= state.indent_step,
         }
     }
@@ -436,6 +480,13 @@ pub fn hard_line() -> Printer {
 }
 
 /// The width-adaptive unit: renders `printer` flat — every enclosed [`line`] as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
+/// A width-adaptive *sequence* of already-punctuated items: each gap becomes a space or a newline on its own, so the run wraps like prose instead of breaking everywhere at once.
+///
+/// Use this where the items are short and interchangeable — the names of an import — and [`group`] where they are structural parts that belong together or apart as a unit. Each item is measured and printed flat, so a fill never breaks *inside* an item; give it items that are already whole.
+pub fn fill(items: impl IntoIterator<Item = Printer>) -> Printer {
+    Printer::Fill(items.into_iter().collect())
+}
+
 pub fn group(printer: Printer) -> Printer {
     Printer::Group(Box::new(printer))
 }

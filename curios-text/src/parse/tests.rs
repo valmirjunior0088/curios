@@ -2276,7 +2276,7 @@ fn parameterized_witness_prints_separator_syntax() {
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     assert_eq!(
         entrypoint.to_string(),
-        "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {\n    show = g,\n}\nu"
+        "satisfy (@A: Type, use Show(A)) => Show(Lst(A)) {\n    show = g,\n}\nu"
     );
 }
 

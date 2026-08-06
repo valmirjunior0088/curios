@@ -24,11 +24,9 @@ fn a_fitting_application_stays_flat() {
 }
 
 #[test]
-fn an_overflowing_application_breaks_one_argument_per_line_with_a_trailing_comma() {
-    assert_eq!(
-        render("f(alpha, bravo)", 10),
-        "f(\n    alpha,\n    bravo,\n)"
-    );
+fn an_overflowing_application_breaks_one_argument_per_line_with_a_riding_closer() {
+    // No trailing comma and no line of its own for the closer: the last argument already ends the call, and saying so with `,` and a lone `)` spends two lines.
+    assert_eq!(render("f(alpha, bravo)", 10), "f(\n    alpha,\n    bravo)");
 }
 
 #[test]
@@ -36,14 +34,20 @@ fn a_lambda_body_rides_the_arrow_and_breaks_when_it_overflows() {
     assert_eq!(render("(x) => x", 80), "(x) => x");
     assert_eq!(
         render("(x) => some_quite_long_call(x, x)", 20),
-        "(x) =>\n    some_quite_long_call(\n        x,\n        x,\n    )"
+        "(x) =>\n    some_quite_long_call(\n        x,\n        x)"
     );
 }
 
 #[test]
 fn a_match_arm_body_rides_its_arrow() {
+    // An arm ladder that fits shares one line — the spelling the corpus writes for a two-arm decision. It used to break unconditionally, which made every such decision five lines.
     assert_eq!(
         render("match b | true => 1 | false => 0 end", 80),
+        "match b | true => 1 | false => 0 end"
+    );
+    // One column short of the flat form, and the ladder breaks: every arm to its own line, at the ladder's column rather than indented under it.
+    assert_eq!(
+        render("match b | true => 1 | false => 0 end", 35),
         "match b\n| true => 1\n| false => 0\nend"
     );
     assert_eq!(
@@ -51,7 +55,7 @@ fn a_match_arm_body_rides_its_arrow() {
             "match b | true => something_rather_long(1) | false => 0 end",
             24
         ),
-        "match b\n| true =>\n    something_rather_long(\n        1,\n    )\n| false => 0\nend"
+        "match b\n| true =>\n    something_rather_long(\n        1)\n| false => 0\nend"
     );
 }
 

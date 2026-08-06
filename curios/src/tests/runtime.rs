@@ -425,7 +425,7 @@ fn diagnostic_uses_source_binder_names() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(source, system).unwrap_err();
     assert!(
-        error.contains("inferred: (n : Nat) -> Nat"),
+        error.contains("inferred: (n: Nat) -> Nat"),
         "binder lost its source name: {error}"
     );
     assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
@@ -444,7 +444,7 @@ fn diagnostic_disambiguates_shadowed_binders() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(source, system).unwrap_err();
     assert!(
-        error.contains("inferred: (n : Nat) -> (n2 : Nat) -> Nat"),
+        error.contains("inferred: (n: Nat) -> (n2: Nat) -> Nat"),
         "shadowed binders not disambiguated: {error}"
     );
     assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");

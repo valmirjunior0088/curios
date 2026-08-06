@@ -255,7 +255,7 @@ fn implicit_marks_print_and_default_to_explicit() {
         ],
         Term::free_var(&binder_0),
     );
-    assert_eq!(format!("{ft}"), "(@T : Type, x : T) -> T");
+    assert_eq!(format!("{ft}"), "(@T: Type, x: T) -> T");
 
     // The unmarked builders default every slot to `Explicit`.
     let plain = Term::func_type(

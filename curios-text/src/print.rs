@@ -15,8 +15,8 @@ use {
     curios_base::{
         Grain, Plicity,
         printer::{
-            Printer, flat, group, hard_line, if_break, indent, line, line_suffix, pure, sep_flat,
-            soft_line,
+            Printer, fill, flat, group, hard_line, if_break, indent, line, line_suffix, pure,
+            sep_flat, soft_line,
         },
     },
     num_bigint::BigUint,
@@ -31,28 +31,88 @@ fn print_plicity(plicity: Plicity) -> Printer {
     }
 }
 
-/// The delimited comma-list shape every bracketed sequence shares: flat when the group fits (`f(a, b)`), one element per line at the next indent with a trailing comma when it breaks. `spaced` puts the corpus's brace padding inside the delimiters (`{ a, b }` flat); an empty sequence prints the bare delimiters and needs no group.
-fn listed(
-    open: impl Into<String>,
-    spaced: bool,
-    items: Vec<Printer>,
-    close: &'static str,
-) -> Printer {
+/// A bracketed **sequence**: flat when the group fits (`f(a, b)`), otherwise one element per line at the next indent with the closer *riding* the last one (`c)`).
+///
+/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, list and packed literals, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is the other shape, for the brace forms that read as records.
+fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
         return flat([open, pure(close)]);
     }
-    let lead = if spaced { line } else { soft_line };
     group(flat([
         open,
         indent(flat([
-            lead(),
+            soft_line(),
+            sep_flat(items, || flat([pure(","), line()])),
+        ])),
+        pure(close),
+    ]))
+}
+
+/// A bracketed **record**: padded flat (`{ a, b }`), and broken with a trailing comma and the closer on a line of its own.
+///
+/// The one shape that does *not* ride its closer, and the difference is about editing rather than looks. A record's fields are the thing that grows: with the brace riding, adding one is a two-line change, because the field above has to give the brace up and take a comma. A sequence's elements do not grow that way, so [`listed`] rides and this does not. Struct literals and patterns take this shape, matching the declaration bodies in [`listed_hard`] — a literal and the `struct` it inhabits close the same way.
+fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
+    let open = pure(open);
+    if items.is_empty() {
+        return flat([open, pure(close)]);
+    }
+    group(flat([
+        open,
+        indent(flat([
+            line(),
             sep_flat(items, || flat([pure(","), line()])),
             if_break("", ","),
         ])),
-        lead(),
+        line(),
         pure(close),
     ]))
+}
+
+/// The wrapping counterpart to [`listed`], for a bracketed run of short interchangeable atoms: flat when the whole run fits, otherwise broken open with the items *filled* across lines at the next indent.
+///
+/// [`listed`] is the right shape for a structure — when one part needs its own line they all take one. A run of names is not a structure, and giving an import that treatment spends a line per name. Items arrive as plain strings and their commas are attached here, so the fill inserts only the gap between them.
+fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printer {
+    if items.is_empty() {
+        return pure(format!("{open}{close}"));
+    }
+    let last = items.len() - 1;
+    let entries = items
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| match index == last {
+            true => pure(item),
+            false => pure(format!("{item},")),
+        })
+        .collect::<Vec<_>>();
+    group(flat([
+        pure(open),
+        indent(flat([soft_line(), fill(entries)])),
+        pure(close),
+    ]))
+}
+
+/// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one.
+///
+/// One shape regardless of what the last argument is. A call whose trailing lambda hung on the head line read well in isolation, but it made the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — stranded the block after its own closing bracket. Reading a call should not require knowing which of two layouts it got.
+///
+/// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
+fn riding_call(head: Term, params: Vec<(Plicity, Term)>) -> Printer {
+    let items = params
+        .into_iter()
+        .map(|(plicity, param)| flat([print_plicity(plicity), print_term(param)]))
+        .collect::<Vec<_>>();
+    flat([
+        print_suffix_head(head),
+        group(flat([
+            pure("("),
+            indent(flat([
+                soft_line(),
+                sep_flat(items, || flat([pure(","), line()])),
+            ])),
+            pure(")"),
+        ])),
+    ])
 }
 
 /// The always-broken brace block a `struct`, `concept`, or `satisfy` body is: one field per line at the next indent with a trailing comma, the closing brace at the opening's column, regardless of how little would fit flat. An empty body prints the bare delimiters.
@@ -77,10 +137,20 @@ fn attached_body(introducer: &'static str, body: Printer) -> Printer {
     group(flat([pure(introducer), indent(flat([line(), body]))]))
 }
 
+/// The most arms a ladder may keep on one line. Beyond this it is a dispatch table rather than a decision, and a table reads as rows.
+const MAX_FLAT_ARMS: usize = 3;
+
+/// Whether a term is itself an arm ladder — the arm body that forces its enclosing ladder to break.
+///
+/// Nested flat, two ladders put both their `end`s on one line and nothing says which closes which: `match b | true => match c | true => false | false => true end | false => c end`. Breaking the outer gives every `end` a column that names what it closes. This is about pairing delimiters by eye, not about density — which is why it applies at any width.
+fn is_ladder(body: &Term) -> bool {
+    matches!(body.as_subterm(), Subterm::Match(_) | Subterm::Choose(_))
+}
+
 /// Prints a match's optional motive — ` : ` and the written term (ordinarily a lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in the source.
 fn print_motive(motive: Option<Term>) -> Printer {
     match motive {
-        Some(motive) => flat([pure(" : "), print_term(motive)]),
+        Some(motive) => flat([pure(": "), print_term(motive)]),
         None => pure(""),
     }
 }
@@ -107,7 +177,7 @@ fn print_flt(value: f32) -> Printer {
 fn print_func_type_param(param: FuncTypeParam) -> Printer {
     let typed = print_term(param.type_);
     let body = match param.label {
-        Some(label) => flat([pure(label), pure(" : "), typed]),
+        Some(label) => flat([pure(label), pure(": "), typed]),
         None => typed,
     };
     flat([print_plicity(param.plicity), body])
@@ -121,7 +191,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
         flat([
             print_plicity(param.plicity),
             print_pattern(param.label),
-            pure(" : "),
+            pure(": "),
             print_term(param.type_),
         ])
     }
@@ -130,7 +200,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
 /// One lambda parameter: the binder name with its optional domain annotation.
 fn print_func_param((plicity, name, annotation): (Plicity, String, Option<Term>)) -> Printer {
     let bound = match annotation {
-        Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
+        Some(ty) => flat([pure(name), pure(": "), print_term(ty)]),
         None => pure(name),
     };
     flat([print_plicity(plicity), bound])
@@ -141,12 +211,7 @@ fn print_tuple_field(field: TupleField) -> Printer {
     match (field.label, field.func_params) {
         (Some(label), Some(params)) => flat([
             pure(label),
-            listed(
-                "(",
-                false,
-                params.into_iter().map(print_func_param).collect(),
-                ")",
-            ),
+            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
             pure(" = "),
             print_term(field.value),
         ]),
@@ -194,7 +259,6 @@ fn print_pattern(pattern: Pattern) -> Printer {
             } else {
                 listed(
                     "(",
-                    false,
                     fields.into_iter().map(print_pattern_field).collect(),
                     ")",
                 )
@@ -203,9 +267,8 @@ fn print_pattern(pattern: Pattern) -> Printer {
         Pattern::Struct { head, fields } => flat([
             pure(head),
             pure(" "),
-            listed(
+            listed_block(
                 "{",
-                true,
                 fields.into_iter().map(print_pattern_field).collect(),
                 "}",
             ),
@@ -228,7 +291,6 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             pure(tag),
             listed(
                 "(",
-                false,
                 args.into_iter()
                     .map(|(plicity, pattern)| {
                         flat([print_plicity(plicity), print_match_pattern(pattern)])
@@ -246,7 +308,6 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             } else {
                 listed(
                     "(",
-                    false,
                     fields.into_iter().map(print_match_pattern_field).collect(),
                     ")",
                 )
@@ -255,9 +316,8 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         MatchPattern::Struct { head, fields } => flat([
             pure(head),
             pure(" "),
-            listed(
+            listed_block(
                 "{",
-                true,
                 fields.into_iter().map(print_match_pattern_field).collect(),
                 "}",
             ),
@@ -314,7 +374,7 @@ fn print_func_pattern_param(param: FuncParam) -> Printer {
         annotation,
     } = param;
     let bound = match annotation {
-        Some(ty) => flat([print_pattern(pattern), pure(" : "), print_term(ty)]),
+        Some(ty) => flat([print_pattern(pattern), pure(": "), print_term(ty)]),
         None => print_pattern(pattern),
     };
     flat([print_plicity(plicity), bound])
@@ -322,7 +382,7 @@ fn print_func_pattern_param(param: FuncParam) -> Printer {
 
 fn print_labeled((label, ty): (Option<String>, Term)) -> Printer {
     match label {
-        Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
+        Some(label) => flat([pure(label), pure(": "), print_term(ty)]),
         None => print_term(ty),
     }
 }
@@ -334,14 +394,13 @@ fn print_field(param: TupleTypeParam) -> Printer {
             pure(label),
             listed(
                 "(",
-                false,
                 params.into_iter().map(print_func_type_param).collect(),
                 ")",
             ),
             pure(" -> "),
             print_term(param.type_),
         ]),
-        (Some(label), None) => flat([pure(label), pure(" : "), print_term(param.type_)]),
+        (Some(label), None) => flat([pure(label), pure(": "), print_term(param.type_)]),
         (None, _) => print_term(param.type_),
     }
 }
@@ -357,7 +416,7 @@ fn format_radix(n: &BigUint, radix: Radix) -> String {
 fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printer {
     flat([
         pure(name),
-        listed("(", false, args.into_iter().map(print_term).collect(), ")"),
+        listed("(", args.into_iter().map(print_term).collect(), ")"),
     ])
 }
 
@@ -484,7 +543,6 @@ fn print_prim(prim: Prim) -> Printer {
                 Grain::B => "b[",
                 Grain::X => "x[",
             },
-            false,
             segments
                 .into_iter()
                 .flat_map(move |segment| match segment {
@@ -566,7 +624,6 @@ fn print_prim(prim: Prim) -> Printer {
         Prim::LstType(elem) => print_prim_call("Lst", vec![elem]),
         Prim::Lst(entries) => listed(
             "[",
-            false,
             entries
                 .into_iter()
                 .map(|entry| match entry {
@@ -684,7 +741,6 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::FuncType(FuncType { params, output }) => flat([
             listed(
                 "(",
-                false,
                 params.into_iter().map(print_func_type_param).collect(),
                 ")",
             ),
@@ -695,30 +751,15 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Func(Func { params, body }) => flat([
             listed(
                 "(",
-                false,
                 params.into_iter().map(print_func_pattern_param).collect(),
                 ")",
             ),
             attached_body(" =>", print_term(body)),
         ]),
-        Subterm::Apply(Apply { head, params }) => flat([
-            print_suffix_head(head),
-            listed(
-                "(",
-                false,
-                params
-                    .into_iter()
-                    .map(|(plicity, p)| flat([print_plicity(plicity), print_term(p)]))
-                    .collect(),
-                ")",
-            ),
-        ]),
-        Subterm::TupleType(TupleType { fields }) => listed(
-            "{",
-            true,
-            fields.into_iter().map(print_field).collect(),
-            "}",
-        ),
+        Subterm::Apply(Apply { head, params }) => riding_call(head, params),
+        Subterm::TupleType(TupleType { fields }) => {
+            listed("{", fields.into_iter().map(print_field).collect(), "}")
+        }
         Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
@@ -728,7 +769,6 @@ fn print_term_inner(term: Term) -> Printer {
             } else {
                 listed(
                     "(",
-                    false,
                     fields.into_iter().map(print_tuple_field).collect(),
                     ")",
                 )
@@ -750,68 +790,82 @@ fn print_term_inner(term: Term) -> Printer {
             if params.is_empty() {
                 pure("")
             } else {
-                listed(
-                    "(",
-                    false,
-                    params.into_iter().map(print_term).collect(),
-                    ")",
-                )
+                listed("(", params.into_iter().map(print_term).collect(), ")")
             },
             pure(" "),
-            listed(
+            listed_block(
                 "{",
-                true,
                 entries.into_iter().map(print_struct_entry).collect(),
                 "}",
             ),
         ]),
-        // Arms always own their lines — the breaks are hard, so any group holding a match or choose is forced broken; each arm's body rides its arrow — inline when it fits, next line one level deeper when it does not.
-        Subterm::Choose(Choose { arms, default }) => flat([
-            pure("choose"),
-            flat(
-                arms.into_iter()
-                    .map(|ChooseArm { test, body }| {
-                        let head = match test {
-                            ChooseTest::Cond(condition) => {
-                                flat([hard_line(), pure("| "), print_term(condition)])
-                            }
-                            ChooseTest::Bind { pattern, value } => flat([
-                                hard_line(),
+        // An arm ladder is width-adaptive: `match carry | true => b[\\1] | false => b[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines is what made a proof-heavy module half again as tall as it was written.
+        //
+        // Two ladders are broken regardless of width, by [`ladder_breaks`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+        Subterm::Choose(Choose { arms, default }) => {
+            let forced = arms.len() + 1 > MAX_FLAT_ARMS
+                || std::iter::once(&default)
+                    .chain(arms.iter().map(|arm| &arm.body))
+                    .any(is_ladder);
+            let separator = match forced {
+                true => hard_line,
+                false => line,
+            };
+            group(flat([
+                pure("choose"),
+                flat(
+                    arms.into_iter()
+                        .map(|ChooseArm { test, body }| {
+                            let head = match test {
+                                ChooseTest::Cond(condition) => {
+                                    flat([separator(), pure("| "), print_term(condition)])
+                                }
+                                ChooseTest::Bind { pattern, value } => flat([
+                                    separator(),
+                                    pure("| "),
+                                    print_match_pattern(pattern),
+                                    pure(" = "),
+                                    print_term(value),
+                                ]),
+                            };
+                            flat([head, attached_body(" =>", print_term(body))])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                separator(),
+                pure("| _"),
+                attached_body(" =>", print_term(default)),
+                separator(),
+                pure("end"),
+            ]))
+        }
+        Subterm::Match(Match { head, motive, arms }) => {
+            let forced =
+                arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
+            let separator = match forced {
+                true => hard_line,
+                false => line,
+            };
+            group(flat([
+                pure("match "),
+                print_term(head),
+                print_motive(motive),
+                flat(
+                    arms.into_iter()
+                        .map(|arm| {
+                            flat([
+                                separator(),
                                 pure("| "),
-                                print_match_pattern(pattern),
-                                pure(" = "),
-                                print_term(value),
-                            ]),
-                        };
-                        flat([head, attached_body(" =>", print_term(body))])
-                    })
-                    .collect::<Vec<_>>(),
-            ),
-            hard_line(),
-            pure("| _"),
-            attached_body(" =>", print_term(default)),
-            hard_line(),
-            pure("end"),
-        ]),
-        Subterm::Match(Match { head, motive, arms }) => flat([
-            pure("match "),
-            print_term(head),
-            print_motive(motive),
-            flat(
-                arms.into_iter()
-                    .map(|arm| {
-                        flat([
-                            hard_line(),
-                            pure("| "),
-                            print_match_pattern(arm.pattern),
-                            attached_body(" =>", print_term(arm.body)),
-                        ])
-                    })
-                    .collect::<Vec<_>>(),
-            ),
-            hard_line(),
-            pure("end"),
-        ]),
+                                print_match_pattern(arm.pattern),
+                                attached_body(" =>", print_term(arm.body)),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                separator(),
+                pure("end"),
+            ]))
+        }
         Subterm::Let(Let { bindings, tail }) => flat(
             bindings
                 .into_iter()
@@ -881,26 +935,38 @@ fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
     match signature {
         LetSignature::Name { type_, body } => flat([
             match type_ {
-                Some(type_) => flat([pure(" : "), print_term(type_)]),
+                Some(type_) => flat([pure(": "), print_term(type_)]),
                 None => pure(""),
             },
             bound(body),
         ]),
+        // The parameter list and the `-> output` share **one** group, so what is measured is the whole signature rather than the parameters alone. Measured apart, parameters that fit on their own stay flat and leave the return type to break — which puts the `{` of a tuple type at the end of a long line and its `}` alone with the `=`. Together, the parameters break first and the return type, now starting a fresh line, fits beside the arrow. Should it still not fit, its own group breaks then, which is the right order of concessions.
         LetSignature::Func {
             params,
             output,
             body,
-        } => flat([
-            listed(
-                "(",
-                false,
-                params.into_iter().map(print_func_sugar_param).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_term(output),
-            bound(body),
-        ]),
+        } => {
+            let items = params
+                .into_iter()
+                .map(print_func_sugar_param)
+                .collect::<Vec<_>>();
+            let signature = match items.is_empty() {
+                true => flat([pure("()"), pure(" -> "), print_term(output)]),
+                false => group(flat([
+                    pure("("),
+                    indent(flat([
+                        soft_line(),
+                        sep_flat(items, || flat([pure(","), line()])),
+                        if_break("", ","),
+                    ])),
+                    soft_line(),
+                    pure(")"),
+                    pure(" -> "),
+                    print_term(output),
+                ])),
+            };
+            flat([signature, bound(body)])
+        }
     }
 }
 
@@ -922,16 +988,10 @@ fn print_top_use(item: TopUse) -> Printer {
         pure("use "),
         pure(item.name.join()),
         match item.group {
-            // The shared delimited-list shape, like any bracketed sequence: a wide import head breaks one name per line.
-            UseGroup::Named(items) => listed(
-                "/{",
-                false,
-                items
-                    .iter()
-                    .map(|item| pure(print_group_item(item)))
-                    .collect(),
-                "}",
-            ),
+            // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line put every name on a line of its own — twenty-six for `/sys/Nat`. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
+            UseGroup::Named(items) => {
+                filled("/{", items.iter().map(print_group_item).collect(), "}")
+            }
             UseGroup::Glob => pure("/*"),
         },
         pure(";"),
@@ -975,7 +1035,6 @@ fn print_wire_signature(signature: WireSignature) -> Printer {
     flat([
         listed(
             "(",
-            false,
             params
                 .into_iter()
                 .map(|(_, type_)| print_wire_type(type_))
@@ -992,7 +1051,7 @@ fn print_top_foreign(item: TopForeign) -> Printer {
         print_pub(item.vis_pub),
         pure("foreign "),
         pure(item.label),
-        pure(" : "),
+        pure(": "),
         print_wire_signature(item.signature),
         pure(";"),
     ])
@@ -1013,8 +1072,9 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
                 .map(|item| {
                     flat([
                         hard_line(),
-                        pure("and "),
+                        // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a `rec` group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
                         print_pub(item.vis_pub),
+                        pure("and "),
                         pure(item.label),
                         print_let_signature(item.signature, true),
                     ])
@@ -1068,8 +1128,8 @@ fn print_top_induct_case(case: TopCase) -> Printer {
 
     let target = match case.target {
         Some(exprs) => flat([
-            pure(" : "),
-            listed("(", false, exprs.into_iter().map(print_term).collect(), ")"),
+            pure(": "),
+            listed("(", exprs.into_iter().map(print_term).collect(), ")"),
         ]),
         None => pure(""),
     };
@@ -1077,7 +1137,7 @@ fn print_top_induct_case(case: TopCase) -> Printer {
     flat([
         hard_line(),
         pure(format!("| {}", case.label)),
-        listed("(", false, payload, ")"),
+        listed("(", payload, ")"),
         target,
     ])
 }
@@ -1089,14 +1149,13 @@ fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
 
     listed(
         "(",
-        false,
         params
             .into_iter()
             .map(|(plicity, name, ty)| {
                 flat([
                     print_plicity(plicity),
                     pure(name),
-                    pure(" : "),
+                    pure(": "),
                     print_term(ty),
                 ])
             })
@@ -1112,17 +1171,12 @@ fn print_top_induct_arity(
     result_sort: Term,
 ) -> Printer {
     if indices.is_empty() {
-        return flat([pure(" : "), print_pub(rep_pub), print_term(result_sort)]);
+        return flat([pure(": "), print_pub(rep_pub), print_term(result_sort)]);
     }
 
     flat([
-        pure(" : "),
-        listed(
-            "(",
-            false,
-            indices.into_iter().map(print_labeled).collect(),
-            ")",
-        ),
+        pure(": "),
+        listed("(", indices.into_iter().map(print_labeled).collect(), ")"),
         pure(" -> "),
         print_pub(rep_pub),
         print_term(result_sort),
@@ -1178,7 +1232,7 @@ fn print_top_struct(item: TopStruct) -> Printer {
         pure("struct "),
         pure(item.label),
         print_top_induct_params(item.params),
-        pure(" : "),
+        pure(": "),
         print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
@@ -1197,14 +1251,13 @@ fn print_concept_field(field: ConceptField) -> Printer {
             pure(field.label),
             listed(
                 "(",
-                false,
                 params.into_iter().map(print_func_type_param).collect(),
                 ")",
             ),
             pure(" -> "),
             print_term(field.type_),
         ]),
-        None => flat([pure(field.label), pure(" : "), print_term(field.type_)]),
+        None => flat([pure(field.label), pure(": "), print_term(field.type_)]),
     }
 }
 
@@ -1214,7 +1267,7 @@ fn print_top_concept(item: TopConcept) -> Printer {
         pure("concept "),
         pure(item.label),
         print_top_induct_params(item.params),
-        pure(" : "),
+        pure(": "),
         print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
@@ -1234,7 +1287,6 @@ fn print_top_witness(item: TopWitness) -> Printer {
             pure(" "),
             listed(
                 "(",
-                false,
                 item.params
                     .into_iter()
                     .map(print_func_sugar_param)
@@ -1250,12 +1302,7 @@ fn print_top_witness(item: TopWitness) -> Printer {
     } else {
         flat([
             pure(item.concept.join()),
-            listed(
-                "(",
-                false,
-                item.args.into_iter().map(print_term).collect(),
-                ")",
-            ),
+            listed("(", item.args.into_iter().map(print_term).collect(), ")"),
         ])
     };
 
@@ -1283,12 +1330,7 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
     match field.func_params {
         Some(params) => flat([
             pure(field.label),
-            listed(
-                "(",
-                false,
-                params.into_iter().map(print_func_param).collect(),
-                ")",
-            ),
+            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
             attached_body(" =", print_term(field.value)),
         ]),
         None => flat([
