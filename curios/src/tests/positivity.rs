@@ -27,6 +27,27 @@ fn rejected_by(source: &str, diagnostic: &str) {
     );
 }
 
+// A description of an `X` is the delayed `X` its thunk erasure makes it, so `X` under `Io` stays strictly positive — the same reading as `Lst`, and for a stronger reason: `bind` never hands back the result except inside another `Io`, and there is no eliminator that does. This is the rule a suspension whose continuation is computed by performing an effect rests on.
+#[test]
+fn an_io_payload_is_a_strictly_positive_occurrence() {
+    let source = r#"
+        use /std/{Nat, Io};
+
+        induct Step(A : Type) : pub Type
+        | done(A)
+        | more(next : Io(Step(A)))
+        end
+
+        let machine : Step(Nat) = Step/more(Io/pure(Step/done(7)));
+
+        match machine
+        | done(_) => /std/print("no")
+        | more(_) => /std/print("suspended")
+        end
+        "#;
+    assert_eq!(run(source), b"suspended");
+}
+
 // The rule most likely to be implemented wrongly, and the one that would take the whole concurrency stack with it. A nullary `() -> X` is an *empty* parameter list, so nothing flips and `X` stays strictly positive — a zero-argument function is a thunk of its result. Read as "an occurrence under an arrow is negative", this rejects `/std/Async`.
 #[test]
 fn a_nullary_arrow_codomain_is_a_strictly_positive_payload() {

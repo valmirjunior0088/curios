@@ -558,8 +558,12 @@ impl<E: Env> Walk<'_, E> {
             // A cell is read *and* written, so it is invariant in its element.
             Prim::CellType(element) => self.walk(element, Polarity::Mixed),
 
-            // `Io` is invariant here by choice, not by derivation. Operationally it is a delayed `T`, which would make it covariant like `Lst`; but `bind` hands the result to a continuation, and no consumer needs an `Io` inside an inductive yet. Invariance only refuses more programs, so it is the direction to be wrong in until one appears with an argument.
-            Prim::IoType(result) => self.walk(result, Polarity::Mixed),
+            // `Io` is covariant, and by the same reading as `Lst` rather than by analogy to `Cell`.
+            //
+            // A description of a `T` is operationally the delayed `T` its thunk erasure makes it — `{} -> T`, whose codomain is a strictly positive position. What decides the polarity is what the eliminations can extract, and `Io`'s are *weaker* than `Lst`'s: `Lst/at` hands back a `T` outright, while `bind` never exposes the `A` except inside another `Io`, and there is no `Io(T) -> T` for any other rule to lean on. A carrier whose only reader is stricter than a covariant carrier's cannot be less positive than it.
+            //
+            // This is the rule that admits a suspension whose continuation is computed by performing an effect — `Step(A) | step(Pause, next: Io(Step(A)))`, which is what `/std/Async` is once its hand-rolled delay is replaced by the typed one.
+            Prim::IoType(result) => self.walk(result, polarity),
 
             // Everything remaining is a value or an operation over values, not a type former. Its operands are terms; whatever they mention, they mention at `Mixed`.
             Prim::Bool(_)
