@@ -1907,3 +1907,37 @@ fn computed_type(context: &mut Context, motive: Term) -> Term {
         Term::prim(Prim::NatType),
     )
 }
+
+/// A primitive with no hand-written congruence arm is still compared operand by operand.
+///
+/// `LstMap` had no arm, and the wildcard beneath the table answered a *hard* mismatch rather than a postponement — so a metavariable standing in one of its operands was refused instead of solved. `convert`'s syntactic-identity short circuit hid that for every spelling that happened to be identical, which is why the omission survived. The rule now reads the operands off `Prim::traverse`, so the table cannot be short an operation.
+#[test]
+fn a_primitive_without_a_hand_written_arm_solves_a_metavariable_in_its_operand() {
+    let mut context = context();
+    let nat_type = Term::prim(Prim::NatType);
+
+    let xs = context.fresh(Some("xs"));
+    context.assume(&xs, &Term::prim(Prim::lst_type(nat_type.clone())));
+
+    let n = context.fresh(Some("n"));
+    let mapper_type = Term::func_type([(n, nat_type.clone())], nat_type.clone());
+    let f = context.fresh(Some("f"));
+    context.assume(&f, &mapper_type);
+
+    context.birth_metavar(MetaId(0), Vec::new(), mapper_type);
+
+    let flexible = Term::prim(Prim::lst_map(
+        nat_type.clone(),
+        nat_type.clone(),
+        Term::free_var(&xs),
+        Term::metavar(0),
+    ));
+    let rigid = Term::prim(Prim::lst_map(
+        nat_type.clone(),
+        nat_type,
+        Term::free_var(&xs),
+        Term::free_var(&f),
+    ));
+
+    assert_eq!(conv(&mut context, &flexible, &rigid), Ok(true));
+}

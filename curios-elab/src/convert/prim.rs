@@ -1,12 +1,20 @@
+//! Congruence for primitive operations.
+//!
+//! Two primitives are equal when they are the same operation applied to convertible operands. That is a congruence rule rather than a computation rule — the computation already happened, since both sides arrived reduced and a foldable operation would have folded.
+//!
+//! The rule is stated *generically* rather than as one arm per operation, which is also how `curios-cert` states it. A hand-written pair match over a roster of upwards of a hundred entries is a list that must be extended every time an operation is added, and its omissions are silent: `convert` short-circuits on syntactic identity before reaching here, so a missing arm only surfaces on two spellings that are convertible without being identical, as a *hard mismatch* rather than a postponement. `Bool`, `BoolType`, and `LstMap` had gone missing that way. Here the shape and the operands are both read through the traversal that already defines what a primitive's operands are, so a new operation is covered the moment it is representable — and covered identically on both sides of the checker seam.
+
 use {
     super::Convert,
-    curios_base::Grain,
-    curios_core::{Peel, Prim, ReduceError, Term, peel_bin, peel_lst, peel_nat},
+    curios_core::{Peel, Prim, ReduceError, Term, Var, Visit, peel_bin, peel_lst, peel_nat},
 };
 
 pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
-    // Two `Bin`/`Lst` values are the free monoid on their bytes/elements: peel the longest common prefix (`core::spine`). `Stuck` falls through to the structural arms below, which compare like-shaped symbolic operands (slices, appends) and `Lst` element runs that the peel leaves opaque — so the peel only ever strengthens conversion, never weakens it.
-    if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_lst(&this, &that)) {
+    // `Nat`, `Bin`, and `Lst` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`). This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
+    if let Some(peel) = peel_nat_pair(&this, &that)
+        .or_else(|| peel_bin(&this, &that))
+        .or_else(|| peel_lst(&this, &that))
+    {
         match peel {
             Peel::Equal => return Ok(true),
             Peel::Clash => return Ok(false),
@@ -18,255 +26,35 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         }
     }
 
-    match (this, that) {
-        (Prim::NatType, Prim::NatType)
-        | (Prim::ByteType, Prim::ByteType)
-        | (Prim::IntType, Prim::IntType)
-        | (Prim::FltType, Prim::FltType)
-        | (Prim::BinType(Grain::X), Prim::BinType(Grain::X))
-        | (Prim::BinType(Grain::B), Prim::BinType(Grain::B))
-        | (Prim::HandleType, Prim::HandleType) => Ok(true),
-        (Prim::Handle(this), Prim::Handle(that)) => Ok(this == that),
-        // Two `Nat`s are the free monoid on one generator: peel the shared successor spine and enqueue the residual tails (`core::spine`).
-        (Prim::Nat(actual), Prim::Nat(target)) => Ok(match peel_nat(&actual, &target) {
-            Peel::Equal => true,
-            Peel::Clash | Peel::Stuck => false,
-            Peel::Continue(left, right) => {
-                cmp.enqueue(Term::type_ground(), left, right);
-                true
-            }
-        }),
-        (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
-        (Prim::Byte(this), Prim::Byte(that)) => Ok(this == that),
-        (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
-        (Prim::Bin(Grain::X, this), Prim::Bin(Grain::X, that)) => Ok(this == that),
-        (Prim::Bin(Grain::B, this), Prim::Bin(Grain::B, that)) => Ok(this == that),
-        (Prim::HandleEql(this_left, this_right), Prim::HandleEql(that_left, that_right))
-        | (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
-        | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
-        | (Prim::NatAdd(this_left, this_right), Prim::NatAdd(that_left, that_right))
-        | (Prim::NatSub(this_left, this_right), Prim::NatSub(that_left, that_right))
-        | (Prim::NatMul(this_left, this_right), Prim::NatMul(that_left, that_right))
-        | (Prim::NatLt(this_left, this_right), Prim::NatLt(that_left, that_right))
-        | (Prim::NatDiv(this_left, this_right), Prim::NatDiv(that_left, that_right))
-        | (Prim::NatRem(this_left, this_right), Prim::NatRem(that_left, that_right))
-        | (Prim::NatGt(this_left, this_right), Prim::NatGt(that_left, that_right))
-        | (Prim::NatLte(this_left, this_right), Prim::NatLte(that_left, that_right))
-        | (Prim::NatGte(this_left, this_right), Prim::NatGte(that_left, that_right))
-        | (Prim::NatAnd(this_left, this_right), Prim::NatAnd(that_left, that_right))
-        | (Prim::NatOr(this_left, this_right), Prim::NatOr(that_left, that_right))
-        | (Prim::NatXor(this_left, this_right), Prim::NatXor(that_left, that_right))
-        | (Prim::NatShl(this_left, this_right), Prim::NatShl(that_left, that_right))
-        | (Prim::NatShr(this_left, this_right), Prim::NatShr(that_left, that_right))
-        | (Prim::NatRotl(this_left, this_right), Prim::NatRotl(that_left, that_right))
-        | (Prim::NatRotr(this_left, this_right), Prim::NatRotr(that_left, that_right))
-        | (Prim::ByteEql(this_left, this_right), Prim::ByteEql(that_left, that_right))
-        | (Prim::ByteLt(this_left, this_right), Prim::ByteLt(that_left, that_right))
-        | (Prim::ByteLte(this_left, this_right), Prim::ByteLte(that_left, that_right))
-        | (Prim::ByteGt(this_left, this_right), Prim::ByteGt(that_left, that_right))
-        | (Prim::ByteGte(this_left, this_right), Prim::ByteGte(that_left, that_right))
-        | (Prim::BoolAnd(this_left, this_right), Prim::BoolAnd(that_left, that_right))
-        | (Prim::BoolOr(this_left, this_right), Prim::BoolOr(that_left, that_right))
-        | (Prim::BoolXor(this_left, this_right), Prim::BoolXor(that_left, that_right))
-        | (Prim::BoolEql(this_left, this_right), Prim::BoolEql(that_left, that_right))
-        | (Prim::BoolNeq(this_left, this_right), Prim::BoolNeq(that_left, that_right))
-        | (Prim::IntEql(this_left, this_right), Prim::IntEql(that_left, that_right))
-        | (Prim::IntNeq(this_left, this_right), Prim::IntNeq(that_left, that_right))
-        | (Prim::IntAdd(this_left, this_right), Prim::IntAdd(that_left, that_right))
-        | (Prim::IntSub(this_left, this_right), Prim::IntSub(that_left, that_right))
-        | (Prim::IntMul(this_left, this_right), Prim::IntMul(that_left, that_right))
-        | (Prim::IntDiv(this_left, this_right), Prim::IntDiv(that_left, that_right))
-        | (Prim::IntRem(this_left, this_right), Prim::IntRem(that_left, that_right))
-        | (Prim::IntLt(this_left, this_right), Prim::IntLt(that_left, that_right))
-        | (Prim::IntGt(this_left, this_right), Prim::IntGt(that_left, that_right))
-        | (Prim::IntLte(this_left, this_right), Prim::IntLte(that_left, that_right))
-        | (Prim::IntGte(this_left, this_right), Prim::IntGte(that_left, that_right))
-        | (Prim::IntAnd(this_left, this_right), Prim::IntAnd(that_left, that_right))
-        | (Prim::IntOr(this_left, this_right), Prim::IntOr(that_left, that_right))
-        | (Prim::IntXor(this_left, this_right), Prim::IntXor(that_left, that_right))
-        | (Prim::IntShl(this_left, this_right), Prim::IntShl(that_left, that_right))
-        | (Prim::IntShr(this_left, this_right), Prim::IntShr(that_left, that_right))
-        | (Prim::IntRotl(this_left, this_right), Prim::IntRotl(that_left, that_right))
-        | (Prim::IntRotr(this_left, this_right), Prim::IntRotr(that_left, that_right))
-        | (Prim::FltAdd(this_left, this_right), Prim::FltAdd(that_left, that_right))
-        | (Prim::FltSub(this_left, this_right), Prim::FltSub(that_left, that_right))
-        | (Prim::FltMul(this_left, this_right), Prim::FltMul(that_left, that_right))
-        | (Prim::FltDiv(this_left, this_right), Prim::FltDiv(that_left, that_right))
-        | (Prim::FltRem(this_left, this_right), Prim::FltRem(that_left, that_right))
-        | (Prim::FltEql(this_left, this_right), Prim::FltEql(that_left, that_right))
-        | (Prim::FltNeq(this_left, this_right), Prim::FltNeq(that_left, that_right))
-        | (Prim::FltLt(this_left, this_right), Prim::FltLt(that_left, that_right))
-        | (Prim::FltGt(this_left, this_right), Prim::FltGt(that_left, that_right))
-        | (Prim::FltLte(this_left, this_right), Prim::FltLte(that_left, that_right))
-        | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
-        | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
-        | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
-        | (Prim::FltCopysign(this_left, this_right), Prim::FltCopysign(that_left, that_right))
-        | (
-            Prim::BinEql(Grain::X, this_left, this_right),
-            Prim::BinEql(Grain::X, that_left, that_right),
-        )
-        | (
-            Prim::BinGet(Grain::X, this_left, this_right),
-            Prim::BinGet(Grain::X, that_left, that_right),
-        )
-        | (
-            Prim::BinAppend(Grain::X, this_left, this_right),
-            Prim::BinAppend(Grain::X, that_left, that_right),
-        )
-        | (
-            Prim::BinEql(Grain::B, this_left, this_right),
-            Prim::BinEql(Grain::B, that_left, that_right),
-        )
-        | (
-            Prim::BinGet(Grain::B, this_left, this_right),
-            Prim::BinGet(Grain::B, that_left, that_right),
-        )
-        | (
-            Prim::BinAppend(Grain::B, this_left, this_right),
-            Prim::BinAppend(Grain::B, that_left, that_right),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_left, that_left);
-            cmp.enqueue(Term::type_ground(), this_right, that_right);
+    let (this_shape, this_operands) = decompose(&this);
+    let (that_shape, that_operands) = decompose(&that);
 
-            Ok(true)
-        }
-        (Prim::FltNeg(this), Prim::FltNeg(that))
-        | (Prim::FltAbs(this), Prim::FltAbs(that))
-        | (Prim::NatClz(this), Prim::NatClz(that))
-        | (Prim::NatCtz(this), Prim::NatCtz(that))
-        | (Prim::NatPopcnt(this), Prim::NatPopcnt(that))
-        | (Prim::IntClz(this), Prim::IntClz(that))
-        | (Prim::IntCtz(this), Prim::IntCtz(that))
-        | (Prim::IntPopcnt(this), Prim::IntPopcnt(that))
-        | (Prim::FltSqrt(this), Prim::FltSqrt(that))
-        | (Prim::FltFloor(this), Prim::FltFloor(that))
-        | (Prim::FltCeil(this), Prim::FltCeil(that))
-        | (Prim::FltTrunc(this), Prim::FltTrunc(that))
-        | (Prim::FltNearest(this), Prim::FltNearest(that))
-        | (Prim::FltToLeBytes(this), Prim::FltToLeBytes(that))
-        | (Prim::FltOfLeBytes(this), Prim::FltOfLeBytes(that))
-        | (Prim::NatToInt(this), Prim::NatToInt(that))
-        | (Prim::NatToFlt(this), Prim::NatToFlt(that))
-        | (Prim::IntToNat(this), Prim::IntToNat(that))
-        | (Prim::IntToFlt(this), Prim::IntToFlt(that))
-        | (Prim::FltToNat(this), Prim::FltToNat(that))
-        | (Prim::FltToInt(this), Prim::FltToInt(that))
-        | (Prim::ByteToNat(this), Prim::ByteToNat(that))
-        | (Prim::NatToByte(this), Prim::NatToByte(that))
-        | (Prim::BinLen(Grain::X, this), Prim::BinLen(Grain::X, that))
-        | (Prim::BinLen(Grain::B, this), Prim::BinLen(Grain::B, that))
-        | (Prim::LstType(this), Prim::LstType(that))
-        | (Prim::CellType(this), Prim::CellType(that))
-        | (Prim::IoType(this), Prim::IoType(that)) => {
-            cmp.enqueue(Term::type_ground(), this, that);
-
-            Ok(true)
-        }
-        (
-            Prim::BinSlice(Grain::X, this_bin, this_start, this_end),
-            Prim::BinSlice(Grain::X, that_bin, that_start, that_end),
-        )
-        | (
-            Prim::BinSlice(Grain::B, this_bin, this_start, this_end),
-            Prim::BinSlice(Grain::B, that_bin, that_start, that_end),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_bin, that_bin);
-            cmp.enqueue(Term::type_ground(), this_start, that_start);
-            cmp.enqueue(Term::type_ground(), this_end, that_end);
-
-            Ok(true)
-        }
-        (
-            Prim::LstSlice(this_ty, this_list, this_start, this_end),
-            Prim::LstSlice(that_ty, that_list, that_start, that_end),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
-            cmp.enqueue(Term::type_ground(), this_list, that_list);
-            cmp.enqueue(Term::type_ground(), this_start, that_start);
-            cmp.enqueue(Term::type_ground(), this_end, that_end);
-
-            Ok(true)
-        }
-        (
-            Prim::LstGet(this_ty, this_list, this_index),
-            Prim::LstGet(that_ty, that_list, that_index),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
-            cmp.enqueue(Term::type_ground(), this_list, that_list);
-            cmp.enqueue(Term::type_ground(), this_index, that_index);
-
-            Ok(true)
-        }
-        (Prim::LstLen(this_ty, this_list), Prim::LstLen(that_ty, that_list)) => {
-            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
-            cmp.enqueue(Term::type_ground(), this_list, that_list);
-
-            Ok(true)
-        }
-        (
-            Prim::LstAppend(this_ty, this_list, this_elem),
-            Prim::LstAppend(that_ty, that_list, that_elem),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
-            cmp.enqueue(Term::type_ground(), this_list, that_list);
-            cmp.enqueue(Term::type_ground(), this_elem, that_elem);
-
-            Ok(true)
-        }
-        (Prim::Lst(this_elem, this_ops), Prim::Lst(that_elem, that_ops)) => {
-            cmp.enqueue(Term::type_ground(), this_elem, that_elem);
-
-            if this_ops.len() != that_ops.len() {
-                return Ok(false);
-            }
-
-            for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Term::type_ground(), this, that);
-            }
-
-            Ok(true)
-        }
-        (Prim::BinConcat(Grain::X, this_ops), Prim::BinConcat(Grain::X, that_ops))
-        | (Prim::BinConcat(Grain::B, this_ops), Prim::BinConcat(Grain::B, that_ops)) => {
-            if this_ops.len() != that_ops.len() {
-                return Ok(false);
-            }
-
-            for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Term::type_ground(), this, that);
-            }
-
-            Ok(true)
-        }
-        (Prim::LstConcat(this_ty, this_ops), Prim::LstConcat(that_ty, that_ops)) => {
-            if this_ops.len() != that_ops.len() {
-                return Ok(false);
-            }
-            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
-            for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Term::type_ground(), this, that);
-            }
-            Ok(true)
-        }
-        // Descriptions compare congruently and by nothing else: no monad law fires here, so `bind(pure(x), f)` and `f(x)` are distinct terms. Nothing can be proven about an `Io`, so a law would buy no program anything, and admitting one would make conversion decide when an effect happens.
-        (Prim::IoPure(this_ty, this_value), Prim::IoPure(that_ty, that_value)) => {
-            cmp.enqueue(Term::type_ground(), this_ty, that_ty);
-            cmp.enqueue(Term::type_ground(), this_value, that_value);
-
-            Ok(true)
-        }
-        (
-            Prim::IoBind(this_from, this_to, this_action, this_next),
-            Prim::IoBind(that_from, that_to, that_action, that_next),
-        ) => {
-            cmp.enqueue(Term::type_ground(), this_from, that_from);
-            cmp.enqueue(Term::type_ground(), this_to, that_to);
-            cmp.enqueue(Term::type_ground(), this_action, that_action);
-            cmp.enqueue(Term::type_ground(), this_next, that_next);
-
-            Ok(true)
-        }
-        (_, _) => Ok(false),
+    // The shapes carry everything that is *not* a term: which operation, which grain, which literal, which successor floor, which foreign row. Comparing them settles the whole of the operation's identity in one derived equality.
+    if this_shape != that_shape || this_operands.len() != that_operands.len() {
+        return Ok(false);
     }
+
+    for (left, right) in this_operands.into_iter().zip(that_operands) {
+        cmp.enqueue(Term::type_ground(), left, right);
+    }
+
+    Ok(true)
+}
+
+/// The free-monoid peel for two `Nat`s, which unlike `Bin`/`Lst` is spelled against the carrier rather than the primitive.
+fn peel_nat_pair(this: &Prim, that: &Prim) -> Option<Peel> {
+    match (this, that) {
+        (Prim::Nat(left), Prim::Nat(right)) => Some(peel_nat(left, right)),
+        _ => None,
+    }
+}
+
+/// Split a primitive into its shape — itself, with every term operand stood down to one placeholder — and those operands in traversal order.
+///
+/// Both halves come from `Prim::traverse`, which is the single definition of what a primitive's term operands are. Nothing here enumerates operations, so nothing here can forget one.
+fn decompose(prim: &Prim) -> (Prim, Vec<Term>) {
+    let mut visit = Visit::masking(|_, _: &Var| None, Term::type_ground());
+    let shape = prim.traverse(&mut visit);
+
+    (shape, visit.take_masked_children())
 }
