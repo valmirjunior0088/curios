@@ -2,7 +2,10 @@
 //!
 //! Each accessor enumerates one structural dimension of a right-hand side — its atom operands, its owned sub-blocks, the values its sub-blocks bind — in deterministic evaluation order. Consumers drive their own explicit worklists over these, keeping every whole-module walk iterative.
 
-use super::{Atom, BlockId, Rhs, Terminator, ValueId};
+use {
+    super::{Atom, BlockId, Module, Rhs, Statement, Terminator, ValueId},
+    std::collections::BTreeSet,
+};
 
 impl Rhs {
     /// Every atom operand this right-hand side evaluates or references, in evaluation order — including callees and scrutinees.
@@ -85,9 +88,11 @@ impl Terminator {
 }
 
 /// Every control block reachable from `root` — the block itself and the sub-blocks of its statements, transitively — without entering a nested function's body. Iterative, deterministic order.
-pub(crate) fn control_blocks(module: &super::Module, root: BlockId) -> Vec<BlockId> {
+///
+/// A recursive group's *value* members are reached, its *function* members are not, and the asymmetry is the same one the sentence above draws. A computed member's `init` is an inline block of this function, run where the group is entered; a function member has a body of its own, which a caller walks by following the group's functions. Omitting an init block makes it invisible to every consumer here — and to a deep copy that decides what it owns by this walk, invisible reads as *outward*, so the copy keeps pointing at the original's block and the two come to own it jointly.
+pub(crate) fn control_blocks(module: &Module, root: BlockId) -> Vec<BlockId> {
     let mut blocks = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
+    let mut seen = BTreeSet::new();
     let mut work = vec![root];
     while let Some(block) = work.pop() {
         if !seen.insert(block) {
@@ -98,10 +103,49 @@ pub(crate) fn control_blocks(module: &super::Module, root: BlockId) -> Vec<Block
             continue;
         };
         for &statement in &definition.statements {
-            if let Some(super::Statement::Let { rhs, .. }) = module.statement(statement) {
-                work.extend(rhs.sub_blocks());
+            match module.statement(statement) {
+                Some(Statement::Let { rhs, .. }) => work.extend(rhs.sub_blocks()),
+                Some(Statement::Rec { group }) => {
+                    if let Some(group) = module.rec_group(*group) {
+                        work.extend(group.values.iter().map(|member| member.init));
+                    }
+                }
+                Some(Statement::Functions { .. }) | None => {}
             }
         }
     }
     blocks
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        super::control_blocks,
+        crate::{Atom, Constant, ErsdBuilder, Terminator},
+    };
+
+    /// A computed member's `init` is inline control and the walk must reach it.
+    ///
+    /// It did not once, and nothing here noticed: the consumer that cared was [`deep_copy_function`](crate::optimize), which decides what a copied region *owns* by this walk. A block the walk never yields reads as outward and is kept verbatim, so the copy went on pointing at the original's init block and the two came to own it jointly — which the verifier reports as a block with more than one owner, aborting compilation of any program whose recursive group has a value member.
+    #[test]
+    fn a_recursive_value_members_init_block_is_control() {
+        let mut builder = ErsdBuilder::new();
+        let member = builder.value(Some("member".into()));
+
+        builder.open_block();
+        builder.open_block();
+        let constant = builder.constant(Constant::Bool(true));
+        let init = builder.seal_block(Terminator::Return(Atom::Constant(constant)));
+        let group = builder.rec_group(vec![], vec![(member, init)]);
+        builder.let_rec(group);
+        let entry = builder.seal_block(Terminator::Return(Atom::Value(member)));
+        builder.set_entry(entry);
+
+        let module = builder.finalize().expect("the module verifies");
+
+        assert!(
+            control_blocks(&module, entry).contains(&init),
+            "the walk must reach a recursive value member's init block",
+        );
+    }
 }
