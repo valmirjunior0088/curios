@@ -24,6 +24,13 @@ pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(super) const BRANCH_CLONE_LIMIT: usize = 64;
 
+/// How many times the pass sequence may be re-run before the fixpoint gives up.
+///
+/// A backstop against a pass pair that undoes each other's work, not a budget: what bounds the *real* work is the growth limits above, each of which refuses an individual rewrite. Reaching this limit therefore means the sequence did not converge, and the module is emitted in whatever half-optimized state the last round left it — silently, since nothing downstream can tell a fixpoint that finished from one that ran out.
+///
+/// It was 32, and 32 bound: 33 programs in the corpus stopped there, and raising the limit showed them converging anywhere up to 191 rounds with every test still passing, so the truncation was pure loss rather than a tradeoff anything depended on. The value is set far above that measured maximum because a backstop that a real program can reach is indistinguishable from a budget nobody documented.
+pub(super) const ROUND_LIMIT: usize = 1024;
+
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
 pub fn optimize(module: &mut CpsModule) {
     module
@@ -32,7 +39,8 @@ pub fn optimize(module: &mut CpsModule) {
 
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
     let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
-    for _ in 0..32 {
+    let mut converged = false;
+    for _ in 0..ROUND_LIMIT {
         let substitutions = known_values(module);
         let changed = rewrite_atoms(module, &substitutions)
             | forward_continuations(module)
@@ -48,9 +56,16 @@ pub fn optimize(module: &mut CpsModule) {
             | dissolve_rec_init(module)
             | prune_unreachable(module);
         if !changed {
+            converged = true;
             break;
         }
     }
+
+    // Loud rather than silent: a module that exhausts the limit is emitted less optimized than an equivalent one that did not, and no later stage can detect the difference. Debug-only because the consequence is worse code rather than wrong code — a release compile should still produce a working program.
+    debug_assert!(
+        converged,
+        "cont optimization did not converge within {ROUND_LIMIT} rounds"
+    );
 
     module
         .verify()
