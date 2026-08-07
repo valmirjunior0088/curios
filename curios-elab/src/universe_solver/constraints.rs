@@ -101,14 +101,6 @@ impl ConstraintStore {
         self.constraints.pop();
     }
 
-    /// Replace a constraint in place, journalling its pre-image so a later rollback can restore it.
-    pub(super) fn replace(&mut self, position: usize, constraint: UniverseConstraint) {
-        self.unindex(position);
-        let previous = std::mem::replace(&mut self.constraints[position], constraint);
-        self.rewrites.push((position, previous));
-        self.index(position);
-    }
-
     /// Restore the store to `mark`: undo every rewrite recorded since, newest first, then drop the constraints appended since.
     pub(super) fn rollback(&mut self, mark: StoreMark) {
         while self.rewrites.len() > mark.rewrites {
@@ -140,34 +132,54 @@ impl ConstraintStore {
         }
     }
 
-    /// Rewrite every constraint mentioning `head` by `substitute`.
+    /// Replace `head` by `solution` in every constraint mentioning it, moving the index by the *delta* the substitution makes rather than rebuilding each rewritten constraint's whole entry.
+    ///
+    /// The delta is the same for every constraint touched — `head` leaves, `solution`'s heads arrive — so it is computed once. The previous form took an opaque rewriting closure, which hid exactly that fact, and so had to `unindex` then `index` each constraint: two BTree operations per head it *already* carried, against one removal plus one insertion per head the solution *adds*. That mattered because the carried width is the number that grows — a solution is a maximum, so every substitution widens the head sets of the constraints it lands in, and each later assignment then pays more.
     ///
     /// Returns the positions that changed, which the caller uses to decide whether cached consistency survived.
-    pub(super) fn substitute(
+    pub(super) fn substitute_head(
         &mut self,
         head: LevelHead,
-        mut substitute: impl FnMut(&Level) -> Result<Level, super::UniverseError>,
+        solution: &Level,
     ) -> Result<Vec<usize>, super::UniverseError> {
+        curios_profile::profile!("universe::substitute");
         let positions = self.mentioning(head).collect::<Vec<_>>();
+        let arrived = solution
+            .atoms()
+            .map(|(atom, _)| atom)
+            .filter(|atom| *atom != head)
+            .collect::<Vec<_>>();
+
         let mut rewritten = Vec::with_capacity(positions.len());
         for position in positions {
-            let constraint = &self.constraints[position];
-            let lower = substitute(&constraint.lower)?;
-            let upper = substitute(&constraint.upper)?;
-            if lower == constraint.lower && upper == constraint.upper {
-                continue;
-            }
-            let origin = constraint.origin.clone();
-            self.replace(
-                position,
+            let rebuilt = {
+                let constraint = &self.constraints[position];
+                let lower = constraint
+                    .lower
+                    .substitute(|found| (found == head).then(|| solution.clone()))?;
+                let upper = constraint
+                    .upper
+                    .substitute(|found| (found == head).then(|| solution.clone()))?;
+                if lower == constraint.lower && upper == constraint.upper {
+                    continue;
+                }
                 UniverseConstraint {
                     lower,
                     upper,
-                    origin,
-                },
-            );
+                    origin: constraint.origin.clone(),
+                }
+            };
+
+            let previous = std::mem::replace(&mut self.constraints[position], rebuilt);
+            self.rewrites.push((position, previous));
+            for atom in &arrived {
+                self.occurrences.entry(*atom).or_default().insert(position);
+            }
             rewritten.push(position);
         }
+
+        // `head` is solved, so nothing mentions it any more — including the constraints the substitution left alone, which by definition did not mention it.
+        self.occurrences.remove(&head);
         Ok(rewritten)
     }
 }

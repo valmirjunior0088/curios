@@ -444,6 +444,7 @@ fn finalize_definition(
     type_: Term,
     body: Term,
 ) -> Result<(UniverseContext, Term, Term), Error> {
+    curios_profile::profile!("finalize_definition");
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 
@@ -908,6 +909,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
 /// Elaborate one persistent module item and perform every item-boundary obligation. Both module drivers use this path so universe transactions, parked work, witnesses, privacy islands, and error attribution cannot drift.
 fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Error> {
+    curios_profile::profile!("elaborate_module_item");
     let item_module = match item {
         Item::Let(definition) => definition.island.clone(),
         Item::Rec(rec) => rec.island(),

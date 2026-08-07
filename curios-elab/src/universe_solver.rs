@@ -701,6 +701,7 @@ impl UniverseSolver {
     ///
     /// Solving is worklist-driven: a level is revisited only when one of the levels its bounds mention has just been solved. Rescanning every constraint for every level after every assignment is what made this quadratic in the size of a declaration's universe closure.
     fn solve_flexible_in(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::solve_flexible_in");
         self.merge_forced_equalities(metas)?;
 
         let mut queue = metas.iter().copied().collect::<VecDeque<_>>();
@@ -815,6 +816,7 @@ impl UniverseSolver {
         &mut self,
         metas: &BTreeSet<UniverseMetaId>,
     ) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::merge_forced_equalities");
         loop {
             let mut assignments = Vec::new();
             {
@@ -879,6 +881,7 @@ impl UniverseSolver {
     ///
     /// Substituting here rather than re-zonking at every read is what keeps the store's normalization invariant: the work is proportional to the solved level's degree, and every later reader sees a settled inequality. A second assignment to one meta is ignored, so a solution is committed at most once and the journal stays a faithful inverse.
     fn assign(&mut self, meta: UniverseMetaId, level: Level) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::assign");
         let entry = self
             .metas
             .get_mut(meta.0)
@@ -892,9 +895,7 @@ impl UniverseSolver {
 
         let head = LevelHead::Meta(meta);
         let solution = self.zonk(&Level::meta(meta))?;
-        self.constraints.substitute(head, |level| {
-            level.substitute(|found| (found == head).then(|| solution.clone()))
-        })?;
+        self.constraints.substitute_head(head, &solution)?;
         Ok(())
     }
 
@@ -1023,6 +1024,7 @@ impl UniverseSolver {
         metas: &BTreeSet<UniverseMetaId>,
         scope: &BTreeSet<UniverseMetaId>,
     ) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::minimize");
         let roles = metas
             .iter()
             .map(|meta| {
@@ -1050,6 +1052,7 @@ impl UniverseSolver {
         interface: impl IntoIterator<Item = UniverseMetaId>,
         internal: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
+        curios_profile::profile!("universe::finalize");
         let interface = interface.into_iter().collect::<BTreeSet<_>>();
         let internal = internal
             .into_iter()
@@ -1082,6 +1085,7 @@ impl UniverseSolver {
         instance: &[Level],
         parameter_count: usize,
     ) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::finalize_at_instance");
         if instance.len() != parameter_count {
             return Err(UniverseError::InstanceArity {
                 expected: parameter_count,
@@ -1221,6 +1225,7 @@ impl UniverseSolver {
     }
 
     fn check_consistent(&mut self) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::check_consistent");
         if let Some(mut cache) = self.consistency.take() {
             if cache.constraint_len == self.constraints.len() {
                 self.consistency = Some(cache);
@@ -1284,6 +1289,7 @@ impl UniverseSolver {
 
     /// Decide consistency from scratch, branching on genuine right-hand maxima. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
     fn check_consistent_full(&self) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::check_consistent_full");
         let constraints = self.constraints.as_slice();
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         enum Node {
@@ -1709,7 +1715,10 @@ impl UniverseSolver {
         // Accepting is always justified: a satisfying branch assignment is a model of the original constraints, so any `Ok` here is sound however few branches were explored. Only *refuting* needs the whole tree, so exhausting the budget means "not decided", and the caller reports it rather than continuing an exponential walk.
         const SEARCH_BUDGET: u64 = 200_000;
         let mut budget = SEARCH_BUDGET;
-        let consistency = choose(&branches, 0, &mut search, &mut budget);
+        let consistency = curios_profile::profile_span!(
+            "universe::choose",
+            choose(&branches, 0, &mut search, &mut budget)
+        );
 
         consistency.map_err(|path| match path {
             Some(path) => self.inconsistency_from_path(path),

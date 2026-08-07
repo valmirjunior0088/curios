@@ -1050,6 +1050,7 @@ impl Context {
         interface: BTreeSet<UniverseMetaId>,
         internal: BTreeSet<UniverseMetaId>,
     ) -> Result<UniverseContext, Error> {
+        curios_profile::profile!("ctx::finalize_universe_metas");
         let universe_context = self
             .universes_mut()
             .finalize(interface, internal)
