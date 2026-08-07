@@ -120,9 +120,7 @@ where
     // `Io({})` is closed, which is what makes this a `Mode::Check` at all. Checking against `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
     let core_mode = match &lowered.type_ {
         Some(type_) => Mode::Check(type_.clone()),
-        None => Mode::Check(Term::prim(Prim::io_type(Term::tuple_type(
-            Vec::<(curios_core::Free, Term)>::new(),
-        )))),
+        None => Mode::Check(Term::prim(Prim::io_type(Term::tuple_type_unit()))),
     };
 
     let (module, core_type) = with_prelude(|prelude| {
