@@ -304,11 +304,7 @@ fn choose(clauses: &[Vec<Option<Arc>>], search: &mut Search, budget: &mut usize)
         undo: None,
     }];
 
-    loop {
-        let Some(frame) = stack.last_mut() else {
-            break;
-        };
-
+    while let Some(frame) = stack.last_mut() {
         // Resuming this frame: put back whatever its last descent committed.
         if let Some(undo) = frame.undo.take() {
             search.rollback(undo);
