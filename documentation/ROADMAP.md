@@ -175,9 +175,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] concurrent `both`/`race`/`select`
   - [x] result cell (`Cell`)
   - [x] `sleep`/`timeout`
-- [ ] [Purity through an opaque Io monad](compiler/01_PURITY_SPEC.md) (three primitives — `Io(T)`, `pure`, `bind` — every host operation retyped to return `Io`, the entrypoint tail always an `Io(T)` the emitted boundary forces once, and `curios-cert`'s purity analysis deleted in favor of the typing invariant; supersedes the reverted algebraic-effects design)
-  - [ ] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness; no behavior change)
-  - [ ] Stage 2: the flip — the host surface and `/std` retyped, the `Io(T)` entrypoint contract, `curios-cert/src/purity.rs` deleted _(breaking: every program's tail becomes an `Io`)_
+- [x] Purity through an opaque Io monad (three primitives — `Io(T)`, `pure`, `bind` — every host operation retyped to return `Io`, the entrypoint tail an `Io({})` the emitted boundary forces once, and `curios-cert`'s purity analysis deleted in favor of the typing invariant; supersedes the reverted algebraic-effects design)
+  - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness; no behavior change)
+  - [x] Stage 2: the flip — the host surface and `/std` retyped, the `Io({})` entrypoint contract, `curios-cert/src/purity.rs` deleted _(breaking: every program's tail becomes an `Io`)_
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)
 - [x] Host-service modules (`std/time` `Instant`/`Duration`, `std/proc` `args`/`env`/`exit`, `std/rand`)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)

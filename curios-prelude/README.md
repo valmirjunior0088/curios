@@ -10,6 +10,14 @@ Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` pre
 
 **Rationale.** A fallback would turn an invariant violation into a silent recompile, letting the archive drift from the sources it claims to capture; failing loudly keeps the archive's fidelity a checked property. Scoping the image to one compiler build removes any stability obligation on the format, so it can change freely with the representations it serializes.
 
+### /sys mirrors the host store, and `Io` owns only the sequencing
+
+**Decision.** The flat `/sys` root is a 1:1 mirror of `curios-abi`'s `ForeignStore`: one declaration per wire row, in store order, with the row's own name. Every one of them returns `Io(T)` — a *description* of the host call rather than its result — and `/sys/Io` holds exactly `pure` and `bind`, the two operations that build and sequence a description. No host operation lives under `/sys/Io`, and `/std` is where the taxonomy goes: `Handle`, `File`, `proc`, `time`, `rand`, `tcp` each own their subject's operations and wrap the raw rows in the shapes a program wants.
+
+**Rationale.** `Io` is the type a result *wears*, not the subject an operation belongs to, so grouping operations under it would sort the library by a fact about their type instead of by what they do. Keeping `/sys` a mirror is what lets the store and the prelude be checked against each other mechanically, the same argument `/syn` rests on above; keeping the monad separate is what stops that mirror from acquiring a taxonomy of its own.
+
+**What a `/std` wrapper may and may not do.** It may rename, reshape a record, retry, or decode — `Handle/write` resends a short write, `proc/env` turns a status row into an `Option`. It may not *perform*: there is no eliminator from `Io(T)` to `T`, so a wrapper threads descriptions with `!` and returns one. A wrapper whose result type is not an `Io` is therefore pure by typing, which is the property the whole effect discipline rests on and the reason `curios-cert` needs no purity analysis. See "Effects are descriptions, and the carrier has no eliminator" in `documentation/DESIGN.md`.
+
 ### /syn holds compiler-emitted names only
 
 **Decision.** `/syn` owns exactly the names Rust lowering emits — the proof-certified literal structures (`/syn/Char`, `/syn/Str`) and the concepts syntax dispatches through. A concept may be declared at `syn.crs` top level or in its own module file beside them; the choice is presentation, and what it decides is the name — `Eql` in a file is `/syn/Eql/Eql`, not `/syn/Eql` — so the Rust registry entry moves with it. Operator witnesses live in the `/std` operator facades and other witnesses beside their types; the canonical Rust registry of the hidden lowering targets is this crate's `src/syntax.rs` for the syntax-directed names and `curios-base`'s `NumOp::concept_field` for the operator concepts, and the registry contract belongs to `curios-base`.

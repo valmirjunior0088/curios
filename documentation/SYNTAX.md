@@ -365,6 +365,43 @@ Every value body is a sequencing region. Lambda bodies, match arms, and recursiv
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
+### Host effects are `Io` descriptions
+
+Every operation that touches the host — writing a handle, reading a clock, allocating or reading a cell, calling a `foreign` function, exiting — has result type `Io(T)`. An `Io(T)` is a *description* of a computation yielding a `T`, not the `T`. Calling such an operation performs nothing; it builds a description.
+
+```crs
+use /std/{Io, print};
+let greeting : Io({}) = print("hello");   -- nothing has been printed
+```
+
+`Io/pure` wraps a value as a description that performs nothing, and `Io/bind` sequences one description into another. Postfix `!` is the ordinary sequencing form and reaches `Io` through its `Monad` witness like any other monad:
+
+```crs
+use /std/{Io, print};
+let shout(s : Str) -> Io({}) =
+    let _ = print(s)!;
+    print("!\n")
+```
+
+**There is no operation taking an `Io(T)` to a `T`.** A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
+
+```crs
+let probe(tag : Str, r : Bool) -> Bool =
+    let _ = /std/print(tag)!;   -- rejected: this region's type is `Bool`, not a monad
+    r;
+```
+
+Binding a description does not perform it, and forcing one twice performs it twice:
+
+```crs
+use /std/{Io, print};
+let once : Io({}) = print("x");
+let _ = once!;
+once                            -- prints "x" twice in total
+```
+
+`Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected.
+
 ### Whole-term forms and operand positions
 
 `let`, `rec`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term : type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
