@@ -2,7 +2,6 @@
 mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
-use curios_cert::fixes_no_value;
 use curios_core::{
     Apply, Field, Free, Func, FuncType, Global, Level, Many, MetaId, Metavar, Prim, PrimHead, Proj,
     ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
@@ -425,16 +424,12 @@ fn retry_checking(
 ///
 /// Also drives Rung-B index *learning* (`refine_head(actual, target)`), where `actual` is a scrutinee index: a `Var` index is the live case, and a *constructor* index records an entry the reducer never fires (it has no applied-head symbol to probe) — the inverter pins the arm binders the other way. A stuck-*application* index would be the genuinely cyclic case, but no inductive in the library is indexed by one.
 ///
-/// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and an effectful scrutinee does not have it: `Cell/get(c)` is a spelling whose value changes under it. Registering one anyway read the same term as `true` in one arm and `false` in a nested one, which is the equation between two `Bool` literals and from there a closed inhabitant of `False`. It also walked the effect *into a type*, past the `EffectAtTypeLevel` guard that refuses one written directly, because the reducer answered from the store before it ever reached the primitive.
+/// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///
-/// So an effectful scrutinee refines nothing, which is what `curios-cert`'s `assume_case_value` says of its own store: the arm is checked under strictly fewer assumptions, and a program that needed the refinement is refused rather than admitted. *Where* it is refused depends on the shape — an effect written into a type directly is refused as one, while an effect reduction never reaches is refused wherever the withheld equation was needed, as an ordinary mismatch.
+/// That is a typing fact now, not an analysis. This used to be guarded by a walk over the scrutinee and everything it reaches, asking whether its spelling fixes a value: `Cell/get(c)` denotes differently before and after a `Cell/set`, and registering an equation for it read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False`. The walk could never close the case it documented, either: `f(b)` for a *binder* `f` had to be assumed effectful, because the function space admitted `Cell/get` and no property of `(Bool) -> Bool` distinguished an effectful inhabitant from a pure one.
 ///
-/// The premise is asked of the *term*, through the shared [`fixes_no_value`], rather than of the reducer — and of the callees the term would reach, since effectfulness of `f(true)` is not a property of `f(true)` when `f` is a binder. Asking the reducer was the first spelling of this guard and it read a question weak-head reduction cannot answer: reduction stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` reduced cleanly and refined. Both checkers now put the same question to the same walk, which is what keeps them from agreeing on the wrong answer to it.
+/// Retyping every host operation to return `Io` made both questions vacuous. `Cell/get(c)` has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all; and no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding. The refinement the walk had to withhold from a pure opaque head is therefore restored — this is a change that *admits* more, not merely one that deletes an analysis.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
-    if fixes_no_value(context, head) {
-        return Ok(());
-    }
-
     match &**head {
         Subterm::Var(var) => {
             context.refine(var.unwrap(), value);

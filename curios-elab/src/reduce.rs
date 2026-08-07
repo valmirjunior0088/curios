@@ -55,9 +55,6 @@ impl curios_cert::Env for Context {
         Context::struct_decl(self, name)
     }
 
-    fn effect_memo(&mut self) -> &mut HashMap<Free, bool> {
-        Context::effect_memo(self)
-    }
 }
 
 impl curios_cert::Judge for Context {

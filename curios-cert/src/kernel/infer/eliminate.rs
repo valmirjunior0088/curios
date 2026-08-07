@@ -24,7 +24,7 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        InductAt, Invert, Kernel, KernelError, Sort, carries_information, fixes_no_value,
+        InductAt, Invert, Kernel, KernelError, Sort, carries_information,
         invert_indices, invert_indices_outer, pinned_by_targets,
     },
     curios_core::{
@@ -142,7 +142,7 @@ fn check_arm(
 ///
 /// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for a primitive carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead.
 ///
-/// A scrutinee whose spelling does not fix a value gets no equation at all, and the shared [`fixes_no_value`](crate::fixes_no_value) is what decides that — an operation the host performs, or a call whose callee that walk does not read, since `f(true)` for a parameter `f` computes whatever the caller bound. This used to rest on reduction refusing the spelling first, which held only for a scrutinee reduction actually reaches: `whnf` stops at a stuck head with its arguments untouched, so `f(Cell/get(c))` was recorded here exactly as it was in the elaborator, and one term denoting two values followed. Withholding the equation checks the arm under strictly fewer assumptions, which is the incomplete direction.
+/// Every scrutinee gets its equation, because a term of non-`Io` type denotes one value. This used to ask a shared walk whether the spelling fixed one — an operation the host performs did not, nor did a call whose callee the walk could not read, since `f(true)` for a parameter `f` computes whatever the caller bound. Retyping the host surface to return `Io` answered both by construction: an `Io` is opaque and cannot be eliminated, so it never reaches a scrutinee position, and no inhabitant of an ordinary arrow performs an effect. The equation the walk had to withhold from a pure opaque head is admitted again.
 ///
 /// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and free-monoid — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
 ///
@@ -160,10 +160,6 @@ pub(super) fn assume_case_value(
         && kernel.local_type(var.unwrap()).is_some()
     {
         solutions.push((var.unwrap().clone(), value));
-        return;
-    }
-
-    if fixes_no_value(kernel, scrutinee) {
         return;
     }
 

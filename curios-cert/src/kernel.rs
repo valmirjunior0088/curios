@@ -253,9 +253,6 @@ impl Env for Kernel {
         Kernel::struct_decl(self, name)
     }
 
-    fn effect_memo(&mut self) -> &mut HashMap<Free, bool> {
-        self.globals.effects_mut()
-    }
 }
 
 impl Judge for Kernel {

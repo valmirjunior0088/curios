@@ -70,10 +70,6 @@ pub trait Env {
     /// The registry entry for a `struct` declaration, or `None` when the name is not one.
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl>;
 
-    /// Where [`fixes_no_value`](crate::fixes_no_value) remembers its per-definition answer.
-    ///
-    /// The one method here that is storage rather than a question, and it argues for itself on cost: the caller is every match arm, the closure of one scrutinee reaches most of the standard library, and re-walking it each time measured a third of the fixed prelude's build. Owned by the driver because it lives as long as the compilation and must be dropped exactly when a definition body stops being what it was — which is the driver's event, not this crate's.
-    fn effect_memo(&mut self) -> &mut HashMap<Free, bool>;
 }
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.

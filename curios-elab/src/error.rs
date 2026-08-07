@@ -48,9 +48,6 @@ pub enum Error {
         start: usize,
         end: usize,
     },
-    EffectAtTypeLevel {
-        kind: String,
-    },
     DivisionByZero {
         kind: &'static str,
     },
@@ -399,9 +396,6 @@ impl Error {
                 end,
                 span,
             } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
-            ReduceError::EffectAtTypeLevel { kind, span } => {
-                Error::EffectAtTypeLevel { kind }.at_opt(span)
-            }
             ReduceError::DivisionByZero { kind, span } => {
                 Error::DivisionByZero { kind }.at_opt(span)
             }
@@ -1557,9 +1551,6 @@ impl fmt::Display for Error {
                     f,
                     "Lst.slice range {start}..{end} out of range (length {len})"
                 )
-            }
-            Error::EffectAtTypeLevel { kind } => {
-                write!(f, "{kind} cannot appear at the type level")
             }
             Error::DivisionByZero { kind } => {
                 write!(f, "division by zero in {kind}")
