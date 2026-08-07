@@ -649,7 +649,6 @@ impl Context {
         self.frames.refine_projection(base, index, value);
     }
 
-
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
         self.frames.definition_body(name)
     }

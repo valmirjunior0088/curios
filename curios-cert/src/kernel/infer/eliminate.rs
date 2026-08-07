@@ -24,8 +24,8 @@ mod tests;
 use {
     super::{check, infer},
     crate::{
-        InductAt, Invert, Kernel, KernelError, Sort, carries_information,
-        invert_indices, invert_indices_outer, pinned_by_targets,
+        InductAt, Invert, Kernel, KernelError, Sort, carries_information, invert_indices,
+        invert_indices_outer, pinned_by_targets,
     },
     curios_core::{
         Atom, Bound, Free, InductArm, InductType, Many, Reducer, Scope, Subterm, Telescope, Term,

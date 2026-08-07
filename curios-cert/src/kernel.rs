@@ -252,7 +252,6 @@ impl Env for Kernel {
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         Kernel::struct_decl(self, name)
     }
-
 }
 
 impl Judge for Kernel {

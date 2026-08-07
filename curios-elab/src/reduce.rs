@@ -53,7 +53,6 @@ impl curios_cert::Env for Context {
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         Context::struct_decl(self, name)
     }
-
 }
 
 impl curios_cert::Judge for Context {

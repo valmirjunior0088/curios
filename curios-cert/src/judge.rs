@@ -18,9 +18,7 @@
 //!
 //! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `KernelError`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
-use {
-    curios_core::{Bound, Free, Global, InductDecl, StructDecl, Subterm, Term},
-};
+use curios_core::{Bound, Free, Global, InductDecl, StructDecl, Subterm, Term};
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
 ///
@@ -68,7 +66,6 @@ pub trait Env {
 
     /// The registry entry for a `struct` declaration, or `None` when the name is not one.
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl>;
-
 }
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.

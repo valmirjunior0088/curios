@@ -491,28 +491,32 @@ pub(super) fn erase_prim(
         // The operand is erased at the construction site like every other primitive's, not inside the thunk. The language is eager: `/sys/Io/pure` is an ordinary call-by-value wrapper, so a surface `Io/pure(e)` has evaluated `e` before this node exists at all, and erasing the operand inside the closure would delay nothing while making this one arm's evaluation order differ from the rest of the roster. What delays a program's effect is `IoBind`.
         Prim::IoPure(type_, value) => {
             let value = emitted!(lowering.walk(context, value, type_, None)?);
-            lowering.thunk(hint.or(Some("io/pure")), move |_| Ok(Outcome::Emitted(value)))
+            lowering.thunk(hint.or(Some("io/pure")), move |_| {
+                Ok(Outcome::Emitted(value))
+            })
         }
         // The description that performs `action`, then the description `continuation` computes from its result. Both forces are zero-argument applications of the closures the operands erased to.
-        Prim::IoBind(from, to, action, continuation) => lowering.thunk(hint.or(Some("io/bind")), |lowering| {
-            let io_from: Term = Subterm::Prim(Prim::IoType(from.clone())).into();
-            let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
-            let result = emitted!(lowering.force(action_atom));
+        Prim::IoBind(from, to, action, continuation) => {
+            lowering.thunk(hint.or(Some("io/bind")), |lowering| {
+                let io_from: Term = Subterm::Prim(Prim::IoType(from.clone())).into();
+                let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
+                let result = emitted!(lowering.force(action_atom));
 
-            let io_to: Term = Subterm::Prim(Prim::IoType(to.clone())).into();
-            let continuation_type =
-                Term::func_type([(context.fresh(Some("x")), from.clone())], io_to);
-            let continuation_atom =
-                emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
-            let next = emitted!(lowering.bind(
-                None,
-                curios_ersd::Rhs::Apply {
-                    callee: continuation_atom,
-                    arguments: vec![result],
-                },
-            ));
+                let io_to: Term = Subterm::Prim(Prim::IoType(to.clone())).into();
+                let continuation_type =
+                    Term::func_type([(context.fresh(Some("x")), from.clone())], io_to);
+                let continuation_atom =
+                    emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
+                let next = emitted!(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Apply {
+                        callee: continuation_atom,
+                        arguments: vec![result],
+                    },
+                ));
 
-            Ok(lowering.force(next))
-        }),
+                Ok(lowering.force(next))
+            })
+        }
     }
 }
