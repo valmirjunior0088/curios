@@ -417,7 +417,7 @@ pub(super) fn erase_prim(
         // A process exit never yields a value, so the thunk's block is sealed by the terminator rather than by a return. Code after the *force* is dead; code after the construction is not.
         Prim::Exit(code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
-            lowering.thunk(hint, move |_| {
+            lowering.thunk(hint.or(Some("io/exit")), move |_| {
                 Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
             })
         }
@@ -434,7 +434,8 @@ pub(super) fn erase_prim(
                 )?));
             }
             let foreign = lowering.builder.foreign(std::sync::Arc::clone(function));
-            lowering.thunk(hint, move |lowering| {
+            let described = format!("io/{}", function.name);
+            lowering.thunk(hint.or(Some(described.as_str())), move |lowering| {
                 Ok(lowering.bind(
                     None,
                     curios_ersd::Rhs::Foreign {
@@ -447,7 +448,7 @@ pub(super) fn erase_prim(
 
         Prim::Cell(type_, initial) => {
             let initial_atom = emitted!(lowering.walk(context, initial, type_, None)?);
-            lowering.thunk(hint, move |lowering| {
+            lowering.thunk(hint.or(Some("io/cell_new")), move |lowering| {
                 Ok(lowering.bind(
                     None,
                     curios_ersd::Rhs::Cell {
@@ -461,7 +462,7 @@ pub(super) fn erase_prim(
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
             let value_atom = emitted!(lowering.walk(context, value, type_, None)?);
-            lowering.thunk(hint, move |lowering| {
+            lowering.thunk(hint.or(Some("io/cell_set")), move |lowering| {
                 Ok(lowering.bind(
                     None,
                     curios_ersd::Rhs::Cell {
@@ -474,7 +475,7 @@ pub(super) fn erase_prim(
         Prim::CellGet(type_, cell) => {
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
-            lowering.thunk(hint, move |lowering| {
+            lowering.thunk(hint.or(Some("io/cell_get")), move |lowering| {
                 Ok(lowering.bind(
                     None,
                     curios_ersd::Rhs::Cell {
@@ -490,10 +491,10 @@ pub(super) fn erase_prim(
         // The operand is erased at the construction site like every other primitive's, not inside the thunk. The language is eager: `/sys/Io/pure` is an ordinary call-by-value wrapper, so a surface `Io/pure(e)` has evaluated `e` before this node exists at all, and erasing the operand inside the closure would delay nothing while making this one arm's evaluation order differ from the rest of the roster. What delays a program's effect is `IoBind`.
         Prim::IoPure(type_, value) => {
             let value = emitted!(lowering.walk(context, value, type_, None)?);
-            lowering.thunk(hint, move |_| Ok(Outcome::Emitted(value)))
+            lowering.thunk(hint.or(Some("io/pure")), move |_| Ok(Outcome::Emitted(value)))
         }
         // The description that performs `action`, then the description `continuation` computes from its result. Both forces are zero-argument applications of the closures the operands erased to.
-        Prim::IoBind(from, to, action, continuation) => lowering.thunk(hint, |lowering| {
+        Prim::IoBind(from, to, action, continuation) => lowering.thunk(hint.or(Some("io/bind")), |lowering| {
             let io_from: Term = Subterm::Prim(Prim::IoType(from.clone())).into();
             let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
             let result = emitted!(lowering.force(action_atom));
