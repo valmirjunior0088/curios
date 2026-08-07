@@ -1372,14 +1372,17 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
     );
 }
 
-/// The control for the fixture above: the same forged row at the wire type its own signature names.
+/// The control for the fixture above: the same forged row at the type its own signature names, wrapped in the description every host call now returns. `wire_term` still reads `Nat` off the signature; `infer` wraps it, because a foreign call is an effect and an effect is an `Io`. Stating the control at the bare `Nat` would fail for a reason that has nothing to do with forgery.
 #[test]
 fn a_forged_foreign_row_still_inhabits_its_wire_type() {
     let false_name = Global::Authored(Qualifier::from(["False"]));
 
     assert_eq!(
         recheck_module_verdicts(
-            &forged_foreign(&Term::prim(Prim::NatType), &false_name),
+            &forged_foreign(
+                &Term::prim(Prim::io_type(Term::prim(Prim::NatType))),
+                &false_name
+            ),
             1_000_000
         ),
         Vec::new(),

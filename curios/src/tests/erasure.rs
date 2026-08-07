@@ -13,7 +13,8 @@ fn prop_irrelevance_equates_distinct_proofs() {
         let irrelevant(a : Nat, b : Nat, p : Nat/Lte(a, b), q : Nat/Lte(a, b))
             -> Eq(p, q) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -24,7 +25,8 @@ fn data_is_not_proof_irrelevant() {
     let source = r#"
         use /std/{Handle, Str, Eq, Nat};
         let bad(x : Nat, y : Nat) -> Eq(x, y) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -35,7 +37,7 @@ fn let_bound_unit_effect_survives_erasure() {
     // `{}` is unit, not a prop, so it is kept — a unit-typed effect must run after erasure. `/std/print` returns `{}`; binding its first call to an unused `let` must not drop the "a" write. Guards that the empty tuple stays runtime content (the `Sort::of` empty-tuple-is-`Type` rule).
     let source = r#"
         use /std/{Handle};
-        let first = /std/print("a");
+        let first = /std/print("a")!;
         /std/print("b")
         "#;
     assert_eq!(run(source), b"ab");
@@ -51,7 +53,8 @@ fn large_elimination_of_a_prop_is_rejected() {
             | z(_) => 0
             | s(_, _, _) => 1
             end;
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -64,7 +67,8 @@ fn erased_param_unused_is_accepted() {
         use /std/{Handle, Str, Nat};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -77,7 +81,8 @@ fn erased_param_is_dropped_at_runtime() {
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -90,7 +95,8 @@ fn erased_struct_field_collapses_to_bare_value() {
         struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -99,7 +105,8 @@ fn erased_struct_field_collapses_to_bare_value() {
 fn char_and_str_certificates_erase_to_their_existing_carriers() {
     let source = r#"
         use /std/{Char, Str};
-        (Char/to_nat('😀'), Str/to_bytes("é😀"))
+        let certificates = (Char/to_nat('😀'), Str/to_bytes("é😀"));
+        /std/Io/pure(())
         "#;
     let entrypoint = source.parse::<Entrypoint>().expect("source parses");
     let mut ersd = None;
@@ -134,7 +141,8 @@ fn erased_tuple_field_is_a_subset_type() {
         use /std/{Handle, Str, Nat};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -147,7 +155,8 @@ fn erased_definition_param_is_dropped_at_runtime() {
         let h(m : Type) -> Nat = 0;
         let g(n : Type) -> Nat = h(n);
         let r : Nat = g(Nat);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -166,7 +175,8 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"5");
 }

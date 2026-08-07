@@ -44,7 +44,7 @@ fn arena_fmt_print_constant_args_collapses() {
 fn arena_fmt_print_runtime_args_specializes_spine() {
     let source = r#"
         use /std/{Fmt, Nat, Lst, proc};
-        Fmt/print("count: %")(Nat/to_str(Lst/len(proc/args())))
+        Fmt/print("count: %")(Nat/to_str(Lst/len(proc/args!)))
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());
 
@@ -66,10 +66,10 @@ fn arena_pure_computation_hugs_a_host_effect() {
             | 0 => 0
             | p + 1; ih => n + ih
             end;
-        let before = Handle/write(Handle/stdout, Str/to_bytes("a"));
+        let before = Handle/write(Handle/stdout, Str/to_bytes("a"))!;
         let pure = triangle(100);
-        let after = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(pure)));
-        ()
+        let after = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(pure)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"a10000".to_vec());
 
@@ -98,7 +98,8 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             | 0 => acc
             | p + 1; ih => build(p, x[\61, ..acc])
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))!;
+        /std/Io/pure(())
         "#
         )
     };

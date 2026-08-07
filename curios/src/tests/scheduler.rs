@@ -9,7 +9,7 @@ fn task_scheduler_parks_polls_and_resumes() {
         use /std/{Async, Handle, Str};
         let prog : Async({}) =
             Async/bind(Async/wait(Handle/stdin, 1), (_) =>
-                let wrote = Handle/write(Handle/stdout, Str/to_bytes("ok"));
+                let wrote = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("ok")))!;
                 Async/pure(()));
         Async/run(prog)
         "#,
@@ -30,7 +30,7 @@ fn task_bind_reads_and_echoes() {
             let r = Async/read(Handle/stdin, 1024)!;
             match r : (_) => Async({})
             | chunk(bytes) =>
-                let wrote = Handle/write(Handle/stdout, bytes);
+                let wrote = Async/lift(Handle/write(Handle/stdout, bytes))!;
                 Async/pure(())
             | eof() => Async/pure(())
             | error(_) => Async/pure(())
@@ -50,14 +50,15 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
     crate::run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         let root : Async(Nat) =
-            let f = Async/spawn(() =>
+            let f = Async/spawn(
                 Async/bind(Async/wait(Handle/stdin, 1), (_) =>
-                    let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
+                    let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("child;")))!;
                     Async/pure(5)))!;
-            let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
+            let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("root;")))!;
             let c = Async/join(f)!;
             Async/pure(Nat/add(c, 2));
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(/std/Result/unwrap_or(Async/block_on(root), 0))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(/std/Result/unwrap_or(Async/block_on(root)!, 0))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -73,14 +74,10 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
         use /std/{Async, Handle, Str, Nat, Lst};
         let main : Async({}) =
             let rs = Async/join_all([
-                () =>
-                    let w = Handle/write(Handle/stdout, Str/to_bytes("a;"));
-                    Async/pure(1),
-                () =>
-                    let w = Handle/write(Handle/stdout, Str/to_bytes("b;"));
-                    Async/pure(2)
+                Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("a;"))), (_) => Async/pure(1)),
+                Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("b;"))), (_) => Async/pure(2))
             ])!;
-            let s = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0)))));
+            let s = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0))))))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -99,7 +96,7 @@ fn map_transforms_a_tasks_result() {
         use /std/{Async, Handle, Str, Nat};
         let main : Async({}) =
             let s = Async/map(Async/pure(42), Nat/to_str)!;
-            let w = Handle/write(Handle/stdout, Str/to_bytes(s));
+            let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(s)))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -117,16 +114,13 @@ fn race_returns_the_first_and_runs_a_cancelled_losers_finalizer() {
         use /std/{Async, Handle, Str, Nat};
         let main : Async({}) =
             let v = Async/race([
-                () =>
-                    let x = Handle/write(Handle/stdout, Str/to_bytes("fast;"));
-                    Async/pure(10),
-                () =>
-                    Async/using(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
+                Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("fast;"))), (_) => Async/pure(10)),
+                Async/using(Handle/stdin, /std/print("released;"),
                         Async/bind(Async/wait(Handle/stdin, 1), (_) =>
-                            let y = Handle/write(Handle/stdout, Str/to_bytes("slow;"));
-                            Async/pure(20)))
+                let y = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("slow;")))!;
+                Async/pure(20)))
             ])!;
-            let z = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v)));
+            let z = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v))))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -145,11 +139,11 @@ fn block_on_drops_a_parked_child_when_root_done() {
         use /std/{Async, Handle, Str};
         let child : Async({}) =
             Async/bind(Async/wait(Handle/stdin, 1), (_) =>
-                let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
+                let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("child;")))!;
                 Async/pure(()));
         let main : Async({}) =
-            Async/bind(Async/go(() => child), (started) =>
-                let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
+            Async/bind(Async/go(child), (started) =>
+                let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("root;")))!;
                 Async/pure(()));
         Async/run(main)
         "#,
@@ -167,11 +161,11 @@ fn constructing_a_leaf_task_performs_no_effect() {
         r#"
         use /std/{Async, Handle, Str};
         let discarded : Async(Handle/Read) = Async/read(Handle/stdin, 100);
-        let r = Handle/read(Handle/stdin, 100);
-        match r : (_) => {}
-        | chunk(bytes) => let _ = Handle/write(Handle/stdout, bytes); ()
-        | eof() => let _ = Handle/write(Handle/stdout, Str/to_bytes("<eof>")); ()
-        | error(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("<err>")); ()
+        let r = Handle/read(Handle/stdin, 100)!;
+        match r : (_) => /std/Io({})
+        | chunk(bytes) => let _ = Handle/write(Handle/stdout, bytes)!; /std/Io/pure(())
+        | eof() => let _ = Handle/write(Handle/stdout, Str/to_bytes("<eof>"))!; /std/Io/pure(())
+        | error(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("<err>"))!; /std/Io/pure(())
         end
         "#,
         system,
@@ -184,14 +178,15 @@ fn constructing_a_leaf_task_performs_no_effect() {
 fn finalizer_runs_for_a_child_parked_on_an_unwoken_fiber() {
     // The previously-leaking path, now closed. A `go` child acquires a resource via `using` (its finalizer writes "released;"), then `park`s with a register that drops its waker — so it lands in the scheduler's `parked` registry and nothing can ever wake it. The root writes "root;" and finishes. Because the scheduler now retains ownership of every parked fiber (rather than handing it off to a waker list, where it was invisible), `block_on`'s shutdown drains the registry and runs the child's finalizer exactly once. Before the fix the "released;" marker leaked and the output was just "root;".
     let (system, io) = MockHost::builder().build();
-    crate::run_text(r#"
+    crate::run_text(
+        r#"
         use /std/{Async, Handle, Str};
         use /std/Async/{Waker};
         let main : Async({}) =
-            let started = Async/go(() =>
-                Async/using(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
-                    Async/park((w : Waker) => ())))!;
-            let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
+            let started = Async/go(
+                Async/using(Handle/stdin, /std/print("released;"),
+                    Async/park((w : Waker) => /std/Io/pure(()))))!;
+            let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("root;")))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -205,11 +200,12 @@ fn finalizer_runs_for_a_child_parked_on_an_unwoken_fiber() {
 fn an_acquired_finalizer_runs_when_the_fiber_completes() {
     // "Open and trust it", normal path: a fiber `acquire`s a finalizer (writes "closed;"), runs its body ("body;"), and finishes without ever calling `release`. The scheduler runs the finalizer on completion, so the output is "body;closed;" — cleanup happens for free on the success path.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(r#"
+    crate::run_text(
+        r#"
         use /std/{Async, Handle, Str};
         let main : Async({}) =
-            let _ = Async/acquire(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("closed;")); ())!;
-            let _ = Handle/write(Handle/stdout, Str/to_bytes("body;"));
+            let _ = Async/acquire(Handle/stdin, /std/print("closed;"))!;
+            let _ = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("body;")))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -223,13 +219,14 @@ fn an_acquired_finalizer_runs_when_the_fiber_completes() {
 fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
     // "Close it yourself, no double close": a fiber `acquire`s a finalizer (writes "closed;"), runs its body ("body;"), then manually `release`s and continues ("after;"). `release` runs the finalizer AND dequeues the guard, so the completion drain does not run it again. The single "closed;" between "body;" and "after;" proves it fired exactly once — at the release, not again at the end.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(r#"
+    crate::run_text(
+        r#"
         use /std/{Async, Handle, Str};
         let main : Async({}) =
-            let _ = Async/acquire(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("closed;")); ())!;
-            let _ = Handle/write(Handle/stdout, Str/to_bytes("body;"));
+            let _ = Async/acquire(Handle/stdin, /std/print("closed;"))!;
+            let _ = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("body;")))!;
             let _ = Async/release(Handle/stdin)!;
-            let _ = Handle/write(Handle/stdout, Str/to_bytes("after;"));
+            let _ = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("after;")))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -258,7 +255,8 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -276,7 +274,7 @@ fn sleep_parks_until_the_clock_passes_the_deadline() {
         use /std/time/{Duration};
         let main : Async({}) =
             Async/bind(Async/sleep(Duration/of_secs(5)), (_) =>
-                let w = Handle/write(Handle/stdout, Str/to_bytes("woke;"));
+                let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("woke;")))!;
                 Async/pure(()));
         Async/run(main)
         "#,
@@ -290,15 +288,16 @@ fn sleep_parks_until_the_clock_passes_the_deadline() {
 fn sleepers_wake_in_deadline_order() {
     // Two spawned children sleep three and six seconds; the scheduler must pick the earliest deadline for each poll timeout and expire the timers in due order even though the six-second child was pushed onto `sleeping` later.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(r#"
+    crate::run_text(
+        r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let mark(m : Str) -> Async({}) =
-            let w = Handle/write(Handle/stdout, Str/to_bytes(m));
+            let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(m)))!;
             Async/pure(());
         let main : Async({}) =
-            let ha = Async/spawn(() => Async/bind(Async/sleep(Duration/of_secs(3)), (_) => mark("a;")))!;
-            let hb = Async/spawn(() => Async/bind(Async/sleep(Duration/of_secs(6)), (_) => mark("b;")))!;
+            let ha = Async/spawn(Async/bind(Async/sleep(Duration/of_secs(3)), (_) => mark("a;")))!;
+            let hb = Async/spawn(Async/bind(Async/sleep(Duration/of_secs(6)), (_) => mark("b;")))!;
             let x = Async/join(ha)!;
             let y = Async/join(hb)!;
             mark("done");
@@ -318,10 +317,10 @@ fn timeout_returns_some_when_the_body_finishes_first() {
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
-            let r = Async/timeout(Duration/of_secs(5), () => Async/pure(42))!;
+            let r = Async/timeout(Duration/of_secs(5), Async/pure(42))!;
             match r : (_) => Async({})
-            | some(v) => let w = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v))); Async/pure(())
-            | none() => let w = Handle/write(Handle/stdout, Str/to_bytes("none")); Async/pure(())
+            | some(v) => let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v))))!; Async/pure(())
+            | none() => let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("none")))!; Async/pure(())
             end;
         Async/run(main)
         "#,
@@ -339,14 +338,14 @@ fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
-            let r = Async/timeout(Duration/of_secs(2), () =>
-                Async/using(Handle/stdin, () => let w = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
+            let r = Async/timeout(Duration/of_secs(2),
+                Async/using(Handle/stdin, /std/print("released;"),
                     Async/bind(Async/sleep(Duration/of_secs(50)), (_) =>
-                        let w = Handle/write(Handle/stdout, Str/to_bytes("body;"));
+                        let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("body;")))!;
                         Async/pure(0))))!;
             match r : (_) => Async({})
-            | some(v) => let w = Handle/write(Handle/stdout, Str/to_bytes("some")); Async/pure(())
-            | none() => let w = Handle/write(Handle/stdout, Str/to_bytes("none;")); Async/pure(())
+            | some(v) => let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("some")))!; Async/pure(())
+            | none() => let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("none;")))!; Async/pure(())
             end;
         Async/run(main)
         "#,
@@ -360,20 +359,21 @@ fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
 fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
     // Pure timer race: both branches sleep, so both land in `sleeping` and the poll timeout must track the earlier deadline. The two-second branch wakes, writes, and wins with 1; the sixty-second loser is cancelled and its `using` finalizer fires on reclamation — its body never runs.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(r#"
+    crate::run_text(
+        r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
             let v = Async/race([
-                () => Async/bind(Async/sleep(Duration/of_secs(2)), (_) =>
-                    let w = Handle/write(Handle/stdout, Str/to_bytes("quick;"));
+                Async/bind(Async/sleep(Duration/of_secs(2)), (_) =>
+                    let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("quick;")))!;
                     Async/pure(1)),
-                () => Async/using(Handle/stdin, () => let w = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
+                Async/using(Handle/stdin, /std/print("released;"),
                     Async/bind(Async/sleep(Duration/of_secs(60)), (_) =>
-                        let w = Handle/write(Handle/stdout, Str/to_bytes("slow;"));
+                        let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("slow;")))!;
                         Async/pure(2)))
             ])!;
-            let z = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v)));
+            let z = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v))))!;
             Async/pure(());
         Async/run(main)
         "#,
@@ -387,17 +387,18 @@ fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
 fn block_on_drops_a_sleeping_child_when_root_done() {
     // The sleeping counterpart of the parked-child drop: a fire-and-forget child holds a resource and sleeps far past the test, but the root finishes immediately. `block_on` must return without waiting out the timer, running the child's finalizer as it drains the `sleeping` registry.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(r#"
+    crate::run_text(
+        r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let child : Async({}) =
-            Async/using(Handle/stdin, () => let w = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
+            Async/using(Handle/stdin, /std/print("released;"),
                 Async/bind(Async/sleep(Duration/of_secs(100)), (_) =>
-                    let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
+                    let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("child;")))!;
                     Async/pure(())));
         let main : Async({}) =
-            Async/bind(Async/go(() => child), (_) =>
-                let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
+            Async/bind(Async/go(child), (_) =>
+                let w = Async/lift(Handle/write(Handle/stdout, Str/to_bytes("root;")))!;
                 Async/pure(()));
         Async/run(main)
         "#,

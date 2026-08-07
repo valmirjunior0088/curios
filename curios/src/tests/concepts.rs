@@ -194,7 +194,7 @@ fn duplicate_witness_reports_its_declaring_module() {
                 f(x) = x
             }
         end
-        ()
+        /std/Io/pure(())
         "#;
 
     assert!(error(source).ends_with(
@@ -936,7 +936,7 @@ fn a_concept_field_may_carry_a_type() {
         let v : alias = 3;
         let picked : Type = Sized/pick(@Nat)();
         let b : picked = true;
-        let _ = /std/print(Nat/to_str(v));
+        let _ = /std/print(Nat/to_str(v))!;
         match b
         | true => /std/print("t")
         | false => /std/print("f")

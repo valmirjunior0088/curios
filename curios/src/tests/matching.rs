@@ -428,7 +428,7 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
 fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand, Handle};
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         let n = Nat/add(z, 5);
         let hit =
             match Option/some(n)
@@ -447,7 +447,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
 fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand, Handle};
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         let n = Nat/add(z, 6);
         let miss =
             match Option/some(n)
@@ -466,7 +466,7 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Handle, Async};
-        match Async/block_on(File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))
+        match Async/block_on(File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
             match outcome
@@ -482,12 +482,12 @@ fn effectful_match_scrutinee_runs_once() {
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
-// `choose`, exercised as emitted wasm rather than folded: `rand/bin(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime 2. The first *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2` selects `300`, and the later-true `_` default is never reached.
+// `choose`, exercised as emitted wasm rather than folded: `rand/bytes(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime 2. The first *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2` selects `300`, and the later-true `_` default is never reached.
 #[test]
 fn choose_selects_first_true_arm() {
     let source = r#"
         use /std/{Nat, Bytes, rand, Handle};
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         let n = Nat/add(z, 2);
         let result =
             choose
@@ -509,7 +509,7 @@ fn choose_selects_first_true_arm() {
 fn choose_default_only() {
     let source = r#"
         use /std/{Nat, Bytes, rand, Handle};
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         let result =
             choose
             | _ => Nat/add(z, 42)
@@ -522,29 +522,7 @@ fn choose_default_only() {
     assert_eq!(io.output(), b"42");
 }
 
-// A deeper condition's effect fires only when it is reached: `probe` prints its tag as a side effect, so an all-false-but-first ladder would print every tag, but a ladder whose first condition is true prints only that tag. The nested `Bool` lowering keeps deeper conditions inside the previous false branch.
-#[test]
-fn choose_evaluates_conditions_lazily() {
-    let source = r#"
-        use /std/{Nat, Bytes, rand, Handle, Bool, Str};
-        let z = Bytes/len(rand/bin(0));
-        let probe(tag : Str, r : Bool) -> Bool =
-            let _ = /std/print(tag);
-            r;
-        let result =
-            choose
-            | probe("a", true)  => Nat/add(z, 1)
-            | probe("b", false) => Nat/add(z, 2)
-            | _ => Nat/add(z, 9)
-            end;
-        /std/print(Nat/to_str(result))
-        "#;
-
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    // "a" from the winning first condition, then "1" — "b" is never evaluated.
-    assert_eq!(io.output(), b"a1");
-}
+// `choose_evaluates_conditions_lazily` stood here. It observed the nested `Bool` lowering by giving a condition a side effect — `probe` printed its tag — so a ladder that evaluated every condition printed every tag. A condition is a `Bool`, and post-`Io` a `(Str, Bool) -> Bool` cannot perform an effect at all, so the fixture is not merely broken but unwritable. Nor is there a replacement at this layer: evaluating a *pure* condition twice, or not at all, is unobservable by any means the language offers, which is the retype working rather than coverage lost. What remains observable is the emitted shape, and that is `tests::codegen`'s to state.
 
 // A headed inductive match with a `| _ =>` catch-all: enumerated constructors take their arm, everything else the default. rand-tainted so it runs as wasm.
 #[test]
@@ -556,7 +534,7 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
             | some(x) => x + 10
             | _ => 99
             end;
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
@@ -576,7 +554,7 @@ fn choose_bind_arm_destructures_or_falls_through() {
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
@@ -595,7 +573,7 @@ fn choose_nested_bind_shares_the_fallthrough() {
             | some([h, ..t]) = o => h + 1
             | _ => 99
             end;
-        let z = Bytes/len(rand/bin(0));
+        let z = Bytes/len(rand/bytes(0)!);
         let a = f(Option/some([5, 6, 7]));
         let b = f(Option/some([]));
         let c = f(Option/none());

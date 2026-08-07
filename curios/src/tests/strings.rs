@@ -80,8 +80,8 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
                     end
                 end;
             go(d);
-
-        Handle/write(Handle/stdout, x[\6F, \6B])
+        let _ = Handle/write(Handle/stdout, x[\6F, \6B])!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -117,7 +117,7 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
 fn str_of_bytes_accepts_multibyte_utf8() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\c3, \a9]) : (_) => {}
+        match Str/of_bytes(x[\c3, \a9]) : (_) => /std/Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("bad")
         end
@@ -133,7 +133,7 @@ fn str_of_bytes_accepts_multibyte_utf8() {
 fn str_of_bytes_rejects_invalid_utf8() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\ff]) : (_) => {}
+        match Str/of_bytes(x[\ff]) : (_) => /std/Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("rejected")
         end
@@ -149,7 +149,7 @@ fn str_of_bytes_rejects_invalid_utf8() {
 fn str_of_bytes_rejects_truncated_multibyte() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\c3]) : (_) => {}
+        match Str/of_bytes(x[\c3]) : (_) => /std/Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("rejected")
         end
@@ -180,7 +180,7 @@ fn utf8_decode_lemmas_type_check() {
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
         use /std/{Str, Char, Nat, Handle, Option};
-        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => {}
+        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => /std/Io({})
         | some(s) =>
             /std/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
@@ -202,7 +202,7 @@ fn str_get_indexes_codepoints_of_every_width() {
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
         use /std/{Str, Char, Nat, Handle, Option};
-        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => {}
+        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => /std/Io({})
         | some(s) =>
             let out =
                 let r0 = Nat/Lt/try(0, Str/len(s));
@@ -234,7 +234,7 @@ fn str_at_reads_codepoints_with_the_proof() {
 fn str_slice_cuts_on_codepoint_boundaries() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => {}
+        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/slice(s, 1, 2))
         | none() => /std/print("bad")
         end
@@ -250,7 +250,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
 fn str_slice_spans_every_codepoint_width() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\61, \c3, \a9, \e2, \82, \ac, \f0, \9f, \98, \80, \62]) : (_) => {}
+        match Str/of_bytes(x[\61, \c3, \a9, \e2, \82, \ac, \f0, \9f, \98, \80, \62]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/slice(s, 1, 4))
         | none() => /std/print("bad")
         end
@@ -269,7 +269,7 @@ fn str_slice_spans_every_codepoint_width() {
 fn str_trim_keeps_interior_multibyte() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\20, \20, \63, \61, \66, \c3, \a9, \20, \20]) : (_) => {}
+        match Str/of_bytes(x[\20, \20, \63, \61, \66, \c3, \a9, \20, \20]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/trim(s))
         | none() => /std/print("bad")
         end
@@ -285,7 +285,7 @@ fn str_trim_keeps_interior_multibyte() {
 fn str_trim_all_whitespace_is_empty() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\20, \09, \20]) : (_) => {}
+        match Str/of_bytes(x[\20, \09, \20]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/concat(Str/trim(s), "!"))
         | none() => /std/print("bad")
         end
@@ -321,9 +321,10 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         use /std/{Char, Nat, Bytes, Option, Lst, Handle};
         let encode(n : Nat) -> Bytes =
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
-        Handle/write(Handle/stdout, Bytes/flatten(Lst/map(
+        let _ = Handle/write(Handle/stdout, Bytes/flatten(Lst/map(
             [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
-             0x10000, 0x1F600, 0x10FFFF], encode)))
+             0x10000, 0x1F600, 0x10FFFF], encode)))!;
+        /std/Io/pure(())
         "#;
 
     let expected = scalars
@@ -449,8 +450,8 @@ fn utf8_inductive_spike() {
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
             end;
-
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -471,8 +472,8 @@ fn utf8_construction_spike() {
             | x[] => All/empty()
             | x[h, ..t]; ih => All/snoc(/std/Byte/to_nat(h), t, ih)
             end;
-
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -552,8 +553,8 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
             -> Valid(x[..a, ..b]) =
             seq(va, vb);
-
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -646,8 +647,8 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | some(_) => Str/to_bytes("yes")
             | none() => Str/to_bytes("no")
             end;
-
-        Handle/write(Handle/stdout, x[..decide(x[\68, \69]), ..decide(x[\80])])
+        let _ = Handle/write(Handle/stdout, x[..decide(x[\68, \69]), ..decide(x[\80])])!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"yesno");
 }
@@ -763,8 +764,8 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
 
         let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
             decimal(n).v;
-
-        Handle/write(Handle/stdout, decimal(255).b)
+        let _ = Handle/write(Handle/stdout, decimal(255).b)!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"255");
 }
@@ -899,8 +900,8 @@ fn utf8_slice_closed_peels_codepoints() {
         let slice(@b : Bytes, d : Valid(b), x : Nat, y : Nat) -> { r : Bytes, v : Valid(r) } =
             let dropped = drop_n(x, d);
             take_n(Nat/sub(y, x), @dropped.r, dropped.v);
-
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }

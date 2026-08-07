@@ -169,10 +169,10 @@ entry {
 }
 
 #[test]
-fn an_exit_seals_the_block_and_drops_dead_code() {
+fn an_exit_seals_the_thunk_that_describes_it() {
     let mut context = context();
     let dead = context.fresh(Some("dead"));
-    // let _ = /std/proc/exit(3); 7 — the trailing computation is dead.
+    // let dead = /std/proc/exit(3); 7 — the trailing computation is *not* dead any more, and that is the point. `exit` returns an `Io({})`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the terminator with no return after it.
     let body = Term::let_(
         &dead,
         Term::tuple_type_unit(),
@@ -188,6 +188,10 @@ fn an_exit_seals_the_block_and_drops_dead_code() {
         erased.to_string(),
         "\
 entry {
+    functions ~f0$dead
+    return 7
+}
+function ~f0$dead() {
     exit 3
 }
 "

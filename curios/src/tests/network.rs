@@ -5,14 +5,15 @@ fn net_call_round_trips_a_scripted_endpoint() {
     let source = r#"
         use /std/{Handle, Str, Async};
         use /std/tcp/{Settings, Socket};
-        match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))
+        let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
             | success(response) => Handle/write(Handle/stdout, response)
             | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
             end
-        end
+        end)!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder()
@@ -28,13 +29,13 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
         use /std/{Handle, Async};
         use /std/tcp/{Settings, Socket};
-        match Async/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))
+        match Async/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
             match outcome
             | success(_) => /std/print("connected")
             | failure(e) =>
-                match e : (_) => {}
+                match e : (_) => /std/Io({})
                 | refused() => /std/print("refused")
                 | tls() => /std/print("tls")
                 | not_found() => /std/print("not found")
@@ -65,20 +66,21 @@ fn net_with_custom_timeout_config_reads_response() {
             write_timeout = Option/none(),
             tls = false
         };
-        match Async/block_on(Socket/with(settings, "db.internal", 5432, (s) =>
+        let _ = (match Async/block_on(Socket/with(settings, "db.internal", 5432, (s) =>
             Async/bind(Socket/read(s, 64), (r) =>
                 match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
                 | eof() => Async/pure(x[])
                 | error(_) => Async/pure(x[])
-                end)))
+                end)))!
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
             | success(bytes) => Handle/write(Handle/stdout, bytes)
             | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
             end
-        end
+        end)!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder()
@@ -101,11 +103,11 @@ fn net_serve_handles_a_scripted_inbound_connection() {
                     Async/bind(Socket/write(c, x[..Str/to_bytes("echo: "), ..bytes]), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
                 | error(_) => Async/pure(())
-                end)))
+                end)))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
-            match outcome : (_) => {}
-            | success(u) => ()
+            match outcome : (_) => /std/Io({})
+            | success(u) => /std/Io/pure(())
             | failure(_) => /std/print("listen failed")
             end
         end
@@ -128,20 +130,21 @@ fn net_with_tls_upgrades_and_reads() {
             write_timeout = Option/none(),
             tls = true
         };
-        match Async/block_on(Socket/with(settings, "secure.example", 443, (s) =>
+        let _ = (match Async/block_on(Socket/with(settings, "secure.example", 443, (s) =>
             Async/bind(Socket/read(s, 64), (r) =>
                 match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
                 | eof() => Async/pure(x[])
                 | error(_) => Async/pure(x[])
-                end)))
+                end)))!
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
             | success(bytes) => Handle/write(Handle/stdout, bytes)
             | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
             end
-        end
+        end)!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder()
@@ -164,11 +167,11 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
                     Async/bind(Socket/write(c, x[..Str/to_bytes("tls: "), ..bytes]), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
                 | error(_) => Async/pure(())
-                end)))
+                end)))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
-            match outcome : (_) => {}
-            | success(u) => ()
+            match outcome : (_) => /std/Io({})
+            | success(u) => /std/Io/pure(())
             | failure(_) => /std/print("serve failed")
             end
         end
@@ -184,23 +187,23 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
         use /std/{Handle, Str, Nat, Async, http};
-        match Async/block_on(http/perform(http/get("example.com", 80, "/")))
+        match Async/block_on(http/perform(http/get("example.com", 80, "/")))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
-            match outcome : (_) => {}
+            match outcome : (_) => /std/Io({})
             | success(response) =>
                 let ct = match http/header(response, "Content-Type") : (_) => Str
                     | some(value) => value
                     | none() => "none"
                     end;
-                match Str/of_bytes(response.body) : (_) => {}
+                match Str/of_bytes(response.body) : (_) => /std/Io({})
                 | some(body) =>
                     let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/flatten([
                         Nat/to_str(response.status.code), " ", ct, " ", body
-                    ]))); ()
-                | none() => let _ = Handle/write(Handle/stdout, Str/to_bytes("bad body")); ()
+                    ])))!; /std/Io/pure(())
+                | none() => let _ = Handle/write(Handle/stdout, Str/to_bytes("bad body"))!; /std/Io/pure(())
                 end
-            | failure(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("error")); ()
+            | failure(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("error"))!; /std/Io/pure(())
             end
         end
         "#;

@@ -17,11 +17,7 @@ fn compile_produces_a_runnable_executable() {
     let dir = std::env::temp_dir();
     let source = dir.join("curios_bundle_e2e.crs");
     let output = dir.join("curios_bundle_e2e.out");
-    fs::write(
-        &source,
-        r#"std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("hello"))"#,
-    )
-    .expect("write the temp source");
+    fs::write(&source, r#"/std/print("hello")"#).expect("write the temp source");
 
     let compiled = Command::new(compiler)
         .arg("compile")

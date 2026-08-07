@@ -14,8 +14,8 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
             end;
 
         let probe(x : Nat) -> Eq(through(x), through(x)) = Eq/refl();
-
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -32,7 +32,8 @@ fn match_omitted_motive_infers() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -55,8 +56,8 @@ fn implicit_inductive_type_param_executes() {
         let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
-        match inferred : (_, _, _) => {}
-        | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
+        match inferred : (_, _, _) => /std/Io({})
+        | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z)))!; /std/Io/pure(())
         end
         "#;
 
@@ -74,7 +75,8 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
-        Handle/write(Handle/stdout, /std/Str/to_bytes("no"))
+        let _ = Handle/write(Handle/stdout, /std/Str/to_bytes("no"))!;
+        /std/Io/pure(())
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -95,8 +97,8 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
             end;
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
-        match chained : (_, _, _) => {}
-        | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
+        match chained : (_, _, _) => /std/Io({})
+        | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z)))!; /std/Io/pure(())
         end
         "#;
 
@@ -114,7 +116,8 @@ fn parked_constraints_still_reject_the_unsolvable() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();
-        Handle/write(Handle/stdout, /std/Str/to_bytes("no"))
+        let _ = Handle/write(Handle/stdout, /std/Str/to_bytes("no"))!;
+        /std/Io/pure(())
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -173,9 +176,9 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let mk(@A : Type, a : A) -> Lst(A) = [a];
         let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
-        match v : (_) => {}
-        | [] => ()
-        | [p, ..rest] => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(p.1))); ()
+        match v : (_) => /std/Io({})
+        | [] => /std/Io/pure(())
+        | [p, ..rest] => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(p.1)))!; /std/Io/pure(())
         end
         "#;
 
@@ -191,7 +194,8 @@ fn checking_problem_without_a_pin_still_rejects() {
         use /std/{Nat, Handle};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
-        Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(n)))
+        let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(n)))!;
+        /std/Io/pure(())
         "#;
 
     let (system, _io) = MockHost::builder().build();

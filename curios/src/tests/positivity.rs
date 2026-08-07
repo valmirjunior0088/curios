@@ -195,7 +195,7 @@ fn an_indexed_family_recursing_at_a_computed_index_is_admitted() {
 
         let two : Run(2) = Run/more(Run/more(Run/stop()));
 
-        match two : (k, r) => {}
+        match two : (k, r) => /std/Io({})
         | more(@_, _) => /std/print("indexed")
         end
         "#;

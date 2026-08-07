@@ -99,7 +99,8 @@ fn toml_date_times_cover_the_rfc3339_subset() {
 fn toml_integer_boundaries_hold_in_every_radix() {
     let source = r#"
         use /std/{Handle, Str, Toml, Result, Lst, Bytes, Nat, rand};
-        let opaque_n(n : Nat) -> Nat = (Bytes/len(rand/bin(0)) + 1) * n;
+        let taint = Bytes/len(rand/bytes(0)!);
+        let opaque_n(n : Nat) -> Nat = (taint + 1) * n;
         rec run_of(ch : Str, k : Nat) -> Str =
             match k == 0
             | true => ""
@@ -265,7 +266,8 @@ fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
 fn toml_decode_and_encode_execute_in_emitted_wasm() {
     let source = r#"
         use /std/{Handle, Str, Toml, Result, Lst, Bytes, rand};
-        let opaque(s : Str) -> Str = Str/slice(s, Bytes/len(rand/bin(0)), Str/len(s));
+        let taint = Bytes/len(rand/bytes(0)!);
+        let opaque(s : Str) -> Str = Str/slice(s, taint, Str/len(s));
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
@@ -290,7 +292,8 @@ fn toml_decode_and_encode_execute_in_emitted_wasm() {
 fn toml_encode_rejects_a_non_utf8_key() {
     let source = r#"
         use /std/{Handle, Str, Toml, Result, Map, Nat, Bytes, rand};
-        let opaque = Nat/to_int(Bytes/len(rand/bin(0)) + 1);
+        let taint = Bytes/len(rand/bytes(0)!);
+        let opaque = Nat/to_int(taint + 1);
         let outcome : Str =
             match Toml/encode(Map/insert(Map/empty(@Toml), x[\ff], Toml/int(opaque)))
             | success(_) => "accepted"
@@ -343,9 +346,9 @@ fn parse_eof_accepts_only_end_of_input() {
             | failure(_) => "rejected"
             end;
         /std/print(Str/flatten([
-            check(x[..rand/bin(0), \41]), ";",
-            check(x[..rand/bin(0), \41, \42]), ";",
-            check(x[..rand/bin(0)])
+            check(x[..rand/bytes(0)!, \41]), ";",
+            check(x[..rand/bytes(0)!, \41, \42]), ";",
+            check(x[..rand/bytes(0)!])
         ]))
         "#;
 

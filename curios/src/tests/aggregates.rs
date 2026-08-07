@@ -11,7 +11,8 @@ fn lst_match_is_a_foldr() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -22,7 +23,8 @@ fn lst_map_fills_every_slot() {
     let source = r#"
         use /std/{Handle, Str, Nat, Lst, Option};
         let xs : Lst(Nat) = Lst/map([10, 20, 30], (n) => Nat/add(n, 1));
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"42");
 }
@@ -35,7 +37,8 @@ fn lst_map_distributes_over_cons() {
         let step(f : (Nat) -> Nat, x : Nat, t : Lst(Nat))
             -> Eq(Lst/map([x, ..t], f), [f(x), ..Lst/map(t, f)]) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -51,7 +54,8 @@ fn bin_match_is_a_foldr() {
             | x[] => 0
             | x[h, ..t]; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -69,7 +73,8 @@ fn bin_concat_is_a_free_monoid() {
         let resegment(x : Bytes)
             -> Eq(x[\01, \02, ..x], x[\01, ..(x[\02, ..x])]) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -80,7 +85,8 @@ fn bin_concat_leading_byte_clash_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes};
         let bad(x : Bytes) -> Eq(x[\01, ..x], x[\02, ..x]) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -96,7 +102,8 @@ fn bin_slice_is_a_monoid_citizen() {
             Eq/refl();
         let empty(b : Bytes, i : Nat) -> Eq(Bytes/slice(b, i, i), x[]) = Eq/refl();
         let full(b : Bytes) -> Eq(Bytes/slice(b, 0, Bytes/len(b)), b) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -109,7 +116,8 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
         let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat)
             -> Eq(x[..Bytes/slice(b, s, m), ..Bytes/slice(b, n, e)], Bytes/slice(b, s, e)) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -125,7 +133,8 @@ fn lst_slice_is_a_monoid_citizen() {
             Eq/refl();
         let empty(@T : Type, a : Lst(T), i : Nat) -> Eq(Lst/slice(a, i, i), []) = Eq/refl();
         let full(@T : Type, a : Lst(T)) -> Eq(Lst/slice(a, 0, Lst/len(a)), a) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -138,7 +147,8 @@ fn lst_append_is_concat_with_a_single() {
         let law(@T : Type, xs : Lst(T), y : T)
             -> Eq([..xs, y], [..xs, ..[y]]) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -151,7 +161,8 @@ fn bin_append_is_concat_with_a_single_byte() {
         let law(xs : Bytes, y : Byte)
             -> Eq(x[..xs, ..(x[y])], x[..xs, y]) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -164,7 +175,8 @@ fn lst_slice_window_seam_mismatch_is_rejected() {
         let bad(@T : Type, a : Lst(T), s : Nat, m : Nat, n : Nat, e : Nat)
             -> Eq([..Lst/slice(a, s, m), ..Lst/slice(a, n, e)], Lst/slice(a, s, e)) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -181,7 +193,8 @@ fn bin_len_reduces_across_a_cons_spine() {
             -> Eq(Nat/lt(0, Bytes/len(x[h, ..t])), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
             -> Eq(Nat/lt(Bytes/len(x[h, ..t]), 0), false) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -193,7 +206,8 @@ fn packed_atom_splice_builds_the_written_sequence() {
         use /std/{Handle, Str, Byte, Bytes};
         let i : Byte = 0x69;
         let bang : Byte = 0x21;
-        Handle/write(Handle/stdout, x[\48, i, bang])
+        let _ = Handle/write(Handle/stdout, x[\48, i, bang])!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"Hi!");
 }
@@ -209,7 +223,8 @@ fn packed_atom_splices_are_the_cons_and_append_spellings() {
             -> Eq(Bytes/get(x[h, ..t], 0), Option/some(h)) = Eq/refl();
         let bits_len(h : Bool, t : Bits)
             -> Eq(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -224,7 +239,8 @@ fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
         let bit_head(b : Bool) -> Eq(Bits/get(b[\1, b], 0), Option/some(true)) = Eq/refl();
         let chained(a : Byte, b : Byte) -> Eq(Bytes/get(x[\48, a, b], 0), Option/some(lead)) = Eq/refl();
         let chained_len(a : Byte, b : Byte) -> Eq(Bytes/len(x[a, b]), 2) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -236,7 +252,8 @@ fn nat_sub_peels_a_successor_spine() {
         use /std/{Handle, Str, Eq, Nat};
         let peel(n : Nat) -> Eq(Nat/sub(Nat/add(3, n), 1), Nat/add(2, n)) = Eq/refl();
         let to_zero(n : Nat) -> Eq(Nat/sub(Nat/add(1, n), 1), n) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -254,7 +271,8 @@ fn lst_concat_is_a_free_monoid() {
         let resegment(@T : Type, a : T, b : T, c : Lst(T))
             -> Eq([a, b, ..c], [a, ..[b, ..c]]) =
             Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -265,7 +283,8 @@ fn lst_concat_length_clash_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Eq, Lst};
         let bad(@T : Type, x : T, y : T) -> Eq([x, y], [x]) = Eq/refl();
-        Handle/write(Handle/stdout, Str/to_bytes("ok"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -276,7 +295,10 @@ fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        r#"std/Handle/write(std/Handle/stdout, x[../std/Str/to_bytes("ok")])"#,
+        r#"
+let _ = std/Handle/write(std/Handle/stdout, x[../std/Str/to_bytes("ok")])!;
+/std/Io/pure(())
+"#,
         system,
     )
     .expect("expected result");
@@ -299,7 +321,8 @@ fn vec_cons_with_nat_succ() {
             xs.0;
 
         let v : Vec(std/Nat, 1) = cons(std/Nat, 0, 42, ());
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(head(std/Nat, 0, v))))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(head(std/Nat, 0, v))))!;
+        /std/Io/pure(())
     "#;
 
     let (system, io) = MockHost::builder().build();
@@ -329,7 +352,8 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat, 3) = append(a, b);
-        Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(total(c, 0))))
+        let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(total(c, 0))))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -342,7 +366,8 @@ fn lst_fold_sums_elements() {
     let source = r#"
         use /std/{Handle, Str, Nat, Lst};
         let xs : Lst(Nat) = [10, 20, 30];
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))!;
+        /std/Io/pure(())
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(source, system).expect("expected result");
@@ -361,7 +386,8 @@ fn lst_spread_concats_segments() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -379,7 +405,8 @@ fn lst_spread_identity_and_multi() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"3232");
 }
@@ -391,7 +418,8 @@ fn lst_spread_borrows_expected_element_type() {
         use /std/{Handle, Str, Nat, Int, Lst};
         let xs : Lst(Int) = [-1, +2];
         let ys : Lst(Int) = [1, ..xs];
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(ys))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(ys))))!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -402,7 +430,8 @@ fn lst_spread_of_non_list_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Nat, Lst};
         let bad : Lst(Nat) = [1, ..2];
-        Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -414,7 +443,8 @@ fn lst_spread_element_type_clash_is_rejected() {
         use /std/{Handle, Str, Nat, Lst};
         let ss : Lst(Str) = ["a"];
         let bad : Lst(Nat) = [..ss];
-        Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -434,7 +464,7 @@ fn lst_spread_operand_hoists_bangs() {
                 | [] => 0
                 | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
                 end;
-            let wrote = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)));
+            let wrote = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits))))!;
             Async/pure(());
         Async/run(prog)
         "#,
@@ -450,7 +480,8 @@ fn bin_spread_concats_segments() {
     let source = r#"
         use /std/{Handle, Nat, Bytes};
         let b : Bytes = x[\02, \03];
-        Handle/write(Handle/stdout, x[\01, ..b, \04, ..Bytes/slice(b, 1, 2)])
+        let _ = Handle/write(Handle/stdout, x[\01, ..b, \04, ..Bytes/slice(b, 1, 2)])!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"\x01\x02\x03\x04\x03");
 }
@@ -461,7 +492,8 @@ fn bin_spread_identity_and_multi() {
         use /std/{Handle, Bytes};
         let b : Bytes = x[\48, \65];
         let c : Bytes = x[..b];
-        Handle/write(Handle/stdout, x[..c, ..c])
+        let _ = Handle/write(Handle/stdout, x[..c, ..c])!;
+        /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"HeHe");
 }
@@ -473,7 +505,8 @@ fn bin_spread_of_non_bin_is_rejected() {
         use /std/{Handle, Str, Nat, Lst, Bytes};
         let xs : Lst(Nat) = [1, 2];
         let bad : Bytes = x[\00, ..xs];
-        Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
+        /std/Io/pure(())
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(source, system).is_err());
@@ -488,7 +521,7 @@ fn bin_spread_operand_hoists_bangs() {
         use /std/{Async, Handle, Bytes};
         let prog : Async({}) =
             let out : Bytes = x[\3e, ..Async/pure(x[\68, \69])!, \3c];
-            let wrote = Handle/write(Handle/stdout, out);
+            let wrote = Async/lift(Handle/write(Handle/stdout, out))!;
             Async/pure(());
         Async/run(prog)
         "#,
@@ -503,7 +536,8 @@ fn bin_fold_sums_bytes() {
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes};
         let b = x[\0a, \14, \1e];
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))!;
+        /std/Io/pure(())
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(source, system).expect("expected result");

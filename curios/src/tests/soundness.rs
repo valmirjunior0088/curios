@@ -589,7 +589,7 @@ fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
 #[test]
 fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
     rejected_as_a_type(&format!(
-        "{SHAPE}\n let ignore(@A : Type, x : Nat) -> Nat = x;\n\n ignore(@Shape(inf), 5)"
+        "{SHAPE}\n let ignore(@A : Type, x : Nat) -> Nat = x;\n\n let _ = ignore(@Shape(inf), 5);\n /std/Io/pure(())"
     ));
 }
 

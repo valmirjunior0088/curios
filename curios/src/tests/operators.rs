@@ -10,7 +10,8 @@ fn bool_logic_and_of_str() {
             | some(b) => b
             | none() => true
             end;
-        Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(computed), Bool/to_str(parsed))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(computed), Bool/to_str(parsed))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -27,7 +28,8 @@ fn bool_xor_executes() {
         use /std/{Bool, Str, Handle};
         let a = Bool/xor(true, false);
         let b = Bool/xor(true, true);
-        Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -44,7 +46,8 @@ fn bool_eql_executes() {
         use /std/{Bool, Str, Handle};
         let a = Bool/eql(true, true);
         let b = Bool/eql(true, false);
-        Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -60,7 +63,7 @@ fn nat_bitwise_ops_execute() {
     crate::run_text(
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Option};
-        let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
+        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]
             | error(_) => x[]
@@ -73,7 +76,8 @@ fn nat_bitwise_ops_execute() {
             Nat/to_str(Nat/shl(x, 20)), ",",
             Nat/to_str(Nat/shr(x, 1))
         ]);
-        Handle/write(Handle/stdout, Str/to_bytes(r))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(r))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -89,7 +93,7 @@ fn int_bitwise_ops_execute() {
     crate::run_text(
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Int, Str, Option};
-        let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
+        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]
             | error(_) => x[]
@@ -104,7 +108,8 @@ fn int_bitwise_ops_execute() {
             Int/to_str(Int/shr(neg, +1)), ",",
             Int/to_str(Int/not(x))
         ]);
-        Handle/write(Handle/stdout, Str/to_bytes(r))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(r))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -119,28 +124,32 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Nat};
-            Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(2 + 3 * 4)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(2 + 3 * 4)))!;
+            /std/Io/pure(())
         "#),
         b"14"
     );
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Nat};
-            Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str((2 + 3) * 4)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str((2 + 3) * 4)))!;
+            /std/Io/pure(())
         "#),
         b"20"
     );
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Nat};
-            Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(10 - 3 - 2)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(10 - 3 - 2)))!;
+            /std/Io/pure(())
         "#),
         b"5"
     );
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Nat};
-            Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(17 % 5)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(17 % 5)))!;
+            /std/Io/pure(())
         "#),
         b"2"
     );
@@ -152,7 +161,8 @@ fn infix_resolves_to_int_for_signed_literals() {
     assert_eq!(
         run(r#"
             use /std/{Handle, Str, Int};
-            Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(-2 - +3)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(-2 - +3)))!;
+            /std/Io/pure(())
         "#),
         b"-5"
     );
@@ -165,7 +175,8 @@ fn infix_resolves_against_a_bound_variable_type() {
         run(r#"
             use /std/{Handle, Str, Int};
             let x : Int = -10;
-            Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(x + 1)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(x + 1)))!;
+            /std/Io/pure(())
         "#),
         b"-9"
     );
@@ -177,20 +188,22 @@ fn infix_comparison_yields_a_bool_scrutinee() {
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
-            match 2 + 2 == 4
+            let _ = (match 2 + 2 == 4
             | true => Handle/write(Handle/stdout, Str/to_bytes("yes"))
             | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
-            end
+            end)!;
+            /std/Io/pure(())
         "#),
         b"yes"
     );
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
-            match 3 < 1
+            let _ = (match 3 < 1
             | true => Handle/write(Handle/stdout, Str/to_bytes("yes"))
             | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
-            end
+            end)!;
+            /std/Io/pure(())
         "#),
         b"no"
     );
@@ -202,10 +215,11 @@ fn infix_equality_is_overloaded_for_bool() {
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
-            match (1 < 2) == (3 < 4)
+            let _ = (match (1 < 2) == (3 < 4)
             | true => Handle/write(Handle/stdout, Str/to_bytes("yes"))
             | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
-            end
+            end)!;
+            /std/Io/pure(())
         "#),
         b"yes"
     );
@@ -218,10 +232,11 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
         run(r#"
             use /std/{Handle, Str, Flt};
             let x : Flt = 3.0;
-            match x + 1 < 4.5
+            let _ = (match x + 1 < 4.5
             | true => Handle/write(Handle/stdout, Str/to_bytes("less"))
             | false => Handle/write(Handle/stdout, Str/to_bytes("more"))
-            end
+            end)!;
+            /std/Io/pure(())
         "#),
         b"less"
     );
@@ -233,10 +248,11 @@ fn infix_undefined_operator_for_type_is_rejected() {
     let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Handle, Str};
-        match 1 && 2
+        let _ = (match 1 && 2
         | true => Handle/write(Handle/stdout, Str/to_bytes("yes"))
         | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
-        end
+        end)!;
+        /std/Io/pure(())
     "#;
     assert!(crate::run_text(source, system).is_err());
 }
@@ -247,10 +263,11 @@ fn infix_rem_on_flt_computes_fmod() {
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
-            match 5.5 % 2.0 == 1.5
+            let _ = (match 5.5 % 2.0 == 1.5
             | true => Handle/write(Handle/stdout, Str/to_bytes("yes"))
             | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
-            end
+            end)!;
+            /std/Io/pure(())
         "#),
         b"yes"
     );
@@ -262,10 +279,11 @@ fn infix_not_equal_on_bool_resolves_to_bool_neq() {
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
-            match true != false
+            let _ = (match true != false
             | true => Handle/write(Handle/stdout, Str/to_bytes("yes"))
             | false => Handle/write(Handle/stdout, Str/to_bytes("no"))
-            end
+            end)!;
+            /std/Io/pure(())
         "#),
         b"yes"
     );
@@ -279,7 +297,8 @@ fn infix_mismatched_operand_types_are_rejected() {
         use /std/{Handle, Str, Int};
         let n : Nat = 1;
         let i : Int = -1;
-        Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(n + i)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(n + i)))!;
+        /std/Io/pure(())
     "#;
     assert!(crate::run_text(source, system).is_err());
 }
@@ -298,7 +317,8 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
             }
             let p : Point = Point { x = 3, y = 4 };
             let q : Point = p + p;
-            Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(q.y)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(q.y)))!;
+            /std/Io/pure(())
         "#),
         b"8"
     );
@@ -311,7 +331,8 @@ fn infix_resolves_against_a_local_use_premise() {
         run(r#"
             use /std/{Nat, Handle, Str, Add};
             pub let double(@A : Type, use Add(A), x : A) -> A = x + x;
-            Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(double(21))))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(double(21))))!;
+            /std/Io/pure(())
         "#),
         b"42"
     );
@@ -323,7 +344,8 @@ fn infix_equality_works_on_str() {
     assert_eq!(
         run(r#"
             use /std/{Bool, Handle, Str};
-            Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str("abc" == "abc")))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str("abc" == "abc")))!;
+            /std/Io/pure(())
         "#),
         b"true"
     );
@@ -336,7 +358,8 @@ fn infix_without_witness_reports_no_witness() {
     let source = r#"
         use /std/{Bool, Handle, Str};
         let b : Bool = true + false;
-        Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str(b)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str(b)))!;
+        /std/Io/pure(())
     "#;
     let error = crate::run_text(source, system).expect_err("Add(Bool) has no witness");
     assert!(error.contains("no witness"), "unexpected error: {error}");
@@ -354,7 +377,8 @@ fn infix_literal_against_a_user_type_is_rejected() {
         }
         let p : Point = Point { x = 1, y = 2 };
         let q : Point = p + 1;
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(q.x)))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(q.x)))!;
+        /std/Io/pure(())
     "#;
     assert!(crate::run_text(source, system).is_err());
 }
@@ -369,7 +393,8 @@ fn type_level_operator_indices_stay_convertible() {
                 Nat/Lte/s(p);
             let base : Nat/Lte(0, 1) = Nat/Lte/z();
             let bumped : Nat/Lte(1, 2) = step(base);
-            Handle/write(Handle/stdout, Str/to_bytes("ok"))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+            /std/Io/pure(())
         "#),
         b"ok"
     );
@@ -383,7 +408,8 @@ fn infix_equality_works_on_bin() {
             use /std/{Bool, Bytes, Handle, Str};
             let a : Bytes = Str/to_bytes("xy");
             let b : Bytes = Str/to_bytes("xz");
-            Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str(a != b)))
+            let _ = Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str(a != b)))!;
+            /std/Io/pure(())
         "#),
         b"true"
     );

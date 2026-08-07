@@ -152,7 +152,7 @@ fn kernel_memo_parity() {
 /// The smallest thing that is still a whole program: the kernel walks every prelude item ahead of the entrypoint, so even this exercises the module driver over the real standard library.
 #[test]
 fn a_trivial_program_rechecks() {
-    let outcome = recheck("()");
+    let outcome = recheck("/std/Io/pure(())");
 
     assert_eq!(outcome, Ok(()), "the kernel refused a trivial program");
 }

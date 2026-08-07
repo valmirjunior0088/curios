@@ -7,7 +7,7 @@ fn tainted(body: &str) -> String {
     format!(
         r#"
         use /std/{{Handle, Nat, Int, Flt, Byte, Bytes, Str, Option}};
-        let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
+        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]
             | error(_) => x[]

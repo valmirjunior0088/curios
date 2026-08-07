@@ -1,6 +1,5 @@
 use {
     super::run,
-    curios_cont::{CpsAtom, CpsEdge, CpsLiteral, CpsNode},
     curios_pipeline::{Stage, compile_entrypoint},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
@@ -9,7 +8,7 @@ use {
 
 #[test]
 fn nullary_closure_survives_erasure_and_codegen() {
-    // A nullary closure stored in an inductive field and called indirectly via a `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). Output proves the suspended effect fired on `force`.
+    // A nullary closure stored in an inductive field and called indirectly via a `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). The suspension now carries a *description* rather than performing on the way through: `force` walks the `later` closure to the `now` payload, and the write happens where that payload is forced, so the output still proves the closure was reached and called.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
@@ -23,12 +22,12 @@ fn nullary_closure_survives_erasure_and_codegen() {
             | now(a) => a
             | later(k) => force(k())
             end;
-        let prog : Susp({}) =
-            Susp/later(() =>
-                let w = Handle/write(Handle/stdout, Str/to_bytes("ok"));
-                Susp/now(()));
+        let prog : Susp(/std/Io({})) =
+            Susp/later(() => Susp/now(/std/print("ok")));
         let r = force(prog);
-        Handle/write(Handle/stdout, Str/to_bytes("!"))
+        let _ = r!;
+        let _ = /std/print("!")!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -49,7 +48,8 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -71,7 +71,8 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (let go : /std/Nat = 3; go);
                 go;
         end
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -88,7 +89,8 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -100,7 +102,8 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -112,7 +115,8 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))!;
+        /std/Io/pure(())
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -150,7 +154,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
         let parser : Parse/Parse(Nat) =
             Parse/pure(Nat/sub(Byte/to_nat(Parse/any_byte!), Byte/to_nat(Parse/any_byte!)));
 
-        match Parse/run(parser, /std/Str/to_bytes("BA")) : (_) => {}
+        match Parse/run(parser, /std/Str/to_bytes("BA")) : (_) => /std/Io({})
         | success(n) => /std/print(Nat/to_str(n))
         | failure(msg) => /std/print(msg)
         end
@@ -178,9 +182,9 @@ fn bang_region_mixes_action_types() {
         let parser : Parse/Parse(Bytes) =
             Parse/pure(x[..Parse/take_while(is_a)!, Parse/any_byte!]);
 
-        match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => {}
+        match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => /std/Io({})
         | success(s) =>
-            match Str/of_bytes(s) : (_) => {}
+            match Str/of_bytes(s) : (_) => /std/Io({})
             | some(t) => /std/print(t)
             | none() => /std/print("invalid utf-8")
             end
@@ -201,11 +205,11 @@ fn bang_region_mixes_action_types() {
 
 #[test]
 fn folds_constant_arg_through_let_function() {
-    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4` returned through main's bodyless return continuation.
+    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`. The observation point is the host call that consumes it rather than main's return continuation: a program's tail is now a description yielding unit, so no user value reaches that continuation at all. `proc/exit` is the shortest host operation taking a `Nat`, and its operand is erased at the construction site, so a surviving `NatAdd` would mean the fold did not happen.
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
-        f(3)
+        /std/proc/exit(f(3))
         "#;
 
     let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -224,24 +228,14 @@ fn folds_constant_arg_through_let_function() {
     .expect("compile succeeded");
 
     let optimized = optimized.expect("Stage::ContOptm observed");
-    let entry = optimized.entry().expect("module has entry");
-    let main = optimized
-        .function(entry)
-        .expect("entry function is defined");
-    let returns_four = optimized.nodes().iter().flatten().any(|node| {
-        matches!(
-            node,
-            CpsNode::ApplyCont(CpsEdge { target, args })
-                if *target == main.return_cont
-                    && matches!(args.as_slice(), [CpsAtom::Literal(
-                        CpsLiteral::Nat(4)
-                    )])
-        )
-    });
+    let text = format!("{optimized}");
     assert!(
-        returns_four,
-        "expected main to return literal 4 through {}, got:\n{optimized}",
-        main.return_cont,
+        !text.contains("NatAdd"),
+        "the addition must fold at compile time, got:\n{text}",
+    );
+    assert!(
+        text.contains("exit Some(Literal(Nat(4)))"),
+        "expected the folded 4 to reach the exit, got:\n{text}",
     );
 }
 
@@ -251,9 +245,9 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
-        match Handle/read(Handle/stdin, 1024) : (_) => {}
+        match Handle/read(Handle/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes) =>
-            match Str/of_bytes(bytes) : (_) => {}
+            match Str/of_bytes(bytes) : (_) => /std/Io({})
             | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
             | none() => /std/print("invalid input")
             end
@@ -264,8 +258,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
 
     let entrypoint = source
         .parse::<Entrypoint>()
-        .expect("failed to parse source")
-        .with_type("{}".parse().unwrap());
+        .expect("failed to parse source");
 
     let mut cont_optm = None;
 
@@ -300,9 +293,9 @@ fn fmt_print_runtime_args_specializes_spine() {
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
-        match Handle/read(Handle/stdin, 1024) : (_) => {}
+        match Handle/read(Handle/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes) =>
-            match Str/of_bytes(bytes) : (_) => {}
+            match Str/of_bytes(bytes) : (_) => /std/Io({})
             | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
             | none() => /std/print("invalid input")
             end
@@ -313,8 +306,7 @@ fn fmt_print_runtime_args_specializes_spine() {
 
     let entrypoint = source
         .parse::<Entrypoint>()
-        .expect("failed to parse source")
-        .with_type("{}".parse().unwrap());
+        .expect("failed to parse source");
 
     let mut ersd_optm = None;
 
@@ -352,8 +344,8 @@ fn fmt_print_err_formats_to_stderr() {
     crate::run_text(
         r#"
         use /std/{Fmt, Handle};
-        let a = /std/print("before;");
-        let b = Fmt/print_err("%: %;")("code")(3);
+        let a = /std/print("before;")!;
+        let b = Fmt/print_err("%: %;")("code")(3)!;
         /std/print("after")
         "#,
         system,
@@ -373,8 +365,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
 
     let entrypoint = source
         .parse::<Entrypoint>()
-        .expect("failed to parse source")
-        .with_type("{}".parse().unwrap());
+        .expect("failed to parse source");
 
     let mut ersd_optm = None;
     let mut cont_optm = None;
@@ -392,10 +383,10 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     .expect("compile succeeded");
 
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
-    // "x = 42, s = hello\n", already formatted, as the residual call's operand. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
+    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself. The residual used to be a call to `/std/print`; `print` is an `Io`-returning wrapper now and inlines away with the rest, so what survives is the write inside the description thunk it erases to — one step further than before, not one less. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
-        ersd.contains("$/std/print(x\"78203d2034322c2073203d2068656c6c6f0a\")"),
-        "expected the folded print residual, got:\n{ersd}",
+        ersd.contains("foreign sys/write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\")"),
+        "expected the folded write residual, got:\n{ersd}",
     );
     assert!(
         !ersd.contains("/std/Parse/"),
@@ -519,7 +510,10 @@ fn diagnostic_spells_index_arithmetic_infix() {
 fn random_bin_returns_requested_length() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        r#"std/Handle/write(std/Handle/stdout, /std/rand/bin(8))"#,
+        r#"
+let _ = std/Handle/write(std/Handle/stdout, /std/rand/bytes(8)!)!;
+/std/Io/pure(())
+"#,
         system,
     )
     .expect("expected result");
@@ -538,7 +532,8 @@ fn nat_of_str_returns_option() {
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
         let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
         let empty = Option/unwrap_or(Nat/of_str(""), 9);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -557,7 +552,8 @@ fn int_of_str_returns_option() {
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
         let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
         let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -576,7 +572,8 @@ fn flt_of_str_returns_option() {
         let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
         let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
         let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -594,7 +591,8 @@ fn option_result_char_helpers() {
         let res0 : Result(Nat, Nat) = Result/success(5);
         let res = Result/unwrap_or(Result/map_success(res0, (x : Nat) => Nat/mul(x, 2)), 0);
         let up = Char/to_ascii_upper('a');
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -611,10 +609,11 @@ fn clock_diff_of_two_distinct_now_readings() {
         .wall([(1, 100, 500), (1, 130, 900)])
         .build();
     crate::run_text(r#"
-        let a = /std/time/Instant/now();
-        let b = /std/time/Instant/now();
+        let a = /std/time/Instant/now()!;
+        let b = /std/time/Instant/now()!;
         let d = /std/time/Instant/diff(b, a);
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(d))))
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(d))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -627,8 +626,9 @@ fn clock_diff_of_two_distinct_now_readings() {
 fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7)]).build();
     crate::run_text(r#"
-        let e = /std/time/Duration/now();
-        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))
+        let e = /std/time/Duration/now()!;
+        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -644,8 +644,8 @@ fn cell_get_returns_init_value() {
         run(r#"
             use /std/{Cell, Handle, Nat, Str};
             let n : Nat = 42;
-            let cell = Cell/new(n);
-            /std/print(Nat/to_str(Cell/get(cell)))
+            let cell = Cell/new(n)!;
+            /std/print(Nat/to_str(Cell/get(cell)!))
         "#),
         b"42",
     );
@@ -658,9 +658,9 @@ fn cell_set_overwrites_value() {
         run(r#"
             use /std/{Cell, Handle, Nat, Str};
             let z : Nat = 0;
-            let cell = Cell/new(z);
-            let _ = Cell/set(cell, 99);
-            /std/print(Nat/to_str(Cell/get(cell)))
+            let cell = Cell/new(z)!;
+            let _ = Cell/set(cell, 99)!;
+            /std/print(Nat/to_str(Cell/get(cell)!))
         "#),
         b"99",
     );
@@ -673,34 +673,16 @@ fn cell_two_cells_are_distinct() {
         run(r#"
             use /std/{Cell, Handle, Nat, Str};
             let n : Nat = 7;
-            let a = Cell/new(n);
-            let b = Cell/new(n);
-            let _ = Cell/set(a, 1);
-            /std/print(Nat/to_str(Cell/get(b)))
+            let a = Cell/new(n)!;
+            let b = Cell/new(n)!;
+            let _ = Cell/set(a, 1)!;
+            /std/print(Nat/to_str(Cell/get(b)!))
         "#),
         b"7",
     );
 }
 
-#[test]
-fn match_reads_an_effectful_scrutinee_once() {
-    // Erasure aliases a non-variable scrutinee before projecting: the `k` binder below is `head - 1` over the *alias*, not a re-erased `Cell/get(c) - 1` — which would re-read the cell after the arm's `Cell/set`, making `k` 0 - 1 (monus) = 0 and `x` 1 instead of 5.
-    assert_eq!(
-        run(r#"
-            use /std/{Cell, Handle, Nat, Str};
-            let n : Nat = 5;
-            let c = Cell/new(n);
-            let x = match Cell/get(c)
-                | 0 => 0
-                | k + 1; ih =>
-                    let _ = Cell/set(c, 0);
-                    k + 1
-                end;
-            /std/print(Nat/to_str(x))
-        "#),
-        b"5",
-    );
-}
+// `match_reads_an_effectful_scrutinee_once` stood here. It pinned erasure aliasing a non-variable scrutinee before projecting, and it could only *observe* that through a re-read: matching `Cell/get(c)` and writing the cell in the arm made a second erasure of the scrutinee visible as a wrong binder value. `Cell/get(c) : Io(Nat)` is no longer a scrutinee at all — `Io` has no eliminator — so the program is a type error rather than a regression fixture, and a scrutinee that type-checks is now pure, which makes re-erasing one unobservable. The aliasing itself still happens and still matters for code size; `tests::codegen` is where a claim about emitted shape belongs. `io_monad::an_io_scrutinee_is_refused` holds the typing half.
 
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
@@ -716,8 +698,9 @@ fn accumulation_loops_are_linear_by_construction() {
             end;
         let built = go(100000, x[]);
         let head = Bytes/slice(built, 0, 10);
-        let _ = Handle/write(Handle/stdout, head);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))
+        let _ = Handle/write(Handle/stdout, head)!;
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -731,27 +714,28 @@ fn peel_loops_are_linear_by_construction() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"
-        use /std/{Handle, Byte, Bytes, Nat, Str, Cell};
+        use /std/{Handle, Byte, Bytes, Nat, Str, Cell, Io};
         rec build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
             | k + 1; ih => build(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let built = build(10000, x[]);
-        let c = Cell/new(built);
-        rec drain(fuel : Nat, acc : Nat) -> Nat =
+        let c = Cell/new(built)!;
+        rec drain(fuel : Nat, acc : Nat) -> Io(Nat) =
             match fuel
-            | 0 => acc
+            | 0 => Io/pure(acc)
             | f + 1; ih =>
-                match Cell/get(c)
-                | x[] => acc
+                match Cell/get(c)!
+                | x[] => Io/pure(acc)
                 | x[h, ..t]; ih2 =>
-                    let _ = Cell/set(c, t);
+                    let _ = Cell/set(c, t)!;
                     drain(f, acc + (Byte/to_nat(h) - 48))
                 end
             end;
-        let total = drain(Bytes/len(built) + 1, 0);
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(total)))
+        let total = drain(Bytes/len(built) + 1, 0)!;
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(total)))!;
+        /std/Io/pure(())
         "#,
         system,
     )
@@ -773,7 +757,7 @@ fn nested_local_rec_runs_correctly() {
                 | k + 1; ih => go(k) + 1
                 end;
              go(n));
-        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bin(4)))))
+        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(4)!))))
         "#,
         system,
     )
@@ -795,7 +779,7 @@ fn local_rec_calls_enclosing_rec_member() {
                 | k + 1; ih => f(k) + go(k)
                 end;
              go(n));
-        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bin(3)))))
+        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(3)!))))
         "#,
         system,
     )
@@ -813,7 +797,7 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
         let make(n : Nat) -> Nat =
             rec loop : Nat = loop;
             n;
-        /std/print(Nat/to_str(make(Bytes/len(/std/rand/bin(5)))))
+        /std/print(Nat/to_str(make(Bytes/len(/std/rand/bytes(5)!))))
         "#,
         system,
     )
@@ -828,13 +812,14 @@ fn recursive_group_signature_reduces_concrete_type_family() {
     crate::run_text(
         r#"
         use /std/{Handle, Nat, Str, Bytes};
+        let taint = Bytes/len(/std/rand/bytes(3)!);
         rec T(n : Nat) -> Type =
             match n
             | 0 => Nat
             | k + 1; ih => T(k)
             end
         and val : T(2) =
-            Bytes/len(/std/rand/bin(3));
+            taint;
         /std/print(Nat/to_str(val))
         "#,
         system,
