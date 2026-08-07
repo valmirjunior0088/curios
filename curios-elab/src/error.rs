@@ -3,7 +3,8 @@ use {
     curios_base::{Grain, Int, Plicity, Qualifier, Span},
     curios_core::{
         Atom, Level, Module, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
-        build_rename, build_shorten, display_names, with_pretty_names, with_short_names,
+        build_rename, build_shorten, display_names, with_erased_universes, with_pretty_names,
+        with_short_names,
     },
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
@@ -899,7 +900,8 @@ impl Error {
         }
 
         let rename = Rc::new(build_rename(&names));
-        with_pretty_names(rename, || self.render())
+        // Axis (c) wraps the whole render rather than any one variant: every error that prints a term prints it from the raw elaborated spelling, so the instance suffix is not a mismatch-specific wart. Suppressing at the printer keeps `Error` a plain data carrier — the alternative, rewriting each variant's terms through `project_erased_universes`, would have to mirror `collect_terms`'s roster and take `&mut self` through two public entry points.
+        with_erased_universes(|| with_pretty_names(rename, || self.render()))
     }
 
     /// Like [`format`], additionally shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Used on the core error paths, where the lowered module is in scope.
@@ -909,15 +911,34 @@ impl Error {
         })
     }
 
+    /// One snippet per rendered error, for the innermost span attached to it.
+    ///
+    /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Rendering therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
     fn render(&self) -> String {
+        let body = self.render_body();
+        match self.innermost_span() {
+            Some(span) => format!("{body}\n\n{}", span.render_snippet()),
+            None => body,
+        }
+    }
+
+    /// The message without any snippet — wrappers are transparent, every other variant renders through its own `Display`.
+    fn render_body(&self) -> String {
         match self {
-            Self::Located { span, error } => {
-                format!("{error}\n\n{}", span.render_snippet())
-            }
+            Self::Located { error, .. } => error.render_body(),
             Self::InDeclaration { name, error } => {
-                format!("while elaborating {name}:\n{}", error.render())
+                format!("while elaborating {name}:\n{}", error.render_body())
             }
             error => error.to_string(),
+        }
+    }
+
+    /// The innermost span stamped on this error, looking through both wrappers.
+    fn innermost_span(&self) -> Option<&Span> {
+        match self {
+            Self::Located { span, error } => error.innermost_span().or(Some(span)),
+            Self::InDeclaration { error, .. } => error.innermost_span(),
+            _ => None,
         }
     }
 

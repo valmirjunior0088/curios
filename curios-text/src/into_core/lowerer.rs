@@ -511,7 +511,21 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Walks a non-boundary expression, elaborating to core and accumulating each `Bang` into `binds` (in evaluation order) replaced by a fresh variable. Boundary/binding forms desugar as their own nested region; `let`/`match` hoist their bound-expression/scrutinee bangs into the *enclosing* `binds`.
+    ///
+    /// Span stamping happens here rather than inside the walk for the same reason [`Self::term`] stamps at its own boundary: every spine arm *rebuilds* its node (`apply_marked`, `proj`, `infix`, …) instead of routing through `term`, so a node lowered in a value body would otherwise reach elaboration with no span and report its errors unlocated. `with_span` is innermost-wins, so the arms that do delegate — leaves through `term`, lambdas through `region` — keep the span they already carry.
     pub(super) fn collect(
+        &self,
+        term: &Term,
+        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
+        let lowered = self.collect_spine(term, binds)?;
+        Ok(match term.span() {
+            Some(span) => lowered.with_span(span.clone()),
+            None => lowered,
+        })
+    }
+
+    fn collect_spine(
         &self,
         term: &Term,
         binds: &mut Vec<(curios_core::Free, curios_core::Term)>,

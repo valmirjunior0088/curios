@@ -9,14 +9,14 @@ use {
         printer::{Printer, deferred, flat, group, indent, line, pure, sep_flat, soft_line},
     },
     std::{
-        cell::RefCell,
+        cell::{Cell, RefCell},
         collections::{BTreeSet, HashMap},
         rc::Rc,
     },
 };
 
 fn universe_suffix(levels: &[Level]) -> String {
-    if levels.is_empty() {
+    if levels.is_empty() || erasing_universes() {
         String::new()
     } else {
         format!(
@@ -38,6 +38,8 @@ fn universe_suffix(levels: &[Level]) -> String {
 //
 // axis (b) — globals: a *shorten map* (`with_short_names`, built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Installed by error rendering *and* `Module` display.
 //
+// axis (c) — universe instances: a *flag* (`with_erased_universes`) suppresses the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. `Type.{n}` is deliberately *not* suppressed: the level is the whole content of that node, and erasing it would render two distinct sorts identically.
+//
 // `display_label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
 thread_local! {
@@ -45,6 +47,8 @@ thread_local! {
     static PRETTY: RefCell<Option<Rc<HashMap<Free, String>>>> = const { RefCell::new(None) };
     /// Global qualified names → their shortest in-scope spelling (axis (b)); installed by both error rendering and `Module` display.
     static SHORTEN: RefCell<Option<Rc<HashMap<Global, String>>>> = const { RefCell::new(None) };
+    /// Whether to suppress universe-instance suffixes (axis (c)); installed by error rendering only.
+    static ERASE_UNIVERSES: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Install a pretty-name rename map for the duration of `f`, restoring the previous state afterwards so the faithful `Display` paths are unaffected.
@@ -61,6 +65,18 @@ pub fn with_short_names<R>(shorten: Rc<HashMap<Global, String>>, f: impl FnOnce(
     let result = f();
     SHORTEN.with(|s| *s.borrow_mut() = prev);
     result
+}
+
+/// Suppress universe-instance suffixes for the duration of `f` (axis (c)).
+pub fn with_erased_universes<R>(f: impl FnOnce() -> R) -> R {
+    let prev = ERASE_UNIVERSES.replace(true);
+    let result = f();
+    ERASE_UNIVERSES.set(prev);
+    result
+}
+
+fn erasing_universes() -> bool {
+    ERASE_UNIVERSES.get()
 }
 
 /// The display spelling of a global — shortened against the module's other symbols (axis (b)) when that is unambiguous, and rendered in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
@@ -734,15 +750,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
         Subterm::Prop => pure("Prop"),
         Subterm::UniverseInst(instance) => flat([
             sub(instance.head, depth),
-            pure(format!(
-                ".{{{}}}",
-                instance
-                    .levels
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )),
+            pure(universe_suffix(&instance.levels)),
         ]),
         Subterm::Prim(prim) => sub_prim(prim, depth),
         Subterm::FuncType(FuncType {

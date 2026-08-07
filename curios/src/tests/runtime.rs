@@ -453,7 +453,7 @@ fn diagnostic_shortens_global_names() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(source, system).unwrap_err();
     assert!(
-        error.contains("inferred: Vec.{") && error.contains("}(Nat, n)"),
+        error.contains("inferred: Vec(Nat, n)"),
         "globals not shortened: {error}"
     );
     assert!(
@@ -478,7 +478,7 @@ fn diagnostic_collapses_witness_dispatch_in_index() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(source, system).unwrap_err();
     assert!(
-        error.contains("inferred: Vec.{") && error.contains("}(Nat, 1)"),
+        error.contains("inferred: Vec(Nat, 1)"),
         "witness dispatch not collapsed to its value: {error}"
     );
     assert!(
@@ -500,7 +500,7 @@ fn diagnostic_spells_index_arithmetic_infix() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(source, system).unwrap_err();
     assert!(
-        error.contains("inferred: Vec.{") && error.contains("}(Nat, (n + m) + 1)"),
+        error.contains("inferred: Vec(Nat, (n + m) + 1)"),
         "index arithmetic not spelled infix: {error}"
     );
 }

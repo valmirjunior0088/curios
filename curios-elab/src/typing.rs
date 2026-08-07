@@ -7,7 +7,7 @@ use curios_core::{
     ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
     UniverseRole,
 };
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, rc::Rc};
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering.
 pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
@@ -80,11 +80,22 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 }
 
 /// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. An unsolved metavariable makes `zonk` fail, in which case the raw spelling is kept; a normalization that exhausts its budget falls back to the merely-zonked form.
+///
+/// Normalization is the whole denoising story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator, so the structural fold the goal reports use runs afterwards over the live local scope — the same three witness forms, the same infix spelling.
 fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     let Ok(zonked) = super::zonk(context, term) else {
         return term.clone();
     };
-    super::normalize(context, zonked.clone()).unwrap_or(zonked)
+    let resolved = super::normalize(context, zonked.clone()).unwrap_or(zonked);
+    let operators = super::operator_table(context);
+    let binders = Rc::new(
+        context
+            .locals()
+            .iter()
+            .map(|(name, type_)| (name.clone(), type_.clone()))
+            .collect(),
+    );
+    super::denoise_for_display(&operators, &binders, &resolved)
 }
 
 /// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]).

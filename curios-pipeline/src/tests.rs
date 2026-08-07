@@ -479,6 +479,83 @@ fn goal_reports_spell_no_universe_instances() {
 }
 
 #[test]
+fn mismatch_reports_spell_no_universe_instances() {
+    // The goal path erases instances structurally; a mismatch carries raw terms to the formatter, which suppresses them at the printer. Same unspellable `.{…}`, same absence — over a nominal family, which is the only thing that carries an instance (`Bool` and `Nat` never did).
+    let source = r#"
+        use /std/{Nat, Str, Option};
+        let bad : Str = Option/some(1);
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+    assert!(
+        error.contains("inferred: Option(Nat)"),
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains(".{"), "universe instance leaked: {error}");
+    assert!(!error.contains("?u"), "universe meta leaked: {error}");
+}
+
+#[test]
+fn a_mismatch_over_an_applied_head_is_located() {
+    // A value body's spine forms are rebuilt by the `!`-hoisting walk rather than routed through the span-stamping lowering entry, so an applied head once reached elaboration unspanned and reported with no snippet at all — while the same mismatch over a bare variable reported one.
+    let source = r#"
+        use /std/{Nat, Str, Option};
+        let bad : Str = Option/some(1);
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("Option/some(1)"),
+        "no source snippet: {error}"
+    );
+}
+
+#[test]
+fn an_abstract_witness_folds_back_to_its_operator() {
+    // Under a `use Add(A)` parameter the projection is stuck on a witness that is a *binder*, so no amount of reduction reaches the operator: the fold must resolve it through the concept the binder's declared type names, or the report spells `a + a` as `(#6561).0(a, a)`.
+    let source = r#"
+        use /syn/{Add};
+        use /std/{Nat, Eq};
+        let bad(@A : Type, use Add(A), a : A) -> Eq(a + a, a + a) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("a + a"), "operator not folded: {error}");
+    assert!(
+        !error.contains(").0("),
+        "witness projection leaked: {error}"
+    );
+}
+
+#[test]
+fn an_abstract_witness_folds_back_in_a_mismatch_too() {
+    // The mismatch path denoises by normalizing, which suffices only while the operand type is concrete. The abstract case needs the same structural fold the goal path runs.
+    let source = r#"
+        use /syn/{Add};
+        use /std/{Nat, Eq};
+        let bad(@A : Type, use Add(A), a : A) -> Eq(a + a, a) = Eq/refl();
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+    assert!(error.contains("a + a"), "operator not folded: {error}");
+    assert!(
+        !error.contains(").0("),
+        "witness projection leaked: {error}"
+    );
+}
+
+#[test]
 fn goal_types_spell_negated_equality_as_neq() {
     // `a != b` elaborates as an xor-negated equality call (no `BoolNot` prim exists); the report folds the pair back to `!=`.
     let source = r#"

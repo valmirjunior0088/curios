@@ -2,7 +2,7 @@
 mod tests;
 
 use {
-    super::{Context, Error, GoalReport, UniverseSolver, universe_context_validate},
+    super::{BinderTypes, Context, Error, GoalReport, UniverseSolver, universe_context_validate},
     curios_base::{Grain, Span},
     curios_core::{
         Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
@@ -825,12 +825,13 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
         ));
     }
 
-    // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, and the fold handles both.
-    let operators = super::operator_witness_table(context);
+    // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, abstract ones are binders of the goal's own scope, and the fold handles all three.
+    let operators = super::operator_table(context);
     let context = &*context;
-    let display = |term: &Term| {
+    let display = |binders: &BinderTypes, term: &Term| {
         super::denoise_for_display(
             &operators,
+            binders,
             &project_erased_universes(&zonk_solved_term_metas(context, term)),
         )
     };
@@ -842,16 +843,29 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             let entry = context
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
+            // The goal's own birth telescope is the scope every term in its report is spelled against, so it is also the scope an abstract witness resolves through.
+            let binders: BinderTypes = Rc::new(
+                entry
+                    .telescope
+                    .iter()
+                    .map(|(name, type_)| (name.clone(), type_.clone()))
+                    .collect(),
+            );
             GoalReport {
                 span: span.clone(),
                 scope: entry
                     .telescope
                     .iter()
-                    .map(|(name, type_)| (Term::free_var(name), display(type_)))
+                    .map(|(name, type_)| (Term::free_var(name), display(&binders, type_)))
                     .collect(),
-                goal: display(&entry.result),
-                solution: context.metavar_solution(*id).map(display),
-                candidates: candidates.iter().map(display).collect(),
+                goal: display(&binders, &entry.result),
+                solution: context
+                    .metavar_solution(*id)
+                    .map(|term| display(&binders, term)),
+                candidates: candidates
+                    .iter()
+                    .map(|term| display(&binders, term))
+                    .collect(),
             }
         })
         .collect()

@@ -913,10 +913,7 @@ fn missing_witness_in_constructor_index_names_the_concept() {
 
     let message = error(source);
     assert!(message.contains("witness"), "got: {message}");
-    assert!(
-        message.contains("Add.{") && message.contains("}(Wrap)"),
-        "got: {message}"
-    );
+    assert!(message.contains("Add(Wrap)"), "got: {message}");
 }
 
 // A `Type`-sorted field and a `Type`-returning method both spell `Type` in the field type's result spine. The record pass lowered that span under `input_type`'s lexical `Generalizable` while the method-wrapper re-lowering met it in output position at the default `Flexible` — one shared universe seed, two roles, and the lowerer's seed assert panicked. The wrapper signature now lowers under the record's role, so the associated type registers, resolves through the table, and its projection unfolds definitionally: `v : alias` checks `3` against `Nat`, and `b : picked` checks `true` against `Bool`.
