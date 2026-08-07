@@ -1,11 +1,11 @@
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        check_concept_registry, check_positivity, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, collect_goal_reports,
-        finish_deferred_witnesses, is_prop, record_definition_totality, record_totality,
-        recorded_totality, reduce_with, register_witness, retry_deferred_witnesses, sort_term,
-        zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
+        check_concept_registry, check_is_sort, check_positivity, check_proof_totality,
+        check_rec_item_totality, check_type_totality, check_written_type_totality,
+        collect_goal_reports, finish_deferred_witnesses, is_prop, record_definition_totality,
+        record_totality, recorded_totality, reduce_with, register_witness,
+        retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
     },
     curios_base::Qualifier,
     curios_cert::group_totality,
@@ -1056,6 +1056,17 @@ fn elaborate_module_suffix(
     context.set_island(Qualifier::empty());
     // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.
     context.restore_budget();
+    // The annotation is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the primitive it denotes. Left raw it stayed exactly as lowered, so `Lst(Nat)` reached conversion as an `Apply` no unfolding could reconcile with the inferred `Prim::LstType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
+    //
+    // The rebuilt module carries the elaborated spelling, because `Module::type_` is what the kernel rechecks the entrypoint against and what `zonk` walks: a raw annotation would put the two checkers on different terms and hand zonk one that never passed through elaboration. Only a *written* annotation is kept, so a synthesized expectation leaves `type_` as absent as the program wrote it.
+    let (mode, annotation) = match mode {
+        Mode::Check(expected) => {
+            let elaborated = check_is_sort(context, &expected)?.0;
+            let annotation = module.type_.is_some().then(|| elaborated.clone());
+            (Mode::Check(elaborated), annotation)
+        }
+        Mode::Infer => (Mode::Infer, None),
+    };
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     // The whole program has elaborated: a witness goal still deferred will never find a table entry — report it now.
     finish_deferred_witnesses(context)?;
@@ -1112,7 +1123,7 @@ fn elaborate_module_suffix(
         concepts,
         witnesses,
         binder_floor: module.binder_floor,
-        type_: module.type_.clone(),
+        type_: annotation,
         body,
     };
 

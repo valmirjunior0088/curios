@@ -23,6 +23,17 @@ fn entrypoint_type_is_used_as_expected_type() {
     assert!(error.contains("type mismatch"));
 }
 
+#[test]
+fn an_entrypoint_type_may_apply_a_type_former() {
+    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the primitive it denotes. Left raw it reached conversion as an `Apply` that no unfolding could reconcile with the inferred `Prim::LstType`, and the mismatch was reported between two spellings of one type — `Lst Nat` against `Lst(Nat)`.
+    let source = r#"
+        use /std/{Lst, Nat};
+        [1]
+    "#;
+
+    assert!(compile(source, Some("/std/Lst(/std/Nat)")).is_ok());
+}
+
 /// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
 ///
 /// A program's tail describes doing something and yielding nothing, so an entrypoint carrying no type is checked against `Io({})` (`elaborate_and_zonk`). Most fixtures here are terms — they end in the `Nat` or `Lst` the feature under test produces — and stating the type is exactly the embedder path that contract leaves open, so each keeps compiling the term it was written to compile rather than acquiring a tail that would change what it measures.
