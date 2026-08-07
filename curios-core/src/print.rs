@@ -9,7 +9,7 @@ use {
         printer::{Printer, deferred, flat, group, indent, line, pure, sep_flat, soft_line},
     },
     std::{
-        collections::{BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
     },
 };
@@ -54,6 +54,8 @@ pub struct Spelling {
     shorten: Option<Rc<HashMap<Global, String>>>,
     /// axis (c) — whether to suppress universe instances and metavariable-headed levels.
     erase_universes: bool,
+    /// axis (d) — a nominal declaration's parameter plicities, so an applied family is marked the way a use site would write it.
+    nominal_plicities: Option<Rc<BTreeMap<Global, Vec<Plicity>>>>,
 }
 
 impl Spelling {
@@ -72,6 +74,12 @@ impl Spelling {
     /// Suppress universe instances and metavariable-headed levels (axis (c)).
     pub fn with_erased_universes(mut self) -> Self {
         self.erase_universes = true;
+        self
+    }
+
+    /// Mark a nominal family's implicit parameters (axis (d)), from `build_nominal_plicities`.
+    pub fn with_nominal_plicities(mut self, plicities: Rc<BTreeMap<Global, Vec<Plicity>>>) -> Self {
+        self.nominal_plicities = Some(plicities);
         self
     }
 
@@ -95,6 +103,22 @@ impl Spelling {
                 Some(hint) => hint.to_string(),
                 None => name.to_string(),
             })
+    }
+
+    /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked as it always did.
+    fn nominal_marks(&self, name: &Global, arity: usize) -> Option<&[Plicity]> {
+        let marks = self.nominal_plicities.as_ref()?.get(name)?;
+        // A declaration whose vector does not match the occurrence is not one this can speak about: render flat rather than mark the wrong argument.
+        (marks.len() == arity).then_some(marks.as_slice())
+    }
+}
+
+/// One argument of an applied nominal family, marked as its declaration wrote it. Indices are always explicit, so only a parameter ever takes a mark.
+fn marked_argument(printer: Printer, plicity: Option<&Plicity>) -> Printer {
+    match plicity {
+        Some(Plicity::Implicit) => flat([pure("@"), printer]),
+        Some(Plicity::Witness) => flat([pure("use "), printer]),
+        _ => printer,
     }
 }
 
@@ -966,28 +990,36 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             };
             flat([pure("("), sub(head, depth, spelling), pure(field)])
         }
-        // Params then indices, one flat argument list — exactly how the type-constructor function is applied at use sites.
+        // Params then indices, one flat argument list — exactly how the type-constructor function is applied at use sites, and marked the same way. Without the marks this spells `Eq(Nat, 5, 5)`, three positional arguments where `Eq(@A : Type) : (A, A) -> Prop` accepts two: a rendering no use site could reproduce.
         Subterm::InductType(InductType {
             name,
             universes,
             params,
             indices,
         }) => {
-            let name = format!(
+            let arity = params.len() + indices.len();
+            let marks = spelling.nominal_marks(&name, arity);
+            let label = format!(
                 "{}{}",
                 spelling.symbol(&name),
                 universe_suffix(&universes, spelling)
             );
-            if params.is_empty() && indices.is_empty() {
-                pure(name)
+            if arity == 0 {
+                pure(label)
             } else {
                 listed(
-                    format!("{name}("),
+                    format!("{label}("),
                     false,
                     params
                         .into_iter()
                         .chain(indices)
-                        .map(|p| sub(p, depth, spelling))
+                        .enumerate()
+                        .map(|(index, p)| {
+                            marked_argument(
+                                sub(p, depth, spelling),
+                                marks.and_then(|marks| marks.get(index)),
+                            )
+                        })
                         .collect(),
                     ")",
                 )
@@ -1020,26 +1052,33 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 )
             }
         }
-        // Like `InductType` but with no indices: `Pair(Nat, Bin)`.
+        // Like `InductType` but with no indices: `Pair(Nat, Bin)`. Concepts are struct-shaped, so a concept application marks its parameters here too.
         Subterm::StructType(StructType {
             name,
             universes,
             params,
         }) => {
-            let name = format!(
+            let marks = spelling.nominal_marks(&name, params.len());
+            let label = format!(
                 "{}{}",
                 spelling.symbol(&name),
                 universe_suffix(&universes, spelling)
             );
             if params.is_empty() {
-                pure(name)
+                pure(label)
             } else {
                 listed(
-                    format!("{name}("),
+                    format!("{label}("),
                     false,
                     params
                         .into_iter()
-                        .map(|p| sub(p, depth, spelling))
+                        .enumerate()
+                        .map(|(index, p)| {
+                            marked_argument(
+                                sub(p, depth, spelling),
+                                marks.and_then(|marks| marks.get(index)),
+                            )
+                        })
                         .collect(),
                     ")",
                 )

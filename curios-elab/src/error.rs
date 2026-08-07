@@ -925,6 +925,7 @@ impl Error {
             Spelling::default()
                 .with_pretty_names(self.rename_map())
                 .with_short_names(Rc::new(build_shorten(&module.module_symbols())))
+                .with_nominal_plicities(Rc::new(module.nominal_plicities()))
                 .with_erased_universes(),
         ))
     }

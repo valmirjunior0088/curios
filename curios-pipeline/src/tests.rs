@@ -549,6 +549,62 @@ fn a_mismatch_keeps_a_concrete_universe_level() {
 }
 
 #[test]
+fn a_mismatch_marks_an_implicit_nominal_parameter() {
+    // `Eq(@A : Type) : (A, A) -> pub Prop` has one implicit parameter and two indices, so a use site writes `Eq(5, 6)`. The mismatch normalizes to `InductType`, which carries no plicities — leaving `Eq(Nat, 5, 5)`, three positional arguments the surface would reject. The marks come from the type constructor's own definition, which is where lowering left them.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let claim : Eq(2 + 3, 6) = Eq/refl();
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("inferred: Eq(@Nat, 5, 5)"),
+        "implicit parameter not marked: {error}"
+    );
+    assert!(
+        error.contains("expected: Eq(@Nat, 5, 6)"),
+        "implicit parameter not marked: {error}"
+    );
+}
+
+#[test]
+fn a_mismatch_leaves_an_explicit_nominal_parameter_unmarked() {
+    // The other side of the same rule: `Option(A : Type)` declares its parameter explicit, so `Option(Nat)` is already what a use site writes and gains no mark. A blanket "parameters are implicit" rule would have spelled this `Option(@Nat)`.
+    let source = r#"
+        use /std/{Nat, Option};
+        let o : Option(Nat) = Option/some(true);
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("inferred: Option(Bool)") && error.contains("expected: Option(Nat)"),
+        "explicit parameter wrongly marked: {error}"
+    );
+}
+
+#[test]
+fn a_mismatch_marks_an_implicit_struct_parameter() {
+    // Structures take the same marks through the same table: their type constructors are `let` items where an inductive's is a `rec`, which is why the table walks both.
+    let source = r#"
+        use /std/{Nat, Str};
+        pub struct Box(@A : Type) : pub Type { it : A }
+        let f : Str = Box { it = 1 };
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("inferred: Box(@Nat)"),
+        "implicit struct parameter not marked: {error}"
+    );
+}
+
+#[test]
 fn a_mismatch_over_an_applied_head_is_located() {
     // A value body's spine forms are rebuilt by the `!`-hoisting walk rather than routed through the span-stamping lowering entry, so an applied head once reached elaboration unspanned and reported with no snippet at all — while the same mismatch over a bare variable reported one.
     let source = r#"

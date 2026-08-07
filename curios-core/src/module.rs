@@ -8,11 +8,11 @@
 
 use {
     super::{
-        Atom, ConceptDecl, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope,
-        Sharing, Spelling, StructDecl, Term, UniverseContext, UniverseError, UniverseSeed,
-        build_shorten, project_erased_universes,
+        Atom, ConceptDecl, Free, FuncType, Global, InductDecl, Many, RecGroup, RecMemberScopes,
+        Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext, UniverseError,
+        UniverseSeed, build_shorten, project_erased_universes,
     },
-    curios_base::{Qualifier, RootId},
+    curios_base::{Plicity, Qualifier, RootId},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -393,6 +393,38 @@ impl Module {
                     acc,
                 ),
             })
+    }
+
+    /// Each nominal declaration's argument plicities, keyed by the family's name — parameters then indices, in the order a use site supplies them.
+    ///
+    /// Read off the type constructor's own definition, whose declared type is the `FuncType` lowering built from `param_tys ++ index_tys`: the parameters keep their declared marks and the indices are always explicit. That is the only place the marks survive — `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and neither `InductDecl::arity` nor `Telescope` has a slot for them.
+    ///
+    /// Both item arms are walked: an inductive's type constructor is a `rec` item, since it refers to itself, while structs and concepts are plain `let`s. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
+    pub fn nominal_plicities(&self) -> BTreeMap<Global, Vec<Plicity>> {
+        let mut marks = BTreeMap::new();
+
+        let mut record = |def: &Definition| {
+            if !matches!(
+                def.kind,
+                DefinitionKind::InductiveType
+                    | DefinitionKind::StructType
+                    | DefinitionKind::ConceptType
+            ) {
+                return;
+            }
+            if let Subterm::FuncType(FuncType { plicities, .. }) = &*def.type_ {
+                marks.insert(def.name.clone(), plicities.clone());
+            }
+        };
+
+        for item in &self.items {
+            match item {
+                Item::Let(def) => record(def),
+                Item::Rec(rec) => rec.definitions().iter().for_each(&mut record),
+            }
+        }
+
+        marks
     }
 
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
