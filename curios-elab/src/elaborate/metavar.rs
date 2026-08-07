@@ -25,6 +25,12 @@ pub(super) fn elaborate_tuple(
 
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
         Subterm::TupleType(TupleType { telescope }) => telescope,
+        // `()` determines its own type: with no fields there is no dependency for an expectation to supply, so `{}` is the only thing it can be. Parking would wait for information the literal already has — and where parking is suppressed the arm below would refuse a well-typed term outright. Synthesizing and reconciling solves the metavariable instead. Non-empty literals still park: a dependent telescope can only come from the expectation, so committing to the non-dependent product there would be a guess.
+        Subterm::Metavar(_) if fields.is_empty() => {
+            let (rebuilt, inferred) = elaborate_tuple(context, tuple, term, Mode::Infer)?;
+            expect(context, term, &inferred, &expected)?;
+            return Ok((rebuilt, inferred));
+        }
         Subterm::Metavar(_) if !context.parking_suppressed() => {
             return park_checking(context, term, &expected);
         }
