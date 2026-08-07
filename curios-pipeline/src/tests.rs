@@ -23,13 +23,20 @@ fn entrypoint_type_is_used_as_expected_type() {
     assert!(error.contains("type mismatch"));
 }
 
-fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
+/// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
+///
+/// A program's tail describes doing something and yielding nothing, so an entrypoint carrying no type is checked against `Io({})` (`elaborate_and_zonk`). Most fixtures here are terms — they end in the `Nat` or `Lst` the feature under test produces — and stating the type is exactly the embedder path that contract leaves open, so each keeps compiling the term it was written to compile rather than acquiring a tail that would change what it measures.
+fn with_entrypoint_type(source: &str, type_: Option<&str>) -> Entrypoint {
     let entrypoint = source.parse::<Entrypoint>().unwrap();
 
-    let entrypoint = match type_ {
+    match type_ {
         Some(type_) => entrypoint.with_type(type_.parse().unwrap()),
         None => entrypoint,
-    };
+    }
+}
+
+fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
+    let entrypoint = with_entrypoint_type(source, type_);
 
     compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
         .map(|(module, _foreigns)| module)
@@ -39,15 +46,13 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
 #[test]
 fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
     // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
-    let goals = "let m : /std/Nat = ?; m".parse::<Entrypoint>().unwrap();
+    let goals = with_entrypoint_type("let m : /std/Nat = ?; m", Some("/std/Nat"));
     assert!(matches!(
         compile_entrypoint(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 
-    let mismatch = "let bad : /std/Nat = true; bad"
-        .parse::<Entrypoint>()
-        .unwrap();
+    let mismatch = with_entrypoint_type("let bad : /std/Nat = true; bad", Some("/std/Nat"));
     assert!(matches!(
         compile_entrypoint(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
         Err(CompileError::Failure(_))
@@ -57,18 +62,19 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
 #[test]
 fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
     let source = "/std/Nat/add(20, 22)";
-    let first = compile(source, None).unwrap();
-    let second = compile(source, None).unwrap();
+    let first = compile(source, Some("/std/Nat")).unwrap();
+    let second = compile(source, Some("/std/Nat")).unwrap();
     assert_eq!(to_bytes(&first), to_bytes(&second));
 }
 
 #[test]
 fn foreign_declaration_produces_a_wasm_import() {
-    // Must actually call `frobnicate` — an unreferenced declaration is pruned by `curios_ersd::optimize` before codegen ever sees it.
+    // Must actually *run* `frobnicate` — a foreign call yields a description (`Io(Nat)`), and one the program never forces is pruned by `curios_ersd::optimize` along with its import, before codegen ever sees it.
     let module = compile(
         r#"
             foreign frobnicate : (Nat, Bytes) -> Nat;
-            frobnicate(5, x[\00, \01])
+            let n = frobnicate(5, x[\00, \01])!;
+            /std/print(/std/Nat/to_str(n))
         "#,
         None,
     )
@@ -86,12 +92,13 @@ fn foreign_declaration_produces_a_wasm_import() {
 
 #[test]
 fn sys_and_foreign_calls_import_under_separate_namespaces() {
-    // Must actually call both — an unreferenced declaration is pruned before codegen ever sees it (see the note above).
+    // Must actually run both — an unforced description is pruned before codegen ever sees it (see the note above).
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
-            let _ = /std/Handle/write(/std/Handle/stdout, x[\00]);
-            frobnicate(5)
+            let _ = /std/Handle/write(/std/Handle/stdout, x[\00])!;
+            let n = frobnicate(5)!;
+            /std/print(/std/Nat/to_str(n))
         "#,
         None,
     )
@@ -113,8 +120,8 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     );
 }
 
-fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
-    let entrypoint = source.parse::<Entrypoint>().unwrap();
+fn compile_printed_stages(source: &str, type_: Option<&str>) -> Result<(String, String), String> {
+    let entrypoint = with_entrypoint_type(source, type_);
     let mut ersd = String::new();
     let mut cont = String::new();
 
@@ -134,11 +141,12 @@ fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
 
 #[test]
 fn let_bound_tuple_with_an_effectful_field_lowers() {
-    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`. Head-only purity classification used to route the whole `let` through `lower_pure_name` and panic the compiler on the field's host primitive. End-to-end guard for `is_pure_term`.
+    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`. Head-only purity classification used to route the whole `let` through `lower_pure_name` and panic the compiler on the field's host primitive. End-to-end guard for `is_pure_term`. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
     let source = r#"
         foreign frobnicate : (Nat) -> Nat;
         let t = (frobnicate(5), 2);
-        t.0
+        let n = t.0!;
+        /std/print(/std/Nat/to_str(n))
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -152,7 +160,7 @@ fn meta_free_prelude_program_compiles_without_overflow() {
         id(/std/Nat, 5)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -163,7 +171,7 @@ fn solved_goal_reports_its_solution() {
         id(?, 5)
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("? : Type"), "unexpected error: {error}");
@@ -226,7 +234,14 @@ fn goal_report_includes_the_local_scope() {
 #[test]
 fn goal_in_synthesis_position_reports_a_meta_type() {
     // A bare `?` with nothing to check against: a fresh metavariable stands in as its type, so the goal still reaches zonk's report (instead of dying with `CannotInfer` during elaboration) and shows the undetermined stand-in.
-    let error = compile("?", None).unwrap_err();
+    //
+    // The synthesis position is a typeless local `let`, not the entrypoint tail: the tail is always *checked* now — against the fixture's stated type here, against `Io({})` in a real program — so it can no longer host a term with nothing to check against.
+    let source = r#"
+        let anything = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("? : ?"), "unexpected error: {error}");
@@ -302,10 +317,10 @@ fn goal_types_spell_operators_as_infix_not_witness_projections() {
     let source = r#"
         use /std/{Nat, Eq};
         let claim : Eq((1 + 2) * 3, 9) = ?;
-        claim
+        0
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("(1 + 2) * 3"), "unexpected error: {error}");
@@ -383,7 +398,7 @@ fn a_solved_goal_gets_no_suggestions() {
         id(?, 5)
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("? ="), "unexpected error: {error}");
     assert!(!error.contains('\u{2248}'), "unexpected error: {error}");
@@ -469,10 +484,10 @@ fn goal_types_spell_negated_equality_as_neq() {
     let source = r#"
         use /std/{Nat, Bool, Eq};
         let claim : Eq(1 != 2, true) = ?;
-        claim
+        0
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("1 != 2"), "unexpected error: {error}");
@@ -526,7 +541,7 @@ fn omitted_motive_mentioning_a_type_param_lowers() {
         pick(/std/Nat, 1, 2, true)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -534,7 +549,7 @@ fn projection_through_a_stuck_inductive_payload_lowers() {
     // `Fmt/print`'s return type is `format_type_with({}, parse(s))`, so erasing `print` evaluates `parse(s)` at compile time with a *symbolic* `s`. The `Parse` combinator's result is a `Result` inductive whose discriminant is therefore stuck, and the inlined `success` payload is reached by a projection. `erase` must lower that projection through the neutral payload `match` (every variant carries the field at the same index) instead of demanding a literal `TupleType`. Guards `projectable_at`; without it this panics `erase: projected a non-tuple`.
     let source = r#"
         use /std/{Fmt, Bytes};
-        Fmt/print("% is %")
+        Fmt/print("% is %")("a")(1)
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -548,18 +563,20 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
         use /std/{Nat};
         let f(a : Nat) -> Result({ Nat, Nat }, Nat) =
             Result/success((a, a));
-        f(7)
+        let r : Result({ Nat, Nat }, Nat) = f(7);
+        0
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 
-    // In infer position nothing pins the holes, so the postponed tuple is re-checked against a still-unsolved metavar and rejected — graceful degradation, no new acceptance of un-annotated constructors.
+    // In infer position nothing pins the holes, so the postponed tuple is re-checked against a still-unsolved metavar and rejected — graceful degradation, no new acceptance of un-annotated constructors. The infer position is a typeless local `let`: the entrypoint tail is always checked now.
     let unpinned = r#"
         use /std/{Result};
-        Result/success((1, 1))
+        let bad = Result/success((1, 1));
+        0
     "#;
 
-    assert!(compile(unpinned, None).is_err());
+    assert!(compile(unpinned, Some("/std/Nat")).is_err());
 }
 
 #[test]
@@ -600,7 +617,7 @@ fn implicit_arguments_can_all_be_supplied_explicitly() {
         end
     "#;
 
-    compile(source, None).unwrap();
+    compile(source, Some("/std/Nat")).unwrap();
 }
 
 #[test]
@@ -618,7 +635,7 @@ fn implicit_argument_is_inserted_and_inferred() {
         end
     "#;
 
-    compile(source, None).unwrap();
+    compile(source, Some("/std/Nat")).unwrap();
 }
 
 #[test]
@@ -630,7 +647,7 @@ fn interleaved_implicit_with_partial_override() {
         std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")))
     "#;
 
-    compile(source, None).unwrap();
+    compile(source, Some("/std/Nat")).unwrap();
 }
 
 #[test]
@@ -647,8 +664,8 @@ fn implicit_argument_queues_are_order_insensitive() {
         std/Bytes/len(second(1, /std/Str/to_bytes("abc"), @Nat))
     "#;
 
-    compile(at_first, None).unwrap();
-    compile(at_last, None).unwrap();
+    compile(at_first, Some("/std/Nat")).unwrap();
+    compile(at_last, Some("/std/Nat")).unwrap();
 }
 
 #[test]
@@ -668,7 +685,7 @@ fn trailing_implicit_is_pinned_by_the_expected_type() {
         end
     "#;
 
-    compile(source, None).unwrap();
+    compile(source, Some("/std/Nat")).unwrap();
 }
 
 #[test]
@@ -704,7 +721,7 @@ fn all_implicit_telescope_saturates_and_retargets() {
         end
     "#;
 
-    compile(source, None).unwrap();
+    compile(source, Some("/std/Nat")).unwrap();
 }
 
 #[test]
@@ -716,7 +733,7 @@ fn uninferred_implicit_names_the_binder_and_function() {
         cast(5)
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(
         error.contains("implicit argument 'T' of '/cast' was not inferred"),
@@ -755,7 +772,7 @@ fn non_pub_inductive_constructors_are_usable_in_the_declaring_module() {
         end
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -805,7 +822,7 @@ fn new_style_inductive_match_lowers_end_to_end() {
         f(Result/success(7))
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -826,7 +843,7 @@ fn indexed_inductive_declares_constructs_and_matches() {
         len(v)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -845,7 +862,7 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
         end
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Bytes")).is_ok());
 }
 
 #[test]
@@ -868,7 +885,7 @@ fn indexed_inductive_motive_binds_the_index() {
         0
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -925,7 +942,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         0
     "#
     );
-    let error = compile(&wrong_annotation, None).unwrap_err();
+    let error = compile(&wrong_annotation, Some("/std/Nat")).unwrap_err();
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
 
@@ -965,7 +982,7 @@ fn index_refinement_learns_inside_the_arm() {
         f(Vec/nil(@Bytes), Vec/nil())
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -980,7 +997,7 @@ fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
         5
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -1005,7 +1022,7 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
         first(w)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Bytes")).is_ok());
 }
 
 #[test]
@@ -1024,7 +1041,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
         (b : Bytes) => first(Vec/cons(b, Vec/nil()))
     "#;
 
-    let (ersd, cont) = compile_printed_stages(source).unwrap();
+    let (ersd, cont) = compile_printed_stages(source, Some("(/std/Bytes) -> /std/Bytes")).unwrap();
 
     assert!(
         ersd.contains("unreachable"),
@@ -1051,7 +1068,7 @@ fn omission_requires_a_definite_clash() {
             end;
         0
     "#;
-    let error = compile(opaque, None).unwrap_err();
+    let error = compile(opaque, Some("/std/Nat")).unwrap_err();
     assert!(
         error.contains("not provably impossible"),
         "unexpected error: {error}"
@@ -1070,7 +1087,7 @@ fn omission_requires_a_definite_clash() {
             end;
         0
     "#;
-    let error = compile(nonlinear, None).unwrap_err();
+    let error = compile(nonlinear, Some("/std/Nat")).unwrap_err();
     assert!(
         error.contains("missing arm 'same'"),
         "unexpected error: {error}"
@@ -1088,7 +1105,7 @@ fn omission_requires_a_definite_clash() {
             end;
         g(Foo/same(5))
     "#;
-    assert!(compile(prunes, None).is_ok());
+    assert!(compile(prunes, Some("/std/Bytes")).is_ok());
 }
 
 #[test]
@@ -1104,7 +1121,7 @@ fn indexed_inductive_index_mismatch_is_rejected() {
         0
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
 }
@@ -1164,10 +1181,10 @@ fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
             Lst/map(xs, f);
         let first(xs : Lst({ Nat, Nat })) -> Lst(Nat) =
             with((pair) => pair.0, xs);
-        first
+        0
     "#;
 
-    assert!(typecheck(source).is_ok());
+    assert!(typecheck(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -1181,20 +1198,20 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
             combine(fallback, fallback);
         let go : Lst(Nat) =
             pick([], cat);
-        go
+        0
     "#;
 
-    assert!(typecheck(source).is_ok());
+    assert!(typecheck(source, Some("/std/Nat")).is_ok());
 
     // With no sibling to ground the element type and no result type to pin it, the postponed `[]` re-checks against a bare metavar and is rejected — graceful degradation, no new acceptance.
     let unpinned = r#"
         use /std/{Lst};
         let id(@A : Type, x : A) -> A = x;
         let bad = id([]);
-        bad
+        0
     "#;
 
-    assert!(typecheck(unpinned).is_err());
+    assert!(typecheck(unpinned, Some("/std/Nat")).is_err());
 }
 
 #[test]
@@ -1206,19 +1223,21 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
         let pair : Parse({ Byte, Byte }) =
             let x = Parse/any_byte!;
             Parse/pure((x, x));
-        pair
+        0
     "#;
 
-    assert!(typecheck(source).is_ok());
+    assert!(typecheck(source, Some("/std/Nat")).is_ok());
 
-    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance.
+    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance. The unpinned region is a typeless local `let`'s body, which is where a region's type is still inferred: the entrypoint tail is always checked now.
     let unpinned = r#"
         use /std/{Parse};
-        let x = Parse/any_byte!;
-        Parse/pure((x, x))
+        let bad =
+            let x = Parse/any_byte!;
+            Parse/pure((x, x));
+        0
     "#;
 
-    assert!(typecheck(unpinned).is_err());
+    assert!(typecheck(unpinned, Some("/std/Nat")).is_err());
 }
 
 #[test]
@@ -1227,7 +1246,8 @@ fn closure_returning_a_bare_projection_lowers() {
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
-        Lst/map(@{ Nat, Nat }, @Nat, [], (pair) => pair.0)
+        let mapped : Lst(Nat) = Lst/map(@{ Nat, Nat }, @Nat, [], (pair) => pair.0);
+        /std/print(/std/Nat/to_str(Lst/len(mapped)))
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -1242,7 +1262,8 @@ fn bare_polymorphic_function_inserts_implicits_in_value_position() {
         let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
         let pairwise(f : (Lst(Nat), Lst(Nat)) -> Lst(Nat), a : Lst(Nat)) -> Lst(Nat) =
             f(a, a);
-        pairwise(cat, [1])
+        let result : Lst(Nat) = pairwise(cat, [1]);
+        /std/print(/std/Nat/to_str(Lst/len(result)))
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -1256,7 +1277,8 @@ fn polymorphic_value_assignment_keeps_its_implicit() {
         use /std/{Nat};
         let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
         let g : (@T : Type, Lst(T), Lst(T)) -> Lst(T) = cat;
-        g(@Nat, [1], [2])
+        let result : Lst(Nat) = g(@Nat, [1], [2]);
+        /std/print(/std/Nat/to_str(Lst/len(result)))
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -1270,7 +1292,7 @@ fn typeless_let_infers_a_literal_body() {
         n
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -1282,7 +1304,7 @@ fn typeless_let_binds_an_annotated_closure() {
         f(5)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
 #[test]
@@ -1294,7 +1316,7 @@ fn closure_annotation_must_match_the_expected_domain() {
         f(5)
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
@@ -1314,8 +1336,8 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 
 // --- A: typecheck-only (stop after zonk, no lowering) ---------------------
 
-fn typecheck(source: &str) -> Result<(), String> {
-    let entrypoint = source.parse::<Entrypoint>().unwrap();
+fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String> {
+    let entrypoint = with_entrypoint_type(source, type_);
     super::elaborate_and_zonk(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
@@ -1329,10 +1351,7 @@ fn typecheck(source: &str) -> Result<(), String> {
 #[test]
 fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cont/optimize/wasm.
-    assert!(
-        typecheck("/std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(0)))")
-            .is_ok()
-    );
+    assert!(typecheck("/std/print(/std/Nat/to_str(0))", None).is_ok());
 }
 
 #[test]
@@ -1344,6 +1363,7 @@ fn typecheck_rejects_a_goal() {
         let m : Nat = ?;
         m
         "#,
+        Some("/std/Nat"),
     )
     .unwrap_err();
 
@@ -1360,10 +1380,10 @@ fn proj_by_label_resolves_to_its_position() {
         let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
         let by_label : Bytes = r.payload;
         let by_index : Bytes = r.1;
-        Handle/write(Handle/stdout, by_label)
+        by_index
     "#;
 
-    assert!(typecheck(source).is_ok());
+    assert!(typecheck(source, Some("/std/Bytes")).is_ok());
 }
 
 #[test]
@@ -1374,7 +1394,7 @@ fn proj_unknown_label_names_the_available_fields() {
         r.body
     "#;
 
-    let error = typecheck(source).unwrap_err();
+    let error = typecheck(source, Some("/std/Bytes")).unwrap_err();
     assert!(
         error.contains("no field named 'body'") && error.contains("status"),
         "unexpected error: {error}"
@@ -1389,7 +1409,7 @@ fn duplicate_tuple_label_is_rejected() {
         r.x
     "#;
 
-    let error = typecheck(source).unwrap_err();
+    let error = typecheck(source, Some("/std/Nat")).unwrap_err();
     assert!(
         error.contains("duplicate field label 'x'"),
         "unexpected error: {error}"
@@ -1405,7 +1425,7 @@ fn tuple_labels_are_part_of_type_identity() {
         let q : { height : Nat, width : Nat } = p;
         q.width
     "#;
-    assert!(typecheck(reordered).is_err());
+    assert!(typecheck(reordered, Some("/std/Nat")).is_err());
 
     // Labeled and unlabeled spellings are distinct types too.
     let unlabeled = r#"
@@ -1414,7 +1434,7 @@ fn tuple_labels_are_part_of_type_identity() {
         let q : { Nat, Nat } = p;
         q.0
     "#;
-    assert!(typecheck(unlabeled).is_err());
+    assert!(typecheck(unlabeled, Some("/std/Nat")).is_err());
 }
 
 #[test]
@@ -1426,14 +1446,14 @@ fn named_construction_checks_against_the_labels() {
         let mixed : { status : Nat, payload : Bytes } = (status = 0, /std/Str/to_bytes("ok"));
         r.status
     "#;
-    assert!(typecheck(source).is_ok());
+    assert!(typecheck(source, Some("/std/Nat")).is_ok());
 
     let wrong_name = r#"
         use /std/{Nat, Bytes};
         let r : { status : Nat, payload : Bytes } = (code = 0, payload = /std/Str/to_bytes("ok"));
         r.status
     "#;
-    let error = typecheck(wrong_name).unwrap_err();
+    let error = typecheck(wrong_name, Some("/std/Nat")).unwrap_err();
     assert!(
         error.contains("'code'") && error.contains("'status'"),
         "unexpected error: {error}"
@@ -1444,7 +1464,7 @@ fn named_construction_checks_against_the_labels() {
         let r : { Nat, Bytes } = (status = 0, /std/Str/to_bytes("ok"));
         r.0
     "#;
-    assert!(typecheck(unlabeled_type).is_err());
+    assert!(typecheck(unlabeled_type, Some("/std/Nat")).is_err());
 }
 
 #[test]
@@ -1453,10 +1473,10 @@ fn dependent_record_projects_by_label() {
     let source = r#"
         let p : { T : Type, x : T } = (T = /std/Nat, x = 3);
         let v : p.T = p.x;
-        /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(v)))
+        /std/print(/std/Nat/to_str(v))
     "#;
 
-    assert!(typecheck(source).is_ok());
+    assert!(typecheck(source, None).is_ok());
 }
 
 #[test]
@@ -1471,7 +1491,7 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
         end
         0
     "#;
-    assert!(typecheck(payload).is_ok());
+    assert!(typecheck(payload, Some("/std/Nat")).is_ok());
 
     // Index types take the same path — and previously panicked even earlier, while the type-constructor binding itself elaborated (its body's `InductiveType` node checks against the index telescope).
     let index = r#"
@@ -1483,7 +1503,7 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
         end
         0
     "#;
-    assert!(typecheck(index).is_ok());
+    assert!(typecheck(index, Some("/std/Nat")).is_ok());
 
     // End to end: construct and eliminate through the rebuilt registry — the match arm's binder is typed from the rebuilt payload type, and the whole program lowers to wasm.
     let through = r#"
@@ -1499,17 +1519,18 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
         | mk(p) => 7
         end
     "#;
-    assert!(compile(through, None).is_ok());
+    assert!(compile(through, Some("/std/Nat")).is_ok());
 }
 
 #[test]
 fn dead_user_definition_is_still_typechecked() {
-    // A user-authored top-level binding the body never references is still type-checked (every item is, before any reachability is considered), so its error is reported. (`write` returns its `Nat` status, `Bytes` mismatches.)
+    // A user-authored top-level binding the body never references is still type-checked (every item is, before any reachability is considered), so its error is reported. (`write` returns an `Io` description of writing, which `Bytes` mismatches.)
     let error = typecheck(
         r#"
         let dead : /std/Bytes = /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes("x"));
-        /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes("ok"))
+        /std/print("ok")
         "#,
+        None,
     )
     .unwrap_err();
 
@@ -1517,8 +1538,8 @@ fn dead_user_definition_is_still_typechecked() {
 }
 
 /// Elaborate `source` to its meta-free Core module and erase it through the arena path, prelude erased fresh — the Phase-2 erasure vertical.
-fn erase_to_ir(source: &str) -> curios_ersd::Module {
-    let entrypoint = source.parse::<Entrypoint>().unwrap();
+fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
+    let entrypoint = with_entrypoint_type(source, type_);
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
@@ -1537,7 +1558,7 @@ fn erase_to_ir(source: &str) -> curios_ersd::Module {
 #[test]
 fn arena_erasure_covers_the_fixed_prelude() {
     // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — through the arena path, fresh, into one verified module.
-    let module = erase_to_ir(r#"/std/Fmt/print("hello")"#);
+    let module = erase_to_ir(r#"/std/Fmt/print("hello")"#, None);
     assert!(
         module.functions().len() > 100,
         "the fixed prelude erased with the program: {} functions",
@@ -1548,15 +1569,15 @@ fn arena_erasure_covers_the_fixed_prelude() {
 #[test]
 fn arena_erasure_is_deterministic_across_compiles() {
     let source = "/std/Nat/add(20, 22)";
-    let first = erase_to_ir(source).to_string();
-    let second = erase_to_ir(source).to_string();
+    let first = erase_to_ir(source, Some("/std/Nat")).to_string();
+    let second = erase_to_ir(source, Some("/std/Nat")).to_string();
     assert_eq!(first, second);
 }
 
 #[test]
 fn arena_erasure_stores_no_captures_for_the_prelude() {
     // Functions carry no capture lists anywhere in the erased prelude; free values are derived on demand. The analysis on the full module is the witness that derivation covers every function.
-    let module = erase_to_ir("/std/Nat/to_str(7)");
+    let module = erase_to_ir("/std/Nat/to_str(7)", Some("/std/Str"));
     let analysis = Analysis::analyze(&module);
     let counted = module.function_ids().count();
     assert!(counted > 0);
@@ -1573,7 +1594,7 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
         source.push_str(&format!("let x{index} = {index} + 1;\n"));
     }
     source.push_str("x0");
-    let module = erase_to_ir(&source);
+    let module = erase_to_ir(&source, Some("/std/Nat"));
     let printed = module.to_string();
     assert!(printed.contains("NatAdd"));
 }
