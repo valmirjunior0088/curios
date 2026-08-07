@@ -7,14 +7,14 @@ pub struct Listener: Type {
 
 let bind_listen(addr: Bytes) -> Io(Result(Listener, Handle/Error)) =
     let s = /sys/socket/open(addr)!;
-    match s.status == /sys/Status/ok
+    match s.status == /sys/status/ok
     | true =>
         let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
         let bound = /sys/socket/bind(s.handle, addr)!;
-        match bound == /sys/Status/ok
+        match bound == /sys/status/ok
         | true =>
             let status = /sys/socket/listen(s.handle, 128)!;
-            match status == /sys/Status/ok
+            match status == /sys/status/ok
             | true =>
                 let nb = Async/nonblocking(s.handle)!;
                 match nb
@@ -85,7 +85,7 @@ pub let serve(
 
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let status = Async/lift(/sys/tls/start_server(h, cfg))!;
-    match status == /sys/Status/ok
+    match status == /sys/status/ok
     | true => Async/using(h, /sys/Handle/close(h), handler(Socket/new(h)))
     | false => Async/lift(/sys/Handle/close(h))
     end;
@@ -98,7 +98,7 @@ pub let serve_tls(
     handler: (Socket) -> Async({}),
 ) -> Async(Result({}, Handle/Error)) =
     let cfg = Async/lift(/sys/tls/server_config(cert, key))!;
-    match cfg.status == /sys/Status/ok
+    match cfg.status == /sys/status/ok
     | true =>
         Async/using(
             cfg.handle,

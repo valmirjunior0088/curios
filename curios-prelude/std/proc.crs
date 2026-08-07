@@ -4,7 +4,7 @@ use /std/{Bytes, Nat, Str, Option, Io};
 pub let env(name: Str) -> Io(Option(Bytes)) =
     let r = /sys/proc/env(Str/to_bytes(name))!;
     Io/pure(
-        match r.status == /sys/Status/ok
+        match r.status == /sys/status/ok
         | true => Option/some(r.value)
         | false => Option/none()
         end);

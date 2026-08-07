@@ -147,8 +147,8 @@ pub let read() -> Io(Option(Bytes)) =
     rec go(acc: Bytes) -> Io(Option(Bytes)) =
         let r = /sys/Handle/read(Handle/stdin, 1)!;
         choose
-        | r.status != /sys/Status/ok && Bytes/len(acc) == 0 => Io/pure(Option/none())
-        | r.status != /sys/Status/ok => Io/pure(Option/some(acc))
+        | r.status != /sys/status/ok && Bytes/len(acc) == 0 => Io/pure(Option/none())
+        | r.status != /sys/status/ok => Io/pure(Option/some(acc))
         | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == 0xA =>
             Io/pure(Option/some(acc))
         | _ => go(x[..acc, ..r.bytes])

@@ -114,7 +114,7 @@ pub let go(body: Fiber) -> Async({}) =
 pub let nonblocking(h: Handle) -> Io(Result({}, Handle/Error)) =
     let status = /sys/socket/set_nonblocking(h, true)!;
     Io/pure(
-        match status == /sys/Status/ok
+        match status == /sys/status/ok
         | true => Result/success(())
         | false => Result/failure(Handle/error_of(status))
         end);
@@ -127,11 +127,11 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
         rec go() -> Async(Handle/Read) =
             let r = lift(/sys/Handle/read(h, n))!;
             choose
-            | r.status == /sys/Status/would_block =>
-                let _ = wait(h, /sys/Poll/read)!;
+            | r.status == /sys/status/would_block =>
+                let _ = wait(h, /sys/poll/read)!;
                 go()
-            | r.status == /sys/Status/eof => pure(Handle/Read/eof())
-            | r.status == /sys/Status/ok => pure(Handle/Read/chunk(r.bytes))
+            | r.status == /sys/status/eof => pure(Handle/Read/eof())
+            | r.status == /sys/status/ok => pure(Handle/Read/chunk(r.bytes))
             | _ => pure(Handle/Read/error(Handle/error_of(r.status)))
             end;
         go()
@@ -145,12 +145,12 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
         rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
             let r = lift(/sys/Handle/write(h, rest))!;
             choose
-            | r.status == /sys/Status/would_block =>
-                let _ = wait(h, /sys/Poll/write)!;
+            | r.status == /sys/status/would_block =>
+                let _ = wait(h, /sys/poll/write)!;
                 go(rest)
-            | r.status != /sys/Status/ok => pure(Result/failure(Handle/error_of(r.status)))
+            | r.status != /sys/status/ok => pure(Result/failure(Handle/error_of(r.status)))
             | r.written < Bytes/len(rest) =>
-                let _ = wait(h, /sys/Poll/write)!;
+                let _ = wait(h, /sys/poll/write)!;
                 go(Bytes/slice(rest, r.written, Bytes/len(rest)))
             | _ => pure(Result/success(()))
             end;
@@ -165,10 +165,10 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
         rec go() -> Async(Result(Handle, Handle/Error)) =
             let r = lift(/sys/socket/accept(l))!;
             choose
-            | r.status == /sys/Status/would_block =>
-                let _ = wait(l, /sys/Poll/read)!;
+            | r.status == /sys/status/would_block =>
+                let _ = wait(l, /sys/poll/read)!;
                 go()
-            | r.status == /sys/Status/ok => pure(Result/success(r.handle))
+            | r.status == /sys/status/ok => pure(Result/success(r.handle))
             | _ => pure(Result/failure(Handle/error_of(r.status)))
             end;
         go()
@@ -299,7 +299,7 @@ rec sweep_parked(ss: Lst(Slot)) -> Io(Lst(Slot)) =
     end;
 
 let is_ready(results: Nat, interest: Nat) -> Bool =
-    Nat/and(results, Nat/or(Nat/or(interest, /sys/Poll/err), /sys/Poll/hup)) > 0;
+    Nat/and(results, Nat/or(Nat/or(interest, /sys/poll/err), /sys/poll/hup)) > 0;
 
 let poll_ready(blocked: Lst(Parked), timeout: Int) -> Io({Lst(Job), Lst(Parked)}) =
     let handles = Lst/map(blocked, (p: Parked) => p.handle);

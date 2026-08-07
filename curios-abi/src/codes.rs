@@ -1,6 +1,6 @@
 //! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
-/// Status codes of failable IO ops, mirrored by the guest's `/sys/Status` and decoded into `/std/Handle/Error`. `Other` carries an OS errno raw, so it has no fixed code here.
+/// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` carries an OS errno raw, so it has no fixed code here.
 pub mod status {
     /// The op succeeded — the reply's payload fields are meaningful only under this code.
     pub const OK: u32 = 0;
@@ -20,7 +20,7 @@ pub mod status {
     pub const TLS_ERROR: u32 = 7;
 }
 
-/// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/Poll`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
+/// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/poll`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
 pub mod poll {
     /// The handle is (or should be watched to become) readable.
     pub const READ: u32 = 0b0001;
@@ -32,7 +32,7 @@ pub mod poll {
     pub const HUP: u32 = 0b1000;
 }
 
-/// `open` modes, mirrored by `/sys/Mode` and the guest's `/std/Handle/Mode`.
+/// `open` modes, mirrored by `/sys/mode` and the guest's `/std/File/Mode`.
 pub mod mode {
     /// Open an existing file read-only.
     pub const READ: u32 = 0;

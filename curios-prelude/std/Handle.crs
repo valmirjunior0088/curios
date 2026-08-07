@@ -14,12 +14,12 @@ end
 
 let errors: Lst({Nat, Error}) =
     [
-        (/sys/Status/not_found, Error/not_found()),
-        (/sys/Status/permission_denied, Error/permission_denied()),
-        (/sys/Status/exists, Error/exists()),
-        (/sys/Status/refused, Error/refused()),
-        (/sys/Status/tls, Error/tls()),
-        (/sys/Status/would_block, Error/would_block())];
+        (/sys/status/not_found, Error/not_found()),
+        (/sys/status/permission_denied, Error/permission_denied()),
+        (/sys/status/exists, Error/exists()),
+        (/sys/status/refused, Error/refused()),
+        (/sys/status/tls, Error/tls()),
+        (/sys/status/would_block, Error/would_block())];
 
 pub let error_of(status: Nat) -> Error =
     Lst/fold(
@@ -37,15 +37,15 @@ pub let read(h: Handle, n: Nat) -> Io(Read) =
     let r = /sys/Handle/read(h, n)!;
     Io/pure(
         choose
-        | r.status == /sys/Status/ok => Read/chunk(r.bytes)
-        | r.status == /sys/Status/eof => Read/eof()
+        | r.status == /sys/status/ok => Read/chunk(r.bytes)
+        | r.status == /sys/status/eof => Read/eof()
         | _ => Read/error(error_of(r.status))
         end);
 
 pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
     let r = /sys/Handle/write(h, b)!;
     choose
-    | r.status != /sys/Status/ok => Io/pure(Result/failure(error_of(r.status)))
+    | r.status != /sys/status/ok => Io/pure(Result/failure(error_of(r.status)))
     | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))
     | _ => Io/pure(Result/success(()))
     end;

@@ -623,7 +623,7 @@ fn take_subject(subjects: &mut Vec<(String, Vec<TopItem>)>, subject: &str) -> Ve
     subjects.remove(index).1
 }
 
-// The remaining host-operation subjects, `exit`, and the wire-code mirror: one `/sys` module per subject, then the `Status`/`Poll`/`Mode` code modules.
+// The remaining host-operation subjects, `exit`, and the wire-code mirror: one `/sys` module per subject, then the `status`/`poll`/`mode` code modules. Every one of these names is lowercase because no type backs it — a capitalized `/sys` module is one whose type the root facade re-exports, and the code modules are `Nat` constants. The mirror was capitalized only so the `poll` op and the `Poll` module could coexist; nesting moved the op to `/sys/Handle/poll` and retired that reason.
 fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     let mut items = subjects
         .into_iter()
@@ -645,7 +645,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     items.extend([
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
         pub_mod(
-            "Status",
+            "status",
             vec![
                 pub_let("ok", nat(), nat_lit(status::OK)),
                 pub_let("eof", nat(), nat_lit(status::EOF)),
@@ -662,7 +662,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
             ],
         ),
         pub_mod(
-            "Poll",
+            "poll",
             vec![
                 pub_let("read", nat(), nat_lit(poll::READ)),
                 pub_let("write", nat(), nat_lit(poll::WRITE)),
@@ -671,7 +671,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
             ],
         ),
         pub_mod(
-            "Mode",
+            "mode",
             vec![
                 pub_let("read", nat(), nat_lit(mode::READ)),
                 pub_let("write", nat(), nat_lit(mode::WRITE)),
@@ -683,7 +683,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     items
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `Status`/`Poll`/`Mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
+/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `status`/`poll`/`mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore) -> Module {
     let mut subjects = host_subjects(foreigns);
     let handle_host = take_subject(&mut subjects, "Handle");

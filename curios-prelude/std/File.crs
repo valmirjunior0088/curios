@@ -12,9 +12,9 @@ end
 
 pub let of_mode(mode: Mode) -> Nat =
     match mode
-    | read() => /sys/Mode/read
-    | write() => /sys/Mode/write
-    | append() => /sys/Mode/append
+    | read() => /sys/mode/read
+    | write() => /sys/mode/write
+    | append() => /sys/mode/append
     end;
 
 pub let read(f: File, n: Nat) -> Async(Handle/Read) =
@@ -25,7 +25,7 @@ pub let write(f: File, b: Bytes) -> Async(Result({}, Handle/Error)) =
 
 pub let open(path: Str, mode: Mode) -> Async(Result(File, Handle/Error)) =
     let r = Async/lift(/sys/file/open(Str/to_bytes(path), of_mode(mode)))!;
-    match r.status == /sys/Status/ok
+    match r.status == /sys/status/ok
     | true =>
         let nb = Async/lift(Async/nonblocking(r.handle))!;
         match nb
