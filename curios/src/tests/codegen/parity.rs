@@ -5,8 +5,10 @@ use {
     curios_text::{Entrypoint, RootSource},
 };
 
-/// The optimized cont-stage dump for `source`, with every digit run replaced by `#`: entropy-derived name counters (`~v37`, `~f26`) are the only expected difference between the compared programs, and both sources use identical numeric literals, so digit-blind comparison is exact for everything that matters.
-fn normalized_cont_optm(source: &str) -> String {
+/// The optimized cont-stage dump for `source`.
+///
+/// Handed to [`operations`] verbatim rather than digit-normalized first. Entropy-derived name counters (`~v37`, `~f26`) do differ between the compared programs, but [`operations`] discards names entirely, and the digits that survive into an operation token — a projection's index, a concatenation's arity — are its semantics, so collapsing them would make `TplGet(0)` and `TplGet(1)` compare equal.
+fn cont_optm(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("parity source parses");
 
     let mut dump = String::new();
@@ -22,21 +24,7 @@ fn normalized_cont_optm(source: &str) -> String {
     )
     .expect("parity source compiles");
 
-    // Collapse every digit run to one `#`, so counter-length differences (`~v9` vs `~v100`) normalize away.
-    let mut normalized = String::with_capacity(dump.len());
-    let mut in_digits = false;
-    for c in dump.chars() {
-        if c.is_ascii_digit() {
-            if !in_digits {
-                normalized.push('#');
-            }
-            in_digits = true;
-        } else {
-            normalized.push(c);
-            in_digits = false;
-        }
-    }
-    normalized
+    dump
 }
 
 /// `Add/add(x, 1)` at `Nat` — dictionary resolved from the sys witness — emits the same operations as the direct primitive wrapper call, over a runtime (non-constant-foldable) operand. `Add` is a one-method concept, so its witness erases to the bare `Nat/add` closure; the resolved instance is baked in by specialization and inlined to `Nat.add`. The clone names carry the extra witness key, so the dumps are not byte-identical — but the emitted operations are.
@@ -58,8 +46,8 @@ fn concept_method_call_matches_direct_primitive_codegen() {
         "#;
 
     assert_eq!(
-        operations(&normalized_cont_optm(through_concept)),
-        operations(&normalized_cont_optm(direct)),
+        operations(&cont_optm(through_concept)),
+        operations(&cont_optm(direct)),
     );
 }
 
@@ -95,8 +83,8 @@ fn choose_matches_hand_nested_bool_codegen() {
         "#;
 
     assert_eq!(
-        operations(&normalized_cont_optm(ladder)),
-        operations(&normalized_cont_optm(nested)),
+        operations(&cont_optm(ladder)),
+        operations(&cont_optm(nested)),
     );
 }
 
@@ -126,30 +114,59 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
 
-    assert_eq!(
-        operations(&normalized_cont_optm(bind)),
-        operations(&normalized_cont_optm(headed)),
-    );
+    assert_eq!(operations(&cont_optm(bind)), operations(&cont_optm(headed)),);
 }
 
-/// The primitive operations emitted by a cont dump, sorted — the `Kind.op` tokens (`Nat.lt`, `Tpl.get`, `Lst.len`, …) that are the actual instructions, ignoring the generated names that wire them together. A generated name is never `Uppercase.lowercase`, so this picks out exactly the primitive ops.
+/// The instructions a cont dump emits, sorted — `NatAdd`, `TplGet(0)`, `BinLen(X)`, and the qualified `cell.Set` / `intrinsic.LstMap` forms — with the generated names that wire them together and the operands they read left out. Sorted because the two programs may emit their top-level closures in a different order while their bodies agree, which is the whole point of comparing operations rather than dumps.
+///
+/// `curios_cont`'s `Display` prints an instruction as its `Debug` spelling immediately followed by its bracketed operand list, so each `[` is a candidate — but the shape alone is not enough to identify one, which is why [`operation_ending_at`] decides on position instead.
+///
+/// The previous spelling looked for `Kind.op` tokens (`Nat.add`, `Tpl.get`) that the printer has not emitted for some time, so it matched nothing at all and every comparison below was `vec![] == vec![]`.
 fn operations(dump: &str) -> Vec<String> {
     let mut ops: Vec<String> = dump
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '_'))
-        .filter(|token| {
-            let mut parts = token.splitn(2, '.');
-            matches!(
-                (parts.next(), parts.next()),
-                (Some(kind), Some(op))
-                    if kind.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                        && !op.is_empty()
-                        && op.chars().all(|c| c.is_ascii_lowercase() || c == '_')
-            )
-        })
-        .map(str::to_string)
+        .match_indices('[')
+        .filter_map(|(at, _)| operation_ending_at(dump, at))
         .collect();
     ops.sort();
+
+    // Every program compared here reaches the host and does arithmetic on a runtime operand, so an empty result means this function stopped recognizing the printer's spelling rather than that the program emits nothing. Asserting it is what keeps a comparison of two empty vectors from passing as parity — the exact way these tests went quiet before.
+    assert!(
+        !ops.is_empty(),
+        "no instruction recognized in the cont dump: {dump}"
+    );
+
     ops
+}
+
+/// The instruction whose operand list opens at `at`, when the text before it is in instruction position.
+///
+/// Position is what decides it, not the bracket: `apply Known(CpsFunId(13))[…]` and `apply Closure(CpsValueId(95))[…]` end in a bracketed operand list too, and their heads are entropy-derived ids that differ between any two compilations. Accepting those would compare the numbering rather than the code. So the head must sit where `curios_cont::CpsNode`'s `Display` puts an operation: after a `let` binding's `= `, or behind a `cell.`/`intrinsic.` qualifier.
+///
+/// The qualifier is kept because it selects a different operation enum — `CpsIntrinsicOp::LstMap` and a primitive of the same name would otherwise read alike.
+fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
+    let head = &dump[..at];
+    // `TplGet(0)`, `BinLen(X)`, `BinConcat(X, 2)`: step over the parenthesized argument to reach the name.
+    let name_end = match head.ends_with(')') {
+        true => head.rfind('(')?,
+        false => at,
+    };
+    let name = &head[..name_end];
+    let start = name
+        .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .map_or(0, |boundary| boundary + 1);
+
+    if !name[start..].starts_with(|c: char| c.is_ascii_uppercase()) {
+        return None;
+    }
+
+    let before = &name[..start];
+    ["= ", "cell.", "intrinsic."]
+        .into_iter()
+        .find(|position| before.ends_with(position))
+        .map(|position| match position {
+            "= " => head[start..].to_string(),
+            qualifier => format!("{qualifier}{}", &head[start..]),
+        })
 }
 
 /// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization (`specialize_calls`), whose `Tpl.get`s then fold to the same primitive. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct primitive's operations.
@@ -171,7 +188,7 @@ fn concept_comparison_matches_direct_primitive_codegen() {
         "#;
 
     assert_eq!(
-        operations(&normalized_cont_optm(through_concept)),
-        operations(&normalized_cont_optm(direct)),
+        operations(&cont_optm(through_concept)),
+        operations(&cont_optm(direct)),
     );
 }
