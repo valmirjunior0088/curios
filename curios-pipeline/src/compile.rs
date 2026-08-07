@@ -3,7 +3,7 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
-    curios_cert::recheck_module_suffix,
+    curios_cert::{Prefix, Verdict, recheck_module_suffix},
     curios_cont::{into_wasm, optimize},
     curios_core::{Prim, Term},
     curios_elab::{
@@ -47,6 +47,22 @@ impl From<CompileError> for String {
             CompileError::Incomplete(message) | CompileError::Failure(message) => message,
         }
     }
+}
+
+/// Put `module`'s user suffix to the independent kernel, defining the archived prelude prefix on the archive's word.
+///
+/// The [`Prefix`] descriptor is assembled here because it borrows the restored prelude, which exists only inside `with_prelude`'s scope — so every caller that wants the compile path's rechecking gets the same prefix rather than reconstructing one.
+pub fn recheck_suffix(module: &curios_core::Module, budget: u64) -> Vec<Verdict> {
+    with_prelude(|prelude| {
+        recheck_module_suffix(
+            module,
+            budget,
+            Prefix {
+                module: prelude.core(),
+                binder_floor: prelude.binder_floor(),
+            },
+        )
+    })
 }
 
 /// Lower and type-check `entrypoint`, reporting the erasure obligations rather than raising them.
@@ -190,11 +206,7 @@ where
     // The independent kernel's second opinion, on the compile path: the archive-replayed prelude prefix was walked when the archive was built, so only the entry suffix is judged here — a refusal fails the compile.
     {
         curios_profile::profile!("recheck_suffix");
-        let checked_from = with_prelude(|prelude| prelude.core().items.len());
-        if let Some(verdict) = recheck_module_suffix(&module, budget, checked_from)
-            .into_iter()
-            .next()
-        {
+        if let Some(verdict) = recheck_suffix(&module, budget).into_iter().next() {
             let refusal = verdict.error.format_with(&module);
             return Err(CompileError::Failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),

@@ -7,7 +7,7 @@ use {
     curios_text::PreparedPrelude,
 };
 
-pub(crate) const SCHEMA: u32 = 22;
+pub(crate) const SCHEMA: u32 = 23;
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[rkyv(
@@ -29,6 +29,8 @@ pub(crate) struct PreludeArchive {
     pub(crate) fingerprint: [u8; 32],
     pub(crate) prepared: PreparedPrelude,
     pub(crate) core: Module,
+    /// `curios_cert::derived_binder_floor` over `core`, computed by the build that established this image. Carried so per-compile rechecking reads the prefix's floor instead of re-deriving it over every archived term — the same "already checked" argument the item prefix rests on, applied to a bound rather than a verdict.
+    pub(crate) binder_floor: usize,
     pub(crate) body_type: Term,
     pub(crate) ersd: ErasedPrelude,
 }

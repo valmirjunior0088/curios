@@ -181,7 +181,18 @@ pub(crate) fn erased_half(
 /// Derived rather than believed. [`Module::binder_floor`] carries the elaborator's answer, and nothing checks it, while the kernel's capture-avoidance depends on it: eta and telescope comparison both open binders of their own, and one that aliases a free local already in a term silently identifies two terms that differ. Since a floor is a *bound* rather than a verdict, the caller takes the maximum of the two — widening is always safe, so a gap in this walk degrades to the carried value rather than to something worse, and no refusal is needed.
 ///
 /// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace.
-pub(crate) fn derived_binder_floor(module: &Module) -> usize {
+pub fn derived_binder_floor(module: &Module) -> usize {
+    derived_binder_floor_beyond(module, None)
+}
+
+/// [`derived_binder_floor`] over only what `prefix` does not already cover — the items past its length and the declarations it does not declare.
+///
+/// The prefix's own floor is not re-derived here because it is a constant of the archive, computed by the build that established the prefix and carried beside it; the caller maximizes the two. This is the same widening argument the function above rests on, only with one of the two bounds read instead of walked: a floor is a bound, so combining by maximum is safe whatever either side covers.
+pub(crate) fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> usize {
+    let covered = prefix.map_or(0, |prefix| prefix.items.len());
+    let fresh_induct = |name: &Global| prefix.is_none_or(|p| !p.induct_decls.contains_key(name));
+    let fresh_struct = |name: &Global| prefix.is_none_or(|p| !p.struct_decls.contains_key(name));
+    let fresh_concept = |name: &Global| prefix.is_none_or(|p| !p.concepts.contains_key(name));
     let mut highest: Option<u32> = None;
     let mut consider = |free_vars: BTreeSet<Free>| {
         for free in free_vars {
@@ -191,14 +202,19 @@ pub(crate) fn derived_binder_floor(module: &Module) -> usize {
         }
     };
 
-    for item in &module.items {
+    for item in &module.items[covered..] {
         for definition in item.definitions() {
             consider(definition.type_.free_vars());
             consider(definition.body.free_vars());
         }
     }
 
-    for declaration in module.induct_decls.values() {
+    for declaration in module
+        .induct_decls
+        .iter()
+        .filter(|(name, _)| fresh_induct(name))
+        .map(|(_, declaration)| declaration)
+    {
         consider(declaration.arity.free_vars());
         consider(declaration.result_sort.free_vars());
         for (_, constructor) in &declaration.constructors {
@@ -206,12 +222,22 @@ pub(crate) fn derived_binder_floor(module: &Module) -> usize {
         }
     }
 
-    for declaration in module.struct_decls.values() {
+    for declaration in module
+        .struct_decls
+        .iter()
+        .filter(|(name, _)| fresh_struct(name))
+        .map(|(_, declaration)| declaration)
+    {
         consider(declaration.arity.free_vars());
         consider(declaration.result_sort.free_vars());
     }
 
-    for concept in module.concepts.values() {
+    for concept in module
+        .concepts
+        .iter()
+        .filter(|(name, _)| fresh_concept(name))
+        .map(|(_, concept)| concept)
+    {
         consider(concept.params.free_vars());
     }
 

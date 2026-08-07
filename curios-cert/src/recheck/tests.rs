@@ -3,8 +3,9 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::{derived_binder_floor, recheck_module_verdicts},
+    super::recheck_module_verdicts,
     crate::KernelError,
+    crate::derived_binder_floor,
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Level, Many,

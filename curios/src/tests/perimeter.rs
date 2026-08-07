@@ -8,7 +8,7 @@
 
 use {
     super::run,
-    curios_cert::recheck_module_suffix,
+    curios_pipeline::recheck_suffix,
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
@@ -999,20 +999,19 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
     ) {
         // Refused before a module existed: type-checking proper, not an erasure obligation.
         Err(error) => (Verdict::Refuses(error.into()), Verdict::NotAsked),
-        Ok((module, checked_from, obligations)) => {
+        Ok((module, _, obligations)) => {
             let elaborator = match obligations.into_iter().next() {
                 Some(error) => Verdict::Refuses(error),
                 None => Verdict::Accepts,
             };
             // The suffix, exactly as the compile path judges it: the archived prefix is defined on the archive's word rather than re-walked, which is both what production does and what keeps a fixture cheap.
-            let kernel =
-                match recheck_module_suffix(&module, crate::DEFAULT_STEP_BUDGET, checked_from)
-                    .into_iter()
-                    .next()
-                {
-                    None => Verdict::Accepts,
-                    Some(verdict) => Verdict::Refuses(verdict.error.to_string()),
-                };
+            let kernel = match recheck_suffix(&module, crate::DEFAULT_STEP_BUDGET)
+                .into_iter()
+                .next()
+            {
+                None => Verdict::Accepts,
+                Some(verdict) => Verdict::Refuses(verdict.error.to_string()),
+            };
             (elaborator, kernel)
         }
     }

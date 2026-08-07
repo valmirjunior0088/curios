@@ -10,7 +10,7 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
-    curios_cert::recheck_module_verdicts,
+    curios_cert::{derived_binder_floor, recheck_module_verdicts},
     curios_core::Item,
     curios_core::{Global, Sharing},
     curios_elab::{
@@ -142,11 +142,14 @@ fn build() {
         sharing.structures()
     );
 
+    // Derived here, where the walk that establishes this image runs, so per-compile rechecking reads the bound instead of re-deriving it over every archived term.
+    let binder_floor = derived_binder_floor(&core);
     let image = PreludeArchive {
         schema: SCHEMA,
         fingerprint,
         prepared,
         core,
+        binder_floor,
         body_type,
         ersd,
     };

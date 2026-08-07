@@ -18,6 +18,7 @@ static ARCHIVE: OnceLock<Result<&'static ArchivedPreludeArchive, String>> = Once
 pub struct Prelude {
     prepared: PreparedPrelude,
     core: Module,
+    binder_floor: usize,
     body_type: Term,
     ersd: ErasedPrelude,
 }
@@ -29,6 +30,11 @@ impl Prelude {
 
     pub fn core(&self) -> &Module {
         &self.core
+    }
+
+    /// The binder floor derived over [`core`](Self::core) when this image was built.
+    pub fn binder_floor(&self) -> usize {
+        self.binder_floor
     }
 
     pub fn body_type(&self) -> &Term {
@@ -48,6 +54,7 @@ thread_local! {
         Prelude {
             prepared: image.prepared,
             core: image.core,
+            binder_floor: image.binder_floor,
             body_type: image.body_type,
             ersd: image.ersd,
         }

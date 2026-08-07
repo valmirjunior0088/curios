@@ -5,8 +5,8 @@
 //! The oracle is what makes this defensible. `curios-elab` cannot be asked about a mutated *Core* module, so a mutant carries no second opinion to compare against; the property therefore has to be one whose answer is known by construction. A definition declared at `Nat` whose body is `true`, or one declared at anything else whose body is `0`, is ill-typed for a reason that needs no checker to establish — so a kernel that accepts it has admitted something false, and one that refuses it has done its job whatever rule it used.
 
 use {
-    curios_cert::recheck_module_suffix,
     curios_core::{Item, Module, Term},
+    curios_pipeline::recheck_suffix,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -78,7 +78,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             "{description}: the subject carries an erasure obligation, so it is the wrong control",
         );
         assert!(
-            recheck_module_suffix(&module, crate::DEFAULT_STEP_BUDGET, checked_from).is_empty(),
+            recheck_suffix(&module, crate::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
@@ -94,8 +94,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             target.body = foreign_body();
 
             assert!(
-                !recheck_module_suffix(&mutant, crate::DEFAULT_STEP_BUDGET, checked_from)
-                    .is_empty(),
+                !recheck_suffix(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
                 "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
                 definition.name,
                 definition.type_,
@@ -157,8 +156,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
                 target.type_ = replacement.clone();
 
                 assert!(
-                    !recheck_module_suffix(&mutant, crate::DEFAULT_STEP_BUDGET, checked_from)
-                        .is_empty(),
+                    !recheck_suffix(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
                     "{description}: the kernel accepted `{}` redeclared at `{replacement}`",
                     definition.name,
                 );
@@ -225,7 +223,7 @@ fn elaborated(description: &str, source: &str) -> (Module, usize) {
 fn a_body_grafted_across_an_index_is_refused() {
     for (description, donor_source, host_source) in GRAFTS {
         let (donor, _) = elaborated(description, donor_source);
-        let (host, checked_from) = elaborated(description, host_source);
+        let (host, _) = elaborated(description, host_source);
 
         let donated = donor
             .items
@@ -239,7 +237,7 @@ fn a_body_grafted_across_an_index_is_refused() {
             .unwrap_or_else(|| panic!("{description}: the donor declares `subject`"));
 
         assert!(
-            recheck_module_suffix(&host, crate::DEFAULT_STEP_BUDGET, checked_from).is_empty(),
+            recheck_suffix(&host, crate::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the host must be accepted before anything is grafted into it",
         );
 
@@ -257,7 +255,7 @@ fn a_body_grafted_across_an_index_is_refused() {
         target.body = donated;
 
         assert!(
-            !recheck_module_suffix(&grafted, crate::DEFAULT_STEP_BUDGET, checked_from).is_empty(),
+            !recheck_suffix(&grafted, crate::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the kernel accepted a body whose index disagrees with its declaration",
         );
     }
