@@ -48,10 +48,11 @@ use {
     crate::{Env, Judge, entails},
     crate::{Erased, erased_half},
     curios_core::{
-        Atom, Free, Global, InductDecl, Level, LevelHead, Polarity, ReduceError, Reducer,
-        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
+        Atom, Free, Global, InductDecl, Level, LevelHead, Module, Polarity, ReduceError, Reducer,
+        Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
+        build_shorten,
     },
-    std::fmt,
+    std::{fmt, rc::Rc},
 };
 
 /// Why the kernel refused a term.
@@ -127,9 +128,35 @@ impl From<UniverseError> for KernelError {
     }
 }
 
+impl KernelError {
+    /// Render this refusal with global names shortened against `module`'s symbol table and a nominal family's implicit parameters marked — the two axes a reader needs to recognize the types they wrote.
+    ///
+    /// Universe instances are deliberately *not* suppressed here, unlike an elaboration diagnostic. A kernel refusal is often *about* the universes: `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type`. The same call the `--print` stage dumps make, for the same reason — a reader looking at the checker wants the levels the checker is arguing about.
+    pub fn format_with(&self, module: &Module) -> String {
+        let spelling = Rc::new(
+            Spelling::default()
+                .with_short_names(Rc::new(build_shorten(&module.module_symbols())))
+                .with_nominal_plicities(Rc::new(module.nominal_plicities())),
+        );
+        Displayed(self, spelling).to_string()
+    }
+}
+
+/// The faithful rendering: core's own names, every universe shown. A refusal reported to a reader goes through [`KernelError::format_with`].
 impl fmt::Display for KernelError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        Displayed(self, Rc::new(Spelling::default())).fmt(formatter)
+    }
+}
+
+/// A refusal paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take. Local to this crate because the orphan rule forbids implementing a foreign trait for a foreign wrapper, and because the axes a kernel refusal wants are not the ones an elaboration diagnostic wants.
+struct Displayed<'a>(&'a KernelError, Rc<Spelling>);
+
+/// Every arm below rebinds its term fields through the spelling before interpolating them. A field left unrebound renders core's own spelling and still compiles, which is why the rebinding is mechanical rather than left to each `write!`.
+impl fmt::Display for Displayed<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let spelling = &self.1;
+        match self.0 {
             KernelError::Reduce(ReduceError::Exhausted) => {
                 formatter.write_str("the kernel's reduction budget ran out")
             }
@@ -139,20 +166,33 @@ impl fmt::Display for KernelError {
                 write!(formatter, "no declaration registered for `{name}`")
             }
             KernelError::Unclassified(type_) => {
+                let type_ = type_.spelled(spelling);
                 write!(formatter, "cannot determine the sort of `{type_}`")
             }
-            KernelError::NotASort(term) => write!(formatter, "`{term}` is not a universe"),
-            KernelError::NotAMotive(term) => write!(
-                formatter,
-                "`{term}` is not a valid motive: it must be well-typed and land in a sort",
-            ),
+            KernelError::NotASort(term) => {
+                let term = term.spelled(spelling);
+                write!(formatter, "`{term}` is not a universe")
+            }
+            KernelError::NotAMotive(term) => {
+                let term = term.spelled(spelling);
+                write!(
+                    formatter,
+                    "`{term}` is not a valid motive: it must be well-typed and land in a sort",
+                )
+            }
             KernelError::Mismatch { inferred, expected } => {
+                let inferred = inferred.spelled(spelling);
+                let expected = expected.spelled(spelling);
                 write!(formatter, "expected `{expected}`, found `{inferred}`")
             }
             KernelError::NotAFunction(type_) => {
+                let type_ = type_.spelled(spelling);
                 write!(formatter, "`{type_}` is not a function type")
             }
-            KernelError::NotATuple(type_) => write!(formatter, "`{type_}` has no components"),
+            KernelError::NotATuple(type_) => {
+                let type_ = type_.spelled(spelling);
+                write!(formatter, "`{type_}` has no components")
+            }
             KernelError::Arity { expected, actual } => {
                 write!(formatter, "expected {expected} of them, found {actual}")
             }
@@ -161,6 +201,7 @@ impl fmt::Display for KernelError {
                 "cannot eliminate the proposition `{name}` into a relevant result",
             ),
             KernelError::NotCore(term) => {
+                let term = term.spelled(spelling);
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }
             KernelError::RepeatedTag(tag) => {
@@ -173,10 +214,13 @@ impl fmt::Display for KernelError {
                 formatter,
                 "no arm for `{tag}` of `{family}`, and its case is not impossible",
             ),
-            KernelError::NotDescending { type_ } => write!(
-                formatter,
-                "a recursive proof or type at `{type_}` does not descend",
-            ),
+            KernelError::NotDescending { type_ } => {
+                let type_ = type_.spelled(spelling);
+                write!(
+                    formatter,
+                    "a recursive proof or type at `{type_}` does not descend",
+                )
+            }
             KernelError::UnclosedUniverses => write!(
                 formatter,
                 "this declaration's universe constraints name a parameter it does not declare",

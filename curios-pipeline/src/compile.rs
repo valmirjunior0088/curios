@@ -195,9 +195,10 @@ where
             .into_iter()
             .next()
         {
+            let refusal = verdict.error.format_with(&module);
             return Err(CompileError::Failure(match &verdict.name {
-                Some(name) => format!("the kernel refused {name}: {}", verdict.error),
-                None => format!("the kernel refused the entrypoint: {}", verdict.error),
+                Some(name) => format!("the kernel refused {name}: {refusal}"),
+                None => format!("the kernel refused the entrypoint: {refusal}"),
             }));
         }
     }

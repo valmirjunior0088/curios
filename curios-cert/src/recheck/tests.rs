@@ -2885,3 +2885,62 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         "PROBE: a bogus occurrence passed as a tuple field type",
     );
 }
+
+/// A refusal names the types the way the program that produced them wrote them.
+///
+/// `KernelError`'s own `Display` is faithful to Core — fully qualified paths, every parameter positional — which is right for a term printed in isolation and wrong for a message a reader has to recognize their own program in. `format_with` supplies the two axes that fix it: globals shortened against the module's symbol table, and a nominal family's implicit parameters marked from the type constructor's declared plicities.
+///
+/// Universe instances are deliberately left alone; see `KernelError::format_with`.
+#[test]
+fn a_refusal_shortens_names_and_marks_implicit_parameters() {
+    let name = Global::Authored(Qualifier::from(["demo", "Box", "Box"]));
+    let parameter = Free::local(0, Some("A"));
+
+    // `struct Box(@A : Type)`: one implicit parameter, so a use site writes `Box(Nat)` and never supplies it positionally.
+    let constructor = Definition {
+        name: name.clone(),
+        kind: DefinitionKind::StructType,
+        universe_context: UniverseContext::empty(),
+        island: Qualifier::default(),
+        root: RootId::Entry,
+        totality: Totality::Total,
+        type_: Term::func_type_marked(
+            [(Plicity::Implicit, parameter, Term::type_ground())],
+            Term::type_ground(),
+        ),
+        body: Term::type_ground(),
+    };
+
+    let module = Module {
+        items: vec![Item::Let(constructor)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Term::prim(Prim::NatType),
+    };
+
+    let applied: Term = curios_core::Subterm::StructType(curios_core::StructType {
+        name,
+        universes: Vec::new(),
+        params: vec![Term::prim(Prim::NatType)],
+    })
+    .into();
+    let refusal = KernelError::Mismatch {
+        inferred: Box::new(applied),
+        expected: Box::new(Term::prim(Prim::NatType)),
+    };
+
+    assert_eq!(
+        refusal.format_with(&module),
+        "expected `Nat`, found `Box(@Nat)`"
+    );
+    // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.
+    assert_eq!(
+        refusal.to_string(),
+        "expected `Nat`, found `/demo/Box/Box(Nat)`"
+    );
+}
