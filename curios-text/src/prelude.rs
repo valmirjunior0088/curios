@@ -219,7 +219,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     };
     let output = io_of(result);
 
-    let body = prim(Prim::Foreign(
+    let body = Term::from(Subterm::Foreign(
         Arc::clone(function),
         signature
             .params

@@ -13,7 +13,7 @@ use {
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductArm, InductDecl,
         InductType, Item, Let, Many, Match, Nat, Prim, PrimHead, Proj, Rec, RecItem, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Variant, wire_term,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Variant,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,

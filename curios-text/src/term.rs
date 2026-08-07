@@ -1,13 +1,14 @@
 use {
     super::{Name, Prim, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
+    curios_abi::ForeignFunction,
     curios_base::{
         Grain, NumOp, Plicity, Source, Span,
         parser::{ParserError, run_parser, take_eof},
         printer::run_printer,
     },
     num_bigint::BigUint,
-    std::{fmt, ops::Deref, rc::Rc, str::FromStr},
+    std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -487,6 +488,8 @@ pub enum Subterm {
     Type,
     Prop,
     Prim(Prim),
+    /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than a [`Prim`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
+    Foreign(Arc<ForeignFunction>, Vec<Term>),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),

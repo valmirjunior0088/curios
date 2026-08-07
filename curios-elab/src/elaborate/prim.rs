@@ -2,8 +2,7 @@ use {
     super::{Context, Error, Mode, elaborate, expect},
     crate::reduce_with,
     curios_base::Grain,
-    curios_core::{ImplicitOrigin, Prim, Subterm, Term, wire_term},
-    std::sync::Arc,
+    curios_core::{ImplicitOrigin, Prim, Subterm, Term},
 };
 
 /// Elaborate both operands of a homogeneous binary primitive at `operand`, then rebuild the variant through its constructor (`build`) and pair it with `result`. Lets each arm name itself once instead of destructuring an OR-pattern and re-matching just to reattach the elaborated operands.
@@ -342,40 +341,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::ProcExit(code) => {
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
             (Prim::ProcExit(code), io_type(Term::tuple_type_unit()))
-        }
-        // A store-described host call: each operand checks against its wire type, and the result shape (unit, bare value, named record) is read off the signature. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
-        Prim::Foreign(function, args) => {
-            let signature = &function.signature;
-
-            assert_eq!(
-                args.len(),
-                signature.params.len(),
-                "{} operand count does not match its signature",
-                function.name
-            );
-
-            let mut elaborated = Vec::with_capacity(args.len());
-            for (arg, (_, wire_type)) in args.iter().zip(&signature.params) {
-                elaborated.push(elaborate(context, arg, Mode::Check(wire_term(wire_type)))?.0);
-            }
-
-            let result = match signature.results.as_slice() {
-                [] => Term::tuple_type_unit(),
-                [(_, wire_type)] => wire_term(wire_type),
-                results => Term::tuple_type(
-                    results
-                        .iter()
-                        .map(|(label, wire_type)| {
-                            (context.fresh(Some(label)), wire_term(wire_type))
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-            };
-
-            (
-                Prim::Foreign(Arc::clone(function), elaborated),
-                io_type(result),
-            )
         }
         // The same rule as `LstType` above, and for the same reason: a cell has an identity.
         Prim::CellType(elem) => {

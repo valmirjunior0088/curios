@@ -10,9 +10,12 @@ use {
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
         ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl,
-        project_erased_universes,
+        project_erased_universes, wire_term,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 /// What one expression erased to. See the module documentation.
@@ -377,6 +380,29 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         match &**term {
             Subterm::Prim(primitive) => prim::erase_prim(self, context, primitive, expected, hint),
+            // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
+            Subterm::Foreign(function, arguments) => {
+                let mut atoms = Vec::with_capacity(arguments.len());
+                for (argument, (_, wire_type)) in arguments.iter().zip(&function.signature.params) {
+                    atoms.push(emitted!(self.walk(
+                        context,
+                        argument,
+                        &wire_term(wire_type),
+                        None
+                    )?));
+                }
+                let foreign = self.builder.foreign(Arc::clone(function));
+                let described = format!("io/{}", function.name);
+                self.thunk(hint.or(Some(described.as_str())), move |lowering| {
+                    Ok(lowering.bind(
+                        None,
+                        curios_ersd::Rhs::Foreign {
+                            foreign,
+                            operands: atoms,
+                        },
+                    ))
+                })
+            }
             // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.
             Subterm::Type(_)
             | Subterm::Prop

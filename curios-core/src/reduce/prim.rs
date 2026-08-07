@@ -6,7 +6,7 @@ use {
     },
     curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_traits::{ToPrimitive, Zero},
-    std::{cmp::Ordering, sync::Arc},
+    std::cmp::Ordering,
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`Lst` `get`/`slice` bounds.
@@ -1412,13 +1412,6 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         Prim::ProcExit(code) => {
             let code = reducer.reduce(code.clone())?;
             Ok(Subterm::Prim(Prim::ProcExit(code)))
-        }
-        Prim::Foreign(function, args) => {
-            let mut reduced = Vec::with_capacity(args.len());
-            for arg in args {
-                reduced.push(reducer.reduce(arg.clone())?);
-            }
-            Ok(Subterm::Prim(Prim::Foreign(Arc::clone(function), reduced)))
         }
         Prim::CellType(elem) => {
             let elem = reducer.reduce(elem.clone())?;

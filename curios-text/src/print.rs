@@ -644,7 +644,6 @@ fn print_prim(prim: Prim) -> Printer {
         Prim::HandleType => pure("Handle"),
         Prim::Handle(token) => pure(format!("Handle({token})")),
         Prim::HandleEql(left, right) => print_prim_call("Handle.eql", vec![left, right]),
-        Prim::Foreign(function, args) => print_prim_call(function.label.clone(), args),
         Prim::ProcExit(code) => print_prim_call("proc.exit", vec![code]),
         Prim::CellType(elem) => print_prim_call("Cell", vec![elem]),
         Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),
@@ -713,6 +712,7 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
         Subterm::Prim(prim) => print_prim(prim),
+        Subterm::Foreign(function, args) => print_prim_call(function.label.clone(), args),
         Subterm::Name(name) => pure(name.join()),
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),

@@ -525,6 +525,9 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Prim(prim) => self.prim(prim, polarity, &term),
 
+            // A host call is opaque for the same reason an effectful primitive is: its result comes from outside the program, so nothing about the declaration being checked can be read out of it.
+            Subterm::Foreign(..) => self.opaque(&term),
+
             Subterm::Apply(_)
             | Subterm::Func(_)
             | Subterm::Tuple(_)
@@ -670,7 +673,6 @@ impl<E: Env> Walk<'_, E> {
             | Prim::LstMap(..)
             | Prim::Handle(_)
             | Prim::HandleEql(..)
-            | Prim::Foreign(..)
             | Prim::ProcExit(..)
             | Prim::Cell(..)
             | Prim::CellSet(..)

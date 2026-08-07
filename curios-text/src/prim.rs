@@ -1,8 +1,6 @@
 use {
     super::{Nat, Term},
-    curios_abi::ForeignFunction,
     curios_base::{Flt, Grain, Int},
-    std::sync::Arc,
 };
 
 /// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `Lst` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `LstConcat` primitive; a spread-free literal lowers to a plain `Lst` exactly as before.
@@ -137,8 +135,6 @@ pub enum Prim {
     HandleType,
     Handle(u32),
     HandleEql(Term, Term),
-    // A store-described host call; the prelude bakes it into the `/sys/Handle` declaration whose parameters the argument terms name.
-    Foreign(Arc<ForeignFunction>, Vec<Term>),
     ProcExit(Term),
     CellType(Term),
     Cell(Term, Term),          // type, init

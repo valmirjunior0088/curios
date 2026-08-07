@@ -982,6 +982,9 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             Subterm::Type(context.universes().zonk(level).map_err(Error::from)?)
         }
         Subterm::Prop => Subterm::Prop,
+        Subterm::Foreign(function, args) => {
+            Subterm::Foreign(Arc::clone(function), zonk_terms(context, args)?)
+        }
         Subterm::Var(var) => Subterm::Var(var.clone()),
         Subterm::UniverseInst(instance) => Subterm::UniverseInst(UniverseInst {
             head: zonk_term(context, &instance.head)?,
@@ -1371,9 +1374,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, f)?,
         ),
 
-        Prim::Foreign(function, args) => {
-            Prim::Foreign(Arc::clone(function), zonk_terms(context, args)?)
-        }
         Prim::ProcExit(code) => Prim::ProcExit(zonk_term(context, code)?),
         Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
         Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),

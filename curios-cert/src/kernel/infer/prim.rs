@@ -8,7 +8,7 @@ use {
     super::{check, infer},
     crate::{Kernel, KernelError, sort_of_prim},
     curios_base::Grain,
-    curios_core::{Prim, Subterm, Term, wire_term},
+    curios_core::{Prim, Subterm, Term},
 };
 
 fn bool_type() -> Term {
@@ -297,43 +297,6 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
             check(kernel, code, &nat_type())?;
 
             Ok(io_type(Term::tuple_type_unit()))
-        }
-
-        // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature.
-        Prim::Foreign(function, args) => {
-            let signature = &function.signature;
-
-            if args.len() != signature.params.len() {
-                return Err(KernelError::Arity {
-                    expected: signature.params.len(),
-                    actual: args.len(),
-                });
-            }
-
-            let params = signature
-                .params
-                .iter()
-                .map(|(_, wire)| wire_term(wire))
-                .collect::<Vec<_>>();
-            for (argument, wire) in args.iter().zip(&params) {
-                check(kernel, argument, wire)?;
-            }
-
-            let results = signature
-                .results
-                .iter()
-                .map(|(label, wire)| (label.clone(), wire_term(wire)))
-                .collect::<Vec<_>>();
-
-            Ok(io_type(match results.as_slice() {
-                [] => Term::tuple_type_unit(),
-                [(_, result)] => result.clone(),
-                many => Term::tuple_type(
-                    many.iter()
-                        .map(|(label, result)| (kernel.fresh(Some(label)), result.clone()))
-                        .collect::<Vec<_>>(),
-                ),
-            }))
         }
 
         // The two constructors of the opaque effect carrier. There is no third: nothing here or anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.

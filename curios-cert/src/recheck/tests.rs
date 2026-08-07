@@ -1411,7 +1411,7 @@ fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         root: RootId::Entry,
         totality: Totality::Total,
         type_: claimed.clone(),
-        body: Term::prim(Prim::Foreign(row, Vec::new())),
+        body: Term::foreign(row, Vec::new()),
     };
 
     Module {

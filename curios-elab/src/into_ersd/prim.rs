@@ -5,7 +5,7 @@
 use {
     super::{
         BigUint, Context, Error, Lowering, Nat, Outcome, Prim, Subterm, Term, ToPrimitive, emitted,
-        reduce_with, wire_term,
+        reduce_with,
     },
     curios_base::{Grain, Int},
 };
@@ -94,7 +94,7 @@ impl Lowering {
     /// `body` runs with a fresh block open, so whatever it erases lands inside the thunk rather than at the construction site — which is what makes an `Io` a description: bound once and forced twice, it performs twice, and substituting a definition for its name never changes behavior. Its `Outcome` seals the block, so a diverging body (a process exit) keeps its own terminator instead of returning.
     ///
     /// What belongs inside is the *performance*, not the operands. `IoPure` erases its value eagerly and hands the closure an atom to return; `IoBind` puts the two forces and the continuation's application inside, because those are what must not happen until the description is run.
-    fn thunk(
+    pub(super) fn thunk(
         &mut self,
         hint: Option<&str>,
         body: impl FnOnce(&mut Self) -> Result<Outcome, Error>,
@@ -424,30 +424,6 @@ pub(super) fn erase_prim(
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
             lowering.thunk(hint.or(Some("io/exit")), move |_| {
                 Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
-            })
-        }
-
-        // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
-        Prim::Foreign(function, arguments) => {
-            let mut atoms = Vec::with_capacity(arguments.len());
-            for (argument, (_, wire_type)) in arguments.iter().zip(&function.signature.params) {
-                atoms.push(emitted!(lowering.walk(
-                    context,
-                    argument,
-                    &wire_term(wire_type),
-                    None
-                )?));
-            }
-            let foreign = lowering.builder.foreign(std::sync::Arc::clone(function));
-            let described = format!("io/{}", function.name);
-            lowering.thunk(hint.or(Some(described.as_str())), move |lowering| {
-                Ok(lowering.bind(
-                    None,
-                    curios_ersd::Rhs::Foreign {
-                        foreign,
-                        operands: atoms,
-                    },
-                ))
             })
         }
 

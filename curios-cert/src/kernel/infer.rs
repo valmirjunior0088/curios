@@ -30,7 +30,7 @@ use {
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Let, Many, Nat, One,
         Prim, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, UniverseInst, Variant,
+        TupleType, UniverseInst, Variant, wire_term,
     },
 };
 
@@ -90,6 +90,38 @@ fn infer_node(
         Subterm::Prop => Ok(Term::type_ground()),
 
         Subterm::Prim(prim) => infer_prim(kernel, prim),
+
+        // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature. The rule is here rather than among the primitives because the row, not this crate, is what states the signature.
+        Subterm::Foreign(function, args) => {
+            let signature = &function.signature;
+
+            if args.len() != signature.params.len() {
+                return Err(KernelError::Arity {
+                    expected: signature.params.len(),
+                    actual: args.len(),
+                });
+            }
+
+            for ((_, wire), argument) in signature.params.iter().zip(args) {
+                check(kernel, argument, &wire_term(wire))?;
+            }
+
+            let results = signature
+                .results
+                .iter()
+                .map(|(label, wire)| (label.clone(), wire_term(wire)))
+                .collect::<Vec<_>>();
+
+            Ok(Term::prim(Prim::io_type(match results.as_slice() {
+                [] => Term::tuple_type_unit(),
+                [(_, result)] => result.clone(),
+                many => Term::tuple_type(
+                    many.iter()
+                        .map(|(label, result)| (kernel.fresh(Some(label)), result.clone()))
+                        .collect::<Vec<_>>(),
+                ),
+            })))
+        }
 
         // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.
         Subterm::Var(var) => kernel

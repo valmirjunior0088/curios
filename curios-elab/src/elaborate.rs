@@ -173,6 +173,45 @@ fn elaborate_subterm(
             Term::type_at(level.succ().map_err(Error::from)?),
         ),
         Subterm::Prop => (term.clone(), Term::type_ground()),
+        // A store-described host call: each operand checks against its wire type, and the result shape (unit, bare value, named record) is read off the signature. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
+        Subterm::Foreign(function, args) => {
+            let signature = &function.signature;
+
+            assert_eq!(
+                args.len(),
+                signature.params.len(),
+                "{} operand count does not match its signature",
+                function.name
+            );
+
+            let mut elaborated = Vec::with_capacity(args.len());
+            for (arg, (_, wire_type)) in args.iter().zip(&signature.params) {
+                elaborated.push(
+                    elaborate(context, arg, Mode::Check(curios_core::wire_term(wire_type)))?.0,
+                );
+            }
+
+            let result = match signature.results.as_slice() {
+                [] => Term::tuple_type_unit(),
+                [(_, wire_type)] => curios_core::wire_term(wire_type),
+                results => Term::tuple_type(
+                    results
+                        .iter()
+                        .map(|(label, wire_type)| {
+                            (
+                                context.fresh(Some(label)),
+                                curios_core::wire_term(wire_type),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            };
+
+            (
+                Term::foreign(std::sync::Arc::clone(function), elaborated),
+                Term::prim(Prim::io_type(result)),
+            )
+        }
         Subterm::UniverseInst(instance) => {
             let type_ = if let Some((group, index)) = instance.head.as_rec_proj() {
                 context

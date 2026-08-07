@@ -1,8 +1,8 @@
 use {
     super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
-    curios_abi::{ForeignFunction, WireType},
+    curios_abi::WireType,
     curios_base::{Flt, Grain, Int, PackedBin},
-    std::{collections::BTreeSet, sync::Arc},
+    std::collections::BTreeSet,
 };
 
 /// The core type a host-boundary [`WireType`] denotes — the one reading of the signature shared by elaboration (operand checks, result records) and erasure, so the two cannot disagree about what crosses the wire.
@@ -19,7 +19,7 @@ pub fn wire_term(wire_type: &WireType) -> Term {
     Subterm::Prim(prim).into()
 }
 
-/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `ProcExit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// A primitive that performs a host effect returns an `Io`. That is the invariant the whole effect discipline rests on and it is enforced nowhere but here and in the two checkers' per-variant arms, so a new effectful variant must be given an `IoType` result when it is added.
 ///
@@ -145,8 +145,6 @@ pub enum Prim {
     Handle(u32),
     // (a, b) -> Bool: identity of two handles. The one pure operation on `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat` equality op.
     HandleEql(Term, Term),
-    // A store-described host call: the function's `WireSignature` fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
-    Foreign(Arc<ForeignFunction>, Vec<Term>),
     // `(Nat) -> {}`: end the process. Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     //
     // The result is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
@@ -551,8 +549,6 @@ impl Prim {
                 visit(d);
             }
 
-            Prim::Foreign(_, args) => args.iter().for_each(&mut *visit),
-
             Prim::BinConcat(Grain::X, terms) | Prim::BinConcat(Grain::B, terms) => {
                 terms.iter().for_each(&mut *visit)
             }
@@ -757,10 +753,6 @@ impl Prim {
             ),
             Prim::HandleType => Prim::HandleType,
             Prim::Handle(token) => Prim::Handle(*token),
-            Prim::Foreign(function, args) => Prim::Foreign(
-                Arc::clone(function),
-                args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
-            ),
             Prim::ProcExit(code) => Prim::ProcExit(visit.visit_subterm(code)),
             Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
             Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),

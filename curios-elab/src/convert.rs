@@ -389,7 +389,6 @@ impl Sort {
                 | Prim::FltToLeBytes(..)
                 | Prim::FltToNat(..)
                 | Prim::FltTrunc(..)
-                | Prim::Foreign(..)
                 | Prim::Handle(..)
                 | Prim::HandleEql(..)
                 | Prim::Int(..)
@@ -454,6 +453,11 @@ impl Sort {
                     Sort::Type(Level::zero())
                 }
             },
+            // A host call is a value, never a type, so it takes the same ground level the non-type primitives above do.
+            Subterm::Foreign(..) => {
+                probe_level_fallback("host call", &reduced);
+                Sort::Type(Level::zero())
+            }
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 // Each opened binder must carry its domain type, not merely be substituted in. Opening with a free variable nothing can type leaves `synth_neutral` returning `None` for every occurrence of it in the codomain, and that `None` is read as level 0 — so the sort of every dependent codomain collapsed to `Type 0` regardless of the binder's real level. That silently under-generalized exactly the declarations whose codomain mentions a binder: every concept wrapper, and every higher-order polymorphic function.

@@ -14,6 +14,7 @@ use {
         Three, Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
         instantiate_universe_levels_scoped, print_term,
     },
+    curios_abi::ForeignFunction,
     curios_base::{
         Grain, Int, Mint, NumOp, Plicity, Span,
         printer::{run_printer, run_printer_within},
@@ -26,6 +27,7 @@ use {
         mem,
         ops::{ControlFlow, Deref},
         rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -608,6 +610,11 @@ impl Term {
     /// A primitive term — any literal or primitive operation that converts into [`Prim`].
     pub fn prim<P: Into<Prim>>(prim: P) -> Self {
         Self::from(Subterm::Prim(prim.into()))
+    }
+
+    /// A host call against the ABI row `function` describes.
+    pub fn foreign(function: Arc<ForeignFunction>, args: Vec<Term>) -> Self {
+        Self::from(Subterm::Foreign(function, args))
     }
 
     /// A variable occurrence. External callers can only build free variables ([`Var::free`]); bound ones are the scope machinery's business.
@@ -2179,6 +2186,10 @@ pub enum Subterm {
     Type(Level),
     Prop,
     Prim(Prim),
+    /// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
+    ///
+    /// A term former rather than a [`Prim`] variant, because it is the one construct here whose meaning is *not* fixed by the enum that holds it: every primitive has a signature this crate spells, while a foreign call reads its own off the ABI row it carries. Nothing about it is closed, so it does not belong in a closed set.
+    Foreign(Arc<ForeignFunction>, Vec<Term>),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -2293,6 +2304,9 @@ impl Subterm {
                     .for_each(|t| t.collect_construction_names(names));
             }
             Subterm::Prim(prim) => prim.collect_construction_names(names),
+            Subterm::Foreign(_, args) => args
+                .iter()
+                .for_each(|arg| arg.collect_construction_names(names)),
             Subterm::Func(Func { telescope, .. }) => telescope.collect_construction_names(names),
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 telescope.collect_construction_names(names)
@@ -2447,6 +2461,7 @@ impl Subterm {
                 left.any_metavar(pred) || right.any_metavar(pred)
             }
             Subterm::Prim(prim) => prim.any_metavar(pred),
+            Subterm::Foreign(_, args) => args.iter().any(|arg| arg.any_metavar(pred)),
             Subterm::Func(Func { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::Apply(Apply { head, params, .. }) => {
@@ -2539,6 +2554,7 @@ impl Subterm {
             Subterm::NumLit(_) => false,
             Subterm::Infix(Infix { left, right, .. }) => pred(left) || pred(right),
             Subterm::Prim(prim) => prim.any_term(pred),
+            Subterm::Foreign(_, args) => args.iter().any(&mut *pred),
             Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
             Subterm::Apply(Apply { head, params, .. }) => {
@@ -2721,6 +2737,10 @@ impl Bound for Subterm {
             Subterm::Type(level) => Subterm::Type(visit.visit_level(level)),
             Subterm::Prop => Subterm::Prop,
             Subterm::Prim(prim) => Subterm::Prim(prim.traverse(visit)),
+            Subterm::Foreign(function, args) => Subterm::Foreign(
+                Arc::clone(function),
+                args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
+            ),
             Subterm::FuncType(FuncType {
                 telescope,
                 plicities,
@@ -2981,6 +3001,7 @@ impl Bound for Subterm {
                 None => 0,
             },
             Subterm::Prim(prim) => prim.reach(),
+            Subterm::Foreign(_, args) => max_reach(args),
             Subterm::Func(Func { telescope, .. }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
             Subterm::Apply(Apply { head, params, .. }) => head.reach().max(max_reach(params)),

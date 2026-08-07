@@ -249,6 +249,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
         | Subterm::Type(_)
         | Subterm::Prop
         | Subterm::Prim(_)
+        | Subterm::Foreign(..)
         | Subterm::NumLit(_) => {}
     }
 }
@@ -676,15 +677,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
         ]),
         Prim::HandleType => pure("Handle"),
         Prim::Handle(token) => pure(format!("Handle({token})")),
-        Prim::Foreign(function, args) => flat(
-            [pure(function.label.clone())]
-                .into_iter()
-                .chain(
-                    args.into_iter()
-                        .flat_map(|arg| [pure(" "), sub(arg, depth)]),
-                )
-                .collect::<Vec<_>>(),
-        ),
         Prim::ProcExit(code) => print_unary("proc.exit ", code, depth),
         Prim::CellType(elem) => print_unary("Cell ", elem, depth),
         Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),
@@ -753,6 +745,15 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
             pure(universe_suffix(&instance.levels)),
         ]),
         Subterm::Prim(prim) => sub_prim(prim, depth),
+        Subterm::Foreign(function, args) => flat(
+            [pure(function.label.clone())]
+                .into_iter()
+                .chain(
+                    args.into_iter()
+                        .flat_map(|arg| [pure(" "), sub(arg, depth)]),
+                )
+                .collect::<Vec<_>>(),
+        ),
         Subterm::FuncType(FuncType {
             telescope,
             plicities,

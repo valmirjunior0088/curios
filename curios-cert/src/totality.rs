@@ -509,6 +509,8 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
+            Subterm::Foreign(_, args) => args.iter().for_each(|arg| self.walk(arg)),
+
             Subterm::Let(Let { bindings, tail }) => {
                 for binding in bindings {
                     self.walk(binding.type_());

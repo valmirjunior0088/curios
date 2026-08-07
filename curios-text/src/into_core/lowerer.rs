@@ -235,6 +235,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core primitive.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
             Subterm::Prim(prim) => curios_core::Term::prim(self.prim(prim)?),
+            Subterm::Foreign(function, args) => curios_core::Term::foreign(
+                Arc::clone(function),
+                args.iter()
+                    .map(|arg| self.term(arg))
+                    .collect::<Result<_, _>>()?,
+            ),
             Subterm::NumLit(num_lit) => curios_core::Term::num_lit(
                 num_lit.magnitude.clone(),
                 num_lit.signed,
@@ -1247,12 +1253,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::HandleEql(left, right) => {
                 curios_core::Prim::io_eql(self.term(left)?, self.term(right)?)
             }
-            Prim::Foreign(function, args) => curios_core::Prim::Foreign(
-                Arc::clone(function),
-                args.iter()
-                    .map(|arg| self.term(arg))
-                    .collect::<Result<_, _>>()?,
-            ),
             Prim::ProcExit(code) => curios_core::Prim::ProcExit(self.term(code)?),
             Prim::NatToFlt(inner) => curios_core::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => curios_core::Prim::int_to_nat(self.term(inner)?),
