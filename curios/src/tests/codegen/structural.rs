@@ -12,7 +12,7 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`Lst/len(proc/args())`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
+// Every fixture takes a runtime taint (`Lst/len(proc/args!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
 
 const LCG: &str = r#"
     use /std/{Handle, Nat, Lst, proc};
@@ -21,7 +21,7 @@ const LCG: &str = r#"
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
         end;
-    let n : Nat = Lst/len(proc/args());
+    let n = Lst/len(proc/args!);
     /std/print(Nat/to_str(loop(n, 1)))
     "#;
 
@@ -41,7 +41,7 @@ const TREES: &str = r#"
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
-    let d : Nat = Lst/len(proc/args());
+    let d = Lst/len(proc/args!);
     /std/print(Nat/to_str(sum(build(d, 1))))
     "#;
 
@@ -52,7 +52,7 @@ const HIGHER_ORDER: &str = r#"
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
-    let n : Nat = Lst/len(proc/args());
+    let n = Lst/len(proc/args!);
     let f = pick(n <= 0);
     /std/print(Nat/to_str(f(n)))
     "#;
@@ -66,7 +66,7 @@ const DIRECT_ESCAPING: &str = r#"
         | true => g
         | false => (y) => y
         end;
-    let n : Nat = Lst/len(proc/args());
+    let n = Lst/len(proc/args!);
     let escaped = select(n <= 0, inc);
     /std/print(Nat/to_str(inc(n) + apply(escaped, n)))
     "#;
@@ -78,7 +78,7 @@ const FUNCTION_ONLY: &str = r#"
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
         end;
-    let n : Nat = Lst/len(proc/args());
+    let n = Lst/len(proc/args!);
     /std/print(Nat/to_str(down(n, 0)))
     "#;
 
@@ -89,7 +89,7 @@ const MUTUAL_RECURSION: &str = r#"
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
-    let n : Nat = Lst/len(proc/args());
+    let n = Lst/len(proc/args!);
     let start = n <= 0;
     /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
     "#;
@@ -134,6 +134,16 @@ fn cont_optm_text(source: &str) -> String {
     .expect("fixture compiles");
 
     dump
+}
+
+/// The lines of `wat` mentioning `needle` that are not the `Io` carrier's own.
+///
+/// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
+fn user_lines<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+    wat.lines()
+        .map(str::trim)
+        .filter(|line| line.contains(needle) && !line.contains("$io/"))
+        .collect()
 }
 
 /// One emitted function: its `$name` and full text.
@@ -270,7 +280,7 @@ fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     set
 }
 
-/// Run the raw (Binaryen-free) module: Cranelift-precompile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args()`, which drives the taint.
+/// Run the raw (Binaryen-free) module: Cranelift-precompile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args!`, which drives the taint.
 fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
     let cwasm = shared_engine()
@@ -294,7 +304,7 @@ fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
 
 // -- LCG --------------------------------------------------------------------
 
-/// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main` and prelude helpers as top-level functions, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
+/// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, and the `io/…` description thunks every effect boundary erases to as top-level functions, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
     let cont = cont_optm_text(LCG);
@@ -314,8 +324,9 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
             .and_then(|(_, rest)| rest.split_once('('))
             .map(|(name, _)| name)
             .unwrap_or_default();
+        // Asked of the loop by name rather than by an allowlist of everything else. A leaked *user* function keeps its source hint, so `loop` escaping contification prints as `~fN$loop`; prelude helpers carry their `/std/` path and the description machinery its `io/` tag, while a lambda the optimizer lifted carries nothing at all and never did. An allowlist would have to admit that anonymous case, which is most of what it was excluding.
         assert!(
-            provenance == "main" || provenance.starts_with("/std/"),
+            provenance != "loop",
             "the recursive loop must be contified, not left a top-level function: {line}",
         );
     }
@@ -413,12 +424,33 @@ fn trees_invariant_arithmetic_propagates_through_scc() {
     );
 }
 
-/// T3: the hot recursive code performs no indirect calls. The whole trees module emits no `call_ref` — every call, including the tree recursion, is direct.
+/// T3: the hot recursive code performs no indirect calls. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences. The tree recursion is not among them.
+///
+/// Stated as "the module contains no `call_ref`" this held only while programs were direct-style; a program is a description now, so two forces are structural. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
 #[test]
 fn trees_hot_arithmetic_has_no_indirect_calls() {
+    let wat = wat(TREES);
+    let functions = functions(&wat);
+
+    let stray = functions
+        .iter()
+        .filter(|function| function.body.contains("call_ref"))
+        .filter(|function| !function.name.contains("$io/") && function.name != "$func/main")
+        .map(|function| function.name)
+        .collect::<Vec<_>>();
     assert!(
-        !wat(TREES).contains("call_ref"),
-        "trees emits no indirect calls"
+        stray.is_empty(),
+        "trees calls indirectly outside the effect boundary: {stray:?}"
+    );
+
+    let main = functions
+        .iter()
+        .find(|function| function.name == "$func/main")
+        .expect("the module has an entry");
+    assert_eq!(
+        main.body.matches("call_ref").count(),
+        1,
+        "main forces the program's description once and calls nothing else indirectly",
     );
 }
 
@@ -426,12 +458,12 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
 #[test]
 fn trees_ordinary_recursion_has_no_shells() {
     let wat = wat(TREES);
-    assert!(!wat.contains("struct.new $clsr/"), "no closure allocation");
-    assert!(
-        !wat.contains("struct.new $envr/"),
-        "no environment allocation"
-    );
-    assert!(!wat.contains("struct.new_default"), "no closure shell");
+    let closures = user_lines(&wat, "struct.new $clsr/");
+    assert!(closures.is_empty(), "no closure allocation: {closures:?}");
+    let envs = user_lines(&wat, "struct.new $envr/");
+    assert!(envs.is_empty(), "no environment allocation: {envs:?}");
+    let shells = user_lines(&wat, "struct.new_default");
+    assert!(shells.is_empty(), "no closure shell: {shells:?}");
 }
 
 // -- general corpus ---------------------------------------------------------
@@ -465,13 +497,21 @@ fn direct_and_escaping_uses_coexist() {
 #[test]
 fn function_only_recursion_has_no_fallback_shells() {
     let wat = wat(FUNCTION_ONLY);
+    // Allocation, not mention: a module that forces a description at all declares the closure *type* for the arity it forces at, and names it in the `call_ref`. What `down` must not do is allocate one.
+    let closures = user_lines(&wat, "struct.new $clsr/");
     assert!(
-        !wat.contains("$clsr/"),
-        "function-only recursion needs no closures"
+        closures.is_empty(),
+        "function-only recursion needs no closures: {closures:?}"
     );
+    let envs = user_lines(&wat, "struct.new $envr/");
     assert!(
-        !wat.contains("struct.new_default"),
-        "function-only recursion needs no shells"
+        envs.is_empty(),
+        "function-only recursion needs no environments: {envs:?}"
+    );
+    let shells = user_lines(&wat, "struct.new_default");
+    assert!(
+        shells.is_empty(),
+        "function-only recursion needs no shells: {shells:?}"
     );
 }
 
