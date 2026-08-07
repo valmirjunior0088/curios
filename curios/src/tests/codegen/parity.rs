@@ -45,13 +45,15 @@ fn concept_method_call_matches_direct_primitive_codegen() {
     let through_concept = r#"
         use /std/{Nat, Lst, Handle, Str, Add, proc};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
     let direct = r#"
         use /std/{Nat, Lst, Handle, Str, proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
 
@@ -66,7 +68,8 @@ fn concept_method_call_matches_direct_primitive_codegen() {
 fn choose_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, Lst, Handle, Str, proc};
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         let result =
             choose
             | n <= 0 => Nat/add(n, 100)
@@ -77,7 +80,8 @@ fn choose_matches_hand_nested_bool_codegen() {
         "#;
     let nested = r#"
         use /std/{Nat, Lst, Handle, Str, proc};
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         let result =
             match n <= 0
             | true => Nat/add(n, 100)
@@ -106,7 +110,8 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
     let headed = r#"
@@ -116,7 +121,8 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
             | some(x) => x + 10
             | _ => 99
             end;
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
 
@@ -152,13 +158,15 @@ fn concept_comparison_matches_direct_primitive_codegen() {
     let through_concept = r#"
         use /std/{Nat, Bool, Lst, Handle, Str, Cmp, proc};
         pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;
     let direct = r#"
         use /std/{Nat, Bool, Lst, Handle, Str, proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
-        let n = Lst/len(proc/args!);
+        let taint = Lst/len(proc/args!);
+        let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;
 
