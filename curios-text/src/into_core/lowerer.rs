@@ -20,6 +20,15 @@ type LoweredParams = Vec<(Plicity, curios_core::Free, curios_core::Term)>;
 /// Minted once, where the binder is introduced, and reused everywhere that binder is in scope — a progressively-extended parameter list re-enters the same identities rather than re-minting them, or an earlier domain and the body would disagree about which binder a name meant.
 pub(super) type Binder = (String, curios_core::Free);
 
+/// One `!` hoisted out of a region: the binder its result lands in, the action to sequence, and the span of the `!` itself.
+///
+/// The span is what [`Lowerer::wrap`] stamps onto the synthesized `/syn/Monad/bind` application. Without it the sequencing is the one node in a lowered value body that no source location reaches, so a `!` the region cannot accept — an annotated top-level `let`, a non-monadic helper — reports its type error with no `-->` line at all.
+pub(super) struct Hoisted {
+    pub(super) binder: curios_core::Free,
+    pub(super) action: curios_core::Term,
+    pub(super) span: Option<Span>,
+}
+
 pub(super) struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
     /// The enclosing local binders (function and `let`/`rec` binders, match-arm patterns, motive labels), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
@@ -447,7 +456,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         struct PendingLet<'t> {
             mark: usize,
             binders: Vec<Binder>,
-            binds: Vec<(curios_core::Free, curios_core::Term)>,
+            binds: Vec<Hoisted>,
             binder: &'t Pattern,
             type_: curios_core::Term,
             value: curios_core::Term,
@@ -516,7 +525,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn collect(
         &self,
         term: &Term,
-        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+        binds: &mut Vec<Hoisted>,
     ) -> Result<curios_core::Term, Error> {
         let lowered = self.collect_spine(term, binds)?;
         Ok(match term.span() {
@@ -528,7 +537,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     fn collect_spine(
         &self,
         term: &Term,
-        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+        binds: &mut Vec<Hoisted>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
@@ -536,7 +545,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let action = self.collect(action, binds)?;
                 let binder = self.context.fresh_binder(None);
                 let var = curios_core::Term::var(curios_core::Var::free(binder.clone()));
-                binds.push((binder, action));
+                binds.push(Hoisted {
+                    binder,
+                    action,
+                    span: term.span().cloned(),
+                });
                 var
             }
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
@@ -621,7 +634,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn build_let(
         &self,
         let_: &Let,
-        binds: &mut Vec<(curios_core::Free, curios_core::Term)>,
+        binds: &mut Vec<Hoisted>,
     ) -> Result<curios_core::Term, Error> {
         let (first, rest) = let_
             .bindings
@@ -815,23 +828,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Wraps `body` in one `/syn/Monad/bind` application per collected bang. The first-collected bang (`binds[0]`) becomes the outermost bind, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. Elaborating each application inserts fresh implicits and a fresh `use` witness slot per `!` site: the action's type pins the constructor (via the flex-apply imitation rule), which resolves the `Monad` witness — so a region can sequence actions of differing result types, and different regions can use different monads.
+    ///
+    /// Each application carries the span of the `!` that produced it (see [`Hoisted`]), so a region that cannot accept the sequencing reports against the written `!` rather than against nothing.
     pub(super) fn wrap(
         &self,
-        binds: Vec<(curios_core::Free, curios_core::Term)>,
+        binds: Vec<Hoisted>,
         body: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        binds
-            .into_iter()
-            .rev()
-            .try_fold(body, |acc, (binder, action)| {
-                let domain = curios_core::Term::metavar(self.context.fresh_metavar());
-                let cont = curios_core::Term::func([(binder, domain)], acc);
-                // The already-resolved core name: the `Monad` concept at `/syn`'s top level, method wrapper `bind`.
-                Ok(Self::syn_call(
-                    self.context.syntax().monad().bind(),
-                    [action, cont],
-                ))
+        binds.into_iter().rev().try_fold(body, |acc, hoisted| {
+            let Hoisted {
+                binder,
+                action,
+                span,
+            } = hoisted;
+            let domain = curios_core::Term::metavar(self.context.fresh_metavar());
+            let cont = curios_core::Term::func([(binder, domain)], acc);
+            // The already-resolved core name: the `Monad` concept at `/syn`'s top level, method wrapper `bind`.
+            let bind = Self::syn_call(self.context.syntax().monad().bind(), [action, cont]);
+            Ok(match span {
+                Some(span) => curios_core::Term::spanned(span, bind),
+                None => bind,
             })
+        })
     }
 
     /// Flush the pending elements onto `operands`.
