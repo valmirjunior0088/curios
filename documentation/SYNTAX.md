@@ -572,11 +572,13 @@ Each selected arm receives the same definitional refinement that an equivalent n
 
 ## Declarations and modules
 
-An entrypoint consists of zero or more top-level items followed by exactly one final term — the value the program computes. A module file consists of top-level items only and has no final term.
+An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. That term has type `Io({})`: a program describes doing something and yielding nothing, so a tail that computes a result must discard it explicitly rather than have the result dropped for it. A module file consists of top-level items only and has no final term.
 
 ### Top-level definitions
 
 Top-level `let` declarations require a type annotation. Function-definition sugar supplies the annotation as a parameter telescope and result type.
+
+That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. The difference is not only scope. An item's value body is its own sequencing region, so a `!` written in it sequences within that definition; a local `let`'s value shares the final term's region, so a `!` written there sequences with the rest of the program.
 
 ```crs
 pub let zero : Nat = 0;
