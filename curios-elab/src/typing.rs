@@ -3,9 +3,9 @@ mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
-    Apply, Field, Free, Func, FuncType, Global, Level, Many, MetaId, Metavar, Prim, PrimHead, Proj,
-    ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-    UniverseRole,
+    Apply, Bound, Field, Free, Func, FuncType, Global, Level, Many, MetaId, Metavar, Prim,
+    PrimHead, Proj, ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
+    UniverseConstraintOrigin, UniverseRole, Visit,
 };
 use std::{collections::BTreeSet, rc::Rc};
 
@@ -98,12 +98,60 @@ fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     super::denoise_for_display(&operators, &binders, &resolved)
 }
 
-/// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]).
-fn display_mismatch(context: &mut Context, this: &Term, that: &Term) -> Error {
-    Error::type_mismatch(
-        resolved_for_display(context, this),
-        resolved_for_display(context, that),
-    )
+/// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/syn/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
+///
+/// `bind` produces `M(B)`, so the generic report names a type the author never wrote, mentions neither the `!` nor the region that rejected it, and leaks the still-unsolved `B`. The specialized report names the monad the region would have to be and the type it actually has.
+fn display_mismatch(context: &mut Context, term: &Term, this: &Term, that: &Term) -> Error {
+    let this = resolved_for_display(context, this);
+    let that = resolved_for_display(context, that);
+
+    if is_sequencing(context, term) && wraps_a_result(&this) && !wraps_a_result(&that) {
+        return Error::stranded_sequencing(required_region_type(context, &this), that);
+    }
+
+    Error::type_mismatch(this, that)
+}
+
+/// Whether `term` is a `/syn/Monad/bind` application — what every `!` lowers to, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
+fn is_sequencing(context: &Context, term: &Term) -> bool {
+    let Subterm::Apply(Apply { head, .. }) = &**term else {
+        return false;
+    };
+
+    head.head_name() == Some(&Free::global(context.syntax().monad().bind().qualifier()))
+}
+
+/// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.
+///
+/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io Str` against `Io Nat` disagrees about the result, while `Io _` against `Nat` is a region that cannot sequence at all. `Io` is named among the primitives because it is the one monad whose former is a primitive node rather than an application or a parameterized nominal type.
+fn wraps_a_result(type_: &Term) -> bool {
+    match &**type_ {
+        Subterm::Apply(_) | Subterm::Prim(Prim::IoType(_)) => true,
+        Subterm::InductType(induct) => !induct.params.is_empty(),
+        Subterm::StructType(struct_) => !struct_.params.is_empty(),
+        _ => false,
+    }
+}
+
+/// What a stranded-sequencing report names as the region's required type: the sequenced `M(B)` with every metavariable it still carries blanked to one binder rendered `_`. The report wants `M(B)` for its `M` alone — `B` is what the continuation would have produced, and a region that cannot sequence never determines it.
+///
+/// `None` when `M` is itself one of those holes: nothing pinned the monad, so the whole spelling would be placeholders and the report says "a monad" instead.
+fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term> {
+    if let Subterm::Apply(Apply { head, .. }) = &**sequenced
+        && matches!(&**head, Subterm::Metavar(_))
+    {
+        return None;
+    }
+
+    let hole = Term::free_var(&context.fresh(Some("_")));
+    let mut visit = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term: &Term| {
+            matches!(&**term, Subterm::Metavar(_)).then(|| hole.clone())
+        }),
+    );
+
+    Some(sequenced.traverse(&mut visit))
 }
 
 pub(crate) fn expect(
@@ -147,11 +195,11 @@ pub(crate) fn expect(
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
-        Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
+        Outcome::Mismatch => Err(display_mismatch(context, term, inferred, expected)),
         // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless conversion is currently a yes/no oracle, in which case undecided must stay a mismatch.
         Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
-                return Err(display_mismatch(context, inferred, expected));
+                return Err(display_mismatch(context, term, inferred, expected));
             }
 
             for goal in goals {
@@ -272,8 +320,10 @@ impl Context {
                                     origin.binder,
                                 )
                                 .at_opt(parked.origin.span()),
-                                None => display_mismatch(self, &goal.this, &goal.that)
-                                    .at_opt(parked.origin.span()),
+                                None => {
+                                    display_mismatch(self, &parked.origin, &goal.this, &goal.that)
+                                        .at_opt(parked.origin.span())
+                                }
                             }
                         }
                         ParkedWork::Checking { expected, .. } => {
@@ -320,7 +370,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
 
     enum Retry {
         Converts,
-        Mismatch(Term, Term),
+        Mismatch(Error),
         Blocked(Vec<super::Goal>),
     }
 
@@ -330,11 +380,10 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         Ok(
             match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
                 Outcome::Converts => Retry::Converts,
-                // Report through whatever solutions have landed: the normalized sides name the actual disagreement, not the metavariables it arrived wrapped in — and, deep-normalized, no stuck operator witness machinery in an index (see `resolved_for_display`). Best-effort, like every other display path: a term that cannot be normalized (an effectful primitive reached at the type level, a reduction out of budget) is reported as it stands. Propagating that failure would replace the mismatch the user needs to see with an artifact of rendering it.
-                Outcome::Mismatch => Retry::Mismatch(
-                    resolved_for_display(context, &goal.this),
-                    resolved_for_display(context, &goal.that),
-                ),
+                // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
+                Outcome::Mismatch => {
+                    Retry::Mismatch(display_mismatch(context, &origin, &goal.this, &goal.that))
+                }
                 Outcome::Blocked(goals) => Retry::Blocked(goals),
             },
         )
@@ -349,7 +398,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     match outcome {
         Retry::Converts => Ok(()),
         // Locate the mismatch at the construct that parked it, as every sibling arm of the drain does. A parked goal outlives the frame it came from, so without this the only surviving clue is the module.
-        Retry::Mismatch(this, that) => Err(Error::type_mismatch(this, that).at_opt(origin.span())),
+        Retry::Mismatch(error) => Err(error.at_opt(origin.span())),
         Retry::Blocked(goals) => {
             for goal in goals {
                 context.repark(ParkedWork::Conversion(goal), origin.clone(), frame.clone());
@@ -401,7 +450,8 @@ fn retry_checking(
                 match outcome {
                     Outcome::Converts => Ok(()),
                     Outcome::Mismatch => {
-                        Err(display_mismatch(context, &rebuilt, &existing).at_opt(origin.span()))
+                        Err(display_mismatch(context, &origin, &rebuilt, &existing)
+                            .at_opt(origin.span()))
                     }
                     Outcome::Blocked(goals) => {
                         for goal in goals {

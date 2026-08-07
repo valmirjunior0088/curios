@@ -65,6 +65,13 @@ pub enum Error {
         inferred: Box<Term>,
         expected: Box<Term>,
     },
+    /// The `/syn/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
+    ///
+    /// `sequenced` is that `M(B)` with its unsolved holes blanked, so the message names the monad the region would have to be without naming the result a region that cannot sequence never reaches. It is `None` when `M` is itself one of those holes: nothing pinned the monad, and a spelling made only of placeholders would name nothing.
+    StrandedSequencing {
+        sequenced: Option<Box<Term>>,
+        region: Box<Term>,
+    },
     NotAFunction {
         head_type: Box<Term>,
     },
@@ -421,6 +428,13 @@ impl Error {
         Self::TypeMismatch {
             inferred: Box::new(inferred.into()),
             expected: Box::new(expected.into()),
+        }
+    }
+
+    pub(crate) fn stranded_sequencing<V: Into<Term>>(sequenced: Option<Term>, region: V) -> Self {
+        Self::StrandedSequencing {
+            sequenced: sequenced.map(Box::new),
+            region: Box::new(region.into()),
         }
     }
 
@@ -957,6 +971,10 @@ impl Error {
                 out.push(inferred);
                 out.push(expected);
             }
+            Self::StrandedSequencing { sequenced, region } => {
+                out.extend(sequenced.as_deref());
+                out.push(region);
+            }
             Self::NotAFunction { head_type }
             | Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
@@ -1048,6 +1066,17 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "type mismatch\n  inferred: {inferred}\n  expected: {expected}"
+                )
+            }
+            // "this sequencing", not "this '!'": a hand-written '/syn/Monad/bind' call reaches the same report, and nothing on the term records which spelling produced it.
+            Error::StrandedSequencing { sequenced, region } => {
+                let needed = match sequenced {
+                    Some(sequenced) => sequenced.to_string(),
+                    None => "a monad".to_string(),
+                };
+                write!(
+                    f,
+                    "this sequencing needs a region whose type is {needed}\n  the region here has type {region}\n  '!' sequences within the nearest enclosing value body; a 'let' with a type annotation is a declaration, and its body is its own region"
                 )
             }
             Error::UniverseInconsistency { lower, upper, path } => {
