@@ -51,6 +51,8 @@ pub(crate) fn check_definition(
 ///
 /// Each member is assumed under a *fresh binder identity* rather than opened over the group's own folded spelling. A member occurrence inside a body is then an ordinary local, gated by the scope stack like every other binder — which is what stops a body from naming a group nothing ever checked, and what stops checking a body from re-entering the check it is already inside. `within` runs within that scope, because a `rec` tail sees the members too; the names retract on every path out, so what the caller returns must not mention them.
 ///
+/// Member *signatures* are checked at that opaque spelling too, and bodies at the folded one. See the note in the body for what each phase needs and what goes wrong when either takes the other's.
+///
 /// Totality is not decided for the group as a whole. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see "Totality of the erased program" in `documentation/DESIGN.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
 pub(crate) fn check_group<R>(
     kernel: &mut Kernel,
@@ -58,25 +60,35 @@ pub(crate) fn check_group<R>(
     within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, KernelError>,
 ) -> Result<R, KernelError> {
     kernel.scoped(|kernel| {
-        let mut names = Vec::with_capacity(group.length());
-        let mut erased_member: Option<Term> = None;
-
-        // Every member is assumed before any body is checked, because a member may call any other.
-        for index in 0..group.length() {
-            let type_ = group.member_type(index);
-            let sort = infer_type(kernel, &type_)?;
-
-            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(kernel, &type_)) {
-                erased_member = Some(type_.clone());
-            }
-
-            let name = kernel.fresh(Some("rec"));
-            kernel.assume(&name, &type_);
-            names.push(name);
-        }
+        // Signatures first, then bodies — and the two phases must read a sibling differently.
+        //
+        // A member's *type* may name the group: in `rec T(n : Nat) -> Type … and val : T(2)`, a sibling computes `val`'s type. [`RecGroup::member_type`] hands that type back opened over the group's own folded spelling, so inferring its sort unfolds `T`, walks back into the group, and re-enters this very check without bound — aborting the process rather than refusing a term. Opened over the assumptions minted here instead, `T` is opaque and `T(2)` is a stuck neutral whose type is `Type`, which is all a sort check needs.
+        //
+        // The body check needs the opposite spelling. `val = 3` type-checks only because `T(2)` *reduces* to `Nat`, which takes the folded group; holding `T` opaque there refuses a correct program. Only the signature phase changes, so an assumption still carries the type every other judgment reads.
+        //
+        // This is the discipline Agda checks a mutual block under, and the one `curios-elab`'s `elaborate_rec` already follows. Coq forbids the question outright — its `Fix` rule checks each `A_i` in a context without the fixpoint names — which is a language restriction rather than a rule this kernel could adopt while `rec` admits an inductive-recursive group.
+        let names = (0..group.length())
+            .map(|_| kernel.fresh(Some("rec")))
+            .collect::<Vec<_>>();
 
         let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = members.iter().collect::<Vec<_>>();
+
+        // Assumed before any signature is checked, because one member's type may name any other. A type not yet known to be a type is assumed only for the span of this scope: an ill-sorted one refuses the group below, and `scoped` retracts every assumption on the way out.
+        for (index, name) in names.iter().enumerate() {
+            kernel.assume(name, &group.member_type(index));
+        }
+
+        let mut erased_member: Option<Term> = None;
+        for (index, member) in group.iter().enumerate() {
+            let sort = infer_type(kernel, &member.type_.open(&refs))?;
+
+            // Erasure asks about the member as the rest of the kernel spells it, and `yields_a_sort` decides by reduction rather than inference — so it never re-enters, and reads the folded type.
+            let folded = group.member_type(index);
+            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(kernel, &folded)) {
+                erased_member = Some(folded);
+            }
+        }
 
         for (index, member) in group.iter().enumerate() {
             check(kernel, &member.body.open(&refs), &group.member_type(index))?;
