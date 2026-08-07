@@ -11,7 +11,6 @@ use {
         reduce_prim,
     },
     num_traits::ToPrimitive,
-    std::collections::HashMap,
 };
 
 /// The elaborator's reduction strategy, supplied to `curios-core`'s primitive folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.

@@ -28,8 +28,6 @@ pub(super) struct Globals {
     definitions: HashMap<Free, Definition>,
     inducts: HashMap<Global, InductDecl>,
     structs: HashMap<Global, StructDecl>,
-    /// Whether a definition's body fails to fix a value — `fixes_no_value`'s memo, kept here because it is a derived fact about *these* definitions and so is invalidated by exactly the event that invalidates a remembered reduct.
-    effects: HashMap<Free, bool>,
 }
 
 impl Globals {
@@ -94,16 +92,6 @@ impl Globals {
             .get(name)
             .filter(|definition| definition.universes.parameter_count == 0)
             .and_then(|definition| definition.value.as_ref())
-    }
-
-    /// Where `fixes_no_value` remembers what a definition's body reaches and calls. Cleared by the same overwrite that invalidates a reduct, since a replaced body is a different closure.
-    pub(super) fn effects_mut(&mut self) -> &mut HashMap<Free, bool> {
-        &mut self.effects
-    }
-
-    /// Forget every remembered purity answer, for an overwrite that may have changed any of them.
-    pub(super) fn forget_effects(&mut self) {
-        self.effects.clear();
     }
 
     /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.

@@ -24,7 +24,7 @@ use {
     },
     std::{
         cell::Cell,
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet},
         mem,
         ops::{Deref, DerefMut},
         rc::Rc,

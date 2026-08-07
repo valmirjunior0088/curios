@@ -20,7 +20,6 @@
 
 use {
     curios_core::{Bound, Free, Global, InductDecl, StructDecl, Subterm, Term},
-    std::collections::HashMap,
 };
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.

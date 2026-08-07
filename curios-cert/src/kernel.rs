@@ -51,7 +51,7 @@ use {
         Atom, Free, Global, InductDecl, Level, LevelHead, Polarity, ReduceError, Reducer,
         StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
     },
-    std::{collections::HashMap, fmt},
+    std::fmt,
 };
 
 /// Why the kernel refused a term.
@@ -430,7 +430,6 @@ impl Kernel {
     ) {
         if self.globals.insert(name, type_, value, universes) {
             self.memos.invalidate();
-            self.globals.forget_effects();
         }
     }
 

@@ -36,8 +36,6 @@ pub(crate) struct ElaborationStamp {
 pub(crate) struct Caches {
     reduction: HashMap<Term, Term>,
     elaboration: HashMap<ElaborationKey, (Term, Term)>,
-    /// Whether a definition's body fails to fix a value — `curios_cert::fixes_no_value`'s memo. Unstamped: it reads definition *bodies* only, which is the one ambient fact a pure run may read, and it is refreshed by exactly the two events that can change a body out from under it.
-    effects: HashMap<Free, bool>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
     /// Monotonic universe-solver writes are tracked separately. Cache entries may survive them only when their keys and results contain no transitively unresolved universe meta; rollback/finalization clears the cache at the non-monotonic boundaries.
@@ -129,12 +127,6 @@ impl Caches {
         self.note_write();
         self.reduction.clear();
         self.elaboration.clear();
-        self.effects.clear();
-    }
-
-    /// Where `curios_cert::fixes_no_value` remembers what a definition's body reaches and calls.
-    pub(crate) fn effects_mut(&mut self) -> &mut HashMap<Free, bool> {
-        &mut self.effects
     }
 
     /// A name was *freshly* defined. A fresh definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF — so the reduction cache retains every entry whose result does not mention it instead of clearing. The elaboration cache survives untouched: its insert gate already refused every entry naming a not-yet-defined global. No stamp — definition is the one ambient fact a pure run may read, and the settled-globals gate covers it.
@@ -160,11 +152,6 @@ impl Caches {
             self.elaboration.clear();
         } else if dropped_definitions {
             self.reduction.clear();
-        }
-
-        // A frame that dropped definitions leaves entries about bodies no longer in scope. They are unreachable rather than wrong — a `Free` is minted once and never reused — but the purity memo is cleared with the reducts on the same event, so that "what a definition reaches" is never remembered longer than the definition is.
-        if dropped_definitions {
-            self.effects.clear();
         }
     }
 
