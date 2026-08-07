@@ -1,20 +1,19 @@
-use /std/{Str, Nat, Bytes, Handle, Result, Option, Lst, Async};
+use /std/{Str, Nat, Bytes, Handle, Result, Option, Lst, Async, Io};
+
+-- Split out so its sequencing is a body of its own. A `!` in an argument position hoists into the
+-- *enclosing* region, which would perform the wait before `using` had acquired the handle; a call
+-- hands `using` an inert description instead.
+let resolved_address(h: Handle) -> Async(Result(Bytes, Handle/Error)) =
+    let _ = Async/wait(h, /sys/Poll/read)!;
+    let a = Async/lift(/sys/resolve(h))!;
+    match a.status == /sys/Status/ok
+    | true => Async/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x[])))
+    | false => Async/pure(Result/failure(Handle/error_of(a.status)))
+    end;
 
 pub let resolve(host: Str, port: Nat) -> Async(Result(Bytes, Handle/Error)) =
-    let r = /sys/lookup(Str/to_bytes(host), port);
+    let r = Async/lift(/sys/lookup(Str/to_bytes(host), port))!;
     match r.status == /sys/Status/ok
-    | true =>
-        Async/using(
-            r.handle,
-            () => /sys/close(r.handle),
-            Async/bind(
-                Async/wait(r.handle, /sys/Poll/read),
-                (_) =>
-                    let a = /sys/resolve(r.handle);
-                    match a.status == /sys/Status/ok
-                    | true =>
-                        Async/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x[])))
-                    | false => Async/pure(Result/failure(Handle/error_of(a.status)))
-                    end))
+    | true => Async/using(r.handle, /sys/close(r.handle), resolved_address(r.handle))
     | false => Async/pure(Result/failure(Handle/error_of(r.status)))
     end;

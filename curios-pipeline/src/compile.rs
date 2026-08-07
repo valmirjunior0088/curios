@@ -5,7 +5,7 @@ use {
     curios_abi::ForeignStore,
     curios_cert::recheck_module_suffix,
     curios_cont::{into_wasm, optimize},
-    curios_core::Term,
+    curios_core::{Prim, Subterm, Term},
     curios_elab::{
         Context, Mode, elaborate_and_zonk_with_prelude, elaborate_and_zonk_with_prelude_reporting,
         erase_module_with_prelude,
@@ -135,8 +135,28 @@ where
     .map_err(|error| CompileError::of(&error, error.format_with(&lowered)))?;
 
     observe(Stage::CoreElab(&module));
+    entrypoint_is_io(&core_type)?;
 
     Ok((module, core_type, user_foreigns))
+}
+
+/// The entrypoint contract: a program's tail is a *description*, never a value.
+///
+/// Untracked effects are hard-deprecated, so this is unconditional. The tail's own type decides it — every host operation returns an `Io`, and the emitted boundary is the one place that forces one, so a tail of any other type is a program whose effects, if it has any, nothing would ever run. The inner type is unconstrained and discarded: `func/main`'s result is ignored by the runtime and the browser harness alike.
+///
+/// Checked here rather than by elaborating the tail against `Io(?T)`, because minting that metavariable needs the elaboration context, which is created inside `elaborate_and_zonk_with_prelude` after the metavariable floor is seeded. The type arrives reduced and zonked, so this is a head test rather than a judgment.
+fn entrypoint_is_io(core_type: &Term) -> Result<(), CompileError> {
+    let mut head = core_type;
+    // Universe instances are computationally irrelevant and never change a head.
+    while let Subterm::UniverseInst(instance) = &**head {
+        head = &instance.head;
+    }
+    match &**head {
+        Subterm::Prim(Prim::IoType(_)) => Ok(()),
+        _ => Err(CompileError::Failure(format!(
+            "a program's tail must be a description of what to do, of type `Io(T)`\n  this one has type `{core_type}`\n  an effect at any other type is one nothing would ever perform",
+        ))),
+    }
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.

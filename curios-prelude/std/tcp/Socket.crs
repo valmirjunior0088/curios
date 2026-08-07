@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bool, Handle, Result, Option, Async};
+use /std/{Bytes, Str, Nat, Bool, Handle, Result, Option, Async, Io};
 use /std/tcp/{Settings, resolve};
 use /std/time/{Duration};
 
@@ -16,51 +16,57 @@ pub let read(c: Socket, n: Nat) -> Async(Handle/Read) =
 pub let write(c: Socket, b: Bytes) -> Async(Result({}, Handle/Error)) =
     Async/write(c.0, b);
 
-let configure(h: Handle, settings: Settings) -> {} =
+let configure(h: Handle, settings: Settings) -> Io({}) =
     let _ =
         /sys/set_recv_timeout(
             h,
-            Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0));
+            Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0))!;
     let _ =
         /sys/set_send_timeout(
             h,
-            Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0));
-    ();
+            Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0))!;
+    Io/pure(());
 
-let upgrade(h: Handle, host: Str, tls: Bool) -> Nat =
-    match tls | true => /sys/start_tls(h, Str/to_bytes(host)) | false => /sys/Status/ok end;
+let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
+    match tls
+    | true => /sys/start_tls(h, Str/to_bytes(host))
+    | false => Io/pure(/sys/Status/ok)
+    end;
 
-let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Result(Socket, Handle/Error) =
-    let s = /sys/socket(addr);
+-- Every step here is a syscall and none of them suspends, so this is an `Io` chain the caller lifts
+-- into a single `Async` step rather than a fiber that could yield partway through connecting.
+let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket, Handle/Error)) =
+    let s = /sys/socket(addr)!;
     match s.status == /sys/Status/ok
     | true =>
-        let _ = configure(s.handle, settings);
-        let status = /sys/connect(s.handle, addr);
+        let _ = configure(s.handle, settings)!;
+        let status = /sys/connect(s.handle, addr)!;
         match status == /sys/Status/ok
         | true =>
-            let upgraded = upgrade(s.handle, host, settings.tls);
+            let upgraded = upgrade(s.handle, host, settings.tls)!;
             match upgraded == /sys/Status/ok
             | true =>
                 -- A TLS stream is driven by rustls, not polled at the socket layer, so it is left blocking on purpose.
                 match settings.tls
-                | true => Result/success(Socket { s.handle })
+                | true => Io/pure(Result/success(Socket { s.handle }))
                 | false =>
-                    match Async/nonblocking(s.handle)
+                    let nb = Async/nonblocking(s.handle)!;
+                    match nb
                     | failure(e) =>
-                        let _ = /sys/close(s.handle);
-                        Result/failure(e)
-                    | success(_) => Result/success(Socket { s.handle })
+                        let _ = /sys/close(s.handle)!;
+                        Io/pure(Result/failure(e))
+                    | success(_) => Io/pure(Result/success(Socket { s.handle }))
                     end
                 end
             | false =>
-                let _ = /sys/close(s.handle);
-                Result/failure(Handle/error_of(upgraded))
+                let _ = /sys/close(s.handle)!;
+                Io/pure(Result/failure(Handle/error_of(upgraded)))
             end
         | false =>
-            let _ = /sys/close(s.handle);
-            Result/failure(Handle/error_of(status))
+            let _ = /sys/close(s.handle)!;
+            Io/pure(Result/failure(Handle/error_of(status)))
         end
-    | false => Result/failure(Handle/error_of(s.status))
+    | false => Io/pure(Result/failure(Handle/error_of(s.status)))
     end;
 
 let connect_socket(
@@ -68,27 +74,20 @@ let connect_socket(
     host: Str,
     port: Nat,
 ) -> Async(Result(Socket, Handle/Error)) =
-    Async/bind(
-        resolve(host, port),
-        (resolved) =>
-            match resolved
-            | failure(e) => Async/pure(Result/failure(e))
-            | success(addr) => Async/pure(connect_addr(settings, host, addr))
-            end);
+    let resolved = resolve(host, port)!;
+    match resolved
+    | failure(e) => Async/pure(Result/failure(e))
+    | success(addr) => Async/lift(connect_addr(settings, host, addr))
+    end;
 
 pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Socket, Handle/Error)) =
-    Async/defer(
-        () =>
-            Async/bind(
-                connect_socket(settings, host, port),
-                (opened) =>
-                    match opened
-                    | failure(e) => Async/pure(Result/failure(e))
-                    | success(c) =>
-                        Async/bind(
-                            Async/acquire(c.0, () => /sys/close(c.0)),
-                            (_) => Async/pure(Result/success(c)))
-                    end));
+    let opened = connect_socket(settings, host, port)!;
+    match opened
+    | failure(e) => Async/pure(Result/failure(e))
+    | success(c) =>
+        let _ = Async/acquire(c.0, /sys/close(c.0))!;
+        Async/pure(Result/success(c))
+    end;
 
 pub let close(c: Socket) -> Async({}) =
     Async/release(c.0);
@@ -100,14 +99,14 @@ pub let with(
     port: Nat,
     f: (Socket) -> Async(A),
 ) -> Async(Result(A, Handle/Error)) =
-    Async/bind(
-        connect(settings, host, port),
-        (opened) =>
-            match opened
-            | failure(e) => Async/pure(Result/failure(e))
-            | success(c) =>
-                Async/bind(f(c), (a) => Async/bind(close(c), (_) => Async/pure(Result/success(a))))
-            end);
+    let opened = connect(settings, host, port)!;
+    match opened
+    | failure(e) => Async/pure(Result/failure(e))
+    | success(c) =>
+        let a = f(c)!;
+        let _ = close(c)!;
+        Async/pure(Result/success(a))
+    end;
 
 let drain(c: Socket) -> Async(Result(Bytes, Handle/Error)) =
     Async/drain((n) => read(c, n));
@@ -125,11 +124,9 @@ pub let call(
             host,
             port,
             (c) =>
-                Async/bind(
-                    write(c, request),
-                    (w) =>
-                        match w
-                        | success(_) => drain(c)
-                        | failure(e) => Async/pure(Result/failure(e))
-                        end)),
+                let w = write(c, request)!;
+                match w
+                | success(_) => drain(c)
+                | failure(e) => Async/pure(Result/failure(e))
+                end),
         (r) => Result/flatten(r));

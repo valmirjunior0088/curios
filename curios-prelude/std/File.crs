@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, Handle, Result, Async};
+use /std/{Bytes, Nat, Str, Handle, Result, Async, Io};
 
 pub struct File: Type {
     Handle,
@@ -24,22 +24,20 @@ pub let write(f: File, b: Bytes) -> Async(Result({}, Handle/Error)) =
     Async/write(f.0, b);
 
 pub let open(path: Str, mode: Mode) -> Async(Result(File, Handle/Error)) =
-    Async/defer(
-        () =>
-            let r = /sys/open(Str/to_bytes(path), of_mode(mode));
-            match r.status == /sys/Status/ok
-            | true =>
-                match Async/nonblocking(r.handle)
-                | failure(e) =>
-                    let _ = /sys/close(r.handle);
-                    Async/pure(Result/failure(e))
-                | success(_) =>
-                    Async/bind(
-                        Async/acquire(r.handle, () => /sys/close(r.handle)),
-                        (_) => Async/pure(Result/success(File { r.handle })))
-                end
-            | false => Async/pure(Result/failure(Handle/error_of(r.status)))
-            end);
+    let r = Async/lift(/sys/open(Str/to_bytes(path), of_mode(mode)))!;
+    match r.status == /sys/Status/ok
+    | true =>
+        let nb = Async/lift(Async/nonblocking(r.handle))!;
+        match nb
+        | failure(e) =>
+            let _ = Async/lift(/sys/close(r.handle))!;
+            Async/pure(Result/failure(e))
+        | success(_) =>
+            let _ = Async/acquire(r.handle, /sys/close(r.handle))!;
+            Async/pure(Result/success(File { r.handle }))
+        end
+    | false => Async/pure(Result/failure(Handle/error_of(r.status)))
+    end;
 
 pub let close(f: File) -> Async({}) =
     Async/release(f.0);
@@ -50,16 +48,14 @@ pub let with(
     mode: Mode,
     body: (File) -> Async(A),
 ) -> Async(Result(A, Handle/Error)) =
-    Async/bind(
-        open(path, mode),
-        (opened) =>
-            match opened
-            | success(f) =>
-                Async/bind(
-                    body(f),
-                    (a) => Async/bind(close(f), (_) => Async/pure(Result/success(a))))
-            | failure(e) => Async/pure(Result/failure(e))
-            end);
+    let opened = open(path, mode)!;
+    match opened
+    | success(f) =>
+        let a = body(f)!;
+        let _ = close(f)!;
+        Async/pure(Result/success(a))
+    | failure(e) => Async/pure(Result/failure(e))
+    end;
 
 let drain(f: File) -> Async(Result(Bytes, Handle/Error)) =
     Async/drain((n) => read(f, n));

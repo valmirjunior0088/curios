@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes};
+use /std/{Nat, Bytes, Io};
 
-pub let bin(n: Nat) -> Bytes =
+pub let bin(n: Nat) -> Io(Bytes) =
     /sys/random(n);

@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Show};
+use /std/{Bytes, Byte, Str, Nat, Show, Io};
 
 pub induct Fmt: pub Type
 | nil()
@@ -77,8 +77,8 @@ rec go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T
 pub let render(s: Str) -> format_type_with(Str, parse(s)) =
     go_with(Str, (x) => x, parse(s), "");
 
-pub let print(s: Str) -> format_type_with({}, parse(s)) =
-    go_with({}, (x) => /std/print(x), parse(s), "");
+pub let print(s: Str) -> format_type_with(Io({}), parse(s)) =
+    go_with(Io({}), (x) => /std/print(x), parse(s), "");
 
-pub let print_err(s: Str) -> format_type_with({}, parse(s)) =
-    go_with({}, (x) => /std/print_err(x), parse(s), "");
+pub let print_err(s: Str) -> format_type_with(Io({}), parse(s)) =
+    go_with(Io({}), (x) => /std/print_err(x), parse(s), "");

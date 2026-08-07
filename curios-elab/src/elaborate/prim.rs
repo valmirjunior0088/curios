@@ -338,10 +338,10 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::HandleType => (prim.clone(), Term::type_ground()),
         Prim::Handle(_) => (prim.clone(), handle_type),
-        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather than the caller's choice — see `Prim::Exit` in `curios-core` for why fixing it at an inhabited type is what makes the primitive sound.
+        // `(n : Nat) -> Io({})`: exit ends the process. The result inside the wrapper is unit rather than the caller's choice — see `Prim::Exit` in `curios-core` for why fixing it at an inhabited type is what makes the primitive sound.
         Prim::Exit(code) => {
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
-            (Prim::Exit(code), Term::tuple_type_unit())
+            (Prim::Exit(code), io_type(Term::tuple_type_unit()))
         }
         // A store-described host call: each operand checks against its wire type, and the result shape (unit, bare value, named record) is read off the signature. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
         Prim::Foreign(function, args) => {
@@ -372,7 +372,10 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 ),
             };
 
-            (Prim::Foreign(Arc::clone(function), elaborated), result)
+            (
+                Prim::Foreign(Arc::clone(function), elaborated),
+                io_type(result),
+            )
         }
         // The same rule as `LstType` above, and for the same reason: a cell has an identity.
         Prim::CellType(elem) => {
@@ -381,24 +384,28 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let sort = crate::sort_term(context, &former)?;
             (Prim::CellType(elem), sort)
         }
+        // Allocating, reading, and writing a cell are all host effects, so all three describe rather than do. `CellGet` is the one the whole discipline was named for: `match Cell/get(c)` is now ill-typed, because a description has no cases.
         Prim::Cell(type_, init) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
             let init = elaborate(context, init, Mode::Check(type_.clone()))?.0;
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
-            (Prim::Cell(type_, init), cell_type)
+            (Prim::Cell(type_, init), io_type(cell_type))
         }
         Prim::CellSet(type_, cell, value) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
             let value = elaborate(context, value, Mode::Check(type_.clone()))?.0;
-            (Prim::CellSet(type_, cell, value), Term::tuple_type_unit())
+            (
+                Prim::CellSet(type_, cell, value),
+                io_type(Term::tuple_type_unit()),
+            )
         }
         Prim::CellGet(type_, cell) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
-            let output = type_.clone();
+            let output = io_type(type_.clone());
             (Prim::CellGet(type_, cell), output)
         }
         // The same rule as `LstType` and `CellType` above, and for a third reason: a description has an effect, so it is not proof-irrelevant however propositional its result.

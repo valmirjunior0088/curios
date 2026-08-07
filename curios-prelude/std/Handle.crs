@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Result, Lst};
+use /std/{Bytes, Nat, Result, Lst, Io};
 
 pub induct Error: pub Type
 | not_found()
@@ -33,18 +33,19 @@ pub induct Read: pub Type
 | error(Error)
 end
 
-pub let read(h: Handle, n: Nat) -> Read =
-    let r = /sys/read(h, n);
-    choose
-    | r.status == /sys/Status/ok => Read/chunk(r.bytes)
-    | r.status == /sys/Status/eof => Read/eof()
-    | _ => Read/error(error_of(r.status))
-    end;
+pub let read(h: Handle, n: Nat) -> Io(Read) =
+    let r = /sys/read(h, n)!;
+    Io/pure(
+        choose
+        | r.status == /sys/Status/ok => Read/chunk(r.bytes)
+        | r.status == /sys/Status/eof => Read/eof()
+        | _ => Read/error(error_of(r.status))
+        end);
 
-pub rec write(h: Handle, b: Bytes) -> Result({}, Error) =
-    let r = /sys/write(h, b);
+pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
+    let r = /sys/write(h, b)!;
     choose
-    | r.status != /sys/Status/ok => Result/failure(error_of(r.status))
+    | r.status != /sys/Status/ok => Io/pure(Result/failure(error_of(r.status)))
     | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))
-    | _ => Result/success(())
+    | _ => Io/pure(Result/success(()))
     end;

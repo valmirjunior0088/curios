@@ -1,4 +1,4 @@
-use /std/{Nat, Bool};
+use /std/{Nat, Bool, Io};
 
 pub struct Duration: Type {
     secs: Nat,
@@ -18,9 +18,9 @@ pub let of_millis(ms: Nat) -> Duration =
     Duration { secs = ms / 1000, nanos = ms % 1000 * 1000000 };
 
 -- The monotonic clock, read as elapsed time since an arbitrary epoch. Distinct from `Instant/now`, which reads the wall clock.
-pub let now() -> Duration =
-    let r = /sys/clock_mono();
-    of(r.secs, r.nanos);
+pub let now() -> Io(Duration) =
+    let r = /sys/clock_mono!;
+    Io/pure(of(r.secs, r.nanos));
 
 pub let secs(d: Duration) -> Nat =
     d.secs;

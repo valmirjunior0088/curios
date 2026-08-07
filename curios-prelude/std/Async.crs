@@ -1,4 +1,4 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad};
+use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad, Io};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -12,154 +12,186 @@ struct Token: Type {
     Cell(Bool),
 }
 
-let cancel_token(t: Token) -> {} =
+let cancel_token(t: Token) -> Io({}) =
     Cell/set(t.0, true);
 
-let is_cancelled(t: Token) -> Bool =
+let is_cancelled(t: Token) -> Io(Bool) =
     Cell/get(t.0);
 
 struct Guard: Type {
     handle: Handle,
-    release: () -> {},
+    release: Io({}),
 }
 
+-- `Step` is the suspension, and it recurses through `Io` because computing what comes next is itself a host effect — reading a socket to decide whether to yield. That is the whole of what `Pause/defer` used to spell with a `() -> Async(A)` thunk: delay, hand-rolled, with no type behind it.
+--
+-- A struct cannot join an `induct … and …` group, so `fork` names the raw continuation rather than `Fiber`. `Pause` is private, so nothing about that reaches a consumer.
 induct Pause: Type
 | wait(handle: Handle, interest: Nat)
 | sleep(Duration)
-| fork(child: () -> Async({}), token: Token)
-| park((Waker) -> {})
-| acquire(handle: Handle, release: () -> {})
+| fork(child: Io(Step({})), token: Token)
+| park((Waker) -> Io({}))
+| acquire(handle: Handle, release: Io({}))
 | release(Handle)
-| defer()
 | yield_now()
-pub and Async(A: Type): Type
+and Step(A: Type): Type
 | done(A)
-| step(pause: Pause, next: () -> Async(A))
+| step(pause: Pause, next: Io(Step(A)))
 end
 
+-- Nominal, not a transparent alias for `Io(Step(A))`: a witness is keyed by the rigid head of its concept's parameters, and an alias would reduce to `Io`'s head and collide with `Monad(Io)`. The newtype is what lets `Async` own its own key, and so its own `!`.
+--
+-- Its representation stays private, which keeps `Step` out of the public interface entirely.
+pub struct Async(A: Type): Type {
+    Io(Step(A)),
+}
+
 pub let Fiber: Type =
-    () -> Async({});
+    Async({});
 
 pub let pure(@A: Type, a: A) -> Async(A) =
-    Async/done(a);
+    Async { Io/pure(Step/done(a)) };
 
-pub rec bind(@A: Type, @B: Type, m: Async(A), f: (A) -> Async(B)) -> Async(B) =
-    match m | done(a) => f(a) | step(p, k) => Async/step(p, () => bind(k(), f)) end;
+rec bind_raw(
+    @A: Type,
+    @B: Type,
+    m: Io(Step(A)),
+    f: (A) -> Io(Step(B)),
+) -> Io(Step(B)) =
+    let s = m!;
+    match s
+    | done(a) => f(a)
+    | step(p, k) => Io/pure(Step/step(p, bind_raw(k, f)))
+    end;
+
+pub let bind(@A: Type, @B: Type, m: Async(A), f: (A) -> Async(B)) -> Async(B) =
+    Async { bind_raw(m.0, (a) => f(a).0) };
 
 pub let map(@A: Type, @B: Type, m: Async(A), f: (A) -> B) -> Async(B) =
     bind(m, (a) => pure(f(a)));
 
-let fork_with(child: Fiber, t: Token) -> Async({}) =
-    Async/step(Pause/fork(child, t), () => pure(()));
+-- The seam between the two monads: an `Io` action as one non-suspending step. Every host operation a fiber performs arrives through here.
+--
+-- Built with an explicit `Io/bind` rather than `!`: a struct literal's field is not its own region, so a `!` here would hoist into this body — which is `Async`-typed — and ask for `Monad(Io)` where `Monad(Async)` is wanted.
+pub let lift(@A: Type, action: Io(A)) -> Async(A) =
+    Async { Io/bind(action, (a) => Io/pure(Step/done(a))) };
 
-pub let defer(@A: Type, body: () -> Async(A)) -> Async(A) =
-    Async/step(Pause/defer(), body);
+let suspend(p: Pause) -> Async({}) =
+    Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
 pub let wait(h: Handle, ev: Nat) -> Async({}) =
-    Async/step(Pause/wait(h, ev), () => pure(()));
+    suspend(Pause/wait(h, ev));
 
 pub let sleep(d: Duration) -> Async({}) =
-    Async/step(Pause/sleep(d), () => pure(()));
+    suspend(Pause/sleep(d));
 
-pub let park(register: (Waker) -> {}) -> Async({}) =
-    Async/step(Pause/park(register), () => pure(()));
+pub let park(register: (Waker) -> Io({})) -> Async({}) =
+    suspend(Pause/park(register));
 
 pub let yield_now: Async({}) =
-    Async/step(Pause/yield_now(), () => pure(()));
+    suspend(Pause/yield_now());
 
-pub let acquire(h: Handle, fin: () -> {}) -> Async({}) =
-    Async/step(Pause/acquire(h, fin), () => pure(()));
+pub let acquire(h: Handle, fin: Io({})) -> Async({}) =
+    suspend(Pause/acquire(h, fin));
 
 pub let release(h: Handle) -> Async({}) =
-    Async/step(Pause/release(h), () => pure(()));
+    suspend(Pause/release(h));
 
-pub let using(@A: Type, h: Handle, fin: () -> {}, body: Async(A)) -> Async(A) =
-    bind(acquire(h, fin), (_) => bind(body, (a) => bind(release(h), (_) => pure(a))));
+let fork_with(child: Fiber, t: Token) -> Async({}) =
+    suspend(Pause/fork(child.0, t));
+
+pub let using(@A: Type, h: Handle, fin: Io({}), body: Async(A)) -> Async(A) =
+    let _ = acquire(h, fin)!;
+    let a = body!;
+    let _ = release(h)!;
+    pure(a);
 
 pub let go(body: Fiber) -> Async({}) =
-    defer(() => fork_with(body, Token { Cell/new(false) }));
+    let c = lift(Cell/new(false))!;
+    fork_with(body, Token { c });
 
 -- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and the next read stalls the whole single-threaded scheduler, so the status is reported rather than dropped.
-pub let nonblocking(h: Handle) -> Result({}, Handle/Error) =
-    let status = /sys/set_nonblocking(h, true);
-    match status == /sys/Status/ok
-    | true => Result/success(())
-    | false => Result/failure(Handle/error_of(status))
-    end;
+pub let nonblocking(h: Handle) -> Io(Result({}, Handle/Error)) =
+    let status = /sys/set_nonblocking(h, true)!;
+    Io/pure(
+        match status == /sys/Status/ok
+        | true => Result/success(())
+        | false => Result/failure(Handle/error_of(status))
+        end);
 
 pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
-    match nonblocking(h)
+    let nb = lift(nonblocking(h))!;
+    match nb
     | failure(e) => pure(Handle/Read/error(e))
     | success(_) =>
         rec go() -> Async(Handle/Read) =
-            defer(
-                () =>
-                    let r = /sys/read(h, n);
-                    choose
-                    | r.status == /sys/Status/would_block =>
-                        bind(wait(h, /sys/Poll/read), (_) => go())
-                    | r.status == /sys/Status/eof => pure(Handle/Read/eof())
-                    | r.status == /sys/Status/ok => pure(Handle/Read/chunk(r.bytes))
-                    | _ => pure(Handle/Read/error(Handle/error_of(r.status)))
-                    end);
+            let r = lift(/sys/read(h, n))!;
+            choose
+            | r.status == /sys/Status/would_block =>
+                let _ = wait(h, /sys/Poll/read)!;
+                go()
+            | r.status == /sys/Status/eof => pure(Handle/Read/eof())
+            | r.status == /sys/Status/ok => pure(Handle/Read/chunk(r.bytes))
+            | _ => pure(Handle/Read/error(Handle/error_of(r.status)))
+            end;
         go()
     end;
 
 pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
-    match nonblocking(h)
+    let nb = lift(nonblocking(h))!;
+    match nb
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
         rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
-            defer(
-                () =>
-                    let r = /sys/write(h, rest);
-                    choose
-                    | r.status == /sys/Status/would_block =>
-                        bind(wait(h, /sys/Poll/write), (_) => go(rest))
-                    | r.status != /sys/Status/ok => pure(Result/failure(Handle/error_of(r.status)))
-                    | r.written < Bytes/len(rest) =>
-                        bind(
-                            wait(h, /sys/Poll/write),
-                            (_) => go(Bytes/slice(rest, r.written, Bytes/len(rest))))
-                    | _ => pure(Result/success(()))
-                    end);
+            let r = lift(/sys/write(h, rest))!;
+            choose
+            | r.status == /sys/Status/would_block =>
+                let _ = wait(h, /sys/Poll/write)!;
+                go(rest)
+            | r.status != /sys/Status/ok => pure(Result/failure(Handle/error_of(r.status)))
+            | r.written < Bytes/len(rest) =>
+                let _ = wait(h, /sys/Poll/write)!;
+                go(Bytes/slice(rest, r.written, Bytes/len(rest)))
+            | _ => pure(Result/success(()))
+            end;
         go(b)
     end;
 
 pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
-    match nonblocking(l)
+    let nb = lift(nonblocking(l))!;
+    match nb
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
         rec go() -> Async(Result(Handle, Handle/Error)) =
-            defer(
-                () =>
-                    let r = /sys/accept(l);
-                    choose
-                    | r.status == /sys/Status/would_block =>
-                        bind(wait(l, /sys/Poll/read), (_) => go())
-                    | r.status == /sys/Status/ok => pure(Result/success(r.handle))
-                    | _ => pure(Result/failure(Handle/error_of(r.status)))
-                    end);
+            let r = lift(/sys/accept(l))!;
+            choose
+            | r.status == /sys/Status/would_block =>
+                let _ = wait(l, /sys/Poll/read)!;
+                go()
+            | r.status == /sys/Status/ok => pure(Result/success(r.handle))
+            | _ => pure(Result/failure(Handle/error_of(r.status)))
+            end;
         go()
     end;
 
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
 pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =
     rec go(acc: Bytes) -> Async(Result(Bytes, Handle/Error)) =
-        bind(
-            read(4096),
-            (r) =>
-                match r
-                | chunk(bytes) => go(x[..acc, ..bytes])
-                | eof() => pure(Result/success(acc))
-                | error(e) => pure(Result/failure(e))
-                end);
+        let r = read(4096)!;
+        match r
+        | chunk(bytes) => go(x[..acc, ..bytes])
+        | eof() => pure(Result/success(acc))
+        | error(e) => pure(Result/failure(e))
+        end;
     go(x[]);
 
 pub rec await(@A: Type, f: Future(A)) -> Async(A) =
-    match Future/poll(f)
+    let polled = lift(Future/poll(f))!;
+    match polled
     | some(a) => pure(a)
-    | none() => bind(park((w) => Future/register(f, w)), (_) => await(f))
+    | none() =>
+        let _ = park((w) => Future/register(f, w))!;
+        await(f)
     end;
 
 struct Job: Type {
@@ -186,84 +218,106 @@ struct Sleeper: Type {
     guards: Lst(Guard),
 }
 
-let run_guards(gs: Lst(Guard)) -> {} =
-    Lst/each(gs, (g) => g.release());
+rec run_guards(gs: Lst(Guard)) -> Io({}) =
+    match gs
+    | [] => Io/pure(())
+    | [g, ..more] =>
+        let _ = g.release!;
+        run_guards(more)
+    end;
 
-let release_guard(h: Handle, gs: Lst(Guard)) -> Lst(Guard) =
-    rec each(rest: Lst(Guard)) -> Lst(Guard) =
-        match rest
-        | [] => []
-        | [g, ..more] =>
-            match /sys/Handle/eql(g.handle, h)
+rec release_guard(h: Handle, gs: Lst(Guard)) -> Io(Lst(Guard)) =
+    match gs
+    | [] => Io/pure([])
+    | [g, ..more] =>
+        match /sys/Handle/eql(g.handle, h)
+        | true =>
+            let _ = g.release!;
+            Io/pure(more)
+        | false =>
+            let rest = release_guard(h, more)!;
+            Io/pure([g, ..rest])
+        end
+    end;
+
+rec drain_jobs(js: Lst(Job)) -> Io({}) =
+    match js
+    | [] => Io/pure(())
+    | [j, ..more] =>
+        let _ = run_guards(j.guards)!;
+        drain_jobs(more)
+    end;
+
+rec drain_parked(ps: Lst(Parked)) -> Io({}) =
+    match ps
+    | [] => Io/pure(())
+    | [p, ..more] =>
+        let _ = run_guards(p.guards)!;
+        drain_parked(more)
+    end;
+
+rec drain_sleeping(ss: Lst(Sleeper)) -> Io({}) =
+    match ss
+    | [] => Io/pure(())
+    | [s, ..more] =>
+        let _ = run_guards(s.guards)!;
+        drain_sleeping(more)
+    end;
+
+rec drain_slots(ss: Lst(Slot)) -> Io({}) =
+    match ss
+    | [] => Io/pure(())
+    | [s, ..more] =>
+        let held = Cell/get(s)!;
+        match held
+        | none() => drain_slots(more)
+        | some(j) =>
+            let _ = run_guards(j.guards)!;
+            drain_slots(more)
+        end
+    end;
+
+rec sweep_parked(ss: Lst(Slot)) -> Io(Lst(Slot)) =
+    match ss
+    | [] => Io/pure([])
+    | [s, ..more] =>
+        let held = Cell/get(s)!;
+        match held
+        | none() => sweep_parked(more)
+        | some(j) =>
+            let dead = is_cancelled(j.token)!;
+            match dead
             | true =>
-                let _ = g.release();
-                more
-            | false => [g, ..each(more)]
+                let _ = run_guards(j.guards)!;
+                let _ = Cell/set(s, Option/none())!;
+                sweep_parked(more)
+            | false =>
+                let rest = sweep_parked(more)!;
+                Io/pure([s, ..rest])
             end
-        end;
-    each(gs);
-
-let drain_jobs(js: Lst(Job)) -> {} =
-    Lst/each(js, (j) => run_guards(j.guards));
-
-let drain_parked(ps: Lst(Parked)) -> {} =
-    Lst/each(ps, (p) => run_guards(p.guards));
-
-let drain_sleeping(ss: Lst(Sleeper)) -> {} =
-    Lst/each(ss, (s) => run_guards(s.guards));
-
-let drain_slots(ss: Lst(Slot)) -> {} =
-    rec each(rest: Lst(Slot)) -> {} =
-        match rest
-        | [] => ()
-        | [s, ..more] =>
-            match Cell/get(s)
-            | none() => each(more)
-            | some(j) =>
-                let _ = run_guards(j.guards);
-                each(more)
-            end
-        end;
-    each(ss);
-
-let sweep_parked(ss: Lst(Slot)) -> Lst(Slot) =
-    rec each(rest: Lst(Slot)) -> Lst(Slot) =
-        match rest
-        | [] => []
-        | [s, ..more] =>
-            match Cell/get(s)
-            | none() => each(more)
-            | some(j) =>
-                match is_cancelled(j.token)
-                | true =>
-                    let _ = run_guards(j.guards);
-                    let _ = Cell/set(s, Option/none());
-                    each(more)
-                | false => [s, ..each(more)]
-                end
-            end
-        end;
-    each(ss);
+        end
+    end;
 
 let is_ready(results: Nat, interest: Nat) -> Bool =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/Poll/err), /sys/Poll/hup)) > 0;
 
-let poll_ready(blocked: Lst(Parked), timeout: Int) -> {Lst(Job), Lst(Parked)} =
+let poll_ready(blocked: Lst(Parked), timeout: Int) -> Io({Lst(Job), Lst(Parked)}) =
     let handles = Lst/map(blocked, (p: Parked) => p.handle);
     let events = Lst/map(blocked, (p: Parked) => p.interest);
-    let results = /sys/poll(handles, events, timeout);
+    let results = /sys/poll(handles, events, timeout)!;
     rec walk(
         rest: Lst(Parked),
         i: Nat,
         woken: Lst(Job),
         still: Lst(Parked),
-    ) -> {Lst(Job), Lst(Parked)} =
+    ) -> Io({Lst(Job), Lst(Parked)}) =
         match rest
-        | [] => (woken, still)
+        | [] => Io/pure((woken, still))
         | [p, ..tail] =>
-            match is_cancelled(p.token)
+            let dead = is_cancelled(p.token)!;
+            match dead
             | true =>
-                let _ = run_guards(p.guards);
+                let _ = run_guards(p.guards)!;
                 walk(tail, i + 1, woken, still)
             | false =>
                 match is_ready(/sys/Lst/get(results, i), p.interest)
@@ -279,7 +333,7 @@ let poll_ready(blocked: Lst(Parked), timeout: Int) -> {Lst(Job), Lst(Parked)} =
         end;
     walk(blocked, 0, [], []);
 
-let sleep_timeout(sleeping: Lst(Sleeper)) -> Int =
+let sleep_timeout(sleeping: Lst(Sleeper)) -> Io(Int) =
     rec earliest(rest: Lst(Sleeper), best: Option(Duration)) -> Option(Duration) =
         match rest
         | [] => best
@@ -294,25 +348,32 @@ let sleep_timeout(sleeping: Lst(Sleeper)) -> Int =
             end
         end;
     match earliest(sleeping, Option/none())
-    | none() => -1
+    | none() => Io/pure(-1)
     | some(due) =>
-        let remaining = Duration/sub(due, Duration/now());
+        let now = Duration/now()!;
+        let remaining = Duration/sub(due, now);
         let whole = Duration/to_millis(remaining);
-        match Duration/nanos(remaining) % 1000000 > 0
-        | true => Nat/to_int(whole + 1)
-        | false => Nat/to_int(whole)
-        end
+        Io/pure(
+            match Duration/nanos(remaining) % 1000000 > 0
+            | true => Nat/to_int(whole + 1)
+            | false => Nat/to_int(whole)
+            end)
     end;
 
-let expire_sleepers(sleeping: Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
-    let now = Duration/now();
-    rec walk(rest: Lst(Sleeper), woken: Lst(Job), still: Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
+let expire_sleepers(sleeping: Lst(Sleeper)) -> Io({Lst(Job), Lst(Sleeper)}) =
+    let now = Duration/now()!;
+    rec walk(
+        rest: Lst(Sleeper),
+        woken: Lst(Job),
+        still: Lst(Sleeper),
+    ) -> Io({Lst(Job), Lst(Sleeper)}) =
         match rest
-        | [] => (woken, still)
+        | [] => Io/pure((woken, still))
         | [s, ..tail] =>
-            match is_cancelled(s.token)
+            let dead = is_cancelled(s.token)!;
+            match dead
             | true =>
-                let _ = run_guards(s.guards);
+                let _ = run_guards(s.guards)!;
                 walk(tail, woken, still)
             | false =>
                 match Duration/before(now, s.due)
@@ -330,124 +391,148 @@ let expire_sleepers(sleeping: Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
 -- No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. Nominal and empty — it records that the fact occurred, and leaves room to carry a diagnostic later without changing how callers match.
 pub struct Deadlock: pub Type {}
 
-pub let block_on(@A: Type, root: Async(A)) -> Result(A, Deadlock) =
-    let runq = Cell/new([]);
-    let blocked = Cell/new([]);
-    let sleeping = Cell/new([]);
-    let parked = Cell/new([]);
-    let result = Cell/new(Option/none(@A));
-    let enqueue(j: Job) -> {} = Cell/set(runq, [j, ..Cell/get(runq)]);
+pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
+    let runq = Cell/new([])!;
+    let blocked = Cell/new([])!;
+    let sleeping = Cell/new([])!;
+    let parked = Cell/new([])!;
+    let result = Cell/new(Option/none(@A))!;
+    let enqueue(j: Job) -> Io({}) =
+        let current = Cell/get(runq)!;
+        Cell/set(runq, [j, ..current]);
+    let root_token_cell = Cell/new(false)!;
     let _ =
         enqueue(
             Job {
-                resume = () =>
+                resume =
                     bind(
                         root,
-                        (a) =>
-                            let _ = Cell/set(result, Option/some(a));
-                            pure(())),
-                token = Token { Cell/new(false) },
+                        (a) => bind(lift(Cell/set(result, Option/some(a))), (_) => pure(()))),
+                token = Token { root_token_cell },
                 guards = [],
-            });
-    rec serve(job: Job) -> {} =
-        match is_cancelled(job.token)
+            })!;
+    rec serve(job: Job) -> Io({}) =
+        let dead = is_cancelled(job.token)!;
+        match dead
         | true => run_guards(job.guards)
         | false =>
-            match job.resume()
+            let s = job.resume.0!;
+            match s
             | done(_) => run_guards(job.guards)
             | step(p, k) =>
                 match p
                 | wait(h, ev) =>
+                    let current = Cell/get(blocked)!;
                     Cell/set(
                         blocked,
                         [
                             Parked {
                                 handle = h,
                                 interest = ev,
-                                resume = k,
+                                resume = Async { k },
                                 token = job.token,
                                 guards = job.guards,
                             },
-                            ..Cell/get(blocked)])
+                            ..current])
                 | sleep(d) =>
+                    let now = Duration/now()!;
+                    let current = Cell/get(sleeping)!;
                     Cell/set(
                         sleeping,
                         [
                             Sleeper {
-                                due = Duration/add(Duration/now(), d),
-                                resume = k,
+                                due = Duration/add(now, d),
+                                resume = Async { k },
                                 token = job.token,
                                 guards = job.guards,
                             },
-                            ..Cell/get(sleeping)])
+                            ..current])
                 | fork(child, ct) =>
-                    let _ = enqueue(Job { ..job, resume = k });
-                    enqueue(Job { resume = child, token = ct, guards = [] })
+                    let _ = enqueue(Job { ..job, resume = Async { k } })!;
+                    enqueue(Job { resume = Async { child }, token = ct, guards = [] })
                 | park(reg) =>
-                    let slot = Cell/new(Option/some(@Job, Job { ..job, resume = k }));
-                    let _ = Cell/set(parked, [slot, ..Cell/get(parked)]);
-                    let waker() -> {} =
-                        match Cell/get(slot)
-                        | none() => ()
-                        | some(j) =>
-                            let _ = Cell/set(slot, Option/none());
-                            enqueue(j)
-                        end;
+                    let slot = Cell/new(Option/some(@Job, Job { ..job, resume = Async { k } }))!;
+                    let current = Cell/get(parked)!;
+                    let _ = Cell/set(parked, [slot, ..current])!;
+                    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
+                    -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
+                    -- region and perform them now.
+                    let waker: Io({}) =
+                        Io/bind(
+                            Cell/get(slot),
+                            (held) =>
+                                match held
+                                | none() => Io/pure(())
+                                | some(j) =>
+                                    Io/bind(Cell/set(slot, Option/none()), (_) => enqueue(j))
+                                end);
                     reg(Waker/new(waker))
                 | acquire(h, fin) =>
                     serve(
                         Job {
                             ..job,
-                            resume = k,
+                            resume = Async { k },
                             guards = [Guard { handle = h, release = fin }, ..job.guards],
                         })
                 | release(h) =>
-                    serve(Job { ..job, resume = k, guards = release_guard(h, job.guards) })
-                | defer() => serve(Job { ..job, resume = k })
-                | yield_now() => enqueue(Job { ..job, resume = k })
+                    let gs = release_guard(h, job.guards)!;
+                    serve(Job { ..job, resume = Async { k }, guards = gs })
+                | yield_now() => enqueue(Job { ..job, resume = Async { k } })
                 end
             end
         end;
-    let drain_all() -> {} =
-        let _ = drain_jobs(Cell/get(runq));
-        let _ = drain_parked(Cell/get(blocked));
-        let _ = drain_sleeping(Cell/get(sleeping));
-        drain_slots(Cell/get(parked));
-    rec drive() -> Result(A, Deadlock) =
-        match Cell/get(result)
+    let drain_all() -> Io({}) =
+        let q = Cell/get(runq)!;
+        let _ = drain_jobs(q)!;
+        let b = Cell/get(blocked)!;
+        let _ = drain_parked(b)!;
+        let s = Cell/get(sleeping)!;
+        let _ = drain_sleeping(s)!;
+        let p = Cell/get(parked)!;
+        drain_slots(p);
+    rec drive() -> Io(Result(A, Deadlock)) =
+        let done = Cell/get(result)!;
+        match done
         | some(a) =>
-            let _ = drain_all();
-            Result/success(a)
+            let _ = drain_all()!;
+            Io/pure(Result/success(a))
         | none() =>
-            match Cell/get(runq)
+            let q = Cell/get(runq)!;
+            match q
             | [] =>
-                let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
-                match Lst/len(Cell/get(blocked)) == 0 && Lst/len(Cell/get(sleeping)) == 0
+                let ps = Cell/get(parked)!;
+                let swept = sweep_parked(ps)!;
+                let _ = Cell/set(parked, swept)!;
+                let b = Cell/get(blocked)!;
+                let s = Cell/get(sleeping)!;
+                match Lst/len(b) == 0 && Lst/len(s) == 0
                 | true =>
                     -- Deadlock: no runnable job, nothing blocked on a handle, and no sleeper — the root can never be fulfilled, so there is no `A` to return. Reported to the caller; terminating the process is `run`'s decision, not the scheduler's.
-                    let _ = drain_all();
-                    Result/failure(Deadlock {})
+                    let _ = drain_all()!;
+                    Io/pure(Result/failure(Deadlock {}))
                 | false =>
-                    let split = poll_ready(Cell/get(blocked), sleep_timeout(Cell/get(sleeping)));
-                    let woken = expire_sleepers(Cell/get(sleeping));
-                    let _ = Cell/set(runq, [..split.0, ..woken.0]);
-                    let _ = Cell/set(blocked, split.1);
-                    let _ = Cell/set(sleeping, woken.1);
+                    let timeout = sleep_timeout(s)!;
+                    let split = poll_ready(b, timeout)!;
+                    let woken = expire_sleepers(s)!;
+                    let _ = Cell/set(runq, [..split.0, ..woken.0])!;
+                    let _ = Cell/set(blocked, split.1)!;
+                    let _ = Cell/set(sleeping, woken.1)!;
                     drive()
                 end
             | [job, ..rest] =>
-                let _ = Cell/set(runq, rest);
-                let _ = serve(job);
+                let _ = Cell/set(runq, rest)!;
+                let _ = serve(job)!;
                 drive()
             end
         end;
     drive();
 
-pub let run(main: Async({})) -> {} =
-    match block_on(main)
-    | success(_) => ()
+pub let run(main: Async({})) -> Io({}) =
+    let outcome = block_on(main)!;
+    match outcome
+    | success(_) => Io/pure(())
     | failure(_) =>
-        let _ = /std/print_err("async: deadlocked, no runnable work remains\n");
+        let _ = /std/print_err("async: deadlocked, no runnable work remains\n")!;
         /sys/exit(1)
     end;
 
@@ -456,33 +541,36 @@ pub struct Task(A: Type): Type {
     token: Token,
 }
 
-pub let spawn(@A: Type, body: () -> Async(A)) -> Async(Task(A)) =
-    defer(
-        () =>
-            let f = Future/new();
-            let t = Token { Cell/new(false) };
-            let task: Task(A) = Task { result = f, token = t };
-            bind(
-                fork_with(
-                    () =>
-                        bind(
-                            body(),
-                            (a) =>
-                                let _ = Future/fulfill(f, a);
-                                pure(())),
-                    t),
-                (_) => pure(task)));
+pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
+    let f = lift(Future/new(A))!;
+    let c = lift(Cell/new(false))!;
+    let t: Token = Token { c };
+    let task: Task(A) = Task { result = f, token = t };
+    let _ =
+        fork_with(
+            Async {
+                bind_raw(
+                    body.0,
+                    (a) => bind(lift(Future/fulfill(f, a)), (_) => pure(())).0)
+            },
+            t)!;
+    pure(task);
 
 pub let join(@A: Type, task: Task(A)) -> Async(A) =
     await(task.result);
 
-pub let cancel(@A: Type, task: Task(A)) -> {} =
+pub let cancel(@A: Type, task: Task(A)) -> Io({}) =
     cancel_token(task.token);
 
-let cancel_all(ts: Lst(Token)) -> {} =
-    Lst/each(ts, cancel_token);
+rec cancel_all(ts: Lst(Token)) -> Io({}) =
+    match ts
+    | [] => Io/pure(())
+    | [t, ..more] =>
+        let _ = cancel_token(t)!;
+        cancel_all(more)
+    end;
 
-pub let join_all(@A: Type, tasks: Lst(() -> Async(A))) -> Async(Lst(A)) =
+pub let join_all(@A: Type, tasks: Lst(Async(A))) -> Async(Lst(A)) =
     rec go(i: Nat) -> Async(Lst(A)) =
         match Nat/Lt/try(i, Lst/len(tasks))
         | none() => pure([])
@@ -494,40 +582,37 @@ pub let join_all(@A: Type, tasks: Lst(() -> Async(A))) -> Async(Lst(A)) =
         end;
     go(0);
 
-pub let select(@A: Type, tasks: Lst(() -> Async(A))) -> Async({Nat, A}) =
-    defer(
-        () =>
-            let winner = Future/new();
-            rec arm(i: Nat) -> Async(Lst(Token)) =
-                match Nat/Lt/try(i, Lst/len(tasks))
-                | none() => pure([])
-                | some(ok) =>
-                    let t = Token { Cell/new(false) };
-                    let _ =
-                        fork_with(
-                            () =>
-                                bind(
-                                    Lst/at(tasks, i, ok)(),
-                                    (a) =>
-                                        let _ = Future/fulfill(winner, (i, a));
-                                        pure(())),
-                            t)!;
-                    let rest = arm(i + 1)!;
-                    pure([t, ..rest])
-                end;
-            let tokens = arm(0)!;
-            let w = await(winner)!;
-            let _ = cancel_all(tokens);
-            pure(w));
+pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
+    let winner = lift(Future/new({Nat, A}))!;
+    rec arm(i: Nat) -> Async(Lst(Token)) =
+        match Nat/Lt/try(i, Lst/len(tasks))
+        | none() => pure([])
+        | some(ok) =>
+            let c = lift(Cell/new(false))!;
+            let t: Token = Token { c };
+            let _ =
+                fork_with(
+                    Async {
+                        bind_raw(
+                            Lst/at(tasks, i, ok).0,
+                            (a) =>
+                                bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0)
+                    },
+                    t)!;
+            let rest = arm(i + 1)!;
+            pure([t, ..rest])
+        end;
+    let tokens = arm(0)!;
+    let w = await(winner)!;
+    let _ = lift(cancel_all(tokens))!;
+    pure(w);
 
-pub let race(@A: Type, tasks: Lst(() -> Async(A))) -> Async(A) =
-    bind(select(tasks), (w) => pure(w.1));
+pub let race(@A: Type, tasks: Lst(Async(A))) -> Async(A) =
+    map(select(tasks), (w) => w.1);
 
-pub let timeout(@A: Type, d: Duration, body: () -> Async(A)) -> Async(Option(A)) =
+pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =
     map(
-        select(
-            @Option(A),
-            [() => map(body(), (a) => Option/some(a)), () => map(sleep(d), (_) => Option/none())]),
+        select(@Option(A), [map(body, (a) => Option/some(a)), map(sleep(d), (_) => Option/none())]),
         (w) => w.1);
 
 satisfy Monad(Async) {

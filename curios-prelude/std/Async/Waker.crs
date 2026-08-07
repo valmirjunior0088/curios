@@ -1,9 +1,12 @@
+use /std/{Io};
+
+-- The resume action is a description rather than a `() -> {}` thunk: delaying an effect is what `Io` is for, so the hand-rolled thunk that used to spell it here has nothing left to do.
 pub struct Waker: Type {
-    () -> {},
+    Io({}),
 }
 
-pub let new(resume: () -> {}) -> Waker =
+pub let new(resume: Io({})) -> Waker =
     Waker { resume };
 
-pub let wake(w: Waker) -> {} =
-    w.0();
+pub let wake(w: Waker) -> Io({}) =
+    w.0;

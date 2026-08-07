@@ -24,9 +24,6 @@ pub let fold(@T: Type, @A: Type, l: Lst(T), init: A, f: (T, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
-pub let each(@T: Type, l: Lst(T), f: (T) -> {}) -> {} =
-    fold(l, (), (x, acc) => f(x));
-
 pub let find(@T: Type, l: Lst(T), pred: (T) -> Bool) -> Option(T) =
     let n = len(l);
     rec go(i: Nat) -> Option(T) =

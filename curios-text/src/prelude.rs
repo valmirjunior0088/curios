@@ -200,10 +200,14 @@ fn wire_type(type_: &WireType) -> Term {
 }
 
 /// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` prim applied to the parameter names. Used both for `/sys/Handle`'s rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
+///
+/// The result is an `Io`, and this one site is what makes that true of every row the store describes — a user's own `foreign` declaration included, since a call across the wire is a host effect whoever declared it. The wire contract does not move: `curios-abi` describes the same shapes and only the guest-facing type changes, so a multi-result row reads `Io({status : Nat, bytes : Bytes})` with the record still inside the wrapper.
+///
+/// A row with no parameters becomes a *constant* rather than a nullary function. The nullary function was the previous discipline's workaround — a top-level value binding would force-reduce its effectful body where a type-level effect was refused — and a description needs no thunk, being one already.
 fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     let signature = &function.signature;
 
-    let output = match signature.results.as_slice() {
+    let result = match signature.results.as_slice() {
         [] => unit(),
         [(_, result)] => wire_type(result),
         results => record(
@@ -213,6 +217,27 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
                 .collect(),
         ),
     };
+    let output = io_of(result);
+
+    let body = prim(Prim::Foreign(
+        Arc::clone(function),
+        signature
+            .params
+            .iter()
+            .map(|(param, _)| name(param))
+            .collect(),
+    ));
+
+    if signature.params.is_empty() {
+        return TopLet {
+            vis_pub,
+            label: function.label.clone(),
+            signature: LetSignature::Name {
+                type_: Some(output),
+                body,
+            },
+        };
+    }
 
     fn_marked(
         vis_pub,
@@ -223,14 +248,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
             .map(|(param, type_)| (Plicity::Explicit, param.as_str(), wire_type(type_)))
             .collect(),
         output,
-        prim(Prim::Foreign(
-            Arc::clone(function),
-            signature
-                .params
-                .iter()
-                .map(|(param, _)| name(param))
-                .collect(),
-        )),
+        body,
     )
 }
 
@@ -496,6 +514,7 @@ fn lst_ops() -> Vec<TopItem> {
     ]
 }
 
+// Allocating a cell, reading one, and writing one are all host effects, so all three return descriptions. `Cell/get` is the operation the whole discipline was named for: a scrutinee spelled `Cell/get(c)` denotes a different value before and after a `Cell/set`, and giving it an `Io` result is what makes that spelling ill-typed in scrutinee position rather than something an analysis has to notice.
 fn cell_ops() -> Vec<TopItem> {
     vec![
         pub_fn_marked(
@@ -504,7 +523,7 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Implicit, "T", type_()),
                 (Plicity::Explicit, "x", name("T")),
             ],
-            cell_of(name("T")),
+            io_of(cell_of(name("T"))),
             prim(Prim::Cell(name("T"), name("x"))),
         ),
         pub_fn_marked(
@@ -514,7 +533,7 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "c", cell_of(name("T"))),
                 (Plicity::Explicit, "v", name("T")),
             ],
-            unit(),
+            io_of(unit()),
             prim(Prim::CellSet(name("T"), name("c"), name("v"))),
         ),
         pub_fn_marked(
@@ -523,7 +542,7 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Implicit, "T", type_()),
                 (Plicity::Explicit, "c", cell_of(name("T"))),
             ],
-            name("T"),
+            io_of(name("T")),
             prim(Prim::CellGet(name("T"), name("c"))),
         ),
     ]
@@ -572,18 +591,18 @@ fn handle_ops() -> Vec<TopItem> {
 
 // The host operations, `exit`, and the wire-code mirror, all emitted flat at the `/sys` root: every store-described op (in declaration order), then `exit`, then the `Status`/`Poll`/`Mode` code modules. Operations are lowercase and the code modules capitalized, so the `poll` op and the `Poll` module coexist without clashing.
 fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
-    // Every store-described host op, in store (= declaration) order. Each is a *function*, including the 0-arity clocks/args: a value binding would force-reduce its effectful prim body at definition (the bare prelude is lowered whole, so a top-level value `let` lands in `main`) and trip the host-effect-at-type-level guard, while under the function abstraction the prim stays unevaluated until called.
+    // Every store-described host op, in store (= declaration) order. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful prim body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
     let mut ops = foreigns
         .iter()
         .map(|function| TopItem::Let(host_fn(function, true)))
         .collect::<Vec<_>>();
 
     ops.extend([
-        // `(n : Nat) -> {}`: exit ends the process. The result is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge.
+        // `(n : Nat) -> Io({})`: exit ends the process. The result inside the wrapper is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge. An `Io`-polymorphic bottom is arguably sound now that no eliminator can extract the result, but it reopens a settled decision for no consumer.
         pub_fn_marked(
             "exit",
             vec![(Plicity::Explicit, "n", nat())],
-            unit(),
+            io_of(unit()),
             prim(Prim::Exit(name("n"))),
         ),
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.

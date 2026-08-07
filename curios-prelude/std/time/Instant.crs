@@ -1,4 +1,4 @@
-use /std/{Nat, Bool};
+use /std/{Nat, Bool, Io};
 use /std/time/{Duration};
 
 pub struct Instant: Type {
@@ -7,9 +7,9 @@ pub struct Instant: Type {
     nanos: Nat,
 }
 
-pub let now() -> Instant =
-    let r = /sys/clock_wall();
-    Instant { secs_hi = r.secs_hi, secs_lo = r.secs_lo, nanos = r.nanos };
+pub let now() -> Io(Instant) =
+    let r = /sys/clock_wall!;
+    Io/pure(Instant { secs_hi = r.secs_hi, secs_lo = r.secs_lo, nanos = r.nanos });
 
 let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
     match x < y

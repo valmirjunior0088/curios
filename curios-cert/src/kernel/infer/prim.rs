@@ -268,24 +268,26 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         }
 
         // A mutable cell. Its identity is what makes a `Cell` of proofs relevant — see `Sort::of`.
+        //
+        // All three operations are host effects and so describe rather than do. `CellGet` returning `Io(T)` rather than `T` is what makes `match Cell/get(c)` ill-typed, which is the whole of what the purity analysis used to decide by walking the scrutinee.
         Prim::Cell(element, initial) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, initial, &element)?;
 
-            Ok(cell_type(element))
+            Ok(io_type(cell_type(element)))
         }
         Prim::CellGet(element, cell) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, cell, &cell_type(element.clone()))?;
 
-            Ok(element)
+            Ok(io_type(element))
         }
         Prim::CellSet(element, cell, value) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, cell, &cell_type(element.clone()))?;
             check(kernel, value, &element)?;
 
-            Ok(Term::tuple_type_unit())
+            Ok(io_type(Term::tuple_type_unit()))
         }
 
         // `exit` ends the process, and its result is the unit type rather than whatever the caller demanded.
@@ -294,7 +296,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         Prim::Exit(code) => {
             check(kernel, code, &nat_type())?;
 
-            Ok(Term::tuple_type_unit())
+            Ok(io_type(Term::tuple_type_unit()))
         }
 
         // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature.
@@ -323,7 +325,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
                 .map(|(label, wire)| (label.clone(), wire_term(wire)))
                 .collect::<Vec<_>>();
 
-            Ok(match results.as_slice() {
+            Ok(io_type(match results.as_slice() {
                 [] => Term::tuple_type_unit(),
                 [(_, result)] => result.clone(),
                 many => Term::tuple_type(
@@ -331,7 +333,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
                         .map(|(label, result)| (kernel.fresh(Some(label)), result.clone()))
                         .collect::<Vec<_>>(),
                 ),
-            })
+            }))
         }
 
         // The two constructors of the opaque effect carrier. There is no third: nothing here or anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.

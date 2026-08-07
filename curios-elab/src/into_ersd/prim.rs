@@ -409,10 +409,17 @@ pub(super) fn erase_prim(
 
         &Prim::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
         Prim::HandleEql(l, r) => op!(curios_ersd::Operation::HandleEql, handle_type, l, r),
-        // A process exit never yields a value: erase the code, then report the terminator that seals this block. Code after it is dead and is never erased.
+        // Every operation the host performs is typed `Io`, so every one erases to a thunk: the
+        // operands are computed where the description is *built*, and the operation itself happens
+        // only when the description is forced. Nothing below changes what the host call is — only
+        // where it sits relative to the closure boundary.
+
+        // A process exit never yields a value, so the thunk's block is sealed by the terminator rather than by a return. Code after the *force* is dead; code after the construction is not.
         Prim::Exit(code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
-            Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
+            lowering.thunk(hint, move |_| {
+                Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
+            })
         }
 
         // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
@@ -427,47 +434,55 @@ pub(super) fn erase_prim(
                 )?));
             }
             let foreign = lowering.builder.foreign(std::sync::Arc::clone(function));
-            Ok(lowering.bind(
-                hint,
-                curios_ersd::Rhs::Foreign {
-                    foreign,
-                    operands: atoms,
-                },
-            ))
+            lowering.thunk(hint, move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Foreign {
+                        foreign,
+                        operands: atoms,
+                    },
+                ))
+            })
         }
 
         Prim::Cell(type_, initial) => {
             let initial_atom = emitted!(lowering.walk(context, initial, type_, None)?);
-            Ok(lowering.bind(
-                hint,
-                curios_ersd::Rhs::Cell {
-                    operation: curios_ersd::CellOperation::New,
-                    operands: vec![initial_atom],
-                },
-            ))
+            lowering.thunk(hint, move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Cell {
+                        operation: curios_ersd::CellOperation::New,
+                        operands: vec![initial_atom],
+                    },
+                ))
+            })
         }
         Prim::CellSet(type_, cell, value) => {
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
             let value_atom = emitted!(lowering.walk(context, value, type_, None)?);
-            Ok(lowering.bind(
-                hint,
-                curios_ersd::Rhs::Cell {
-                    operation: curios_ersd::CellOperation::Set,
-                    operands: vec![cell_atom, value_atom],
-                },
-            ))
+            lowering.thunk(hint, move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Cell {
+                        operation: curios_ersd::CellOperation::Set,
+                        operands: vec![cell_atom, value_atom],
+                    },
+                ))
+            })
         }
         Prim::CellGet(type_, cell) => {
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
-            Ok(lowering.bind(
-                hint,
-                curios_ersd::Rhs::Cell {
-                    operation: curios_ersd::CellOperation::Get,
-                    operands: vec![cell_atom],
-                },
-            ))
+            lowering.thunk(hint, move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Cell {
+                        operation: curios_ersd::CellOperation::Get,
+                        operands: vec![cell_atom],
+                    },
+                ))
+            })
         }
 
         // The description that performs nothing: a closure yielding an already-computed value.

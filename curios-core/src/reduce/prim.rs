@@ -6,7 +6,7 @@ use {
     },
     curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_traits::{ToPrimitive, Zero},
-    std::cmp::Ordering,
+    std::{cmp::Ordering, sync::Arc},
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`Lst` `get`/`slice` bounds.
@@ -1406,31 +1406,40 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
         Prim::HandleType => Ok(Subterm::Prim(Prim::HandleType)),
         Prim::Handle(token) => Ok(Subterm::Prim(Prim::Handle(*token))),
-        Prim::Exit(code) => Err(ReduceError::EffectAtTypeLevel {
-            kind: "Exit".to_string(),
-            span: code.span(),
-        }),
-        // A store-described host call never reduces at the type level — the effect cannot happen at compile time; it becomes a host call only at erasure.
-        Prim::Foreign(function, args) => Err(ReduceError::EffectAtTypeLevel {
-            kind: function.name.clone(),
-            span: args.first().and_then(|arg| arg.span()),
-        }),
+        // Every operation the host performs is an `Io`, which is to say a *description*: it denotes one inert value here and becomes a host call only at erasure, where the entrypoint boundary forces the program's description exactly once.
+        //
+        // These arms used to refuse instead, and the refusal was the type-level half of the effect discipline: a spelling that does not fix a value must not reach a type. It is now the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
+        Prim::Exit(code) => {
+            let code = reducer.reduce(code.clone())?;
+            Ok(Subterm::Prim(Prim::Exit(code)))
+        }
+        Prim::Foreign(function, args) => {
+            let mut reduced = Vec::with_capacity(args.len());
+            for arg in args {
+                reduced.push(reducer.reduce(arg.clone())?);
+            }
+            Ok(Subterm::Prim(Prim::Foreign(Arc::clone(function), reduced)))
+        }
         Prim::CellType(elem) => {
             let elem = reducer.reduce(elem.clone())?;
             Ok(Subterm::Prim(Prim::cell_type(elem)))
         }
-        Prim::Cell(_, init) => Err(ReduceError::EffectAtTypeLevel {
-            kind: "Cell".to_string(),
-            span: init.span(),
-        }),
-        Prim::CellSet(_, cell, _) => Err(ReduceError::EffectAtTypeLevel {
-            kind: "CellSet".to_string(),
-            span: cell.span(),
-        }),
-        Prim::CellGet(_, cell) => Err(ReduceError::EffectAtTypeLevel {
-            kind: "CellGet".to_string(),
-            span: cell.span(),
-        }),
+        Prim::Cell(type_, init) => {
+            let type_ = reducer.reduce(type_.clone())?;
+            let init = reducer.reduce(init.clone())?;
+            Ok(Subterm::Prim(Prim::Cell(type_, init)))
+        }
+        Prim::CellSet(type_, cell, value) => {
+            let type_ = reducer.reduce(type_.clone())?;
+            let cell = reducer.reduce(cell.clone())?;
+            let value = reducer.reduce(value.clone())?;
+            Ok(Subterm::Prim(Prim::CellSet(type_, cell, value)))
+        }
+        Prim::CellGet(type_, cell) => {
+            let type_ = reducer.reduce(type_.clone())?;
+            let cell = reducer.reduce(cell.clone())?;
+            Ok(Subterm::Prim(Prim::CellGet(type_, cell)))
+        }
         Prim::IoType(result) => {
             let result = reducer.reduce(result.clone())?;
             Ok(Subterm::Prim(Prim::io_type(result)))
