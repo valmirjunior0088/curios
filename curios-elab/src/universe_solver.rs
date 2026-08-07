@@ -544,6 +544,11 @@ impl UniverseSolver {
         self.assign(from, Level::meta(to))
     }
 
+    /// Record an inequality. Consistency is *not* decided here.
+    ///
+    /// It used to be: every insertion pushed, ran a full consistency check, and popped on refusal. That check is an incremental cycle detection over the difference graph — one relaxation pass per constraint — and it measured at 67 of the fixed prelude's 200 seconds of elaboration, across seventy-five thousand insertions at roughly a millisecond each. Nothing was buying that. The rendered diagnostic is `lower ≤ upper` plus a step count, both read off the *graph* by `inconsistency_from_path`, so a check taken later names the same cycle; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
+    ///
+    /// What still decides consistency is what always used a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize`, `finalize_at_instance`, and `solve_flexible`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` validates the universes it archives independently.
     pub fn add_constraint(
         &mut self,
         mut constraint: UniverseConstraint,
@@ -565,10 +570,6 @@ impl UniverseSolver {
             };
         }
         self.constraints.push(constraint);
-        if let Err(error) = self.check_consistent() {
-            self.constraints.pop();
-            return Err(error);
-        }
         Ok(())
     }
 
@@ -1741,5 +1742,6 @@ pub(crate) fn universe_context_validate(context: &UniverseContext) -> Result<(),
     for constraint in &context.constraints {
         solver.add_constraint(constraint.clone())?;
     }
-    Ok(())
+    // Insertion records; it does not decide (see `add_constraint`). Satisfiability is this function's whole question, so the boundary it is decided at is here.
+    solver.check_consistent()
 }

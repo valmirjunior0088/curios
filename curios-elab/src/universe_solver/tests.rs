@@ -53,13 +53,14 @@ fn successor_distributes_and_overflow_is_checked() {
 fn solver_rejects_direct_and_long_positive_cycles_with_paths() {
     let mut solver = UniverseSolver::new(0);
     let u = solver.fresh(UniverseRole::Generalizable, None);
-    let error = solver
+    solver
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::meta(u),
             origin("direct"),
         )
-        .unwrap_err();
+        .unwrap();
+    let error = solver.check_consistent().unwrap_err();
     assert!(matches!(
         error,
         UniverseError::Inconsistency { path, .. } if path.len() == 1
@@ -75,9 +76,10 @@ fn solver_rejects_direct_and_long_positive_cycles_with_paths() {
     solver
         .add_leq(Level::meta(v), Level::meta(w), origin("vw"))
         .unwrap();
-    let error = solver
+    solver
         .add_leq(Level::meta(w), Level::meta(u), origin("wu"))
-        .unwrap_err();
+        .unwrap();
+    let error = solver.check_consistent().unwrap_err();
     assert!(
         matches!(
         error,
@@ -96,13 +98,14 @@ fn seeded_written_type_origin_survives_into_an_inconsistency_path() {
         origin: Some(written.clone()),
     }]);
 
-    let error = solver
+    solver
         .add_leq(
             Level::meta(UniverseMetaId(0)).succ().unwrap(),
             Level::meta(UniverseMetaId(0)),
             origin("cycle"),
         )
-        .unwrap_err();
+        .unwrap();
+    let error = solver.check_consistent().unwrap_err();
 
     assert!(matches!(
         error,
@@ -122,9 +125,10 @@ fn solver_rejects_cycles_hidden_behind_right_hand_maxima() {
             origin("max"),
         )
         .unwrap();
-    let error = solver
+    solver
         .add_leq(Level::meta(v), Level::meta(u), origin("back"))
-        .unwrap_err();
+        .unwrap();
+    let error = solver.check_consistent().unwrap_err();
     assert!(matches!(
         error,
         UniverseError::Inconsistency { path, .. } if !path.is_empty()
@@ -142,13 +146,14 @@ fn solver_rejects_inconsistent_constant_bounds_through_atoms() {
             origin("lower"),
         )
         .unwrap();
-    let error = solver
+    solver
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::constant(2),
             origin("upper"),
         )
-        .unwrap_err();
+        .unwrap();
+    let error = solver.check_consistent().unwrap_err();
     assert!(matches!(error, UniverseError::Inconsistency { .. }));
 }
 
