@@ -5,7 +5,7 @@ use {
     curios_abi::ForeignStore,
     curios_cert::recheck_module_suffix,
     curios_cont::{into_wasm, optimize},
-    curios_core::{Prim, Subterm, Term},
+    curios_core::{Prim, Term},
     curios_elab::{
         Context, Mode, elaborate_and_zonk_with_prelude, elaborate_and_zonk_with_prelude_reporting,
         erase_module_with_prelude,
@@ -115,9 +115,14 @@ where
 
     observe(Stage::Core(&lowered));
 
+    // The entrypoint contract, as an ordinary expectation rather than a judgment after the fact: a program *is* a description of doing something and yielding nothing. An embedder that states its own type still gets it — that is how the typecheck-only fixtures reach both checkers with deliberately odd tails.
+    //
+    // `Io({})` is closed, which is what makes this a `Mode::Check` at all. Checking against `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
     let core_mode = match &lowered.type_ {
         Some(type_) => Mode::Check(type_.clone()),
-        None => Mode::Infer,
+        None => Mode::Check(Term::prim(Prim::io_type(Term::tuple_type(
+            Vec::<(curios_core::Free, Term)>::new(),
+        )))),
     };
 
     let (module, core_type) = with_prelude(|prelude| {
@@ -135,28 +140,8 @@ where
     .map_err(|error| CompileError::of(&error, error.format_with(&lowered)))?;
 
     observe(Stage::CoreElab(&module));
-    entrypoint_is_io(&core_type)?;
 
     Ok((module, core_type, user_foreigns))
-}
-
-/// The entrypoint contract: a program's tail is a *description*, never a value.
-///
-/// Untracked effects are hard-deprecated, so this is unconditional. The tail's own type decides it — every host operation returns an `Io`, and the emitted boundary is the one place that forces one, so a tail of any other type is a program whose effects, if it has any, nothing would ever run. The inner type is unconstrained and discarded: `func/main`'s result is ignored by the runtime and the browser harness alike.
-///
-/// Checked here rather than by elaborating the tail against `Io(?T)`, because minting that metavariable needs the elaboration context, which is created inside `elaborate_and_zonk_with_prelude` after the metavariable floor is seeded. The type arrives reduced and zonked, so this is a head test rather than a judgment.
-fn entrypoint_is_io(core_type: &Term) -> Result<(), CompileError> {
-    let mut head = core_type;
-    // Universe instances are computationally irrelevant and never change a head.
-    while let Subterm::UniverseInst(instance) = &**head {
-        head = &instance.head;
-    }
-    match &**head {
-        Subterm::Prim(Prim::IoType(_)) => Ok(()),
-        _ => Err(CompileError::Failure(format!(
-            "a program's tail must be a description of what to do, of type `Io(T)`\n  this one has type `{core_type}`\n  an effect at any other type is one nothing would ever perform",
-        ))),
-    }
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.

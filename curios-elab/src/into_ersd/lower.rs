@@ -253,7 +253,7 @@ pub fn erase_module(
 
 /// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one.
 ///
-/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a pure tail still erases as it always did — what makes it mandatory on the compile path is `curios-pipeline` refusing a tail that is not an `Io`. The forced value is discarded and the entry yields unit: the runtime ignores `func/main`'s result, so a program's meaning is the effects its description performs.
+/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail still erases as it always did — the `erase_module` unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
 fn force_entry(
     lowering: &mut Lowering,
     context: &mut Context,
