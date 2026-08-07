@@ -20,12 +20,10 @@ impl Lowering {
             let item = &module.items[index];
             match item {
                 Item::Let(definition) => {
-                    let outcome = self.walk(
-                        context,
-                        &definition.body,
-                        &definition.type_,
-                        Some(&definition.name.symbol()),
-                    )?;
+                    let symbol = definition.name.symbol();
+                    let outcome = self.with_owner(symbol.clone(), |lowering| {
+                        lowering.walk(context, &definition.body, &definition.type_, Some(&symbol))
+                    })?;
                     let atom = match outcome {
                         Outcome::Emitted(atom) => atom,
                         // A diverging initializer (a vacuous elimination) has no result operand; give it the computed-member encoding — a value whose init block seals with the divergence terminator — so the program traps at initialization, matching the entry-block convention.

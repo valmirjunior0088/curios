@@ -22,7 +22,17 @@ impl Lowering {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let function = self.builder.reserve_function();
-        self.define_lambda(context, function, func, expected, hint)?;
+        // A lambda in argument position carries no statement to be named after; it takes its owner's name instead of none at all.
+        let name = hint.map(str::to_string).or_else(|| self.derived_hint());
+        match name {
+            Some(name) => {
+                let hint = name.clone();
+                self.with_owner(name, |lowering| {
+                    lowering.define_lambda(context, function, func, expected, Some(&hint))
+                })?;
+            }
+            None => self.define_lambda(context, function, func, expected, None)?,
+        }
         self.builder.let_functions(vec![function]);
         Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))
     }

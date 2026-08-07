@@ -123,7 +123,22 @@ impl Lowering {
                     let Subterm::Func(func) = &**body else {
                         unreachable!("erase: a function member's body is a lambda")
                     };
-                    self.define_lambda(context, *function, func, type_, hint.as_deref())?;
+                    // A member the group named keeps that name; one it did not takes its owner's, the same way an argument-position lambda does.
+                    match hint.clone().or_else(|| self.derived_hint()) {
+                        Some(name) => {
+                            let named = name.clone();
+                            self.with_owner(name, |lowering| {
+                                lowering.define_lambda(
+                                    context,
+                                    *function,
+                                    func,
+                                    type_,
+                                    Some(&named),
+                                )
+                            })?;
+                        }
+                        None => self.define_lambda(context, *function, func, type_, None)?,
+                    }
                     functions.push(*function);
                 }
                 Member::Computed(value) => {

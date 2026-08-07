@@ -304,7 +304,7 @@ fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
 
 // -- LCG --------------------------------------------------------------------
 
-/// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, and the `io/…` description thunks every effect boundary erases to as top-level functions, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
+/// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
     let cont = cont_optm_text(LCG);
@@ -324,9 +324,11 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
             .and_then(|(_, rest)| rest.split_once('('))
             .map(|(name, _)| name)
             .unwrap_or_default();
-        // Asked of the loop by name rather than by an allowlist of everything else. A leaked *user* function keeps its source hint, so `loop` escaping contification prints as `~fN$loop`; prelude helpers carry their `/std/` path and the description machinery its `io/` tag, while a lambda the optimizer lifted carries nothing at all and never did. An allowlist would have to admit that anonymous case, which is most of what it was excluding.
+        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, and a lifted lambda its owner's name qualified — `/std/Handle/write/1`. A leaked `loop` matches none of them.
         assert!(
-            provenance != "loop",
+            provenance == "main"
+                || provenance.starts_with("/std/")
+                || provenance.starts_with("io/"),
             "the recursive loop must be contified, not left a top-level function: {line}",
         );
     }

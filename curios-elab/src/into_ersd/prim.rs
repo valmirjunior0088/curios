@@ -100,11 +100,16 @@ impl Lowering {
         body: impl FnOnce(&mut Self) -> Result<Outcome, Error>,
     ) -> Result<Outcome, Error> {
         let function = self.builder.reserve_function();
+        // The description's own name, and the owner of anything the performance mints inside it.
+        let name = hint.map(str::to_string).or_else(|| self.derived_hint());
         self.builder.open_block();
-        let outcome = body(self)?;
+        let outcome = match name.clone() {
+            Some(name) => self.with_owner(name, body)?,
+            None => body(self)?,
+        };
         let block = self.seal(outcome);
         self.builder
-            .define_function(function, hint.map(str::to_string), Vec::new(), block);
+            .define_function(function, name, Vec::new(), block);
         self.builder.let_functions(vec![function]);
 
         Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))

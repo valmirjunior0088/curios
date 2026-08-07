@@ -29,6 +29,8 @@ pub(super) struct Lowering {
     pub(super) environment: Environment,
     /// Dropped binder labels referenced from a retained position. Consumed by the function-body collapse: a proof-valued body that dangles a binder its own lambda dropped is replaced by the unit constant.
     pub(super) dangled: BTreeSet<Free>,
+    /// The definition each emitted function descends from, innermost last, paired with how many anonymous ones have been minted under it. See [`Lowering::derived_hint`].
+    owners: Vec<(String, usize)>,
 }
 
 pub(super) struct UniverseErased<T>(T);
@@ -238,7 +240,10 @@ pub fn erase_module(
         lowering.erase_items(context, &module, 0)?;
 
         lowering.builder.open_block();
-        let outcome = lowering.walk(context, &module.body, &expected, None)?;
+        // The program's own body owns what it mints, the same way an item owns what its body mints — the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from.
+        let outcome = lowering.with_owner("main".to_string(), |lowering| {
+            lowering.walk(context, &module.body, &expected, None)
+        })?;
         let outcome = force_entry(&mut lowering, context, &expected, outcome)?;
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
@@ -282,6 +287,22 @@ fn force_entry(
 }
 
 impl Lowering {
+    /// Erase `body` with `name` standing as the definition every function minted inside it descends from.
+    pub(super) fn with_owner<R>(&mut self, name: String, body: impl FnOnce(&mut Self) -> R) -> R {
+        self.owners.push((name, 0));
+        let result = body(self);
+        self.owners.pop();
+        result
+    }
+
+    /// A name for a function nothing else names.
+    ///
+    /// A lambda in argument position binds no statement, so `walk` has no hint to pass and the function it lifts to would print as a bare `~fN` — and its closure as a bare `$clsr/N`. `naming-scheme-law` spells an emitted name `kind/{uniquifier}$hint`, so an absent hint is a hole in it, and one a reader of a module dump or a profile pays for. The owner's own name qualified by which anonymous function this is fills it: `/std/Handle/write/1`, and `/std/Handle/write/1/1` one level in. The separator is `/` because `$` is reserved for the hint boundary itself.
+    pub(super) fn derived_hint(&mut self) -> Option<String> {
+        let (owner, minted) = self.owners.last_mut()?;
+        *minted += 1;
+        Some(format!("{owner}/{minted}"))
+    }
     /// Seal the innermost open block: a computed value returns, a divergence keeps its own terminator.
     pub(super) fn seal(&mut self, outcome: Outcome) -> curios_ersd::BlockId {
         match outcome {
@@ -539,11 +560,15 @@ pub fn erase_module_with_prelude(
             builder: curios_ersd::ErsdBuilder::resume(prefix.module),
             environment: prefix.environment,
             dangled: Default::default(),
+            owners: Default::default(),
         };
         lowering.erase_items(context, &module, prelude.items.len())?;
 
         lowering.builder.open_block();
-        let outcome = lowering.walk(context, &module.body, &expected, None)?;
+        // The program's own body owns what it mints, the same way an item owns what its body mints — the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from.
+        let outcome = lowering.with_owner("main".to_string(), |lowering| {
+            lowering.walk(context, &module.body, &expected, None)
+        })?;
         let outcome = force_entry(&mut lowering, context, &expected, outcome)?;
         let entry = lowering.seal(outcome);
         lowering.builder.set_entry(entry);
