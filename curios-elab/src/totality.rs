@@ -32,7 +32,7 @@ use {
 
 /// Every top-level definition's totality.
 ///
-/// Group rejection is only the local part. A definition is also `Partial` if it mentions [`Prim::Exit`] — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
+/// Group rejection is only the local part. A definition is also `Partial` if it mentions [`Prim::ProcExit`] — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
 ///
 /// `inherited` carries the totality of definitions `module` references but does not define — the replayed prelude prefix. Because each of its flags is already a closure, the walk stops at that boundary instead of re-analyzing the standard library on every compilation. Pass an empty map when `module` is the whole program. Classify one definition against the verdicts already recorded, and record it.
 ///
@@ -212,7 +212,7 @@ fn settled(module: &Module, inherited: &BTreeMap<Global, Totality>) -> BTreeMap<
 
 /// Every way the given positions fail to be total, with the site of each.
 ///
-/// Two ways, and a position can fail either: it reaches a definition already classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a `Prim::Exit`.
+/// Two ways, and a position can fail either: it reaches a definition already classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a `Prim::ProcExit`.
 // Safety: the memo is keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling — the same caveat `checked_proof_positions` carries.
 #[allow(clippy::mutable_key_type)]
 fn faults(
@@ -427,7 +427,7 @@ fn term_is_locally_partial(context: &mut Context, term: &Term, memo: &mut LocalM
 #[allow(clippy::mutable_key_type)]
 type LocalMemo = HashMap<Term, bool>;
 
-/// Whether `term` contains a `Prim::Exit` or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
+/// Whether `term` contains a `Prim::ProcExit` or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
 ///
 /// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so the native per-node recursion this replaces cost one stack frame per byte *and* re-walked the shared tail once per position — quadratic in the literal's length. Measured on a 640-byte literal, that was 2.0s of a 2.1s compile, and a 10KiB literal overflowed the stack outright. Depth is not steps, so the reduction budget cannot bound either one.
 ///
@@ -443,7 +443,7 @@ fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> 
             None => Enter::Descend,
         },
         |state, term, mut children| {
-            let mut partial = matches!(&**term, Subterm::Prim(Prim::Exit(..)));
+            let mut partial = matches!(&**term, Subterm::Prim(Prim::ProcExit(..)));
             if let Subterm::Rec(Rec { group, .. }) = &**term {
                 partial = partial || group_totality(state.0, group) == Totality::Partial;
             }

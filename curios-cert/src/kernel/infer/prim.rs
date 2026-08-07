@@ -293,7 +293,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         // `exit` ends the process, and its result is the unit type rather than whatever the caller demanded.
         //
         // That is the whole of the rule, and it is why there is no side condition here. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits — the forgery is the problem, not the non-return — and restricting *which* type it may be given cannot fix that, because any `Type`-sorted empty inductive eliminates into `Prop` unguarded. Fixing the result at `{}`, which `()` already inhabits, leaves nothing to forge.
-        Prim::Exit(code) => {
+        Prim::ProcExit(code) => {
             check(kernel, code, &nat_type())?;
 
             Ok(io_type(Term::tuple_type_unit()))

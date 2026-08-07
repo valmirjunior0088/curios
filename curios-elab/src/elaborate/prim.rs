@@ -338,10 +338,10 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::HandleType => (prim.clone(), Term::type_ground()),
         Prim::Handle(_) => (prim.clone(), handle_type),
-        // `(n : Nat) -> Io({})`: exit ends the process. The result inside the wrapper is unit rather than the caller's choice — see `Prim::Exit` in `curios-core` for why fixing it at an inhabited type is what makes the primitive sound.
-        Prim::Exit(code) => {
+        // `(n : Nat) -> Io({})`: exit ends the process. The result inside the wrapper is unit rather than the caller's choice — see `Prim::ProcExit` in `curios-core` for why fixing it at an inhabited type is what makes the primitive sound.
+        Prim::ProcExit(code) => {
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
-            (Prim::Exit(code), io_type(Term::tuple_type_unit()))
+            (Prim::ProcExit(code), io_type(Term::tuple_type_unit()))
         }
         // A store-described host call: each operand checks against its wire type, and the result shape (unit, bare value, named record) is read off the signature. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
         Prim::Foreign(function, args) => {

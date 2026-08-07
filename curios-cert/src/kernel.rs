@@ -100,7 +100,7 @@ pub enum KernelError {
     },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
     Oversized { domain: Level, bound: Level },
-    /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or a `Prim::Exit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
+    /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or a `Prim::ProcExit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
     NotTotal {
         erased: crate::Erased,
         reached: Option<Global>,

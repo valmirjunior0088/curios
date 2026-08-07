@@ -176,7 +176,7 @@ fn an_exit_seals_the_thunk_that_describes_it() {
     let body = Term::let_(
         &dead,
         Term::tuple_type_unit(),
-        Term::prim(Prim::Exit(nat_lit(3))),
+        Term::prim(Prim::ProcExit(nat_lit(3))),
         nat_lit(7),
     );
     let erased = erase(

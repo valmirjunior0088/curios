@@ -420,7 +420,7 @@ pub(super) fn erase_prim(
         // where it sits relative to the closure boundary.
 
         // A process exit never yields a value, so the thunk's block is sealed by the terminator rather than by a return. Code after the *force* is dead; code after the construction is not.
-        Prim::Exit(code) => {
+        Prim::ProcExit(code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
             lowering.thunk(hint.or(Some("io/exit")), move |_| {
                 Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))

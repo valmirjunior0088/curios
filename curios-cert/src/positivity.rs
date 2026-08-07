@@ -671,7 +671,7 @@ impl<E: Env> Walk<'_, E> {
             | Prim::Handle(_)
             | Prim::HandleEql(..)
             | Prim::Foreign(..)
-            | Prim::Exit(..)
+            | Prim::ProcExit(..)
             | Prim::Cell(..)
             | Prim::CellSet(..)
             | Prim::CellGet(..)

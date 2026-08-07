@@ -685,7 +685,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer {
                 )
                 .collect::<Vec<_>>(),
         ),
-        Prim::Exit(code) => print_unary("exit ", code, depth),
+        Prim::ProcExit(code) => print_unary("proc.exit ", code, depth),
         Prim::CellType(elem) => print_unary("Cell ", elem, depth),
         Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),
         Prim::CellSet(type_, cell, value) => flat([

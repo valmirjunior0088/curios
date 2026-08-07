@@ -1409,9 +1409,9 @@ pub fn reduce_prim(reducer: &mut impl Reducer, prim: &Prim) -> Result<Subterm, R
         // Every operation the host performs is an `Io`, which is to say a *description*: it denotes one inert value here and becomes a host call only at erasure, where the entrypoint boundary forces the program's description exactly once.
         //
         // These arms used to refuse instead, and the refusal was the type-level half of the effect discipline: a spelling that does not fix a value must not reach a type. It is now the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
-        Prim::Exit(code) => {
+        Prim::ProcExit(code) => {
             let code = reducer.reduce(code.clone())?;
-            Ok(Subterm::Prim(Prim::Exit(code)))
+            Ok(Subterm::Prim(Prim::ProcExit(code)))
         }
         Prim::Foreign(function, args) => {
             let mut reduced = Vec::with_capacity(args.len());

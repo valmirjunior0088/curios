@@ -163,7 +163,7 @@ fn authored(name: &Global, type_: Term, body: Term) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         root: RootId::Entry,
-        // Non-recursive and `Exit`-free, so the honest flag; `partial_definitions` recomputes it.
+        // Non-recursive and `ProcExit`-free, so the honest flag; `partial_definitions` recomputes it.
         totality: Totality::Total,
         type_,
         body,
@@ -2385,11 +2385,11 @@ fn rec_apply_module() -> Module {
     }
 }
 
-/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or a `Prim::Exit`.
+/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or a `Prim::ProcExit`.
 ///
 /// Instrumented across a kernel walk of the whole prelude and every program in `curios`'s test corpus, the named route refused 9 times — 8 at a proof position, 1 at a type position — and the anonymous route refused **zero**, with no test in this crate asserting a `NotTotal` verdict at all. The reason is the one this module documents: every surface spelling that would reach it is refused during elaboration, so no module carries it here. `rec b : False = b; b`, the shape three of `curios`'s `tests::soundness` fixtures use, never arrives.
 ///
-/// `Prim::Exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` types at `{}` — deliberately, so that nothing is forged by a term that never returns — and `Held/qed(exit(0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
+/// `Prim::ProcExit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` types at `{}` — deliberately, so that nothing is forged by a term that never returns — and `Held/qed(exit(0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
 ///
 /// The control is the same module with `()` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
@@ -2444,9 +2444,9 @@ fn proof_carrying_unit(exiting: bool) -> Module {
     };
 
     let payload = match exiting {
-        true => Term::prim(Prim::Exit(Term::prim(Prim::Nat(curios_core::Nat::new(
-            0usize,
-        ))))),
+        true => Term::prim(Prim::ProcExit(Term::prim(Prim::Nat(
+            curios_core::Nat::new(0usize),
+        )))),
         false => Term::tuple(Vec::<Term>::new()),
     };
 

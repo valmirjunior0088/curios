@@ -362,7 +362,7 @@ impl Sort {
                 | Prim::Cell(..)
                 | Prim::CellGet(..)
                 | Prim::CellSet(..)
-                | Prim::Exit(..)
+                | Prim::ProcExit(..)
                 | Prim::Flt(..)
                 | Prim::FltAbs(..)
                 | Prim::FltAdd(..)

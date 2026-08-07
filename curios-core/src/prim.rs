@@ -19,7 +19,7 @@ pub fn wire_term(wire_type: &WireType) -> Term {
     Subterm::Prim(prim).into()
 }
 
-/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `Exit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `ProcExit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// A primitive that performs a host effect returns an `Io`. That is the invariant the whole effect discipline rests on and it is enforced nowhere but here and in the two checkers' per-variant arms, so a new effectful variant must be given an `IoType` result when it is added.
 ///
@@ -150,7 +150,7 @@ pub enum Prim {
     // `(Nat) -> {}`: end the process. Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     //
     // The result is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
-    Exit(Term),
+    ProcExit(Term),
     CellType(Term),
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value
@@ -460,7 +460,7 @@ impl Prim {
             | Prim::BinLen(Grain::B, t)
             | Prim::LstType(t)
             | Prim::IoType(t)
-            | Prim::Exit(t) => visit(t),
+            | Prim::ProcExit(t) => visit(t),
 
             Prim::HandleEql(a, b)
             | Prim::ByteEql(a, b)
@@ -761,7 +761,7 @@ impl Prim {
                 Arc::clone(function),
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
-            Prim::Exit(code) => Prim::Exit(visit.visit_subterm(code)),
+            Prim::ProcExit(code) => Prim::ProcExit(visit.visit_subterm(code)),
             Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
             Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),
             Prim::CellGet(a, b) => traverse_binary(a, b, visit, Prim::CellGet),
