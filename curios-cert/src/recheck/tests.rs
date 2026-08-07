@@ -1395,6 +1395,7 @@ fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
     let row = std::sync::Arc::new(curios_abi::ForeignFunction {
         namespace: "ffi",
         name: "/forged".to_string(),
+        subject: None,
         label: "forged".to_string(),
         signature: curios_abi::WireSignature {
             params: Vec::new(),

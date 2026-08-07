@@ -8,7 +8,7 @@ pub struct Instant: Type {
 }
 
 pub let now() -> Io(Instant) =
-    let r = /sys/clock_wall!;
+    let r = /sys/clock/wall!;
     Io/pure(Instant { secs_hi = r.secs_hi, secs_lo = r.secs_lo, nanos = r.nanos });
 
 let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =

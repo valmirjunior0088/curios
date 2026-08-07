@@ -42,13 +42,22 @@ fn names_are_the_wire_abi() {
     );
 }
 
-/// Labels are the guest binding names, so they must be as unique as the import names (`register` already enforces name uniqueness; this pins the seed's labels too).
+/// A row's `/sys` placement is its subject module plus its label, and two rows sharing one is a binding conflict the prelude only discovers when it is built. Labels alone are *not* unique — `file/open` and `socket/open` deliberately share a POSIX leaf name — so the pair is what this pins.
 #[test]
-fn labels_are_unique() {
+fn placements_are_unique() {
     let store = host_ops();
-    let labels: BTreeSet<_> = store.iter().map(|function| &function.label).collect();
+    let placements: BTreeSet<_> = store
+        .iter()
+        .map(|function| (&function.subject, &function.label))
+        .collect();
 
-    assert_eq!(labels.len(), store.len());
+    assert_eq!(placements.len(), store.len());
+}
+
+/// Every builtin states the `/sys` module it surfaces in: the prelude places rows by that column rather than by a list beside the table, so a row without one is a table it cannot read.
+#[test]
+fn host_ops_rows_name_a_subject() {
+    assert!(host_ops().iter().all(|function| function.subject.is_some()));
 }
 
 /// Result labels are the record fields the guest projects (`.status`, `.secs_hi`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.
@@ -104,6 +113,7 @@ fn register_rejects_a_duplicate_name() {
     store.register(ForeignFunction {
         namespace: "sys",
         name: "read".to_string(),
+        subject: Some("Handle".to_string()),
         label: "read_again".to_string(),
         signature: WireSignature {
             params: vec![],
@@ -128,6 +138,7 @@ fn equality_is_the_import_pair() {
     let base = |namespace, label: &str| ForeignFunction {
         namespace,
         name: "frobnicate".to_string(),
+        subject: None,
         label: label.to_string(),
         signature: WireSignature {
             params: vec![],

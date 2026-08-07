@@ -1,8 +1,8 @@
-pub use /sys/{args};
+pub use /sys/proc/{args};
 use /std/{Bytes, Nat, Str, Option, Io};
 
 pub let env(name: Str) -> Io(Option(Bytes)) =
-    let r = /sys/env(Str/to_bytes(name))!;
+    let r = /sys/proc/env(Str/to_bytes(name))!;
     Io/pure(
         match r.status == /sys/Status/ok
         | true => Option/some(r.value)
@@ -11,4 +11,4 @@ pub let env(name: Str) -> Io(Option(Bytes)) =
 
 -- Unit inside the wrapper, not a caller-chosen type: `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits. At `{}` there is nothing to forge. A branch that exits must still produce a description, so write `let _ = proc/exit(1)!; …` rather than passing the exit off as the value itself.
 pub let exit(code: Nat) -> Io({}) =
-    /sys/exit(code);
+    /sys/proc/exit(code);

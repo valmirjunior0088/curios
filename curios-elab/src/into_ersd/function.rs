@@ -131,7 +131,7 @@ impl Lowering {
 
         let callee = emitted!(self.walk(context, head, &head_type, None)?);
 
-        // A proof-valued callee that is not a direct function reference is erased content standing where a function was expected — a projection of an erased field, a dropped binder, or a wrapper call returning an erased method: the application is proof content and collapses to the unit constant. The check must be value-driven, not type-driven: a *direct* function reference keeps its call even at an erasable type, because a never-returning host effect (`/std/proc/exit : (Nat) -> False`, polymorphic `/sys/exit`) is proof-typed but must run.
+        // A proof-valued callee that is not a direct function reference is erased content standing where a function was expected — a projection of an erased field, a dropped binder, or a wrapper call returning an erased method: the application is proof content and collapses to the unit constant. The check must be value-driven, not type-driven: a *direct* function reference keeps its call even at an erasable type, because a never-returning host effect (`/std/proc/exit : (Nat) -> False`, polymorphic `/sys/proc/exit`) is proof-typed but must run.
         if !matches!(callee, curios_ersd::Atom::Function(_)) && is_erasable(context, &head_type)? {
             return Ok(Outcome::Emitted(self.unit()));
         }

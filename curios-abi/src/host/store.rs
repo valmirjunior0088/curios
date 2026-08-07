@@ -69,7 +69,7 @@ pub struct WireSignature {
     pub results: Vec<(String, WireType)>,
 }
 
-/// One foreign (host-provided) function. `namespace`/`name` is the wasm import pair — the wire ABI shared by the wasm emitter and the runtime linker; never change one without changing what the other end expects (the unit tests snapshot the builtin set). `namespace` is `sys` for a builtin and `ffi` for a user's `foreign` declaration, whose `name` is its fully qualified name (leading `/`). `label` is the binding name the function surfaces under in the guest.
+/// One foreign (host-provided) function. `namespace`/`name` is the wasm import pair — the wire ABI shared by the wasm emitter and the runtime linker; never change one without changing what the other end expects (the unit tests snapshot the builtin set). `namespace` is `sys` for a builtin and `ffi` for a user's `foreign` declaration, whose `name` is its fully qualified name (leading `/`). `label` is the binding name the function surfaces under in the guest, and `subject` the module that binding sits in: `Some` for a builtin, whose placement the [`host_ops!`](super::host_ops) table states, and `None` for a user's `foreign` declaration, which the guest already places by writing it where it wants it. The two are independent of the wire pair — a row moves in the module tree without the import moving.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -79,6 +79,7 @@ pub struct ForeignFunction {
     #[cfg_attr(feature = "archive", rkyv(with = crate::Namespace))]
     pub namespace: &'static str,
     pub name: String,
+    pub subject: Option<String>,
     pub label: String,
     pub signature: WireSignature,
 }

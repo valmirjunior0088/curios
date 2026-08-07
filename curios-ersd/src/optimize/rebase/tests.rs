@@ -57,6 +57,7 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     let row = std::sync::Arc::new(ForeignFunction {
         namespace: "sys",
         name: "poll".into(),
+        subject: Some("Handle".into()),
         label: "poll".into(),
         signature: WireSignature {
             params: vec![],

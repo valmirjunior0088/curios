@@ -34,7 +34,7 @@ pub induct Read: pub Type
 end
 
 pub let read(h: Handle, n: Nat) -> Io(Read) =
-    let r = /sys/read(h, n)!;
+    let r = /sys/Handle/read(h, n)!;
     Io/pure(
         choose
         | r.status == /sys/Status/ok => Read/chunk(r.bytes)
@@ -43,7 +43,7 @@ pub let read(h: Handle, n: Nat) -> Io(Read) =
         end);
 
 pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
-    let r = /sys/write(h, b)!;
+    let r = /sys/Handle/write(h, b)!;
     choose
     | r.status != /sys/Status/ok => Io/pure(Result/failure(error_of(r.status)))
     | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))

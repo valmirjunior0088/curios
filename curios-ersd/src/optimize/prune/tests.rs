@@ -20,6 +20,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     let row = std::sync::Arc::new(ForeignFunction {
         namespace: "sys",
         name: "beep".into(),
+        subject: Some("Handle".into()),
         label: "beep".into(),
         signature: WireSignature {
             params: vec![],

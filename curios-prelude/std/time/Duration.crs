@@ -19,7 +19,7 @@ pub let of_millis(ms: Nat) -> Duration =
 
 -- The monotonic clock, read as elapsed time since an arbitrary epoch. Distinct from `Instant/now`, which reads the wall clock.
 pub let now() -> Io(Duration) =
-    let r = /sys/clock_mono!;
+    let r = /sys/clock/mono!;
     Io/pure(of(r.secs, r.nanos));
 
 pub let secs(d: Duration) -> Nat =

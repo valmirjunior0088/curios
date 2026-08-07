@@ -6,29 +6,29 @@ pub struct Listener: Type {
 }
 
 let bind_listen(addr: Bytes) -> Io(Result(Listener, Handle/Error)) =
-    let s = /sys/socket(addr)!;
+    let s = /sys/socket/open(addr)!;
     match s.status == /sys/Status/ok
     | true =>
-        let _ = /sys/set_reuseaddr(s.handle, true)!;
-        let bound = /sys/bind(s.handle, addr)!;
+        let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
+        let bound = /sys/socket/bind(s.handle, addr)!;
         match bound == /sys/Status/ok
         | true =>
-            let status = /sys/listen(s.handle, 128)!;
+            let status = /sys/socket/listen(s.handle, 128)!;
             match status == /sys/Status/ok
             | true =>
                 let nb = Async/nonblocking(s.handle)!;
                 match nb
                 | failure(e) =>
-                    let _ = /sys/close(s.handle)!;
+                    let _ = /sys/Handle/close(s.handle)!;
                     Io/pure(Result/failure(e))
                 | success(_) => Io/pure(Result/success(Listener { s.handle }))
                 end
             | false =>
-                let _ = /sys/close(s.handle)!;
+                let _ = /sys/Handle/close(s.handle)!;
                 Io/pure(Result/failure(Handle/error_of(status)))
             end
         | false =>
-            let _ = /sys/close(s.handle)!;
+            let _ = /sys/Handle/close(s.handle)!;
             Io/pure(Result/failure(Handle/error_of(bound)))
         end
     | false => Io/pure(Result/failure(Handle/error_of(s.status)))
@@ -63,7 +63,7 @@ let listen_loop(
     match opened
     | failure(e) => Async/pure(Result/failure(e))
     | success(l) =>
-        let _ = Async/using(l.0, /sys/close(l.0), accept_loop(l, on_conn))!;
+        let _ = Async/using(l.0, /sys/Handle/close(l.0), accept_loop(l, on_conn))!;
         Async/pure(Result/success(()))
     end;
 
@@ -72,8 +72,8 @@ let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     match nb
     | failure(_) =>
         -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
-        Async/lift(/sys/close(h))
-    | success(_) => Async/go(Async/using(h, /sys/close(h), handler(Socket/new(h))))
+        Async/lift(/sys/Handle/close(h))
+    | success(_) => Async/go(Async/using(h, /sys/Handle/close(h), handler(Socket/new(h))))
     end;
 
 pub let serve(
@@ -84,10 +84,10 @@ pub let serve(
     listen_loop(host, port, (h) => serve_conn(h, handler));
 
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    let status = Async/lift(/sys/start_tls_server(h, cfg))!;
+    let status = Async/lift(/sys/tls/start_server(h, cfg))!;
     match status == /sys/Status/ok
-    | true => Async/using(h, /sys/close(h), handler(Socket/new(h)))
-    | false => Async/lift(/sys/close(h))
+    | true => Async/using(h, /sys/Handle/close(h), handler(Socket/new(h)))
+    | false => Async/lift(/sys/Handle/close(h))
     end;
 
 pub let serve_tls(
@@ -97,12 +97,12 @@ pub let serve_tls(
     key: Bytes,
     handler: (Socket) -> Async({}),
 ) -> Async(Result({}, Handle/Error)) =
-    let cfg = Async/lift(/sys/tls_server_config(cert, key))!;
+    let cfg = Async/lift(/sys/tls/server_config(cert, key))!;
     match cfg.status == /sys/Status/ok
     | true =>
         Async/using(
             cfg.handle,
-            /sys/close(cfg.handle),
+            /sys/Handle/close(cfg.handle),
             listen_loop(host, port, (h) => serve_tls_conn(h, cfg.handle, handler)))
     | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
     end;

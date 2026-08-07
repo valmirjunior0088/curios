@@ -18,29 +18,29 @@ pub let write(c: Socket, b: Bytes) -> Async(Result({}, Handle/Error)) =
 
 let configure(h: Handle, settings: Settings) -> Io({}) =
     let _ =
-        /sys/set_recv_timeout(
+        /sys/socket/set_recv_timeout(
             h,
             Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0))!;
     let _ =
-        /sys/set_send_timeout(
+        /sys/socket/set_send_timeout(
             h,
             Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0))!;
     Io/pure(());
 
 let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
     match tls
-    | true => /sys/start_tls(h, Str/to_bytes(host))
+    | true => /sys/tls/start(h, Str/to_bytes(host))
     | false => Io/pure(/sys/Status/ok)
     end;
 
 -- Every step here is a syscall and none of them suspends, so this is an `Io` chain the caller lifts
 -- into a single `Async` step rather than a fiber that could yield partway through connecting.
 let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket, Handle/Error)) =
-    let s = /sys/socket(addr)!;
+    let s = /sys/socket/open(addr)!;
     match s.status == /sys/Status/ok
     | true =>
         let _ = configure(s.handle, settings)!;
-        let status = /sys/connect(s.handle, addr)!;
+        let status = /sys/socket/connect(s.handle, addr)!;
         match status == /sys/Status/ok
         | true =>
             let upgraded = upgrade(s.handle, host, settings.tls)!;
@@ -53,17 +53,17 @@ let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket
                     let nb = Async/nonblocking(s.handle)!;
                     match nb
                     | failure(e) =>
-                        let _ = /sys/close(s.handle)!;
+                        let _ = /sys/Handle/close(s.handle)!;
                         Io/pure(Result/failure(e))
                     | success(_) => Io/pure(Result/success(Socket { s.handle }))
                     end
                 end
             | false =>
-                let _ = /sys/close(s.handle)!;
+                let _ = /sys/Handle/close(s.handle)!;
                 Io/pure(Result/failure(Handle/error_of(upgraded)))
             end
         | false =>
-            let _ = /sys/close(s.handle)!;
+            let _ = /sys/Handle/close(s.handle)!;
             Io/pure(Result/failure(Handle/error_of(status)))
         end
     | false => Io/pure(Result/failure(Handle/error_of(s.status)))
@@ -85,7 +85,7 @@ pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Socket
     match opened
     | failure(e) => Async/pure(Result/failure(e))
     | success(c) =>
-        let _ = Async/acquire(c.0, /sys/close(c.0))!;
+        let _ = Async/acquire(c.0, /sys/Handle/close(c.0))!;
         Async/pure(Result/success(c))
     end;
 

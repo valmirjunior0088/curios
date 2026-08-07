@@ -169,7 +169,7 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 
 /// The canonical form of a (potential) scrutinee refinement key: the head kept verbatim — so the refined function (`classify`, `Nat/in_range`) is *not* unfolded and stays the key — with each argument reduced to WHNF. Storing and probing through one canonicalizer makes occurrences that differ only in argument spelling (`c` vs `Bin/at(cons(c,t),0,_)`, `lo` vs a projection that reduces to it) collapse to the same key. A non-application is its own canonical form.
 ///
-/// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO primitive like `is_ready`'s `/sys/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
+/// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO primitive like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     let canonical = match &**term {
         Subterm::Apply(Apply {

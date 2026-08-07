@@ -199,7 +199,7 @@ fn wire_type(type_: &WireType) -> Term {
     }
 }
 
-/// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` prim applied to the parameter names. Used both for `/sys/Handle`'s rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
+/// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` prim applied to the parameter names. Used both for the builtin store's rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
 ///
 /// The result is an `Io`, and this one site is what makes that true of every row the store describes — a user's own `foreign` declaration included, since a call across the wire is a host effect whoever declared it. The wire contract does not move: `curios-abi` describes the same shapes and only the guest-facing type changes, so a multi-result row reads `Io({status : Nat, bytes : Bytes})` with the record still inside the wrapper.
 ///
@@ -261,6 +261,7 @@ pub(crate) fn foreign_signature(
     let function = ForeignFunction {
         namespace: "ffi",
         name,
+        subject: None,
         label: declaration.label.clone(),
         signature: declaration.signature.clone(),
     };
@@ -548,7 +549,7 @@ fn cell_ops() -> Vec<TopItem> {
     ]
 }
 
-// The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the `/sys` root stays the flat mirror of the `ForeignStore` and `/std` owns the taxonomy — and `Io` is only the type its result wears.
+// The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the one its own store row names, not the type its result wears.
 fn io_ops() -> Vec<TopItem> {
     vec![
         pub_fn_marked(
@@ -574,9 +575,9 @@ fn io_ops() -> Vec<TopItem> {
     ]
 }
 
-// The values and operations of the `/sys/Handle` type: the three standard streams and handle identity. The host operations that mint and consume handles live flat at the `/sys` root (see `host_operations`), not here.
-fn handle_ops() -> Vec<TopItem> {
-    vec![
+// The values and operations of the `/sys/Handle` type: the three standard streams, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `poll`, `close`), which join their type module rather than open one of their own.
+fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
+    let mut items = vec![
         pub_let("stdin", handle(), prim(Prim::Handle(stdio::STDIN))),
         pub_let("stdout", handle(), prim(Prim::Handle(stdio::STDOUT))),
         pub_let("stderr", handle(), prim(Prim::Handle(stdio::STDERR))),
@@ -586,25 +587,62 @@ fn handle_ops() -> Vec<TopItem> {
             bool_(),
             prim(Prim::HandleEql(name("a"), name("b"))),
         ),
-    ]
+    ];
+
+    items.append(&mut host);
+    items
 }
 
-// The host operations, `exit`, and the wire-code mirror, all emitted flat at the `/sys` root: every store-described op (in declaration order), then `exit`, then the `Status`/`Poll`/`Mode` code modules. Operations are lowercase and the code modules capitalized, so the `poll` op and the `Poll` module coexist without clashing.
-fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
-    // Every store-described host op, in store (= declaration) order. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful prim body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
-    let mut ops = foreigns
+// Every store-described host op, grouped by the `/sys` module its own row names as its subject — groups in the order their first row appears, rows within a group in store order. The grouping is read off the rows rather than listed here, so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful prim body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
+fn host_subjects(foreigns: &ForeignStore) -> Vec<(String, Vec<TopItem>)> {
+    let mut subjects: Vec<(String, Vec<TopItem>)> = vec![];
+
+    for function in foreigns.iter() {
+        let subject = function
+            .subject
+            .clone()
+            .expect("a builtin host operation names its /sys subject");
+        let item = TopItem::Let(host_fn(function, true));
+
+        match subjects.iter_mut().find(|(label, _)| *label == subject) {
+            Some((_, items)) => items.push(item),
+            None => subjects.push((subject, vec![item])),
+        }
+    }
+
+    subjects
+}
+
+// Lift one subject's operations out of the grouping, leaving the rest for `host_operations`. `Handle`'s rows are the caller: they belong inside the type module `sys_module` already builds, so they cannot be emitted as a root module of their own.
+fn take_subject(subjects: &mut Vec<(String, Vec<TopItem>)>, subject: &str) -> Vec<TopItem> {
+    let index = subjects
         .iter()
-        .map(|function| TopItem::Let(host_fn(function, true)))
+        .position(|(label, _)| label == subject)
+        .unwrap_or_else(|| panic!("no host operation names the '{subject}' subject"));
+
+    subjects.remove(index).1
+}
+
+// The remaining host-operation subjects, `exit`, and the wire-code mirror: one `/sys` module per subject, then the `Status`/`Poll`/`Mode` code modules.
+fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
+    let mut items = subjects
+        .into_iter()
+        .map(|(subject, mut ops)| {
+            // `exit` is `Prim::Exit` rather than a store row — it traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it is placed by hand in the module its subject already opened. `(n : Nat) -> Io({})`: the result inside the wrapper is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge. An `Io`-polymorphic bottom is arguably sound now that no eliminator can extract the result, but it reopens a settled decision for no consumer.
+            if subject == "proc" {
+                ops.push(pub_fn_marked(
+                    "exit",
+                    vec![(Plicity::Explicit, "n", nat())],
+                    io_of(unit()),
+                    prim(Prim::Exit(name("n"))),
+                ));
+            }
+
+            pub_mod(&subject, ops)
+        })
         .collect::<Vec<_>>();
 
-    ops.extend([
-        // `(n : Nat) -> Io({})`: exit ends the process. The result inside the wrapper is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge. An `Io`-polymorphic bottom is arguably sound now that no eliminator can extract the result, but it reopens a settled decision for no consumer.
-        pub_fn_marked(
-            "exit",
-            vec![(Plicity::Explicit, "n", nat())],
-            io_of(unit()),
-            prim(Prim::Exit(name("n"))),
-        ),
+    items.extend([
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
         pub_mod(
             "Status",
@@ -642,11 +680,14 @@ fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
         ),
     ]);
 
-    ops
+    items
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; the host operations, `exit`, and the `Status`/`Poll`/`Mode` code modules sit flat at the root. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
+/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `Status`/`Poll`/`Mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore) -> Module {
+    let mut subjects = host_subjects(foreigns);
+    let handle_host = take_subject(&mut subjects, "Handle");
+
     let mut items = vec![
         pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
         pub_use("Nat"),
@@ -674,7 +715,10 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
         pub_use("Bool"),
         pub_mod(
             "Handle",
-            with_type(pub_let("Handle", type_(), handle()), handle_ops()),
+            with_type(
+                pub_let("Handle", type_(), handle()),
+                handle_ops(handle_host),
+            ),
         ),
         pub_use("Handle"),
         pub_mod(
@@ -703,7 +747,7 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
         pub_use("Io"),
     ];
 
-    items.extend(host_operations(foreigns));
+    items.extend(host_operations(subjects));
 
     Module { items }
 }

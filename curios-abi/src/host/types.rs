@@ -108,7 +108,7 @@ impl Status {
     }
 }
 
-/// The open mode of `/sys/open`, mirrored by `/std/File`'s `Mode` inductive. Lifts from its `0`/`1`/`2` tag; an out-of-range tag panics — `/std/File` only ever marshals those three, so anything else is a codegen bug.
+/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Lifts from its `0`/`1`/`2` tag; an out-of-range tag panics — `/std/File` only ever marshals those three, so anything else is a codegen bug.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Read,

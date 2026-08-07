@@ -112,7 +112,7 @@ pub let go(body: Fiber) -> Async({}) =
 
 -- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and the next read stalls the whole single-threaded scheduler, so the status is reported rather than dropped.
 pub let nonblocking(h: Handle) -> Io(Result({}, Handle/Error)) =
-    let status = /sys/set_nonblocking(h, true)!;
+    let status = /sys/socket/set_nonblocking(h, true)!;
     Io/pure(
         match status == /sys/Status/ok
         | true => Result/success(())
@@ -125,7 +125,7 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
     | failure(e) => pure(Handle/Read/error(e))
     | success(_) =>
         rec go() -> Async(Handle/Read) =
-            let r = lift(/sys/read(h, n))!;
+            let r = lift(/sys/Handle/read(h, n))!;
             choose
             | r.status == /sys/Status/would_block =>
                 let _ = wait(h, /sys/Poll/read)!;
@@ -143,7 +143,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
         rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
-            let r = lift(/sys/write(h, rest))!;
+            let r = lift(/sys/Handle/write(h, rest))!;
             choose
             | r.status == /sys/Status/would_block =>
                 let _ = wait(h, /sys/Poll/write)!;
@@ -163,7 +163,7 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
         rec go() -> Async(Result(Handle, Handle/Error)) =
-            let r = lift(/sys/accept(l))!;
+            let r = lift(/sys/socket/accept(l))!;
             choose
             | r.status == /sys/Status/would_block =>
                 let _ = wait(l, /sys/Poll/read)!;
@@ -304,7 +304,7 @@ let is_ready(results: Nat, interest: Nat) -> Bool =
 let poll_ready(blocked: Lst(Parked), timeout: Int) -> Io({Lst(Job), Lst(Parked)}) =
     let handles = Lst/map(blocked, (p: Parked) => p.handle);
     let events = Lst/map(blocked, (p: Parked) => p.interest);
-    let results = /sys/poll(handles, events, timeout)!;
+    let results = /sys/Handle/poll(handles, events, timeout)!;
     rec walk(
         rest: Lst(Parked),
         i: Nat,
@@ -533,7 +533,7 @@ pub let run(main: Async({})) -> Io({}) =
     | success(_) => Io/pure(())
     | failure(_) =>
         let _ = /std/print_err("async: deadlocked, no runnable work remains\n")!;
-        /sys/exit(1)
+        /sys/proc/exit(1)
     end;
 
 pub struct Task(A: Type): Type {
