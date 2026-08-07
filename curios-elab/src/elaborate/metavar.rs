@@ -72,10 +72,30 @@ pub(super) fn elaborate_metavar(
     match mode {
         // Birth: freeze the local context as Γ and record the type the hole is checked against. Births happen once per id, but a re-traversal in the same mode is idempotent — re-check the recorded type against the (identical) `expected`.
         Mode::Check(expected) => {
-            if context.metavar_entry(id).is_some() {
-                let result = context.metavar_entry(id).unwrap().result.clone();
+            if let Some(entry) = context.metavar_entry(id) {
+                let result = entry.result.clone();
+                // `into_core` mints a hole *bare* (`Term::metavar`), and the birth arm below rebuilds it over its frozen Γ — but that rebuild lands in the *returned* term, not in the node the traversal read. A node reached a second time in checking position therefore arrives bare again, and returning it unchanged puts a spineless copy of a birthed hole into a compared type, which is exactly what `solve`'s spine-arity invariant forbids. Re-attach the identity spine here so both traversals hand the same term downstream.
+                //
+                // Only the bare case is repaired: an occurrence that already carries a spine may be carrying a *substituted* one, opened under binders the birth Γ does not have, and that is the delayed substitution the whole representation exists to keep.
+                let restored =
+                    (metavar.spine.is_empty() && !entry.telescope.is_empty()).then(|| {
+                        entry
+                            .telescope
+                            .iter()
+                            .map(|(name, _)| Term::free_var(name))
+                            .collect::<Vec<_>>()
+                    });
                 expect(context, term, &result, &expected)?;
-                Ok((term.clone(), expected))
+
+                let Some(spine) = restored else {
+                    return Ok((term.clone(), expected));
+                };
+                let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
+                let rebuilt = match term.span() {
+                    Some(span) => rebuilt.with_span(span),
+                    None => rebuilt,
+                };
+                Ok((rebuilt, expected))
             } else {
                 // Rebuild the hole with the identity spine over its frozen telescope: the rebuilt term is what flows downstream, so every surviving occurrence carries the delayed substitution. Telescope and spine are the shared per-Γ snapshot.
                 let (telescope, spine) = context.identity_snapshot();
