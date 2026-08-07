@@ -510,6 +510,45 @@ fn mismatch_reports_spell_no_universe_instances() {
 }
 
 #[test]
+fn a_mismatch_over_a_polymorphic_head_spells_no_universe_metas() {
+    // The instance suffixes are gone by the sibling above, but a `Type`'s *own* level is a separate node, and a diagnostic over a polymorphic head is where unsolved ones cluster: this fixture once read `(A: Type.{?u263}) -> Nat` against `(#…: (#…: Type.{?u261}) -> Type.{?u262}) -> Nat`. Three placeholders, none of them the disagreement. A concrete level still prints — only a metavariable-headed one is suppressed.
+    let source = r#"
+        use /std/{Nat};
+        let g(A : Type) -> Nat = 0;
+        let f : ((Type) -> Type) -> Nat = g;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+    assert!(
+        error.contains("(A: Type) -> Nat"),
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains("?u"), "universe meta leaked: {error}");
+}
+
+#[test]
+fn a_mismatch_keeps_a_concrete_universe_level() {
+    // The other half of the rule, and the reason it is not "suppress every level": `Type` inhabits the sort one above it, so this reports a genuine `Type.{1}`. Erasing that would render two distinct sorts identically, which is the one thing a mismatch may never do.
+    let source = r#"
+        use /std/{Str};
+        let f : Type = Type;
+        let g : Str = f;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+    assert!(
+        error.contains("inferred: Type.{1}"),
+        "concrete level suppressed: {error}"
+    );
+}
+
+#[test]
 fn a_mismatch_over_an_applied_head_is_located() {
     // A value body's spine forms are rebuilt by the `!`-hoisting walk rather than routed through the span-stamping lowering entry, so an applied head once reached elaboration unspanned and reported with no snippet at all — while the same mismatch over a bare variable reported one.
     let source = r#"

@@ -38,7 +38,9 @@ fn universe_suffix(levels: &[Level]) -> String {
 //
 // axis (b) — globals: a *shorten map* (`with_short_names`, built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Installed by error rendering *and* `Module` display.
 //
-// axis (c) — universe instances: a *flag* (`with_erased_universes`) suppresses the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. `Type.{n}` is deliberately *not* suppressed: the level is the whole content of that node, and erasing it would render two distinct sorts identically.
+// axis (c) — universe instances: a *flag* (`with_erased_universes`) suppresses the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead.
+//
+// A `Type`'s own level is suppressed only when it is *metavariable-headed*. The level is that node's whole content, so erasing a concrete one could render two distinct sorts identically — but an unsolved level names nothing a reader can act on, and it is the common case: a diagnostic over a polymorphic head reports `(A: Type.{?u263}) -> Nat` against `(#6553: (#6552: Type.{?u261}) -> Type.{?u262}) -> Nat`, three placeholders competing with the disagreement they surround. Suppressing every level was rejected for the case that cannot be ruled out — two distinct concrete levels rendering as `Type` against `Type` — and a whole-fragment "show it only when it disambiguates" pass was rejected as context-dependent rendering: unlike a binder name, which is inherently relative, a level is an absolute fact about the term.
 //
 // `display_label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
@@ -733,7 +735,7 @@ fn sub_prim(prim: Prim, depth: usize) -> Printer {
 pub(crate) fn print_term(term: Term, depth: usize) -> Printer {
     match Term::unwrap_or_clone(term) {
         Subterm::Type(level) => {
-            if level.is_zero() {
+            if level.is_zero() || (erasing_universes() && level.metas().next().is_some()) {
                 pure("Type")
             } else {
                 pure(format!("Type.{{{level}}}"))
