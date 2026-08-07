@@ -2,12 +2,15 @@ use {
     super::Erased,
     curios_base::{Grain, Int, Plicity, Qualifier, Span},
     curios_core::{
-        Atom, Level, Module, Polarity, ReduceError, Term, UniverseConstraintOrigin, UniverseError,
-        build_rename, build_shorten, display_names, with_erased_universes, with_pretty_names,
-        with_short_names,
+        Atom, Free, Level, Module, Polarity, ReduceError, Spelling, Term, UniverseConstraintOrigin,
+        UniverseError, build_rename, build_shorten, display_names,
     },
     num_bigint::BigUint,
-    std::{collections::BTreeSet, fmt, rc::Rc},
+    std::{
+        collections::{BTreeSet, HashMap},
+        fmt,
+        rc::Rc,
+    },
 };
 
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`]; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
@@ -903,8 +906,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn format(&self) -> String {
-        // Render with source-style names (axis (a)): collect the names appearing across every term this error displays, build one collision-aware rename map for them, and install it for the duration of the render so `inferred`/`expected` agree on what each name means.
+    /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means.
+    fn rename_map(&self) -> Rc<HashMap<Free, String>> {
         let mut terms = Vec::new();
         self.collect_terms(&mut terms);
 
@@ -913,23 +916,24 @@ impl Error {
             names.extend(display_names(term));
         }
 
-        let rename = Rc::new(build_rename(&names));
-        // Axis (c) wraps the whole render rather than any one variant: every error that prints a term prints it from the raw elaborated spelling, so the instance suffix is not a mismatch-specific wart. Suppressing at the printer keeps `Error` a plain data carrier — the alternative, rewriting each variant's terms through `project_erased_universes`, would have to mirror `collect_terms`'s roster and take `&mut self` through two public entry points.
-        with_erased_universes(|| with_pretty_names(rename, || self.render()))
+        Rc::new(build_rename(&names))
     }
 
-    /// Like [`format`], additionally shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Used on the core error paths, where the lowered module is in scope.
+    /// Render this error with source-style names, shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(&self, module: &Module) -> String {
-        with_short_names(Rc::new(build_shorten(&module.module_symbols())), || {
-            self.format()
-        })
+        self.render(&Rc::new(
+            Spelling::default()
+                .with_pretty_names(self.rename_map())
+                .with_short_names(Rc::new(build_shorten(&module.module_symbols())))
+                .with_erased_universes(),
+        ))
     }
 
     /// One snippet per rendered error, for the innermost span attached to it.
     ///
     /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Rendering therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
-    fn render(&self) -> String {
-        let body = self.render_body();
+    fn render(&self, spelling: &Rc<Spelling>) -> String {
+        let body = self.render_body(spelling);
         match self.innermost_span() {
             Some(span) => format!("{body}\n\n{}", span.render_snippet()),
             None => body,
@@ -937,13 +941,13 @@ impl Error {
     }
 
     /// The message without any snippet — wrappers are transparent, every other variant renders through its own `Display`.
-    fn render_body(&self) -> String {
+    fn render_body(&self, spelling: &Rc<Spelling>) -> String {
         match self {
-            Self::Located { error, .. } => error.render_body(),
+            Self::Located { error, .. } => error.render_body(spelling),
             Self::InDeclaration { name, error } => {
-                format!("while elaborating {name}:\n{}", error.render_body())
+                format!("while elaborating {name}:\n{}", error.render_body(spelling))
             }
-            error => error.to_string(),
+            error => Displayed(error, Rc::clone(spelling)).to_string(),
         }
     }
 
@@ -1053,16 +1057,32 @@ fn declaring_module(module: &Qualifier) -> String {
     }
 }
 
+/// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format_with`], which supplies a [`Spelling`].
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        Displayed(self, Rc::new(Spelling::default())).fmt(f)
+    }
+}
+
+/// An error paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take, and the reason every arm below rebinds its term fields before interpolating them. A field left unrebound would silently render core's own spelling, which is why the rebinding is per-arm and mechanical rather than left to each `write!`.
+struct Displayed<'a>(&'a Error, Rc<Spelling>);
+
+impl fmt::Display for Displayed<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let spelling = &self.1;
+        match self.0 {
             Error::ReduceExhausted { term } => {
+                let term = term.spelled(spelling);
                 write!(f, "reduction ran out of steps on: {term}")
             }
             Error::ConvertExhausted { this, that } => {
+                let that = that.spelled(spelling);
+                let this = this.spelled(spelling);
                 write!(f, "conversion ran out of steps between {this} and {that}")
             }
             Error::TypeMismatch { inferred, expected } => {
+                let expected = expected.spelled(spelling);
+                let inferred = inferred.spelled(spelling);
                 write!(
                     f,
                     "type mismatch\n  inferred: {inferred}\n  expected: {expected}"
@@ -1070,8 +1090,9 @@ impl fmt::Display for Error {
             }
             // "this sequencing", not "this '!'": a hand-written '/syn/Monad/bind' call reaches the same report, and nothing on the term records which spelling produced it.
             Error::StrandedSequencing { sequenced, region } => {
+                let region = region.spelled(spelling);
                 let needed = match sequenced {
-                    Some(sequenced) => sequenced.to_string(),
+                    Some(sequenced) => sequenced.spelled(spelling).to_string(),
                     None => "a monad".to_string(),
                 };
                 write!(
@@ -1093,21 +1114,25 @@ impl fmt::Display for Error {
                 write!(f, "invalid inferred universe state: {message}")
             }
             Error::NotAFunction { head_type } => {
+                let head_type = head_type.spelled(spelling);
                 write!(f, "applied a non-function\n  head has type: {head_type}")
             }
             Error::NotAFunctionType { expected } => {
+                let expected = expected.spelled(spelling);
                 write!(
                     f,
                     "introduced a lambda where the expected type is not a function type\n  expected: {expected}"
                 )
             }
             Error::NotATuple { head_type } => {
+                let head_type = head_type.spelled(spelling);
                 write!(
                     f,
                     "projected from a non-tuple\n  head has type: {head_type}"
                 )
             }
             Error::NotATupleType { expected } => {
+                let expected = expected.spelled(spelling);
                 write!(
                     f,
                     "introduced a tuple where the expected type is not a tuple type\n  expected: {expected}"
@@ -1166,15 +1191,19 @@ impl fmt::Display for Error {
                 }
             }
             Error::NotNatType { head_type } => {
+                let head_type = head_type.spelled(spelling);
                 write!(f, "expected Nat but got {head_type}")
             }
             Error::NotBoolType { head_type } => {
+                let head_type = head_type.spelled(spelling);
                 write!(f, "expected Bool but got {head_type}")
             }
             Error::NotLstType { head_type } => {
+                let head_type = head_type.spelled(spelling);
                 write!(f, "expected Lst but got {head_type}")
             }
             Error::NotBinType { grain, head_type } => {
+                let head_type = head_type.spelled(spelling);
                 let expected = match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
@@ -1212,9 +1241,11 @@ impl fmt::Display for Error {
                 write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")
             }
             Error::MatchCaseMissing { term, atom } => {
+                let term = term.spelled(spelling);
                 write!(f, "missing match case for constructor '{atom}': {term}")
             }
             Error::NotAInductType { head_type } => {
+                let head_type = head_type.spelled(spelling);
                 write!(
                     f,
                     "matched inductive constructors on a non-inductive type\n  head has type: {head_type}"
@@ -1231,6 +1262,7 @@ impl fmt::Display for Error {
                 field,
                 field_type,
             } => {
+                let field_type = field_type.spelled(spelling);
                 write!(
                     f,
                     "struct '{name}' is declared at sort 'Prop' but field '{field} : {field_type}' is informative\n  a 'Prop' struct's fields must all be propositions (or forced by indices)"
@@ -1242,6 +1274,7 @@ impl fmt::Display for Error {
                 site_type,
                 polarity,
             } => {
+                let site_type = site_type.spelled(spelling);
                 write!(
                     f,
                     "'{name}' is not strictly positive: through '{site} : {site_type}' it occurs in itself {polarity}\n  a recursive occurrence must be a plain payload, never left of an arrow"
@@ -1272,6 +1305,7 @@ impl fmt::Display for Error {
                 }
             }
             Error::NotAStructType { found } => {
+                let found = found.spelled(spelling);
                 write!(f, "expected a struct type here\n  found: {found}")
             }
             Error::StructArityMismatch {
@@ -1338,6 +1372,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::SpreadBaseTypeMismatch { name, found } => {
+                let found = found.spelled(spelling);
                 write!(
                     f,
                     "the '..' base of a '{name}' literal must itself be a '{name}'\n  found: {found}"
@@ -1379,18 +1414,21 @@ impl fmt::Display for Error {
                 )
             }
             Error::UnboundVariable { term } => {
+                let term = term.spelled(spelling);
                 write!(f, "unbound variable: {term}")
             }
             Error::CannotInfer => {
                 write!(f, "cannot infer type of expression")
             }
             Error::PostponedCheck { expected } => {
+                let expected = expected.spelled(spelling);
                 write!(
                     f,
                     "cannot check expression: its expected type never gained structure: {expected}"
                 )
             }
             Error::OperatorUndefined { symbol, type_ } => {
+                let type_ = type_.spelled(spelling);
                 write!(f, "operator '{symbol}' is not defined for type {type_}")
             }
             Error::UninferredImplicit { func, binder } => {
@@ -1412,6 +1450,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::NoWitness { goal, func, binder } => {
+                let goal = goal.spelled(spelling);
                 write!(
                     f,
                     "no witness of {goal} found\n  needed by '{func}' for its 'use' binder '{binder}'"
@@ -1422,14 +1461,20 @@ impl fmt::Display for Error {
                 goal,
                 solution,
             } => {
+                let goal = goal.spelled(spelling);
                 // `?` itself is the turnstile: hypotheses as `name : type` lines, then `? : type` states the goal and `? = term` its solution — the declaration idiom `name : type = value` split into clauses about `?`. No `? =` line means nothing determined it.
                 write!(f, "goal `?`")?;
                 for (name, type_) in scope {
-                    write!(f, "\n  {name} : {type_}")?;
+                    write!(
+                        f,
+                        "\n  {} : {}",
+                        name.spelled(spelling),
+                        type_.spelled(spelling)
+                    )?;
                 }
                 write!(f, "\n  ? : {goal}")?;
                 match solution {
-                    Some(solution) => write!(f, "\n  ? = {solution}"),
+                    Some(solution) => write!(f, "\n  ? = {}", solution.spelled(spelling)),
                     None => Ok(()),
                 }
             }
@@ -1437,7 +1482,8 @@ impl fmt::Display for Error {
                 // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
                 const WIDTH: usize = 100;
                 let clause = |term: &Term| {
-                    term.display_within(WIDTH)
+                    term.spelled(spelling)
+                        .within(WIDTH)
                         .to_string()
                         .replace('\n', "\n    ")
                 };
@@ -1449,7 +1495,7 @@ impl fmt::Display for Error {
                     }
                     write!(f, "goal `?`")?;
                     for (name, type_) in &report.scope {
-                        write!(f, "\n  {name} : {}", clause(type_))?;
+                        write!(f, "\n  {} : {}", clause(name), clause(type_))?;
                     }
                     write!(f, "\n  ? : {}", clause(&report.goal))?;
                     if let Some(solution) = &report.solution {
@@ -1501,6 +1547,9 @@ impl fmt::Display for Error {
                 first,
                 second,
             } => {
+                let first = first.spelled(spelling);
+                let goal = goal.spelled(spelling);
+                let second = second.spelled(spelling);
                 write!(
                     f,
                     "ambiguous witness of {goal}\n  both {first} and {second} match at the same superclass depth"
@@ -1523,6 +1572,7 @@ impl fmt::Display for Error {
                 position,
                 head,
             } => {
+                let head = head.spelled(spelling);
                 write!(
                     f,
                     "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, or a primitive type",
@@ -1530,12 +1580,14 @@ impl fmt::Display for Error {
                 )
             }
             Error::NotAConcept { witness, found } => {
+                let found = found.spelled(spelling);
                 write!(
                     f,
                     "witness '{witness}' does not witness a concept\n  its annotation elaborates to: {found}"
                 )
             }
             Error::NonRegularWitnessPremise { witness, premise } => {
+                let premise = premise.spelled(spelling);
                 write!(
                     f,
                     "witness '{witness}' has a non-regular premise: {premise}\n  every 'use' premise must apply its concept to variables bound by the witness's own parameters"

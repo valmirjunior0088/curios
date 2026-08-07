@@ -10,9 +10,9 @@ use frees::*;
 
 use {
     super::{
-        Atom, Bound, Enter, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Telescope,
-        Three, Two, UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
-        instantiate_universe_levels_scoped, print_term,
+        Atom, Bound, Enter, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Spelled,
+        Spelling, Telescope, Three, Two, UniverseContext, UniverseError, UniverseMetaId,
+        UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
     },
     curios_abi::ForeignFunction,
     curios_base::{
@@ -1283,22 +1283,32 @@ impl From<Subterm> for Term {
     }
 }
 
+/// The faithful rendering: core's own names, every universe shown. A diagnostic wanting source-style spelling goes through [`Term::spelled`].
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_term(self.clone(), 0), formatter, 4)
+        run_printer(
+            print_term(self.clone(), 0, &Rc::new(Spelling::default())),
+            formatter,
+            4,
+        )
     }
 }
 
 impl Term {
-    /// A `Display` adapter rendering this term within `width` columns: the printer's groups fit or break against the target instead of the unbounded flat layout plain `Display` keeps. Diagnostics that print large terms render through this; the width is a target, not a guarantee, since content with no break point still overruns.
-    pub fn display_within(&self, width: usize) -> impl fmt::Display {
-        struct Within(Term, usize);
-        impl fmt::Display for Within {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                run_printer_within(print_term(self.0.clone(), 0), formatter, 4, self.1)
-            }
+    /// This term paired with the [`Spelling`] it renders under — the parameter `Display::fmt` cannot take. See the axes documented in `print`.
+    pub fn spelled<'a>(&'a self, spelling: &Rc<Spelling>) -> Spelled<'a, Term> {
+        Spelled::new(self, spelling)
+    }
+}
+
+impl fmt::Display for Spelled<'_, Term> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let printer = print_term(self.value().clone(), 0, self.spelling());
+        match self.width() {
+            // The width is a target, not a guarantee: content with no break point still overruns.
+            Some(width) => run_printer_within(printer, formatter, 4, width),
+            None => run_printer(printer, formatter, 4),
         }
-        Within(self.clone(), width)
     }
 }
 
@@ -2724,7 +2734,11 @@ impl Subterm {
 
 impl fmt::Display for Subterm {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_term(self.clone().into(), 0), formatter, 4)
+        run_printer(
+            print_term(self.clone().into(), 0, &Rc::new(Spelling::default())),
+            formatter,
+            4,
+        )
     }
 }
 

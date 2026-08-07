@@ -9,8 +9,8 @@
 use {
     super::{
         Atom, ConceptDecl, Free, Global, InductDecl, Many, RecGroup, RecMemberScopes, Scope,
-        Sharing, StructDecl, Term, UniverseContext, UniverseError, UniverseSeed, build_shorten,
-        project_erased_universes, with_short_names,
+        Sharing, Spelling, StructDecl, Term, UniverseContext, UniverseError, UniverseSeed,
+        build_shorten, project_erased_universes,
     },
     curios_base::{Qualifier, RootId},
     std::{
@@ -217,8 +217,14 @@ impl Definition {
             .collect()
     }
 
-    fn print(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{} : {} = {}", self.name, self.type_, self.body)
+    fn print(&self, formatter: &mut fmt::Formatter<'_>, spelling: &Rc<Spelling>) -> fmt::Result {
+        write!(
+            formatter,
+            "{} : {} = {}",
+            self.name,
+            self.type_.spelled(spelling),
+            self.body.spelled(spelling)
+        )
     }
 }
 
@@ -411,36 +417,39 @@ impl Module {
 impl fmt::Display for Module {
     // Printed by *iterating* the flat items (never re-folding into a nested term), so `--print core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        with_short_names(Rc::new(build_shorten(&self.module_symbols())), || {
-            for item in &self.items {
-                match item {
-                    Item::Let(def) => {
-                        write!(formatter, "let ")?;
-                        def.print(formatter)?;
-                        writeln!(formatter, ";")?;
-                    }
-                    Item::Rec(rec) => {
-                        write!(formatter, "rec ")?;
-                        for (index, def) in rec.definitions().iter().enumerate() {
-                            if index > 0 {
-                                write!(formatter, "and ")?;
-                            }
-                            def.print(formatter)?;
-                            write!(formatter, " ")?;
+        // Shortened against this module's own symbols (axis (b)) and nothing else: a dump is read *about* the compiler, so its universes stay visible where a diagnostic would suppress them.
+        let spelling = Rc::new(
+            Spelling::default().with_short_names(Rc::new(build_shorten(&self.module_symbols()))),
+        );
+
+        for item in &self.items {
+            match item {
+                Item::Let(def) => {
+                    write!(formatter, "let ")?;
+                    def.print(formatter, &spelling)?;
+                    writeln!(formatter, ";")?;
+                }
+                Item::Rec(rec) => {
+                    write!(formatter, "rec ")?;
+                    for (index, def) in rec.definitions().iter().enumerate() {
+                        if index > 0 {
+                            write!(formatter, "and ")?;
                         }
-                        writeln!(formatter, ";")?;
+                        def.print(formatter, &spelling)?;
+                        write!(formatter, " ")?;
                     }
+                    writeln!(formatter, ";")?;
                 }
             }
+        }
 
-            write!(formatter, "{}", self.body)?;
+        write!(formatter, "{}", self.body.spelled(&spelling))?;
 
-            if let Some(type_) = &self.type_ {
-                write!(formatter, "\n: {type_}")?;
-            }
+        if let Some(type_) = &self.type_ {
+            write!(formatter, "\n: {}", type_.spelled(&spelling))?;
+        }
 
-            Ok(())
-        })
+        Ok(())
     }
 }
 
