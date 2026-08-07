@@ -82,7 +82,7 @@ pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
 
     let mut budget = BUDGET;
 
-    choose(&clauses, 0, &mut search, &mut budget)
+    choose(&clauses, &mut search, &mut budget)
 }
 
 /// One side of a constraint as the parts a maximum is taken over: each atom, and the constant when it contributes.
@@ -277,41 +277,78 @@ impl Search {
     }
 }
 
-/// Choose an alternative for every clause from `clause` onward, backtracking over the ones that close a cycle.
-fn choose(
-    clauses: &[Vec<Option<Arc>>],
-    clause: usize,
-    search: &mut Search,
-    budget: &mut usize,
-) -> bool {
+/// Choose an alternative for every clause, backtracking over the ones that close a cycle.
+///
+/// Iterative rather than recursive, and that is a requirement rather than a preference: the natural spelling puts one call frame on the stack per clause, and a declaration's clause count is a function of how many constraints reached it — bounded by the program, not by the rule. A corpus large enough overflows the thread stack, which aborts the process instead of refusing the term. `curios-elab`'s `universe_solver::choose` is the same search over the same clause shape and is linearised for the same reason.
+fn choose(clauses: &[Vec<Option<Arc>>], search: &mut Search, budget: &mut usize) -> bool {
+    /// One clause of the current partial assignment. `next` is the alternative to try when this frame is resumed, and `undo` is what the alternative it last descended on committed — replayed on resume, which is what the recursive spelling got from unwinding.
+    struct Frame {
+        clause: usize,
+        next: usize,
+        undo: Option<Undo>,
+    }
+
     if *budget == 0 {
         return false;
     }
     *budget -= 1;
 
-    // Feasibility is the invariant, so an assignment that committed is a model.
-    if clause == clauses.len() {
+    // Feasibility is the invariant, so an assignment that committed is a model — and the empty one is already committed.
+    if clauses.is_empty() {
         return true;
     }
 
-    for alternative in &clauses[clause] {
-        let Some(arc) = alternative else {
-            // Already satisfied by the committed potential, with nothing to undo.
-            if choose(clauses, clause + 1, search, budget) {
-                return true;
-            }
-            continue;
+    let mut stack = vec![Frame {
+        clause: 0,
+        next: 0,
+        undo: None,
+    }];
+
+    loop {
+        let Some(frame) = stack.last_mut() else {
+            break;
         };
 
-        match search.commit(*arc) {
-            Ok(undo) => {
-                if choose(clauses, clause + 1, search, budget) {
-                    return true;
-                }
-                search.rollback(undo);
-            }
-            Err(undo) => search.rollback(undo),
+        // Resuming this frame: put back whatever its last descent committed.
+        if let Some(undo) = frame.undo.take() {
+            search.rollback(undo);
         }
+
+        let clause = frame.clause;
+        let Some(&alternative) = clauses[clause].get(frame.next) else {
+            stack.pop();
+            continue;
+        };
+        frame.next += 1;
+
+        let undo = match alternative {
+            // Already satisfied by the committed potential, with nothing to undo.
+            None => None,
+            Some(arc) => match search.commit(arc) {
+                Ok(undo) => Some(undo),
+                Err(undo) => {
+                    search.rollback(undo);
+                    continue;
+                }
+            },
+        };
+        frame.undo = undo;
+
+        if *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
+
+        let next = clause + 1;
+        if next == clauses.len() {
+            return true;
+        }
+
+        stack.push(Frame {
+            clause: next,
+            next: 0,
+            undo: None,
+        });
     }
 
     false
