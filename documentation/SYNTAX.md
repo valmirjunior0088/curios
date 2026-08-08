@@ -352,7 +352,7 @@ A goal is never accepted in a successfully compiled program.
 
 ### Postfix `!`
 
-`action!` is monadic sequencing. Each occurrence is equivalent to a call to `/syn/Monad/bind(action, continuation)`.
+`action!` is monadic sequencing. Each occurrence is equivalent to a call to `/syn/Monad/bind(action, continuation)` in the monad of its region.
 
 ```crs
 let parser : Parse(Nat) =
@@ -362,6 +362,10 @@ let parser : Parse(Nat) =
 ```
 
 Every value body is a sequencing region. Lambda bodies, match arms, and recursive member bodies begin fresh regions; the tail after a local `let` remains in the same region. There is no `let !` header or matching `end`.
+
+A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
+
+An action whose own monad differs from the region's is lifted: the `!` wraps the action in `/syn/Lift`'s `lift`, and the declared `Lift` witness for that ordered pair of monads carries it into the region. A pair with no declared witness is rejected. See [Lifting between monads](#lifting-between-monads).
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
@@ -401,6 +405,29 @@ once                            -- prints "x" twice in total
 ```
 
 `Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected.
+
+### Lifting between monads
+
+`/syn/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
+
+```crs
+satisfy Lift(Io, Async) {
+    lift = lift,
+}
+```
+
+With that witness declared — `/std/Async` declares it — an `Io` action sequences directly inside an `Async` region, and the `!` inserts the lift:
+
+```crs
+use /std/{Async, print};
+pub let fiber : Async({}) =
+    let _ = print("hello\n")!;
+    Async/pure(());
+```
+
+The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region.
+
+Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it, and the composite embedding is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler.
 
 ### Whole-term forms and operand positions
 
@@ -926,7 +953,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `use C(A)` | Automatically resolved witness binder |
 | `use value` | Explicitly supplied witness argument or superclass field |
 | `?` | Written elaboration goal that always reports and fails compilation |
-| `term!` | Monadic bind through `Monad` |
+| `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |

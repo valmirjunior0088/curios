@@ -25,7 +25,7 @@ Verified against the tree rather than inherited from the superseded documents. E
 | η-equating metavariable heads | Nothing for this item. `eta_expand_neutral` (`convert.rs:1254`) is *type-directed* Π/Σ/struct eta, which is the separate, already-checked roadmap entry | The metavariable-head rule itself |
 | Residual constraints | The checking-shaped half: a parked `Checking` obligation surviving every retry reports `Error::PostponedCheck` (`error.rs:245`) at the expression's own span, naming the expected type it waited on | The conversion-shaped residue. A parked `Conversion` goal still reports as a plain mismatch at its origin, distinguished only when it stands between witness holes |
 | Lambda inference | The scheduling machinery, hardened in production: `ParkedGoal` freezes its birth frame and watch set (`context/solutions.rs:51`), `elaborate_apply` settles a whole telescope through `ParkedWork::Checking`, and drains run at item boundaries | The feature. `ParkedWork` (`context/solutions.rs:34`) has exactly `Conversion`, `Checking`, `Witness` — no inference-shaped or groundness-shaped variant — and `binding.rs:519` still rejects an unannotated domain outright |
-| Witness keying | Keying works wherever the concept parameter reduces to a rigid head, including the higher-kinded case through `HeadKey::of_whnf`'s `Func` arm (`concept.rs:80`) | A partially applied family. `(A : Type) => Free(S, A)` leaves a stuck `Apply` under the binder, which the arm does not read |
+| Witness keying | Keying works wherever the concept parameter reduces to a rigid head, including the higher-kinded case through `HeadKey::of_whnf`'s `Func` arm (`concept.rs:78`) | A partially applied family. `(A : Type) => Free(S, A)` leaves a stuck `Apply` under the binder, which the arm does not read |
 | Partial imitation | Full-arity imitation, with pre-commit re-validation against the metavariable's frozen birth type (`convert.rs:1691`) | The under-applied case. `convert.rs:1646` blocks when `flex.params.len() != arity` |
 
 The last two items are the newest and the least discussed, so they carry a reproduction each below. The first four are inherited scope whose superseded documents this file replaces.
@@ -65,7 +65,7 @@ This item is a prerequisite for 1.1 and Part 2 in practice, not in principle: bo
 
 ### 1.4 Right-biased partial imitation for flex-apply
 
-**Reproduction.** With `induct Box(S : Type, A : Type) : Type | wrap(A) end`, a `!` on an action of type `Box(Str, Nat)` raises the goal `Monad(?M)` with the equation `?M(?A) ≡ Box(Str, Nat)`. Imitation blocks at `convert.rs:1646`:
+**Reproduction.** With `induct Box(S : Type, A : Type) : Type | wrap(A) end`, a `!` on an action of type `Box(Str, Nat)` raises the goal `Monad(?M)` with the equation `?M(?A) ≡ Box(Str, Nat)`. (Strict postponement reads the region's monad from the region's *type*, but the `Monad` goal's `?M` is still pinned by unification against that type — an application of the same shape — so this item remains the gate for every multi-parameter monad.) Imitation blocks at `convert.rs:1646`:
 
 ```rust
 let arity = rigid_args.len();          // params + indices
@@ -92,11 +92,11 @@ and equate the retained prefix pairwise as the saturated case already does.
 
 **Reproduction.** `satisfy (@S : Type) => Monad((A : Type) => Box(S, A))` is refused with *witness cannot be keyed: its concept's parameter 1 reduces to `A => Box(S, A)`*. The same declaration with a unary family — `satisfy Monad((A : Type) => Uni(A))` — is accepted and runs.
 
-**Cause.** Two mechanisms compose. Surface `Box(S, A)` lowers to `Apply(Box, [S, A])`, and weak-head reduction does not go under the `λA`, so the lambda body stays a stuck application. `HeadKey::of_whnf`'s `Func` arm (`concept.rs:80`) walks the telescope to its body and accepts only `InductType`, `StructType`, or an intrinsic former there; an `Apply` falls to `_ => None`, and `resolve.rs:651` raises the error.
+**Cause.** Two mechanisms compose. Surface `Box(S, A)` lowers to `Apply(Box, [S, A])`, and weak-head reduction does not go under the `λA`, so the lambda body stays a stuck application. `HeadKey::of_whnf`'s `Func` arm (`concept.rs:78`) walks the telescope to its body and accepts only `InductType`, `StructType`, or an intrinsic former there; an `Apply` falls to `_ => None`, and `resolve.rs:690` raises the error.
 
 The unary case is not an exception to this — it is `reduce_func_eta` firing first. `λA. Uni(A)` contracts to bare `Uni`, whose own whnf is the family node. Eta-contraction cannot fire on a partial application, which is why the two spellings diverge.
 
-**Rule.** When the `Func` body is an `Apply`, key on that application's head. This makes registration and lookup agree, and both call sites (`resolve.rs:226` for the goal, `resolve.rs:651` for the declaration) go through the one function.
+**Rule.** When the `Func` body is an `Apply`, key on that application's head. This makes registration and lookup agree, and both call sites (`resolve.rs:319` for the goal, `resolve.rs:690` for the declaration) go through the one function.
 
 **Asymmetry worth knowing.** Only the registration side needs this. On the goal side, a committed imitation constructs its body through `Term::induct_type_at` (`convert.rs:1611`) — a materialized node — so once 1.4 lands, the solved `?M` keys through the existing arm unchanged. The two items are therefore independent fixes to opposite sides of the same wall, and 1.5 is independently useful: it admits the parametric witness declaration even before 1.4 makes `!` dispatch to it.
 

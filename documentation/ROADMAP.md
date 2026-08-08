@@ -21,6 +21,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Show`/`Eql`/`Ord`/`Monad` in the standard library
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
   - [x] Multi-parameter keying (tuple of every parameter head)
+  - [x] `Lift` embeddings (`/syn/Lift(M, N)` with `Monad` superclasses; one witness per ordered pair, never chained; `/std/Async` declares `Lift(Io, Async)`; missing-edge reports name the sequencing, monadhood, and any declared chain)
   - [x] Orphan rule (a witness must be declared where its concept, or a type in its key, is already declared; the standard library's three roots — `sys`/`syn`/`std` — are exempt from the check against each other, one coordinated implementation rather than independent packages)
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp` with `/sys` witnesses; intrinsic codegen unchanged)
 - [x] Unified `struct` declarations (independent nominal and declaration-local representation visibility)
@@ -57,7 +58,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Syntax Sugar
 
 - [x] Multi-parameter function syntax sugar
-- [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/syn/Monad` concept — no `let !` header; every value body is a region)
+- [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/syn/Monad` concept — no `let !` header; every value body is a region; the region's monad is read strictly from its type, and a cross-monad action lifts through the declared `/syn/Lift` edge)
 - [x] Field projection sugar (`.0`/`.label`)
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in every comma-separated list
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
@@ -94,6 +95,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Build-scoped archived prelude and replay (`curios-prelude` compiles and validates fixed Text/Core/Ersd state in `OUT_DIR`; production compilations restore it with no source fallback and lower/elaborate/erase only the user suffix)
 - [x] Configurable type-checker reduction budget (the CLI's `--budget`, default 1,000,000 steps, restored per declaration; counting steps rather than elapsed time makes acceptance reproducible across machines, so the browser build needs no clock shim)
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length (the `elaborate → elaborate_apply → check` cycle defunctionalized onto a frame stack for ground, all-explicit applications; each term's cached derivations carried on the shared `Rc` node and filled by an iterative post-order walk — so a literal or generated spine of any size compiles on a default 2MB stack, the ceiling now being the reduction deadline and memory)
+- [x] Elaboration transients grouped under one core variant (`Transient`: `Infix`, `NumLit`, and `Bang` — postfix `!` carried into core unresolved and desugared by `elaborate_bang`, where the type-directed lift decision lives; refused wholesale at the kernel boundary)
 - [x] Names as identity only (a compiler name distinguishes bindings and renders for a human, and nothing branches on its spelling: `Free`/`Global`/`Mint`/`WitnessId` replace the five facts that were flattened into one `String`, constructor runtime tags are declaration order rather than alphabetical rank, anonymous witnesses carry an identity rather than a manufactured name, and no accessor reaches a spelling from a `Free` outside the printer)
 - [x] Totality of everything erasure deletes, so no closed term inhabits `/syn/False` by a divergent type or a divergent proof (size-change termination per `rec` group, classifying rather than rejecting; obligation **(T)** over type positions and **(V)** over `Prop`-sorted terms, both seeded from what elaboration settled; partiality persisted on `Definition` and inherited across the prelude archive — see [DESIGN.md](DESIGN.md), "Totality of the erased program", and [PERIMETER.md](PERIMETER.md), which also records the one route still open)
 - [x] Crate-boundary split separating the term representation from the elaborator (`curios-core` holds `Term`, its binder discipline, the intrinsic roster and folds, universes, and the nominal registry; `curios-elab` holds elaboration, unification, zonking, the universe solver, witness resolution, and erasure — with `Reducer` as the seam that shares intrinsic folding while leaving reduction strategy to each side)
