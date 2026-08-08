@@ -14,7 +14,7 @@ use {
         Statement, StatementId, Terminator, ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
-    std::sync::Arc,
+    std::{collections::BTreeSet, sync::Arc},
 };
 
 /// A checked module under construction. See the module documentation.
@@ -22,6 +22,10 @@ use {
 pub struct ErsdBuilder {
     module: Module,
     open_blocks: Vec<Vec<StatementId>>,
+    /// Identities handed out by [`reserve_function`](Self::reserve_function) and not yet defined.
+    ///
+    /// Tracked here rather than read back off the arena, because an empty slot does not say *why* it is empty: `Arena::reserve` and `Arena::remove` both write `None`, so an unfilled reservation and a pruned-away function are the same value. Reading finalization's question off the arena therefore answers a different one — it reports the first empty slot whatever put it there, and a module carrying a tombstone would be rejected for a reservation nobody made. Reservation is a lifecycle of *construction*, opening and closing inside one builder, where a tombstone outlives the builder; keeping the two apart is what lets a pruned module be finalized at all.
+    reserved_functions: BTreeSet<FunctionId>,
 }
 
 impl ErsdBuilder {
@@ -35,6 +39,8 @@ impl ErsdBuilder {
         Self {
             module,
             open_blocks: Vec::new(),
+            // A resumed prefix has no outstanding reservations: `into_module` is the only way one is handed over, and it takes a finished builder.
+            reserved_functions: BTreeSet::new(),
         }
     }
 
@@ -89,7 +95,9 @@ impl ErsdBuilder {
 
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. Finalization rejects a reservation that was never defined.
     pub fn reserve_function(&mut self) -> FunctionId {
-        self.module.reserve_function()
+        let id = self.module.reserve_function();
+        self.reserved_functions.insert(id);
+        id
     }
 
     /// Define a previously reserved function.
@@ -100,6 +108,7 @@ impl ErsdBuilder {
         params: Vec<ValueId>,
         body: BlockId,
     ) {
+        self.reserved_functions.remove(&id);
         self.module.define_function(
             id,
             Function {
@@ -202,9 +211,9 @@ impl ErsdBuilder {
                 self.open_blocks.len()
             )));
         }
-        if let Some(index) = self.module.functions().iter().position(Option::is_none) {
+        if let Some(&id) = self.reserved_functions.iter().next() {
             return Err(VerifyError(format!(
-                "function ~f{index} was reserved but never defined"
+                "function {id} was reserved but never defined"
             )));
         }
         self.module.verify()?;
