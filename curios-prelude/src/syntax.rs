@@ -1,8 +1,8 @@
 //! Canonical compiler-known names owned by the authored `/syn` source tree.
 
 use curios_base::{
-    CharacterSyntax, ConceptField, MonadSyntax, OperatorSyntax, ProofSyntax, StringSyntax,
-    SyntaxName, SyntaxRegistry,
+    CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
+    StringSyntax, SyntaxName, SyntaxRegistry,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -17,6 +17,7 @@ const fn field(segments: &'static [&'static str], label: &'static str) -> Concep
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
     MonadSyntax::new(name(&["syn", "Monad", "bind"])),
+    LiftSyntax::new(field(&["syn", "Lift"], "lift")),
     OperatorSyntax::new(
         field(&["syn", "Add"], "add"),
         field(&["syn", "Sub"], "sub"),

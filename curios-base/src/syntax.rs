@@ -62,6 +62,7 @@ impl ConceptField {
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
     monad: MonadSyntax,
+    lift: LiftSyntax,
     operator: OperatorSyntax,
     character: CharacterSyntax,
     string: StringSyntax,
@@ -71,6 +72,7 @@ pub struct SyntaxRegistry {
 impl SyntaxRegistry {
     pub const fn new(
         monad: MonadSyntax,
+        lift: LiftSyntax,
         operator: OperatorSyntax,
         character: CharacterSyntax,
         string: StringSyntax,
@@ -78,6 +80,7 @@ impl SyntaxRegistry {
     ) -> Self {
         Self {
             monad,
+            lift,
             operator,
             character,
             string,
@@ -87,6 +90,10 @@ impl SyntaxRegistry {
 
     pub const fn monad(self) -> MonadSyntax {
         self.monad
+    }
+
+    pub const fn lift(self) -> LiftSyntax {
+        self.lift
     }
 
     pub const fn operator(self) -> OperatorSyntax {
@@ -124,7 +131,9 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
-        self.operator.concept_fields()
+        self.operator
+            .concept_fields()
+            .chain(std::iter::once(self.lift.lift))
     }
 }
 
@@ -141,6 +150,22 @@ impl MonadSyntax {
 
     pub const fn bind(self) -> SyntaxName {
         self.bind
+    }
+}
+
+/// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/syn/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
+#[derive(Debug, Clone, Copy)]
+pub struct LiftSyntax {
+    lift: ConceptField,
+}
+
+impl LiftSyntax {
+    pub const fn new(lift: ConceptField) -> Self {
+        Self { lift }
+    }
+
+    pub const fn lift(self) -> ConceptField {
+        self.lift
     }
 }
 

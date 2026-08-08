@@ -40,6 +40,12 @@ pub concept Monad(M: (Type) -> Type): pub Type {
     bind(@A: Type, @B: Type, M(A), (A) -> M(B)) -> M(B),
 }
 
+-- The canonical embedding of one monad into another: `lift` is a monad morphism, so sequencing an `M` action inside an `N` region means what it meant in `M`. One witness per ordered pair program-wide; embeddings never chain automatically — a composite edge is declared, not derived. The `Monad(M)` superclass makes an edge out of a non-monad undeclarable; the region side needs no twin, since `bind`'s own witness checks `N` at every sequencing site.
+pub concept Lift(M: (Type) -> Type, N: (Type) -> Type): pub Type {
+    use Monad(M),
+    lift(@A: Type, M(A)) -> N(A),
+}
+
 pub mod Eql;
 pub use Eql/{let Eql};
 

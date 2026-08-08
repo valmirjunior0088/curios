@@ -1,8 +1,8 @@
 use super::super::{Entrypoint, Error, PreludeModules, RootSource};
 use curios_abi::{WireType, host_ops};
 use curios_base::{
-    CharacterSyntax, ConceptField, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier, RootId,
-    StringSyntax, SyntaxName, SyntaxRegistry,
+    CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
+    RootId, StringSyntax, SyntaxName, SyntaxRegistry,
 };
 use curios_elab::TermBuilders;
 use std::{
@@ -21,6 +21,7 @@ const fn syn_field(segments: &'static [&'static str], label: &'static str) -> Co
 
 const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
     MonadSyntax::new(syn_name(&["syn", "Monad", "bind"])),
+    LiftSyntax::new(syn_field(&["syn", "Lift"], "lift")),
     OperatorSyntax::new(
         syn_field(&["syn", "Add"], "add"),
         syn_field(&["syn", "Sub"], "sub"),
