@@ -72,9 +72,20 @@ fn dispatch() -> Result<(), Failure> {
             input_path,
             output_path,
         } => {
+            let output = output_path.unwrap_or_else(|| exe_output_path(&input_path));
+
+            // Nothing enforces a `.crs` extension, so an extensionless input's default output is the input itself — and `-o` can name it explicitly. Refuse before compiling rather than destroy the source.
+            if let (Ok(input), Ok(target)) = (input_path.canonicalize(), output.canonicalize())
+                && input == target
+            {
+                return Err(Failure::Error(format!(
+                    "refusing to overwrite the input {}",
+                    input_path.display()
+                )));
+            }
+
             let module = compile_file(budget, &print, &input_path)?;
             let cwasm = to_cwasm(&module)?;
-            let output = output_path.unwrap_or_else(|| exe_output_path(&input_path));
 
             emit_exe(&cwasm, &output)?;
         }
