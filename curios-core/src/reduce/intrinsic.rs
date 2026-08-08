@@ -1078,23 +1078,23 @@ pub fn reduce_intrinsic(
                 (bin, _) => Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)),
             })
         }
-        Intrinsic::BinConcat(Grain::X, operands) => {
+        Intrinsic::BinConcat(grain, operands) => {
+            let grain = *grain;
             let reduced: Vec<Term> = operands
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Normalise by the monoid unit/associativity laws — drop the empty bytestring (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), merge adjacent literal runs, collapse a lone operand. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
-            fn literal(operand: &Term) -> Option<&[u8]> {
-                match &**operand {
-                    Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes)) => bytes.as_bytes(),
-                    _ => None,
-                }
-            }
+            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `PackedBin::concat`, collapse a lone operand. Grain-generic: both carriers fuse in the packed representation. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
             Ok(normalize_concat(
                 reduced,
-                literal,
-                |bytes| Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(bytes))),
-                |kept| Subterm::Intrinsic(Intrinsic::BinConcat(Grain::X, kept)),
+                |operand: &Term| match &**operand {
+                    Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain => {
+                        Some(bytes)
+                    }
+                    _ => None,
+                },
+                |runs| Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::concat(runs))),
+                |kept| Subterm::Intrinsic(Intrinsic::BinConcat(grain, kept)),
             ))
         }
         Intrinsic::BinType(Grain::B) => Ok(Subterm::Intrinsic(Intrinsic::BinType(Grain::B))),
@@ -1271,31 +1271,6 @@ pub fn reduce_intrinsic(
                 _ => Intrinsic::BinAppend(Grain::B, bin, bit),
             }))
         }
-        Intrinsic::BinConcat(Grain::B, operands) => {
-            let mut operands = operands
-                .iter()
-                .map(|operand| reducer.reduce_forced(operand.clone()))
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter()
-                .filter(|operand| {
-                    !matches!(&**operand, Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)) if bits.is_empty())
-                })
-                .collect::<Vec<_>>();
-            let literals = operands
-                .iter()
-                .map(|operand| match &**operand {
-                    Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)) => Some(bits),
-                    _ => None,
-                })
-                .collect::<Option<Vec<_>>>();
-            Ok(match literals {
-                Some(literals) => {
-                    Subterm::Intrinsic(Intrinsic::Bin(Grain::B, PackedBin::concat(literals)))
-                }
-                None if operands.len() == 1 => Term::unwrap_or_clone(operands.pop().unwrap()),
-                None => Subterm::Intrinsic(Intrinsic::BinConcat(Grain::B, operands)),
-            })
-        }
         Intrinsic::LstType(elem) => {
             let elem = reducer.reduce(elem.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::lst_type(elem)))
@@ -1463,17 +1438,22 @@ pub fn reduce_intrinsic(
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal runs, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
-            fn literal(operand: &Term) -> Option<&[Term]> {
+            // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
+            fn literal(operand: &Term) -> Option<&Vec<Term>> {
                 match &**operand {
-                    Subterm::Intrinsic(Intrinsic::Lst(_, elems)) => Some(elems.as_slice()),
+                    Subterm::Intrinsic(Intrinsic::Lst(_, elems)) => Some(elems),
                     _ => None,
                 }
             }
             Ok(normalize_concat(
                 reduced,
                 literal,
-                |elems| Subterm::Intrinsic(Intrinsic::Lst(type_.clone(), elems)),
+                |runs| {
+                    Subterm::Intrinsic(Intrinsic::Lst(
+                        type_.clone(),
+                        runs.into_iter().flatten().cloned().collect(),
+                    ))
+                },
                 |kept| Subterm::Intrinsic(Intrinsic::lst_concat(type_.clone(), kept)),
             ))
         }

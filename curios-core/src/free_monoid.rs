@@ -295,13 +295,30 @@ fn is_empty_lst(term: &Term) -> bool {
     matches!(&**term, Subterm::Intrinsic(Intrinsic::Lst(_, elems)) if elems.is_empty())
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared verbatim by `BinConcat` and `LstConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `[]`), merge adjacent literal runs into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` borrows an operand's run when it is a literal (`None` for a symbolic chunk); `into_literal`/`into_concat` rebuild the result in the carrier's intrinsics.
+/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`PackedBin` for both `Bin` grains, the element vector for `Lst`), exposing only the emptiness [`normalize_concat`] drops.
+pub(crate) trait Run {
+    fn is_empty(&self) -> bool;
+}
+
+impl Run for PackedBin {
+    fn is_empty(&self) -> bool {
+        PackedBin::is_empty(self)
+    }
+}
+
+impl Run for Vec<Term> {
+    fn is_empty(&self) -> bool {
+        self.as_slice().is_empty()
+    }
+}
+
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `LstConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal (`None` for a symbolic chunk); `merge` fuses the runs in the carrier's own representation — `PackedBin::concat`'s bulk copy, `Lst`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands.
 ///
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the spine peel's job when *deciding equality* (`spine::push`); reduction only needs a normal form, and conversion closes any residual gap.
-pub(crate) fn normalize_concat<E: Clone>(
+pub(crate) fn normalize_concat<C: Run>(
     operands: Vec<Term>,
-    literal: fn(&Term) -> Option<&[E]>,
-    into_literal: impl FnOnce(Vec<E>) -> Subterm,
+    literal: impl Fn(&Term) -> Option<&C>,
+    merge: impl FnOnce(Vec<&C>) -> Subterm,
     into_concat: impl FnOnce(Vec<Term>) -> Subterm,
 ) -> Subterm {
     let mut kept: Vec<Term> = operands
@@ -309,15 +326,9 @@ pub(crate) fn normalize_concat<E: Clone>(
         .filter(|operand| !matches!(literal(operand), Some(run) if run.is_empty()))
         .collect();
 
-    // Every surviving operand literal ⇒ one merged literal; the first symbolic chunk stops the fold, leaving the concatenation (a lone operand collapses to itself).
-    let merged = kept.iter().try_fold(Vec::new(), |mut run, operand| {
-        run.extend(literal(operand)?.iter().cloned());
-
-        Some(run)
-    });
-
-    match merged {
-        Some(run) => into_literal(run),
+    // Every surviving operand literal ⇒ the runs fuse into one; the first symbolic chunk stops the collection, leaving the concatenation (a lone operand collapses to itself).
+    match kept.iter().map(&literal).collect::<Option<Vec<&C>>>() {
+        Some(runs) => merge(runs),
         None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
         None => into_concat(kept),
     }
