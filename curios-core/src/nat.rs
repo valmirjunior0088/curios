@@ -2,7 +2,6 @@ use {
     super::{Intrinsic, Subterm, Term},
     num_bigint::BigUint,
     num_traits::{ToPrimitive, Zero},
-    std::fmt,
 };
 
 #[cfg(feature = "archive")]
@@ -107,14 +106,5 @@ impl Nat {
     /// Whether a reduced term is literal zero — the identity floor.
     pub fn is_zero(term: &Term) -> bool {
         matches!(&**term, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
-    }
-}
-
-impl fmt::Display for Nat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Nat::Zero => write!(f, "0"),
-            Nat::Succ(spine, _) => write!(f, "{spine}"),
-        }
     }
 }
