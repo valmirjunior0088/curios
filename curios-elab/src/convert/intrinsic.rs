@@ -91,7 +91,10 @@ fn known_len(grain: Grain, term: &Term) -> Option<usize> {
 fn literal_len(grain: Grain, value: &PackedBin) -> usize {
     match grain {
         Grain::B => value.bit_length(),
-        Grain::X => value.to_bytes().expect("an X-grain literal packs whole bytes").len(),
+        Grain::X => value
+            .to_bytes()
+            .expect("an X-grain literal packs whole bytes")
+            .len(),
     }
 }
 

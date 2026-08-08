@@ -1917,6 +1917,13 @@ impl Convert {
                 continue;
             }
 
+            // A goal that must park does so under its *raw* spelling. The reduced forms applied the live frame's counterfactual refinements and any already-solved motive, so parking them loses exactly what a retry needs: the watch set misses the metavariables only the raw spelling mentions (an unsolved motive heading the expected type), and the refinement-suppression analysis can no longer recover the solvable unrefined spelling — a candidate instantiated through an arm refinement is well-typed only under it, which re-validation rightly rejects forever. The retry re-reduces the raw goal under its restored frame, so nothing is lost by deferring the reduction.
+            let raw_goal = |type_: &Term| Goal {
+                type_: type_.clone(),
+                this: this_raw.clone(),
+                that: that_raw.clone(),
+            };
+
             // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
             match (as_metavar(&this).cloned(), as_metavar(&that).cloned()) {
                 (Some(this_m), Some(that_m)) => {
@@ -1940,24 +1947,19 @@ impl Convert {
                         }
                     }
 
-                    if context.is_rec_slot(this_m.id) || context.is_rec_slot(that_m.id) {
-                        self.blocked.push(Goal { type_, this, that });
-                        continue;
-                    }
-
-                    // Distinct heads (or an undecided probe): v1 flex–flex does no intersection — postpone.
-                    self.blocked.push(Goal { type_, this, that });
+                    // Rec slots, and distinct heads (or an undecided probe): v1 flex–flex does no intersection — postpone.
+                    self.blocked.push(raw_goal(&type_));
                     continue;
                 }
                 (Some(metavar), None) => {
                     if context.is_rec_slot(metavar.id) {
-                        self.blocked.push(Goal { type_, this, that });
+                        self.blocked.push(raw_goal(&type_));
                         continue;
                     }
                     match self.solve_refinement_free(context, &metavar, &that, &that_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
-                            self.blocked.push(Goal { type_, this, that });
+                            self.blocked.push(raw_goal(&type_));
                             continue;
                         }
                         Solved::Failed => return Ok(false),
@@ -1965,13 +1967,13 @@ impl Convert {
                 }
                 (None, Some(metavar)) => {
                     if context.is_rec_slot(metavar.id) {
-                        self.blocked.push(Goal { type_, this, that });
+                        self.blocked.push(raw_goal(&type_));
                         continue;
                     }
                     match self.solve_refinement_free(context, &metavar, &this, &this_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
-                            self.blocked.push(Goal { type_, this, that });
+                            self.blocked.push(raw_goal(&type_));
                             continue;
                         }
                         Solved::Failed => return Ok(false),
@@ -2150,19 +2152,43 @@ impl Convert {
                 // Flex-apply imitation: a stuck application against a nominal type constructor. The unsolved-metavariable-head guard (and the `eta_expand_neutral` fallthrough for every other `Apply`) lives inside `imitate_flex_apply`.
                 (Subterm::Apply(apply), Subterm::InductType(rigid)) => {
                     let rigid: Term = Subterm::InductType(rigid).into();
-                    self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
+                    self.imitate_flex_apply(
+                        context,
+                        apply,
+                        rigid,
+                        &that_raw,
+                        raw_goal(&goal.type_),
+                    )?
                 }
                 (Subterm::InductType(rigid), Subterm::Apply(apply)) => {
                     let rigid: Term = Subterm::InductType(rigid).into();
-                    self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
+                    self.imitate_flex_apply(
+                        context,
+                        apply,
+                        rigid,
+                        &this_raw,
+                        raw_goal(&goal.type_),
+                    )?
                 }
                 (Subterm::Apply(apply), Subterm::StructType(rigid)) => {
                     let rigid: Term = Subterm::StructType(rigid).into();
-                    self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
+                    self.imitate_flex_apply(
+                        context,
+                        apply,
+                        rigid,
+                        &that_raw,
+                        raw_goal(&goal.type_),
+                    )?
                 }
                 (Subterm::StructType(rigid), Subterm::Apply(apply)) => {
                     let rigid: Term = Subterm::StructType(rigid).into();
-                    self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
+                    self.imitate_flex_apply(
+                        context,
+                        apply,
+                        rigid,
+                        &this_raw,
+                        raw_goal(&goal.type_),
+                    )?
                 }
                 (
                     Subterm::Apply(apply),
@@ -2173,7 +2199,13 @@ impl Convert {
                     ),
                 ) => {
                     let rigid: Term = Subterm::Intrinsic(rigid).into();
-                    self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
+                    self.imitate_flex_apply(
+                        context,
+                        apply,
+                        rigid,
+                        &that_raw,
+                        raw_goal(&goal.type_),
+                    )?
                 }
                 (
                     Subterm::Intrinsic(
@@ -2184,7 +2216,13 @@ impl Convert {
                     Subterm::Apply(apply),
                 ) => {
                     let rigid: Term = Subterm::Intrinsic(rigid).into();
-                    self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
+                    self.imitate_flex_apply(
+                        context,
+                        apply,
+                        rigid,
+                        &this_raw,
+                        raw_goal(&goal.type_),
+                    )?
                 }
                 (this_n, that_n) => {
                     self.eta_expand_neutral(context, this_n.into(), that_n.into(), type_)?
@@ -2198,7 +2236,7 @@ impl Convert {
                 {
                     let key = self.history_key(context, &goal);
                     self.history.remove(&key);
-                    self.blocked.push(goal);
+                    self.blocked.push(raw_goal(&goal.type_));
                     continue;
                 }
                 return Ok(false);
