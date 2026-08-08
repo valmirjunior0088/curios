@@ -188,6 +188,22 @@ impl<E: Env> Walk<'_, E> {
                     .map(|kid| self.expand_shape(kid, fuel))
                     .collect(),
             ),
+            // Rebuilt through the constructors so a tail that expands into a run of the same carrier merges back into one canonical run.
+            Shape::UnaryRun { count, tail } => {
+                Shape::unary_run(count.clone(), self.expand_shape(tail, fuel))
+            }
+            Shape::ElemRun {
+                carrier,
+                heads,
+                tail,
+            } => Shape::elem_run(
+                *carrier,
+                heads
+                    .iter()
+                    .map(|head| self.expand_shape(head, fuel))
+                    .collect(),
+                self.expand_shape(tail, fuel),
+            ),
         }
     }
 
@@ -278,25 +294,48 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// Decode one free-monoid layer, and the tail beneath it.
+    /// Decode a whole free-monoid prefix into one packed run over the shape of whatever stops the peel.
+    ///
+    /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bin`/`Lst` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
     fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Shape {
         let carriers = match carrier {
-            FreeMonoid::Unary => Carriers::Unary,
+            FreeMonoid::Unary => {
+                return match &**term {
+                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
+                        Shape::Node(Tag::Empty(Carriers::Unary), Vec::new())
+                    }
+                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(spine, inner))) => {
+                        Shape::unary_run(spine.clone(), self.shape_of(inner))
+                    }
+                    _ => self.unfolded_shape(term),
+                };
+            }
             FreeMonoid::Bin(_) => Carriers::Bin,
             FreeMonoid::Lst => Carriers::Lst,
         };
-        match carrier.uncons(Term::unwrap_or_clone(term.clone())) {
-            Layer::Empty => Shape::Node(Tag::Empty(carriers), Vec::new()),
-            Layer::Cons { head, tail } => {
-                // `Nat`'s generator carries no payload, so its cons node has exactly one child and `pred + 1` is one level over `pred`.
-                let mut kids = Vec::new();
-                if let Some(head) = head {
-                    kids.push(self.shape_of(&head));
+
+        let mut heads = Vec::new();
+        let mut rest = Term::unwrap_or_clone(term.clone());
+        loop {
+            match carrier.uncons(rest) {
+                Layer::Empty => {
+                    break Shape::elem_run(
+                        carriers,
+                        heads,
+                        Shape::Node(Tag::Empty(carriers), Vec::new()),
+                    );
                 }
-                kids.push(self.shape_of(&tail));
-                Shape::Node(Tag::Cons(carriers), kids)
+                Layer::Cons { head, tail } => {
+                    if let Some(head) = head {
+                        heads.push(self.shape_of(&head));
+                    }
+                    rest = Term::unwrap_or_clone(tail);
+                }
+                Layer::Stuck(stuck) => {
+                    let stuck = Term::from(stuck);
+                    break Shape::elem_run(carriers, heads, self.unfolded_shape(&stuck));
+                }
             }
-            Layer::Stuck(_) => self.unfolded_shape(term),
         }
     }
 
@@ -619,10 +658,8 @@ impl<E: Env> Walk<'_, E> {
                     empty_case,
                 );
                 let (binders, body) = self.open_two(cons_case);
-                let shape = Shape::Node(
-                    Tag::Cons(Carriers::Unary),
-                    vec![Shape::Atom(binders[0].clone())],
-                );
+                let shape =
+                    Shape::unary_run(BigUint::from(1usize), Shape::Atom(binders[0].clone()));
                 self.refine(scrutinee, shape, &body);
             }
             Carrier::Bin {
@@ -654,12 +691,10 @@ impl<E: Env> Walk<'_, E> {
             empty_case,
         );
         let (binders, body) = self.open_three(cons_case);
-        let shape = Shape::Node(
-            Tag::Cons(carriers),
-            vec![
-                Shape::Atom(binders[0].clone()),
-                Shape::Atom(binders[1].clone()),
-            ],
+        let shape = Shape::elem_run(
+            carriers,
+            vec![Shape::Atom(binders[0].clone())],
+            Shape::Atom(binders[1].clone()),
         );
         self.refine(scrutinee, shape, &body);
     }

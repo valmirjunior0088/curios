@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::Kernel};
 
 /// Build a matrix from a row-major grid of size grades.
 fn matrix(rows: &[&[Size]]) -> Matrix {
@@ -39,9 +39,10 @@ fn join_keeps_the_strongest_of_two_routes() {
 fn shapes_are_compared_by_the_proper_subterm_order() {
     let head = Free::local(1, None);
     let tail = Free::local(2, None);
-    let whole = Shape::Node(
-        Tag::Cons(Carriers::Bin),
-        vec![Shape::Atom(head.clone()), Shape::Atom(tail.clone())],
+    let whole = Shape::elem_run(
+        Carriers::Bin,
+        vec![Shape::Atom(head.clone())],
+        Shape::Atom(tail.clone()),
     );
 
     assert_eq!(whole.against(&whole), Size::Same);
@@ -63,16 +64,68 @@ fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
         Free::local(2, None),
         Free::local(3, None),
     );
-    let inner = Shape::Node(
-        Tag::Cons(Carriers::Bin),
-        vec![Shape::Atom(a2), Shape::Atom(b2)],
-    );
-    let whole = Shape::Node(
-        Tag::Cons(Carriers::Bin),
-        vec![Shape::Atom(outer), inner.clone()],
-    );
+    let inner = Shape::elem_run(Carriers::Bin, vec![Shape::Atom(a2)], Shape::Atom(b2));
+    let whole = Shape::elem_run(Carriers::Bin, vec![Shape::Atom(outer)], inner.clone());
 
     assert_eq!(inner.against(&whole), Size::Less);
+}
+
+#[test]
+fn a_literal_is_one_packed_run_however_large_its_value() {
+    // The size order on literals is decided by count arithmetic on the packed spine — never by expanding the value into a unary chain, whose depth for a `u64`-sized switch literal or call argument is a stack overflow.
+    let empty = || Shape::Node(Tag::Empty(Carriers::Unary), Vec::new());
+    let huge = Shape::unary_run(BigUint::from(u64::MAX), empty());
+    let smaller = Shape::unary_run(BigUint::from(u64::MAX - 1), empty());
+
+    assert_eq!(huge.against(&huge), Size::Same);
+    assert_eq!(smaller.against(&huge), Size::Less);
+    assert_eq!(huge.against(&smaller), NONE);
+    assert_eq!(empty().against(&huge), Size::Less);
+}
+
+#[test]
+fn a_huge_literal_call_argument_grades_without_expansion() {
+    // `rec f : (n: Nat) -> Nat = (n) => f(u64::MAX); f` — grading the literal argument must read the packed spine, not peel it: the unary expansion this replaces would loop once per successor, and the value is unbounded by the source that spelled it.
+    let mut kernel = Kernel::new(100_000);
+    let f = Free::local(1, Some("f"));
+    let n = Free::local(2, Some("n"));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let rec = Term::rec(
+        vec![(
+            f.clone(),
+            Term::func_type([(n.clone(), nat())], nat()),
+            Term::func(
+                [(n, nat())],
+                Term::apply(
+                    Term::free_var(&f),
+                    [Term::intrinsic(Intrinsic::Nat(Nat::new(u64::MAX)))],
+                ),
+            ),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    // A constant argument never decreases, so the verdict is `Partial` — promptly.
+    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+}
+
+#[test]
+fn runs_merge_so_a_refined_tail_stays_one_chain() {
+    // `match n` refines `n` to a 1-run over `pred`; a nested arm refining `pred` to a 4-run must expand to the single 5-run the chain denotes, or a literal argument could never grade against it.
+    let empty = || Shape::Node(Tag::Empty(Carriers::Unary), Vec::new());
+    let merged = Shape::unary_run(
+        BigUint::from(1usize),
+        Shape::unary_run(BigUint::from(4usize), empty()),
+    );
+
+    assert!(merged.same_as(&Shape::unary_run(BigUint::from(5usize), empty())));
+    assert_eq!(
+        Shape::unary_run(BigUint::from(3usize), empty()).against(&merged),
+        Size::Less
+    );
 }
 
 #[test]
@@ -85,7 +138,7 @@ fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
     assert_eq!(smaller.against(&Shape::Atom(other)), NONE);
     assert_eq!(smaller.against(&Shape::Opaque), NONE);
 
-    let refined = Shape::Node(Tag::Cons(Carriers::Unary), vec![Shape::Atom(n)]);
+    let refined = Shape::unary_run(BigUint::from(1usize), Shape::Atom(n));
     assert_eq!(smaller.against(&refined), NONE);
 }
 
@@ -94,13 +147,12 @@ fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
     // It is a claim about a binder, not a value, so it can never be found equal to or inside a tree. Anything else would manufacture a decrease out of a term the walk never read.
     let n = Free::local(1, None);
     let smaller = Shape::Smaller(n.clone());
-    let tree = Shape::Node(
-        Tag::Cons(Carriers::Unary),
-        vec![smaller.clone(), Shape::Atom(n)],
-    );
+    let tree = Shape::Node(Tag::Tuple, vec![smaller.clone(), Shape::Atom(n.clone())]);
+    let run = Shape::elem_run(Carriers::Lst, vec![smaller.clone()], Shape::Atom(n));
 
     assert!(!smaller.same_as(&smaller));
     assert!(!smaller.proper_subterm_of(&tree));
+    assert!(!smaller.proper_subterm_of(&run));
 }
 
 #[test]

@@ -16,6 +16,7 @@ pub enum Layer {
 }
 
 /// A native intrinsic that is the free monoid on a generator set, named by its generator: `Unary` is `Nat` on the unit, `Bin` is `Bin` on its bytes, `Lst` is `Lst` on its elements. A closed set — the value-level twin of the `Carrier` the eliminator already carries (`reduce` maps one to the other). `uncons` is the only seam the structural eliminator needs; the recursion scheme around it is carrier-generic and lives in `reduce`.
+#[derive(Clone, Copy)]
 pub enum FreeMonoid {
     /// The free monoid on one payload-less generator: the unary naturals. `succ` peels to its predecessor with no head.
     Unary,
