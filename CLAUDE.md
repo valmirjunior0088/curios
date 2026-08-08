@@ -175,7 +175,7 @@ Profile the compiler through the built-in `tracing` mechanism, not an external s
 Run one compilation under the profiler with the `profile` recipe:
 
 ```sh
-make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_curios.crs
+make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_world.crs
 ```
 
 It builds the `curios` binary with `--features profile` — which is the only build in which the `profile` subcommand exists — and prints per-span aggregate timings sorted by total time descending. The instrumentation mechanics — `profile!` and `profile_span!`, the per-crate `profile` feature fan-out, the `capture` collector, and the temporary-instrumentation norm — are documented in the `curios-profile` crate, the one place in the workspace that names `tracing`.

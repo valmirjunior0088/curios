@@ -35,7 +35,7 @@ curios/web:
 		"$(CURIOS_WEB_BIN)"
 
 .PHONY: curios/profile
-CURIOS_PROFILE_SOURCE ?= programs/hello_curios.crs
+CURIOS_PROFILE_SOURCE ?= programs/hello_world.crs
 
 curios/profile:
 	cargo run \
