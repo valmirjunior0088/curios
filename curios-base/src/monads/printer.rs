@@ -479,7 +479,6 @@ pub fn hard_line() -> Printer {
     }
 }
 
-/// The width-adaptive unit: renders `printer` flat — every enclosed [`line`] as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
 /// A width-adaptive *sequence* of already-punctuated items: each gap becomes a space or a newline on its own, so the run wraps like prose instead of breaking everywhere at once.
 ///
 /// Use this where the items are short and interchangeable — the names of an import — and [`group`] where they are structural parts that belong together or apart as a unit. Each item is measured and printed flat, so a fill never breaks *inside* an item; give it items that are already whole.
@@ -487,6 +486,7 @@ pub fn fill(items: impl IntoIterator<Item = Printer>) -> Printer {
     Printer::Fill(items.into_iter().collect())
 }
 
+/// The width-adaptive unit: renders `printer` flat — every enclosed [`line`] as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
 pub fn group(printer: Printer) -> Printer {
     Printer::Group(Box::new(printer))
 }
