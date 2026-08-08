@@ -884,7 +884,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
     /// The leaf of the matrix compiler's recursion: exactly one row remains once every column is consumed. Lowers the row's body under every accumulated binder name (so a reference resolves to the binder rather than a like-named module binding, exactly like [`Self::scoped`]'s other callers), then wraps it in the accumulated `let`s, outermost first.
     /// The single-row hypothesis slot: a plain-name pattern keeps the fast path — its spelling becomes the core node's binder hint directly, exactly as before — while a compound pattern mints an unwritten binder for the node and binds each written leaf to its projection chain off it through the row-binds mechanism (`finish_row` materializes the `let`s), the same projection sugar an irrefutable `let` pattern lowers to.
-    fn cons_ih_pattern(&self, row: &mut MatrixRow<'_>, ih: &Option<Pattern>) -> super::lowerer::Binder {
+    fn cons_ih_pattern(
+        &self,
+        row: &mut MatrixRow<'_>,
+        ih: &Option<Pattern>,
+    ) -> super::lowerer::Binder {
         match ih {
             Some(Pattern::Binder(name)) => self.cons_ih_binder(name),
             None => self.cons_ih_binder(&None),

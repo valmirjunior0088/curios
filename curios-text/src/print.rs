@@ -326,10 +326,9 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         MatchPattern::Bool(false) => pure("false"),
         MatchPattern::Bool(true) => pure("true"),
         MatchPattern::Nat(NatPattern::Zero) => pure("0"),
-        MatchPattern::Nat(NatPattern::Succ {
-            pred_label,
-            ih,
-        }) => flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)]),
+        MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
+            flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)])
+        }
         MatchPattern::Nat(NatPattern::Lit(n)) => pure(n.to_string()),
         MatchPattern::Lst(LstPattern::Nil) => pure("[]"),
         MatchPattern::Lst(LstPattern::Cons {
