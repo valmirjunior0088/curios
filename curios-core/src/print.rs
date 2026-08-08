@@ -35,7 +35,7 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, so these axes were once three thread-locals installed around a render — which made a term's spelling depend on an enclosing frame nobody could see from the call, and made "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
-// axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a literally-rendered global, take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
+// axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — the axis-(b) shortened form where that map shortens it — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
 // axis (b) — globals: a *shorten map* (built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Used by error rendering *and* `Module` display.
 //
@@ -329,18 +329,28 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
     }
 }
 
-/// Give every local binder a clean display spelling: its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a global's literal rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
+/// Give every local binder a clean display spelling: its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a global's displayed rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
+///
+/// `shorten` is the axis-(b) map the same render will apply: a global is reserved under the rendering it actually displays, since a full path — never a bare identifier — is unshadowable by construction, while a single-segment shortening is exactly what a binder hint can read like.
 ///
 /// A hintless entry's `x` is consulted only where something references the binder — the label sites spell an unreferenced unnameable binder `_` (or elide it) without the map. Hinted names are assigned first, so a synthesized `x` can never steal the spelling from a binder actually written `x`.
-pub fn build_rename(names: &BTreeSet<Free>) -> HashMap<Free, String> {
+pub fn build_rename(
+    names: &BTreeSet<Free>,
+    shorten: &HashMap<Global, String>,
+) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
     let (literal, prettifiable): (Vec<_>, Vec<_>) =
         names.iter().partition(|name| name.as_global().is_some());
 
-    // Globals render as themselves and reserve their spelling up front.
+    // Globals reserve the spelling they will display under.
     let mut used = literal
         .into_iter()
-        .map(Free::to_string)
+        .map(
+            |name| match name.as_global().and_then(|global| shorten.get(global)) {
+                Some(short) => short.clone(),
+                None => name.to_string(),
+            },
+        )
         .collect::<BTreeSet<_>>();
 
     let (hinted, hintless): (Vec<_>, Vec<_>) = prettifiable
@@ -1482,5 +1492,22 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 ])
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
+        let global = Global::Authored(Qualifier::from(["main", "helper"]));
+        let shorten = build_shorten(std::slice::from_ref(&global));
+        assert_eq!(shorten.get(&global).map(String::as_str), Some("helper"));
+
+        let binder = Free::local(0, Some("helper"));
+        let names = BTreeSet::from([Free::Global(global), binder.clone()]);
+        let rename = build_rename(&names, &shorten);
+        assert_eq!(rename.get(&binder).map(String::as_str), Some("helper2"));
     }
 }

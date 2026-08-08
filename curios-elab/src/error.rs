@@ -2,7 +2,7 @@ use {
     super::Erased,
     curios_base::{Grain, Int, Plicity, Qualifier, Span},
     curios_core::{
-        Atom, Free, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
+        Atom, Free, Global, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
     },
     num_bigint::BigUint,
@@ -964,8 +964,8 @@ impl Error {
         }
     }
 
-    /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means.
-    fn rename_map(&self) -> Rc<HashMap<Free, String>> {
+    /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. The axis-(b) shorten map rides along so globals are reserved under the rendering they actually display.
+    fn rename_map(&self, shorten: &HashMap<Global, String>) -> Rc<HashMap<Free, String>> {
         let mut terms = Vec::new();
         self.collect_terms(&mut terms);
 
@@ -974,15 +974,16 @@ impl Error {
             names.extend(display_names(term));
         }
 
-        Rc::new(build_rename(&names))
+        Rc::new(build_rename(&names, shorten))
     }
 
     /// Render this error with source-style names, shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(&self, module: &Module) -> String {
+        let shorten = Rc::new(build_shorten(&module.module_symbols()));
         self.render(&Rc::new(
             Spelling::default()
-                .with_pretty_names(self.rename_map())
-                .with_short_names(Rc::new(build_shorten(&module.module_symbols())))
+                .with_pretty_names(self.rename_map(&shorten))
+                .with_short_names(shorten)
                 .with_nominal_plicities(Rc::new(module.nominal_plicities()))
                 .with_erased_universes(),
         ))
