@@ -78,6 +78,23 @@ fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
     assert_eq!(to_bytes(&first), to_bytes(&second));
 }
 
+/// `Stage::NAMES`, `Stage::name`, and the driver's emission order are three spellings of one fact, and only `name` is forced by the compiler when a stage is added — a variant missing from `NAMES` would leave bare `--print` silently incomplete. One compile pins all three to each other.
+#[test]
+fn every_stage_is_observed_once_in_names_order() {
+    let entrypoint = with_entrypoint_type("/std/Nat/add(20, 22)", Some("/std/Nat"));
+    let mut seen = Vec::new();
+
+    compile_entrypoint(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        RootSource::none(),
+        |stage| seen.push(stage.name()),
+    )
+    .unwrap();
+
+    assert_eq!(seen, Stage::NAMES);
+}
+
 #[test]
 fn foreign_declaration_produces_a_wasm_import() {
     // Must actually *run* `frobnicate` — a foreign call yields a description (`Io(Nat)`), and one the program never forces is pruned by `curios_ersd::optimize` along with its import, before codegen ever sees it.

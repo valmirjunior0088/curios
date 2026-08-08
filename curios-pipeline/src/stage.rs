@@ -19,7 +19,7 @@ pub enum Stage<'a> {
 }
 
 impl<'a> Stage<'a> {
-    /// Every stage name, in pipeline order — the single source the CLI's `--print` default/help text is derived from, so it cannot drift from [`Stage::name`].
+    /// Every stage name, in pipeline order — the single source the CLI's `--print` default/help text is derived from. Nothing structural ties this list to [`Stage::name`]; the `every_stage_is_observed_once_in_names_order` test is what pins the two to each other and to the driver's emission order.
     pub const NAMES: [&'static str; 8] = [
         "text",
         "core",
