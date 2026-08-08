@@ -15,7 +15,10 @@ use {
         UniverseContext, UniverseInst, Variant, Visit, instantiate_universe_levels_scoped,
         project_erased_universes,
     },
-    std::collections::{HashMap, HashSet, VecDeque},
+    std::{
+        collections::{HashMap, HashSet, VecDeque},
+        mem,
+    },
 };
 
 /// The outcome of attempting to solve a metavariable against a candidate.
@@ -1872,7 +1875,7 @@ impl Convert {
 
             // Fixpoint: retry postponed constraints only when a fresh solution since the last sweep could have unblocked them.
             if self.progress && !self.blocked.is_empty() {
-                self.pending = std::mem::take(&mut self.blocked).into();
+                self.pending = mem::take(&mut self.blocked).into();
                 self.progress = false;
             } else {
                 break;
@@ -1882,7 +1885,7 @@ impl Convert {
         // A constraint still blocked at quiescence is undecided, not unequal: surrender it to the caller rather than conflating the two.
         Ok(match self.blocked.is_empty() {
             true => Outcome::Converts,
-            false => Outcome::Blocked(std::mem::take(&mut self.blocked)),
+            false => Outcome::Blocked(mem::take(&mut self.blocked)),
         })
     }
 
@@ -2016,10 +2019,11 @@ impl Convert {
                         true
                     }
                 }
-                // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit).
+                // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit). One gate: a match stuck on a *flex* scrutinee decomposes against another match only when their motives and case tables are syntactically identical — then the two are instances of one source match and the scrutinee goal is an exact congruence (what solves `?b1 := yh` when `xor3(xh, ?b1, c)` meets `xor3(xh, yh, c)`). With differing arms the pair may be layer-misaligned — reduction carried the rigid-scrutinee side past the layer the flex side is stuck at (`xor3(xh, false, c)` reduces through its `b`-match while `xor3(xh, ?b1, c)` cannot) — and the scrutinee goal would solve the metavariable with the wrong layer's scrutinee. Such a pair falls through, and the blocked-on-metavariable path below parks it until the scrutinee's metavariable resolves.
                 (Subterm::Match(this), Subterm::Match(that))
-                    if std::mem::discriminant(&this.cases)
-                        == std::mem::discriminant(&that.cases) =>
+                    if mem::discriminant(&this.cases) == mem::discriminant(&that.cases)
+                        && ((!flex_scrutinee(&this.head) && !flex_scrutinee(&that.head))
+                            || (this.cases == that.cases && this.motive == that.motive)) =>
                 {
                     self.compare_match(context, this, that)?
                 }
@@ -2188,9 +2192,9 @@ impl Convert {
             };
 
             if !ok {
-                // A structural mismatch where a side is an intrinsic stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold the operation (`?m - 1` against `0` folds once `?m := 1` lands), which no structural rule anticipates. Park the goal instead of failing — rigid-head disagreements, which no solution can repair, still mismatch here. The goal leaves `history` so a retry after fresh progress is not skipped as already-handled.
-                if intrinsic_blocked_on_metavar(context, &goal.this)
-                    || intrinsic_blocked_on_metavar(context, &goal.that)
+                // A structural mismatch where a side is stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold an intrinsic (`?m - 1` against `0` folds once `?m := 1` lands) or a match (`Below(?c, …)` reduces to `True` once `?c` is pinned and the arm refinement applies), which no structural rule anticipates. Park the goal instead of failing — rigid-head disagreements with no metavariable in a blocking position, which no solution can repair, still mismatch here. The goal leaves `history` so a retry after fresh progress is not skipped as already-handled.
+                if blocked_on_unsolved_metavar(context, &goal.this)
+                    || blocked_on_unsolved_metavar(context, &goal.that)
                 {
                     let key = self.history_key(context, &goal);
                     self.history.remove(&key);
@@ -2231,11 +2235,27 @@ fn as_metavar(term: &Term) -> Option<&Metavar> {
     }
 }
 
-/// `true` iff `term` — already in weak-head normal form, so a foldable literal would have folded — is an intrinsic operation still carrying an unsolved metavariable: the stuck-on-a-metavariable shape whose structural mismatches are undecided rather than definite.
-fn intrinsic_blocked_on_metavar(context: &Context, term: &Term) -> bool {
-    matches!(&**term, Subterm::Intrinsic(_))
-        && term
-            .metavars()
+/// `true` iff a match scrutinee is stuck on a metavariable itself — bare, or an application headed by one. This is the side that could not reduce, so its stuck layer may trail the partner's; decomposing across that misalignment is what the match-match gate above forbids.
+fn flex_scrutinee(term: &Term) -> bool {
+    match &**term {
+        Subterm::Metavar(_) => true,
+        Subterm::Apply(apply) => matches!(&*apply.head, Subterm::Metavar(_)),
+        _ => false,
+    }
+}
+
+/// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), or an elimination — application, projection — headed by such a shape. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.
+fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
+    let has_unsolved = |term: &Term| {
+        term.metavars()
             .iter()
             .any(|id| context.metavar_solution(*id).is_none())
+    };
+
+    match &**term {
+        Subterm::Intrinsic(_) | Subterm::Match(_) => has_unsolved(term),
+        Subterm::Apply(apply) => blocked_on_unsolved_metavar(context, &apply.head),
+        Subterm::Proj(proj) => blocked_on_unsolved_metavar(context, &proj.head),
+        _ => false,
+    }
 }

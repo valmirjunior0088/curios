@@ -91,6 +91,51 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
 }
 
 #[test]
+fn a_conversion_parked_under_refinements_notes_the_dependence() {
+    // `Scalar/below`'s proof checks against `Below(?c, 0xD800)` — a match stuck on the unsolved index — and parks under the `code < 0xD800` arm's refinement. Nothing ever pins `?c`, so the survivor's report must say the goal was postponed and note the refinement dependence.
+    let source = r#"
+        use /std/{Nat, Option, True, Char, Io};
+        use /std/Char/{Scalar};
+
+        let f(code: Nat) -> {} =
+            match code < 0xD800
+            | true =>
+                let s = Scalar/below(True/qed());
+                ()
+            | false => ()
+            end;
+
+        Io/pure(())
+    "#;
+    let error = compile(source, None).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("cannot decide a postponed conversion"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        error.contains("match-arm refinements"),
+        "unexpected report: {error}"
+    );
+}
+
+#[test]
+fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
+    // The Item 2 acceptance shape: the proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
+    let source = r#"
+        use /syn/Str/{Scan, Utf8};
+        use /std/{Nat, Byte, Bytes, True, Io};
+
+        let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Utf8(Scan/lead(), b)) -> {} = ();
+
+        let call(h: Byte, t: Bytes, valid: Utf8(Scan/lead(), x[h, ..t])) -> {} =
+            proof_first(True/qed(), valid);
+
+        Io/pure(())
+    "#;
+    assert!(compile(source, None).is_ok());
+}
+
+#[test]
 fn a_rigid_mismatch_still_reports_as_a_mismatch() {
     let source = r#"
         use /std/{Nat, Io};

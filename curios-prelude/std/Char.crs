@@ -8,12 +8,12 @@ pub let to_nat(c: Char) -> Nat =
 
 pub let of_nat(code: Nat) -> Option(Char) =
     match code < 0xD800
-    | true => Option/some(Char { code = code, scalar = Scalar/below(@code, True/qed()) })
+    | true => Option/some(Char { code = code, scalar = Scalar/below(True/qed()) })
     | false =>
         match code >= 0xE000
         | true =>
             match code <= 0x10FFFF
-            | true => Option/some(Char { code = code, scalar = Scalar/above(@code, True/qed()) })
+            | true => Option/some(Char { code = code, scalar = Scalar/above(True/qed()) })
             | false => Option/none()
             end
         | false => Option/none()
@@ -69,7 +69,7 @@ pub let to_ascii_upper(c: Char) -> Char =
     match is_lower(c) | true => Option/unwrap_or(of_nat(c.code - 0x20), c) | false => c end;
 
 let ascii_zero: Char =
-    Char { code = 0x30, scalar = Scalar/below(@0x30, True/qed()) };
+    Char { code = 0x30, scalar = Scalar/below(True/qed()) };
 
 pub let hex_digit(nibble: Nat) -> Char =
     let digit =

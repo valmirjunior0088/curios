@@ -210,7 +210,7 @@ pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> 
         Eq/subst(
             (sc: Scan) => Utf8(sc, t),
             step_scans(c),
-            peel_byte(@Scan/lead(), @x[c, ..t], True/qed(), w));
+            peel_byte(True/qed(), w));
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat
     | ascii() => (w2) => Byte/to_nat(c)
     | lead(k, lo, hi, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0

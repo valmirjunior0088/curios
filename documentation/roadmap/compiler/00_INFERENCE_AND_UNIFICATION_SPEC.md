@@ -17,10 +17,10 @@ Every explicitly supplied implicit argument in `curios-prelude/std/` and `curios
 
 | Sites | Args | Blocked by | Unlocked by |
 | --- | --- | --- | --- |
-| `Char.crs:11`, `:16`, `:72` | 3 | eager mismatch checking `True/qed()` against `Below(?c, …)`/`InRange(?c, …)` stuck on the unsolved index | Item 2 |
-| `Str.crs:68`, `:78`, `:84`, `:144`, `:152`, `:159` | 12 | same shape: `Nat/Lt(0, Bytes/len(?b))` checked before the witness argument that would solve `?b` | Item 2 |
-| `Str/utf8.crs:216` | 2 | same | Item 2 |
-| `BigNat/add.crs:1270`, `:1286` | 4 | comparison of two matches stuck on the same scrutinee with a metavariable in an arm position | Item 2, pending its investigation bullet |
+| `Char.crs:11`, `:16`, `:72` | 3 | eager mismatch checking `True/qed()` against `Below(?c, …)`/`InRange(?c, …)` stuck on the unsolved index | Item 2 — dropped 2026-08-08 |
+| `Str.crs:68`, `:78`, `:84`, `:144`, `:152`, `:159` | 12 | same shape: `Nat/Lt(0, Bytes/len(?b))` checked before the witness argument that would solve `?b` | Item 2 — dropped 2026-08-08 |
+| `Str/utf8.crs:216` | 2 | same | Item 2 — dropped 2026-08-08 |
+| `BigNat/add.crs:1270`, `:1286` | 4 | investigation closed 2026-08-08: the flex side's `xor3(xh, ?b1, c)` is stuck one layer behind its constant-middle partner, so decomposition would need arm selection through a flexible scrutinee — a guess the solver deliberately refuses (the match-match gate); the goals now park honestly instead of wrongly committing | stays explicit by design |
 | `BigNat/succ.crs:56`, `:61`, `:94`, `:100` | 16 | packed constant folding versus cons/append/concat decomposition | Item 4 |
 | `Async.crs:399`, `:454`, `:615`; `Async/Future.crs:15` | 4 | one root cause across what the measurement first split into "embedded chains", defect (a), and defect (b): `solve` analyzed unmaterialized candidates (see the defect ledger) | dropped 2026-08-08 with the defect fix |
 | `Str/utf8.crs:180` | 1 | refinement-suppressed solving postpones unrecoverably | none; Item 1 makes its report honest |
@@ -35,7 +35,7 @@ Verified against the tree on 2026-08-08. Every citation is a file and line to re
 | Item | Landed | Remaining |
 | --- | --- | --- |
 | Residual constraints | **Both halves (2026-08-08).** A parked `Checking` obligation reports `Error::postponed_check` at its span; a parked `Conversion` goal surviving the drain reports `Error::PostponedConversion` at its origin, naming its still-unsolved watched metavariables (with insertion provenance where an occurrence carries it) and noting when its frozen frame carried match-arm refinements; the witness-hole case remains the third state | The refinement-dependence note first becomes *exercisable* when Item 2 parks meta-blocked comparisons — its acceptance test rides Item 2 |
-| Conversion postponement | Nothing. A conversion whose verdict hinges on a term stuck on an unsolved metavariable — `True ≡ Below(?c, 0xD800)` reducing to a match stuck on `?c` — returns `Mismatch` eagerly, aborting elaboration before later arguments or the result unification could solve the blocker | The item |
+| Conversion postponement | **Landed 2026-08-08**, as two rules in `convert.rs`'s drain: a structural mismatch whose side is stuck on an unsolved metavariable (intrinsic, match, or an elimination headed by one — `blocked_on_unsolved_metavar`) parks watching the metavariables instead of failing; and two stuck matches decompose only when both scrutinees are rigid or their motives and case tables are syntactically identical — a flex-scrutinee pair with differing arms may be layer-misaligned, and its scrutinee goal would solve the metavariable with the wrong layer's scrutinee | Nothing |
 | Pruning | The degenerate forms only: the embedded-metavariable guard postpones any solve whose candidate mentions an unsolved metavariable (`convert.rs:1446`, "the stand-in for pruning"), and spine inversion refuses dependence on non-pattern slots (`convert.rs:1504`, "pruning in its simplest form") | Real pruning |
 | Packed views | Nothing. `b[h, ..t]` lowers to `Bits.concat(Bits.append(b[], h), t)`, and the reducer folds constant spines into literals — `append(b[], true)` becomes `b[\1]` — so unification meets `append(b[], ?h) ≡ b[\0]` with no rule to answer it | The item |
 
@@ -57,6 +57,8 @@ Two additions to the original scope:
 This item remains the prerequisite for everything below in practice: Items 2 and 3 both add ways for work to park, and both are much harder to evaluate against a diagnostic that cannot say whether the solver stalled or the program disagreed.
 
 ## Item 2 — metavariable-blocked conversions postpone instead of mismatching
+
+**Landed 2026-08-08.** The escape hatch generalizes the pre-existing intrinsic-only rule (`blocked_on_unsolved_metavar`); 17 of the 21 attributed arguments dropped (`Char` ×3, `Str` ×6, `utf8:216` ×2), and the investigation bullet closed with the `add.crs` pair staying explicit by design — its resolution would require selecting a match arm through a flexible scrutinee, the same class of guess imitation refuses, and the landed match-match gate (both scrutinees rigid, or identical motive and case tables) exists precisely because decomposing across that misalignment *wrongly commits* rather than merely failing. The section below is the original scope, kept until retirement.
 
 The largest measured item: 21 of the corpus's 50 explicit arguments across 12 sites exist only because a conversion whose verdict depends on an unsolved metavariable fails hard instead of parking.
 
