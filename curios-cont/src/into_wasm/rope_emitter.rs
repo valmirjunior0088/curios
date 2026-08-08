@@ -67,6 +67,297 @@ fn null(type_name: &curios_wasm::TypeName) -> curios_wasm::Instr {
     }
 }
 
+/// The walk machinery shared verbatim by [`RopeEmitter::emit_force_func`] and [`RopeEmitter::emit_bits_force_func`]: one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, view resolution, worklist growth and descent, pop, memoization — so the two grains cannot silently diverge on the discipline. Each emitter inlines only what genuinely differs: destination sizing, the chunk-count source, and the copy body.
+struct ForceWalk<'r> {
+    rope: &'r RopeData,
+    elems: curios_wasm::TypeName,
+    r: curios_wasm::LocalName,
+    node: curios_wasm::LocalName,
+    out: curios_wasm::LocalName,
+    stack: curios_wasm::LocalName,
+    grown: curios_wasm::LocalName,
+    sp: curios_wasm::LocalName,
+    offset: curios_wasm::LocalName,
+    cur: curios_wasm::LocalName,
+    payload: curios_wasm::LocalName,
+    src_off: curios_wasm::LocalName,
+    count: curios_wasm::LocalName,
+    sb: curios_wasm::LocalName,
+}
+
+impl<'r> ForceWalk<'r> {
+    fn new(rope: &'r RopeData, elems: curios_wasm::TypeName) -> Self {
+        Self {
+            rope,
+            elems,
+            r: curios_wasm::LocalName::from("r"),
+            node: curios_wasm::LocalName::from("node"),
+            out: curios_wasm::LocalName::from("out"),
+            stack: curios_wasm::LocalName::from("stack"),
+            grown: curios_wasm::LocalName::from("grown"),
+            sp: curios_wasm::LocalName::from("sp"),
+            offset: curios_wasm::LocalName::from("offset"),
+            cur: curios_wasm::LocalName::from("cur"),
+            payload: curios_wasm::LocalName::from("payload"),
+            src_off: curios_wasm::LocalName::from("src_off"),
+            count: curios_wasm::LocalName::from("count"),
+            sb: curios_wasm::LocalName::from("sb"),
+        }
+    }
+
+    /// The shared scratch-local roster; the bit-grain emitter appends its copy-loop extras.
+    fn locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+        vec![
+            (
+                self.node.clone(),
+                concrete_val(self.rope.node.clone(), true),
+            ),
+            (
+                self.out.clone(),
+                concrete_val(self.rope.payload.clone(), true),
+            ),
+            (self.stack.clone(), concrete_val(self.elems.clone(), true)),
+            (self.grown.clone(), concrete_val(self.elems.clone(), true)),
+            (self.sp.clone(), i32_val.clone()),
+            (self.offset.clone(), i32_val.clone()),
+            (self.cur.clone(), concrete_val(self.rope.base.clone(), true)),
+            (
+                self.payload.clone(),
+                concrete_val(self.rope.payload.clone(), true),
+            ),
+            (self.src_off.clone(), i32_val.clone()),
+            (self.count.clone(), i32_val),
+            (self.sb.clone(), concrete_val(self.rope.base.clone(), true)),
+        ]
+    }
+
+    /// The flat entries answer without walking: a leaf its payload, a cached node its memo (setting `node` on the way for the memoize epilogue). A view skips straight to the walk.
+    fn entry_shortcuts(&self) -> Vec<curios_wasm::Instr> {
+        vec![
+            get(&self.r),
+            field_get(&self.rope.base, &self.rope.tag_field),
+            curios_wasm::Instr::I32Eqz,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("leaf"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&self.r),
+                    cast(&self.rope.leaf),
+                    field_get(&self.rope.leaf, &self.rope.payload_field),
+                    curios_wasm::Instr::Return,
+                ],
+                else_instructions: vec![],
+            },
+            get(&self.r),
+            field_get(&self.rope.base, &self.rope.tag_field),
+            curios_wasm::Instr::I32Const { value: 1 },
+            curios_wasm::Instr::I32Eq,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("entry_node"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&self.r),
+                    cast(&self.rope.node),
+                    set(&self.node),
+                    get(&self.node),
+                    field_get(&self.rope.node, &self.rope.cache_field),
+                    curios_wasm::Instr::RefIsNull,
+                    curios_wasm::Instr::I32Eqz,
+                    curios_wasm::Instr::If {
+                        label_name: curios_wasm::LabelName::from("cached"),
+                        block_type: curios_wasm::BlockType::Empty,
+                        then_instructions: vec![
+                            get(&self.node),
+                            field_get(&self.rope.node, &self.rope.cache_field),
+                            curios_wasm::Instr::RefAsNonNull,
+                            curios_wasm::Instr::Return,
+                        ],
+                        else_instructions: vec![],
+                    },
+                ],
+                else_instructions: vec![],
+            },
+        ]
+    }
+
+    /// A fresh 32-slot worklist, the walk starting at the entry.
+    fn init_worklist(&self) -> Vec<curios_wasm::Instr> {
+        vec![
+            curios_wasm::Instr::I32Const { value: 32 },
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: self.elems.clone(),
+            },
+            set(&self.stack),
+            get(&self.r),
+            set(&self.cur),
+        ]
+    }
+
+    /// The view descent arm: its window over the base's flat payload — a leaf's payload or a cached node's cache (non-null by the slice invariant; the null trap at the copy is its enforcement).
+    fn resolve_view_chunk(&self) -> Vec<curios_wasm::Instr> {
+        vec![
+            get(&self.cur),
+            field_get(&self.rope.base, &self.rope.tag_field),
+            curios_wasm::Instr::I32Const { value: 2 },
+            curios_wasm::Instr::I32Eq,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("at_view"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&self.cur),
+                    cast(&self.rope.view),
+                    field_get(&self.rope.view, &self.rope.base_field),
+                    set(&self.sb),
+                    get(&self.cur),
+                    cast(&self.rope.view),
+                    field_get(&self.rope.view, &self.rope.offset_field),
+                    set(&self.src_off),
+                    get(&self.cur),
+                    field_get(&self.rope.base, &self.rope.len_field),
+                    set(&self.count),
+                    get(&self.sb),
+                    field_get(&self.rope.base, &self.rope.tag_field),
+                    curios_wasm::Instr::I32Eqz,
+                    curios_wasm::Instr::If {
+                        label_name: curios_wasm::LabelName::from("view_base"),
+                        block_type: curios_wasm::BlockType::Empty,
+                        then_instructions: vec![
+                            get(&self.sb),
+                            cast(&self.rope.leaf),
+                            field_get(&self.rope.leaf, &self.rope.payload_field),
+                            set(&self.payload),
+                        ],
+                        else_instructions: vec![
+                            get(&self.sb),
+                            cast(&self.rope.node),
+                            field_get(&self.rope.node, &self.rope.cache_field),
+                            set(&self.payload),
+                        ],
+                    },
+                    curios_wasm::Instr::Br {
+                        label_name: curios_wasm::LabelName::from("emit"),
+                    },
+                ],
+                else_instructions: vec![],
+            },
+        ]
+    }
+
+    /// The uncached-node descent tail: grow the worklist by doubling when full, push `cur.right`, descend into `cur.left`.
+    fn push_uncached_node(
+        &self,
+        descend_label: &curios_wasm::LabelName,
+    ) -> Vec<curios_wasm::Instr> {
+        vec![
+            get(&self.sp),
+            get(&self.stack),
+            curios_wasm::Instr::ArrayLen,
+            curios_wasm::Instr::I32Eq,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("grow"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&self.sp),
+                    curios_wasm::Instr::I32Const { value: 1 },
+                    curios_wasm::Instr::I32Shl,
+                    curios_wasm::Instr::ArrayNewDefault {
+                        type_name: self.elems.clone(),
+                    },
+                    set(&self.grown),
+                    get(&self.grown),
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    get(&self.stack),
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    get(&self.sp),
+                    curios_wasm::Instr::ArrayCopy {
+                        source_name: self.elems.clone(),
+                        target_name: self.elems.clone(),
+                    },
+                    get(&self.grown),
+                    set(&self.stack),
+                ],
+                else_instructions: vec![],
+            },
+            get(&self.stack),
+            get(&self.sp),
+            get(&self.cur),
+            cast(&self.rope.node),
+            field_get(&self.rope.node, &self.rope.right_field),
+            curios_wasm::Instr::ArraySet {
+                type_name: self.elems.clone(),
+            },
+            get(&self.sp),
+            curios_wasm::Instr::I32Const { value: 1 },
+            curios_wasm::Instr::I32Add,
+            set(&self.sp),
+            get(&self.cur),
+            cast(&self.rope.node),
+            field_get(&self.rope.node, &self.rope.left_field),
+            set(&self.cur),
+            curios_wasm::Instr::Br {
+                label_name: descend_label.clone(),
+            },
+        ]
+    }
+
+    /// Pop the next pending subtree; fall out of the walk when the worklist is empty.
+    fn pop_or_exit(&self, walk_label: &curios_wasm::LabelName) -> Vec<curios_wasm::Instr> {
+        vec![
+            get(&self.sp),
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("pop"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&self.sp),
+                    curios_wasm::Instr::I32Const { value: 1 },
+                    curios_wasm::Instr::I32Sub,
+                    set(&self.sp),
+                    get(&self.stack),
+                    get(&self.sp),
+                    curios_wasm::Instr::ArrayGet {
+                        type_name: self.elems.clone(),
+                    },
+                    cast(&self.rope.base),
+                    set(&self.cur),
+                    curios_wasm::Instr::Br {
+                        label_name: walk_label.clone(),
+                    },
+                ],
+                else_instructions: vec![],
+            },
+        ]
+    }
+
+    /// Memoize a node entry and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize. Answers the filled payload.
+    fn memoize_entry_node(&self) -> Vec<curios_wasm::Instr> {
+        vec![
+            get(&self.r),
+            field_get(&self.rope.base, &self.rope.tag_field),
+            curios_wasm::Instr::I32Const { value: 1 },
+            curios_wasm::Instr::I32Eq,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("memoize"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&self.node),
+                    get(&self.out),
+                    field_set(&self.rope.node, &self.rope.cache_field),
+                    get(&self.node),
+                    null(&self.rope.base),
+                    field_set(&self.rope.node, &self.rope.left_field),
+                    get(&self.node),
+                    null(&self.rope.base),
+                    field_set(&self.rope.node, &self.rope.right_field),
+                ],
+                else_instructions: vec![],
+            },
+            get(&self.out),
+            curios_wasm::Instr::RefAsNonNull,
+        ]
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct RopeEmitter<'a, 'b> {
     table: &'a Table<'a>,
@@ -134,179 +425,52 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///
     /// An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
     pub(crate) fn emit_force_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
-        let elems = self.table.elems_type();
+        let walk = ForceWalk::new(rope, self.table.elems_type());
 
-        let r = curios_wasm::LocalName::from("r");
-        let node = curios_wasm::LocalName::from("node");
-        let out = curios_wasm::LocalName::from("out");
-        let stack = curios_wasm::LocalName::from("stack");
-        let grown = curios_wasm::LocalName::from("grown");
-        let sp = curios_wasm::LocalName::from("sp");
-        let offset = curios_wasm::LocalName::from("offset");
-        let cur = curios_wasm::LocalName::from("cur");
-        let payload = curios_wasm::LocalName::from("payload");
-        let src_off = curios_wasm::LocalName::from("src_off");
-        let count = curios_wasm::LocalName::from("count");
-        let sb = curios_wasm::LocalName::from("sb");
+        let mut instrs = walk.entry_shortcuts();
 
-        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-        let locals = vec![
-            (node.clone(), concrete_val(rope.node.clone(), true)),
-            (out.clone(), concrete_val(rope.payload.clone(), true)),
-            (stack.clone(), concrete_val(elems.clone(), true)),
-            (grown.clone(), concrete_val(elems.clone(), true)),
-            (sp.clone(), i32_val.clone()),
-            (offset.clone(), i32_val.clone()),
-            (cur.clone(), concrete_val(rope.base.clone(), true)),
-            (payload.clone(), concrete_val(rope.payload.clone(), true)),
-            (src_off.clone(), i32_val.clone()),
-            (count.clone(), i32_val.clone()),
-            (sb.clone(), concrete_val(rope.base.clone(), true)),
-        ];
-
-        let mut instrs = Vec::new();
-
-        // Leaf: answer the payload directly.
+        // out = array.new_default <payload> r.len, then the worklist.
         instrs.extend([
-            get(&r),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Eqz,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("leaf"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&r),
-                    cast(&rope.leaf),
-                    field_get(&rope.leaf, &rope.payload_field),
-                    curios_wasm::Instr::Return,
-                ],
-                else_instructions: vec![],
-            },
-        ]);
-
-        // Cached node: answer the memo. (A view skips straight to the walk.)
-        instrs.extend([
-            get(&r),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("entry_node"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&r),
-                    cast(&rope.node),
-                    set(&node),
-                    get(&node),
-                    field_get(&rope.node, &rope.cache_field),
-                    curios_wasm::Instr::RefIsNull,
-                    curios_wasm::Instr::I32Eqz,
-                    curios_wasm::Instr::If {
-                        label_name: curios_wasm::LabelName::from("cached"),
-                        block_type: curios_wasm::BlockType::Empty,
-                        then_instructions: vec![
-                            get(&node),
-                            field_get(&rope.node, &rope.cache_field),
-                            curios_wasm::Instr::RefAsNonNull,
-                            curios_wasm::Instr::Return,
-                        ],
-                        else_instructions: vec![],
-                    },
-                ],
-                else_instructions: vec![],
-            },
-        ]);
-
-        // out = array.new_default <payload> r.len; stack = 32-slot worklist.
-        instrs.extend([
-            get(&r),
+            get(&walk.r),
             field_get(&rope.base, &rope.len_field),
             curios_wasm::Instr::ArrayNewDefault {
                 type_name: rope.payload.clone(),
             },
-            set(&out),
-            curios_wasm::Instr::I32Const { value: 32 },
-            curios_wasm::Instr::ArrayNewDefault {
-                type_name: elems.clone(),
-            },
-            set(&stack),
-            get(&r),
-            set(&cur),
+            set(&walk.out),
         ]);
+        instrs.extend(walk.init_worklist());
 
         // The descent body: classify `cur`, either resolving a leaf-like chunk — payload + source window — (exit to `$emit`) or pushing right and descending left.
         let descend_label = curios_wasm::LabelName::from("descend");
         let mut descend = vec![
             // Leaf: the whole payload.
-            get(&cur),
+            get(&walk.cur),
             field_get(&rope.base, &rope.tag_field),
             curios_wasm::Instr::I32Eqz,
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("at_leaf"),
                 block_type: curios_wasm::BlockType::Empty,
                 then_instructions: vec![
-                    get(&cur),
+                    get(&walk.cur),
                     cast(&rope.leaf),
                     field_get(&rope.leaf, &rope.payload_field),
-                    set(&payload),
+                    set(&walk.payload),
                     curios_wasm::Instr::I32Const { value: 0 },
-                    set(&src_off),
-                    get(&payload),
+                    set(&walk.src_off),
+                    get(&walk.payload),
                     curios_wasm::Instr::ArrayLen,
-                    set(&count),
+                    set(&walk.count),
                     curios_wasm::Instr::Br {
                         label_name: curios_wasm::LabelName::from("emit"),
                     },
                 ],
                 else_instructions: vec![],
             },
-            // View: its window over the base's flat payload — a leaf's payload or a cached node's cache (non-null by the slice invariant; the null trap in `array.copy` is its enforcement).
-            get(&cur),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 2 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("at_view"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&cur),
-                    cast(&rope.view),
-                    field_get(&rope.view, &rope.base_field),
-                    set(&sb),
-                    get(&cur),
-                    cast(&rope.view),
-                    field_get(&rope.view, &rope.offset_field),
-                    set(&src_off),
-                    get(&cur),
-                    field_get(&rope.base, &rope.len_field),
-                    set(&count),
-                    get(&sb),
-                    field_get(&rope.base, &rope.tag_field),
-                    curios_wasm::Instr::I32Eqz,
-                    curios_wasm::Instr::If {
-                        label_name: curios_wasm::LabelName::from("view_base"),
-                        block_type: curios_wasm::BlockType::Empty,
-                        then_instructions: vec![
-                            get(&sb),
-                            cast(&rope.leaf),
-                            field_get(&rope.leaf, &rope.payload_field),
-                            set(&payload),
-                        ],
-                        else_instructions: vec![
-                            get(&sb),
-                            cast(&rope.node),
-                            field_get(&rope.node, &rope.cache_field),
-                            set(&payload),
-                        ],
-                    },
-                    curios_wasm::Instr::Br {
-                        label_name: curios_wasm::LabelName::from("emit"),
-                    },
-                ],
-                else_instructions: vec![],
-            },
-            // Cached node: the whole cache.
-            get(&cur),
+        ];
+        descend.extend(walk.resolve_view_chunk());
+        // Cached node: the whole cache.
+        descend.extend([
+            get(&walk.cur),
             cast(&rope.node),
             field_get(&rope.node, &rope.cache_field),
             curios_wasm::Instr::RefIsNull,
@@ -315,161 +479,65 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 label_name: curios_wasm::LabelName::from("at_cached"),
                 block_type: curios_wasm::BlockType::Empty,
                 then_instructions: vec![
-                    get(&cur),
+                    get(&walk.cur),
                     cast(&rope.node),
                     field_get(&rope.node, &rope.cache_field),
-                    set(&payload),
+                    set(&walk.payload),
                     curios_wasm::Instr::I32Const { value: 0 },
-                    set(&src_off),
-                    get(&payload),
+                    set(&walk.src_off),
+                    get(&walk.payload),
                     curios_wasm::Instr::ArrayLen,
-                    set(&count),
+                    set(&walk.count),
                     curios_wasm::Instr::Br {
                         label_name: curios_wasm::LabelName::from("emit"),
                     },
                 ],
                 else_instructions: vec![],
             },
-            // Uncached node: grow the worklist if full…
-            get(&sp),
-            get(&stack),
-            curios_wasm::Instr::ArrayLen,
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("grow"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&sp),
-                    curios_wasm::Instr::I32Const { value: 1 },
-                    curios_wasm::Instr::I32Shl,
-                    curios_wasm::Instr::ArrayNewDefault {
-                        type_name: elems.clone(),
-                    },
-                    set(&grown),
-                    get(&grown),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    get(&stack),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    get(&sp),
-                    curios_wasm::Instr::ArrayCopy {
-                        source_name: elems.clone(),
-                        target_name: elems.clone(),
-                    },
-                    get(&grown),
-                    set(&stack),
-                ],
-                else_instructions: vec![],
-            },
-        ];
-        // …push cur.right, descend into cur.left.
-        descend.extend([
-            get(&stack),
-            get(&sp),
-            get(&cur),
-            cast(&rope.node),
-            field_get(&rope.node, &rope.right_field),
-            curios_wasm::Instr::ArraySet {
-                type_name: elems.clone(),
-            },
-            get(&sp),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Add,
-            set(&sp),
-            get(&cur),
-            cast(&rope.node),
-            field_get(&rope.node, &rope.left_field),
-            set(&cur),
-            curios_wasm::Instr::Br {
-                label_name: descend_label.clone(),
-            },
         ]);
+        descend.extend(walk.push_uncached_node(&descend_label));
 
         // The walk: descend to a chunk, copy it at the running offset, pop.
         let walk_label = curios_wasm::LabelName::from("walk");
+        let mut walk_body = vec![
+            curios_wasm::Instr::Block {
+                label_name: curios_wasm::LabelName::from("emit"),
+                block_type: curios_wasm::BlockType::Empty,
+                instructions: vec![curios_wasm::Instr::Loop {
+                    label_name: descend_label,
+                    block_type: curios_wasm::BlockType::Empty,
+                    instructions: descend,
+                }],
+            },
+            // array.copy out[offset..] <- payload[src_off..src_off+count]
+            get(&walk.out),
+            get(&walk.offset),
+            get(&walk.payload),
+            get(&walk.src_off),
+            get(&walk.count),
+            curios_wasm::Instr::ArrayCopy {
+                source_name: rope.payload.clone(),
+                target_name: rope.payload.clone(),
+            },
+            get(&walk.offset),
+            get(&walk.count),
+            curios_wasm::Instr::I32Add,
+            set(&walk.offset),
+        ];
+        walk_body.extend(walk.pop_or_exit(&walk_label));
         instrs.push(curios_wasm::Instr::Loop {
-            label_name: walk_label.clone(),
+            label_name: walk_label,
             block_type: curios_wasm::BlockType::Empty,
-            instructions: vec![
-                curios_wasm::Instr::Block {
-                    label_name: curios_wasm::LabelName::from("emit"),
-                    block_type: curios_wasm::BlockType::Empty,
-                    instructions: vec![curios_wasm::Instr::Loop {
-                        label_name: descend_label,
-                        block_type: curios_wasm::BlockType::Empty,
-                        instructions: descend,
-                    }],
-                },
-                // array.copy out[offset..] <- payload[src_off..src_off+count]
-                get(&out),
-                get(&offset),
-                get(&payload),
-                get(&src_off),
-                get(&count),
-                curios_wasm::Instr::ArrayCopy {
-                    source_name: rope.payload.clone(),
-                    target_name: rope.payload.clone(),
-                },
-                get(&offset),
-                get(&count),
-                curios_wasm::Instr::I32Add,
-                set(&offset),
-                // Pop the next pending subtree; fall out when empty.
-                get(&sp),
-                curios_wasm::Instr::If {
-                    label_name: curios_wasm::LabelName::from("pop"),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![
-                        get(&sp),
-                        curios_wasm::Instr::I32Const { value: 1 },
-                        curios_wasm::Instr::I32Sub,
-                        set(&sp),
-                        get(&stack),
-                        get(&sp),
-                        curios_wasm::Instr::ArrayGet {
-                            type_name: elems.clone(),
-                        },
-                        cast(&rope.base),
-                        set(&cur),
-                        curios_wasm::Instr::Br {
-                            label_name: walk_label,
-                        },
-                    ],
-                    else_instructions: vec![],
-                },
-            ],
+            instructions: walk_body,
         });
 
-        // Memoize a node entry and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize.
-        instrs.extend([
-            get(&r),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("memoize"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&node),
-                    get(&out),
-                    field_set(&rope.node, &rope.cache_field),
-                    get(&node),
-                    null(&rope.base),
-                    field_set(&rope.node, &rope.left_field),
-                    get(&node),
-                    null(&rope.base),
-                    field_set(&rope.node, &rope.right_field),
-                ],
-                else_instructions: vec![],
-            },
-            get(&out),
-            curios_wasm::Instr::RefAsNonNull,
-        ]);
+        instrs.extend(walk.memoize_entry_node());
 
         self.add_helper(
             func_name,
-            vec![(r, concrete_val(rope.base.clone(), false))],
+            vec![(walk.r.clone(), concrete_val(rope.base.clone(), false))],
             concrete_val(rope.payload.clone(), false),
-            locals,
+            walk.locals(),
             instrs,
         );
     }
@@ -477,90 +545,25 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope into a packed LSB-first payload. The tree walk is iterative, like [`Self::emit_force_func`], but chunk windows and offsets are measured in bits and the destination has `ceil(len / 8)` zeroed bytes. Copying only logical bits keeps the unused high padding of the final byte zero.
     pub(crate) fn emit_bits_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let rope = self.table.bin_rope();
-        let elems = self.table.elems_type();
+        let walk = ForceWalk::new(&rope, self.table.elems_type());
 
-        let r = curios_wasm::LocalName::from("r");
-        let node = curios_wasm::LocalName::from("node");
-        let out = curios_wasm::LocalName::from("out");
-        let stack = curios_wasm::LocalName::from("stack");
-        let grown = curios_wasm::LocalName::from("grown");
-        let sp = curios_wasm::LocalName::from("sp");
-        let offset = curios_wasm::LocalName::from("offset");
-        let cur = curios_wasm::LocalName::from("cur");
-        let payload = curios_wasm::LocalName::from("payload");
-        let src_off = curios_wasm::LocalName::from("src_off");
-        let count = curios_wasm::LocalName::from("count");
-        let sb = curios_wasm::LocalName::from("sb");
         let copy_i = curios_wasm::LocalName::from("copy_i");
         let src_bit = curios_wasm::LocalName::from("src_bit");
         let dst_bit = curios_wasm::LocalName::from("dst_bit");
 
         let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-        let locals = vec![
-            (node.clone(), concrete_val(rope.node.clone(), true)),
-            (out.clone(), concrete_val(rope.payload.clone(), true)),
-            (stack.clone(), concrete_val(elems.clone(), true)),
-            (grown.clone(), concrete_val(elems.clone(), true)),
-            (sp.clone(), i32_val.clone()),
-            (offset.clone(), i32_val.clone()),
-            (cur.clone(), concrete_val(rope.base.clone(), true)),
-            (payload.clone(), concrete_val(rope.payload.clone(), true)),
-            (src_off.clone(), i32_val.clone()),
-            (count.clone(), i32_val.clone()),
-            (sb.clone(), concrete_val(rope.base.clone(), true)),
+        let mut locals = walk.locals();
+        locals.extend([
             (copy_i.clone(), i32_val.clone()),
             (src_bit.clone(), i32_val.clone()),
-            (dst_bit.clone(), i32_val.clone()),
-        ];
+            (dst_bit.clone(), i32_val),
+        ]);
 
-        let mut instrs = vec![
-            // A packed leaf is already flat.
-            get(&r),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Eqz,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("leaf"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&r),
-                    cast(&rope.leaf),
-                    field_get(&rope.leaf, &rope.payload_field),
-                    curios_wasm::Instr::Return,
-                ],
-                else_instructions: vec![],
-            },
-            // A cached node answers its packed memo.
-            get(&r),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("entry_node"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&r),
-                    cast(&rope.node),
-                    set(&node),
-                    get(&node),
-                    field_get(&rope.node, &rope.cache_field),
-                    curios_wasm::Instr::RefIsNull,
-                    curios_wasm::Instr::I32Eqz,
-                    curios_wasm::Instr::If {
-                        label_name: curios_wasm::LabelName::from("cached"),
-                        block_type: curios_wasm::BlockType::Empty,
-                        then_instructions: vec![
-                            get(&node),
-                            field_get(&rope.node, &rope.cache_field),
-                            curios_wasm::Instr::RefAsNonNull,
-                            curios_wasm::Instr::Return,
-                        ],
-                        else_instructions: vec![],
-                    },
-                ],
-                else_instructions: vec![],
-            },
-            // ceil(r.len / 8) zeroed destination bytes.
-            get(&r),
+        let mut instrs = walk.entry_shortcuts();
+
+        // ceil(r.len / 8) zeroed destination bytes, then the worklist.
+        instrs.extend([
+            get(&walk.r),
             field_get(&rope.base, &rope.len_field),
             curios_wasm::Instr::I32Const { value: 7 },
             curios_wasm::Instr::I32Add,
@@ -569,88 +572,40 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::ArrayNewDefault {
                 type_name: rope.payload.clone(),
             },
-            set(&out),
-            curios_wasm::Instr::I32Const { value: 32 },
-            curios_wasm::Instr::ArrayNewDefault {
-                type_name: elems.clone(),
-            },
-            set(&stack),
-            get(&r),
-            set(&cur),
-        ];
+            set(&walk.out),
+        ]);
+        instrs.extend(walk.init_worklist());
 
         let descend_label = curios_wasm::LabelName::from("descend");
         let mut descend = vec![
             // Leaf: copy exactly its logical bit length, not its padding.
-            get(&cur),
+            get(&walk.cur),
             field_get(&rope.base, &rope.tag_field),
             curios_wasm::Instr::I32Eqz,
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("at_leaf"),
                 block_type: curios_wasm::BlockType::Empty,
                 then_instructions: vec![
-                    get(&cur),
+                    get(&walk.cur),
                     cast(&rope.leaf),
                     field_get(&rope.leaf, &rope.payload_field),
-                    set(&payload),
+                    set(&walk.payload),
                     curios_wasm::Instr::I32Const { value: 0 },
-                    set(&src_off),
-                    get(&cur),
+                    set(&walk.src_off),
+                    get(&walk.cur),
                     field_get(&rope.base, &rope.len_field),
-                    set(&count),
+                    set(&walk.count),
                     curios_wasm::Instr::Br {
                         label_name: curios_wasm::LabelName::from("emit"),
                     },
                 ],
                 else_instructions: vec![],
             },
-            // A view is a logical-bit window over a leaf or cached node.
-            get(&cur),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 2 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("at_view"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&cur),
-                    cast(&rope.view),
-                    field_get(&rope.view, &rope.base_field),
-                    set(&sb),
-                    get(&cur),
-                    cast(&rope.view),
-                    field_get(&rope.view, &rope.offset_field),
-                    set(&src_off),
-                    get(&cur),
-                    field_get(&rope.base, &rope.len_field),
-                    set(&count),
-                    get(&sb),
-                    field_get(&rope.base, &rope.tag_field),
-                    curios_wasm::Instr::I32Eqz,
-                    curios_wasm::Instr::If {
-                        label_name: curios_wasm::LabelName::from("view_base"),
-                        block_type: curios_wasm::BlockType::Empty,
-                        then_instructions: vec![
-                            get(&sb),
-                            cast(&rope.leaf),
-                            field_get(&rope.leaf, &rope.payload_field),
-                            set(&payload),
-                        ],
-                        else_instructions: vec![
-                            get(&sb),
-                            cast(&rope.node),
-                            field_get(&rope.node, &rope.cache_field),
-                            set(&payload),
-                        ],
-                    },
-                    curios_wasm::Instr::Br {
-                        label_name: curios_wasm::LabelName::from("emit"),
-                    },
-                ],
-                else_instructions: vec![],
-            },
-            // A cached node contributes its logical length from bit zero.
-            get(&cur),
+        ];
+        descend.extend(walk.resolve_view_chunk());
+        // A cached node contributes its logical length from bit zero.
+        descend.extend([
+            get(&walk.cur),
             cast(&rope.node),
             field_get(&rope.node, &rope.cache_field),
             curios_wasm::Instr::RefIsNull,
@@ -659,215 +614,122 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 label_name: curios_wasm::LabelName::from("at_cached"),
                 block_type: curios_wasm::BlockType::Empty,
                 then_instructions: vec![
-                    get(&cur),
+                    get(&walk.cur),
                     cast(&rope.node),
                     field_get(&rope.node, &rope.cache_field),
-                    set(&payload),
+                    set(&walk.payload),
                     curios_wasm::Instr::I32Const { value: 0 },
-                    set(&src_off),
-                    get(&cur),
+                    set(&walk.src_off),
+                    get(&walk.cur),
                     field_get(&rope.base, &rope.len_field),
-                    set(&count),
+                    set(&walk.count),
                     curios_wasm::Instr::Br {
                         label_name: curios_wasm::LabelName::from("emit"),
                     },
                 ],
                 else_instructions: vec![],
             },
-            // Grow the explicit worklist by doubling when it is full.
-            get(&sp),
-            get(&stack),
-            curios_wasm::Instr::ArrayLen,
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("grow"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&sp),
-                    curios_wasm::Instr::I32Const { value: 1 },
-                    curios_wasm::Instr::I32Shl,
-                    curios_wasm::Instr::ArrayNewDefault {
-                        type_name: elems.clone(),
-                    },
-                    set(&grown),
-                    get(&grown),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    get(&stack),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    get(&sp),
-                    curios_wasm::Instr::ArrayCopy {
-                        source_name: elems.clone(),
-                        target_name: elems.clone(),
-                    },
-                    get(&grown),
-                    set(&stack),
-                ],
-                else_instructions: vec![],
-            },
-        ];
-        descend.extend([
-            get(&stack),
-            get(&sp),
-            get(&cur),
-            cast(&rope.node),
-            field_get(&rope.node, &rope.right_field),
-            curios_wasm::Instr::ArraySet {
-                type_name: elems.clone(),
-            },
-            get(&sp),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Add,
-            set(&sp),
-            get(&cur),
-            cast(&rope.node),
-            field_get(&rope.node, &rope.left_field),
-            set(&cur),
-            curios_wasm::Instr::Br {
-                label_name: descend_label.clone(),
-            },
         ]);
+        descend.extend(walk.push_uncached_node(&descend_label));
 
         let walk_label = curios_wasm::LabelName::from("walk");
         let copy_label = curios_wasm::LabelName::from("copy");
         let copy_done = curios_wasm::LabelName::from("copy_done");
-        instrs.push(curios_wasm::Instr::Loop {
-            label_name: walk_label.clone(),
-            block_type: curios_wasm::BlockType::Empty,
-            instructions: vec![
-                curios_wasm::Instr::Block {
-                    label_name: curios_wasm::LabelName::from("emit"),
+        let mut walk_body = vec![
+            curios_wasm::Instr::Block {
+                label_name: curios_wasm::LabelName::from("emit"),
+                block_type: curios_wasm::BlockType::Empty,
+                instructions: vec![curios_wasm::Instr::Loop {
+                    label_name: descend_label,
                     block_type: curios_wasm::BlockType::Empty,
-                    instructions: vec![curios_wasm::Instr::Loop {
-                        label_name: descend_label,
-                        block_type: curios_wasm::BlockType::Empty,
-                        instructions: descend,
-                    }],
-                },
-                // Scratch locals are reused per chunk, so reset the cursor.
-                curios_wasm::Instr::I32Const { value: 0 },
-                set(&copy_i),
-                curios_wasm::Instr::Block {
-                    label_name: copy_done.clone(),
+                    instructions: descend,
+                }],
+            },
+            // Scratch locals are reused per chunk, so reset the cursor.
+            curios_wasm::Instr::I32Const { value: 0 },
+            set(&copy_i),
+            curios_wasm::Instr::Block {
+                label_name: copy_done.clone(),
+                block_type: curios_wasm::BlockType::Empty,
+                instructions: vec![curios_wasm::Instr::Loop {
+                    label_name: copy_label.clone(),
                     block_type: curios_wasm::BlockType::Empty,
-                    instructions: vec![curios_wasm::Instr::Loop {
-                        label_name: copy_label.clone(),
-                        block_type: curios_wasm::BlockType::Empty,
-                        instructions: vec![
-                            get(&copy_i),
-                            get(&count),
-                            curios_wasm::Instr::I32GeU,
-                            curios_wasm::Instr::BrIf {
-                                label_name: copy_done,
-                            },
-                            get(&src_off),
-                            get(&copy_i),
-                            curios_wasm::Instr::I32Add,
-                            set(&src_bit),
-                            get(&offset),
-                            get(&copy_i),
-                            curios_wasm::Instr::I32Add,
-                            set(&dst_bit),
-                            // out[dst/8] |= ((payload[src/8] >> src%8) & 1) << dst%8
-                            get(&out),
-                            get(&dst_bit),
-                            curios_wasm::Instr::I32Const { value: 3 },
-                            curios_wasm::Instr::I32ShrU,
-                            get(&out),
-                            get(&dst_bit),
-                            curios_wasm::Instr::I32Const { value: 3 },
-                            curios_wasm::Instr::I32ShrU,
-                            curios_wasm::Instr::ArrayGetU {
-                                type_name: rope.payload.clone(),
-                            },
-                            get(&payload),
-                            get(&src_bit),
-                            curios_wasm::Instr::I32Const { value: 3 },
-                            curios_wasm::Instr::I32ShrU,
-                            curios_wasm::Instr::ArrayGetU {
-                                type_name: rope.payload.clone(),
-                            },
-                            get(&src_bit),
-                            curios_wasm::Instr::I32Const { value: 7 },
-                            curios_wasm::Instr::I32And,
-                            curios_wasm::Instr::I32ShrU,
-                            curios_wasm::Instr::I32Const { value: 1 },
-                            curios_wasm::Instr::I32And,
-                            get(&dst_bit),
-                            curios_wasm::Instr::I32Const { value: 7 },
-                            curios_wasm::Instr::I32And,
-                            curios_wasm::Instr::I32Shl,
-                            curios_wasm::Instr::I32Or,
-                            curios_wasm::Instr::ArraySet {
-                                type_name: rope.payload.clone(),
-                            },
-                            get(&copy_i),
-                            curios_wasm::Instr::I32Const { value: 1 },
-                            curios_wasm::Instr::I32Add,
-                            set(&copy_i),
-                            curios_wasm::Instr::Br {
-                                label_name: copy_label,
-                            },
-                        ],
-                    }],
-                },
-                get(&offset),
-                get(&count),
-                curios_wasm::Instr::I32Add,
-                set(&offset),
-                get(&sp),
-                curios_wasm::Instr::If {
-                    label_name: curios_wasm::LabelName::from("pop"),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![
-                        get(&sp),
-                        curios_wasm::Instr::I32Const { value: 1 },
-                        curios_wasm::Instr::I32Sub,
-                        set(&sp),
-                        get(&stack),
-                        get(&sp),
-                        curios_wasm::Instr::ArrayGet {
-                            type_name: elems.clone(),
+                    instructions: vec![
+                        get(&copy_i),
+                        get(&walk.count),
+                        curios_wasm::Instr::I32GeU,
+                        curios_wasm::Instr::BrIf {
+                            label_name: copy_done,
                         },
-                        cast(&rope.base),
-                        set(&cur),
+                        get(&walk.src_off),
+                        get(&copy_i),
+                        curios_wasm::Instr::I32Add,
+                        set(&src_bit),
+                        get(&walk.offset),
+                        get(&copy_i),
+                        curios_wasm::Instr::I32Add,
+                        set(&dst_bit),
+                        // out[dst/8] |= ((payload[src/8] >> src%8) & 1) << dst%8
+                        get(&walk.out),
+                        get(&dst_bit),
+                        curios_wasm::Instr::I32Const { value: 3 },
+                        curios_wasm::Instr::I32ShrU,
+                        get(&walk.out),
+                        get(&dst_bit),
+                        curios_wasm::Instr::I32Const { value: 3 },
+                        curios_wasm::Instr::I32ShrU,
+                        curios_wasm::Instr::ArrayGetU {
+                            type_name: rope.payload.clone(),
+                        },
+                        get(&walk.payload),
+                        get(&src_bit),
+                        curios_wasm::Instr::I32Const { value: 3 },
+                        curios_wasm::Instr::I32ShrU,
+                        curios_wasm::Instr::ArrayGetU {
+                            type_name: rope.payload.clone(),
+                        },
+                        get(&src_bit),
+                        curios_wasm::Instr::I32Const { value: 7 },
+                        curios_wasm::Instr::I32And,
+                        curios_wasm::Instr::I32ShrU,
+                        curios_wasm::Instr::I32Const { value: 1 },
+                        curios_wasm::Instr::I32And,
+                        get(&dst_bit),
+                        curios_wasm::Instr::I32Const { value: 7 },
+                        curios_wasm::Instr::I32And,
+                        curios_wasm::Instr::I32Shl,
+                        curios_wasm::Instr::I32Or,
+                        curios_wasm::Instr::ArraySet {
+                            type_name: rope.payload.clone(),
+                        },
+                        get(&copy_i),
+                        curios_wasm::Instr::I32Const { value: 1 },
+                        curios_wasm::Instr::I32Add,
+                        set(&copy_i),
                         curios_wasm::Instr::Br {
-                            label_name: walk_label,
+                            label_name: copy_label,
                         },
                     ],
-                    else_instructions: vec![],
-                },
-            ],
+                }],
+            },
+            get(&walk.offset),
+            get(&walk.count),
+            curios_wasm::Instr::I32Add,
+            set(&walk.offset),
+        ];
+        walk_body.extend(walk.pop_or_exit(&walk_label));
+        instrs.push(curios_wasm::Instr::Loop {
+            label_name: walk_label,
+            block_type: curios_wasm::BlockType::Empty,
+            instructions: walk_body,
         });
 
-        instrs.extend([
-            get(&r),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("memoize"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&node),
-                    get(&out),
-                    field_set(&rope.node, &rope.cache_field),
-                    get(&node),
-                    null(&rope.base),
-                    field_set(&rope.node, &rope.left_field),
-                    get(&node),
-                    null(&rope.base),
-                    field_set(&rope.node, &rope.right_field),
-                ],
-                else_instructions: vec![],
-            },
-            get(&out),
-            curios_wasm::Instr::RefAsNonNull,
-        ]);
+        instrs.extend(walk.memoize_entry_node());
 
         self.add_helper(
             func_name,
-            vec![(r, concrete_val(rope.base.clone(), false))],
-            concrete_val(rope.payload, false),
+            vec![(walk.r.clone(), concrete_val(rope.base.clone(), false))],
+            concrete_val(rope.payload.clone(), false),
             locals,
             instrs,
         );
