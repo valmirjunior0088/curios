@@ -36,12 +36,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Unification solver
   - [x] Pattern unification for higher-order metavariable spines
   - [x] Re-validate solutions in checking mode
-  - [ ] [Pruning of out-of-scope metavariables](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
-  - [ ] [η-equate metavariable heads](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
   - [ ] [Surface residual unification constraints](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
+  - [ ] [Metavariable-blocked conversions postpone instead of mismatching](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (a conversion stuck on an unsolved metavariable parks watching it; empty watch sets still fail fast)
+  - [ ] [Pruning of out-of-scope metavariables](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
+  - [ ] [Packed-literal views in unification decomposition](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (a nonempty `Bits`/`Bytes` literal decomposes as the cons the reducer folded away)
   - [x] Right-biased partial imitation for flex-apply (`?M(?A) ≟ T(b̄, x)` under-applied commits `λx. T(b̄, x)` with the suffix equated pairwise and the split re-validated against the birth type — what pins a two-parameter monad's `?M` from its region)
   - [x] Witness keying through a partially applied type constructor (`satisfy (@S) => Monad((A) => State(S, A))` keys on the stuck application's head; registration and goal lookup share the one `of_whnf` arm)
-- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (park structurally blocked inference within one enclosing item)
 
 ## Pattern Matching
 
@@ -53,7 +53,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
-- [ ] [Anonymous match functions](roadmap/compiler/06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference)_
+- [ ] [Anonymous match functions](roadmap/compiler/06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match; staged — the syntax ships checking-position first, then the form's own parked inference-position machinery)
 
 ## Syntax Sugar
 

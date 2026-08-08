@@ -1,249 +1,193 @@
 # Inference and unification
 
-Working implementation specification for the remaining inference and unification work in `curios-elab`.
+Working implementation specification for the remaining inference and unification work in `curios-elab`: the metavariable solver, the postponement scheduler, and the diagnostics that report what they could not decide. Durable user-facing semantics belong in `SYNTAX.md`, elaborator invariants in `curios-elab` module documentation and tests, and cross-cutting rationale in `DESIGN.md`.
 
-This document is the implementation handoff for six related items that all move the same subsystem: the metavariable solver, the postponement scheduler, and the witness-resolution keys that read solved metavariables. Their durable user-facing semantics belong in `SYNTAX.md`, elaborator invariants in `curios-elab` module documentation and tests, and cross-cutting rationale in `DESIGN.md`.
-
-It consolidates what were three scattered plans — an unrefined unification umbrella, a refined lambda-inference handoff, and two limitations found while probing higher-kinded witness resolution. They are one document because they share a scheduler, a solver, and a failure mode: an elaboration that cannot proceed today parks, and every item below is either a rule that lets it proceed, or a diagnostic that explains why it did not.
+This document was rebuilt on 2026-08-08 around a demand measurement of the `/std` and `/syn` corpus rather than inherited item lists. Two items survive from the prior version (residual-constraint diagnostics, pruning), two were added because the measurement showed them to be the largest actual blockers (metavariable-blocked conversion postponement, packed-literal unification views), one was dropped for having no demonstrated consumer (η-equating metavariable heads — see Non-goals), and monomorphic lambda inference moved to [`06_ANONYMOUS_MATCH_FUNCTION_SPEC.md`](06_ANONYMOUS_MATCH_FUNCTION_SPEC.md), reframed as that form's inference-position machinery.
 
 ## Covered roadmap items
 
-- Pruning of out-of-scope metavariables
-- η-equating metavariable heads
 - Surfacing residual unification constraints (distinguishing postponed from rigid-mismatch diagnostics)
-- Monomorphic, use-driven inference for unannotated lambda parameters
+- Metavariable-blocked conversions postpone instead of mismatching
+- Pruning of out-of-scope metavariables
+- Packed-literal views in unification decomposition
+
+## The corpus measurement
+
+Every explicitly supplied implicit argument in `curios-prelude/std/` and `curios-prelude/syn/` was cataloged and re-tested with the implicit omitted, by replicating each site's exact typing context — callee signature, argument order, live refinements, and expected-type flow — in standalone programs compiled at 2026-08-08 HEAD. `/syn` has none; `/std` has 24 call sites carrying 50 explicit implicit arguments. The corpus is a demand floor, not a ceiling: it shows only where authors pushed through with `@` rather than designing around a gap (`Async/Future.crs:13`'s comment documents one designed-around case).
+
+| Sites | Args | Blocked by | Unlocked by |
+| --- | --- | --- | --- |
+| `Char.crs:11`, `:16`, `:72` | 3 | eager mismatch checking `True/qed()` against `Below(?c, …)`/`InRange(?c, …)` stuck on the unsolved index | Item 2 |
+| `Str.crs:68`, `:78`, `:84`, `:144`, `:152`, `:159` | 12 | same shape: `Nat/Lt(0, Bytes/len(?b))` checked before the witness argument that would solve `?b` | Item 2 |
+| `Str/utf8.crs:216` | 2 | same | Item 2 |
+| `BigNat/add.crs:1270`, `:1286` | 4 | comparison of two matches stuck on the same scrutinee with a metavariable in an arm position | Item 2, pending its investigation bullet |
+| `BigNat/succ.crs:56`, `:61`, `:94`, `:100` | 16 | packed constant folding versus cons/append/concat decomposition | Item 4 |
+| `Async.crs:399`, `Async/Future.crs:15` | 2 | embedded-metavariable postponement chains that never commit | Item 3 |
+| `Async.crs:615` | 1 | list-literal elaboration refuses a ground solution eagerly | defect (a) below, not an item |
+| `Str/utf8.crs:180` | 1 | refinement-suppressed solving postpones unrecoverably | none; Item 1 makes its report honest |
+| `Async.crs:454`; `Str/utf8.crs:9`, `:205`, `:211-213` | 9 | nothing — already inferable | droppable now |
+
+The corpus sites double as acceptance tests: each item's retirement includes dropping the explicit arguments it unlocks, so the prelude stays calibrated to the solver instead of drifting stale again — the condition the measurement found it in, with nine arguments of accumulated slack.
 
 ## Status ledger
 
-Verified against the tree rather than inherited from the superseded documents. Every citation is a file and line to re-read before starting, not a frozen API.
+Verified against the tree on 2026-08-08. Every citation is a file and line to re-read before starting, not a frozen API.
 
 | Item | Landed | Remaining |
 | --- | --- | --- |
-| Pruning | The degenerate form only: a non-invertible spine entry makes the solution unable to depend on that slot, enforced by the scope check (`convert.rs:1385`, "pruning in its simplest form"), with `convert/tests.rs:1288` pinning it | Real pruning. `convert.rs:1327` postpones instead, and says so: "Postpone (the stand-in for pruning)" |
-| η-equating metavariable heads | Nothing for this item. `eta_expand_neutral` (`convert.rs:1254`) is *type-directed* Π/Σ/struct eta, which is the separate, already-checked roadmap entry | The metavariable-head rule itself |
-| Residual constraints | The checking-shaped half: a parked `Checking` obligation surviving every retry reports `Error::PostponedCheck` (`error.rs:245`) at the expression's own span, naming the expected type it waited on | The conversion-shaped residue. A parked `Conversion` goal still reports as a plain mismatch at its origin, distinguished only when it stands between witness holes |
-| Lambda inference | The scheduling machinery, hardened in production: `ParkedGoal` freezes its birth frame and watch set (`context/solutions.rs:51`), `elaborate_apply` settles a whole telescope through `ParkedWork::Checking`, and drains run at item boundaries | The feature. `ParkedWork` (`context/solutions.rs:34`) has exactly `Conversion`, `Checking`, `Witness` — no inference-shaped or groundness-shaped variant — and `binding.rs:519` still rejects an unannotated domain outright |
+| Residual constraints | The checking-shaped half: a parked `Checking` obligation surviving every retry reports `Error::postponed_check` (`typing.rs:338`, `error.rs:459`) at the expression's own span, naming the expected type it waited on | The conversion-shaped residue. A parked `Conversion` goal surviving the drain reports as a plain mismatch at its origin (`typing.rs:328`), distinguished only when it stands between witness holes |
+| Conversion postponement | Nothing. A conversion whose verdict hinges on a term stuck on an unsolved metavariable — `True ≡ Below(?c, 0xD800)` reducing to a match stuck on `?c` — returns `Mismatch` eagerly, aborting elaboration before later arguments or the result unification could solve the blocker | The item |
+| Pruning | The degenerate forms only: the embedded-metavariable guard postpones any solve whose candidate mentions an unsolved metavariable (`convert.rs:1446`, "the stand-in for pruning"), and spine inversion refuses dependence on non-pattern slots (`convert.rs:1504`, "pruning in its simplest form") | Real pruning |
+| Packed views | Nothing. `b[h, ..t]` lowers to `Bits.concat(Bits.append(b[], h), t)`, and the reducer folds constant spines into literals — `append(b[], true)` becomes `b[\1]` — so unification meets `append(b[], ?h) ≡ b[\0]` with no rule to answer it | The item |
 
-The last two items are the newest and the least discussed, so they carry a reproduction each below. The first four are inherited scope whose superseded documents this file replaces.
+## Item 1 — surfacing residual unification constraints
 
-## Part 1 — solver refinements
+Half landed, and the landed half is the template. A `ParkedWork::Checking` obligation that survives the final drain reports at its own span, naming the expected type it was waiting on.
 
-### 1.1 Pruning of out-of-scope metavariables
+The remaining half is `ParkedWork::Conversion`. A parked conversion goal that never wakes surfaces as an ordinary type mismatch at its origin, which is honest but misleading: a rigid mismatch means the program is wrong; a postponed conversion means the program may be right and inference never gained the structure to decide. Every non-eager corpus failure in the measurement surfaced exactly this way — `inferred: ?2459` against a fully concrete expected type — so the item now has direct evidence, not just principle.
 
-When solving `?m[σ] ≡ t`, a candidate solution `t` may mention metavariables whose contexts are wider than `?m`'s. Committing would let a solution escape the scope that justified it, so `convert.rs:1327` postpones the whole equation instead. Postponement is correct and incomplete: the goal wakes only if something else solves the offending metavariable, and if nothing does, an equation that had a legitimate restricted solution surfaces as a mismatch.
+The diagnostic should distinguish the two, name the metavariables the goal was watching, and anchor at the origin term the `ParkedGoal` already carries (`context/solutions.rs:51`). The existing witness-hole special case (`typing.rs:313`) is a third state and remains reachable rather than being folded into either.
 
-Pruning replaces the refusal with a restriction. Where a candidate mentions `?n` whose context exceeds `?m`'s, mint `?n'` at the intersection of the two contexts, solve `?n := ?n'` restricted to that intersection, and re-attempt the original equation against the pruned candidate. Where the intersection cannot support `?n`'s type — the type itself depends on a variable being pruned away — the equation is genuinely unsolvable and should fail rather than postpone.
+Two additions to the original scope:
 
-Constraints this must respect:
+- A solve postponed by `solve_refinement_free` (`convert.rs:1842`) — the guard that refuses to commit solutions derived under counterfactual match-arm refinements — should also report as a postponement, naming the refinement dependence. `Str/utf8.crs:180` is the corpus reproduction; the guard itself is sound and stays.
+- The wake-cascade investigation from the defect ledger belongs to this item: residual reporting is only trustworthy once it is known whether surviving goals genuinely lacked solutions or were stranded by wake bookkeeping.
+
+This item remains the prerequisite for everything below in practice: Items 2 and 3 both add ways for work to park, and both are much harder to evaluate against a diagnostic that cannot say whether the solver stalled or the program disagreed.
+
+## Item 2 — metavariable-blocked conversions postpone instead of mismatching
+
+The largest measured item: 21 of the corpus's 50 explicit arguments across 12 sites exist only because a conversion whose verdict depends on an unsolved metavariable fails hard instead of parking.
+
+The rule: when either side's weak-head normal form is stuck on a term containing an unsolved metavariable — a match whose scrutinee mentions one, an intrinsic application over one — the goal is undecided, not unequal. It parks as `ParkedWork::Conversion` watching the blocking metavariables, exactly as flex-headed goals already do. A stuck comparison whose blocking positions contain no metavariable stays a hard mismatch: the watch set would be empty, nothing could ever wake it, and failing fast preserves early, well-located errors for genuinely wrong programs.
+
+Reproduction — the minimal pair, distilled from the `peel_byte` call sites. `after` compiles today; `before` fails at `True/qed()` with `expected: Lt(0, Bytes/len(?b))` because the proof argument is checked before the witness argument that solves `?b`:
+
+```crs
+use /syn/Str/{Scan, Utf8};
+use /std/{Nat, Byte, Bytes, True};
+
+let witness_first(@b: Bytes, w: Utf8(Scan/lead(), b), nz: Nat/Lt(0, Bytes/len(b))) -> {} = ();
+let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Utf8(Scan/lead(), b)) -> {} = ();
+
+let after(h: Byte, t: Bytes, valid: Utf8(Scan/lead(), x[h, ..t])) -> {} = witness_first(valid, True/qed());
+let before(h: Byte, t: Bytes, valid: Utf8(Scan/lead(), x[h, ..t])) -> {} = proof_first(True/qed(), valid);
+```
+
+The same failure blocks the `Char.crs` sites even at a closed index — `Char { code = 0x30, scalar = Scalar/below(True/qed()) }` fails because the proof is checked before the constructor's result-index unification would solve `?code` — which is why the alternative fix of unifying constructor target indices before payload arguments was considered and rejected: it repairs only the constructor sites, while the postponement rule repairs those, the argument-order sites, and every future shape in the class with one verdict change.
+
+Constraints:
+
+- Committing nothing, the rule cannot be unsound; the risks are diagnostic quality (met by Item 1 landing first) and lost eagerness (met by the empty-watch-set fast-fail).
+- The parked goal must watch the blockers transitively — the metavariables in stuck positions, not merely a flex head — or the wake never comes.
+- Retry under the frozen frame must reproduce the refinements live at park time, since the woken goal may only discharge under them (the `Char.crs` sites reduce `Below(code, 0xD800)` to `True` only inside the `code < 0xD800` arm).
+
+Investigation bullet, gating the `BigNat/add.crs` pair: `add.crs:1239` omits the same implicits that `add.crs:1270` must spell, and the probe shows the difference is a comparison of two matches stuck on the same scrutinee with a metavariable in an arm slot (`xor3(xh, ?b1, c)` against its reduced concrete form). Some match-match conversion already exists — `step(c, Scan/lead()) ≡ scan_of_class(classify(c))` converts as stuck matches today — so the failure needs pinpointing (definition-unfolding staging versus missing congruence with flexible arms) before deciding whether this item's rule or an arm-wise congruence extension covers it.
+
+## Item 3 — pruning of out-of-scope metavariables
+
+When solving `?m[σ] ≡ t`, a candidate `t` mentioning another unsolved metavariable is refused wholesale by the embedded-metavariable guard (`convert.rs:1446`), because that metavariable may carry a wider context than `?m`'s. Postponement is correct and incomplete: the goal wakes only if something else solves the offending metavariable, and if nothing does, an equation with a legitimate restricted solution surfaces as a mismatch.
+
+Pruning replaces the refusal with a restriction. Where a candidate mentions `?n` whose context exceeds `?m`'s, mint `?n'` at the intersection of the two contexts, solve `?n := ?n'` restricted to that intersection, and re-attempt the original equation against the pruned candidate. Where the intersection cannot support `?n`'s type, the equation is genuinely unsolvable and should fail rather than postpone. For same-context metavariables — the whole measured class — the intersection is the full context and pruning degenerates to committing immediately, which is what unblocks the chains.
+
+Named consumers: `Async.crs:399` and `Async/Future.crs:15`, both `let x = action!` continuations whose element type only the continuation pins; and `Async/Future.crs:13`, whose comment records that `Future/new` takes its type parameter explicitly because this gap made the implicit unusable — the item retires that API constraint, not just two `@`s.
+
+Constraints, unchanged from the prior version of this document:
 
 - The existing scope check stays. Pruning narrows what a candidate mentions; it does not license a solution to mention what its birth frame never had.
-- Solutions remain monotonic. A pruned metavariable is solved, not retracted, so no cache may assume an unsolved metavariable stays unsolved (the invariant `reduce.rs`'s memo already depends on).
+- Solutions remain monotonic. A pruned metavariable is solved, not retracted, so no cache may assume an unsolved metavariable stays unsolved.
 - Pruning runs inside the same transaction as the solve it serves, so a rolled-back speculative branch unwinds the pruning with it.
-- `convert.rs:1327`'s comment is the marker for the site to change, and its wording should stop advertising a stand-in once the real thing exists.
+- `convert.rs:1446`'s comment is the marker for the site to change, and its wording should stop advertising a stand-in once the real thing exists.
 
-### 1.2 η-equating metavariable heads
+One dependency to respect: even with eager commits, the measured chains still take one wake hop through a flex-flex postponement, so this item's acceptance depends on the wake-cascade investigation in Item 1 having landed or exonerated the machinery.
 
-Distinct from the type-directed eta already implemented. The rule wanted here equates a metavariable against an eta-expansion of itself — `?m ≡ λx. ?m(x)` — and, more usefully, lets `?m(x₁ … xₙ) ≡ t` be attacked by contracting the flex side when the arguments are exactly the binders in order.
+## Item 4 — packed-literal views in unification decomposition
 
-`reduce_func_eta` (`reduce.rs:274`) already implements exactly that contraction for the *rigid* case, with the three guards that make it sound: the application is saturated by the binder count, each argument is precisely the corresponding binder, and the head does not mention any of them. The item is to make the solver reach for the same contraction when the head is a metavariable, rather than only when reduction happens to normalize into it.
+`b[h, ..t]` lowers to `Bits.concat(Bits.append(b[], h), t)`, and the reducer folds constant spines into packed literals. The folding is correct for evaluation and fatal for inversion: once `append(b[], true)` becomes the literal `b[\1]`, an equation like `append(b[], ?h) ≡ b[\1]` or `concat(b[\1], ?t) ≡ b[\1]` has a unique obvious solution and no rule that produces it.
 
-Interacts with the landed right-biased partial imitation (2026-08-08): both change what the solver does with a flex head against a spine, and the landed spine/arity guards sit in the function this item would extend — `imitate_flex_apply`'s under-application rule must survive the extension unchanged.
+The corpus contains the minimal pair in adjacent lines: `BigNat/succ.crs:95` omits the implicits that `:94` must spell, because line 95's spine keeps open variable heads (nothing folds, rigid decomposition works) while line 94's constant heads fold into literals. All 16 arguments across the four `succ.crs` sites are this one gap, and any future proof work over packed values with constant bits — more `BigNat` arithmetic, `utf8` lemmas — reproduces it.
 
-### 1.3 Surfacing residual unification constraints
+The rule: during rigid-rigid decomposition, a nonempty packed literal opposite a cons/append/concat spine contributes its own cons view — `b[\1]` decomposes as `append(b[], true)`, equivalently `concat(append(b[], true), b[])` when a concat tail must be answered — and decomposition proceeds pairwise as it already does for unfolded spines. `Bytes` gets the same treatment as `Bits`.
 
-Half landed, and the landed half is the template. A `ParkedWork::Checking` obligation that survives the final drain reports `Error::PostponedCheck` at its own span, naming the expected type it was waiting on, instead of an unlocated `cannot infer`.
+Constraints:
 
-The remaining half is `ParkedWork::Conversion`. A parked conversion goal that never wakes currently surfaces as an ordinary type mismatch at its origin, which is honest but misleading: the two failures have different causes and different fixes. A rigid mismatch means the program is wrong; a postponed conversion means the program may be right and inference never gained the structure to decide.
+- This is an elaboration-side solving rule; the kernel rechecks whatever it commits, so the soundness exposure is a wrong guess failing recheck, not an unsound acceptance. It must still only fire where the view is forced — a nonempty literal is uniquely a cons of its first atom onto its tail, so the view is deterministic, not a search.
+- The reduction laws themselves do not change. The fold laws in `reduce/prim.rs` are shared by both checkers and have prior non-confluence history (the deleted slice-reassociation rule); this item reads them, never edits them.
+- The view applies during solving and decomposition only, never in normalization output, so printed terms and erased code are unaffected.
 
-The diagnostic should distinguish them, name the metavariables the goal was watching, and anchor at the origin term the `ParkedGoal` already carries (`context/solutions.rs:55` — "its span anchors the eventual error if the problem never resolves"). The existing witness-hole special case is a third state and should remain reachable rather than being folded into either.
+## Defect ledger
 
-This item is a prerequisite for 1.1 and Part 2 in practice, not in principle: both add ways for work to park, and both are much harder to debug against a diagnostic that cannot say whether the solver stalled or the program disagreed.
+Two behaviors observed during the measurement look like defects rather than designed incompleteness. Neither is an item; both carry reproductions because Items 1-3 will trip over them.
 
-## Part 2 — monomorphic, use-driven lambda inference
-
-The largest item, and the one whose scheduling substrate is already in production. Preserved here in full from its superseded handoff.
-
-### Goal
-
-Permit an unannotated lambda whose body is temporarily blocked on a parameter type to receive enough type information from a later use in the same item.
+**(a) List-literal elaboration refuses a ground solution eagerly.** `Async/map(body, (a) => Option/some(a))` compiles alone, but the same call as a list-literal element fails eagerly at the lambda body with `inferred: Option(A), expected: ?B` — a flex-rigid equation with a ground, in-scope candidate that should commit. Annotating the list type restores it. The suspicion is metavariable state minted under the element-agreement path losing its birth record, making `solve` return `Failed` where `Done` is available. `Async.crs:615` is the corpus consumer; fix as a bug on its own schedule.
 
 ```crs
-let unwrap = (value) =>
-  match value
-  | some(x) => x
-  | none() => 0
-  end;
-unwrap(Option/some(42))
+use /std/{Async, Option, Nat};
+
+let probe(@A: Type, body: Async(A)) -> Async({Nat, Option(A)}) =
+    Async/select([Async/map(body, (a) => Option/some(a))]);
 ```
 
-The intended elaboration sequence is:
-
-1. Give `value` a fresh metavariable domain `?A`.
-2. Discover that the match cannot proceed while `?A` is unknown, and park inference of the match behind paired term and type placeholders.
-3. Return a provisional lambda type `(?A) -> ?R`.
-4. Elaborate `unwrap(Option/some(42))`, solving `?A := Option(Nat)`.
-5. Wake the parked match, restore the lexical frame in which it was created, and infer it as `Nat`, solving both its term and type placeholders.
-6. Zonk the enclosing item normally, with no unsolved metavariables remaining.
-
-The feature is deliberately smaller than Hindley–Milner: a lambda may acquire constraints from later uses within the same enclosing item, but it is never generalized and inference never crosses an item boundary.
-
-### Inherited safety discipline
-
-The scheduling campaign that landed `ParkedWork::Checking` left a defect ledger, and it is this part's inherited discipline rather than background reading:
-
-- A frozen frame is restored by reapplying only identities not already live. An intra-item wake under the older restoration doubled live binders, giving every metavariable born in the retry a non-linear identity spine that pattern inversion cannot invert.
-- A placeholder solved ahead of its retry ends the obligation without re-elaborating. A second elaboration of a term whose lowering-minted holes are already birthed drops their spines.
-- A rollback bracket may not contain retries. It would consume obligations whose solutions it then unwinds.
-
-The authoritative description is `curios-elab/README.md`, "Postponement is a parked obligation, never a raw substitution".
-
-### User-visible semantics
-
-**Monomorphic inference.** Every unannotated lambda parameter receives one metavariable for the enclosing item. Uses constrain that single metavariable; they do not instantiate a generalized type scheme.
-
-Two uses at one type succeed, inferring `id : (Nat) -> Nat`:
+**(b) Wake-cascade fragility.** In the reproduction below, every parked goal's blockers eventually receive solutions — `Option/some(1)` pins the element type, and the chain to the `Cell/new` argument is three rigid decompositions — yet the first goal survives to the drain and reports. `drain_parked` (`typing.rs:292`) documents retry-to-fixpoint with a final sweep, which should have resolved it; either the watch sets miss transitive blockers, or a retry re-parks watching a stale set, or the cascade genuinely runs and something narrower blocks. Resolving which is part of Item 1, and Item 3's acceptance depends on the answer.
 
 ```crs
-let id = (x) => x;
-(id(1), id(2))
+use /std/{Cell, Option, Io, Nat};
+
+let probe: Io({}) =
+    let c = Cell/new(Option/none())!;
+    let _ = Cell/set(c, Option/some(1))!;
+    Io/pure(());
+
+probe
 ```
-
-Two uses at different types fail, because they demand inconsistent solutions for the same monomorphic domain:
-
-```crs
-let id = (x) => x;
-(id(1), id(true))
-```
-
-**The enclosing item is the inference boundary.** Constraints may flow through local definitions and later expressions in one item; they may not flow from a later top-level item into an earlier one. This matches the existing lifecycle — parked work is drained after each top-level item and after the body of a local binding region — so no module-wide inference phase is introduced.
-
-**Unconstrained lambdas still fail.** An unannotated domain must be transitively ground by the end of its enclosing item. `(x) => x` remains an inference error, and the diagnostic must be anchored at the lambda parameter or its domain site rather than emitted later as an unlocated zonking failure.
-
-**No constructor-name guessing.** An inductive match whose scrutinee type is unknown must wait for an actual type constraint. Inferring an inductive from arm tags alone is forbidden: tags are not globally unique, and guessing would make name resolution affect typing unpredictably.
-
-**Intrinsic matches constrain their carriers eagerly.** Intrinsic match forms have an unambiguous carrier and should solve an unknown scrutinee type immediately rather than park — Boolean arms to `Bool`, numeric switch arms to `Nat`, bit and byte arms to their packed intrinsics, list-shaped arms to `Lst(?Element)` with the element type free to remain unknown.
-
-### Core design
-
-**Allow provisional lambda domains.** `elaborate_func_infer` rejects an unannotated domain that is still a metavariable (`binding.rs:519`), and the test is literally `matches!(…, Subterm::Metavar(_))` — a bare-outer-term check, not transitive groundness. Remove the early rejection and permit the inferred function type to carry the domain metavariable while the item is still elaborating.
-
-This relaxation alone is insufficient: structural operations in the body must be able to suspend, and every unannotated domain needs an explicit end-of-item groundness obligation.
-
-**Add parked inference.** A new obligation alongside the existing three, conceptually:
-
-```rust
-Inference {
-    term: Term,
-    blocker: Term,
-    term_placeholder: MetavarId,
-    type_placeholder: MetavarId,
-}
-```
-
-`term` is the residual, partially rebuilt term to retry; `blocker` identifies the type information that prevented progress; the two placeholders stand for the elaborated core term and its inferred type. The existing frozen frame records the lexical environment in which all three are valid. The Rust spelling should follow the surrounding enum and ownership conventions rather than this sketch.
-
-**Use paired placeholders.** When inference parks, create a fresh type placeholder `?T : Type` and a fresh term placeholder `?e : ?T`, then return `(?e, ?T)`. Both must be created inside the exact current frame, which is what allows an inferred result type to mention lambda parameters or other local assumptions. On retry: reduce the blocker enough to decide whether progress is possible; if still blocked, re-park without manufacturing a second pair; otherwise restore the frozen frame, infer the residual term, solve the type placeholder with the inferred type, and solve the term placeholder with the rebuilt term.
-
-Solving these internal placeholders directly is justified by the same invariant retried checking uses — the replacement was elaborated under the placeholder's exact birth frame — and it avoids depending on general flex-flex orientation or on 1.1 landing first.
-
-**Park the residual term, not the untouched source term.** Every structural park site must first infer or rebuild the portion already known, and store *that* in the obligation. This monotonicity rule is essential: retrying the untouched source term can allocate fresh implicit arguments, witness goals, or nested metavariables on every wake-up, leaving duplicate or orphaned obligations. A retry continues one elaboration; it does not start a parallel one.
-
-**Add a groundness obligation.** Every unannotated lambda domain registers an obligation conceptually equivalent to `Ground { type_: Term }`, complete once the type is transitively ground, reusing or centralizing the transitive-groundness logic currently associated with application elaboration rather than re-testing the outer term. A survivor of the item's final drain reports `CannotInfer` at the lambda domain span. This is separate from parked body inference: `(x) => x` blocks on no structural operation, yet must still fail predictably.
-
-**Watch transitive blockers.** Existing wake-up sets are organized around directly solved metavariables, but a blocker can be an alias or a type expression whose unsolved leaves are metavariables. New inference and groundness work should watch those transitively unsolved leaves, keeping the final drain as a safety net rather than the primary mechanism.
-
-### Structural operations that must park
-
-- **Inductive matching** (`elaborate_induct_match`) — if the rebuilt scrutinee type reduces to an unsolved metavariable, park the entire residual match; on retry, run the ordinary inductive lookup, motive construction, coverage checks, refinement handling, and branch elaboration. Do not pre-resolve tags.
-- **Projection** (`elaborate_proj`) — if the rebuilt head type is an unsolved metavariable, park the residual projection, enabling `(pair) => pair.0`. Do not guess a tuple or record skeleton.
-- **Application** (`elaborate_apply`) — if the rebuilt callee type is an unsolved metavariable, park the residual application, enabling `(f, x) => f(x)`. Do not solve the callee type to an invented function skeleton: Curios functions carry explicit, implicit, and witness plicities and may have dependent codomains, and guessing a skeleton commits to semantics the source did not supply.
-- **Intrinsic matching** — before the generic path, recognize intrinsic arm shapes and unify the scrutinee with their known carrier, introducing a fresh element metavariable for `Lst(?Element)`.
-
-### Retry and scheduler invariants
-
-- A retry meeting the same unresolved blocker reuses the existing placeholders and obligation identity.
-- A retry reaching a deeper blocker may create nested parked work but must not recursively spin during one wake-up cycle.
-- Solving either placeholder obeys the ordinary occurs and scope checks for its birth frame.
-- Parked inference may temporarily place placeholders inside definitions, but reduction continues to treat unsolved metavariables as stuck and solutions as monotonic.
-- No normalization cache may assume an unsolved metavariable remains unsolved after an obligation wakes.
-- The final successful module remains meta-free under existing zonking checks.
-- Retrying under a frozen frame preserves representation-visibility islands, refinements, and witness scope exactly as immediate elaboration would.
-
-### Conversion-oracle behavior
-
-Some elaboration runs under an oracle or transaction where speculative obligations must not escape a rolled-back attempt. When parking is suppressed by that mode, structural inference must return the existing local inference or mismatch result rather than installing provisional placeholders. Delayed work must never outlive the conversion state whose assumptions justified it.
-
-### Diagnostics
-
-The primary diagnostic for an unresolved lambda domain is the existing `CannotInfer` family, anchored at the unannotated parameter. Ordinary errors discovered after a wake-up retain their original spans and categories — unknown or incomplete match arms, private representation access, witness ambiguity, type mismatch. A retry must not replace a useful structural error with a generic unsolved-metavariable error merely because the check happened later.
-
-### Scope and soundness risks
-
-- **Placeholder scope.** Both placeholders must be born under the lambda binder if their solutions may mention it. Creating them outside that frame either rejects valid dependent results or lets a local escape.
-- **Refinements and witnesses.** A delayed match must see the same branch refinements as an immediate one, and delayed applications must neither duplicate nor silently discard witness resolution. Both paths need tests.
-- **Representation visibility.** The frozen frame and item boundary must retain the active representation island, so delaying a projection or match cannot make private constructors or fields visible outside their origin scope.
-- **Local definitions.** Definitions containing provisional placeholders are safe only if all outstanding work drains before the item leaves its elaboration boundary. No placeholder-backed definition may enter a later item's context.
 
 ## Ordering
 
-The remaining items are not equally coupled, and one ordering is load-bearing rather than preferential. (Right-biased partial imitation and partially-applied witness keying landed 2026-08-08 — the durable rules live on `imitate_flex_apply` and `HeadKey::of_whnf`, and `/std/State` and `/std/Throw` are their consumers.)
-
-1. **1.3 (residual constraint diagnostics)** first. It is cheap, half-done, and every later item adds ways for work to park. Debugging 1.1 or Part 2 against a diagnostic that cannot distinguish *the solver stalled* from *the program disagreed* is the avoidable cost here.
-2. **1.2 (metavariable-head eta)** next. It extends the reach of the same function the landed partial imitation guards, and its contraction must preserve those spine/arity guards.
-3. **1.1 (pruning)** after 1.2. Pruning is what lets the solver commit where it currently postpones, and it is easiest to evaluate once the imitation rules that feed it are settled.
-4. **Part 2 (lambda inference)** last, in its own sequence: relax the domain rejection and add the groundness obligation; add paired placeholders and scheduler support against a narrow blocker; then application and projection parking; then inductive-match parking; then eager intrinsic carriers; then dependent, witness, refinement, privacy, and diagnostic coverage. This produces testable scheduler behavior before the richest match path depends on it.
-
-Part 2 does not require 1.1: its placeholder equations are deliberately oriented so the placeholder is solved directly by a term elaborated in its own frame, minimizing dependence on unfinished flex-flex behavior. That orientation is a design constraint, not an accident, and should survive any reordering.
-
-[`06_ANONYMOUS_MATCH_FUNCTION_SPEC.md`](06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) depends on Part 2 landing but is not part of this document: it is `curios-text` parsing, printing, and lowering, and expects no `curios-elab` change of its own.
+1. **Item 1** first: cheap, half-done, and every later item adds ways for work to park. The wake-cascade investigation rides with it.
+2. **Item 2** second: the largest measured win, and the lowest-risk verdict change — it commits nothing, converting hard failures into parked goals the Item 1 diagnostics can now explain.
+3. **Item 3** third: it commits solutions where the solver currently refuses, is the item with the most soundness exposure, and its chains still need the wake machinery Item 1 vetted.
+4. **Item 4** last: self-contained, theory-specific, and independent of the scheduler entirely.
 
 ## Implementation map
 
 The likely surface, to be re-read rather than trusted:
 
-- `curios-elab/src/convert.rs` — metavariable-head eta (1.2), pruning at the solve site (1.1).
-- `curios-elab/src/context/solutions.rs` — new parked-work variants, blocker watchers, obligation bookkeeping (Part 2, 1.3).
-- `curios-elab/src/typing.rs` — retry behavior, placeholder solving, wake-up policy, final draining diagnostics (Part 2, 1.3).
-- `curios-elab/src/error.rs` — the conversion-shaped residual diagnostic (1.3).
-- `curios-elab/src/elaborate/binding.rs` — provisional unannotated domains and groundness registration (Part 2).
-- `curios-elab/src/elaborate/apply.rs` — application blocking and shared transitive-groundness support (Part 2).
-- `curios-elab/src/elaborate/aggregate.rs` — projection blocking (Part 2).
-- `curios-elab/src/elaborate/match_.rs` — inductive-match blocking and eager intrinsic carriers (Part 2).
+- `curios-elab/src/convert.rs` — the postponement rule at the stuck-comparison verdicts (Item 2), pruning at the solve site (`solve`, `convert.rs:1427`; the guard at `:1446`) (Item 3), packed views in the decomposition arms (Item 4), `solve_refinement_free` (`convert.rs:1842`) reporting (Item 1).
+- `curios-elab/src/typing.rs` — the drain's conversion-residue diagnostic (`drain_parked`, `typing.rs:292`), retry and wake behavior (`retry_parked`, `typing.rs:264`) (Items 1-3).
+- `curios-elab/src/context/solutions.rs` — watch-set computation (`park`, `solutions.rs:209`) for transitive blockers (Items 1, 2).
+- `curios-elab/src/error.rs` — the postponed-conversion diagnostic beside `postponed_check` (`error.rs:459`) (Item 1).
 - Test modules beside each, plus `curios/src/tests/` for cross-stage programs proving accepted terms compile and run.
-- `documentation/SYNTAX.md`, `documentation/ROADMAP.md`, `documentation/DESIGN.md`, and affected module rustdocs once items land.
+- `curios-prelude/std/` — dropping the corpus explicits each item unlocks, as part of that item's retirement.
+- `documentation/ROADMAP.md`, `documentation/SOUNDNESS.md`, and affected module rustdocs once items land.
 
-No core representation change is expected, and none of the six items adds a `HeadKey` or `WitnessKey` variant, so the prelude's rkyv archive format is unchanged. No erased IR, continuation IR, wasm, ABI, or runtime change is expected. Nothing here crosses the `curios-cert` seam: witnesses are ordinary definitions, resolution is elaboration-only, and the kernel rechecks a plain application either way.
+No core representation change is expected, no `HeadKey` or `WitnessKey` variant is added, and the prelude's rkyv archive format is unchanged. No erased IR, continuation IR, wasm, ABI, or runtime change is expected. Nothing here crosses the `curios-cert` seam: the kernel rechecks committed solutions either way, which is precisely why Items 3 and 4 are elaboration-scoped.
 
 ## Acceptance tests
 
-**1.1 Pruning** — an equation whose candidate mentions a wider-context metavariable is solved by restriction rather than postponed; an equation whose intersection cannot support the pruned metavariable's type fails rather than postponing; a rolled-back speculative branch unwinds its pruning; `convert/tests.rs:1288`'s existing degenerate case still holds.
+**Item 1** — a never-woken `Conversion` goal reports a postponement diagnostic naming its watched metavariables, distinct from a rigid mismatch; a genuine rigid mismatch still reports as a mismatch; the witness-hole case remains its own third state; the landed `postponed_check` behavior is unchanged; a refinement-suppressed postponement names its refinement dependence; defect (b)'s reproduction is explained — resolved or reclassified as designed with the watch sets corrected.
 
-**1.2 η metavariable heads** — `?m ≡ λx. ?m(x)` equates; `?m(x₁ … xₙ) ≡ t` is attacked by contraction when the arguments are exactly the binders in order; a non-binder or duplicated argument does not contract.
+**Item 2** — the `witness_first`/`proof_first` pair both compile; the six `Str.crs` `peel_byte` sites, `Str/utf8.crs:216`, and the three `Char.crs` sites compile with their implicits omitted; a stuck comparison with no metavariable in any blocking position still fails eagerly at the original span; the `add.crs` investigation has a verdict, and if congruence is in scope, `add.crs:1270`/`:1286` compile with implicits omitted.
 
-**1.3 Residual constraints** — a never-woken `Conversion` goal reports a postponement diagnostic naming its watched metavariables, distinct from a rigid mismatch; a genuine rigid mismatch still reports as a mismatch; the witness-hole case remains its own third state; the landed `PostponedCheck` behavior is unchanged.
+**Item 3** — an equation whose candidate mentions a same-context metavariable commits by restriction rather than postponing; an equation whose intersection cannot support the pruned metavariable's type fails rather than postponing; a rolled-back speculative branch unwinds its pruning; the degenerate scope check at `convert.rs:1504` still holds; both defect-ledger reproductions' `Cell`/`Future` shapes compile with implicits omitted, and `Future/new` can be re-declared with an implicit parameter.
 
-**Part 2** — a local identity lambda fixed by a later `Nat` call; repeated uses at one type succeeding and incompatible uses failing monomorphically; a standalone `(x) => x` failing at its parameter span; an `Option` match inside a lambda inferred from a later call; a `Result` match and a user-defined indexed-inductive match retrying with correct refinements; Boolean, numeric, bit, byte and list intrinsic matches constraining their carrier immediately; a list match leaving its element type open and then either constrained or failed at the boundary; projection from an initially unknown parameter type; calling an initially unknown function parameter, including its plicities; a dependent inferred result mentioning a lambda parameter without escaping; nested structural blockers making progress without duplicate placeholders or infinite retry; witness goals created before or during a retry resolved once with source spans retained; representation privacy and match refinements identical before and after parking; no work surviving a top-level item boundary; oracle-mode elaboration leaking no parked obligations; successful zonking leaving no unsolved metavariables.
+**Item 4** — `append(b[], ?h) ≡ b[\0]` and `concat(b[\1], ?t) ≡ b[\1]` solve; the four `BigNat/succ.crs` sites compile with all sixteen implicits omitted; the `succ.crs:94`/`:95` pair becomes uniform; `Bytes` literals decompose the same way; a literal opposite a non-spine rigid term still mismatches.
 
-Where practical, scheduler tests should assert obligation counts or placeholder reuse, so a superficially successful program cannot hide duplicated delayed work.
+Where practical, tests should assert obligation counts, so a superficially successful program cannot hide duplicated or stranded parked work.
 
 ## Non-goals
 
-- Hindley–Milner generalization or let-polymorphism.
-- Cross-item or module-wide inference.
-- Inferring an inductive from constructor spellings alone.
-- Inventing function, tuple, record, or inductive skeletons from an operation on an otherwise unconstrained value.
-- Changing implicit or witness argument semantics.
-- Relaxing witness uniqueness to admit overlapping ground instances.
-- Full higher-order unification. Imitation stays a guess that blocks rather than a complete procedure, and the constant and projection solutions remain unproduced.
+- Monomorphic lambda inference, in any form — moved to [`06_ANONYMOUS_MATCH_FUNCTION_SPEC.md`](06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) as the `match =>` form's inference-position machinery, with general unannotated-lambda inference dropped outright there.
+- η-equating metavariable heads (`?m ≡ λx. ?m(x)` and flex-side contraction). Dropped from scope: the corpus produces no equation of this shape, and the item predates any concrete consumer. Reinstate only when a real program blocks on it; `reduce_func_eta`'s rigid-side contraction is unaffected.
+- Hindley–Milner generalization, cross-item inference, or any inference boundary change.
+- Full higher-order unification. Imitation stays a guess that blocks rather than a complete procedure, and Item 2 parks undecided goals rather than deciding them.
+- Theory-specific inversion beyond the packed cons views of Item 4 — no general "invert this intrinsic" mechanism, and no change to the shared reduction laws.
+- Relaxing `solve_refinement_free`'s refusal to commit refinement-derived solutions; Item 1 reports it, nothing licenses it.
 - Effect rows, or any second constraint domain beside the universe solver.
 - A new core term, or a change to any downstream IR.
-- Anonymous match-function syntax, specified separately.
 
 ## Effort estimate
 
-Part 1 is a set of small-to-medium solver changes: 1.3 is a focused change plus tests; 1.2 is moderate; 1.1 is the largest and the one with the most soundness exposure, since it touches the file carrying the most perimeter weight.
-
-Part 2 is a medium-to-large core elaboration project on its own, roughly 250–450 lines of implementation and 300–500 lines of tests across 7–10 files. Its uncertainty lies less in the individual park sites than in preserving retry monotonicity, lexical scope, diagnostics, and solver transaction boundaries. A match-only proof of concept would be smaller but would leave ordinary lambdas inconsistent across match, projection, and application bodies, and should not be treated as the finished feature.
+Item 1 is a focused diagnostics change plus the wake investigation, which is open-ended but bounded by two small reproductions. Item 2 is a small verdict change with a large test surface — the corpus sites are the tests. Item 3 is the largest and carries the most soundness exposure, since it commits solutions in the file carrying the most perimeter weight. Item 4 is a contained decomposition extension with mechanical tests.
 
 ## Verification
 
@@ -259,14 +203,14 @@ cargo test --workspace --all-targets --all-features
 
 Because `curios-elab` is in the browser compiler's dependency graph, also run `make curios/web` with the exactly version-matched `wasm-bindgen-cli`.
 
-Items touching `convert.rs` should additionally be weighed against `SOUNDNESS.md`: the conversion checker carries several probed rows, and a change to imitation or pruning is the class of change whose evidence those rows record.
+Items touching `convert.rs` should additionally be weighed against `SOUNDNESS.md`: the conversion checker carries several probed rows, and changes to solving verdicts are the class of change whose evidence those rows record.
 
 ## Retirement criteria
 
-Each item is retired individually; the file is deleted when all are. (Right-biased partial imitation and partially-applied witness keying retired 2026-08-08: semantics in `SYNTAX.md`'s witness-keying and resolution sections, rules on `imitate_flex_apply` and `HeadKey::of_whnf`, obligations as `curios/src/tests/concepts.rs`' partial-family tests, consumers `/std/State` and `/std/Throw`.)
+Each item is retired individually; the file is deleted when all are. (Right-biased partial imitation and partially-applied witness keying retired 2026-08-08: semantics in `SYNTAX.md`, rules on `imitate_flex_apply` and `HeadKey::of_whnf`, obligations as `curios/src/tests/concepts.rs`'s partial-family tests.)
 
-- Durable user-facing semantics are recorded in `SYNTAX.md` — for Part 2, lambda inference semantics.
 - Solver, parking, and retry invariants are recorded in the owning `curios-elab` module documentation and tests.
-- Cross-cutting rationale — notably that imitation is a deliberate guess and that witness keying is head-only with uniqueness enforced — is recorded in `DESIGN.md` or `curios-elab/README.md` as appropriate.
-- Remaining plans refer to landed elaborator behavior rather than this file.
+- The corpus explicits an item unlocks are dropped from `curios-prelude/std/` as part of that item's landing. The nine already-stale arguments — `Async.crs:454`, `Str/utf8.crs:9`, `:205`, `:211-213` — need no item and may be dropped as standalone cleanup at any time.
+- Cross-cutting rationale — notably that imitation is a deliberate guess, that packed views are solving-only, and that η-metavariable heads were dropped for lack of demand — is recorded in `DESIGN.md` or `curios-elab/README.md` as appropriate.
+- Both defect-ledger entries are resolved or reclassified with their reproductions pinned as tests.
 - Each roadmap entry is a checked, unlinked summary, and no reference to this filename remains.
