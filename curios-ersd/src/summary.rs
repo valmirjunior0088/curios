@@ -64,7 +64,7 @@ impl Summary {
     pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
             .join(call_behavior(rhs, &self.functions))
-            .join(region_blocks(module, rhs.sub_blocks(), &self.functions))
+            .join(region_behavior(module, rhs.sub_blocks(), &self.functions))
     }
 
     /// The total behavior of executing a statement: a `Let` evaluates its right-hand side; binding functions performs nothing (dormancy); a recursive group eagerly evaluates its computed initializers.
@@ -77,18 +77,10 @@ impl Summary {
                     .rec_group(*group)
                     .map(|group| group.values.iter().map(|member| member.init).collect())
                     .unwrap_or_default();
-                region_blocks(module, inits, &self.functions)
+                region_behavior(module, inits, &self.functions)
             }
         }
     }
-}
-
-fn region_blocks(
-    module: &Module,
-    seeds: Vec<BlockId>,
-    summaries: &BTreeMap<FunctionId, LocalBehavior>,
-) -> LocalBehavior {
-    region_behavior(module, seeds, summaries)
 }
 
 /// The joined behavior of every block reachable from `seeds` through control flow and eager initializers — never through a nested function body, whose behavior is composed only at its calls.
