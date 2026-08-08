@@ -22,13 +22,11 @@ Every explicitly supplied implicit argument in `curios-prelude/std/` and `curios
 | `Str/utf8.crs:216` | 2 | same | Item 2 |
 | `BigNat/add.crs:1270`, `:1286` | 4 | comparison of two matches stuck on the same scrutinee with a metavariable in an arm position | Item 2, pending its investigation bullet |
 | `BigNat/succ.crs:56`, `:61`, `:94`, `:100` | 16 | packed constant folding versus cons/append/concat decomposition | Item 4 |
-| `Async.crs:399`, `Async/Future.crs:15` | 2 | embedded-metavariable postponement chains that never commit | Item 3 |
-| `Async.crs:615` | 1 | list-literal elaboration refuses a ground solution eagerly | defect (a) below, not an item |
+| `Async.crs:399`, `:454`, `:615`; `Async/Future.crs:15` | 4 | one root cause across what the measurement first split into "embedded chains", defect (a), and defect (b): `solve` analyzed unmaterialized candidates (see the defect ledger) | dropped 2026-08-08 with the defect fix |
 | `Str/utf8.crs:180` | 1 | refinement-suppressed solving postpones unrecoverably | none; Item 1 makes its report honest |
-| `Async.crs:454` | 1 | droppable in an isolated replica, but the drop strands an unrelated postponement chain (`parked`, `Async.crs:398`) in `block_on`'s larger goal graph — defect (b) order sensitivity | defect (b)'s resolution |
 | `Str/utf8.crs:9`, `:205`, `:211-213` | 8 | nothing — already inferable | dropped 2026-08-08 |
 
-The corpus sites double as acceptance tests: each item's retirement includes dropping the explicit arguments it unlocks, so the prelude stays calibrated to the solver instead of drifting stale again — the condition the measurement found it in, with eight arguments of accumulated slack (a ninth, `Async.crs:454`, looked stale in isolation and fell to defect (b) in context).
+The corpus sites double as acceptance tests: each item's retirement includes dropping the explicit arguments it unlocks, so the prelude stays calibrated to the solver instead of drifting stale again — the condition the measurement found it in, with eight arguments of accumulated slack and four more behind one solver defect.
 
 ## Status ledger
 
@@ -36,12 +34,14 @@ Verified against the tree on 2026-08-08. Every citation is a file and line to re
 
 | Item | Landed | Remaining |
 | --- | --- | --- |
-| Residual constraints | The checking-shaped half: a parked `Checking` obligation surviving every retry reports `Error::postponed_check` (`typing.rs:338`, `error.rs:459`) at the expression's own span, naming the expected type it waited on | The conversion-shaped residue. A parked `Conversion` goal surviving the drain reports as a plain mismatch at its origin (`typing.rs:328`), distinguished only when it stands between witness holes |
+| Residual constraints | **Both halves (2026-08-08).** A parked `Checking` obligation reports `Error::postponed_check` at its span; a parked `Conversion` goal surviving the drain reports `Error::PostponedConversion` at its origin, naming its still-unsolved watched metavariables (with insertion provenance where an occurrence carries it) and noting when its frozen frame carried match-arm refinements; the witness-hole case remains the third state | The refinement-dependence note first becomes *exercisable* when Item 2 parks meta-blocked comparisons — its acceptance test rides Item 2 |
 | Conversion postponement | Nothing. A conversion whose verdict hinges on a term stuck on an unsolved metavariable — `True ≡ Below(?c, 0xD800)` reducing to a match stuck on `?c` — returns `Mismatch` eagerly, aborting elaboration before later arguments or the result unification could solve the blocker | The item |
 | Pruning | The degenerate forms only: the embedded-metavariable guard postpones any solve whose candidate mentions an unsolved metavariable (`convert.rs:1446`, "the stand-in for pruning"), and spine inversion refuses dependence on non-pattern slots (`convert.rs:1504`, "pruning in its simplest form") | Real pruning |
 | Packed views | Nothing. `b[h, ..t]` lowers to `Bits.concat(Bits.append(b[], h), t)`, and the reducer folds constant spines into literals — `append(b[], true)` becomes `b[\1]` — so unification meets `append(b[], ?h) ≡ b[\0]` with no rule to answer it | The item |
 
 ## Item 1 — surfacing residual unification constraints
+
+**Landed 2026-08-08**, together with the defect-ledger fix its investigation produced; the section below is the original scope, kept until retirement. The refinement-dependence note's acceptance test rides Item 2, where such goals first park.
 
 Half landed, and the landed half is the template. A `ParkedWork::Checking` obligation that survives the final drain reports at its own span, naming the expected type it was waiting on.
 
@@ -91,7 +91,7 @@ When solving `?m[σ] ≡ t`, a candidate `t` mentioning another unsolved metavar
 
 Pruning replaces the refusal with a restriction. Where a candidate mentions `?n` whose context exceeds `?m`'s, mint `?n'` at the intersection of the two contexts, solve `?n := ?n'` restricted to that intersection, and re-attempt the original equation against the pruned candidate. Where the intersection cannot support `?n`'s type, the equation is genuinely unsolvable and should fail rather than postpone. For same-context metavariables — the whole measured class — the intersection is the full context and pruning degenerates to committing immediately, which is what unblocks the chains.
 
-Named consumers: `Async.crs:399` and `Async/Future.crs:15`, both `let x = action!` continuations whose element type only the continuation pins; and `Async/Future.crs:13`, whose comment records that `Future/new` takes its type parameter explicitly because this gap made the implicit unusable — the item retires that API constraint, not just two `@`s.
+Named consumers, revised 2026-08-08: the two originally attributed here — `Async.crs:399` and `Async/Future.crs:15` — turned out to be the defect-ledger root cause and landed with its fix, not with pruning. What remains for this item is the genuine article: chains whose embedded metavariables are *unsolved* (not merely unmaterialized) commit later than they could, each taking a park-and-wake hop the restriction would avoid, and `Async/Future.crs:13`'s API constraint — `Future/new` taking its type parameter explicitly — stands until an implicit parameter there elaborates, which is this item's acceptance probe. Re-measure the corpus's residual demand before starting; the item may have shrunk to the diagnostic-latency win plus the `Future/new` re-declaration.
 
 Constraints, unchanged from the prior version of this document:
 
@@ -118,29 +118,9 @@ Constraints:
 
 ## Defect ledger
 
-Two behaviors observed during the measurement look like defects rather than designed incompleteness. Neither is an item; both carry reproductions because Items 1-3 will trip over them.
+Two behaviors observed during the measurement looked like defects rather than designed incompleteness. **Both were resolved on 2026-08-08 by one fix, and shared one root cause**: `solve` analyzed the *unmaterialized* candidate, in which a solved metavariable's occurrence still spells the metavariable and its spine still names the frame it was born under. A spine binder outside `?m`'s frame then surfaced in `free_vars`, and the scope check refused (defect (b), `mentioned: true → Postponed`, stranding cascades) or failed (defect (a), `mentioned: false → Failed`, the eager list-element mismatch) candidates whose *resolutions* were perfectly scoped and often ground. The fix materializes committed solutions in the candidate and the occurrence's spine entries (`zonk_solved_term_metas`) before the occurs, embedded-metavariable, abstraction, and scope analyses — which also lets the occurs check see a cycle hidden behind a solved metavariable's solution. Reproductions are pinned as `curios-pipeline` tests (`a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade`, `a_list_element_lambda_body_solves_against_the_element_metavariable`).
 
-**(a) List-literal elaboration refuses a ground solution eagerly.** `Async/map(body, (a) => Option/some(a))` compiles alone, but the same call as a list-literal element fails eagerly at the lambda body with `inferred: Option(A), expected: ?B` — a flex-rigid equation with a ground, in-scope candidate that should commit. Annotating the list type restores it. The suspicion is metavariable state minted under the element-agreement path losing its birth record, making `solve` return `Failed` where `Done` is available. `Async.crs:615` is the corpus consumer; fix as a bug on its own schedule.
-
-```crs
-use /std/{Async, Option, Nat};
-
-let probe(@A: Type, body: Async(A)) -> Async({Nat, Option(A)}) =
-    Async/select([Async/map(body, (a) => Option/some(a))]);
-```
-
-**(b) Wake-cascade fragility.** In the reproduction below, every parked goal's blockers eventually receive solutions — `Option/some(1)` pins the element type, and the chain to the `Cell/new` argument is three rigid decompositions — yet the first goal survives to the drain and reports. `drain_parked` (`typing.rs:292`) documents retry-to-fixpoint with a final sweep, which should have resolved it; either the watch sets miss transitive blockers, or a retry re-parks watching a stale set, or the cascade genuinely runs and something narrower blocks. Resolving which is part of Item 1, and Item 3's acceptance depends on the answer. The fragility is order-sensitive: dropping `Async.crs:454`'s `@Job` — inferable in an isolated replica — perturbs `block_on`'s goal graph enough to strand the *unrelated* `parked` cell's chain (`Async.crs:398`), so the same drain that resolves a chain in one goal population reports it unresolved in another.
-
-```crs
-use /std/{Cell, Option, Io, Nat};
-
-let probe: Io({}) =
-    let c = Cell/new(Option/none())!;
-    let _ = Cell/set(c, Option/some(1))!;
-    Io/pure(());
-
-probe
-```
+Corpus consequences of the fix, all verified by probe: `Async.crs:615` (was defect (a)), and the entire embedded-chain class — `Async.crs:399`, `Async/Future.crs:15`, and `Async.crs:454`'s destabilization — now elaborate with their implicits omitted. The wake machinery itself (watch sets, retry-to-fixpoint, final sweep) was exonerated: the cascade always ran; `solve` refused the links.
 
 ## Ordering
 

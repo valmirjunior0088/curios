@@ -71,6 +71,74 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
 }
 
 #[test]
+fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
+    // `f`'s implicit domain meets `Option(?X)` with `?X` never pinned: the goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched.
+    let source = r#"
+        use /std/{Option, Io};
+
+        let f(@A: Type, a: A) -> {} = ();
+
+        let stuck: {} = f(Option/none());
+
+        Io/pure(())
+    "#;
+    let error = compile(source, None).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("cannot decide a postponed conversion"),
+        "unexpected report: {error}"
+    );
+    assert!(error.contains("never solved"), "unexpected report: {error}");
+}
+
+#[test]
+fn a_rigid_mismatch_still_reports_as_a_mismatch() {
+    let source = r#"
+        use /std/{Nat, Io};
+
+        let bad: Nat = true;
+
+        Io/pure(())
+    "#;
+    let error = compile(source, None).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("type mismatch"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        !error.contains("postponed conversion"),
+        "unexpected report: {error}"
+    );
+}
+
+#[test]
+fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
+    // The inference spec's defect (a), same root cause as defect (b): checked as a list element, `map`'s result metavariable reaches the lambda body's conversion still spelling solved metavariables whose spines carry out-of-scope binders, and the unmaterialized scope check refused the ground `Option(A)`.
+    let source = r#"
+        use /std/{Async, Option, Nat};
+
+        let probe(@A: Type, body: Async(A)) -> Async({Nat, Option(A)}) =
+            Async/select([Async/map(body, (a) => Option/some(a))]);
+
+        /std/Io/pure(())
+    "#;
+    assert!(compile(source, None).is_ok());
+}
+
+#[test]
+fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
+    // The inference spec's defect (b): `c`'s element type is pinned only by the later `Cell/set`, and the chain back to the `Cell/new` argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
+    let source = r#"
+        use /std/{Cell, Option, Io, Nat};
+        let probe: Io({}) =
+            let c = Cell/new(Option/none())!;
+            let _ = Cell/set(c, Option/some(1))!;
+            Io/pure(());
+        probe
+    "#;
+    assert!(compile(source, None).is_ok());
+}
+
+#[test]
 fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
     let source = "/std/Nat/add(20, 22)";
     let first = compile(source, Some("/std/Nat")).unwrap();

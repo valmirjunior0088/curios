@@ -396,7 +396,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
     let blocked = Cell/new([])!;
     let sleeping = Cell/new([])!;
     let parked = Cell/new([])!;
-    let result = Cell/new(Option/none(@A))!;
+    let result = Cell/new(Option/none())!;
     let enqueue(j: Job) -> Io({}) =
         let current = Cell/get(runq)!;
         Cell/set(runq, [j, ..current]);
@@ -451,7 +451,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                     let _ = enqueue(Job { ..job, resume = Async { k } })!;
                     enqueue(Job { resume = Async { child }, token = ct, guards = [] })
                 | park(reg) =>
-                    let slot = Cell/new(Option/some(@Job, Job { ..job, resume = Async { k } }))!;
+                    let slot = Cell/new(Option/some(Job { ..job, resume = Async { k } }))!;
                     let current = Cell/get(parked)!;
                     let _ = Cell/set(parked, [slot, ..current])!;
                     -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
@@ -612,7 +612,7 @@ pub let race(@A: Type, tasks: Lst(Async(A))) -> Async(A) =
 
 pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =
     map(
-        select(@Option(A), [map(body, (a) => Option/some(a)), map(sleep(d), (_) => Option/none())]),
+        select([map(body, (a) => Option/some(a)), map(sleep(d), (_) => Option/none())]),
         (w) => w.1);
 
 satisfy Monad(Async) {

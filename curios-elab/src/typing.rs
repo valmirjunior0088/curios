@@ -4,10 +4,14 @@ mod tests;
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
     Apply, Bound, Field, Free, Func, FuncType, Global, Intrinsic, IntrinsicHead, Level, Many,
-    MetaId, Metavar, Proj, ReduceError, Scope, Subterm, Telescope, Term, Transient,
+    MetaId, Metavar, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope, Term, Transient,
     UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
 };
-use std::{collections::BTreeSet, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering.
 pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
@@ -307,7 +311,13 @@ impl Context {
             // No progress in a full sweep: the rest can never resolve. Report the first at its origin.
             if self.parked_len() >= before && !self.has_newly_solved() {
                 if let Some(parked) = self.take_parked().into_iter().next() {
-                    return Err(match parked.work {
+                    let super::ParkedGoal {
+                        work,
+                        origin: parked_origin,
+                        frame,
+                        watching,
+                    } = parked;
+                    return Err(match work {
                         ParkedWork::Conversion(goal) => {
                             // A conversion stuck between two witness holes reads as a bare metavariable mismatch; name the unresolved witness it actually is instead.
                             match self
@@ -322,21 +332,29 @@ impl Context {
                                         origin.binder,
                                         embedding,
                                     )
-                                    .at_opt(parked.origin.span())
+                                    .at_opt(parked_origin.span())
                                 }
+                                // A survivor of the drain is postponed, not rigidly mismatched — the retry's own Mismatch arm reports rigid disagreements. Say so, naming the blockers it watched: a rigid mismatch means the program is wrong, a postponement means inference never gained the structure to decide.
                                 None => {
-                                    display_mismatch(self, &parked.origin, &goal.this, &goal.that)
-                                        .at_opt(parked.origin.span())
+                                    let blockers =
+                                        watched_blockers(self, &watching, &goal.this, &goal.that);
+                                    Error::postponed_conversion(
+                                        resolved_for_display(self, &goal.this),
+                                        resolved_for_display(self, &goal.that),
+                                        blockers,
+                                        frame.carries_refinements(),
+                                    )
+                                    .at_opt(parked_origin.span())
                                 }
                             }
                         }
                         ParkedWork::Checking { term, expected, .. } => match &*term {
                             // A parked bang is a region that never named its monad; report it as that, not as a generic stalled check.
                             Subterm::Transient(Transient::Bang(_)) => {
-                                Error::bang_region_undetermined().at_opt(parked.origin.span())
+                                Error::bang_region_undetermined().at_opt(parked_origin.span())
                             }
                             _ => Error::postponed_check(resolved_for_display(self, &expected))
-                                .at_opt(parked.origin.span()),
+                                .at_opt(parked_origin.span()),
                         },
                         ParkedWork::Witness {
                             goal, provenance, ..
@@ -348,7 +366,7 @@ impl Context {
                                 provenance.binder,
                                 embedding,
                             )
-                            .at_opt(parked.origin.span())
+                            .at_opt(parked_origin.span())
                         }
                     });
                 }
@@ -356,6 +374,52 @@ impl Context {
             }
         }
     }
+}
+
+/// Render a surviving conversion goal's still-unsolved watched metavariables. Insertion provenance rides the *occurrence*, not the birth entry, so both sides are scanned for the watched ids; a watched metavariable no occurrence names (solved away from the spelling, or watched through a spine) still renders as its bare id.
+fn watched_blockers(
+    context: &Context,
+    watching: &BTreeSet<MetaId>,
+    this: &Term,
+    that: &Term,
+) -> Vec<String> {
+    let origins: Rc<RefCell<BTreeMap<MetaId, MetavarOrigin>>> =
+        Rc::new(RefCell::new(BTreeMap::new()));
+    for side in [this, that] {
+        let sink = Rc::clone(&origins);
+        let mut visit = Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term: &Term| {
+                if let Subterm::Metavar(Metavar {
+                    id,
+                    origin: Some(origin),
+                    ..
+                }) = &**term
+                {
+                    sink.borrow_mut()
+                        .entry(*id)
+                        .or_insert_with(|| origin.clone());
+                }
+                None
+            }),
+        );
+        let _: Term = side.traverse(&mut visit);
+    }
+
+    let origins = origins.borrow();
+    watching
+        .iter()
+        .filter(|id| context.metavar_solution(**id).is_none())
+        .map(|id| match origins.get(id) {
+            Some(MetavarOrigin::Implicit(origin)) => {
+                format!(
+                    "the implicit argument '{}' of '{}'",
+                    origin.binder, origin.func
+                )
+            }
+            _ => format!("?{}", id.0),
+        })
+        .collect()
 }
 
 fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Error> {

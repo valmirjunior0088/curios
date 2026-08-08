@@ -1434,6 +1434,9 @@ impl Convert {
         if context.is_rec_slot(id) {
             return Ok(Solved::Postponed);
         }
+
+        // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — the wake-cascade strand this call site's spec records as defect (b)). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
+        let t = &crate::zonk_solved_term_metas(context, t);
         let metavars = t.metavars();
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
@@ -1485,20 +1488,11 @@ impl Convert {
             "metavariable spine arity diverged from its birth telescope"
         );
 
-        // Resolve *solved-metavariable* entries to their values first — a solved entry stands for its (possibly variable) value, and chains terminate because the occurs check forbids solution cycles. Entries are otherwise deliberately unreduced: a name backed by a definition must stay that name, or an obviously-invertible renaming looks flexible.
+        // Materialize *solved-metavariable* occurrences in the entries too — a solved entry stands for its (possibly variable) value, chains terminate because the occurs check forbids solution cycles, and a deep solved occurrence must take the same spelling the materialized candidate now carries or the abstraction subjects below would never match it. Entries are otherwise deliberately unreduced: a name backed by a definition must stay that name, or an obviously-invertible renaming looks flexible.
         let entries = metavar
             .spine
             .iter()
-            .map(|term| {
-                let mut entry = term.clone();
-                while let Subterm::Metavar(m) = &*entry {
-                    match context.resolve_metavar(m) {
-                        Some(resolved) => entry = resolved,
-                        None => break,
-                    }
-                }
-                entry
-            })
+            .map(|term| crate::zonk_solved_term_metas(context, term))
             .collect::<Vec<_>>();
 
         // Invert the spine through its *pattern* entries — a syntactic free variable whose name no other entry shares. A non-variable or duplicated entry is simply not invertible; the solution then may not depend on that slot, which the scope check below enforces — pruning in its simplest form.

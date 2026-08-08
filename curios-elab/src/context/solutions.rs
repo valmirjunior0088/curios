@@ -207,7 +207,7 @@ impl Solutions {
 
     /// Park work under its frozen frame, recomputing the watch set from the work's currently unsolved metavariables.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
-        let watching = match &work {
+        let watching: BTreeSet<MetaId> = match &work {
             ParkedWork::Conversion(goal) => goal
                 .this
                 .metavars()

@@ -12,7 +12,7 @@ pub struct Future(A: Type): Type {
 
 -- The result type is explicit rather than implicit: there are no arguments to infer it from, so an implicit would leave a metavariable for the caller's continuation to pin, and the caller now reaches it through two layers of `bind`.
 pub let new(A: Type) -> Io(Future(A)) =
-    let cell = Cell/new(State/pending(@A, []))!;
+    let cell = Cell/new(State/pending([]))!;
     Io/pure(Future { cell });
 
 pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =

@@ -36,6 +36,15 @@ pub(crate) struct FrozenFrame {
     pub(crate) witness_binders: Vec<(Free, Term)>,
 }
 
+impl FrozenFrame {
+    /// Whether the frame carried live match-arm refinements at park time — the residual-constraint report notes it, since a solution holding only under counterfactual refinements is deliberately never committed.
+    pub(crate) fn carries_refinements(&self) -> bool {
+        !self.refinements.is_empty()
+            || !self.refinement_projections.is_empty()
+            || !self.refinement_scrutinees.is_empty()
+    }
+}
+
 /// The frame-scoped lexical stores. `Context` holds exactly one of these; see the module documentation for the cache-coordination contract.
 #[derive(Debug)]
 pub(crate) struct Frames {

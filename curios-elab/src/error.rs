@@ -275,6 +275,15 @@ pub enum Error {
     PostponedCheck {
         expected: Box<Term>,
     },
+    /// A parked conversion goal that survived every retry, distinguished from `TypeMismatch`: a rigid mismatch means the program is wrong, a postponed conversion means the program may be right and inference never gained the structure to decide. Reported at the goal's origin span by the item drain, naming the still-unsolved blockers it watched.
+    PostponedConversion {
+        this: Box<Term>,
+        that: Box<Term>,
+        /// The still-unsolved watched metavariables, pre-rendered with insertion provenance where an occurrence carries it.
+        watching: Vec<String>,
+        /// Whether the goal's frozen frame carried live match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
+        under_refinements: bool,
+    },
     /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
     BangRegionUndetermined,
     /// An overloaded infix operator applied at an operand type with no matching scalar intrinsic — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
@@ -459,6 +468,20 @@ impl Error {
     pub(crate) fn postponed_check<U: Into<Term>>(expected: U) -> Self {
         Self::PostponedCheck {
             expected: Box::new(expected.into()),
+        }
+    }
+
+    pub(crate) fn postponed_conversion<T: Into<Term>, U: Into<Term>>(
+        this: T,
+        that: U,
+        watching: Vec<String>,
+        under_refinements: bool,
+    ) -> Self {
+        Self::PostponedConversion {
+            this: Box::new(this.into()),
+            that: Box::new(that.into()),
+            watching,
+            under_refinements,
         }
     }
 
@@ -1023,6 +1046,10 @@ impl Error {
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
             Self::PostponedCheck { expected } => out.push(expected),
+            Self::PostponedConversion { this, that, .. } => {
+                out.push(this);
+                out.push(that);
+            }
             Self::NoWitness {
                 goal, embedding, ..
             } => {
@@ -1468,6 +1495,29 @@ impl fmt::Display for Displayed<'_> {
                     f,
                     "cannot check expression: its expected type never gained structure: {expected}"
                 )
+            }
+            Error::PostponedConversion {
+                this,
+                that,
+                watching,
+                under_refinements,
+            } => {
+                let this = this.spelled(spelling);
+                let that = that.spelled(spelling);
+                write!(
+                    f,
+                    "cannot decide a postponed conversion\n  between: {this}\n      and: {that}"
+                )?;
+                if !watching.is_empty() {
+                    write!(f, "\n  never solved: {}", watching.join(", "))?;
+                }
+                if *under_refinements {
+                    write!(
+                        f,
+                        "\n  the goal sits under match-arm refinements; a solution holding only under them is never committed"
+                    )?;
+                }
+                Ok(())
             }
             Error::BangRegionUndetermined => {
                 write!(
