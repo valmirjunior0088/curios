@@ -146,7 +146,7 @@ enum Leaf {
         addend: Atom,
     },
     /// `a = f(args); return a`.
-    Bare { block: BlockId, call: StatementId },
+    Bare { call: StatementId },
     /// Any other returning leaf: combine the accumulator with its result.
     Base { block: BlockId },
 }
@@ -293,7 +293,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
                 module.set_block_statements(block, statements);
                 module.set_block_terminator(block, terminator);
             }
-            Leaf::Bare { block, call } => {
+            Leaf::Bare { call } => {
                 let Some(Statement::Let {
                     result,
                     rhs: Rhs::Apply { arguments, .. },
@@ -313,7 +313,6 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
                         },
                     },
                 );
-                let _ = block;
             }
             Leaf::Base { block } => {
                 let Some((returned, mut statements)) =
@@ -443,7 +442,6 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
         {
             spine_calls += 1;
             leaves.push(Leaf::Bare {
-                block,
                 call: statements[count - 1],
             });
             continue;
