@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost};
+use super::{error, run};
 
 #[test]
 fn lst_match_is_a_foldr() {
@@ -88,8 +88,7 @@ fn bin_concat_leading_byte_clash_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -119,8 +118,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -178,8 +176,7 @@ fn lst_slice_window_seam_mismatch_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -286,23 +283,19 @@ fn lst_concat_length_clash_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
 fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
 let _ = std/Handle/write(std/Handle/stdout, x[../std/Str/to_bytes("ok")])!;
 /std/Io/pure(())
-"#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"ok");
+"#),
+        b"ok"
+    );
 }
 
 #[test]
@@ -325,9 +318,7 @@ fn vec_cons_with_nat_succ() {
         /std/Io/pure(())
     "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 #[test]
@@ -356,9 +347,7 @@ fn indexed_vec_append_executes() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 #[test]
@@ -369,9 +358,7 @@ fn lst_fold_sums_elements() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))!;
         /std/Io/pure(())
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"60");
+    assert_eq!(run(source), b"60");
 }
 
 #[test]
@@ -433,8 +420,7 @@ fn lst_spread_of_non_list_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -446,16 +432,14 @@ fn lst_spread_element_type_clash_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
 fn lst_spread_operand_hoists_bangs() {
     // A bang inside a spread operand hoists into the enclosing region exactly like one inside a plain element — the literal is collected, not sealed.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Async, Handle, Str, Nat, Lst};
         let prog : Async({}) =
             let ys : Lst(Nat) = [1, ..Async/pure([2, 3])!, 4];
@@ -467,11 +451,9 @@ fn lst_spread_operand_hoists_bangs() {
             let wrote = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits))))!;
             Async/pure(());
         Async/run(prog)
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"4321");
+        "#),
+        b"4321"
+    );
 }
 
 #[test]
@@ -508,27 +490,23 @@ fn bin_spread_of_non_bin_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
 fn bin_spread_operand_hoists_bangs() {
     // The `Bytes` sibling of `lst_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Async, Handle, Bytes};
         let prog : Async({}) =
             let out : Bytes = x[\3e, ..Async/pure(x[\68, \69])!, \3c];
             let wrote = Async/lift(Handle/write(Handle/stdout, out))!;
             Async/pure(());
         Async/run(prog)
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b">hi<");
+        "#),
+        b">hi<"
+    );
 }
 
 #[test]
@@ -539,9 +517,7 @@ fn bin_fold_sums_bytes() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))!;
         /std/Io/pure(())
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"60");
+    assert_eq!(run(source), b"60");
 }
 
 // An empty match is a vacuous elimination: it never inspects its scrutinee. A `False` is a `Prop`, so it erases (sort-driven) — a contradiction may therefore discharge into a *relevant* result, both directly (`match c : (_) => A end`) and through `False/absurd`. This is what lets an impossible runtime branch be closed off by an erased witness, the crux of the UTF-8 decode certification.

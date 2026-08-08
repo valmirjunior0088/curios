@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost};
+use super::run;
 
 #[test]
 fn big_nat_add_ripples_carry() {
@@ -165,9 +165,7 @@ fn flt_to_le_bytes_prints_raw_bytes() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), 1.5f32.to_le_bytes());
+    assert_eq!(run(source), 1.5f32.to_le_bytes());
 }
 
 #[test]
@@ -178,7 +176,5 @@ fn flt_of_le_bytes_roundtrips_raw_bytes() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), 1.5f32.to_le_bytes());
+    assert_eq!(run(source), 1.5f32.to_le_bytes());
 }

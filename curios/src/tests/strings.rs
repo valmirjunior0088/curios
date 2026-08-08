@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost};
+use super::{error, run};
 
 #[test]
 fn utf8_slice_proof_aligns_with_byte_walk() {
@@ -94,9 +94,7 @@ fn str_literal_prints_its_bytes() {
         /std/print(s)
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"hello");
+    assert_eq!(run(source), b"hello");
 }
 
 // A string literal lowers to a right-nested certified UTF-8 derivation — `more(c, st, t, rest)`, one link per byte. The elaboration cache collapses the `Rc`-shared per-byte scan-state chains hanging off each link, but the spine nodes themselves are each unique, so sharing-oblivious elaboration still recursed one native frame per link and overflowed a default 2MB test thread near ~50 bytes. Iterative (defunctionalized) elaboration now walks the spine on an explicit heap frame stack at O(1) native depth per link, so the length a literal can reach is bounded by the reduction budget, not the stack. This 500-byte literal sits an order of magnitude past that old cliff. See curios-elab/README.md.
@@ -123,9 +121,7 @@ fn str_of_bytes_accepts_multibyte_utf8() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), [0xc3, 0xa9]);
+    assert_eq!(run(source), [0xc3, 0xa9]);
 }
 
 // An invalid lead byte fails `is_utf8`, so `Str/of_bytes` returns `none`.
@@ -139,9 +135,7 @@ fn str_of_bytes_rejects_invalid_utf8() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"rejected");
+    assert_eq!(run(source), b"rejected");
 }
 
 // A truncated multi-byte sequence (a 2-byte lead with no continuation) fails the continuation-byte check, so `of_bin` returns `none`.
@@ -155,9 +149,7 @@ fn str_of_bytes_rejects_truncated_multibyte() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"rejected");
+    assert_eq!(run(source), b"rejected");
 }
 
 // The UTF-8 decode certification lemmas: naming them forces their bodies to elaborate (demand-driven checking). `cont_len` is the one that exercises the comparison intrinsic — `step` only reduces in `cont` state because `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_scalars`/ `decode_head` are the cursor-free decode core: `peel_byte` advances the (prop) validity witness one byte without ever large-eliminating it, `count_scalars` is the codepoint count `len` is built on, and `decode_head` reads the head codepoint from the relevant bytes under that witness.
@@ -170,9 +162,7 @@ fn utf8_decode_lemmas_type_check() {
         /std/print("ok")
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 // `Str/len` and `Str/get` count and index by codepoint, not byte. The string is `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
@@ -192,9 +182,7 @@ fn str_get_indexes_codepoints_of_every_width() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"3,97,8364,128512");
+    assert_eq!(run(source), b"3,97,8364,128512");
 }
 
 // `Str/at` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into the `Bytes/at` bound, so it reads each codepoint with no fallback. Indexing `a€😀` at 0, 1, 2 yields U+0061, U+20AC, U+1F600 — same widths as `get`, but total.
@@ -224,9 +212,7 @@ fn str_at_reads_codepoints_with_the_proof() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"97,8364,128512");
+    assert_eq!(run(source), b"97,8364,128512");
 }
 
 // `Str/slice` cuts at codepoint boundaries, so slicing `[1, 2)` out of `a€😀` yields the whole 3-byte euro sign — never a split sequence.
@@ -240,9 +226,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), [0xe2, 0x82, 0xac]);
+    assert_eq!(run(source), [0xe2, 0x82, 0xac]);
 }
 
 // An interior `Str/slice` over a mixed-width string exercises the single-pass O(n) cut: `drop_n` skips the leading `a` (1 byte) and `take_n` keeps the next three scalars (`é€😀`, of widths 2, 3, 4) as one window — never splitting a sequence. `aé€😀b` sliced `[1, 4)` yields `é€😀`.
@@ -256,10 +240,8 @@ fn str_slice_spans_every_codepoint_width() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
     assert_eq!(
-        io.output(),
+        run(source),
         [0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]
     );
 }
@@ -275,9 +257,7 @@ fn str_trim_keeps_interior_multibyte() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), [0x63, 0x61, 0x66, 0xc3, 0xa9]);
+    assert_eq!(run(source), [0x63, 0x61, 0x66, 0xc3, 0xa9]);
 }
 
 // An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`, and the `Nat/min` guard collapses the slice to nothing rather than trapping.
@@ -291,9 +271,7 @@ fn str_trim_all_whitespace_is_empty() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"!");
+    assert_eq!(run(source), b"!");
 }
 
 #[test]
@@ -413,8 +391,7 @@ fn character_literals_do_not_coerce_to_numeric_domains() {
         "use /std/{Char, Nat}; let c : Char = 'a'; c == 97",
         "use /std/{Char, Byte}; let c : Char = 'a'; c == (0x61 : Byte)",
     ] {
-        let (system, _io) = MockHost::builder().build();
-        assert!(crate::run_text(source, system).is_err());
+        error(source);
     }
 }
 

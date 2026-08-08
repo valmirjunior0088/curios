@@ -1,4 +1,5 @@
 use {
+    super::run,
     curios_pipeline::compile_entrypoint,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
@@ -6,30 +7,24 @@ use {
 
 #[test]
 fn io_write() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
 let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("hello"))!;
 /std/Io/pure(())
-"#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"hello");
+"#),
+        b"hello"
+    );
 }
 
 #[test]
 fn io_write_stderr() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
 let _ = std/Handle/write(std/Handle/stderr, /std/Str/to_bytes("oops"))!;
 /std/Io/pure(())
-"#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"oops");
+"#),
+        b"oops"
+    );
 }
 
 #[test]
@@ -115,9 +110,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"not found");
+    assert_eq!(run(source), b"not found");
 }
 
 #[test]
@@ -204,20 +197,16 @@ fn proc_env_found_unwraps_to_some() {
 
 #[test]
 fn proc_env_absent_is_none() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Io};
         match /std/proc/env("NOPE")! : (_) => Io({})
         | some(v) => let _ = std/Handle/write(std/Handle/stdout, v)!; /std/Io/pure(())
         | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
         end
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"missing");
+        "#),
+        b"missing"
+    );
 }
 
 #[test]
@@ -319,7 +308,5 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
         print(show(Async/block_on(Async/drain(chunk_then_eof!))!))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"error / error / ok:3");
+    assert_eq!(run(source), b"error / error / ok:3");
 }

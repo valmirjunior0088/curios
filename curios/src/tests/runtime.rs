@@ -1,5 +1,5 @@
 use {
-    super::run,
+    super::{error, run},
     curios_pipeline::{Stage, compile_entrypoint},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
@@ -9,9 +9,8 @@ use {
 #[test]
 fn nullary_closure_survives_erasure_and_codegen() {
     // A nullary closure stored in an inductive field and called indirectly via a `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). The suspension now carries a *description* rather than performing on the way through: `force` walks the `later` closure to the `now` payload, and the write happens where that payload is forced, so the output still proves the closure was reached and called.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Str};
         induct Susp(A : Type) : Type
         | now(A)
@@ -28,11 +27,9 @@ fn nullary_closure_survives_erasure_and_codegen() {
         let _ = r!;
         let _ = /std/print("!")!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"ok!");
+        "#),
+        b"ok!"
+    );
 }
 
 #[test]
@@ -52,9 +49,7 @@ fn end_to_end() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"+42");
+    assert_eq!(run(source), b"+42");
 }
 
 // Local binders shadow like-named *module* bindings, and a local name never leaks past its lexical scope. Inside `mod Foo` the module binding is `Foo/go`: an inner `let go` must shadow it (so `shadowed` is 3, not the captured 7), while a `go` that is a sibling of an inner `let go = 3` — reached only after that scope closes — must resolve back to `Foo/go` (so `sibling` is 7, not a leaked, unbound bare `go`). Encoded as 3*10 + 7 = 37, so the unlawful-capture regression reads 77 and a scope leak fails to compile.
@@ -75,9 +70,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"37");
+    assert_eq!(run(source), b"37");
 }
 
 // Named fields end to end: a dependent record (the vector's length indexes its type) constructed with written names, consumed through `.label` and `.index` access on the same value — both resolve to the same positional projection.
@@ -93,9 +86,7 @@ fn triangular_sum() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"10");
+    assert_eq!(run(source), b"10");
 }
 
 #[test]
@@ -106,9 +97,7 @@ fn multi_arg_function() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"+7");
+    assert_eq!(run(source), b"+7");
 }
 
 #[test]
@@ -119,9 +108,7 @@ fn curried_function() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"+7");
+    assert_eq!(run(source), b"+7");
 }
 
 #[test]
@@ -140,9 +127,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
         /std/print(Nat/to_str(result.unbox))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 #[test]
@@ -340,18 +325,15 @@ fn fmt_print_runtime_args_specializes_spine() {
 #[test]
 fn fmt_print_err_formats_to_stderr() {
     // Same staging as `Fmt/print`, routed through `/std/print_err`. MockIo captures stdout and stderr concatenated in write order, so the ordering also shows the stderr write really happened between the stdout ones.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Fmt, Handle};
         let a = /std/print("before;")!;
         let b = Fmt/print_err("%: %;")("code")(3)!;
         /std/print("after")
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"before;code: 3;after");
+        "#),
+        b"before;code: 3;after"
+    );
 }
 
 #[test]
@@ -413,8 +395,7 @@ fn diagnostic_uses_source_binder_names() {
         bad
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("inferred: (n: Nat) -> Nat"),
         "binder lost its source name: {error}"
@@ -432,8 +413,7 @@ fn diagnostic_disambiguates_shadowed_binders() {
         bad
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("inferred: (n: Nat) -> (n2: Nat) -> Nat"),
         "shadowed binders not disambiguated: {error}"
@@ -450,8 +430,7 @@ fn diagnostic_shortens_global_names() {
         bad
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("inferred: Vec(Nat, n)"),
         "globals not shortened: {error}"
@@ -475,8 +454,7 @@ fn diagnostic_collapses_witness_dispatch_in_index() {
         bad
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("inferred: Vec(Nat, 1)"),
         "witness dispatch not collapsed to its value: {error}"
@@ -497,8 +475,7 @@ fn diagnostic_spells_index_arithmetic_infix() {
         bad
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("inferred: Vec(Nat, (n + m) + 1)"),
         "index arithmetic not spelled infix: {error}"
@@ -508,65 +485,50 @@ fn diagnostic_spells_index_arithmetic_infix() {
 // A struct type is nominal: it never converts with a structural tuple type of the same fields.
 #[test]
 fn random_bin_returns_requested_length() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    let output = run(r#"
 let _ = std/Handle/write(std/Handle/stdout, /std/rand/bytes(8)!)!;
 /std/Io/pure(())
-"#,
-        system,
-    )
-    .expect("expected result");
-
-    let output = io.output();
+"#);
     assert_eq!(output.len(), 8);
 }
 
 #[test]
 fn nat_of_str_returns_option() {
     // `123` parses; `12a` (non-digit) and the empty string are `none`, taking the `unwrap_or` defaults — `123 + 7 + 9`.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Nat, Str, Option, Handle};
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
         let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
         let empty = Option/unwrap_or(Nat/of_str(""), 9);
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"139");
+        "#),
+        b"139"
+    );
 }
 
 #[test]
 fn int_of_str_returns_option() {
     // `-5` and `+7` parse (compared by magnitude); `x` is `none` → default `+3`.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Nat, Int, Str, Option, Handle};
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
         let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
         let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"15");
+        "#),
+        b"15"
+    );
 }
 
 #[test]
 fn flt_of_str_returns_option() {
     // `12.0`, `.5` (empty integer part), and `1e3` parse; `abc` is `none` → default `+4.0`. Values are truncated to `Nat` for an exact assertion: `12 + (0.5*2) + 1000 + 4`.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(r#"
+    assert_eq!(
+        run(r#"
         use /std/{Nat, Flt, Str, Option, Handle};
         let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
         let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
@@ -574,18 +536,15 @@ fn flt_of_str_returns_option() {
         let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"1017");
+        "#),
+        b"1017"
+    );
 }
 
 #[test]
 fn option_result_char_helpers() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(r#"
+    assert_eq!(
+        run(r#"
         use /std/{Option, Result, Char, Nat, Str, Handle};
         let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
         let res0 : Result(Nat, Nat) = Result/success(5);
@@ -593,13 +552,10 @@ fn option_result_char_helpers() {
         let up = Char/to_ascii_upper('a');
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    // opt = 5, res = 10, up = 'A' = 65  ->  80
-    assert_eq!(io.output(), b"80");
+        "#),
+        // opt = 5, res = 10, up = 'A' = 65  ->  80
+        b"80",
+    );
 }
 
 #[test]
@@ -687,9 +643,8 @@ fn cell_two_cells_are_distinct() {
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
     // The rope representation's whole promise: a naive 100k-step packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step (Θ(n²), tens of minutes at this size); a regression fails on the timeout. The final slice + print also pins the force → memo → host-write path end to end.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Bytes, Nat, Str};
         rec go(i : Nat, acc : Bytes) -> Bytes =
             match i
@@ -701,19 +656,16 @@ fn accumulation_loops_are_linear_by_construction() {
         let _ = Handle/write(Handle/stdout, head)!;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"01234567891000000");
+        "#),
+        b"01234567891000000"
+    );
 }
 
 #[test]
 fn peel_loops_are_linear_by_construction() {
     // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a `Cell` each step, so no compile-time pass (worker_wrapper's cursor, slice forwarding) can rescue it: a copying slice would be Θ(n²) and fail on the timeout. Matching directly on `Cell/get(c)` also leans on erasure's scrutinee alias — the cell must be read once per match, not once per projection (the head read lands *after* the `Cell/set` otherwise).
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Cell, Io};
         rec build(i : Nat, acc : Bytes) -> Bytes =
             match i
@@ -736,19 +688,16 @@ fn peel_loops_are_linear_by_construction() {
         let total = drain(Bytes/len(built) + 1, 0)!;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(total)))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"450000");
+        "#),
+        b"450000"
+    );
 }
 
 // A local `rec` nested inside another local `rec`'s body: `go` (inner) is an ordinary term-level construct here — never lambda-lifted, never spliced anywhere — so it just works, elaborated and erased in place exactly where written. Runtime-tainted so codegen cannot const-fold it away.
 #[test]
 fn nested_local_rec_runs_correctly() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
@@ -758,19 +707,16 @@ fn nested_local_rec_runs_correctly() {
                 end;
              go(n));
         /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(4)!))))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"4");
+        "#),
+        b"4"
+    );
 }
 
 // A local `rec` nested inside a top-level `rec` member, calling that enclosing member by name: since nothing gets lambda-lifted or spliced as a separate item, there is no forward-reference to worry about — `go` just resolves `f` through ordinary lexical/context scoping, exactly where it's written.
 #[test]
 fn local_rec_calls_enclosing_rec_member() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
@@ -780,37 +726,31 @@ fn local_rec_calls_enclosing_rec_member() {
                 end;
              go(n));
         /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(3)!))))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"0");
+        "#),
+        b"0"
+    );
 }
 
 // A non-capturing, self-referential value `rec` (`loop : Nat = loop`) that the program never calls: this is exactly the shape that silently miscompiled under lambda-lifting (a self-aliased value slot dropped by the optimizer's copy-propagation) — here it stays a term-level `Rec`, erased in place, and its mere existence has no effect on the rest of the program.
 #[test]
 fn self_referential_value_rec_never_forced_compiles_and_runs() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         let make(n : Nat) -> Nat =
             rec loop : Nat = loop;
             n;
         /std/print(Nat/to_str(make(Bytes/len(/std/rand/bytes(5)!))))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"5");
+        "#),
+        b"5"
+    );
 }
 
 // A sibling signature may demand the result shape of a recursive type family while the group is still being checked. Protected slots prevent conversion from solving the knot, but shape-demanding reduction can still unfold a filled slot productively: `val : T(2)` reaches `Nat`. Indexed inductive families lower to this same shape, so the prelude depends on the distinction.
 #[test]
 fn recursive_group_signature_reduces_concrete_type_family() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         let taint = Bytes/len(/std/rand/bytes(3)!);
         rec T(n : Nat) -> Type =
@@ -821,9 +761,7 @@ fn recursive_group_signature_reduces_concrete_type_family() {
         and val : T(2) =
             taint;
         /std/print(Nat/to_str(val))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"3");
+        "#),
+        b"3"
+    );
 }

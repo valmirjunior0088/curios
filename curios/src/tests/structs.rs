@@ -1,4 +1,4 @@
-use curios_runtime::MockHost;
+use super::{error, run};
 
 #[test]
 fn named_fields_run_end_to_end() {
@@ -14,9 +14,7 @@ fn named_fields_run_end_to_end() {
         /std/print(Nat/to_str(Nat/add(total(p.v, 0), Nat/mul(p.0, 0))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // A transparent record: build with a pinned head, project by label and by index — both resolve to the same positional projection.
@@ -29,9 +27,7 @@ fn struct_transparent_pair_projects() {
         /std/print(Nat/to_str(Nat/add(p.fst, p.1)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // The bare-name head infers the parameters from the fields (and the expected type at the binding).
@@ -44,9 +40,7 @@ fn struct_parameter_inference_at_construction() {
         /std/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"12");
+    assert_eq!(run(source), b"12");
 }
 
 // A zero-cost newtype: a single positional field, projected with `.0`. It erases to its bare field, so the projection elides at runtime.
@@ -59,9 +53,7 @@ fn struct_newtype_projects() {
         /std/print(Nat/to_str(m.0))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"5");
+    assert_eq!(run(source), b"5");
 }
 
 // A dependent field: a later field's type mentions an earlier field (the vector's length indexes its type).
@@ -79,9 +71,7 @@ fn struct_dependent_fields_run_end_to_end() {
         /std/print(Nat/to_str(total(s.v, 0)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // The motivating case: an abstract type — public type, hidden representation — usable only through exported smart constructors/accessors in its module.
@@ -98,9 +88,7 @@ fn struct_abstract_smart_constructor_round_trips() {
         /std/print(Nat/to_str(Celsius/to_nat(Celsius/of_nat(42))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // Constructing a private-representation struct from outside its declaring module is rejected (`PrivateRepresentation`).
@@ -116,8 +104,7 @@ fn struct_private_construction_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -138,8 +125,7 @@ fn struct_private_projection_rejected() {
         /std/print(Nat/to_str(c.0))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("field") && error.contains("private"),
         "unexpected error: {error}"
@@ -156,8 +142,7 @@ fn struct_is_not_a_tuple() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // A struct literal must supply exactly the declared fields, in order.
@@ -170,8 +155,7 @@ fn struct_wrong_field_count_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // Written field labels are validated positionally — no reordering.
@@ -184,8 +168,7 @@ fn struct_field_label_out_of_order_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // A struct literal whose head names a non-struct binding is rejected as `NotAStructType` (its type is reported), not misreported as unbound.
@@ -198,8 +181,7 @@ fn struct_literal_non_struct_head_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
 
@@ -214,9 +196,7 @@ fn prop_struct_with_prop_fields_runs() {
         /std/print(Nat/to_str(7))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // A `Prop`-sorted struct with an informative (`Type`-sorted) field is rejected at declaration. Projection is an unguarded eliminator, so admitting it under proof irrelevance proves `Eq(b0, b1)` for distinct `b0`, `b1` — and thence `Eq(0, 1)` and `False`. The soundness-critical regression (bare `: Prop`).
@@ -233,8 +213,7 @@ fn prop_struct_with_informative_field_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("informative"), "unexpected error: {error}");
 }
 
@@ -250,8 +229,7 @@ fn type_struct_distinct_values_not_convertible() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // The function-field sugar, end to end: `label(params) -> T` in a struct declaration and a Σ-type, `label(params) = body` in a struct literal and a tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it — this pins the lowering, not just the grammar.
@@ -266,9 +244,7 @@ fn function_field_sugar_runs_end_to_end() {
         /std/print(Nat/to_str(pair.twice(pair.seed)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"8");
+    assert_eq!(run(source), b"8");
 }
 
 // A `pub` item's signature may not expose a private sibling: the reference resolves through lexical scope (no publicness walk), so a dedicated interface audit closes the gap.
@@ -284,8 +260,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("exposes private item '/M/Secret'"),
         "unexpected error: {error}"
@@ -308,8 +283,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("exposes private item '/M/Inner/T'"),
         "unexpected error: {error}"
@@ -334,8 +308,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("exposes private item '/M/Hidden'"),
         "unexpected error: {error}"
@@ -360,9 +333,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
         /std/print("ok")
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 // A pub inductive's constructors are its interface: a private payload type is rejected (the `Async`/`Pause` shape).
@@ -381,8 +352,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("exposes private item '/M/Secret'"),
         "unexpected error: {error}"
@@ -403,9 +373,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
         let o = M/mk();
         /std/print("ok")
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(hidden, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(hidden), b"ok");
 
     let exposed = r#"
         use /std/{Nat, Handle};
@@ -416,8 +384,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
         end
         /std/print("no")
         "#;
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(exposed, system).unwrap_err();
+    let error = error(exposed);
     assert!(
         error.contains("exposes private item '/M/Secret'"),
         "unexpected error: {error}"
@@ -435,9 +402,7 @@ fn struct_spread_identity_copy() {
         /std/print(Nat/to_str(Nat/mul(q.fst, q.snd)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"12");
+    assert_eq!(run(source), b"12");
 }
 
 // A single labeled override replaces its field; the rest copy across.
@@ -451,9 +416,7 @@ fn struct_spread_single_override() {
         /std/print(Nat/to_str(Nat/add(q.fst, q.snd)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"13");
+    assert_eq!(run(source), b"13");
 }
 
 // Overrides claim scattered positions (first and third), the gap copies — the order-preserving-subsequence rule with a hole in the middle.
@@ -467,9 +430,7 @@ fn struct_spread_multi_override_with_gap() {
         /std/print(Nat/to_str(Nat/add(Nat/add(u.fst, u.snd), u.thd)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // A dependent record updates when the override keeps the dependency consistent: `n` and `v : Vec(Nat, n)` replaced together.
@@ -488,9 +449,7 @@ fn struct_spread_dependent_override_runs() {
         /std/print(Nat/to_str(total(t.v, 0)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // Overriding a field that a copied field's type depends on is rejected: the copied `v` still has length 2, but the new telescope demands 3.
@@ -504,8 +463,7 @@ fn struct_spread_dependent_field_mismatch_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // The head may re-pin parameters, so an update can change them: the base is a `Pair(Nat, Nat)`, the result a `Pair(Str, Nat)` — the copied `snd` is checked against the new instantiation.
@@ -519,9 +477,7 @@ fn struct_spread_parameter_changing_update() {
         /std/print(Nat/to_str(q.snd))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // A bare head with a spread and no annotation: the parameter metavariables are minted inside the base's frame and solved from the copied projections.
@@ -535,9 +491,7 @@ fn struct_spread_bare_head_inference() {
         /std/print(Nat/to_str(Nat/add(q.fst, q.snd)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"13");
+    assert_eq!(run(source), b"13");
 }
 
 // The function-field definition sugar works as a spread override.
@@ -551,9 +505,7 @@ fn struct_spread_function_field_override() {
         /std/print(Nat/to_str(api2.bump(api2.base)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // Overrides after a spread must be labeled: gaps make positions ambiguous.
@@ -567,8 +519,7 @@ fn struct_spread_unlabeled_override_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("labeled"), "unexpected error: {error}");
 }
 
@@ -583,8 +534,7 @@ fn struct_spread_out_of_order_override_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("order"), "unexpected error: {error}");
 }
 
@@ -599,8 +549,7 @@ fn struct_spread_duplicate_override_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("order"), "unexpected error: {error}");
 }
 
@@ -615,8 +564,7 @@ fn struct_spread_unknown_field_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("no field"), "unexpected error: {error}");
 }
 
@@ -631,8 +579,7 @@ fn struct_spread_not_first_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("first"), "unexpected error: {error}");
 }
 
@@ -647,8 +594,7 @@ fn struct_spread_multiple_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(error.contains("at most one"), "unexpected error: {error}");
 }
 
@@ -662,8 +608,7 @@ fn struct_spread_non_struct_base_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("must itself be"),
         "unexpected error: {error}"
@@ -682,8 +627,7 @@ fn struct_spread_wrong_struct_base_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("must itself be"),
         "unexpected error: {error}"
@@ -705,8 +649,7 @@ fn struct_spread_private_outside_module_rejected() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -731,9 +674,7 @@ fn struct_private_representation_open_in_descendant() {
         /std/print(Nat/to_str(Celsius/Build/to_nat(Celsius/Build/of_nat(42))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // The relaxation is downward only. A sibling subtree is outside the declaring module, so its representation stays opaque there.
@@ -755,8 +696,7 @@ fn struct_private_representation_closed_to_siblings() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -788,9 +728,7 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
         /std/print(Nat/to_str(Flag/Read/to_nat(Flag/on)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // `/std/Async` keeps `Future` and `Waker` as private child modules and re-exports only the two type names, so a program can name a `Future` but cannot reach the scheduler plumbing that drives one.
@@ -802,8 +740,7 @@ fn async_future_plumbing_is_not_reachable_from_user_code() {
         /std/print("no")
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("private child module"),
         "unexpected error: {error}"

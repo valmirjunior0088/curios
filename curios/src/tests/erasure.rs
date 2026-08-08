@@ -1,7 +1,6 @@
 use {
-    super::run,
+    super::{error, run},
     curios_pipeline::{Stage, compile_entrypoint},
-    curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -28,8 +27,7 @@ fn data_is_not_proof_irrelevant() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -56,8 +54,7 @@ fn large_elimination_of_a_prop_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -190,9 +187,7 @@ fn erased_void_discharges_to_relevant_result() {
         let proofs = (direct, via_absurd);
         /std/print("ok")
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 #[test]
@@ -213,9 +208,7 @@ fn erased_indexed_relevant_repro() {
         let g = f;
         /std/print("ok")
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 // Regression: a type-valued *application* (`Box(m)`, here `False/absurd`'s inferred `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type; erasing it structurally used to leave `m` in the runtime term, so codegen demanded a value for an erased binder ("`into_cont` lacks value").
@@ -231,9 +224,7 @@ fn erased_index_in_type_valued_arg() {
         let g = f;
         /std/print("ok")
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 // Regression: a `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` used to keep it, so rebuilding the constructor computed the field from binders the same erasure had dropped — `Eq/cong` erased to `apply f(unit)`, and a proof bound in a statement position (which the design runs regardless of sort) fed that unit to a `Bits` fold and trapped.
@@ -246,9 +237,7 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
         let p : Eq(BigNat/add(a, b), BigNat/add(b, a)) = BigNat/add/comm(a, b);
         /std/print("ok")
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 // The same law in an erased position stays non-strict: it is never evaluated, and the consumer still typechecks against it.
@@ -261,7 +250,5 @@ fn proof_in_an_erased_position_is_not_evaluated() {
         let consume(x : BigNat, y : BigNat, p : Eq(BigNat/add(x, y), BigNat/add(y, x))) -> Nat = 42;
         /std/print(Nat/to_str(consume(a, b, BigNat/add/comm(a, b))))
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }

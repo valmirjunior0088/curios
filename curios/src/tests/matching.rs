@@ -1,4 +1,7 @@
-use curios_runtime::MockHost;
+use {
+    super::{error, run},
+    curios_runtime::MockHost,
+};
 
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {
@@ -18,9 +21,7 @@ fn opaque_inductive_is_usable_through_declaring_module_api() {
         /std/print(Nat/to_str(Secret/reveal(Secret/make(7))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 #[test]
@@ -38,8 +39,7 @@ fn opaque_inductive_empty_elimination_is_private() {
         /std/print(Nat/to_str(reveal(Secret/make(7))))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("representation of type '/Secret/T' is private"),
         "unexpected error: {error}"
@@ -59,9 +59,7 @@ fn flat_option_match_lowers_without_synthetic_indirection() {
         /std/print(Nat/to_str(f(Option/some(5))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"5");
+    assert_eq!(run(source), b"5");
 }
 
 #[test]
@@ -78,9 +76,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
         /std/print(Nat/to_str(value(b[\1, \0, \1, \1, \0, \0, \1, \0, \1, \1])))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"845");
+    assert_eq!(run(source), b"845");
 }
 
 // The spec's own motivating example: a single tupled head, fully enumerated over two independent `Option`-shaped columns.
@@ -98,9 +94,7 @@ fn nested_ctor_pattern_dispatches_by_shape() {
         /std/print(Nat/to_str(f(Option/some(3), Option/some(4))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // Regression for a `choose` lowering bug: a condition arm followed by a refutable bind arm was parsed as `Choose`, but lowering the bind arm accidentally routed through the headed-match dependent-motive/default gate.
@@ -117,9 +111,7 @@ fn choose_allows_condition_before_bind_arm() {
         /std/print(Nat/to_str(pick(true, Option/some(21), 5)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"5");
+    assert_eq!(run(source), b"5");
 }
 
 // A tuple value used as a match target directly — no constructor tag at all — desugars to plain projection, never a core `Match` node.
@@ -134,9 +126,7 @@ fn tuple_match_target_projects_fields() {
         /std/print(Nat/to_str(f((3, 4))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // A struct value used as a match target directly, including field-punning.
@@ -152,9 +142,7 @@ fn struct_match_target_projects_fields() {
         /std/print(Nat/to_str(f(Pair { fst = 3, snd = 4 })))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // A struct match-arm pattern desugars to the same `proj`/`proj_label` calls an ordinary projection uses, so representation privacy is inherited automatically and unmodified — matching `struct_private_projection_rejected` in `structs.rs`, but reached through a match arm instead of `.0`.
@@ -173,8 +161,7 @@ fn struct_arm_privacy_is_enforced() {
         end
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("field") && error.contains("private"),
         "unexpected error: {error}"
@@ -194,8 +181,7 @@ fn matrix_match_rejects_inconsistent_tuple_arity() {
         /std/print(Nat/to_str(f((3, 4))))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("disagree on shape"),
         "unexpected error: {error}"
@@ -218,8 +204,7 @@ fn matrix_match_rejects_duplicate_row() {
         /std/print(Nat/to_str(f(Option/some(3), Option/some(4))))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("duplicate or overlapping"),
         "unexpected error: {error}"
@@ -240,8 +225,7 @@ fn matrix_match_rejects_duplicate_flat_tag() {
         /std/print(Nat/to_str(f(Option/some(3))))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("duplicate or overlapping"),
         "unexpected error: {error}"
@@ -261,8 +245,7 @@ fn matrix_match_rejects_mixed_binder_and_ctor_column() {
         /std/print(Nat/to_str(f(Option/some(3))))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("disagree on shape"),
         "unexpected error: {error}"
@@ -282,8 +265,7 @@ fn matrix_match_rejects_a_motive_on_tuple_head() {
         /std/print(Nat/to_str(f((3, 4))))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("written motive"),
         "unexpected error: {error}"
@@ -304,9 +286,7 @@ fn nested_nat_pattern_dispatches_by_shape() {
         /std/print(Nat/to_str(f(Option/some(3))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"2");
+    assert_eq!(run(source), b"2");
 }
 
 // An `Lst` literal leaf (`[]`/`[h, ..t]`) nested inside a tuple field.
@@ -322,9 +302,7 @@ fn nested_lst_pattern_dispatches_by_shape() {
         /std/print(Nat/to_str(f((0, [7, 8]))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // A `Bytes` literal leaf (`x[]`/`x[h, ..t]`) nested inside a tuple field.
@@ -340,9 +318,7 @@ fn nested_bin_pattern_dispatches_by_shape() {
         /std/print(Nat/to_str(f((0, Str/to_bytes("A")))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"65");
+    assert_eq!(run(source), b"65");
 }
 
 // A `Bool` literal leaf (`true`/`false`) nested inside a constructor payload — two full rows, since a bare top-level `true`/`false` would otherwise be swallowed by the separate flat `parse_bool_match` before ever reaching the matrix grammar.
@@ -361,9 +337,7 @@ fn nested_bool_pattern_dispatches_by_shape() {
         /std/print(Nat/to_str(f(Pair/pair(false, 4))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"5");
+    assert_eq!(run(source), b"5");
 }
 
 // A nested `Nat` pattern column missing its `0` case entirely — reachable only through the matrix grammar (the flat two-branch `parse_nat_match` can't even express incompleteness, since it requires both cases up front). These four hardcoded carriers have no core-side exhaustiveness mechanism to fall back on, unlike an ordinary constructor tag.
@@ -378,8 +352,7 @@ fn matrix_match_rejects_incomplete_nat_pattern() {
         /std/print(Nat/to_str(f(3)))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("both of its cases"),
         "unexpected error: {error}"
@@ -399,9 +372,7 @@ fn matrix_match_allows_dependent_motive_on_nat_head() {
         /std/print(Nat/to_str(f(3)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"2");
+    assert_eq!(run(source), b"2");
 }
 
 // Regression test mirroring `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match must lower and run correctly end-to-end, exercising `compile_ctor`'s and `compile_nat`'s single-row fast paths together — guarding against reintroducing the erasure hint-compounding bug for the new carrier leaves.
@@ -418,9 +389,7 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
         /std/print(Nat/to_str(f(Option/some(1))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"0");
+    assert_eq!(run(source), b"0");
 }
 
 // Nested literal dispatch as emitted wasm: a runtime-tainted `n == 5` inside `some(n)` selects the `some(5)` arm; the `_` fallthrough covers every other value (and `none()`). Exercises `compile_nat`'s switch mode — a `Cases::Switch` reached through a constructor payload — at runtime rather than folded.
@@ -438,9 +407,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
         /std/print(Nat/to_str(hit))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"700");
+    assert_eq!(run(source), b"700");
 }
 
 #[test]
@@ -457,9 +424,7 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
         /std/print(Nat/to_str(miss))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"999");
+    assert_eq!(run(source), b"999");
 }
 
 #[test]
@@ -499,9 +464,7 @@ fn choose_selects_first_true_arm() {
         /std/print(Nat/to_str(result))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"300");
+    assert_eq!(run(source), b"300");
 }
 
 // A `choose` with no condition arms is just its default. Runtime-tainted so it runs as wasm.
@@ -517,9 +480,7 @@ fn choose_default_only() {
         /std/print(Nat/to_str(result))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"42");
+    assert_eq!(run(source), b"42");
 }
 
 // `choose_evaluates_conditions_lazily` stood here. It observed the nested `Bool` lowering by giving a condition a side effect — `probe` printed its tag — so a ladder that evaluated every condition printed every tag. A condition is a `Bool`, and post-`Io` a `(Str, Bool) -> Bool` cannot perform an effect at all, so the fixture is not merely broken but unwritable. Nor is there a replacement at this layer: evaluating a *pure* condition twice, or not at all, is unobservable by any means the language offers, which is the retype working rather than coverage lost. What remains observable is the emitted shape, and that is `tests::codegen`'s to state.
@@ -538,10 +499,8 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
         /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
     // some(5) → 15 via its arm; none() → 99 via the catch-all; 15 + 99 = 114.
-    assert_eq!(io.output(), b"114");
+    assert_eq!(run(source), b"114");
 }
 
 // A `choose` bind arm `| pattern = value =>` (Rust `if let`): fires and binds when `value` matches, else falls through to the rest of the ladder.
@@ -558,9 +517,7 @@ fn choose_bind_arm_destructures_or_falls_through() {
         /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"114");
+    assert_eq!(run(source), b"114");
 }
 
 // A bind arm whose pattern is refutable at *two* points (`some` and the `cons` nested in its payload): the rest-of-ladder is shared through a nullary thunk, reached whether the outer `some` or the inner cons fails to match.
@@ -580,10 +537,8 @@ fn choose_nested_bind_shares_the_fallthrough() {
         /std/print(Nat/to_str(((a + b) + c) + z))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
     // some([5,..]) → 6; some([]) → 99 (inner cons fails); none() → 99 (outer some fails). 6 + 99 + 99 = 204.
-    assert_eq!(io.output(), b"204");
+    assert_eq!(run(source), b"204");
 }
 
 // === Motives ================================================================
@@ -604,9 +559,7 @@ fn a_motive_may_name_a_top_level_family() {
         /std/print(Nat/to_str(4))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"4");
+    assert_eq!(run(source), b"4");
 }
 
 // A motive that ignores every binder is written with `_`s, one per index and one for the scrutinee — a constant motive is a lambda like any other, not a separate rung.
@@ -622,9 +575,7 @@ fn a_constant_motive_on_an_indexed_family_binds_placeholders() {
         /std/print(Nat/to_str(len(Vec/cons(1, Vec/cons(2, Vec/nil())))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"2");
+    assert_eq!(run(source), b"2");
 }
 
 // A motive binder's annotation is an ordinary type in an ordinary position, so the scrutinee binder's annotation may name the index binders written before it — recovering the eliminated family on the motive line. This is the dependent-lambda-telescope rule (`tests::binders`) applied to a motive.
@@ -640,9 +591,7 @@ fn a_motive_binder_annotation_may_name_earlier_index_binders() {
         /std/print(Nat/to_str(6))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"6");
+    assert_eq!(run(source), b"6");
 }
 
 // Plicity is expressible because the annotation is a real application: `Eq` hides its type parameter, so `Eq(s, t)` is how it is written here, and the old flat slot list that spelled it `Eq(A, s, t)` has no counterpart.
@@ -658,9 +607,7 @@ fn a_motive_binder_annotation_obeys_the_families_plicity() {
         /std/print(Nat/to_str(7))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // A `| _ =>` catch-all on an indexed family. Every motive binds its indices whether or not the body uses them, so a default no longer collides with a "pattern motive": the enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones.
@@ -677,9 +624,7 @@ fn a_default_arm_is_allowed_on_an_indexed_family() {
         /std/print(Nat/to_str(head_or(v, 0)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"8");
+    assert_eq!(run(source), b"8");
 }
 
 // The binder count is checked against the index telescope, not inferred, so an under-bound motive reports as itself instead of as a domain mismatch.
@@ -695,8 +640,7 @@ fn an_under_bound_motive_reports_its_binder_count() {
         /std/print(Nat/to_str(len(Vec/nil())))
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system).unwrap_err();
+    let error = error(source);
     assert!(
         error.contains("motive binds 1 name(s)") && error.contains("needs 2"),
         "unexpected error: {error}"
@@ -732,7 +676,5 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
         /std/print(refined(7, true))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"refined");
+    assert_eq!(run(source), b"refined");
 }

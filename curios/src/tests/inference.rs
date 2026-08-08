@@ -1,4 +1,4 @@
-use curios_runtime::MockHost;
+use super::{error, run};
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
@@ -18,9 +18,7 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected the implicit to solve");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 #[test]
@@ -36,9 +34,7 @@ fn match_omitted_motive_infers() {
         /std/Io/pure(())
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"10");
+    assert_eq!(run(source), b"10");
 }
 
 #[test]
@@ -61,9 +57,7 @@ fn implicit_inductive_type_param_executes() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"2");
+    assert_eq!(run(source), b"2");
 }
 
 #[test]
@@ -79,8 +73,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         /std/Io/pure(())
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -102,9 +95,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"3");
+    assert_eq!(run(source), b"3");
 }
 
 #[test]
@@ -120,8 +111,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         /std/Io/pure(())
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -142,9 +132,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
         /std/print(Nat/to_str(Vec/len(d(2))))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"4");
+    assert_eq!(run(source), b"4");
 }
 
 #[test]
@@ -163,9 +151,7 @@ fn bare_tuple_continuation_tail_infers() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"104");
+    assert_eq!(run(source), b"104");
 }
 
 #[test]
@@ -182,9 +168,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"2");
+    assert_eq!(run(source), b"2");
 }
 
 #[test]
@@ -198,8 +182,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         /std/Io/pure(())
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is implicit — must insert that implicit when the motive is instantiated. It used to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panicked `reduce_apply` with "telescope arity mismatch".
@@ -214,9 +197,7 @@ fn subst_motive_inserts_implicit_in_eq() {
         /std/print("ok")
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
+    assert_eq!(run(source), b"ok");
 }
 
 // A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in type position — same infinite-spin behavior as a top-level `rec` — so a step budget stops it with an error rather than hanging.
@@ -236,8 +217,7 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
         0
         "#;
 
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // The flex-apply imitation rule: an implicit higher-kinded binder `@M` is inferred from an argument's concrete type — `?M(?A) ≡ Lst(Nat)` commits `?M := (A) => Lst(A)` and `?A := Nat` — where previously only the explicit `apply_m(@Lst, l)` spelling checked.
@@ -251,9 +231,7 @@ fn higher_kinded_implicit_infers_by_imitation() {
         /std/print(Nat/to_str(Lst/len(k)))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"2");
+    assert_eq!(run(source), b"2");
 }
 
 // A postponed argument keeps its *raw* surface spelling when `elaborate_apply` opens the rest of the telescope, and that spelling is load-bearing: reducing through it is what lets the result `expect` pin the metavariables the slot is waiting on. But `elaborate_proj` only resolves a label projection on the *checked* form, so beta-reducing a raw lambda body through the result type manufactures `head.label` where the settled spelling is `head.index` — a term `reduce_proj` once declared `unreachable!`. The result `expect` is now two-phase: best-effort through the raw spelling, then authoritative through the settled arguments.
@@ -272,9 +250,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
         /std/print(Nat/to_str(boxed.value))
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"7");
+    assert_eq!(run(source), b"7");
 }
 
 // Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B probe in `reduce`). A concept-dispatched comparison reduces past the `Cmp` wrapper to an intrinsic normal form, which is not an application — so before `head_label` covered intrinsics, `match a <= hi` registered a refinement key the probe could never look up and the arm silently failed to refine, while the equivalent `Nat/lte(a, hi)` spelling worked. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
@@ -298,24 +274,18 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"refined");
+    assert_eq!(run(source), b"refined");
 }
 
 // A parked checking problem that survives every retry — a tuple against an implicit nothing ever pins — is reported by the item drain at the expression's own span, naming the expected type it waited on rather than the bare `cannot infer` it used to raise.
 #[test]
 fn unresolvable_parked_check_reports_its_expected_type() {
-    let (system, _io) = curios_runtime::MockHost::builder().build();
     let source = r#"
         use /std/{Nat, Str};
         let use_it(@A : Type, a : A) -> Nat = 0;
         let z : Nat = use_it((1, true));
         /std/print(Nat/to_str(z))
         "#;
-    let error = match crate::run_text(source, system) {
-        Ok(_) => panic!("expected an error, program succeeded"),
-        Err(error) => error.to_string(),
-    };
+    let error = error(source);
     assert!(error.contains("never gained structure"), "{error}");
 }

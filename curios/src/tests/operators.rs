@@ -1,9 +1,12 @@
-use {super::run, curios_runtime::MockHost};
+use {
+    super::{error, run},
+    curios_runtime::MockHost,
+};
 
 #[test]
 fn bool_logic_and_of_str() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(r#"
+    assert_eq!(
+        run(r#"
         use /std/{Bool, Str, Option, Handle};
         let computed = Bool/and(Bool/or(false, true), Bool/not(false));
         let parsed = match Bool/of_str("false") : (_) => Bool
@@ -12,48 +15,37 @@ fn bool_logic_and_of_str() {
             end;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(computed), Bool/to_str(parsed))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"truefalse");
+        "#),
+        b"truefalse"
+    );
 }
 
 #[test]
 fn bool_xor_executes() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Bool, Str, Handle};
         let a = Bool/xor(true, false);
         let b = Bool/xor(true, true);
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"truefalse");
+        "#),
+        b"truefalse"
+    );
 }
 
 #[test]
 fn bool_eql_executes() {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        r#"
+    assert_eq!(
+        run(r#"
         use /std/{Bool, Str, Handle};
         let a = Bool/eql(true, true);
         let b = Bool/eql(true, false);
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))!;
         /std/Io/pure(())
-        "#,
-        system,
-    )
-    .expect("expected result");
-
-    assert_eq!(io.output(), b"truefalse");
+        "#),
+        b"truefalse"
+    );
 }
 
 #[test]
@@ -245,7 +237,6 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
 #[test]
 fn infix_undefined_operator_for_type_is_rejected() {
     // `&&` only has a witness on `Bool`, so `nat && nat` has no `And(Nat)` — a compile-time error, same as any other operator at an un-witnessed type.
-    let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Handle, Str};
         let _ = (match 1 && 2
@@ -254,7 +245,7 @@ fn infix_undefined_operator_for_type_is_rejected() {
         end)!;
         /std/Io/pure(())
     "#;
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 #[test]
@@ -292,7 +283,6 @@ fn infix_not_equal_on_bool_resolves_to_bool_neq() {
 #[test]
 fn infix_mismatched_operand_types_are_rejected() {
     // No implicit coercion: a `Nat` and an `Int` cannot be added.
-    let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Handle, Str, Int};
         let n : Nat = 1;
@@ -300,7 +290,7 @@ fn infix_mismatched_operand_types_are_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Int/to_str(n + i)))!;
         /std/Io/pure(())
     "#;
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // === Concept-dispatched operators (one path, no overload table) =============
@@ -354,21 +344,19 @@ fn infix_equality_works_on_str() {
 // An operator at a type with no witness is a missing-witness diagnostic — the single operator error vocabulary (`operator ... not defined` survives only for the exotic no-prelude embedding, where the concept itself is absent from the context).
 #[test]
 fn infix_without_witness_reports_no_witness() {
-    let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Bool, Handle, Str};
         let b : Bool = true + false;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Bool/to_str(b)))!;
         /std/Io/pure(())
     "#;
-    let error = crate::run_text(source, system).expect_err("Add(Bool) has no witness");
+    let error = error(source);
     assert!(error.contains("no witness"), "unexpected error: {error}");
 }
 
 // A literal mixed with a witnessed user type still errors on the literal: `p` pins the operand type to `Point`, and `1` has no `Point` realization.
 #[test]
 fn infix_literal_against_a_user_type_is_rejected() {
-    let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Nat, Handle, Str, Add};
         struct Point : pub Type { x : Nat, y : Nat }
@@ -380,7 +368,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(q.x)))!;
         /std/Io/pure(())
     "#;
-    assert!(crate::run_text(source, system).is_err());
+    error(source);
 }
 
 // Type-level operators: `a + 1` in `Lte`'s constructor indices elaborates to a witness projection that must reduce during conversion checking, and the two spellings (the index's and this call site's) stay convertible across items.

@@ -1,4 +1,4 @@
-use curios_runtime::MockHost;
+use {super::run, curios_runtime::MockHost};
 
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
@@ -48,9 +48,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"refused");
+    assert_eq!(run(source), b"refused");
 }
 
 // A custom `Config` with an optional `Duration` timeout flows through the bracket; `Socket/read` pulls bytes from the socket the body is handed.
