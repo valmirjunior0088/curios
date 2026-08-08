@@ -34,7 +34,7 @@ use {
 #[cfg(feature = "archive")]
 use curios_base::BigUintBytes;
 
-/// Whether `name` is one of `names` — a declaration group's own member names, which are still carried as flattened strings. A boundary, not a decode: it asks whether an authored path renders as one of the given names and reads no structure out of them. Retired when `Definition::name` becomes a [`Global`].
+/// The head identity a scrutinee-refinement key gates on: a named free-variable head, or the tag standing in for a comparison intrinsic whose normal form has no named head. Produced only by [`Term::head_key`], which documents the mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadTag<'a> {
     Name(&'a Free),
