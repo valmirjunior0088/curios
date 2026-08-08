@@ -16,17 +16,18 @@ profile = [
 
 [dependencies]
 curios-profile = { workspace = true }
-curios-abi = { workspace = true }
-curios-base = { workspace = true }
-curios-cert = { workspace = true }
-curios-core = { workspace = true }
 curios-wasm = { workspace = true }
-curios-cont = { workspace = true }
-curios-ersd = { workspace = true }
-curios-elab = { workspace = true }
 curios-text = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-binaryen = { workspace = true }
 curios-runtime = { workspace = true }
+# Named nowhere in code: this row is the switch that turns Cranelift on for the shared runtime engine, which is what gives `to_cwasm` a `precompile_module` to call.
 wasmtime = { workspace = true, features = ["cranelift"] }
 clap = { version = "4.6.1", features = ["derive"] }
+
+# The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
+[dev-dependencies]
+curios-cert = { workspace = true }
+curios-core = { workspace = true }
+curios-cont = { workspace = true }
+curios-elab = { workspace = true }
