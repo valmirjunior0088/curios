@@ -36,7 +36,7 @@ mod rope_emitter;
 use rope_emitter::*;
 
 mod types;
-use types::*;
+pub use types::*;
 
 #[cfg(test)]
 mod tests;

@@ -1,9 +1,11 @@
-//! The wire-ABI `Bytes` bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings through its exports. It declares the compiler's `array (mut i8)` payload shape locally — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
+//! The wire-ABI `Bytes` bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings through its exports. It declares the compiler's own payload shape (`curios_cont::bytes_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
 
-use curios_wasm::{
-    ArrayType, BlockType, CompType, Export, Expr, FieldType, Func, FuncName, FuncType, HeapType,
-    Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RefType, ResultType,
-    StorageType, SubType, TypeName, ValType, to_bytes,
+use {
+    curios_cont::bytes_sub_type,
+    curios_wasm::{
+        BlockType, CompType, Export, Expr, Func, FuncName, FuncType, HeapType, Instr, LabelName,
+        LocalName, Module, NumType, RefType, ResultType, SubType, TypeName, ValType, to_bytes,
+    },
 };
 
 /// One accessor's name, parameters, outputs, and array op.
@@ -13,20 +15,6 @@ type Accessor = (
     Vec<ValType>,
     Instr,
 );
-
-/// The compiler's `$bytes` host-boundary shape: `array (mut i8)`.
-pub(crate) fn bytes_sub_type() -> SubType {
-    SubType {
-        is_final: true,
-        super_types: vec![],
-        comp_type: CompType::Array(ArrayType {
-            field_type: FieldType {
-                storage_type: StorageType::Packed(PackedType::I8),
-                mutability: Mutability::Var,
-            },
-        }),
-    }
-}
 
 /// A `block $done (loop $continue ...)` pair whose body runs `step` for `i` from 0 to `len` (both preexisting locals): the copy loop shared by the two bulk transfers.
 fn counted_loop(i: &LocalName, len: &LocalName, step: Vec<Instr>) -> Instr {

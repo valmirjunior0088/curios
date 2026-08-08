@@ -650,6 +650,7 @@ name = "curios-web"
 version = "0.8.0"
 dependencies = [
  "curios-abi",
+ "curios-cont",
  "curios-pipeline",
  "curios-runtime",
  "curios-text",

@@ -37,15 +37,6 @@ fn call(store: &mut Store<()>, func: &Func, params: &[Val]) -> Val {
     results.remove(0)
 }
 
-/// The bridge's `bytes` declaration matches the compiler's `array (mut i8)` host-boundary shape — the premise of the whole canonicalization scheme.
-#[test]
-fn bytes_type_is_the_compiler_boundary_shape() {
-    assert_eq!(
-        crate::bridge::bridge_module().get_type(&TypeName::from("bytes")),
-        Some(&crate::bridge::bytes_sub_type())
-    );
-}
-
 #[test]
 fn accessors_are_exported_with_their_shapes() {
     let module = crate::bridge::bridge_module();

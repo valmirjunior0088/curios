@@ -20,6 +20,7 @@ curios-abi = { workspace = true }
 curios-text = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-wasm = { workspace = true }
+curios-cont = { workspace = true }
 wasm-bindgen = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
 

@@ -10,4 +10,4 @@ pub use cps::*;
 mod machine;
 
 mod into_wasm;
-pub use into_wasm::into_wasm;
+pub use into_wasm::*;
