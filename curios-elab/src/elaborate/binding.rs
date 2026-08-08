@@ -459,7 +459,7 @@ fn action_result_key(context: &mut Context, action: &Term) -> Option<HeadKey> {
     }
 }
 
-/// The [`HeadKey`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is walked unopened, exactly as [`HeadKey::of_whnf`]'s higher-kinded arm walks a former's body, so a *dependent* result — one naming an earlier binder — is not closed and abstains rather than reducing an open term. A closed result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains.
+/// The [`HeadKey`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`) still abstains, because a free-variable head has no key. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains. A wrong abstention still costs a message, never a solution.
 fn declared_result_key(
     context: &mut Context,
     declared: &Term,
@@ -475,14 +475,16 @@ fn declared_result_key(
             if explicit_binders != explicit_args {
                 return None;
             }
-            let mut telescope = &func_type.telescope;
-            while let Telescope::Cons(_, rest) = telescope {
-                telescope = rest.body();
+            let mut telescope = func_type.telescope.clone();
+            loop {
+                match telescope {
+                    Telescope::Cons(_, rest) => {
+                        let binder = context.fresh(rest.first_hint());
+                        telescope = rest.open(&[&Term::free_var(&binder)]);
+                    }
+                    Telescope::Done(result) => break (*result).clone(),
+                }
             }
-            let Telescope::Done(result) = telescope else {
-                unreachable!("a telescope spine ends in Done");
-            };
-            (**result).clone()
         }
         // A zero-argument action (`Async/yield_now`): the declared type is the carrier itself.
         _ => match explicit_args {
@@ -490,9 +492,6 @@ fn declared_result_key(
             _ => return None,
         },
     };
-    if !result.closed() {
-        return None;
-    }
     let whnf = reduce_with(context, &result).ok()?;
     HeadKey::of_whnf(&whnf)
 }

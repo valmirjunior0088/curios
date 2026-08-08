@@ -136,6 +136,22 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 }
 
 #[test]
+fn a_dependent_result_action_auto_lifts_through_bang() {
+    // `Cell/new : (@T: Type, x: T) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Async)` embedding without an explicit `lift(...)`.
+    let source = r#"
+        use /std/{Async, Cell, Nat, Io};
+
+        let fiber: Async(Nat) =
+            let c = Cell/new(7)!;
+            let n = Cell/get(c)!;
+            Async/pure(n);
+
+        Io/pure(())
+    "#;
+    assert!(compile(source, None).is_ok());
+}
+
+#[test]
 fn a_rigid_mismatch_still_reports_as_a_mismatch() {
     let source = r#"
         use /std/{Nat, Io};
