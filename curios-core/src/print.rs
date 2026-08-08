@@ -546,7 +546,7 @@ enum FormerEta {
     Intrinsic(&'static str),
 }
 
-/// Recognize `x => T(…, x)` on the *unopened* telescope: one explicit binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. The prefix arguments must be closed under the binder (`reach() == 0`), which is what guarantees the binder occurs nowhere else.
+/// Recognize `x => T(…, x)` on the *unopened* telescope: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. The binder's plicity is deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binder already mirrors the declaration. The prefix arguments must be closed under the binder (`reach() == 0`), which is what guarantees the binder occurs nowhere else.
 fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
     if telescope.len() != 1 || plicities.len() != 1 {
         return None;
