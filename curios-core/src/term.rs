@@ -125,7 +125,7 @@ impl Term {
         self.scalars().hash
     }
 
-    /// Whether any *free* variable in this term carries an elaborator-minted label — one containing `#`, which cannot occur in a written identifier (`Context::fresh` always embeds it; witness-table names share the convention, deliberately counted here so the elaboration memo stays conservative). Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
+    /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of [`Subterm::has_local_free`], which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
         self.scalars().has_local_free
     }
