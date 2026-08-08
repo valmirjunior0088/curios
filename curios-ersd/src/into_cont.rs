@@ -793,7 +793,7 @@ impl Lowerer<'_> {
                 let op = match intrinsic {
                     Intrinsic::LstMap => curios_cont::CpsIntrinsicCall::LstMap,
                 };
-                // Both representations bind the mapper first; the operands transcribe in order.
+                // Both representations bind the list first, then the mapper; the operands transcribe in order.
                 let args = operands
                     .iter()
                     .map(|&operand| self.lower_atom(operand))
