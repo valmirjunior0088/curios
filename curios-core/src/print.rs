@@ -172,151 +172,160 @@ pub fn display_names(term: &Term) -> BTreeSet<Free> {
     names
 }
 
-/// Collect every binder label in `term`, recursing through scope and telescope bodies. (`Intrinsic` interiors are skipped: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.)
+/// Collect every binder label in `term`, descending scope and telescope bodies on an explicit stack — a diagnostic's term can be as deep as the deliberately iterative elaborator admits, so this walk must not abort the report the printer's own deferred descent already survives. (`Intrinsic` interiors are skipped: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.)
 fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
-    fn push(out: &mut BTreeSet<Free>, binder: Option<&Free>) {
-        if let Some(binder) = binder {
-            out.insert(binder.clone());
-        }
-    }
-
-    fn scope<A: Arity>(out: &mut BTreeSet<Free>, scope: &Scope<A>) {
+    fn scope<'a, A: Arity>(
+        out: &mut BTreeSet<Free>,
+        stack: &mut Vec<&'a Term>,
+        scope: &'a Scope<A>,
+    ) {
         if let Some(names) = scope.names() {
-            names.iter().for_each(|n| push(out, Some(n)));
+            out.extend(names.iter().cloned());
         }
-        collect_labels(scope.body(), out);
+        stack.push(scope.body());
     }
 
-    fn telescope(out: &mut BTreeSet<Free>, mut cur: &Telescope<Term>) {
+    fn telescope<'a>(
+        out: &mut BTreeSet<Free>,
+        stack: &mut Vec<&'a Term>,
+        mut cur: &'a Telescope<Term>,
+    ) {
         loop {
             match cur {
                 Telescope::Cons(ty, rest) => {
-                    push(out, rest.binder(0));
-                    collect_labels(ty, out);
+                    if let Some(binder) = rest.binder(0) {
+                        out.insert(binder.clone());
+                    }
+                    stack.push(ty);
                     cur = rest.body();
                 }
-                Telescope::Done(body) => break collect_labels(body, out),
+                Telescope::Done(body) => break stack.push(body),
             }
         }
     }
 
     // A tuple type's telescope has no result term (`Telescope<()>`); only its field types and labels carry names.
-    fn tuple_telescope(out: &mut BTreeSet<Free>, mut cur: &Telescope<()>) {
+    fn tuple_telescope<'a>(
+        out: &mut BTreeSet<Free>,
+        stack: &mut Vec<&'a Term>,
+        mut cur: &'a Telescope<()>,
+    ) {
         while let Telescope::Cons(ty, rest) = cur {
-            push(out, rest.binder(0));
-            collect_labels(ty, out);
+            if let Some(binder) = rest.binder(0) {
+                out.insert(binder.clone());
+            }
+            stack.push(ty);
             cur = rest.body();
         }
     }
 
-    let each = |out: &mut BTreeSet<Free>, terms: &[Term]| {
-        terms.iter().for_each(|t| collect_labels(t, out))
-    };
-
-    match &**term {
-        Subterm::FuncType(FuncType { telescope: t, .. }) => telescope(out, t),
-        Subterm::Func(Func { telescope: t, .. }) => telescope(out, t),
-        Subterm::TupleType(TupleType { telescope: t, .. }) => tuple_telescope(out, t),
-        Subterm::Apply(Apply { head, params, .. }) => {
-            collect_labels(head, out);
-            each(out, params);
-        }
-        Subterm::Tuple(Tuple { fields, .. }) => each(out, fields),
-        Subterm::Proj(Proj { head, .. }) => collect_labels(head, out),
-        Subterm::InductType(InductType {
-            params, indices, ..
-        }) => {
-            each(out, params);
-            each(out, indices);
-        }
-        Subterm::Variant(Variant {
-            params, payload, ..
-        }) => {
-            each(out, params);
-            each(out, payload);
-        }
-        Subterm::StructType(StructType { params, .. }) => each(out, params),
-        Subterm::Struct(Struct { params, fields, .. }) => {
-            each(out, params);
-            each(out, fields);
-        }
-        Subterm::Let(Let { bindings, tail, .. }) => {
-            for binding in bindings {
-                collect_labels(binding.type_(), out);
-                collect_labels(binding.value(), out);
+    let mut stack = vec![term];
+    while let Some(term) = stack.pop() {
+        match &**term {
+            Subterm::FuncType(FuncType { telescope: t, .. }) => telescope(out, &mut stack, t),
+            Subterm::Func(Func { telescope: t, .. }) => telescope(out, &mut stack, t),
+            Subterm::TupleType(TupleType { telescope: t, .. }) => {
+                tuple_telescope(out, &mut stack, t)
             }
-            scope(out, tail);
-        }
-        Subterm::Rec(Rec { group, tail }) => {
-            for member in group.iter() {
-                scope(out, &member.type_);
-                scope(out, &member.body);
+            Subterm::Apply(Apply { head, params, .. }) => {
+                stack.push(head);
+                stack.extend(params.iter());
             }
-            scope(out, tail);
-        }
-        Subterm::Match(Match {
-            head,
-            motive,
-            cases,
-        }) => {
-            collect_labels(head, out);
-            scope(out, motive);
-            match cases {
-                Cases::Bool {
-                    false_case,
-                    true_case,
-                } => {
-                    collect_labels(false_case, out);
-                    collect_labels(true_case, out);
-                }
-                Cases::Switch { cases, default } => {
-                    cases.iter().for_each(|(_, body)| collect_labels(body, out));
-                    collect_labels(default, out);
-                }
-                Cases::Induct { cases, default, .. } => {
-                    cases.iter().for_each(|(_, s)| scope(out, &s.body));
-                    default.iter().for_each(|d| collect_labels(d, out));
-                }
-                Cases::FreeMonoid { carrier } => match carrier {
-                    Carrier::Nat {
-                        empty_case,
-                        cons_case,
-                    } => {
-                        collect_labels(empty_case, out);
-                        scope(out, cons_case);
-                    }
-                    Carrier::Bin {
-                        empty_case,
-                        cons_case,
-                        ..
-                    } => {
-                        collect_labels(empty_case, out);
-                        scope(out, cons_case);
-                    }
-                    Carrier::Lst {
-                        elem,
-                        empty_case,
-                        cons_case,
-                    } => {
-                        collect_labels(elem, out);
-                        collect_labels(empty_case, out);
-                        scope(out, cons_case);
-                    }
-                },
+            Subterm::Tuple(Tuple { fields, .. }) => stack.extend(fields.iter()),
+            Subterm::Proj(Proj { head, .. }) => stack.push(head),
+            Subterm::InductType(InductType {
+                params, indices, ..
+            }) => {
+                stack.extend(params.iter());
+                stack.extend(indices.iter());
             }
+            Subterm::Variant(Variant {
+                params, payload, ..
+            }) => {
+                stack.extend(params.iter());
+                stack.extend(payload.iter());
+            }
+            Subterm::StructType(StructType { params, .. }) => stack.extend(params.iter()),
+            Subterm::Struct(Struct { params, fields, .. }) => {
+                stack.extend(params.iter());
+                stack.extend(fields.iter());
+            }
+            Subterm::Let(Let { bindings, tail, .. }) => {
+                for binding in bindings {
+                    stack.push(binding.type_());
+                    stack.push(binding.value());
+                }
+                scope(out, &mut stack, tail);
+            }
+            Subterm::Rec(Rec { group, tail }) => {
+                for member in group.iter() {
+                    scope(out, &mut stack, &member.type_);
+                    scope(out, &mut stack, &member.body);
+                }
+                scope(out, &mut stack, tail);
+            }
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => {
+                stack.push(head);
+                scope(out, &mut stack, motive);
+                match cases {
+                    Cases::Bool {
+                        false_case,
+                        true_case,
+                    } => {
+                        stack.push(false_case);
+                        stack.push(true_case);
+                    }
+                    Cases::Switch { cases, default } => {
+                        stack.extend(cases.values());
+                        stack.push(default);
+                    }
+                    Cases::Induct { cases, default, .. } => {
+                        for (_, arm) in cases {
+                            scope(out, &mut stack, &arm.body);
+                        }
+                        stack.extend(default.iter());
+                    }
+                    Cases::FreeMonoid { carrier } => match carrier {
+                        Carrier::Nat {
+                            empty_case,
+                            cons_case,
+                        } => {
+                            stack.push(empty_case);
+                            scope(out, &mut stack, cons_case);
+                        }
+                        Carrier::Bin {
+                            empty_case,
+                            cons_case,
+                            ..
+                        } => {
+                            stack.push(empty_case);
+                            scope(out, &mut stack, cons_case);
+                        }
+                        Carrier::Lst {
+                            elem,
+                            empty_case,
+                            cons_case,
+                        } => {
+                            stack.push(elem);
+                            stack.push(empty_case);
+                            scope(out, &mut stack, cons_case);
+                        }
+                    },
+                }
+            }
+            Subterm::Metavar(metavar) => stack.extend(metavar.spine.iter()),
+            Subterm::UniverseInst(instance) => stack.push(&instance.head),
+            Subterm::Transient(transient) => stack.extend(transient.subterms()),
+            Subterm::Var(_)
+            | Subterm::Type(_)
+            | Subterm::Prop
+            | Subterm::Intrinsic(_)
+            | Subterm::Foreign(..) => {}
         }
-        Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
-        Subterm::UniverseInst(instance) => collect_labels(&instance.head, out),
-        Subterm::Transient(transient) => {
-            transient
-                .subterms()
-                .for_each(|child| collect_labels(child, out));
-        }
-        Subterm::Var(_)
-        | Subterm::Type(_)
-        | Subterm::Prop
-        | Subterm::Intrinsic(_)
-        | Subterm::Foreign(..) => {}
     }
 }
 
