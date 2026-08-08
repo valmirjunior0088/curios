@@ -1942,6 +1942,11 @@ fn matrix_match_round_trips() {
         "match a | [] => b | [h, ..t]; ih => c end",
         "match a | x[] => b | x[h, ..t]; ih => c end",
         "match a | b[] => b | b[h, ..t]; ih => c end",
+        // The `;` fold-hypothesis position takes any irrefutable pattern — a destructuring binds the fold result's fields directly, plain names round-tripping as before.
+        "match n | 0 => a | m + 1; (count, live) => count end",
+        "match a | [] => b | [h, ..t]; (x, (y, z)) => x end",
+        "match a | x[] => b | x[h, ..t]; (seen = s, rest = r) => s end",
+        "match a | b[] => b | b[h, ..t]; (x, y) => x end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(

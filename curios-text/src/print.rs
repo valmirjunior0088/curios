@@ -230,10 +230,10 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer {
     }
 }
 
-/// A tuple-pattern / struct-pattern field: positional or `label = pattern` — the literal mirror of `print_tuple_field`, with `Term` replaced by `Pattern` (no definition-sugar form; a pattern field is never a function). The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin` fold's cons arm — `None` prints nothing at all (a plain case-split), matching how it was written.
-fn print_cons_ih(ih_label: Option<String>) -> Printer {
-    match ih_label {
-        Some(ih_label) => flat([pure("; "), pure(ih_label)]),
+/// The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
+fn print_cons_ih(ih: Option<Pattern>) -> Printer {
+    match ih {
+        Some(ih) => flat([pure("; "), print_pattern(ih)]),
         None => pure(""),
     }
 }
@@ -328,21 +328,21 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         MatchPattern::Nat(NatPattern::Zero) => pure("0"),
         MatchPattern::Nat(NatPattern::Succ {
             pred_label,
-            ih_label,
-        }) => flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih_label)]),
+            ih,
+        }) => flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)]),
         MatchPattern::Nat(NatPattern::Lit(n)) => pure(n.to_string()),
         MatchPattern::Lst(LstPattern::Nil) => pure("[]"),
         MatchPattern::Lst(LstPattern::Cons {
             head_label,
             tail_label,
-            ih_label,
+            ih,
         }) => flat([
             pure("["),
             pure(head_label),
             pure(", .."),
             pure(tail_label),
             pure("]"),
-            print_cons_ih(ih_label),
+            print_cons_ih(ih),
         ]),
         MatchPattern::Bin(BinPattern::End(grain)) => pure(match grain {
             Grain::B => "b[]",
@@ -352,7 +352,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             grain,
             head_label,
             tail_label,
-            ih_label,
+            ih,
         }) => flat([
             pure(match grain {
                 Grain::B => "b[",
@@ -362,7 +362,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             pure(", .."),
             pure(tail_label),
             pure("]"),
-            print_cons_ih(ih_label),
+            print_cons_ih(ih),
         ]),
     }
 }

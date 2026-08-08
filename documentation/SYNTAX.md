@@ -326,7 +326,7 @@ even(input)
 
 ### Irrefutable binder patterns
 
-The binders of `let`, lambdas, and function-definition sugar accept nested tuple and struct patterns.
+The binders of `let`, lambdas, function-definition sugar, and the `;` fold-hypothesis position of `Nat`/`Lst`/`Bits`/`Bytes` match arms accept nested tuple and struct patterns.
 
 ```crs
 let (x, (_, y)) = value;
@@ -575,6 +575,15 @@ match n : (m) => P(m)
 end
 ```
 
+The `;` binding names the fold result rather than part of the scrutinee, so it accepts the same irrefutable tuple and struct patterns a `let` binder does:
+
+```crs
+match n
+| 0 => (0, true)
+| predecessor + 1; (count, live) => (count + 1, live)
+end
+```
+
 ### Natural-number dispatch
 
 A natural-number dispatch has literal arms and a mandatory `_` default.
@@ -593,7 +602,7 @@ Natural-number pattern literals are numeric literals only. Character literals do
 
 ### List fold and case split
 
-A list match uses `[]` for the empty case and `[head, ..tail]` for the nonempty case. A binding after `;` receives the fold result for `tail`; omit it for an ordinary case split.
+A list match uses `[]` for the empty case and `[head, ..tail]` for the nonempty case. A binding after `;` receives the fold result for `tail` — a plain name or an irrefutable tuple/struct pattern, exactly as in [natural-number induction](#natural-number-induction); omit it for an ordinary case split.
 
 ```crs
 match values
@@ -604,7 +613,7 @@ end
 
 ### Packed folds
 
-`Bits` and `Bytes` use their literal grain letters to select the carrier, and their arms take the same shape as a [list fold](#list-fold-and-case-split). The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
+`Bits` and `Bytes` use their literal grain letters to select the carrier, and their arms take the same shape as a [list fold](#list-fold-and-case-split). The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail, as a plain name or an irrefutable tuple/struct pattern. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
 
 ```crs
 match bits

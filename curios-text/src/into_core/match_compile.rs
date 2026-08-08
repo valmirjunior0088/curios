@@ -3,7 +3,7 @@ use {
     super::{Hoisted, Lowerer},
     crate::{
         BinPattern, Choose, ChooseArm, ChooseTest, Error, LstPattern, Match, MatchPattern,
-        MatrixArm, NatPattern, Term,
+        MatrixArm, NatPattern, Pattern, PatternField, Term,
     },
     curios_base::{Grain, Plicity},
     std::{collections::BTreeMap, mem},
@@ -522,9 +522,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf mixed in is [`Error::MatrixMixedNatDispatch`] — no single core form peels a successor *and* dispatches on a value.
     /// - **Dispatch** (no `Succ`): value dispatch over `0`/`Lit(k)` cases, emitted as [`curios_core::Term::switch`] with the matrix default as its fallthrough. A `switch` over `Nat` is never exhaustive, so the default is mandatory (else [`Error::MatrixIncompleteCarrierMatch`]). Rows sharing a literal group and recurse together, exactly like [`Self::compile_ctor`]'s tags.
     ///
-    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming discipline exactly, for the same reason: `curios-elab`'s erasure pass reads a `Nat` succ arm's stored binder labels as naming hints too (`erase_nat_match`, the same `Context::fresh` hint-compounding mechanism `erase_induct_match` has) — unconditionally minting a synthetic name here would resurrect the exact regression class `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of exactly one row therefore reuses that row's own written `pred_label`/`ih_label` directly (the optional `ih` through [`Self::cons_ih_name`], like [`Self::compile_lst`]); only a group with more than one row mints synthetic names, and — as in [`Self::compile_lst`] — a multi-row member that omitted `; ih` gets no ih bind pushed.
+    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming discipline exactly, for the same reason: `curios-elab`'s erasure pass reads a `Nat` succ arm's stored binder labels as naming hints too (`erase_nat_match`, the same `Context::fresh` hint-compounding mechanism `erase_induct_match` has) — unconditionally minting a synthetic name here would resurrect the exact regression class `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of exactly one row therefore reuses that row's own written `pred_label` (and a plain-name `; ih`) directly (the hypothesis through [`Self::cons_ih_pattern`], like [`Self::compile_lst`]); only a group with more than one row mints synthetic names, and — as in [`Self::compile_lst`] — a multi-row member that omitted `; ih` gets no ih bind pushed.
     ///
-    /// `pred`/`ih` are always plain binder names, never a further sub-pattern (deep peeling stays out of scope), so — unlike a constructor argument slot — the multi-row case never needs a new column for them at all: each row's own written name is just bound to one shared synthetic variable via `row.binds`, exactly like [`Self::compile`]'s own all-`Binder`-column-retirement path.
+    /// `pred` is always a plain binder name, never a further sub-pattern (deep peeling stays out of scope), so — unlike a constructor argument slot — the multi-row case never needs a new column for it at all: each row's own written name is just bound to one shared synthetic variable via `row.binds`, exactly like [`Self::compile`]'s own all-`Binder`-column-retirement path. The `; ih` binds the fold result rather than scrutinee shape, so it additionally admits an irrefutable tuple/struct pattern, whose leaves ride the same binds as projections ([`Self::push_shared_ih_binds`]).
     ///
     /// Both groups must be present — `Cases::FreeMonoid` has no vacuity escape hatch either (same point as [`Self::compile_bool`]'s doc comment). Checking this eagerly, before recursing on either group, also avoids indexing into an empty `rows` slice or a misleading [`Error::MatrixDuplicateRow`] from [`Self::compile`]'s base case.
     fn compile_nat(
@@ -538,15 +538,14 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let rest = columns;
 
         let mut zero_rows = Vec::new();
-        let mut succ_rows: Vec<(String, Option<String>, MatrixRow<'_>)> = Vec::new();
+        let mut succ_rows: Vec<(String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         let mut lit_rows: Vec<(u32, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::Nat(NatPattern::Zero) => zero_rows.push(row),
-                MatchPattern::Nat(NatPattern::Succ {
-                    pred_label,
-                    ih_label,
-                }) => succ_rows.push((pred_label.clone(), ih_label.clone(), row)),
+                MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
+                    succ_rows.push((pred_label.clone(), ih.clone(), row))
+                }
                 MatchPattern::Nat(NatPattern::Lit(value)) => lit_rows.push((*value, row)),
                 _ => unreachable!("every row classified as Nat"),
             }
@@ -592,9 +591,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         };
 
         let (pred_label, ih_label, succ_case) = if succ_rows.len() == 1 {
-            let (pred_name, ih_name, row) = succ_rows.pop().unwrap();
+            let (pred_name, ih, mut row) = succ_rows.pop().unwrap();
             let pred_bound = self.pattern_binder(&pred_name);
-            let ih_bound = self.cons_ih_binder(&ih_name);
+            let ih_bound = self.cons_ih_pattern(&mut row, &ih);
             let succ_case = self.bound(&[pred_bound.clone(), ih_bound.clone()], || {
                 self.compile(rest, vec![row], None, leaf)
             })?;
@@ -604,17 +603,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             let ih_synth = self.context.fresh_binder(None);
             let sub_rows = succ_rows
                 .into_iter()
-                .map(|(pred_name, ih_name, mut row)| {
+                .map(|(pred_name, ih, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&pred_name),
                         curios_core::Term::var(curios_core::Var::free(pred_synth.clone())),
                     ));
-                    if let Some(ih_name) = ih_name {
-                        row.binds.push((
-                            self.pattern_binder(&ih_name),
-                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
-                        ));
-                    }
+                    self.push_shared_ih_binds(&mut row, &ih, &ih_synth);
                     row
                 })
                 .collect();
@@ -632,7 +626,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `LstNil`/`LstCons` and emits [`curios_core::Term::lst_match`] directly. Structurally identical to [`Self::compile_nat`] but with three names (`head`/`tail`/optional `ih`) instead of two, reusing [`Self::cons_ih_name`] for the single-row case's `ih` (already handles "written name → bound, omitted → fresh" correctly). In the multi-row case, a row whose own `ih_label` was `None` never references any ih name, so no bind is pushed for it — only rows that wrote `; ih` get one, sharing the one synthetic `ih` variable the emitted core node itself always needs.
+    /// Groups rows into `LstNil`/`LstCons` and emits [`curios_core::Term::lst_match`] directly. Structurally identical to [`Self::compile_nat`] but with three names (`head`/`tail`/optional `ih`) instead of two, reusing [`Self::cons_ih_pattern`] for the single-row case's `ih` (written name → bound, omitted → fresh, compound pattern → fresh plus projection binds). In the multi-row case, a row whose own `ih` was omitted never references any ih name, so no bind is pushed for it — only rows that wrote `; ih` get binds, sharing the one synthetic `ih` variable the emitted core node itself always needs.
     fn compile_lst(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -644,20 +638,15 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let rest = columns;
 
         let mut nil_rows = Vec::new();
-        let mut cons_rows: Vec<(String, String, Option<String>, MatrixRow<'_>)> = Vec::new();
+        let mut cons_rows: Vec<(String, String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::Lst(LstPattern::Nil) => nil_rows.push(row),
                 MatchPattern::Lst(LstPattern::Cons {
                     head_label,
                     tail_label,
-                    ih_label,
-                }) => cons_rows.push((
-                    head_label.clone(),
-                    tail_label.clone(),
-                    ih_label.clone(),
-                    row,
-                )),
+                    ih,
+                }) => cons_rows.push((head_label.clone(), tail_label.clone(), ih.clone(), row)),
                 _ => unreachable!("every row classified as Lst"),
             }
         }
@@ -686,10 +675,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     .expect("default present when a group is missing"),
             )
         } else if cons_rows.len() == 1 {
-            let (head_name, tail_name, ih_name, row) = cons_rows.pop().unwrap();
+            let (head_name, tail_name, ih, mut row) = cons_rows.pop().unwrap();
             let head_bound = self.pattern_binder(&head_name);
             let tail_bound = self.pattern_binder(&tail_name);
-            let ih_bound = self.cons_ih_binder(&ih_name);
+            let ih_bound = self.cons_ih_pattern(&mut row, &ih);
             let cons_case = self.bound(
                 &[head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
                 || self.compile(rest, vec![row], None, leaf),
@@ -701,7 +690,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             let ih_synth = self.context.fresh_binder(None);
             let sub_rows = cons_rows
                 .into_iter()
-                .map(|(head_name, tail_name, ih_name, mut row)| {
+                .map(|(head_name, tail_name, ih, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&head_name),
                         curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
@@ -710,12 +699,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                         self.pattern_binder(&tail_name),
                         curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
                     ));
-                    if let Some(ih_name) = ih_name {
-                        row.binds.push((
-                            self.pattern_binder(&ih_name),
-                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
-                        ));
-                    }
+                    self.push_shared_ih_binds(&mut row, &ih, &ih_synth);
                     row
                 })
                 .collect();
@@ -748,7 +732,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let mut grain: Option<&Grain> = None;
         let mut end_rows = Vec::new();
-        let mut byte_rows: Vec<(String, String, Option<String>, MatrixRow<'_>)> = Vec::new();
+        let mut byte_rows: Vec<(String, String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::Bin(BinPattern::End(row_grain)) => {
@@ -762,18 +746,13 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     grain: row_grain,
                     head_label,
                     tail_label,
-                    ih_label,
+                    ih,
                 }) => {
                     if grain.is_some_and(|grain| *grain != *row_grain) {
                         return Err(Error::MatrixMixedBinGrain);
                     }
                     grain.get_or_insert(row_grain);
-                    byte_rows.push((
-                        head_label.clone(),
-                        tail_label.clone(),
-                        ih_label.clone(),
-                        row,
-                    ))
+                    byte_rows.push((head_label.clone(), tail_label.clone(), ih.clone(), row))
                 }
                 _ => unreachable!("every row classified as Bin"),
             }
@@ -809,10 +788,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     .expect("default present when a group is missing"),
             )
         } else if byte_rows.len() == 1 {
-            let (head_name, tail_name, ih_name, row) = byte_rows.pop().unwrap();
+            let (head_name, tail_name, ih, mut row) = byte_rows.pop().unwrap();
             let head_bound = self.pattern_binder(&head_name);
             let tail_bound = self.pattern_binder(&tail_name);
-            let ih_bound = self.cons_ih_binder(&ih_name);
+            let ih_bound = self.cons_ih_pattern(&mut row, &ih);
             let cons_case = self.bound(
                 &[head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
                 || self.compile(rest, vec![row], None, leaf),
@@ -824,7 +803,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             let ih_synth = self.context.fresh_binder(None);
             let sub_rows = byte_rows
                 .into_iter()
-                .map(|(head_name, tail_name, ih_name, mut row)| {
+                .map(|(head_name, tail_name, ih, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&head_name),
                         curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
@@ -833,12 +812,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                         self.pattern_binder(&tail_name),
                         curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
                     ));
-                    if let Some(ih_name) = ih_name {
-                        row.binds.push((
-                            self.pattern_binder(&ih_name),
-                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
-                        ));
-                    }
+                    self.push_shared_ih_binds(&mut row, &ih, &ih_synth);
                     row
                 })
                 .collect();
@@ -909,6 +883,74 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// The leaf of the matrix compiler's recursion: exactly one row remains once every column is consumed. Lowers the row's body under every accumulated binder name (so a reference resolves to the binder rather than a like-named module binding, exactly like [`Self::scoped`]'s other callers), then wraps it in the accumulated `let`s, outermost first.
+    /// The single-row hypothesis slot: a plain-name pattern keeps the fast path — its spelling becomes the core node's binder hint directly, exactly as before — while a compound pattern mints an unwritten binder for the node and binds each written leaf to its projection chain off it through the row-binds mechanism (`finish_row` materializes the `let`s), the same projection sugar an irrefutable `let` pattern lowers to.
+    fn cons_ih_pattern(&self, row: &mut MatrixRow<'_>, ih: &Option<Pattern>) -> super::lowerer::Binder {
+        match ih {
+            Some(Pattern::Binder(name)) => self.cons_ih_binder(name),
+            None => self.cons_ih_binder(&None),
+            Some(pattern) => {
+                let bound = self.cons_ih_binder(&None);
+                self.push_ih_pattern_binds(row, pattern, &bound.1);
+                bound
+            }
+        }
+    }
+
+    /// The multi-row hypothesis slot, against the group's one shared synthetic variable: a row that omitted `; ih` (or wrote an anonymous binder) references nothing and gets no bind; a plain name binds the shared variable directly, as before; a compound pattern binds its leaves to projections off it.
+    fn push_shared_ih_binds(
+        &self,
+        row: &mut MatrixRow<'_>,
+        ih: &Option<Pattern>,
+        shared: &curios_core::Free,
+    ) {
+        match ih {
+            None | Some(Pattern::Binder(None)) => {}
+            Some(Pattern::Binder(Some(name))) => row.binds.push((
+                self.pattern_binder(name),
+                curios_core::Term::var(curios_core::Var::free(shared.clone())),
+            )),
+            Some(pattern) => self.push_ih_pattern_binds(row, pattern, shared),
+        }
+    }
+
+    /// Bind a compound hypothesis pattern's written leaves to their projection chains off `ih`, positional fields by index and labeled fields by label — mirroring `lower_pattern_fields`' projection choice for irrefutable `let` patterns.
+    fn push_ih_pattern_binds(
+        &self,
+        row: &mut MatrixRow<'_>,
+        pattern: &Pattern,
+        ih: &curios_core::Free,
+    ) {
+        let base = curios_core::Term::var(curios_core::Var::free(ih.clone()));
+        match pattern {
+            Pattern::Binder(Some(name)) => row.binds.push((self.pattern_binder(name), base)),
+            Pattern::Binder(None) => {}
+            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                self.push_ih_field_binds(row, fields, base)
+            }
+        }
+    }
+
+    fn push_ih_field_binds(
+        &self,
+        row: &mut MatrixRow<'_>,
+        fields: &[PatternField],
+        base: curios_core::Term,
+    ) {
+        for (index, field) in fields.iter().enumerate() {
+            let proj = match &field.label {
+                Some(label) => curios_core::Term::proj_label(base.clone(), label.clone()),
+                None => curios_core::Term::proj(base.clone(), index),
+            };
+            match &field.value {
+                Pattern::Binder(Some(name)) => row.binds.push((self.pattern_binder(name), proj)),
+                Pattern::Binder(None) => {}
+                Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                    self.push_ih_field_binds(row, fields, proj)
+                }
+            }
+        }
+    }
+
     fn finish_row(
         &self,
         row: MatrixRow<'_>,

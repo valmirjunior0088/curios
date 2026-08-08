@@ -210,10 +210,10 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
             .and_drop(parse_literal("1")),
     )
     .and(parse_cons_ih())
-    .map(|(pred_label, ih_label): (&str, Option<String>)| {
+    .map(|(pred_label, ih): (&str, Option<Pattern>)| {
         MatchPattern::Nat(NatPattern::Succ {
             pred_label: pred_label.to_string(),
-            ih_label,
+            ih,
         })
     })
 }
@@ -242,11 +242,11 @@ pub(super) fn parse_lst_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     .and(parse_identifier())
     .and_drop(parse_literal("]"))
     .and(parse_cons_ih())
-    .map(|((head, tail), ih_label)| {
+    .map(|((head, tail), ih)| {
         MatchPattern::Lst(LstPattern::Cons {
             head_label: head.to_string(),
             tail_label: tail.to_string(),
-            ih_label,
+            ih,
         })
     })
 }
@@ -276,12 +276,12 @@ fn parse_bin_cons_match_pattern<'a>(
     .and(parse_identifier())
     .and_drop(parse_literal("]"))
     .and(parse_cons_ih())
-    .map(move |((head, tail), ih_label)| {
+    .map(move |((head, tail), ih)| {
         MatchPattern::Bin(BinPattern::Atom {
             grain,
             head_label: head.to_string(),
             tail_label: tail.to_string(),
-            ih_label,
+            ih,
         })
     })
 }

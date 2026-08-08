@@ -3,6 +3,33 @@ use {
     curios_runtime::MockHost,
 };
 
+// The `;` fold-hypothesis position accepts an irrefutable pattern: the destructuring binds the fold result's fields directly, lowering to the same projections a `let (t, live) = ih;` would.
+#[test]
+fn a_fold_hypothesis_destructures_directly() {
+    let source = r#"
+        use /std/{Nat, Bool, Byte, Bytes, Handle};
+        let count(n : Nat) -> Nat =
+            let (total, _) =
+                match n
+                | 0 => (0, true)
+                | pred + 1; (t, live) => (t + 1, live)
+                end;
+            total;
+        let sum(b : Bytes) -> Nat =
+            let (s, _) =
+                match b
+                | x[] => (0, true)
+                | x[h, ..t]; (acc, live) => (acc + Byte/to_nat(h), live)
+                end;
+            s;
+        /std/print(Nat/to_str(count(5) + sum(x[\01, \02, \03])))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"11");
+}
+
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {
     let source = r#"

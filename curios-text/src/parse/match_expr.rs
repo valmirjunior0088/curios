@@ -33,10 +33,10 @@ pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
         .map(|(pattern, body)| MatrixArm { pattern, body })
 }
 
-// The `; ih` induction-hypothesis tail on a `Lst`/`Bin` cons leaf pattern (`parse_lst_cons_match_pattern`/`parse_bin_cons_match_pattern`): `;` sets the hypothesis apart from the scrutinee's shape. A plain case-split needs no induction hypothesis, so `; ih` may be omitted — `None`, not a placeholder name; lowering mints a fresh internal name for it directly.
-pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<String>> {
-    catch(parse_literal(";").and_keep(parse_identifier()))
-        .map(|name| Some(name.to_string()))
+// The `; ih` induction-hypothesis tail on a `Nat` succ or `Lst`/`Bin` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
+pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<Pattern>> {
+    catch(parse_literal(";").and_keep(parse_pattern()))
+        .map(Some)
         .or(pure(None))
 }
 

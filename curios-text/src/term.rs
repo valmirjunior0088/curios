@@ -323,10 +323,10 @@ impl MatchPattern {
 pub enum NatPattern {
     /// The `0` leaf.
     Zero,
-    /// The `pred + 1; ih` leaf. `pred_label`/`ih_label` are always plain binder names, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. `ih_label` is optional, exactly like the `; ih` on the `Lst`/`Bits`/`Bytes` cons leaves below: omitting it makes the arm an ordinary case split.
+    /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `Lst`/`Bits`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
     Succ {
         pred_label: String,
-        ih_label: Option<String>,
+        ih: Option<Pattern>,
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     Lit(u32),
@@ -337,11 +337,11 @@ pub enum NatPattern {
 pub enum LstPattern {
     /// The `[]` leaf.
     Nil,
-    /// The `[head, ..tail][; ih]` leaf. `ih_label` is `None` when `; ih` is omitted (lowering mints a fresh internal name) — a plain case-split with no induction hypothesis.
+    /// The `[head, ..tail][; ih]` leaf. `ih` is `None` when `; ih` is omitted (lowering mints a fresh internal name) — a plain case-split with no fold hypothesis; when written it is any irrefutable [`Pattern`], like the `Nat` succ leaf's.
     Cons {
         head_label: String,
         tail_label: String,
-        ih_label: Option<String>,
+        ih: Option<Pattern>,
     },
 }
 
@@ -350,12 +350,12 @@ pub enum LstPattern {
 pub enum BinPattern {
     /// The `b[]`/`x[]` leaf.
     End(Grain),
-    /// The `\head\..tail[; ih]` leaf; `ih_label` is optional exactly as on the `Lst` cons leaf.
+    /// The `\head\..tail[; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `Lst` cons leaf.
     Atom {
         grain: Grain,
         head_label: String,
         tail_label: String,
-        ih_label: Option<String>,
+        ih: Option<Pattern>,
     },
 }
 
