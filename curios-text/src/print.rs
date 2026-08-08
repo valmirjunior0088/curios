@@ -213,10 +213,9 @@ fn print_tuple_field(field: TupleField) -> Printer {
         (Some(label), Some(params)) => flat([
             pure(label),
             listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-            pure(" = "),
-            print_term(field.value),
+            attached_body(" =", print_term(field.value)),
         ]),
-        (Some(label), None) => flat([pure(label), pure(" = "), print_term(field.value)]),
+        (Some(label), None) => flat([pure(label), attached_body(" =", print_term(field.value))]),
         (None, _) => print_term(field.value),
     }
 }
