@@ -2151,7 +2151,6 @@ impl Rec {
     }
 }
 
-/// The folded fixed point selecting one member of a [`RecGroup`]. This is a structural term, not an allocation identity: separately allocated alpha-equivalent groups compare equal.
 /// Provenance of an inserted implicit argument: the applied function (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
