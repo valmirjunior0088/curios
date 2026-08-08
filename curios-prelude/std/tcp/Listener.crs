@@ -68,7 +68,7 @@ let listen_loop(
     end;
 
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    let nb = Async/lift(Async/nonblocking(h))!;
+    let nb = Async/nonblocking(h)!;
     match nb
     | failure(_) =>
         -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
@@ -84,7 +84,7 @@ pub let serve(
     listen_loop(host, port, (h) => serve_conn(h, handler));
 
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    let status = Async/lift(/sys/tls/start_server(h, cfg))!;
+    let status = /sys/tls/start_server(h, cfg)!;
     match status == /sys/status/ok
     | true => Async/using(h, /sys/Handle/close(h), handler(Socket/new(h)))
     | false => Async/lift(/sys/Handle/close(h))
@@ -97,7 +97,7 @@ pub let serve_tls(
     key: Bytes,
     handler: (Socket) -> Async({}),
 ) -> Async(Result({}, Handle/Error)) =
-    let cfg = Async/lift(/sys/tls/server_config(cert, key))!;
+    let cfg = /sys/tls/server_config(cert, key)!;
     match cfg.status == /sys/status/ok
     | true =>
         Async/using(

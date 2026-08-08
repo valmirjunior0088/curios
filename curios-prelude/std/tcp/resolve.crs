@@ -5,14 +5,14 @@ use /std/{Str, Nat, Bytes, Handle, Result, Option, Lst, Async, Io};
 -- hands `using` an inert description instead.
 let resolved_address(h: Handle) -> Async(Result(Bytes, Handle/Error)) =
     let _ = Async/wait(h, /sys/poll/read)!;
-    let a = Async/lift(/sys/dns/resolve(h))!;
+    let a = /sys/dns/resolve(h)!;
     match a.status == /sys/status/ok
     | true => Async/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x[])))
     | false => Async/pure(Result/failure(Handle/error_of(a.status)))
     end;
 
 pub let resolve(host: Str, port: Nat) -> Async(Result(Bytes, Handle/Error)) =
-    let r = Async/lift(/sys/dns/lookup(Str/to_bytes(host), port))!;
+    let r = /sys/dns/lookup(Str/to_bytes(host), port)!;
     match r.status == /sys/status/ok
     | true => Async/using(r.handle, /sys/Handle/close(r.handle), resolved_address(r.handle))
     | false => Async/pure(Result/failure(Handle/error_of(r.status)))

@@ -107,7 +107,7 @@ pub let using(@A: Type, h: Handle, fin: Io({}), body: Async(A)) -> Async(A) =
     pure(a);
 
 pub let go(body: Fiber) -> Async({}) =
-    let c = lift(Cell/new(false))!;
+    let c = Cell/new(false)!;
     fork_with(body, Token { c });
 
 -- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and the next read stalls the whole single-threaded scheduler, so the status is reported rather than dropped.
@@ -120,12 +120,12 @@ pub let nonblocking(h: Handle) -> Io(Result({}, Handle/Error)) =
         end);
 
 pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
-    let nb = lift(nonblocking(h))!;
+    let nb = nonblocking(h)!;
     match nb
     | failure(e) => pure(Handle/Read/error(e))
     | success(_) =>
         rec go() -> Async(Handle/Read) =
-            let r = lift(/sys/Handle/read(h, n))!;
+            let r = /sys/Handle/read(h, n)!;
             choose
             | r.status == /sys/status/would_block =>
                 let _ = wait(h, /sys/poll/read)!;
@@ -138,12 +138,12 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
     end;
 
 pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
-    let nb = lift(nonblocking(h))!;
+    let nb = nonblocking(h)!;
     match nb
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
         rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
-            let r = lift(/sys/Handle/write(h, rest))!;
+            let r = /sys/Handle/write(h, rest)!;
             choose
             | r.status == /sys/status/would_block =>
                 let _ = wait(h, /sys/poll/write)!;
@@ -158,12 +158,12 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
     end;
 
 pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
-    let nb = lift(nonblocking(l))!;
+    let nb = nonblocking(l)!;
     match nb
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
         rec go() -> Async(Result(Handle, Handle/Error)) =
-            let r = lift(/sys/socket/accept(l))!;
+            let r = /sys/socket/accept(l)!;
             choose
             | r.status == /sys/status/would_block =>
                 let _ = wait(l, /sys/poll/read)!;
@@ -186,7 +186,7 @@ pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/E
     go(x[]);
 
 pub rec await(@A: Type, f: Future(A)) -> Async(A) =
-    let polled = lift(Future/poll(f))!;
+    let polled = Future/poll(f)!;
     match polled
     | some(a) => pure(a)
     | none() =>
@@ -542,8 +542,8 @@ pub struct Task(A: Type): Type {
 }
 
 pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
-    let f = lift(Future/new(A))!;
-    let c = lift(Cell/new(false))!;
+    let f = Future/new()!;
+    let c = Cell/new(false)!;
     let t: Token = Token { c };
     let task: Task(A) = Task { result = f, token = t };
     let _ =
@@ -583,12 +583,12 @@ pub let join_all(@A: Type, tasks: Lst(Async(A))) -> Async(Lst(A)) =
     go(0);
 
 pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
-    let winner = lift(Future/new({Nat, A}))!;
+    let winner = Future/new()!;
     rec arm(i: Nat) -> Async(Lst(Token)) =
         match Nat/Lt/try(i, Lst/len(tasks))
         | none() => pure([])
         | some(ok) =>
-            let c = lift(Cell/new(false))!;
+            let c = Cell/new(false)!;
             let t: Token = Token { c };
             let _ =
                 fork_with(
@@ -604,7 +604,7 @@ pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
         end;
     let tokens = arm(0)!;
     let w = await(winner)!;
-    let _ = lift(cancel_all(tokens))!;
+    let _ = cancel_all(tokens)!;
     pure(w);
 
 pub let race(@A: Type, tasks: Lst(Async(A))) -> Async(A) =

@@ -24,13 +24,13 @@ pub let write(f: File, b: Bytes) -> Async(Result({}, Handle/Error)) =
     Async/write(f.0, b);
 
 pub let open(path: Str, mode: Mode) -> Async(Result(File, Handle/Error)) =
-    let r = Async/lift(/sys/file/open(Str/to_bytes(path), of_mode(mode)))!;
+    let r = /sys/file/open(Str/to_bytes(path), of_mode(mode))!;
     match r.status == /sys/status/ok
     | true =>
-        let nb = Async/lift(Async/nonblocking(r.handle))!;
+        let nb = Async/nonblocking(r.handle)!;
         match nb
         | failure(e) =>
-            let _ = Async/lift(/sys/Handle/close(r.handle))!;
+            let _ = /sys/Handle/close(r.handle)!;
             Async/pure(Result/failure(e))
         | success(_) =>
             let _ = Async/acquire(r.handle, /sys/Handle/close(r.handle))!;
