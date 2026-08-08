@@ -35,8 +35,6 @@ enum Job {
     Statement(StatementId),
     /// A labeled nested block: `label {`, the block's contents, `}`.
     Blocked(String, BlockId),
-    /// A block's terminator line.
-    Terminator(BlockId),
     Indent,
     Dedent,
 }
@@ -120,26 +118,19 @@ impl Printer<'_, '_, '_> {
                 Job::Statement(statement) => self.expand_statement(&mut stack, statement),
                 Job::Blocked(label, block) => {
                     let contents = self.module.block(block).expect("live block");
-                    let mut sequence = Vec::with_capacity(contents.statements.len() + 4);
-                    sequence.push(Job::Line(format!("{label} {{")));
-                    sequence.push(Job::Indent);
-                    sequence.extend(contents.statements.iter().map(|&id| Job::Statement(id)));
-                    sequence.push(Job::Terminator(block));
-                    sequence.push(Job::Dedent);
-                    sequence.push(Job::Line("}".into()));
-                    push_sequence(&mut stack, sequence);
-                }
-                Job::Terminator(block) => {
-                    let line = match &self.module.block(block).expect("live block").terminator {
+                    let terminator = match &contents.terminator {
                         Terminator::Return(atom) => format!("return {}", self.atom(*atom)),
                         Terminator::Exit(atom) => format!("exit {}", self.atom(*atom)),
                         Terminator::Unreachable => "unreachable".into(),
                     };
-                    for _ in 0..indent.min(INDENT_SATURATION) {
-                        self.out.write_str("    ")?;
-                    }
-                    self.out.write_str(&line)?;
-                    self.out.write_str("\n")?;
+                    let mut sequence = Vec::with_capacity(contents.statements.len() + 4);
+                    sequence.push(Job::Line(format!("{label} {{")));
+                    sequence.push(Job::Indent);
+                    sequence.extend(contents.statements.iter().map(|&id| Job::Statement(id)));
+                    sequence.push(Job::Line(terminator));
+                    sequence.push(Job::Dedent);
+                    sequence.push(Job::Line("}".into()));
+                    push_sequence(&mut stack, sequence);
                 }
             }
         }
