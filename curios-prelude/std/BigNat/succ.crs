@@ -53,12 +53,12 @@ let raw_inj_absurd(
     p: Eq(raw(b[]), raw(b[zh, ..zt])),
 ) -> False =
     match zh
-    | true => false_neq_true(Eq/sym(cons_inj_head(@true, @b[], @false, @raw(zt), p)))
+    | true => false_neq_true(Eq/sym(cons_inj_head(p)))
     | false =>
         let shifted: Eq(is_trimmed(b[\0]), true) =
             Eq/subst(
                 (w: Bits) => Eq(is_trimmed(w), true),
-                cong_cons2(refl_at(false), Eq/sym(cons_inj_tail(@true, @b[], @true, @zt, p))),
+                cong_cons2(refl_at(false), Eq/sym(cons_inj_tail(p))),
                 pz);
         false_neq_true(shifted)
     end;
@@ -91,13 +91,13 @@ pub rec raw_inj(
                             zt,
                             tail_is_trimmed(true, yt, py),
                             tail_is_trimmed(true, zt, pz),
-                            cons_inj_tail(@false, @raw(yt), @false, @raw(zt), p)))
+                            cons_inj_tail(p)))
                 | false => False/absurd(false_neq_true(cons_inj_head(p)))
                 end
             | false =>
                 match zh
                 | true => False/absurd(false_neq_true(Eq/sym(cons_inj_head(p))))
-                | false => cong_cons2(refl_at(false), cons_inj_tail(@true, @yt, @true, @zt, p))
+                | false => cong_cons2(refl_at(false), cons_inj_tail(p))
                 end
             end
         end

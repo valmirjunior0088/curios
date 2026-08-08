@@ -136,6 +136,39 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 }
 
 #[test]
+fn a_packed_literal_decomposes_against_its_folded_spine() {
+    // The packed-literal view's acceptance shape, distilled from `BigNat/succ.crs`: `raw(b[])` folds to the literal `b[\1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[\1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
+    let source = r#"
+        use /std/{Bool, Bits, Eq, False, True, Io};
+        use /std/Bool/{false_neq_true};
+
+        let head_of(x: Bits) -> Bool =
+            match x | b[] => false | b[h, .._] => h end;
+
+        let cons_inj_head(
+            @h1: Bool,
+            @t1: Bits,
+            @h2: Bool,
+            @t2: Bits,
+            p: Eq(b[h1, ..t1], b[h2, ..t2]),
+        ) -> Eq(h1, h2) =
+            match p: (s, t, q) => Eq(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
+
+        rec raw(x: Bits) -> Bits =
+            match x
+            | b[] => b[\1]
+            | b[h, ..t] => match h | true => b[\0, ..raw(t)] | false => b[\1, ..t] end
+            end;
+
+        let probe(zt: Bits, p: Eq(raw(b[]), raw(b[true, ..zt]))) -> False =
+            false_neq_true(Eq/sym(cons_inj_head(p)));
+
+        Io/pure(())
+    "#;
+    assert!(compile(source, None).is_ok());
+}
+
+#[test]
 fn a_dependent_result_action_auto_lifts_through_bang() {
     // `Cell/new : (@T: Type, x: T) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Async)` embedding without an explicit `lift(...)`.
     let source = r#"
