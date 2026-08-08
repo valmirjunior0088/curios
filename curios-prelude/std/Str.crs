@@ -80,8 +80,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                     | true => (f(certify_decoded(partial), acc.0), 0)
                     | false => (acc.0, partial)
                     end)
-            | bad() =>
-                ih(step(h, Scan/bad()), peel_byte(True/qed(), valid), acc)
+            | bad() => ih(step(h, Scan/bad()), peel_byte(True/qed(), valid), acc)
             end
     end)(Scan/lead(), s.valid, (init, 0)).0;
 
@@ -146,19 +145,8 @@ pub let at(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
                         match le: (x, y, le) => Nat/Lte(x - 1, y - 1) | s(@a, @c, prev) => prev end)
                 end
             | cont(rem, lo, hi) =>
-                go(
-                    step(h, Scan/cont(rem, lo, hi)),
-                    t,
-                    peel_byte(True/qed(), valid),
-                    i,
-                    le)
-            | bad() =>
-                go(
-                    step(h, Scan/bad()),
-                    t,
-                    peel_byte(True/qed(), valid),
-                    i,
-                    le)
+                go(step(h, Scan/cont(rem, lo, hi)), t, peel_byte(True/qed(), valid), i, le)
+            | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), i, le)
             end
         end;
     go(

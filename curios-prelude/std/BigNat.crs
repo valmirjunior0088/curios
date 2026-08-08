@@ -71,7 +71,10 @@ let tail_is_trimmed(
     match tail: (t) => Eq(is_trimmed(t), true) | b[] => Eq/refl() | b[_, .._] => p end;
 
 pub let is_trimmed_of_canonical(rep: Bits, c: Canonical(rep)) -> Eq(is_trimmed(rep), true) =
-    match is_trimmed(rep): (r) => Eq(r, true) | true => Eq/refl() | false => match c end end;
+    match is_trimmed(rep): (r) => Eq(r, true)
+    | true => Eq/refl()
+    | false => match c end
+    end;
 
 pub let of_trimmed_bits(rep: Bits, p: Eq(is_trimmed(rep), true)) -> BigNat =
     BigNat { rep = rep, canonical = canonical_of_is_trimmed(rep, p) };

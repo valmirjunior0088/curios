@@ -203,11 +203,7 @@ let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) 
 
 -- The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
 pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Nat =
-    let peeled =
-        Eq/subst(
-            (sc: Scan) => Utf8(sc, t),
-            step_scans(c),
-            peel_byte(True/qed(), w));
+    let peeled = Eq/subst((sc: Scan) => Utf8(sc, t), step_scans(c), peel_byte(True/qed(), w));
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat
     | ascii() => (w2) => Byte/to_nat(c)
     | lead(k, lo, hi, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0

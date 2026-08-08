@@ -29,7 +29,10 @@ let cons_low_trimmed(
     tr: Eq(is_trimmed(rep), true),
     ne: is_cons(rep),
 ) -> Eq(is_trimmed(b[low, ..rep]), true) =
-    match rep | b[] => match ne end | b[_, .._] => tr end;
+    match rep
+    | b[] => match ne end
+    | b[_, .._] => tr
+    end;
 
 -- is_cons transports along the of_bits trim, given the raw is trimmed and cons-headed
 pub let raw_non_zero(
@@ -41,7 +44,10 @@ pub let raw_non_zero(
 
 -- combine / trim-head helpers for the mul-nonzero proof
 let combine_non_zero(h: Bool, w: Bits, ne: is_cons(w)) -> is_cons(combine(h, w)) =
-    match w | b[] => match ne end | b[_, .._] => True/qed() end;
+    match w
+    | b[] => match ne end
+    | b[_, .._] => True/qed()
+    end;
 
 let combine_true_non_zero(w: Bits) -> is_cons(combine(true, w)) =
     match w | b[] => True/qed() | b[_, .._] => True/qed() end;

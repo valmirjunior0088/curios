@@ -64,12 +64,18 @@ let xor3_inj_mid(
                 | false => match false_neq_true(Eq/sym(p)) end
                 end
             | false =>
-                match b2 | true => match false_neq_true(p) end | false => refl_at(false) end
+                match b2
+                | true => match false_neq_true(p) end
+                | false => refl_at(false)
+                end
             end
         | false =>
             match b1
             | true =>
-                match b2 | true => refl_at(true) | false => match false_neq_true(p) end end
+                match b2
+                | true => refl_at(true)
+                | false => match false_neq_true(p) end
+                end
             | false =>
                 match b2
                 | true => match false_neq_true(Eq/sym(p)) end
@@ -82,7 +88,10 @@ let xor3_inj_mid(
         | true =>
             match b1
             | true =>
-                match b2 | true => refl_at(true) | false => match false_neq_true(p) end end
+                match b2
+                | true => refl_at(true)
+                | false => match false_neq_true(p) end
+                end
             | false =>
                 match b2
                 | true => match false_neq_true(Eq/sym(p)) end
@@ -97,7 +106,10 @@ let xor3_inj_mid(
                 | false => match false_neq_true(Eq/sym(p)) end
                 end
             | false =>
-                match b2 | true => match false_neq_true(p) end | false => refl_at(false) end
+                match b2
+                | true => match false_neq_true(p) end
+                | false => refl_at(false)
+                end
             end
         end
     end;
@@ -1147,7 +1159,10 @@ pub rec raw_trimmed(
                 | b[] =>
                     match xh
                     | true =>
-                        match yh | true => Eq/refl() | false => match false_neq_true(py) end end
+                        match yh
+                        | true => Eq/refl()
+                        | false => match false_neq_true(py) end
+                        end
                     | false => match false_neq_true(px) end
                     end
                 | b[a2, ..b2] =>

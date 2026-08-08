@@ -92,7 +92,11 @@ let cong_cmp_match(
 
 pub rec raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
     match x
-    | b[] => match y | b[] => Eq/refl() | b[_, .._] => match lt_neq_eq(p) end end
+    | b[] =>
+        match y
+        | b[] => Eq/refl()
+        | b[_, .._] => match lt_neq_eq(p) end
+        end
     | b[xh, ..xt] =>
         match y
         | b[] => match gt_neq_eq(p) end
@@ -113,8 +117,16 @@ and cmp_head_eq(
         Order/eq()),
 ) -> Eq(xh, yh) =
     match xh
-    | true => match yh | true => Eq/refl() | false => match gt_neq_eq(p) end end
-    | false => match yh | true => match lt_neq_eq(p) end | false => Eq/refl() end
+    | true =>
+        match yh
+        | true => Eq/refl()
+        | false => match gt_neq_eq(p) end
+        end
+    | false =>
+        match yh
+        | true => match lt_neq_eq(p) end
+        | false => Eq/refl()
+        end
     end;
 
 let flip_heads(
@@ -201,8 +213,15 @@ let head_lt_yh(
 ) -> Eq(yh, true) =
     match xh
     | true =>
-        match yh | true => match eq_neq_lt(p) end | false => match gt_neq_lt(p) end end
-    | false => match yh | true => Eq/refl() | false => match eq_neq_lt(p) end end
+        match yh
+        | true => match eq_neq_lt(p) end
+        | false => match gt_neq_lt(p) end
+        end
+    | false =>
+        match yh
+        | true => Eq/refl()
+        | false => match eq_neq_lt(p) end
+        end
     end;
 
 let head_lt_xh(
@@ -217,7 +236,10 @@ let head_lt_xh(
 ) -> Eq(xh, false) =
     match xh
     | true =>
-        match yh | true => match eq_neq_lt(p) end | false => match gt_neq_lt(p) end end
+        match yh
+        | true => match eq_neq_lt(p) end
+        | false => match gt_neq_lt(p) end
+        end
     | false => Eq/refl()
     end;
 
@@ -291,9 +313,10 @@ let trans_cons(
                     e2))
         | eq() =>
             match false_neq_true(
-                    Eq/trans(
-                        Eq/sym(head_lt_xh(yh, zh, reduce_whole(e2, q))),
-                        head_lt_yh(xh, yh, reduce_whole(e1, p)))) end
+                Eq/trans(
+                    Eq/sym(head_lt_xh(yh, zh, reduce_whole(e2, q))),
+                    head_lt_yh(xh, yh, reduce_whole(e1, p))))
+            end
         end
     end;
 
@@ -308,7 +331,11 @@ pub rec raw_trans(
     | b[] =>
         match y
         | b[] => match eq_neq_lt(p) end
-        | b[yh, ..yt] => match z | b[] => match gt_neq_lt(q) end | b[_, .._] => Eq/refl() end
+        | b[yh, ..yt] =>
+            match z
+            | b[] => match gt_neq_lt(q) end
+            | b[_, .._] => Eq/refl()
+            end
         end
     | b[xh, ..xt] =>
         match y

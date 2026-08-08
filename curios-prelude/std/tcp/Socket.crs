@@ -125,8 +125,5 @@ pub let call(
             port,
             (c) =>
                 let w = write(c, request)!;
-                match w
-                | success(_) => drain(c)
-                | failure(e) => Async/pure(Result/failure(e))
-                end),
+                match w | success(_) => drain(c) | failure(e) => Async/pure(Result/failure(e)) end),
         (r) => Result/flatten(r));

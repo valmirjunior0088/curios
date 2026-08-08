@@ -16,7 +16,7 @@ pub let bind(@S: Type, @A: Type, @B: Type, m: State(S, A), f: (A) -> State(S, B)
     State {
         (s) =>
             let r = m.0(s);
-            f(r.0).0(r.1)
+            f(r.0).0(r.1),
     };
 
 pub let get(@S: Type) -> State(S, S) =

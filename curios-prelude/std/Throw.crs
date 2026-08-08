@@ -12,16 +12,10 @@ pub let raise(@E: Type, @A: Type, e: E) -> Throw(E, A) =
     Throw { Result/failure(e) };
 
 pub let bind(@E: Type, @A: Type, @B: Type, m: Throw(E, A), f: (A) -> Throw(E, B)) -> Throw(E, B) =
-    match m.0
-    | success(a) => f(a)
-    | failure(e) => Throw { Result/failure(e) }
-    end;
+    match m.0 | success(a) => f(a) | failure(e) => Throw { Result/failure(e) } end;
 
 pub let rescue(@E: Type, @A: Type, m: Throw(E, A), handler: (E) -> Throw(E, A)) -> Throw(E, A) =
-    match m.0
-    | success(_) => m
-    | failure(e) => handler(e)
-    end;
+    match m.0 | success(_) => m | failure(e) => handler(e) end;
 
 pub let of(@E: Type, @A: Type, r: Result(A, E)) -> Throw(E, A) =
     Throw { r };

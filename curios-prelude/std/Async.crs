@@ -52,17 +52,9 @@ pub let Fiber: Type =
 pub let pure(@A: Type, a: A) -> Async(A) =
     Async { Io/pure(Step/done(a)) };
 
-rec bind_raw(
-    @A: Type,
-    @B: Type,
-    m: Io(Step(A)),
-    f: (A) -> Io(Step(B)),
-) -> Io(Step(B)) =
+rec bind_raw(@A: Type, @B: Type, m: Io(Step(A)), f: (A) -> Io(Step(B))) -> Io(Step(B)) =
     let s = m!;
-    match s
-    | done(a) => f(a)
-    | step(p, k) => Io/pure(Step/step(p, bind_raw(k, f)))
-    end;
+    match s | done(a) => f(a) | step(p, k) => Io/pure(Step/step(p, bind_raw(k, f))) end;
 
 pub let bind(@A: Type, @B: Type, m: Async(A), f: (A) -> Async(B)) -> Async(B) =
     Async { bind_raw(m.0, (a) => f(a).0) };
@@ -404,10 +396,9 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
     let _ =
         enqueue(
             Job {
-                resume =
-                    bind(
-                        root,
-                        (a) => bind(lift(Cell/set(result, Option/some(a))), (_) => pure(()))),
+                resume = bind(
+                    root,
+                    (a) => bind(lift(Cell/set(result, Option/some(a))), (_) => pure(()))),
                 token = Token { root_token_cell },
                 guards = [],
             })!;
@@ -454,9 +445,6 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                     let slot = Cell/new(Option/some(Job { ..job, resume = Async { k } }))!;
                     let current = Cell/get(parked)!;
                     let _ = Cell/set(parked, [slot, ..current])!;
-                    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
-                    -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
-                    -- region and perform them now.
                     let waker =
                         Io/bind(
                             Cell/get(slot),
@@ -466,6 +454,9 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                                 | some(j) =>
                                     Io/bind(Cell/set(slot, Option/none()), (_) => enqueue(j))
                                 end);
+                    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
+                    -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
+                    -- region and perform them now.
                     reg(Waker/new(waker))
                 | acquire(h, fin) =>
                     serve(
@@ -548,11 +539,7 @@ pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
     let task = Task { result = f, token = t };
     let _ =
         fork_with(
-            Async {
-                bind_raw(
-                    body.0,
-                    (a) => bind(lift(Future/fulfill(f, a)), (_) => pure(())).0)
-            },
+            Async { bind_raw(body.0, (a) => bind(lift(Future/fulfill(f, a)), (_) => pure(())).0) },
             t)!;
     pure(task);
 
@@ -595,8 +582,7 @@ pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
                     Async {
                         bind_raw(
                             Lst/at(tasks, i, ok).0,
-                            (a) =>
-                                bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0)
+                            (a) => bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0),
                     },
                     t)!;
             let rest = arm(i + 1)!;
