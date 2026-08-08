@@ -78,6 +78,9 @@ pub enum Error {
     ByteLiteralOutOfRange {
         value: String,
     },
+    FltLiteralOutOfRange {
+        value: String,
+    },
     TypeMismatch {
         inferred: Box<Term>,
         expected: Box<Term>,
@@ -1807,6 +1810,9 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::ByteLiteralOutOfRange { value } => {
                 write!(f, "Byte literal {value} is out of range (expected 0..=255)")
+            }
+            Error::FltLiteralOutOfRange { value } => {
+                write!(f, "Flt literal {value} overflows the finite range")
             }
             Error::InDeclaration { name, error } => {
                 write!(f, "while elaborating {name}:\n{error}")

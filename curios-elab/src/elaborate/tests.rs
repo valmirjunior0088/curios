@@ -2,7 +2,8 @@ use crate::TermBuilders;
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Flt, Plicity, Qualifier, RootId},
+    num_bigint::BigUint,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -450,4 +451,22 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
             ..
         })
     ));
+}
+
+#[test]
+fn a_num_lit_that_overflows_flt_is_refused() {
+    let mut context = context();
+    let flt = || Term::intrinsic(Intrinsic::FltType);
+
+    // 2^512 saturates `to_f32` to infinity, a value no literal spells — refused like an out-of-range Byte.
+    let huge = Term::num_lit(BigUint::from(2u32).pow(512), false, false);
+    assert!(matches!(
+        elaborate(&mut context, &huge, Mode::Check(flt())),
+        Err(Error::FltLiteralOutOfRange { .. })
+    ));
+
+    // A magnitude inside the finite range still resolves at `Flt`.
+    let small = Term::num_lit(BigUint::from(42u32), false, false);
+    let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
+    assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))));
 }

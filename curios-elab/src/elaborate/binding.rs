@@ -247,7 +247,13 @@ pub(super) fn elaborate_num_lit(
             (Intrinsic::Int(Int::new(value)), int_type)
         }
         Subterm::Intrinsic(Intrinsic::FltType) => {
+            // `to_f32` saturates an overflowing magnitude to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
             let magnitude = num_lit.magnitude.to_f32().unwrap_or(f32::INFINITY);
+            if !magnitude.is_finite() {
+                return Err(Error::FltLiteralOutOfRange {
+                    value: num_lit.magnitude.to_string(),
+                });
+            }
             let value = if num_lit.negative {
                 -magnitude
             } else {
