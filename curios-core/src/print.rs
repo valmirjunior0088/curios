@@ -903,17 +903,13 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             telescope,
             plicities,
         }) => {
-            fn walk(
-                cur: Telescope<Term>,
-                plicities: &[Plicity],
-                depth: usize,
-                total: usize,
-                idx: usize,
-                printers: &mut Vec<Printer>,
-                spelling: &Rc<Spelling>,
-            ) -> Term {
+            let n = telescope.len();
+            let mut printers = Vec::with_capacity(n);
+            let mut cur = telescope;
+            let mut idx = 0;
+            let output = loop {
                 match cur {
-                    Telescope::Done(body) => *body,
+                    Telescope::Done(body) => break *body,
                     Telescope::Cons(ty, rest) => {
                         let raw = rest.binder(0);
                         let label = binder_or(raw, depth + idx);
@@ -923,7 +919,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             Some(Plicity::Witness) => "use ",
                             _ => "",
                         };
-                        let typed = sub(ty, depth + total, spelling);
+                        let typed = sub(ty, depth + n, spelling);
                         // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
                         let named = match raw {
                             Some(name) => name.hint().is_some() || rest.uses(0),
@@ -935,15 +931,11 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             flat([pure(mark), typed])
                         };
                         printers.push(printer);
-                        let next = rest.open(&[&Term::free_var(&label)]);
-                        walk(next, plicities, depth, total, idx + 1, printers, spelling)
+                        cur = rest.open(&[&Term::free_var(&label)]);
+                        idx += 1;
                     }
                 }
-            }
-
-            let n = telescope.len();
-            let mut printers = Vec::with_capacity(n);
-            let output = walk(telescope, &plicities, depth, n, 0, &mut printers, spelling);
+            };
             flat([
                 listed("(".into(), false, printers, ")"),
                 pure(" -> "),
@@ -1017,40 +1009,28 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             ),
         ]),
         Subterm::TupleType(TupleType { telescope, .. }) => {
-            fn walk(
-                cur: Telescope<()>,
-                depth: usize,
-                total: usize,
-                idx: usize,
-                items: &mut Vec<Printer>,
-                spelling: &Rc<Spelling>,
-            ) {
-                match cur {
-                    Telescope::Done(_) => {}
-                    Telescope::Cons(ty, rest) => {
-                        let raw = rest.binder(0);
-                        let label = binder_or(raw, depth + idx);
-                        // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
-                        let named = match raw {
-                            Some(name) => name.hint().is_some() || rest.uses(0),
-                            None => false,
-                        };
-                        let typed = sub(ty, depth + total, spelling);
-                        let printer = if named {
-                            flat([pure(spelling.label(&label)), pure(": "), typed])
-                        } else {
-                            typed
-                        };
-                        items.push(indent(printer));
-                        let next = rest.open(&[&Term::free_var(&label)]);
-                        walk(next, depth, total, idx + 1, items, spelling);
-                    }
-                }
-            }
-
             let n = telescope.len();
             let mut items = Vec::with_capacity(n);
-            walk(telescope, depth, n, 0, &mut items, spelling);
+            let mut cur = telescope;
+            let mut idx = 0;
+            while let Telescope::Cons(ty, rest) = cur {
+                let raw = rest.binder(0);
+                let label = binder_or(raw, depth + idx);
+                // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
+                let named = match raw {
+                    Some(name) => name.hint().is_some() || rest.uses(0),
+                    None => false,
+                };
+                let typed = sub(ty, depth + n, spelling);
+                let printer = if named {
+                    flat([pure(spelling.label(&label)), pure(": "), typed])
+                } else {
+                    typed
+                };
+                items.push(indent(printer));
+                cur = rest.open(&[&Term::free_var(&label)]);
+                idx += 1;
+            }
 
             // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/SYNTAX.md` spells. Unspaced for the same reason the surface printer is.
             listed("{".into(), false, items, "}")
