@@ -4,7 +4,9 @@ use {
         Intrinsic, Nat, Peel, Subterm, Term, normalize_concat, peel_bin, peel_first_atom,
         peel_first_elem,
     },
-    curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
+    curios_base::{
+        Grain, Int, PackedBin, int_rotl, int_rotr, int_to_nat, nat_rotl, nat_rotr, nat_to_int,
+    },
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };
@@ -865,17 +867,14 @@ pub fn reduce_intrinsic(
             let inner = reducer.reduce_forced(inner.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::FltOfLeBytes(inner)))
         }
+        // The conversions are the shared 32-bit carrier-bit reinterpretation (`curios_base::scalar`) — the one definition ersd's evaluator also folds with — declining only a literal beyond the u32/i32 view. 30/31-bitness exists solely as `into_wasm`'s carrier traps, never here.
         Intrinsic::NatToInt(inner) => reduce_nat_unary(
             reducer,
             inner,
             |v| {
-                let bits = v.to_big_uint()?.to_u32()? & 0x7FFF_FFFF;
-                let signed = if bits >= 0x4000_0000 {
-                    bits as i64 - (1i64 << 31)
-                } else {
-                    bits as i64
-                };
-                Some(Intrinsic::Int(Int::new(signed)))
+                Some(Intrinsic::Int(Int::new(nat_to_int(
+                    v.to_big_uint()?.to_u32()?,
+                ))))
             },
             Intrinsic::NatToInt,
         ),
@@ -886,7 +885,7 @@ pub fn reduce_intrinsic(
         Intrinsic::IntToNat(inner) => reduce_int_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Nat(Nat::new(v.to_i32()? as u32))),
+            |v| Some(Intrinsic::Nat(Nat::new(int_to_nat(v.to_i32()?)))),
             Intrinsic::IntToNat,
         ),
         Intrinsic::IntToFlt(inner) => {
@@ -1562,7 +1561,7 @@ mod tests {
     use {
         super::{Reducer, compare_nat, from_ordering, reduce_intrinsic},
         crate::{Free, Intrinsic, Nat, ReduceError, Subterm, Term},
-        curios_base::{Grain, PackedBin},
+        curios_base::{Grain, Int, PackedBin, int_to_nat, nat_to_int},
     };
 
     /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
@@ -1594,6 +1593,37 @@ mod tests {
         let reduced = reduce_intrinsic(&mut Inert, &get).expect("reduces");
 
         assert_eq!(Term::from(reduced), bit);
+    }
+
+    // Soundness gate: the `Nat`/`Int` conversion folds are the shared 32-bit reinterpretation (`curios_base::scalar`), the definition ersd's evaluator folds with — including the samples the leftover i31 fold used to wrap at bit 30/31.
+    #[test]
+    fn conversion_folds_are_the_shared_reinterpretation() {
+        for n in [
+            0u32,
+            1,
+            0x3FFF_FFFF,
+            0x4000_0000,
+            0x7FFF_FFFF,
+            0x8000_0000,
+            u32::MAX,
+        ] {
+            let nat = Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+            let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::NatToInt(nat)).expect("reduces");
+            assert_eq!(
+                reduced,
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(nat_to_int(n)))),
+                "Nat/to_int diverged from the shared reinterpretation on {n}",
+            );
+        }
+        for i in [0i32, 1, -1, 0x3FFF_FFFF, -0x4000_0000, i32::MAX, i32::MIN] {
+            let int = Term::intrinsic(Intrinsic::Int(Int::new(i)));
+            let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int)).expect("reduces");
+            assert_eq!(
+                reduced,
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(int_to_nat(i)))),
+                "Int/to_nat diverged from the shared reinterpretation on {i}",
+            );
+        }
     }
 
     // Soundness gate: the structural body agrees with the host ordering on every pair of literals — the decidable closed case where the two routes into a `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
