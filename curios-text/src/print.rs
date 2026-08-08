@@ -5,7 +5,7 @@ use {
     super::{
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
         FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Intrinsic, Let,
-        LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, Nat,
+        LetBinding, LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, Nat,
         NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, Rec, StructLit,
         StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
@@ -672,11 +672,17 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 
 pub(crate) fn print_term(term: Term) -> Printer {
     // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed comment written before its own start — a leading comment breaks onto its own line before the term, a trailing one rides its line's end through the suffix channel. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run the claim is empty and printing is unchanged.
-    let comments = match term.span() {
-        Some(span) => claim_comments_before(span.start),
+    let offset = term.span().map(|span| span.start);
+    claimed_before(offset, || print_term_inner(term))
+}
+
+/// Claim every not-yet-claimed comment written before `offset` and prefix it to the document `build` produces — a leading comment on its own line, a trailing one riding its line's end through the suffix channel. The claim happens before the build, so an ancestor claims ahead of its descendants; `None` (a spanless term) claims nothing.
+fn claimed_before(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Printer {
+    let comments = match offset {
+        Some(offset) => claim_comments_before(offset),
         None => Vec::new(),
     };
-    let doc = print_term_inner(term);
+    let doc = build();
     if comments.is_empty() {
         return doc;
     }
@@ -692,6 +698,21 @@ pub(crate) fn print_term(term: Term) -> Printer {
         .collect();
     parts.push(doc);
     flat(parts)
+}
+
+/// Where a `let` binding claims its leading comments: the start of its earliest spanned component, since neither the `let` keyword nor the binder pattern records a span. A comment above the `let` precedes all of these, so any of them bounds the claim; taking the earliest keeps comments written inside the signature with the component they lead.
+fn binding_claim_offset(binding: &LetBinding) -> Option<usize> {
+    let earliest = match &binding.signature {
+        LetSignature::Name {
+            type_: Some(type_), ..
+        } => type_,
+        LetSignature::Name { type_: None, body } => body,
+        LetSignature::Func { params, output, .. } => match params.first() {
+            Some(param) => &param.type_,
+            None => output,
+        },
+    };
+    earliest.span().map(|span| span.start)
 }
 
 /// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a match, a lambda, an arrow, an effect form) parenthesizes unconditionally, since the operand grammar cannot produce it bare.
@@ -884,20 +905,24 @@ fn print_term_inner(term: Term) -> Printer {
                 pure("end"),
             ]))
         }
-        Subterm::Let(Let { bindings, tail }) => flat(
-            bindings
+        Subterm::Let(Let { bindings, tail }) => {
+            // The binding documents materialize before the tail's: claiming is a build-order side effect, and an eagerly evaluated tail would claim every comment in the chain, including those leading later bindings. Each binding claims at its own head, so a comment above a `let` stays above it instead of sliding under the `=`.
+            let bindings = bindings
                 .into_iter()
                 .map(|binding| {
-                    flat([
-                        pure("let "),
-                        print_pattern(binding.binder),
-                        print_let_signature(binding.signature, false),
-                        pure(";"),
-                        hard_line(),
-                    ])
+                    claimed_before(binding_claim_offset(&binding), || {
+                        flat([
+                            pure("let "),
+                            print_pattern(binding.binder),
+                            print_let_signature(binding.signature, false),
+                            pure(";"),
+                            hard_line(),
+                        ])
+                    })
                 })
-                .chain([print_term(tail)]),
-        ),
+                .collect::<Vec<_>>();
+            flat(bindings.into_iter().chain([print_term(tail)]))
+        }
         Subterm::Rec(Rec { items, tail }) => {
             let bindings = items
                 .into_iter()

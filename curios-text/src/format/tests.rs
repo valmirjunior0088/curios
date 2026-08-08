@@ -53,6 +53,13 @@ fn a_trailing_comment_rides_its_line() {
 }
 
 #[test]
+fn a_comment_above_a_later_let_binding_stays_above_it() {
+    // The let-chain tail must not claim comments leading later bindings (it once built eagerly, ahead of the binding documents), and a binding-leading comment claims at the binding head, so this shape is a fixed point.
+    let source = "let compute(n: /std/Nat) -> /std/Nat =\n    let a = n + n;\n    -- the second binding\n    let b = a + a;\n    b;\n\ncompute(1)\n";
+    assert_eq!(formatted(source), source);
+}
+
+#[test]
 fn an_interior_comment_survives_and_forces_a_break() {
     // The comment claims into the argument's document; its hard break keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.
     let source = "let one : /std/Nat = f( -- why\n    1);\none\n";
