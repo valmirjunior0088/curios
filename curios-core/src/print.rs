@@ -1472,9 +1472,9 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             action,
             continuation,
         })) => flat([
-            sub(action.clone(), depth, spelling),
+            sub(action, depth, spelling),
             pure("!; "),
-            sub(continuation.clone(), depth, spelling),
+            sub(continuation, depth, spelling),
         ]),
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing.
         Subterm::Metavar(metavar) => {
