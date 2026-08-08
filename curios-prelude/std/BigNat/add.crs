@@ -1263,7 +1263,7 @@ and raw_cancel_absurd(
     pz: Eq(is_trimmed(b[zh, ..zt]), true),
     p: Eq(raw(b[xh, ..xt], b[], c), raw(b[xh, ..xt], b[zh, ..zt], c)),
 ) -> False =
-    let shifted: Eq(is_trimmed(b[\0]), true) =
+    let shifted =
         Eq/subst(
             (w: Bits) => Eq(is_trimmed(w), true),
             cong_cons2(

@@ -457,7 +457,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                     -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
                     -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
                     -- region and perform them now.
-                    let waker: Io({}) =
+                    let waker =
                         Io/bind(
                             Cell/get(slot),
                             (held) =>
@@ -544,8 +544,8 @@ pub struct Task(A: Type): Type {
 pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
     let f = Future/new()!;
     let c = Cell/new(false)!;
-    let t: Token = Token { c };
-    let task: Task(A) = Task { result = f, token = t };
+    let t = Token { c };
+    let task = Task { result = f, token = t };
     let _ =
         fork_with(
             Async {
@@ -589,7 +589,7 @@ pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
         | none() => pure([])
         | some(ok) =>
             let c = Cell/new(false)!;
-            let t: Token = Token { c };
+            let t = Token { c };
             let _ =
                 fork_with(
                     Async {

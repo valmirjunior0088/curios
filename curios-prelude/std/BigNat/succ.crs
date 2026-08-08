@@ -55,7 +55,7 @@ let raw_inj_absurd(
     match zh
     | true => false_neq_true(Eq/sym(cons_inj_head(p)))
     | false =>
-        let shifted: Eq(is_trimmed(b[\0]), true) =
+        let shifted =
             Eq/subst(
                 (w: Bits) => Eq(is_trimmed(w), true),
                 cong_cons2(refl_at(false), Eq/sym(cons_inj_tail(p))),

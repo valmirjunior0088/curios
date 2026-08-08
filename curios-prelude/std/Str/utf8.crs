@@ -103,7 +103,7 @@ pub rec take_valid(
     end;
 
 pub rec bad_uninhabited(@x: Bytes, w: Utf8(Scan/bad(), x)) -> False =
-    match w: (q, y, w) => False | more(c, st, t, rest) => bad_uninhabited(rest) end;
+    match w | more(c, st, t, rest) => bad_uninhabited(rest) end;
 
 pub rec cont_len(
     k: Nat,
@@ -135,7 +135,7 @@ pub rec cont0_uninhabited(
     @t: Bytes,
     w: Utf8(Scan/cont(0, lo, hi), t),
 ) -> False =
-    match w: (q, y, w) => False
+    match w
     | more(c, st, t2, rest) =>
         match Nat/in_range(Byte/to_nat(c), lo, hi)
         | true => cont0_uninhabited(rest)
