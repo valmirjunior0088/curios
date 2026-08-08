@@ -191,7 +191,7 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 | `documentation/SYNTAX.md` | Complete Curios surface-language reference |
 | `documentation/ROADMAP.md` | Implemented capabilities and pending specifications |
 | `documentation/DESIGN.md` | Cross-cutting design decisions — those spanning the language or several crates — their rationale, and rejected alternatives |
-| `documentation/PERIMETER.md` | The soundness perimeter: every rule that can admit a term, its grade, and the evidence behind it |
+| `documentation/SOUNDNESS.md` | The soundness perimeter: every rule that can admit a term, its grade, and the evidence behind it |
 | Crate `README.md` files | The crate's mission and its crate-scoped design decisions, rationale, and rejected alternatives |
 | Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
 | `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |

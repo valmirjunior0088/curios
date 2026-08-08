@@ -8,11 +8,11 @@ Hunt for an unsoundness in the trusted base.
 
 ## Authority
 
-`$ARGUMENTS` selects the mode. The word `auto` anywhere in it means unattended; anything else is an interactive session. Whatever remains names an entry of the soundness perimeter to attack, spelled as `documentation/PERIMETER.md` spells it. With no row given, choose one by "Where to hunt" and say why.
+`$ARGUMENTS` selects the mode. The word `auto` anywhere in it means unattended; anything else is an interactive session. Whatever remains names an entry of the soundness perimeter to attack, spelled as `documentation/SOUNDNESS.md` spells it. With no row given, choose one by "Where to hunt" and say why.
 
 **Interactive is read-only.** Investigate, report, propose the fix and its control test, and wait — whatever the gate would say. Discussing why a rule is wrong is worth more here than a fast patch.
 
-**Auto is the user's standing authorization, and it covers exactly two kinds of commit:** one carrying a regression test together with the fix it guards, and one carrying a probe with its evidence recorded against the entry it attacked in `documentation/PERIMETER.md`. For those it overrides CLAUDE.md's prohibition on unattended edits and commits, and for nothing else. Commit on whatever branch is already checked out; never create, switch, or rebase one. Prefer stopping to guessing — idleness is the correct failure mode here, overreach is not.
+**Auto is the user's standing authorization, and it covers exactly two kinds of commit:** one carrying a regression test together with the fix it guards, and one carrying a probe with its evidence recorded against the entry it attacked in `documentation/SOUNDNESS.md`. For those it overrides CLAUDE.md's prohibition on unattended edits and commits, and for nothing else. Commit on whatever branch is already checked out; never create, switch, or rebase one. Prefer stopping to guessing — idleness is the correct failure mode here, overreach is not.
 
 **Pre-flight, before any investigation.** Run `git status`. Every file already modified belongs to the user: do not edit it, stage it, or read a finding into its contents. If the row you mean to attack is implemented in one, choose another row or stop. A regression test left uncommitted by an earlier run is covered by the same rule — it is a finding waiting for a human, not work to resume, and the row it names is spent for this run.
 
@@ -22,7 +22,7 @@ Running a witness needs the embedded launcher built first — `make curios/runti
 
 Everything factual about the perimeter lives elsewhere and is read there. This file restates none of it, deliberately: a second copy drifts, and the last one did.
 
-- `documentation/PERIMETER.md` — every rule that can admit a term, each graded *probed*, *argued*, or *auditable only*, with one section per entry carrying its evidence. `documentation/DESIGN.md`, "The soundness perimeter", holds the decision behind it and nothing else; the grades and the evidence are not there.
+- `documentation/SOUNDNESS.md` — every rule that can admit a term, each graded *probed*, *argued*, or *auditable only*, with one section per entry carrying its evidence. `documentation/DESIGN.md`, "The soundness perimeter", holds the decision behind it and nothing else; the grades and the evidence are not there.
 - `documentation/DESIGN.md`, "An independent kernel re-checks what the elaborator accepts" — what the second checker buys, and in numbers what it does not.
 - `curios-cert/README.md`, "Incompleteness is the safe direction".
 - `curios/src/tests/perimeter.rs`, `soundness.rs`, and `kernel.rs` — what is already guarded, by which diagnostic, and what each checker is recorded as saying about it.
@@ -45,7 +45,7 @@ The kernel runs on the compile path, so a *disagreement* between the two checker
 - the elaborator-only whole-module passes the kernel never re-runs
 - rules both sides implement identically wrong
 
-Rank candidates by that asymmetry and by the weakness of their Status, not by how easy they are to test. The index in `documentation/PERIMETER.md` carries the grades; each entry's own section carries what has already been tried.
+Rank candidates by that asymmetry and by the weakness of their Status, not by how easy they are to test. The index in `documentation/SOUNDNESS.md` carries the grades; each entry's own section carries what has already been tried.
 
 The third class of find has one operative sentence: **the kernel relies on something it did not itself decide.** Reading elaborator output is not the violation — it is the kernel's entire input. Believing it is. Two things are routinely misreported as violations and are not: an evaluation memo replays the kernel's own pure function of the terms, and `recheck_module_suffix`'s archived prefix rests on the kernel's own full walk at archive-build time. Cached kernel judgment is not inherited elaborator judgment. Report a genuine dependency even when it is currently benign; it is the shape every future unsoundness will arrive through.
 
@@ -65,7 +65,7 @@ Counting deserves particular weight. Every defect this design has produced was f
 
 ## On a null result
 
-Attacking a row and finding nothing is a result, not a wasted iteration: it is the difference between *unprobed* and *probed*. Commit the probe and the Status it updates — that entry's Status in `documentation/PERIMETER.md` is this hunt's only memory across runs, so an unrecorded null result will be re-attacked. In interactive mode, propose it and wait.
+Attacking a row and finding nothing is a result, not a wasted iteration: it is the difference between *unprobed* and *probed*. Commit the probe and the Status it updates — that entry's Status in `documentation/SOUNDNESS.md` is this hunt's only memory across runs, so an unrecorded null result will be re-attacked. In interactive mode, propose it and wait.
 
 ## Recording a find
 

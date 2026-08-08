@@ -36,12 +36,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Unification solver
   - [x] Pattern unification for higher-order metavariable spines
   - [x] Re-validate solutions in checking mode
-  - [ ] [Pruning of out-of-scope metavariables](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
-  - [ ] [η-equate metavariable heads](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
-  - [ ] [Surface residual unification constraints](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
+  - [ ] [Pruning of out-of-scope metavariables](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
+  - [ ] [η-equate metavariable heads](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
+  - [ ] [Surface residual unification constraints](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
   - [x] Right-biased partial imitation for flex-apply (`?M(?A) ≟ T(b̄, x)` under-applied commits `λx. T(b̄, x)` with the suffix equated pairwise and the split re-validated against the birth type — what pins a two-parameter monad's `?M` from its region)
   - [x] Witness keying through a partially applied type constructor (`satisfy (@S) => Monad((A) => State(S, A))` keys on the stuck application's head; registration and goal lookup share the one `of_whnf` arm)
-- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (park structurally blocked inference within one enclosing item)
+- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (park structurally blocked inference within one enclosing item)
 
 ## Pattern Matching
 
@@ -53,7 +53,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
-- [ ] [Anonymous match functions](compiler/06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference)_
+- [ ] [Anonymous match functions](roadmap/compiler/06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match) _(follows lambda inference)_
 
 ## Syntax Sugar
 
@@ -97,12 +97,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length (the `elaborate → elaborate_apply → check` cycle defunctionalized onto a frame stack for ground, all-explicit applications; each term's cached derivations carried on the shared `Rc` node and filled by an iterative post-order walk — so a literal or generated spine of any size compiles on a default 2MB stack, the ceiling now being the reduction deadline and memory)
 - [x] Elaboration transients grouped under one core variant (`Transient`: `Infix`, `NumLit`, and `Bang` — postfix `!` carried into core unresolved and desugared by `elaborate_bang`, where the type-directed lift decision lives; refused wholesale at the kernel boundary)
 - [x] Names as identity only (a compiler name distinguishes bindings and renders for a human, and nothing branches on its spelling: `Free`/`Global`/`Mint`/`WitnessId` replace the five facts that were flattened into one `String`, constructor runtime tags are declaration order rather than alphabetical rank, anonymous witnesses carry an identity rather than a manufactured name, and no accessor reaches a spelling from a `Free` outside the printer)
-- [x] Totality of everything erasure deletes, so no closed term inhabits `/syn/False` by a divergent type or a divergent proof (size-change termination per `rec` group, classifying rather than rejecting; obligation **(T)** over type positions and **(V)** over `Prop`-sorted terms, both seeded from what elaboration settled; partiality persisted on `Definition` and inherited across the prelude archive — see [DESIGN.md](DESIGN.md), "Totality of the erased program", and [PERIMETER.md](PERIMETER.md), which also records the one route still open)
+- [x] Totality of everything erasure deletes, so no closed term inhabits `/syn/False` by a divergent type or a divergent proof (size-change termination per `rec` group, classifying rather than rejecting; obligation **(T)** over type positions and **(V)** over `Prop`-sorted terms, both seeded from what elaboration settled; partiality persisted on `Definition` and inherited across the prelude archive — see [DESIGN.md](DESIGN.md), "Totality of the erased program", and [SOUNDNESS.md](SOUNDNESS.md), which also records the one route still open)
 - [x] Crate-boundary split separating the term representation from the elaborator (`curios-core` holds `Term`, its binder discipline, the intrinsic roster and folds, universes, and the nominal registry; `curios-elab` holds elaboration, unification, zonking, the universe solver, witness resolution, and erasure — with `Reducer` as the seam that shares intrinsic folding while leaving reduction strategy to each side)
 - [x] Independent kernel in `curios-cert` re-checking what the elaborator accepts, from the finished terms alone — reduction, sort, conversion, the typing judgment, nominal elimination (the large-elimination guard's singleton condition decided rather than approximated), subsumption as its own cumulative relation, universe constraint entailment in both directions, and declaration acceptance (constructor/field sizing, strict positivity, size-change totality), with index inversion, positivity, totality, and universe entailment shared rather than duplicated behind the `Env`/`Judge` seam (see [DESIGN.md](DESIGN.md), "An independent kernel re-checks what the elaborator accepts"). On the compile path in production: `recheck_module_suffix` runs inside `compile_entrypoint` and a refusal fails the compile, with the fixed prelude validated the same way at archive-build time and no source fallback. The whole-prelude disagreement count closed at **0 of 1052** across all three profiles; two positions remain named rather than closed — an elimination's motive/arms and `rec`-group/spine-argument comparison at `Type` — both recorded conversion incompleteness that does not count against the gate.
-- [ ] [Full data section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
-- [ ] [Full element section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
-- [ ] [`Stage::WasmOptm`: observe the Binaryen-optimized module through a binary reader](compiler/09_WASM_OPTM_STAGE_SPEC.md) (`reader.rs`/`from_bytes` as the binary writer's inverse over the pinned feature envelope; sequenced after full conformance, since bulk-memory optimization can rewrite into the forms the representation cannot yet hold)
+- [ ] [Full data section support in `curios-wasm`](roadmap/compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
+- [ ] [Full element section support in `curios-wasm`](roadmap/compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
+- [ ] [`Stage::WasmOptm`: observe the Binaryen-optimized module through a binary reader](roadmap/compiler/09_WASM_OPTM_STAGE_SPEC.md) (`reader.rs`/`from_bytes` as the binary writer's inverse over the pinned feature envelope; sequenced after full conformance, since bulk-memory optimization can rewrite into the forms the representation cannot yet hold)
 - [ ] Self-hosting bootstrap of the language-specific stages _(deferred until further notice, deliberately unspecified; the objective and the Curios/Rust ownership split are recorded in [DESIGN.md](DESIGN.md))_
 
 ## Optimizations
@@ -173,7 +173,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation)
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
-  - [ ] [Full TOML conformance over exact numerics](compiler/08_TOML_FULL_CONFORMANCE_SPEC.md) _(not refined; after the general rational `BigFlt` sequence)_
+  - [ ] [Full TOML conformance over exact numerics](roadmap/compiler/08_TOML_FULL_CONFORMANCE_SPEC.md) _(not refined; after the general rational `BigFlt` sequence)_
 - [x] Async combinators for `/std/Async`
   - [x] `map`
   - [x] concurrent `both`/`race`/`select`
@@ -189,20 +189,20 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
 - [ ] Dyadic `BigFlt` exact core
-  - [ ] [Canonical representation, exact operations, comparison, and witnesses](big_flt_dyadic/01_CORE_SPEC.md)
-  - [ ] [Exact binary32 conversion and correctly rounded output](big_flt_dyadic/02_BINARY32_SPEC.md)
-- [ ] [`BigInt` certified algebra, order, and binary-scale laws](big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md)
+  - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big_flt_dyadic/01_CORE_SPEC.md)
+  - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big_flt_dyadic/02_BINARY32_SPEC.md)
+- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md)
 - [ ] Dyadic `BigFlt` proof and quotient-boundary completion
-  - [ ] [Algebra and order theorem corpus](big_flt_dyadic_proofs/02_LAWS_SPEC.md)
-  - [ ] [Correctly rounded exact quotient conversion to binary32](big_flt_dyadic_proofs/03_RATIO_NARROWING_SPEC.md)
-  - [ ] [Binary32 round-trip and correct-rounding proofs](big_flt_dyadic_proofs/04_BOUNDARY_PROOFS_SPEC.md)
+  - [ ] [Algebra and order theorem corpus](roadmap/big_flt_dyadic_proofs/02_LAWS_SPEC.md)
+  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big_flt_dyadic_proofs/03_RATIO_NARROWING_SPEC.md)
+  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big_flt_dyadic_proofs/04_BOUNDARY_PROOFS_SPEC.md)
 - [ ] General rational `BigFlt` sequence _(explicitly after the program-analysis interface; no umbrella-only implementation step)_
-  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](big_flt_general/01_BIG_NAT_EUCLIDEAN_SPEC.md)
-  - [ ] [General `BigFlt` reduced rational representation and exact operations](big_flt_general/02_CORE_SPEC.md)
-  - [ ] [General canonical uniqueness, ring, and order laws](big_flt_general/03_LAWS_SPEC.md)
-  - [ ] [General division and field laws](big_flt_general/04_FIELD_LAWS_SPEC.md)
-  - [ ] [General rational binary32 boundaries](big_flt_general/05_BINARY32_SPEC.md)
-  - [ ] [Exact decimal parsing and presentation](big_flt_general/06_DECIMAL_SPEC.md)
+  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big_flt_general/01_BIG_NAT_EUCLIDEAN_SPEC.md)
+  - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big_flt_general/02_CORE_SPEC.md)
+  - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big_flt_general/03_LAWS_SPEC.md)
+  - [ ] [General division and field laws](roadmap/big_flt_general/04_FIELD_LAWS_SPEC.md)
+  - [ ] [General rational binary32 boundaries](roadmap/big_flt_general/05_BINARY32_SPEC.md)
+  - [ ] [Exact decimal parsing and presentation](roadmap/big_flt_general/06_DECIMAL_SPEC.md)
 
 ## Tooling & Ecosystem
 

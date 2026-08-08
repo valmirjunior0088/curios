@@ -259,7 +259,7 @@ cargo test --workspace --all-targets --all-features
 
 Because `curios-elab` is in the browser compiler's dependency graph, also run `make curios/web` with the exactly version-matched `wasm-bindgen-cli`.
 
-Items touching `convert.rs` should additionally be weighed against `PERIMETER.md`: the conversion checker carries several probed rows, and a change to imitation or pruning is the class of change whose evidence those rows record.
+Items touching `convert.rs` should additionally be weighed against `SOUNDNESS.md`: the conversion checker carries several probed rows, and a change to imitation or pruning is the class of change whose evidence those rows record.
 
 ## Retirement criteria
 

@@ -2,7 +2,7 @@
 //!
 //! This is the *only* shape from which an arm can conclude that a binder is not zero, and that conclusion is what licenses an arithmetic decrease: `n / k` and `n - k` are below `n` only where `n` is nonzero, since both saturate. `/std/Nat/to_str` descends on exactly this — the false arm of `n < 10` gives `n >= 10`.
 //!
-//! The relation table below is therefore an accepting rule, and each row says what it takes for the arm's fact to exclude zero. `documentation/PERIMETER.md`'s `record_totality` entry records the probes.
+//! The relation table below is therefore an accepting rule, and each row says what it takes for the arm's fact to exclude zero. `documentation/SOUNDNESS.md`'s `record_totality` entry records the probes.
 
 use {
     curios_core::{Free, Intrinsic, Subterm, Term},
