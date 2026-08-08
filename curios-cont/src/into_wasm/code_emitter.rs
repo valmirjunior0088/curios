@@ -1,5 +1,6 @@
 use {
     super::{Context, EmissionCode, EmissionValueName, LoadAs, RopeData, Table},
+    crate::CpsIntrinsicOp,
     curios_base::Grain,
 };
 
@@ -344,30 +345,56 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             .unwrap_or_else(|| panic!("`CodeEmitter` lacks local `{}`", value_name));
 
         match op {
-            EmissionCode::NatEql(left, right) => self.emit_binary_op(
+            EmissionCode::Intrinsic(op, args) => self.emit_intrinsic(result_local, *op, args),
+            EmissionCode::LstMap(src, f) => {
+                let map = self.context.table().lst_map_func();
+                let envr_type = self.context.table().find_envr_type(1);
+                self.emit_instrs(self.context.load_value_instrs(src, LoadAs::Lst));
+                self.emit_instrs(
+                    self.context
+                        .load_value_instrs(f, LoadAs::Concrete(envr_type)),
+                );
+                self.emit_instr(curios_wasm::Instr::Call { func_name: map });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local,
+                });
+            }
+        }
+    }
+
+    /// Lower one intrinsic op into the current frame; `args` carries the operands in the order and arity the op fixes, verified at the CPS boundary.
+    fn emit_intrinsic(
+        &mut self,
+        result_local: curios_wasm::LocalName,
+        op: CpsIntrinsicOp,
+        args: &'a [EmissionValueName],
+    ) {
+        match op {
+            CpsIntrinsicOp::NatEql => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Eq,
                 WrapAs::I31,
             ),
-            EmissionCode::NatNeq(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatNeq => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Ne,
                 WrapAs::I31,
             ),
-            EmissionCode::NatAdd(left, right) => self.emit_checked_nat_op(
+            CpsIntrinsicOp::NatAdd => self.emit_checked_nat_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "nat_add",
                 curios_wasm::Instr::I32Add,
             ),
-            EmissionCode::NatSub(left, right) => {
+            CpsIntrinsicOp::NatSub => {
+                let (left, right) = (&args[0], &args[1]);
                 // Monus: 0 if left < right, else left - right. select [val1=0, val2=left-right, cond=left<right] returns val1 when cond != 0.
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
@@ -382,7 +409,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::NatMul(left, right) => {
+            CpsIntrinsicOp::NatMul => {
+                let (left, right) = (&args[0], &args[1]);
                 let local_name = self.context.push_local(
                     "nat_mul",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I64),
@@ -411,85 +439,86 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::NatLt(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatLt => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32LtU,
                 WrapAs::I31,
             ),
-            EmissionCode::NatDiv(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatDiv => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32DivU,
                 WrapAs::I31,
             ),
-            EmissionCode::NatRem(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatRem => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32RemU,
                 WrapAs::I31,
             ),
-            EmissionCode::NatGt(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatGt => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32GtU,
                 WrapAs::I31,
             ),
-            EmissionCode::NatLte(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatLte => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32LeU,
                 WrapAs::I31,
             ),
-            EmissionCode::NatGte(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatGte => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32GeU,
                 WrapAs::I31,
             ),
-            EmissionCode::IntEql(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntEql => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Eq,
                 WrapAs::I31,
             ),
-            EmissionCode::IntNeq(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntNeq => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Ne,
                 WrapAs::I31,
             ),
-            EmissionCode::IntAdd(left, right) => self.emit_checked_int_op(
+            CpsIntrinsicOp::IntAdd => self.emit_checked_int_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "int_add",
                 curios_wasm::Instr::I32Add,
             ),
-            EmissionCode::IntSub(left, right) => self.emit_checked_int_op(
+            CpsIntrinsicOp::IntSub => self.emit_checked_int_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "int_sub",
                 curios_wasm::Instr::I32Sub,
             ),
-            EmissionCode::IntMul(left, right) => {
+            CpsIntrinsicOp::IntMul => {
+                let (left, right) = (&args[0], &args[1]);
                 let local_name = self.context.push_local(
                     "int_mul",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I64),
@@ -523,249 +552,250 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::IntDiv(left, right) => self.emit_checked_int_op(
+            CpsIntrinsicOp::IntDiv => self.emit_checked_int_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "int_div",
                 curios_wasm::Instr::I32DivS,
             ),
-            EmissionCode::IntRem(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntRem => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32RemS,
                 WrapAs::I31,
             ),
-            EmissionCode::IntLt(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntLt => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32LtS,
                 WrapAs::I31,
             ),
-            EmissionCode::IntGt(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntGt => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32GtS,
                 WrapAs::I31,
             ),
-            EmissionCode::IntLte(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntLte => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32LeS,
                 WrapAs::I31,
             ),
-            EmissionCode::IntGte(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntGte => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32GeS,
                 WrapAs::I31,
             ),
-            EmissionCode::NatAnd(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatAnd => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32And,
                 WrapAs::I31,
             ),
-            EmissionCode::NatOr(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatOr => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Or,
                 WrapAs::I31,
             ),
-            EmissionCode::NatXor(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatXor => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            EmissionCode::NatShl(left, right) => self.emit_checked_nat_op(
+            CpsIntrinsicOp::NatShl => self.emit_checked_nat_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "nat_shl",
                 curios_wasm::Instr::I32Shl,
             ),
-            EmissionCode::NatShr(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::NatShr => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32ShrU,
                 WrapAs::I31,
             ),
-            EmissionCode::NatRotl(left, right) => self.emit_checked_nat_op(
+            CpsIntrinsicOp::NatRotl => self.emit_checked_nat_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "nat_rotl",
                 curios_wasm::Instr::I32Rotl,
             ),
-            EmissionCode::NatRotr(left, right) => self.emit_checked_nat_op(
+            CpsIntrinsicOp::NatRotr => self.emit_checked_nat_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "nat_rotr",
                 curios_wasm::Instr::I32Rotr,
             ),
-            EmissionCode::NatClz(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::NatClz => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Clz,
                 WrapAs::I31,
             ),
-            EmissionCode::NatCtz(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::NatCtz => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Ctz,
                 WrapAs::I31,
             ),
-            EmissionCode::NatPopcnt(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::NatPopcnt => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Popcnt,
                 WrapAs::I31,
             ),
-            EmissionCode::NatEqz(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::NatEqz => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Nat,
                 curios_wasm::Instr::I32Eqz,
                 WrapAs::I31,
             ),
-            EmissionCode::IntAnd(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntAnd => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32And,
                 WrapAs::I31,
             ),
-            EmissionCode::IntOr(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntOr => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Or,
                 WrapAs::I31,
             ),
-            EmissionCode::IntXor(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntXor => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            EmissionCode::IntShl(left, right) => self.emit_checked_int_op(
+            CpsIntrinsicOp::IntShl => self.emit_checked_int_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "int_shl",
                 curios_wasm::Instr::I32Shl,
             ),
-            EmissionCode::IntShr(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::IntShr => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Int,
                 curios_wasm::Instr::I32ShrS,
                 WrapAs::I31,
             ),
-            EmissionCode::IntRotl(left, right) => self.emit_checked_int_op(
+            CpsIntrinsicOp::IntRotl => self.emit_checked_int_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "int_rotl",
                 curios_wasm::Instr::I32Rotl,
             ),
-            EmissionCode::IntRotr(left, right) => self.emit_checked_int_op(
+            CpsIntrinsicOp::IntRotr => self.emit_checked_int_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 "int_rotr",
                 curios_wasm::Instr::I32Rotr,
             ),
-            EmissionCode::IntClz(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::IntClz => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Clz,
                 WrapAs::I31,
             ),
-            EmissionCode::IntCtz(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::IntCtz => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Ctz,
                 WrapAs::I31,
             ),
-            EmissionCode::IntPopcnt(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::IntPopcnt => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Popcnt,
                 WrapAs::I31,
             ),
-            EmissionCode::IntEqz(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::IntEqz => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Int,
                 curios_wasm::Instr::I32Eqz,
                 WrapAs::I31,
             ),
-            EmissionCode::FltAdd(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltAdd => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Add,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltSub(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltSub => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Sub,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltMul(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltMul => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Mul,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltDiv(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltDiv => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Div,
                 WrapAs::Flt,
             ),
             // WebAssembly has no `f32.rem`, so expand the C `fmod` definition `x - trunc(x / y) * y` inline (`x`/`y` are locals, loaded twice).
-            EmissionCode::FltRem(left, right) => {
+            CpsIntrinsicOp::FltRem => {
+                let (left, right) = (&args[0], &args[1]);
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
@@ -779,128 +809,129 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::FltEql(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltEql => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Eq,
                 WrapAs::I31,
             ),
-            EmissionCode::FltNeq(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltNeq => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Ne,
                 WrapAs::I31,
             ),
-            EmissionCode::FltLt(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltLt => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Lt,
                 WrapAs::I31,
             ),
-            EmissionCode::FltGt(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltGt => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Gt,
                 WrapAs::I31,
             ),
-            EmissionCode::FltLte(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltLte => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Le,
                 WrapAs::I31,
             ),
-            EmissionCode::FltGte(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltGte => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Ge,
                 WrapAs::I31,
             ),
-            EmissionCode::FltMin(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltMin => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Min,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltMax(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltMax => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Max,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltNeg(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltNeg => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Neg,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltAbs(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltAbs => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Abs,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltSqrt(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltSqrt => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Sqrt,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltFloor(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltFloor => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Floor,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltCeil(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltCeil => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Ceil,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltTrunc(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltTrunc => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Trunc,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltNearest(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::FltNearest => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Nearest,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltCopysign(left, right) => self.emit_binary_op(
+            CpsIntrinsicOp::FltCopysign => self.emit_binary_op(
                 &result_local,
-                left,
-                right,
+                &args[0],
+                &args[1],
                 LoadAs::Flt,
                 curios_wasm::Instr::F32Copysign,
                 WrapAs::Flt,
             ),
-            EmissionCode::NatToInt(operand) => {
+            CpsIntrinsicOp::NatToInt => {
+                let operand = &args[0];
                 // The conversion is a carrier-bit reinterpretation; a `Nat` at or above 2^30 has no signed-i31 representation, so it traps at the boundary rather than silently reloading negative.
                 let local_name = self.context.push_local(
                     "nat_to_int",
@@ -924,14 +955,15 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::NatToFlt(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::NatToFlt => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Nat,
                 curios_wasm::Instr::F32ConvertI32U,
                 WrapAs::Flt,
             ),
-            EmissionCode::IntToNat(operand) => {
+            CpsIntrinsicOp::IntToNat => {
+                let operand = &args[0];
                 // The conversion is a carrier-bit reinterpretation; a negative `Int` maps to a `Nat` at or above 2^31, which has no i31 representation, so it traps at the boundary rather than silently dropping the sign bit.
                 let local_name = self.context.push_local(
                     "int_to_nat",
@@ -955,14 +987,15 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::IntToFlt(operand) => self.emit_unary_op(
+            CpsIntrinsicOp::IntToFlt => self.emit_unary_op(
                 &result_local,
-                operand,
+                &args[0],
                 LoadAs::Int,
                 curios_wasm::Instr::F32ConvertI32S,
                 WrapAs::Flt,
             ),
-            EmissionCode::FltToLeBytes(operand) => {
+            CpsIntrinsicOp::FltToLeBytes => {
+                let operand = &args[0];
                 // Reinterpret the f32 as its IEEE-754 bit pattern and split it into the four little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each shifted i32 to its low byte -- byte-for-byte `f32::to_le_bytes`, with no host round-trip.
                 let bits_local = self.context.push_local(
                     "flt_bits",
@@ -994,7 +1027,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::FltOfLeBytes(operand) => {
+            CpsIntrinsicOp::FltOfLeBytes => {
+                let operand = &args[0];
                 // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 4 bytes, then OR the bytes back into an i32 -- each `$bytes/read` zero-extends its packed byte -- and reinterpret. Byte-for-byte `f32::from_le_bytes`, no host round-trip.
                 let rope = self.context.table().bin_rope();
                 let read = self.context.table().bytes_read_func();
@@ -1026,12 +1060,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::FltToNat(operand) => {
+            CpsIntrinsicOp::FltToNat => {
                 let local_name = self.context.push_local(
                     "flt_to_nat",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                 );
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
                 self.emit_instr(curios_wasm::Instr::I32TruncF32U);
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
@@ -1050,12 +1084,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::FltToInt(operand) => {
+            CpsIntrinsicOp::FltToInt => {
                 let local_name = self.context.push_local(
                     "flt_to_int",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                 );
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
                 self.emit_instr(curios_wasm::Instr::I32TruncF32S);
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
@@ -1080,110 +1114,111 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::BinLen(_grain, bin) => {
+            CpsIntrinsicOp::BinLen(_) => {
                 let rope = self.context.table().bin_rope();
                 self.emit_unary_op(
                     &result_local,
-                    bin,
+                    &args[0],
                     LoadAs::Bytes,
                     Self::rope_get(&rope, &rope.len_field),
                     WrapAs::I31,
                 );
             }
-            EmissionCode::BinEql(grain, left, right) => {
+            CpsIntrinsicOp::BinEql(grain) => {
                 let eql = match grain {
                     Grain::B => self.context.table().bits_eql_func(),
                     Grain::X => self.context.table().bytes_eql_func(),
                 };
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bytes));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bytes));
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Bytes));
+                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Bytes));
                 self.emit_instr(curios_wasm::Instr::Call { func_name: eql });
                 self.emit_instr(curios_wasm::Instr::RefI31);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::BinGet(grain, bin, idx) => {
+            CpsIntrinsicOp::BinGet(grain) => {
                 let read = match grain {
                     Grain::B => self.context.table().bits_read_func(),
                     Grain::X => self.context.table().bytes_read_func(),
                 };
-                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bytes));
-                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Bytes));
+                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
                 self.emit_instr(curios_wasm::Instr::Call { func_name: read });
                 self.emit_instr(curios_wasm::Instr::RefI31);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::BinSlice(grain, bin, start, end) => {
+            CpsIntrinsicOp::BinSlice(grain) => {
                 let slice = match grain {
                     Grain::B => self.context.table().bits_slice_func(),
                     Grain::X => self.context.table().bytes_slice_func(),
                 };
-                self.emit_rope_slice(&result_local, bin, start, end, LoadAs::Bytes, slice);
+                self.emit_rope_slice(
+                    &result_local,
+                    &args[0],
+                    &args[1],
+                    &args[2],
+                    LoadAs::Bytes,
+                    slice,
+                );
             }
-            EmissionCode::BinAppend(_grain, bin, byte) => {
+            CpsIntrinsicOp::BinAppend(_) => {
                 let rope = self.context.table().bin_rope();
-                let elem_instrs = self.context.load_value_instrs(byte, LoadAs::Nat);
-                self.emit_rope_append(&result_local, bin, elem_instrs, LoadAs::Bytes, &rope);
+                let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Nat);
+                self.emit_rope_append(&result_local, &args[0], elem_instrs, LoadAs::Bytes, &rope);
             }
-            EmissionCode::BinConcat(_grain, operands) => {
+            CpsIntrinsicOp::BinConcat(_, _) => {
                 let rope = self.context.table().bin_rope();
-                self.emit_rope_concat(&result_local, operands, LoadAs::Bytes, &rope);
+                self.emit_rope_concat(&result_local, args, LoadAs::Bytes, &rope);
             }
-            EmissionCode::LstLen(lst) => {
+            CpsIntrinsicOp::LstLen => {
                 let rope = self.context.table().lst_rope();
                 self.emit_unary_op(
                     &result_local,
-                    lst,
+                    &args[0],
                     LoadAs::Lst,
                     Self::rope_get(&rope, &rope.len_field),
                     WrapAs::I31,
                 );
             }
-            EmissionCode::LstGet(lst, idx) => {
+            CpsIntrinsicOp::LstGet => {
                 let read = self.context.table().lst_read_func();
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
-                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
                 self.emit_instr(curios_wasm::Instr::Call { func_name: read });
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            EmissionCode::LstSlice(lst, start, end) => {
+            CpsIntrinsicOp::LstSlice => {
                 let slice = self.context.table().lst_slice_func();
-                self.emit_rope_slice(&result_local, lst, start, end, LoadAs::Lst, slice);
-            }
-            EmissionCode::LstAppend(lst, elem) => {
-                let rope = self.context.table().lst_rope();
-                let elem_instrs = self.context.load_value_instrs(elem, LoadAs::Null);
-                self.emit_rope_append(&result_local, lst, elem_instrs, LoadAs::Lst, &rope);
-            }
-            EmissionCode::LstConcat(operands) => {
-                let rope = self.context.table().lst_rope();
-                self.emit_rope_concat(&result_local, operands, LoadAs::Lst, &rope);
-            }
-            EmissionCode::LstMap(src, f) => {
-                let map = self.context.table().lst_map_func();
-                let envr_type = self.context.table().find_envr_type(1);
-                self.emit_instrs(self.context.load_value_instrs(src, LoadAs::Lst));
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(f, LoadAs::Concrete(envr_type)),
+                self.emit_rope_slice(
+                    &result_local,
+                    &args[0],
+                    &args[1],
+                    &args[2],
+                    LoadAs::Lst,
+                    slice,
                 );
-                self.emit_instr(curios_wasm::Instr::Call { func_name: map });
-                self.emit_instr(curios_wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
             }
-            EmissionCode::TplGet(tuple, index) => {
-                let tpl_n_type = self.context.table().find_tpl_type(*index + 1);
-                let field_name = Table::tpl_field(*index);
+            CpsIntrinsicOp::LstAppend => {
+                let rope = self.context.table().lst_rope();
+                let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Null);
+                self.emit_rope_append(&result_local, &args[0], elem_instrs, LoadAs::Lst, &rope);
+            }
+            CpsIntrinsicOp::LstConcat(_) => {
+                let rope = self.context.table().lst_rope();
+                self.emit_rope_concat(&result_local, args, LoadAs::Lst, &rope);
+            }
+            CpsIntrinsicOp::TplGet(index) => {
+                let tpl_n_type = self.context.table().find_tpl_type(index + 1);
+                let field_name = Table::tpl_field(index);
 
                 self.emit_instrs(
                     self.context
-                        .load_value_instrs(tuple, LoadAs::Concrete(tpl_n_type.clone())),
+                        .load_value_instrs(&args[0], LoadAs::Concrete(tpl_n_type.clone())),
                 );
 
                 self.emit_instr(curios_wasm::Instr::StructGet {

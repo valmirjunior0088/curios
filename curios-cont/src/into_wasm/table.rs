@@ -4,6 +4,7 @@ use {
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
         EmissionValueName,
     },
+    crate::CpsIntrinsicOp,
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -209,7 +210,7 @@ fn max_value_tpl_arity(value: &EmissionValue) -> usize {
     match value {
         EmissionValue::Pure(data) => max_tpl_arity(data),
         // Projecting field `index` reads through a tuple type of arity at least `index + 1`, even when no tuple of that arity is ever *built* in the module (e.g. the projected tuple only ever arrives from outside, or the producing array is empty). Sizing the tuple types from constructions alone misses it.
-        EmissionValue::Eval(EmissionCode::TplGet(_, index)) => index + 1,
+        EmissionValue::Eval(EmissionCode::Intrinsic(CpsIntrinsicOp::TplGet(index), _)) => index + 1,
         _ => 0,
     }
 }
