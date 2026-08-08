@@ -384,8 +384,6 @@ impl Hash for UniverseConstraint {
     }
 }
 
-impl UniverseConstraint {}
-
 /// A closed, declaration-local residual universe context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(
