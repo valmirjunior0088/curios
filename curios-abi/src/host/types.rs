@@ -2,7 +2,10 @@
 //!
 //! Each mirrors a guest-side notion and lifts from / lowers to its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
-use {crate::stdio, num_bigint::BigUint};
+use {
+    crate::{status, stdio},
+    num_bigint::BigUint,
+};
 
 /// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
 #[derive(Clone)]
@@ -73,7 +76,7 @@ impl Poll {
     }
 }
 
-/// The status contract of failable host ops, mirrored by `/std/File`'s `decode`. Each named status has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`. [`Status`] lowers to that code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
+/// The status contract of failable host ops, mirrored by `/std/Handle`'s `error_of`. Each named status has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
 #[derive(Clone, Copy)]
 pub enum Status {
     Ok,
@@ -92,18 +95,18 @@ pub enum Status {
 }
 
 impl Status {
-    /// The wire code the guest decodes. The named statuses have fixed tags; `Other(code)` lowers its carried errno raw.
+    /// The wire code the guest decodes. The named statuses have fixed tags; `Other(errno)` lowers as [`OTHER_BASE`](status::OTHER_BASE) plus its carried errno, keeping the errno lane disjoint from the named tags.
     pub fn code(self) -> u32 {
         match self {
-            Status::Ok => crate::status::OK,
-            Status::Eof => crate::status::EOF,
-            Status::NotFound => crate::status::NOT_FOUND,
-            Status::PermissionDenied => crate::status::PERMISSION_DENIED,
-            Status::AlreadyExists => crate::status::ALREADY_EXISTS,
-            Status::ConnectionRefused => crate::status::CONNECTION_REFUSED,
-            Status::WouldBlock => crate::status::WOULD_BLOCK,
-            Status::TlsError => crate::status::TLS_ERROR,
-            Status::Other(code) => code,
+            Status::Ok => status::OK,
+            Status::Eof => status::EOF,
+            Status::NotFound => status::NOT_FOUND,
+            Status::PermissionDenied => status::PERMISSION_DENIED,
+            Status::AlreadyExists => status::ALREADY_EXISTS,
+            Status::ConnectionRefused => status::CONNECTION_REFUSED,
+            Status::WouldBlock => status::WOULD_BLOCK,
+            Status::TlsError => status::TLS_ERROR,
+            Status::Other(errno) => status::OTHER_BASE + errno,
         }
     }
 }

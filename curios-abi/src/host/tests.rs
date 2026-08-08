@@ -1,7 +1,26 @@
 use {
-    super::{ForeignFunction, WireSignature, host_ops},
+    super::{ForeignFunction, Status, WireSignature, host_ops},
+    crate::status,
     std::collections::BTreeSet,
 };
+
+/// Every named code sits below `OTHER_BASE` and the errno passthrough lowers at or above it, so a raw OS errno — including the errno-less `Other(0)` — can never decode as `OK` or a named failure.
+#[test]
+fn errno_lane_is_disjoint_from_named_codes() {
+    let named = [
+        status::OK,
+        status::EOF,
+        status::NOT_FOUND,
+        status::PERMISSION_DENIED,
+        status::ALREADY_EXISTS,
+        status::CONNECTION_REFUSED,
+        status::WOULD_BLOCK,
+        status::TLS_ERROR,
+    ];
+
+    assert!(named.iter().all(|&code| code < status::OTHER_BASE));
+    assert_eq!(Status::Other(0).code(), status::OTHER_BASE);
+}
 
 /// The builtin import names, byte for byte and in declaration order — the wire ABI contract between the wasm emitter and the runtime linker. A mismatch here silently strands an import, so the whole list is pinned.
 #[test]

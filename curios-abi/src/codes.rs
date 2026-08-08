@@ -1,6 +1,6 @@
 //! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
-/// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` carries an OS errno raw, so it has no fixed code here.
+/// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` has no fixed code here: it lowers its carried errno offset by [`OTHER_BASE`], keeping the errno lane disjoint from the named codes.
 pub mod status {
     /// The op succeeded — the reply's payload fields are meaningful only under this code.
     pub const OK: u32 = 0;
@@ -18,6 +18,8 @@ pub mod status {
     pub const WOULD_BLOCK: u32 = 6;
     /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
     pub const TLS_ERROR: u32 = 7;
+    /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `error_of` subtracts it back out.
+    pub const OTHER_BASE: u32 = TLS_ERROR + 1;
 }
 
 /// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/poll`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.

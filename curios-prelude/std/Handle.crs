@@ -24,7 +24,8 @@ let errors: Lst({Nat, Error}) =
 pub let error_of(status: Nat) -> Error =
     Lst/fold(
         errors,
-        Error/other(status),
+        -- Not a named code: the errno passthrough lane, offset by other_base so an errno never collides with a named code.
+        Error/other(status - /sys/status/other_base),
         (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
 
 pub induct Read: pub Type

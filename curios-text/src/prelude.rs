@@ -694,6 +694,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
                 pub_let("refused", nat(), nat_lit(status::CONNECTION_REFUSED)),
                 pub_let("would_block", nat(), nat_lit(status::WOULD_BLOCK)),
                 pub_let("tls", nat(), nat_lit(status::TLS_ERROR)),
+                pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
             ],
         ),
         pub_mod(
