@@ -35,13 +35,13 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, so these axes were once three thread-locals installed around a render — which made a term's spelling depend on an enclosing frame nobody could see from the call, and made "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function takes the spelling beside the depth it already threaded.
 //
-// axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a literally-rendered name, take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike.
+// axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a literally-rendered global, take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
 // axis (b) — globals: a *shorten map* (built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Used by error rendering *and* `Module` display.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; the `--print` stage dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
-// A `Type`'s own level is suppressed only when it is *metavariable-headed*. The level is that node's whole content, so erasing a concrete one could render two distinct sorts identically — but an unsolved level names nothing a reader can act on, and it is the common case: a diagnostic over a polymorphic head reports `(A: Type.{?u263}) -> Nat` against `(#6553: (#6552: Type.{?u261}) -> Type.{?u262}) -> Nat`, three placeholders competing with the disagreement they surround. Suppressing every level was rejected for the case that cannot be ruled out — two distinct concrete levels rendering as `Type` against `Type` — and a whole-fragment "show it only when it disambiguates" pass was rejected as context-dependent rendering: unlike a binder name, which is inherently relative, a level is an absolute fact about the term.
+// A `Type`'s own level is suppressed only when it is *metavariable-headed*. The level is that node's whole content, so erasing a concrete one could render two distinct sorts identically — but an unsolved level names nothing a reader can act on, and it is the common case: a diagnostic over a polymorphic head reports `(A: Type.{?u263}) -> Nat` against `((Type.{?u261}) -> Type.{?u262}) -> Nat`, three placeholders competing with the disagreement they surround. Suppressing every level was rejected for the case that cannot be ruled out — two distinct concrete levels rendering as `Type` against `Type` — and a whole-fragment "show it only when it disambiguates" pass was rejected as context-dependent rendering: unlike a binder name, which is inherently relative, a level is an absolute fact about the term.
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
@@ -312,21 +312,27 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
     }
 }
 
-/// Give every hinted binder a clean display spelling: its hint, or `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a name that renders literally (globals, hintless binders). The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
+/// Give every local binder a clean display spelling: its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a global's literal rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
+///
+/// A hintless entry's `x` is consulted only where something references the binder — the label sites spell an unreferenced unnameable binder `_` (or elide it) without the map. Hinted names are assigned first, so a synthesized `x` can never steal the spelling from a binder actually written `x`.
 pub fn build_rename(names: &BTreeSet<Free>) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
-    let (prettifiable, literal): (Vec<_>, Vec<_>) =
-        names.iter().partition(|name| name.hint().is_some());
+    let (literal, prettifiable): (Vec<_>, Vec<_>) =
+        names.iter().partition(|name| name.as_global().is_some());
 
-    // Names that render as themselves reserve their spelling up front.
+    // Globals render as themselves and reserve their spelling up front.
     let mut used = literal
         .into_iter()
         .map(Free::to_string)
         .collect::<BTreeSet<_>>();
 
+    let (hinted, hintless): (Vec<_>, Vec<_>) = prettifiable
+        .into_iter()
+        .partition(|name| name.hint().is_some());
+
     let mut map = HashMap::new();
-    for name in prettifiable {
-        let hint = name.hint().expect("partitioned on a present hint");
+    for name in hinted.into_iter().chain(hintless) {
+        let hint = name.hint().unwrap_or("x");
         let mut candidate = hint.to_string();
         let mut next = 2;
         while used.contains(&candidate) {
@@ -394,24 +400,6 @@ fn scope_labels<'a>(binders: impl Iterator<Item = Option<&'a Free>>, depth: usiz
 
 fn label_terms(binders: &[Free]) -> Vec<Term> {
     binders.iter().map(Term::free_var).collect()
-}
-
-fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<Free>, Term) {
-    fn walk(cur: Telescope<Term>, depth: usize, idx: usize, binders: &mut Vec<Free>) -> Term {
-        match cur {
-            Telescope::Done(body) => *body,
-            Telescope::Cons(_ty, rest) => {
-                let binder = binder_or(rest.binder(0), depth + idx);
-                let next = rest.open(&[&Term::free_var(&binder)]);
-                binders.push(binder);
-                walk(next, depth, idx + 1, binders)
-            }
-        }
-    }
-
-    let mut binders = Vec::new();
-    let body = walk(telescope, depth, 0, &mut binders);
-    (binders, body)
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((Free, Free), Term) {
@@ -971,20 +959,31 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 return former_doc(former, depth, spelling);
             }
             let n = telescope.len();
-            let (labels, body) = open_telescope(telescope, depth);
-            // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above.
-            let marked = labels
-                .iter()
-                .enumerate()
-                .map(|(idx, label)| {
-                    let mark = match plicities.get(idx) {
-                        Some(Plicity::Implicit) => "@",
-                        Some(Plicity::Witness) => "use ",
-                        _ => "",
-                    };
-                    format!("{mark}{}", spelling.label(label))
-                })
-                .collect::<Vec<_>>();
+            // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above. A parameter position cannot be elided, so an unnameable binder nothing references prints the way source spells it: `_`.
+            let mut marked = Vec::with_capacity(n);
+            let mut cur = telescope;
+            let mut idx = 0;
+            let body = loop {
+                match cur {
+                    Telescope::Done(body) => break *body,
+                    Telescope::Cons(_ty, rest) => {
+                        let label = binder_or(rest.binder(0), depth + idx);
+                        let mark = match plicities.get(idx) {
+                            Some(Plicity::Implicit) => "@",
+                            Some(Plicity::Witness) => "use ",
+                            _ => "",
+                        };
+                        let shown = if label.hint().is_none() && !rest.uses(0) {
+                            "_".to_string()
+                        } else {
+                            spelling.label(&label)
+                        };
+                        marked.push(format!("{mark}{shown}"));
+                        cur = rest.open(&[&Term::free_var(&label)]);
+                        idx += 1;
+                    }
+                }
+            };
             let param_str = if marked.len() == 1 && plicities.first() == Some(&Plicity::Explicit) {
                 marked.into_iter().next().unwrap()
             } else {
@@ -1029,12 +1028,20 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 match cur {
                     Telescope::Done(_) => {}
                     Telescope::Cons(ty, rest) => {
-                        let label = binder_or(rest.binder(0), depth + idx);
-                        items.push(indent(flat([
-                            pure(spelling.label(&label)),
-                            pure(": "),
-                            sub(ty, depth + total, spelling),
-                        ])));
+                        let raw = rest.binder(0);
+                        let label = binder_or(raw, depth + idx);
+                        // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
+                        let named = match raw {
+                            Some(name) => name.hint().is_some() || rest.uses(0),
+                            None => false,
+                        };
+                        let typed = sub(ty, depth + total, spelling);
+                        let printer = if named {
+                            flat([pure(spelling.label(&label)), pure(": "), typed])
+                        } else {
+                            typed
+                        };
+                        items.push(indent(printer));
                         let next = rest.open(&[&Term::free_var(&label)]);
                         walk(next, depth, total, idx + 1, items, spelling);
                     }

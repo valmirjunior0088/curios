@@ -45,8 +45,11 @@ pub(crate) fn suggest_candidates(
     let hole_name = context.fresh(Some("?"));
     let hole = Term::free_var(&hole_name);
 
-    // Pool 0 — scope fits: a binder whose type converts to the goal type is itself a candidate.
+    // Pool 0 — scope fits: a binder whose type converts to the goal type is itself a candidate. An unnameable binder is skipped: the paste-and-recheck promise needs a spelling the author can write.
     for (name, type_) in telescope {
+        if !name.nameable() {
+            continue;
+        }
         if matches!(probe_match(context, type_, goal_type), Ok(Probe::Yes)) {
             candidates.push(Candidate {
                 term: Term::free_var(name),
@@ -68,9 +71,12 @@ pub(crate) fn suggest_candidates(
         );
     }
 
-    // Pools 2–4 — application fits: scope binders with function types, then the module's own definitions, then the globals its items reference.
+    // Pools 2–4 — application fits: scope binders with function types, then the module's own definitions, then the globals its items reference. Unnameable heads are skipped for the same reason as pool 0.
     let mut attempts = 0usize;
     for (name, type_) in telescope {
+        if !name.nameable() {
+            continue;
+        }
         if attempts >= ATTEMPTS {
             break;
         }

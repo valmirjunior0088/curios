@@ -2,8 +2,8 @@ use {
     super::Erased,
     curios_base::{Grain, Int, Plicity, Qualifier, Span},
     curios_core::{
-        Atom, Free, Level, Module, Polarity, ReduceError, Spelling, Term, UniverseConstraintOrigin,
-        UniverseError, build_rename, build_shorten, display_names,
+        Atom, Free, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
+        UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
     },
     num_bigint::BigUint,
     std::{
@@ -13,7 +13,7 @@ use {
     },
 };
 
-/// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`]; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
+/// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
 pub struct GoalReport {
     pub span: Option<Span>,
@@ -305,7 +305,7 @@ pub enum Error {
         /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
         embedding: Option<EmbeddingDiagnosis>,
     },
-    /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently.
+    /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — except an unnameable binder, whose line spells `_` the way source does.
     ///
     /// The compile path batches goals via [`Error::Goals`] before zonk runs, so this single-goal form survives as the safety net for direct zonk callers.
     Goal {
@@ -1083,6 +1083,14 @@ impl From<UniverseError> for Error {
     }
 }
 
+/// Whether a goal-scope binder is unnameable — a hintless local no written expression can reference. Its scope line spells `_` the way source does, instead of the synthesized name the rename map would mint for it.
+fn unnameable_binder(name: &Term) -> bool {
+    match &**name {
+        Subterm::Var(var) => var.as_free().is_some_and(|free| !free.nameable()),
+        _ => false,
+    }
+}
+
 /// How a diagnostic names a declaring module. The root qualifier is the entry module — a legitimate value, not a missing one.
 fn declaring_module(module: &Qualifier) -> String {
     match module.is_root() {
@@ -1542,12 +1550,11 @@ impl fmt::Display for Displayed<'_> {
                 // `?` itself is the turnstile: hypotheses as `name : type` lines, then `? : type` states the goal and `? = term` its solution — the declaration idiom `name : type = value` split into clauses about `?`. No `? =` line means nothing determined it.
                 write!(f, "goal `?`")?;
                 for (name, type_) in scope {
-                    write!(
-                        f,
-                        "\n  {} : {}",
-                        name.spelled(spelling),
-                        type_.spelled(spelling)
-                    )?;
+                    let shown = match unnameable_binder(name) {
+                        true => "_".to_string(),
+                        false => name.spelled(spelling).to_string(),
+                    };
+                    write!(f, "\n  {shown} : {}", type_.spelled(spelling))?;
                 }
                 write!(f, "\n  ? : {goal}")?;
                 match solution {
@@ -1572,7 +1579,11 @@ impl fmt::Display for Displayed<'_> {
                     }
                     write!(f, "goal `?`")?;
                     for (name, type_) in &report.scope {
-                        write!(f, "\n  {} : {}", clause(name), clause(type_))?;
+                        let shown = match unnameable_binder(name) {
+                            true => "_".to_string(),
+                            false => clause(name),
+                        };
+                        write!(f, "\n  {shown} : {}", clause(type_))?;
                     }
                     write!(f, "\n  ? : {}", clause(&report.goal))?;
                     if let Some(solution) = &report.solution {

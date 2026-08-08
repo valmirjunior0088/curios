@@ -177,6 +177,14 @@ impl Free {
         matches!(self, Free::Local(_))
     }
 
+    /// Whether source can spell this identity: a global's path, or a local's written hint. A hintless local is compiler-minted — an anonymous or invented binder no written expression can reference — so a diagnostic spells it `_` rather than offering it as something to paste.
+    pub fn nameable(&self) -> bool {
+        match self {
+            Free::Global(_) => true,
+            Free::Local(mint) => mint.hint().is_some(),
+        }
+    }
+
     /// What a diagnostic should call this, if there is anything better than its rendered form: a local's minting hint, or nothing for a global, whose rendering the printer shortens against the module it appears in.
     pub(crate) fn hint(&self) -> Option<&str> {
         self.as_local().and_then(Mint::hint)
