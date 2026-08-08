@@ -1,16 +1,6 @@
 //! End-to-end tests for binder plicity: automatic insertion of omitted hidden lambda binders (Phase 3), exact checking of written function binders (Phase 1), and exact checking of constructor-pattern plicity (Phase 2).
 
-use super::run;
-use crate::run_text;
-use curios_runtime::MockHost;
-
-fn error(source: &str) -> String {
-    let (system, _io) = MockHost::builder().build();
-    match run_text(source, system) {
-        Ok(_) => panic!("expected an error, program succeeded"),
-        Err(error) => error.to_string(),
-    }
-}
+use super::{error, run};
 
 // A lambda checked against `(@A : Type, x : A) -> A` may omit the implicit binder entirely: elaboration inserts `@A` and binds the sole explicit slot.
 #[test]

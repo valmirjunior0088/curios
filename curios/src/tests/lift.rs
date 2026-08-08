@@ -2,26 +2,7 @@
 //!
 //! `/syn/Lift(M, N)` declares the canonical embedding of one monad into another, one witness per ordered pair, never chained. `elaborate_bang` reads the region's monad from the expected type (strict postponement — never inferred from the action) and, when the action's declared monad differs from the region's, wraps the action in `/syn/Lift`'s `lift` so the declared edge resolves — or its absence is reported as the missing witness.
 
-use {
-    super::run,
-    curios_text::{Entrypoint, RootSource},
-};
-
-/// Compile-only, for the programs whose point is that they are refused.
-fn typecheck(source: &str) -> Result<(), String> {
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .expect("failed to parse source");
-
-    curios_pipeline::compile_entrypoint(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
-}
+use super::{run, typecheck};
 
 /// The acceptance flip: an `Io` action sequenced bare inside an `Async` region, lifted through the `/std/Async` edge with nothing spelled at the call site.
 #[test]

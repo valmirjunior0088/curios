@@ -2,26 +2,7 @@
 //!
 //! `Io(T)` is an inert description of a computation yielding a `T`, and the only thing that ever forces one is the emitted entrypoint boundary. These tests pin that reading rather than merely tolerating it — most of all [`a_description_bound_once_and_forced_twice_performs_twice`], which is what distinguishes a description from a value that happened to be computed early.
 
-use {
-    super::run,
-    curios_text::{Entrypoint, RootSource},
-};
-
-/// Compile-only, for the programs whose point is that they are refused.
-fn typecheck(source: &str) -> Result<(), String> {
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .expect("failed to parse source");
-
-    curios_pipeline::compile_entrypoint(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
-}
+use super::{run, typecheck};
 
 #[test]
 fn pure_and_bind_sequence_a_description() {

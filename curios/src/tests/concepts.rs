@@ -1,12 +1,4 @@
-use {super::run, curios_runtime::MockHost};
-
-fn error(source: &str) -> String {
-    let (system, _io) = MockHost::builder().build();
-    match crate::run_text(source, system) {
-        Ok(_) => panic!("expected an error, program succeeded"),
-        Err(error) => error.to_string(),
-    }
-}
+use super::{error, run};
 
 // The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to `show_nat`.
 #[test]

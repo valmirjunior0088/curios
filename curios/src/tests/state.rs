@@ -2,26 +2,7 @@
 //!
 //! A `State(S, A)` region sequences with `!` like any monad — the parametric `Monad((A) => State(S, A))` witness resolves through partial-application keying, and the bind's monad pins by right-biased imitation from the region's type. What a `State` region can never do is perform an effect: no `Lift(Io, State(S))` edge exists, and its absence is the guarantee.
 
-use {
-    super::run,
-    curios_text::{Entrypoint, RootSource},
-};
-
-/// Compile-only, for the programs whose point is that they are refused.
-fn typecheck(source: &str) -> Result<(), String> {
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .expect("failed to parse source");
-
-    curios_pipeline::compile_entrypoint(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
-}
+use super::{run, typecheck};
 
 /// The full vocabulary in one region: `get`, `put`, `modify`, and the `state` constructor, sequenced with `!` and run purely at the boundary.
 #[test]

@@ -33,10 +33,39 @@ mod throw;
 mod toml;
 mod universes;
 
-use curios_runtime::MockHost;
+use {
+    curios_pipeline::compile_entrypoint,
+    curios_runtime::MockHost,
+    curios_text::{Entrypoint, RootSource},
+};
 
 fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();
     crate::run_text(source, system).expect("expected result");
     io.output().to_vec()
+}
+
+/// Compile-only, for the programs whose point is that they are refused.
+fn typecheck(source: &str) -> Result<(), String> {
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .expect("failed to parse source");
+
+    compile_entrypoint(
+        crate::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        RootSource::none(),
+        |_| {},
+    )
+    .map(|_| ())
+    .map_err(|error| error.to_string())
+}
+
+/// Run expecting failure, returning the diagnostic.
+fn error(source: &str) -> String {
+    let (system, _io) = MockHost::builder().build();
+    match crate::run_text(source, system) {
+        Ok(_) => panic!("expected an error, program succeeded"),
+        Err(error) => error.to_string(),
+    }
 }
