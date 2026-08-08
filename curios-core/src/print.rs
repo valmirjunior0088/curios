@@ -515,7 +515,7 @@ fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
         | Intrinsic::IntEql(..)
         | Intrinsic::FltEql(..)
         | Intrinsic::BoolEql(..)
-        | Intrinsic::BinEql(Grain::X, ..)
+        | Intrinsic::BinEql(..)
         | Intrinsic::HandleEql(..) => "==",
         Intrinsic::NatNeq(..)
         | Intrinsic::IntNeq(..)
@@ -739,7 +739,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
                 .join(", ")
         )),
         Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, frame),
-        Intrinsic::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, frame),
+        Intrinsic::BinEql(Grain::X, l, r) => print_infix("==", l, r, frame),
         Intrinsic::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, frame),
         Intrinsic::BinSlice(Grain::X, bin, start, end) => flat([
             pure("Bytes.slice "),
@@ -768,7 +768,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
                 .join(", ")
         )),
         Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, frame),
-        Intrinsic::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, frame),
+        Intrinsic::BinEql(Grain::B, l, r) => print_infix("==", l, r, frame),
         Intrinsic::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, frame),
         Intrinsic::BinSlice(Grain::B, bin, start, end) => flat([
             pure("Bits.slice "),
