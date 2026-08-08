@@ -20,7 +20,7 @@ mod tests;
 use {
     super::{Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
-        Apply, Bound, Field, FuncType, InductType, Intrinsic, Level, Proj, Reducer, StructType,
+        Apply, Bound, Field, FuncType, Intrinsic, Level, Proj, Reducer, StructType,
         Subterm, Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
     },
 };
@@ -77,19 +77,8 @@ impl Sort {
 
         match &*reduced {
             // A nominal type's sort is declared, not derived: the declaration says whether the family lands in `Type` or in `Prop`, at the universes this occurrence instantiated it at.
-            Subterm::InductType(InductType {
-                name,
-                universes,
-                params,
-                indices,
-            }) => {
-                let family = InductType {
-                    name: name.clone(),
-                    universes: universes.clone(),
-                    params: params.clone(),
-                    indices: indices.clone(),
-                };
-                let result_sort = kernel.induct_at(&family)?.result_sort().clone();
+            Subterm::InductType(family) => {
+                let result_sort = kernel.induct_at(family)?.result_sort().clone();
 
                 as_sort(kernel, &result_sort)
             }
