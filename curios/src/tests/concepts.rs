@@ -1019,3 +1019,31 @@ fn parametric_witnesses_over_one_family_still_collide() {
         "expected the key collision, got: {message}"
     );
 }
+
+// The use side of the partial family: a `!` inside a `Box(Str, Nat)` region pins the bind's monad by right-biased partial imitation (`?M := (A) => Box(Str, A)`), which the parametric witness then answers. This is the spec's own reproduction for the rule, flipped to acceptance.
+#[test]
+fn a_bang_sequences_in_a_two_parameter_monad_region() {
+    let source = r#"
+        use /std/{Nat, Str, Monad};
+        induct Box(S : Type, A : Type) : Type
+        | wrap(A)
+        end
+        satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
+            pure(@A, a) = Box/wrap(a),
+            bind(@A, @B, m, f) =
+                match m : (_) => Box(S, B)
+                | wrap(a) => f(a)
+                end,
+        }
+        pub let prog : Box(Str, Nat) =
+            let v = Monad/pure(3)!;
+            Monad/pure(Nat/add(v, v));
+        let out =
+            match prog : (_) => Nat
+            | wrap(value) => value
+            end;
+        /std/print(Nat/to_str(out))
+        "#;
+
+    assert_eq!(run(source), b"6");
+}

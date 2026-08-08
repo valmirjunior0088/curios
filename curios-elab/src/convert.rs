@@ -1693,8 +1693,8 @@ impl Convert {
 
     /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`Lst`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
     ///
-    /// Deliberate v1 restrictions (cf. the guards in `solve`):
-    /// - exact arity only — `ā.len()` must equal `params.len() + indices.len()`; partial application is future work;
+    /// Deliberate restrictions (cf. the guards in `solve`):
+    /// - **right-biased** partial application — for a spine of `k` arguments against `n` rigid arguments, `k < n` commits `?m := λx₁…xₖ. T(b₁, …, b_{n−k}, x₁, …, xₖ)`, the conventional choice kind-currying makes (it is why `Monad (Either e)` works in Haskell). The fixed prefix is taken from the rigid side, which a telescope's left-to-right dependency order keeps well-scoped, and `k` is never guessed: it is the spine's own length, checked against `?m`'s frozen birth arity. An equation whose intended solution abstracts a *prefix* is guessed wrong and blocked — incompleteness moves rather than disappearing — and a kind-wrong split (abstracting an index the birth type sorts differently) is refused by the re-validation below before it commits;
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection (`?m := λx. x`) solutions are never produced;
     /// - rigid heads only — nominal constructors and the unary intrinsic formers (`Lst`, `Cell`), whose argument rides inside the `Intrinsic` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
@@ -1765,12 +1765,14 @@ impl Convert {
             _ => unreachable!("the callers pass a nominal or intrinsic-former rigid side"),
         };
         let arity = rigid_args.len();
+        let spine = flex.params.len();
 
-        if flex.params.len() != arity {
+        // Right-biased: a spine shorter than the rigid argument list abstracts the *suffix*, with the prefix baked in from the rigid side; a longer spine has no imitation.
+        if spine > arity {
             return self.block(context, goal);
         }
 
-        // The candidate's binders come from `?m`'s frozen birth type, which must itself reduce to a function type of the same arity. Peeling opens each binder as a free variable of its own label (elaborated labels are entropy-fresh), so dependent domains stay well-scoped.
+        // The candidate's binders come from `?m`'s frozen birth type, which must itself reduce to a function type of the spine's arity. Peeling opens each binder as a free variable of its own label (elaborated labels are entropy-fresh), so dependent domains stay well-scoped.
         let Some(entry) = context.metavar_entry(metavar.id) else {
             return self.block(context, goal);
         };
@@ -1778,7 +1780,7 @@ impl Convert {
         let Subterm::FuncType(func_type) = &*result else {
             return self.block(context, goal);
         };
-        if func_type.plicities.len() != arity {
+        if func_type.plicities.len() != spine {
             return self.block(context, goal);
         }
 
@@ -1799,7 +1801,13 @@ impl Convert {
             .iter()
             .map(|(_, binder, _)| Term::free_var(binder))
             .collect::<Vec<_>>();
-        let body = mk_body(&binder_vars);
+        let (rigid_prefix, rigid_suffix) = rigid_args.split_at(arity - spine);
+        let full_args = rigid_prefix
+            .iter()
+            .cloned()
+            .chain(binder_vars.iter().cloned())
+            .collect::<Vec<_>>();
+        let body = mk_body(&full_args);
         let candidate = Term::func_marked(domains.clone(), body);
 
         // The invariant `solve_refinement_free` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under counterfactual match-arm refinements. When refinements are live and the unrefined spelling differs, the nominal shape may be the refinement's doing — postpone rather than commit.
@@ -1817,9 +1825,12 @@ impl Convert {
             Solved::Postponed | Solved::Failed => return self.block(context, goal),
         }
 
-        // Equate arguments pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types).
-        for ((flex_arg, rigid_arg), (_, _, domain)) in
-            flex.params.into_iter().zip(rigid_args).zip(domains)
+        // Equate the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
+        for ((flex_arg, rigid_arg), (_, _, domain)) in flex
+            .params
+            .into_iter()
+            .zip(rigid_suffix.iter().cloned())
+            .zip(domains)
         {
             self.enqueue(domain, flex_arg, rigid_arg);
         }
