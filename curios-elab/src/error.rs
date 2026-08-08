@@ -264,6 +264,8 @@ pub enum Error {
     PostponedCheck {
         expected: Box<Term>,
     },
+    /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
+    BangRegionUndetermined,
     /// An overloaded infix operator applied at an operand type with no matching scalar intrinsic — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
@@ -445,6 +447,10 @@ impl Error {
         Self::PostponedCheck {
             expected: Box::new(expected.into()),
         }
+    }
+
+    pub(crate) fn bang_region_undetermined() -> Self {
+        Self::BangRegionUndetermined
     }
 
     pub(crate) fn not_a_function<U: Into<Term>>(head_type: U) -> Self {
@@ -1426,6 +1432,12 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     f,
                     "cannot check expression: its expected type never gained structure: {expected}"
+                )
+            }
+            Error::BangRegionUndetermined => {
+                write!(
+                    f,
+                    "the monad of this region was never determined\n  a '!' sequences in its region's monad, which is read from the region's type\n  annotate the enclosing result type to fix the monad"
                 )
             }
             Error::OperatorUndefined { symbol, type_ } => {

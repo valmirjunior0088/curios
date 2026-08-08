@@ -891,11 +891,14 @@ fn all_implicit_telescope_saturates_and_retargets() {
         let direct = bind(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
         -- The lambda body is its own region root: the `!` sequences inside
         -- it instead of hoisting into the entrypoint tail (which returns a
-        -- bare `Nat`, not an `Id`).
-        let sugared_block = () =>
-            let v = Id/wrap(3)!;
-            Id/wrap(v);
-        let sugared = sugared_block();
+        -- bare `Nat`, not an `Id`). The annotation is what names the region's
+        -- monad: a `!` reads it from the region's type and never infers it
+        -- from the action, so an inference-position region is refused.
+        let sugared_block : ({}) -> Id(Nat) =
+            (_) =>
+                let v = Id/wrap(3)!;
+                Id/wrap(v);
+        let sugared = sugared_block(());
         match sugared : (_) => Nat
         | wrap(value) =>
             match direct : (_) => Nat

@@ -1,4 +1,4 @@
-use crate::TermBuilders;
+use crate::{HeadKey, TermBuilders};
 use {super::*, curios_core::Global};
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding folds through `Term::let_`, which merges the bindings back into a single flat `Let`. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
@@ -383,20 +383,119 @@ fn infix_method(
     }))
 }
 
-/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/syn/Monad/bind` application and elaborate the result — exactly the application `into_core`'s `wrap` used to spell, so behavior is unchanged; constructing it here instead keeps the transient in play until the stage with types in hand, where a type-directed decision about the sequencing has a place to live. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
+/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/syn/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
 pub(super) fn elaborate_bang(
     context: &mut Context,
     bang: &Bang,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    let Mode::Check(expected) = &mode else {
+        return Err(Error::bang_region_undetermined().at_opt(term.span()));
+    };
+
+    // Strict postponement: a region whose monad is not yet rigid parks the whole bang and re-checks when the expected type's metavariables solve; the drain reports the region as undetermined if they never do.
+    let region = reduce_with(context, expected)?;
+    if region_flex(context, &region) {
+        return park_checking(context, term, expected);
+    }
+
+    // Auto-lift, decided before anything elaborates by reading declared shapes: both heads keyable and different means the action is wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
+    let action = match (
+        HeadKey::of_whnf(&region),
+        action_result_key(context, &bang.action),
+    ) {
+        (Some(region_key), Some(action_key)) if region_key != action_key => {
+            let field = context.syntax().lift().lift();
+            let wrapper = Term::free_var(&Free::global(
+                field.concept().qualifier().with(field.field()),
+            ));
+            let wrapped = Term::apply(wrapper, vec![bang.action.clone()]);
+            match bang.action.span().or_else(|| term.span()) {
+                Some(span) => Term::spanned(span, wrapped),
+                None => wrapped,
+            }
+        }
+        _ => bang.action.clone(),
+    };
+
     let head = Term::free_var(&Free::global(context.syntax().monad().bind().qualifier()));
-    let app = Term::apply(head, vec![bang.action.clone(), bang.continuation.clone()]);
+    let app = Term::apply(head, vec![action, bang.continuation.clone()]);
     let app = match term.span() {
         Some(span) => Term::spanned(span, app),
         None => app,
     };
     elaborate(context, &app, mode)
+}
+
+/// Whether the region's weak-head form is still headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case.
+fn region_flex(context: &Context, whnf: &Term) -> bool {
+    match &**whnf {
+        Subterm::Metavar(metavar) => context.metavar_solution(metavar.id).is_none(),
+        Subterm::Apply(apply) => region_flex(context, &apply.head),
+        _ => false,
+    }
+}
+
+/// The action's monad head, read without elaborating: peel the explicit application spine to a named head, read the head's *declared* type from the assumption store, and key the syntactic result behind its telescope. `None` on anything unreadable — an unnamed or computed head, a spine whose explicit-argument count differs from the declared telescope's, an alias-headed or computed result — so the oracle never wraps on a guess: reads only, no elaboration, no reduction, no instantiation, and a wrong abstention costs a message, never a solution.
+fn action_result_key(context: &mut Context, action: &Term) -> Option<HeadKey> {
+    let mut head = action;
+    let mut explicit_args = 0usize;
+    loop {
+        match &**head {
+            Subterm::Apply(apply) => {
+                explicit_args += apply
+                    .plicities
+                    .iter()
+                    .filter(|plicity| matches!(plicity, Plicity::Explicit))
+                    .count();
+                head = &apply.head;
+            }
+            Subterm::Var(var) => {
+                let declared = context.assumption(var.as_free()?)?.clone();
+                return declared_result_key(context, &declared, explicit_args);
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// The [`HeadKey`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is walked unopened, exactly as [`HeadKey::of_whnf`]'s higher-kinded arm walks a former's body, so a *dependent* result — one naming an earlier binder — is not closed and abstains rather than reducing an open term. A closed result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains.
+fn declared_result_key(
+    context: &mut Context,
+    declared: &Term,
+    explicit_args: usize,
+) -> Option<HeadKey> {
+    let result = match &**declared {
+        Subterm::FuncType(func_type) => {
+            let explicit_binders = func_type
+                .plicities
+                .iter()
+                .filter(|plicity| matches!(plicity, Plicity::Explicit))
+                .count();
+            if explicit_binders != explicit_args {
+                return None;
+            }
+            let mut telescope = &func_type.telescope;
+            while let Telescope::Cons(_, rest) = telescope {
+                telescope = rest.body();
+            }
+            let Telescope::Done(result) = telescope else {
+                unreachable!("a telescope spine ends in Done");
+            };
+            (**result).clone()
+        }
+        // A zero-argument action (`Async/yield_now`): the declared type is the carrier itself.
+        _ => match explicit_args {
+            0 => declared.clone(),
+            _ => return None,
+        },
+    };
+    if !result.closed() {
+        return None;
+    }
+    let whnf = reduce_with(context, &result).ok()?;
+    HeadKey::of_whnf(&whnf)
 }
 
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.

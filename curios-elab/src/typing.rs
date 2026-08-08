@@ -4,8 +4,8 @@ mod tests;
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
     Apply, Bound, Field, Free, Func, FuncType, Global, Intrinsic, IntrinsicHead, Level, Many,
-    MetaId, Metavar, Proj, ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
-    UniverseConstraintOrigin, UniverseRole, Visit,
+    MetaId, Metavar, Proj, ReduceError, Scope, Subterm, Telescope, Term, Transient,
+    UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
 };
 use std::{collections::BTreeSet, rc::Rc};
 
@@ -326,10 +326,14 @@ impl Context {
                                 }
                             }
                         }
-                        ParkedWork::Checking { expected, .. } => {
-                            Error::postponed_check(resolved_for_display(self, &expected))
-                                .at_opt(parked.origin.span())
-                        }
+                        ParkedWork::Checking { term, expected, .. } => match &*term {
+                            // A parked bang is a region that never named its monad; report it as that, not as a generic stalled check.
+                            Subterm::Transient(Transient::Bang(_)) => {
+                                Error::bang_region_undetermined().at_opt(parked.origin.span())
+                            }
+                            _ => Error::postponed_check(resolved_for_display(self, &expected))
+                                .at_opt(parked.origin.span()),
+                        },
                         ParkedWork::Witness {
                             goal, provenance, ..
                         } => Error::no_witness(
