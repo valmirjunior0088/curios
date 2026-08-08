@@ -60,11 +60,6 @@ impl Summary {
         Self { functions: current }
     }
 
-    /// The total behavior of invoking a function's body.
-    pub fn function(&self, id: FunctionId) -> LocalBehavior {
-        self.functions.get(&id).copied().unwrap_or_default()
-    }
-
     /// The total behavior of evaluating a right-hand side: its own operation, its callee or callback, and every sub-block it evaluates.
     pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
@@ -153,7 +148,11 @@ fn call_behavior(rhs: &Rhs, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> 
 
 fn callee_behavior(atom: Atom, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> LocalBehavior {
     match atom {
-        Atom::Function(function) => summaries.get(&function).copied().unwrap_or_default(),
+        // The seed covers every live function and a verified module references only live functions, so a miss is a broken snapshot discipline, never a program property.
+        Atom::Function(function) => summaries
+            .get(&function)
+            .copied()
+            .expect("a live callee has a summary"),
         _ => LocalBehavior::unknown(),
     }
 }
