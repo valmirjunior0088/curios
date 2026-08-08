@@ -201,7 +201,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
     }
 }
 
-/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructor `Bin/get` and `Bin/slice` walk a codepoint at a time, exposing the cons structure the `Utf8` relation builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
+/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bin/get` and `Bin/slice` walk an atom at a time, exposing the cons structure the `Utf8` relation builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
 pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
     match peel_front(grain, bin) {
         Front::Cons { head, tail } => Some((head.into_chunk(grain), tail)),
@@ -277,7 +277,7 @@ fn peel_front_lst(lst: &Term) -> LstFront {
     }
 }
 
-/// Split the first element off a reduced `Lst` value, returning the head element and the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `Lst/get` and `Lst/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/ `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque symbolic value, where no first element is statically exposed.
+/// Split the first element off a reduced `Lst` value, returning the head element and the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `Lst/get` and `Lst/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/`Bin/slice` walk an atom at a time. `None` for the empty array or an opaque symbolic value, where no first element is statically exposed.
 pub(crate) fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
     match peel_front_lst(lst) {
         LstFront::Cons { head, tail } => Some((head, tail)),
