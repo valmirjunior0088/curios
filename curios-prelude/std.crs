@@ -31,6 +31,9 @@ pub use Monad/{let Monad};
 pub mod Lift;
 pub use Lift/{let Lift};
 
+pub mod State;
+pub use State/{let State};
+
 -- Before every module that sequences an effect with `!`. A witness has no dependency edge from its consumers: it lands after its own body's dependencies, so a consumer earlier in this flat order would not see it.
 pub mod Io;
 pub use Io/{let Io};
@@ -79,6 +82,9 @@ pub use Char/{let Char};
 
 pub mod Result;
 pub use Result/{let Result};
+
+pub mod Throw;
+pub use Throw/{let Throw};
 
 pub mod Option;
 pub use Option/{let Option};
