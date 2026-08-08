@@ -22,14 +22,15 @@ let parse_false_val: Parse(Json) =
 
 let parse_num: Parse(Json) =
     Parse {
-        run(input, pos) = match Parse/take_while(is_num_byte).run(input, pos)
-        | success((next, chunk)) =>
-            match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
-            | some(value) => Result/success((next, Json/num(value)))
-            | none() => Result/failure("expected number")
-            end
-        | failure(msg) => Result/failure(msg)
-        end,
+        run(input, pos) =
+            match Parse/take_while(is_num_byte).run(input, pos)
+            | success((next, chunk)) =>
+                match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
+                | some(value) => Result/success((next, Json/num(value)))
+                | none() => Result/failure("expected number")
+                end
+            | failure(msg) => Result/failure(msg)
+            end,
     };
 
 let is_not_string_special(byte: Byte) -> Bool =
@@ -127,23 +128,24 @@ let symbol(b: Byte) -> Parse(Byte) =
 
 pub rec decode: Parse(Json) =
     Parse {
-        run(input, pos) = match ws.run(input, pos)
-        | failure(msg) => Result/failure(msg)
-        | success((start, _)) =>
-            match Nat/Lt/try(start, Bytes/len(input))
-            | none() => Result/failure("unexpected end of input")
-            | some(ok) =>
-                match Byte/to_nat(Bytes/at(input, start, ok))
-                | 110 => parse_null.run(input, start)
-                | 116 => parse_true_val.run(input, start)
-                | 102 => parse_false_val.run(input, start)
-                | 34 => parse_str_value.run(input, start)
-                | 91 => parse_arr.run(input, start)
-                | 123 => parse_obj.run(input, start)
-                | _ => parse_num.run(input, start)
+        run(input, pos) =
+            match ws.run(input, pos)
+            | failure(msg) => Result/failure(msg)
+            | success((start, _)) =>
+                match Nat/Lt/try(start, Bytes/len(input))
+                | none() => Result/failure("unexpected end of input")
+                | some(ok) =>
+                    match Byte/to_nat(Bytes/at(input, start, ok))
+                    | 110 => parse_null.run(input, start)
+                    | 116 => parse_true_val.run(input, start)
+                    | 102 => parse_false_val.run(input, start)
+                    | 34 => parse_str_value.run(input, start)
+                    | 91 => parse_arr.run(input, start)
+                    | 123 => parse_obj.run(input, start)
+                    | _ => parse_num.run(input, start)
+                    end
                 end
-            end
-        end,
+            end,
     }
 and parse_arr: Parse(Json) =
     let _ = symbol(0x5B)!;

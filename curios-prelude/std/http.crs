@@ -123,20 +123,21 @@ pub struct Response: pub Type {
 
 let rest: Parse(Bytes) =
     Parse {
-        run(input, pos) = Result/success(
-            (Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input)))),
+        run(input, pos) =
+            Result/success((Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input)))),
     };
 
 let guard_header: Parse({}) =
     Parse {
-        run(input, pos) = match Nat/Lt/try(pos, Bytes/len(input))
-        | none() => Result/failure("unexpected end of headers")
-        | some(ok) =>
-            match Bytes/at(input, pos, ok) == 0xD
-            | true => Result/failure("end of header block")
-            | false => Result/success((pos, ()))
-            end
-        end,
+        run(input, pos) =
+            match Nat/Lt/try(pos, Bytes/len(input))
+            | none() => Result/failure("unexpected end of headers")
+            | some(ok) =>
+                match Bytes/at(input, pos, ok) == 0xD
+                | true => Result/failure("end of header block")
+                | false => Result/success((pos, ()))
+                end
+            end,
     };
 
 let header_line: Parse({Str, Str}) =
@@ -153,8 +154,9 @@ let header_line: Parse({Str, Str}) =
 
 let take_n(n: Nat) -> Parse(Bytes) =
     Parse {
-        run(input, pos) = let stop = Nat/min(pos + n, Bytes/len(input));
-        Result/success((stop, Bytes/slice(input, pos, stop))),
+        run(input, pos) =
+            let stop = Nat/min(pos + n, Bytes/len(input));
+            Result/success((stop, Bytes/slice(input, pos, stop))),
     };
 
 let content_length_of(headers: Lst({Str, Str})) -> Option(Nat) =

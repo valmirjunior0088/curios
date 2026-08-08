@@ -50,49 +50,51 @@ let escape_scan(input: Bytes, cur: Nat) -> Result({Nat, Bytes}, Str) =
 
 let basic_str_scan: Parse(Bytes) =
     Parse {
-        run(input, pos) = rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-            match Bytes/get(input, cur)
-            | none() => Result/failure("unterminated string")
-            | some(b) =>
-                let n = Byte/to_nat(b);
-                choose
-                | n == 0x22 => Result/success((cur + 1, acc))
-                | n == 0x5C =>
-                    match escape_scan(input, cur + 1)
-                    | success((next, chunk)) => go(next, x[..acc, ..chunk])
-                    | failure(msg) => Result/failure(msg)
+        run(input, pos) =
+            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
+                    choose
+                    | n == 0x22 => Result/success((cur + 1, acc))
+                    | n == 0x5C =>
+                        match escape_scan(input, cur + 1)
+                        | success((next, chunk)) => go(next, x[..acc, ..chunk])
+                        | failure(msg) => Result/failure(msg)
+                        end
+                    | n == 0x9 => go(cur + 1, x[..acc, b])
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, x[..acc, b])
                     end
-                | n == 0x9 => go(cur + 1, x[..acc, b])
-                | n < 0x20 => Result/failure("control character in string")
-                | n == 0x7F => Result/failure("control character in string")
-                | _ => go(cur + 1, x[..acc, b])
-                end
-            end;
-        match byte_at_is(input, pos, (n) => n == 0x22)
-        | true => go(pos + 1, x[])
-        | false => Result/failure("expected string")
-        end,
+                end;
+            match byte_at_is(input, pos, (n) => n == 0x22)
+            | true => go(pos + 1, x[])
+            | false => Result/failure("expected string")
+            end,
     };
 
 let literal_str_scan: Parse(Bytes) =
     Parse {
-        run(input, pos) = rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-            match Bytes/get(input, cur)
-            | none() => Result/failure("unterminated string")
-            | some(b) =>
-                let n = Byte/to_nat(b);
-                choose
-                | n == 0x27 => Result/success((cur + 1, acc))
-                | n == 0x9 => go(cur + 1, x[..acc, b])
-                | n < 0x20 => Result/failure("control character in string")
-                | n == 0x7F => Result/failure("control character in string")
-                | _ => go(cur + 1, x[..acc, b])
-                end
-            end;
-        match byte_at_is(input, pos, (n) => n == 0x27)
-        | true => go(pos + 1, x[])
-        | false => Result/failure("expected string")
-        end,
+        run(input, pos) =
+            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
+                    choose
+                    | n == 0x27 => Result/success((cur + 1, acc))
+                    | n == 0x9 => go(cur + 1, x[..acc, b])
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, x[..acc, b])
+                    end
+                end;
+            match byte_at_is(input, pos, (n) => n == 0x27)
+            | true => go(pos + 1, x[])
+            | false => Result/failure("expected string")
+            end,
     };
 
 rec quote_run(input: Bytes, cur: Nat, quote: Nat, acc: Nat) -> Nat =
@@ -131,91 +133,93 @@ rec trim_scan(input: Bytes, cur: Nat, seen_nl: Bool) -> Result(Nat, Str) =
 -- content of a multiline basic string, after the opening delimiter
 let ml_basic_scan: Parse(Bytes) =
     Parse {
-        run(input, pos) = rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-            match Bytes/get(input, cur)
-            | none() => Result/failure("unterminated string")
-            | some(b) =>
-                let n = Byte/to_nat(b);
-                choose
-                | n == 0x22 =>
-                    let q = quote_run(input, cur, 0x22, 0);
+        run(input, pos) =
+            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
                     choose
-                    | q >= 6 => Result/failure("too many quotes")
-                    | q >= 3 => Result/success((cur + q, x[..acc, ..quotes(b, q - 3)]))
-                    | _ => go(cur + q, x[..acc, ..quotes(b, q)])
-                    end
-                | n == 0x5C =>
-                    match byte_at_is(
-                        input,
-                        cur + 1,
-                        (n2) => n2 == 0x20 || n2 == 0x9 || n2 == 0xA || n2 == 0xD)
-                    | true =>
-                        match trim_scan(input, cur + 1, false)
-                        | success(next) => go(next, acc)
-                        | failure(msg) => Result/failure(msg)
+                    | n == 0x22 =>
+                        let q = quote_run(input, cur, 0x22, 0);
+                        choose
+                        | q >= 6 => Result/failure("too many quotes")
+                        | q >= 3 => Result/success((cur + q, x[..acc, ..quotes(b, q - 3)]))
+                        | _ => go(cur + q, x[..acc, ..quotes(b, q)])
                         end
-                    | false =>
-                        match escape_scan(input, cur + 1)
-                        | success((next, chunk)) => go(next, x[..acc, ..chunk])
-                        | failure(msg) => Result/failure(msg)
+                    | n == 0x5C =>
+                        match byte_at_is(
+                            input,
+                            cur + 1,
+                            (n2) => n2 == 0x20 || n2 == 0x9 || n2 == 0xA || n2 == 0xD)
+                        | true =>
+                            match trim_scan(input, cur + 1, false)
+                            | success(next) => go(next, acc)
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        | false =>
+                            match escape_scan(input, cur + 1)
+                            | success((next, chunk)) => go(next, x[..acc, ..chunk])
+                            | failure(msg) => Result/failure(msg)
+                            end
                         end
+                    | n == 0xA => go(cur + 1, x[..acc, b])
+                    | n == 0xD =>
+                        match is_crlf_at(input, cur)
+                        | true => go(cur + 2, x[..acc, \0d, \0a])
+                        | false => Result/failure("bare carriage return")
+                        end
+                    | n == 0x9 => go(cur + 1, x[..acc, b])
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, x[..acc, b])
                     end
-                | n == 0xA => go(cur + 1, x[..acc, b])
-                | n == 0xD =>
-                    match is_crlf_at(input, cur)
-                    | true => go(cur + 2, x[..acc, \0d, \0a])
-                    | false => Result/failure("bare carriage return")
-                    end
-                | n == 0x9 => go(cur + 1, x[..acc, b])
-                | n < 0x20 => Result/failure("control character in string")
-                | n == 0x7F => Result/failure("control character in string")
-                | _ => go(cur + 1, x[..acc, b])
-                end
-            end;
-        let start =
-            choose
-            | byte_at_is(input, pos, (n) => n == 0xA) => pos + 1
-            | is_crlf_at(input, pos) => pos + 2
-            | _ => pos
-            end;
-        go(start, x[]),
+                end;
+            let start =
+                choose
+                | byte_at_is(input, pos, (n) => n == 0xA) => pos + 1
+                | is_crlf_at(input, pos) => pos + 2
+                | _ => pos
+                end;
+            go(start, x[]),
     };
 
 -- content of a multiline literal string, after the opening delimiter
 let ml_literal_scan: Parse(Bytes) =
     Parse {
-        run(input, pos) = rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-            match Bytes/get(input, cur)
-            | none() => Result/failure("unterminated string")
-            | some(b) =>
-                let n = Byte/to_nat(b);
-                choose
-                | n == 0x27 =>
-                    let q = quote_run(input, cur, 0x27, 0);
+        run(input, pos) =
+            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
                     choose
-                    | q >= 6 => Result/failure("too many quotes")
-                    | q >= 3 => Result/success((cur + q, x[..acc, ..quotes(b, q - 3)]))
-                    | _ => go(cur + q, x[..acc, ..quotes(b, q)])
+                    | n == 0x27 =>
+                        let q = quote_run(input, cur, 0x27, 0);
+                        choose
+                        | q >= 6 => Result/failure("too many quotes")
+                        | q >= 3 => Result/success((cur + q, x[..acc, ..quotes(b, q - 3)]))
+                        | _ => go(cur + q, x[..acc, ..quotes(b, q)])
+                        end
+                    | n == 0xA => go(cur + 1, x[..acc, b])
+                    | n == 0xD =>
+                        match is_crlf_at(input, cur)
+                        | true => go(cur + 2, x[..acc, \0d, \0a])
+                        | false => Result/failure("bare carriage return")
+                        end
+                    | n == 0x9 => go(cur + 1, x[..acc, b])
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, x[..acc, b])
                     end
-                | n == 0xA => go(cur + 1, x[..acc, b])
-                | n == 0xD =>
-                    match is_crlf_at(input, cur)
-                    | true => go(cur + 2, x[..acc, \0d, \0a])
-                    | false => Result/failure("bare carriage return")
-                    end
-                | n == 0x9 => go(cur + 1, x[..acc, b])
-                | n < 0x20 => Result/failure("control character in string")
-                | n == 0x7F => Result/failure("control character in string")
-                | _ => go(cur + 1, x[..acc, b])
-                end
-            end;
-        let start =
-            choose
-            | byte_at_is(input, pos, (n) => n == 0xA) => pos + 1
-            | is_crlf_at(input, pos) => pos + 2
-            | _ => pos
-            end;
-        go(start, x[]),
+                end;
+            let start =
+                choose
+                | byte_at_is(input, pos, (n) => n == 0xA) => pos + 1
+                | is_crlf_at(input, pos) => pos + 2
+                | _ => pos
+                end;
+            go(start, x[]),
     };
 
 let str_of(b: Bytes) -> Parse(Str) =

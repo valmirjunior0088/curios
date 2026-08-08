@@ -4,18 +4,19 @@ use /std/Toml/strings/{str_basic, str_literal};
 
 let key_bare: Parse(Str) =
     Parse {
-        run(input, pos) = match Parse/take_while(is_bare_byte).run(input, pos)
-        | success((next, chunk)) =>
-            match Bytes/len(chunk) == 0
-            | true => Result/failure("expected key")
-            | false =>
-                match Str/of_bytes(chunk)
-                | some(s) => Result/success((next, s))
-                | none() => Result/failure("expected key")
+        run(input, pos) =
+            match Parse/take_while(is_bare_byte).run(input, pos)
+            | success((next, chunk)) =>
+                match Bytes/len(chunk) == 0
+                | true => Result/failure("expected key")
+                | false =>
+                    match Str/of_bytes(chunk)
+                    | some(s) => Result/success((next, s))
+                    | none() => Result/failure("expected key")
+                    end
                 end
-            end
-        | failure(msg) => Result/failure(msg)
-        end,
+            | failure(msg) => Result/failure(msg)
+            end,
     };
 
 pub let key_part: Parse(Str) =

@@ -64,17 +64,19 @@ pub let one: NonZero =
 
 pub let dbl(t: NonZero) -> NonZero =
     NonZero {
-        magnitude = of_trimmed_bits(
-            b[\0, ..t.magnitude.rep],
-            cons_low_trimmed(false, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
+        magnitude =
+            of_trimmed_bits(
+                b[\0, ..t.magnitude.rep],
+                cons_low_trimmed(false, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };
 
 pub let dbl_succ(t: NonZero) -> NonZero =
     NonZero {
-        magnitude = of_trimmed_bits(
-            b[\1, ..t.magnitude.rep],
-            cons_low_trimmed(true, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
+        magnitude =
+            of_trimmed_bits(
+                b[\1, ..t.magnitude.rep],
+                cons_low_trimmed(true, t.magnitude.rep, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };
 

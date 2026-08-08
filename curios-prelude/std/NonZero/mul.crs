@@ -32,13 +32,14 @@ rec raw_trim_cons(
 pub let mul(p: NonZero, q: NonZero) -> NonZero =
     NonZero {
         magnitude = p.magnitude * q.magnitude,
-        non_zero = raw_trim_cons(
-            p.magnitude.rep,
-            q.magnitude.rep,
-            nz_trimmed(p),
-            p.non_zero,
-            nz_trimmed(q),
-            q.non_zero),
+        non_zero =
+            raw_trim_cons(
+                p.magnitude.rep,
+                q.magnitude.rep,
+                nz_trimmed(p),
+                p.non_zero,
+                nz_trimmed(q),
+                q.non_zero),
     };
 
 pub let comm(p: NonZero, q: NonZero) -> Eq(mul(p, q), mul(q, p)) =

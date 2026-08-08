@@ -151,40 +151,44 @@ let offset_scan(input: Bytes, pos: Nat) -> Result({Nat, Int}, Str) =
 
 pub let datetime_value: Parse(Toml) =
     Parse {
-        run(input, pos) = match date_scan(input, pos)
-        | success((c1, date)) =>
-            let sep: Option(Nat) =
-                match byte_at_is(input, c1, (n) => n == 0x54 || n == 0x74 || n == 0x20)
-                | true => Option/some(c1 + 1)
-                | false => Option/none()
-                end;
-            match sep
-            | none() => Result/success((c1, Toml/local_date(date)))
-            | some(c2) =>
-                match time_scan(input, c2)
-                | failure(_) => Result/success((c1, Toml/local_date(date)))
-                | success((c3, time)) =>
-                    match offset_scan(input, c3)
-                    | success((c4, off)) =>
-                        Result/success(
-                            (
-                                c4,
-                                Toml/offset_date_time(
-                                    OffsetDateTime {
-                                        date = date,
-                                        time = time,
-                                        offset_minutes = off,
-                                    })))
-                    | failure(_) =>
-                        Result/success(
-                            (c3, Toml/local_date_time(LocalDateTime { date = date, time = time })))
+        run(input, pos) =
+            match date_scan(input, pos)
+            | success((c1, date)) =>
+                let sep: Option(Nat) =
+                    match byte_at_is(input, c1, (n) => n == 0x54 || n == 0x74 || n == 0x20)
+                    | true => Option/some(c1 + 1)
+                    | false => Option/none()
+                    end;
+                match sep
+                | none() => Result/success((c1, Toml/local_date(date)))
+                | some(c2) =>
+                    match time_scan(input, c2)
+                    | failure(_) => Result/success((c1, Toml/local_date(date)))
+                    | success((c3, time)) =>
+                        match offset_scan(input, c3)
+                        | success((c4, off)) =>
+                            Result/success(
+                                (
+                                    c4,
+                                    Toml/offset_date_time(
+                                        OffsetDateTime {
+                                            date = date,
+                                            time = time,
+                                            offset_minutes = off,
+                                        })))
+                        | failure(_) =>
+                            Result/success(
+                                (
+                                    c3,
+                                    Toml/local_date_time(
+                                        LocalDateTime { date = date, time = time })))
+                        end
                     end
                 end
-            end
-        | failure(_) =>
-            match time_scan(input, pos)
-            | success((c, time)) => Result/success((c, Toml/local_time(time)))
-            | failure(msg) => Result/failure(msg)
-            end
-        end,
+            | failure(_) =>
+                match time_scan(input, pos)
+                | success((c, time)) => Result/success((c, Toml/local_time(time)))
+                | failure(msg) => Result/failure(msg)
+                end
+            end,
     };

@@ -12,8 +12,9 @@ let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
 pub let succ(p: NonZero) -> NonZero =
     NonZero {
         magnitude = BigNat/succ/succ(p.magnitude),
-        non_zero = raw_non_zero(
-            BigNat/succ/raw(p.magnitude.rep),
-            BigNat/succ/raw_trimmed(p.magnitude.rep, nz_trimmed(p)),
-            raw_cons(p.magnitude.rep)),
+        non_zero =
+            raw_non_zero(
+                BigNat/succ/raw(p.magnitude.rep),
+                BigNat/succ/raw_trimmed(p.magnitude.rep, nz_trimmed(p)),
+                raw_cons(p.magnitude.rep)),
     };

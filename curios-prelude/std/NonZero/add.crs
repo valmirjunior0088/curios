@@ -85,15 +85,16 @@ pub rec trim_non_zero(
 pub let add(p: NonZero, q: NonZero) -> NonZero =
     NonZero {
         magnitude = p.magnitude + q.magnitude,
-        non_zero = raw_non_zero(
-            BigNat/add/raw(p.magnitude.rep, q.magnitude.rep, false),
-            BigNat/add/raw_trimmed(
-                p.magnitude.rep,
-                q.magnitude.rep,
-                false,
-                nz_trimmed(p),
-                nz_trimmed(q)),
-            raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)),
+        non_zero =
+            raw_non_zero(
+                BigNat/add/raw(p.magnitude.rep, q.magnitude.rep, false),
+                BigNat/add/raw_trimmed(
+                    p.magnitude.rep,
+                    q.magnitude.rep,
+                    false,
+                    nz_trimmed(p),
+                    nz_trimmed(q)),
+                raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)),
     };
 
 pub let comm(p: NonZero, q: NonZero) -> Eq(add(p, q), add(q, p)) =

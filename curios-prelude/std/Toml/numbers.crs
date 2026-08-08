@@ -71,55 +71,58 @@ let sign_read(input: Bytes, pos: Nat) -> {Nat, Bool, Bool} =
 
 pub let int_value: Parse(Toml) =
     Parse {
-        run(input, pos) = let (cur, negative, signed) = sign_read(input, pos);
-        let prefixed: Option(Result({Nat, Nat}, Str)) =
-            match signed
-            | true => Option/none()
-            | false =>
-                match byte_at_is(input, cur, (n) => n == 0x30)
-                | true =>
-                    match Bytes/get(input, cur + 1)
-                    | none() => Option/none()
-                    | some(b) =>
-                        match Byte/to_nat(b)
-                        | 120 => Option/some(magnitude_scan(input, cur + 2, 16, 268435455, hex_val))
-                        | 111 =>
-                            Option/some(magnitude_scan(input, cur + 2, 8, 536870911, oct_digit))
-                        | 98 =>
-                            Option/some(magnitude_scan(input, cur + 2, 2, 2147483647, bin_digit))
-                        | _ => Option/none()
+        run(input, pos) =
+            let (cur, negative, signed) = sign_read(input, pos);
+            let prefixed: Option(Result({Nat, Nat}, Str)) =
+                match signed
+                | true => Option/none()
+                | false =>
+                    match byte_at_is(input, cur, (n) => n == 0x30)
+                    | true =>
+                        match Bytes/get(input, cur + 1)
+                        | none() => Option/none()
+                        | some(b) =>
+                            match Byte/to_nat(b)
+                            | 120 =>
+                                Option/some(magnitude_scan(input, cur + 2, 16, 268435455, hex_val))
+                            | 111 =>
+                                Option/some(magnitude_scan(input, cur + 2, 8, 536870911, oct_digit))
+                            | 98 =>
+                                Option/some(
+                                    magnitude_scan(input, cur + 2, 2, 2147483647, bin_digit))
+                            | _ => Option/none()
+                            end
                         end
+                    | false => Option/none()
                     end
-                | false => Option/none()
+                end;
+            let scanned: Result({Nat, Nat}, Str) =
+                match prefixed
+                | some(r) => r
+                | none() =>
+                    match dec_leading_zero(input, cur)
+                    | true => Result/failure("leading zero")
+                    | false => magnitude_scan(input, cur, 10, 429496728, dec_digit)
+                    end
+                end;
+            match scanned
+            | failure(msg) => Result/failure(msg)
+            | success((next, mag)) =>
+                match negative
+                | true =>
+                    choose
+                    | mag > 1073741824 => Result/failure("integer out of range")
+                    | mag == 1073741824 =>
+                        Result/success((next, Toml/int(+0 - Nat/to_int(1073741823) - +1)))
+                    | _ => Result/success((next, Toml/int(+0 - Nat/to_int(mag))))
+                    end
+                | false =>
+                    match mag > 1073741823
+                    | true => Result/failure("integer out of range")
+                    | false => Result/success((next, Toml/int(Nat/to_int(mag))))
+                    end
                 end
-            end;
-        let scanned: Result({Nat, Nat}, Str) =
-            match prefixed
-            | some(r) => r
-            | none() =>
-                match dec_leading_zero(input, cur)
-                | true => Result/failure("leading zero")
-                | false => magnitude_scan(input, cur, 10, 429496728, dec_digit)
-                end
-            end;
-        match scanned
-        | failure(msg) => Result/failure(msg)
-        | success((next, mag)) =>
-            match negative
-            | true =>
-                choose
-                | mag > 1073741824 => Result/failure("integer out of range")
-                | mag == 1073741824 =>
-                    Result/success((next, Toml/int(+0 - Nat/to_int(1073741823) - +1)))
-                | _ => Result/success((next, Toml/int(+0 - Nat/to_int(mag))))
-                end
-            | false =>
-                match mag > 1073741823
-                | true => Result/failure("integer out of range")
-                | false => Result/success((next, Toml/int(Nat/to_int(mag))))
-                end
-            end
-        end,
+            end,
     };
 
 -- significand digits: at most nine significant decimal digits are kept exactly; `frac` selects whether consumed digits shift the decimal point down (fraction) or dropped digits shift it up (integer part past nine digits)
@@ -204,69 +207,74 @@ rec exp_digits(
 
 pub let flt_special: Parse(Toml) =
     Parse {
-        run(input, pos) = let (cur, negative, _) = sign_read(input, pos);
-        match Parse/take_literal("inf").run(input, cur)
-        | success((next, _)) =>
-            let bits: Bytes =
-                match negative | true => x[\00, \00, \80, \ff] | false => x[\00, \00, \80, \7f] end;
-            Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
-        | failure(_) =>
-            match Parse/take_literal("nan").run(input, cur)
+        run(input, pos) =
+            let (cur, negative, _) = sign_read(input, pos);
+            match Parse/take_literal("inf").run(input, cur)
             | success((next, _)) =>
-                Result/success((next, Toml/flt(Flt/of_le_bytes(x[\00, \00, \c0, \7f]))))
-            | failure(msg) => Result/failure(msg)
-            end
-        end,
+                let bits: Bytes =
+                    match negative
+                    | true => x[\00, \00, \80, \ff]
+                    | false => x[\00, \00, \80, \7f]
+                    end;
+                Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
+            | failure(_) =>
+                match Parse/take_literal("nan").run(input, cur)
+                | success((next, _)) =>
+                    Result/success((next, Toml/flt(Flt/of_le_bytes(x[\00, \00, \c0, \7f]))))
+                | failure(msg) => Result/failure(msg)
+                end
+            end,
     };
 
 pub let flt_number: Parse(Toml) =
     Parse {
-        run(input, pos) = let (cur0, negative, _) = sign_read(input, pos);
-        match dec_leading_zero(input, cur0)
-        | true => Result/failure("leading zero")
-        | false =>
-            match flt_digits(input, cur0, 0, 0, 0, false, false, false)
-            | failure(msg) => Result/failure(msg)
-            | success((cur1, sig1, count1, up1)) =>
-                let frac_res: Result({Nat, Nat, Nat, Bool}, Str) =
-                    match byte_at_is(input, cur1, (n) => n == 0x2E)
-                    | true =>
-                        match flt_digits(input, cur1 + 1, sig1, count1, 0, true, false, false)
-                        | success((c, s, k, down)) => Result/success((c, s, down, true))
-                        | failure(msg) => Result/failure(msg)
-                        end
-                    | false => Result/success((cur1, sig1, 0, false))
-                    end;
-                match frac_res
+        run(input, pos) =
+            let (cur0, negative, _) = sign_read(input, pos);
+            match dec_leading_zero(input, cur0)
+            | true => Result/failure("leading zero")
+            | false =>
+                match flt_digits(input, cur0, 0, 0, 0, false, false, false)
                 | failure(msg) => Result/failure(msg)
-                | success((cur2, sig2, down2, has_frac)) =>
-                    let exp_res: Result({Nat, Nat, Bool, Bool}, Str) =
-                        match byte_at_is(input, cur2, (n) => n == 0x65 || n == 0x45)
+                | success((cur1, sig1, count1, up1)) =>
+                    let frac_res: Result({Nat, Nat, Nat, Bool}, Str) =
+                        match byte_at_is(input, cur1, (n) => n == 0x2E)
                         | true =>
-                            let (ce, eneg, _) = sign_read(input, cur2 + 1);
-                            match exp_digits(input, ce, 0, false, false)
-                            | success((c, e)) => Result/success((c, e, eneg, true))
+                            match flt_digits(input, cur1 + 1, sig1, count1, 0, true, false, false)
+                            | success((c, s, k, down)) => Result/success((c, s, down, true))
                             | failure(msg) => Result/failure(msg)
                             end
-                        | false => Result/success((cur2, 0, false, false))
+                        | false => Result/success((cur1, sig1, 0, false))
                         end;
-                    match exp_res
+                    match frac_res
                     | failure(msg) => Result/failure(msg)
-                    | success((next, emag, eneg, has_exp)) =>
-                        match has_frac || has_exp
-                        | true =>
-                            let up = match eneg | true => up1 | false => up1 + emag end;
-                            let down = match eneg | true => down2 + emag | false => down2 end;
-                            let scaled =
-                                Nat/to_flt(sig2) * Flt/pow10(Nat/min(up, 2000))
-                                    / Flt/pow10(Nat/min(down, 2000));
-                            let value =
-                                match negative | true => Flt/neg(scaled) | false => scaled end;
-                            Result/success((next, Toml/flt(value)))
-                        | false => Result/failure("expected float")
+                    | success((cur2, sig2, down2, has_frac)) =>
+                        let exp_res: Result({Nat, Nat, Bool, Bool}, Str) =
+                            match byte_at_is(input, cur2, (n) => n == 0x65 || n == 0x45)
+                            | true =>
+                                let (ce, eneg, _) = sign_read(input, cur2 + 1);
+                                match exp_digits(input, ce, 0, false, false)
+                                | success((c, e)) => Result/success((c, e, eneg, true))
+                                | failure(msg) => Result/failure(msg)
+                                end
+                            | false => Result/success((cur2, 0, false, false))
+                            end;
+                        match exp_res
+                        | failure(msg) => Result/failure(msg)
+                        | success((next, emag, eneg, has_exp)) =>
+                            match has_frac || has_exp
+                            | true =>
+                                let up = match eneg | true => up1 | false => up1 + emag end;
+                                let down = match eneg | true => down2 + emag | false => down2 end;
+                                let scaled =
+                                    Nat/to_flt(sig2) * Flt/pow10(Nat/min(up, 2000))
+                                        / Flt/pow10(Nat/min(down, 2000));
+                                let value =
+                                    match negative | true => Flt/neg(scaled) | false => scaled end;
+                                Result/success((next, Toml/flt(value)))
+                            | false => Result/failure("expected float")
+                            end
                         end
                     end
                 end
-            end
-        end,
+            end,
     };

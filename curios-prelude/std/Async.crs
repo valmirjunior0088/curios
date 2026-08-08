@@ -396,9 +396,10 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
     let _ =
         enqueue(
             Job {
-                resume = bind(
-                    root,
-                    (a) => bind(lift(Cell/set(result, Option/some(a))), (_) => pure(()))),
+                resume =
+                    bind(
+                        root,
+                        (a) => bind(lift(Cell/set(result, Option/some(a))), (_) => pure(()))),
                 token = Token { root_token_cell },
                 guards = [],
             })!;
@@ -445,6 +446,9 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                     let slot = Cell/new(Option/some(Job { ..job, resume = Async { k } }))!;
                     let current = Cell/get(parked)!;
                     let _ = Cell/set(parked, [slot, ..current])!;
+                    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
+                    -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
+                    -- region and perform them now.
                     let waker =
                         Io/bind(
                             Cell/get(slot),
@@ -454,9 +458,6 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                                 | some(j) =>
                                     Io/bind(Cell/set(slot, Option/none()), (_) => enqueue(j))
                                 end);
-                    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
-                    -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
-                    -- region and perform them now.
                     reg(Waker/new(waker))
                 | acquire(h, fin) =>
                     serve(
