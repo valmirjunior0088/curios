@@ -220,7 +220,6 @@ impl<E: Env> Walk<'_, E> {
             }
 
             Subterm::Variant(Variant { tag, payload, .. }) => {
-                let payload = payload.clone();
                 let kids = payload
                     .iter()
                     .map(|argument| self.shape_of(argument))
@@ -229,13 +228,11 @@ impl<E: Env> Walk<'_, E> {
             }
 
             Subterm::Struct(Struct { name, fields, .. }) => {
-                let (name, fields) = (name.clone(), fields.clone());
                 let kids = fields.iter().map(|field| self.shape_of(field)).collect();
-                Shape::Node(Tag::Struct(name), kids)
+                Shape::Node(Tag::Struct(name.clone()), kids)
             }
 
             Subterm::Tuple(Tuple { fields, .. }) => {
-                let fields = fields.clone();
                 let kids = fields.iter().map(|field| self.shape_of(field)).collect();
                 Shape::Node(Tag::Tuple, kids)
             }
@@ -262,13 +259,11 @@ impl<E: Env> Walk<'_, E> {
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `BigUint` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
             Subterm::Intrinsic(Intrinsic::NatDiv(left, right)) => {
-                let (left, right) = (left.clone(), right.clone());
-                self.arithmetic_shape(&left, &right, &BigUint::from(2usize))
+                self.arithmetic_shape(left, right, &BigUint::from(2usize))
             }
 
             Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
-                let (left, right) = (left.clone(), right.clone());
-                self.arithmetic_shape(&left, &right, &BigUint::from(1usize))
+                self.arithmetic_shape(left, right, &BigUint::from(1usize))
             }
 
             _ => self.unfolded_shape(term),
