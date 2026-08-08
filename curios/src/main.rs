@@ -14,11 +14,15 @@ use {
     curios::{run_wasm, to_cwasm},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost},
+    curios_text::Formatted,
     std::{
-        iter,
+        fs, iter,
         process::{self, ExitCode},
     },
 };
+
+#[cfg(feature = "profile")]
+use {curios::load, curios_pipeline::compile_entrypoint, curios_profile::capture};
 
 /// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
 enum Failure {
@@ -93,11 +97,11 @@ fn dispatch() -> Result<(), Failure> {
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
             let mut dirty = Vec::new();
             for path in &paths {
-                match curios_text::Formatted::from_path(path)? {
-                    curios_text::Formatted::Unchanged(_) => {}
-                    curios_text::Formatted::Changed(text) => match check {
+                match Formatted::from_path(path)? {
+                    Formatted::Unchanged(_) => {}
+                    Formatted::Changed(text) => match check {
                         true => dirty.push(path.display().to_string()),
-                        false => std::fs::write(path, text)
+                        false => fs::write(path, text)
                             .map_err(|error| format!("{}: {error}", path.display()))?,
                     },
                 }
@@ -111,10 +115,9 @@ fn dispatch() -> Result<(), Failure> {
         }
         #[cfg(feature = "profile")]
         Mode::Profile { input_path } => {
-            let (entrypoint, loader) = curios::load(&input_path)?;
-            let (compilation, report) = curios_profile::capture(|| {
-                curios_pipeline::compile_entrypoint(budget, &entrypoint, loader, |_| {})
-            });
+            let (entrypoint, loader) = load(&input_path)?;
+            let (compilation, report) =
+                capture(|| compile_entrypoint(budget, &entrypoint, loader, |_| {}));
 
             println!("total_ms\tcalls\tmin_ms\tmax_ms\ttarget\tname");
             for summary in &report.summaries {
