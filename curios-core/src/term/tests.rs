@@ -1,12 +1,16 @@
 use {
     crate::*,
     curios_base::{Plicity, Qualifier},
-    std::{collections::BTreeSet, rc::Rc},
+    std::{
+        collections::{BTreeSet, HashSet, hash_map::RandomState},
+        hash::BuildHasher,
+        rc::Rc,
+    },
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> crate::Global {
-    crate::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
 }
 
 #[cfg(feature = "archive")]
@@ -306,7 +310,7 @@ fn inductive_match_default_prints_a_catch_all_arm() {
         Term::free_var(&r),
         None,
         Term::type_ground(),
-        [("none", Vec::<crate::Free>::new(), Term::free_var(&a))],
+        [("none", Vec::<Free>::new(), Term::free_var(&a))],
         Term::free_var(&b),
     );
 
@@ -421,14 +425,13 @@ fn open_shares_closed_subterm_inside_substituted_body() {
 fn binder_name_hints_are_identity_irrelevant() {
     let x = Free::local(0, Some("x"));
     let y = Free::local(1, Some("y"));
-    use std::hash::BuildHasher;
 
     let this = Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x));
     let that = Term::func([(y.clone(), Term::type_ground())], Term::free_var(&y));
 
     assert_eq!(this, that);
 
-    let state = std::collections::hash_map::RandomState::new();
+    let state = RandomState::new();
     assert_eq!(state.hash_one(&this), state.hash_one(&that));
 }
 
@@ -459,7 +462,7 @@ fn tuple_type_field_labels_are_identity() {
 
 /// The number of distinct `Node`s reachable from `term`, counting a shared node once. Inlined here because only these tests ask the question.
 fn distinct_nodes(term: &Term) -> usize {
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     let mut stack = Vec::from([term.clone()]);
     while let Some(node) = stack.pop() {
         if !seen.insert(Rc::as_ptr(&node.inner)) {
