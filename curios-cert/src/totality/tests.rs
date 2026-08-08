@@ -1,4 +1,8 @@
-use {super::*, crate::Kernel};
+use {
+    super::*,
+    crate::Kernel,
+    curios_base::{Grain, PackedBin},
+};
 
 /// Build a matrix from a row-major grid of size grades.
 fn matrix(rows: &[&[Size]]) -> Matrix {
@@ -110,6 +114,59 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
 
     // A constant argument never decreases, so the verdict is `Partial` — promptly.
     assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+}
+
+#[test]
+fn a_peeled_prefix_keeps_its_binder_tail() {
+    // The `BigNat/add/raw_trimmed` pattern: `b[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
+    let mut kernel = Kernel::new(100_000);
+    let f = Free::local(1, Some("f"));
+    let rec = Term::rec(
+        vec![(
+            f.clone(),
+            Term::intrinsic(Intrinsic::NatType),
+            Term::free_var(&f),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    let h = Free::local(2, Some("h"));
+    let t = Free::local(3, Some("t"));
+    let arities = vec![0];
+    let mut walk = Walk {
+        env: &mut kernel,
+        group,
+        arities: &arities,
+        caller: 0,
+        params: &[],
+        refined: BTreeMap::new(),
+        nonzero: BTreeSet::new(),
+        entered: Vec::new(),
+        calls: Vec::new(),
+    };
+
+    let single = Term::intrinsic(Intrinsic::BinAppend(
+        Grain::X,
+        Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::empty())),
+        Term::free_var(&h),
+    ));
+    let cons = Term::intrinsic(Intrinsic::BinConcat(
+        Grain::X,
+        vec![single, Term::free_var(&t)],
+    ));
+
+    let shape = walk.shape_of(&cons);
+    assert!(
+        shape.same_as(&Shape::elem_run(
+            Carriers::Bin,
+            vec![Shape::Atom(h)],
+            Shape::Atom(t),
+        )),
+        "expected a one-element run over the binder tail, got {shape:?}"
+    );
 }
 
 #[test]

@@ -328,7 +328,13 @@ impl<E: Env> Walk<'_, E> {
                 }
                 Layer::Stuck(stuck) => {
                     let stuck = Term::from(stuck);
-                    break Shape::elem_run(carriers, heads, self.unfolded_shape(&stuck));
+                    let tail = match heads.is_empty() {
+                        // Nothing peeled: the whole term is what stuck, and dispatching it back through `shape_of` would land right here again — force it instead.
+                        true => self.unfolded_shape(&stuck),
+                        // The remainder after a peeled prefix is an arbitrary term — a binder, another literal spelling, an application — and gets the full dispatch, exactly as the tail of every peeled layer did when the layers were nested nodes.
+                        false => self.shape_of(&stuck),
+                    };
+                    break Shape::elem_run(carriers, heads, tail);
                 }
             }
         }
