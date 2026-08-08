@@ -113,12 +113,20 @@ impl Spelling {
     }
 }
 
+/// The prefix a plicity marks its binder or argument with — `@` for implicit, `use ` for witness, nothing for explicit.
+fn plicity_mark(plicity: Option<&Plicity>) -> &'static str {
+    match plicity {
+        Some(Plicity::Implicit) => "@",
+        Some(Plicity::Witness) => "use ",
+        _ => "",
+    }
+}
+
 /// One argument of an applied nominal family, marked as its declaration wrote it. Indices are always explicit, so only a parameter ever takes a mark.
 fn marked_argument(printer: Printer, plicity: Option<&Plicity>) -> Printer {
-    match plicity {
-        Some(Plicity::Implicit) => flat([pure("@"), printer]),
-        Some(Plicity::Witness) => flat([pure("use "), printer]),
-        _ => printer,
+    match plicity_mark(plicity) {
+        "" => printer,
+        mark => flat([pure(mark), printer]),
     }
 }
 
@@ -913,12 +921,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                     Telescope::Cons(ty, rest) => {
                         let raw = rest.binder(0);
                         let label = binder_or(raw, depth + idx);
-                        // Plicity marks the name (`@x` = implicit, `use x` = witness).
-                        let mark = match plicities.get(idx) {
-                            Some(Plicity::Implicit) => "@",
-                            Some(Plicity::Witness) => "use ",
-                            _ => "",
-                        };
+                        let mark = plicity_mark(plicities.get(idx));
                         let typed = sub(ty, depth + n, spelling);
                         // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
                         let named = match raw {
@@ -960,11 +963,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                     Telescope::Done(body) => break *body,
                     Telescope::Cons(_ty, rest) => {
                         let label = binder_or(rest.binder(0), depth + idx);
-                        let mark = match plicities.get(idx) {
-                            Some(Plicity::Implicit) => "@",
-                            Some(Plicity::Witness) => "use ",
-                            _ => "",
-                        };
+                        let mark = plicity_mark(plicities.get(idx));
                         let shown = if label.hint().is_none() && !rest.uses(0) {
                             "_".to_string()
                         } else {
@@ -999,11 +998,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 params
                     .into_iter()
                     .zip(plicities)
-                    .map(|(p, plicity)| match plicity {
-                        Plicity::Implicit => flat([pure("@"), sub(p, depth, spelling)]),
-                        Plicity::Witness => flat([pure("use "), sub(p, depth, spelling)]),
-                        Plicity::Explicit => sub(p, depth, spelling),
-                    })
+                    .map(|(p, plicity)| marked_argument(sub(p, depth, spelling), Some(&plicity)))
                     .collect::<Vec<_>>(),
                 ")",
             ),
@@ -1256,11 +1251,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                                             .iter()
                                             .enumerate()
                                             .map(|(idx, l)| {
-                                                let mark = match arm.plicities.get(idx) {
-                                                    Some(Plicity::Implicit) => "@",
-                                                    Some(Plicity::Witness) => "use ",
-                                                    _ => "",
-                                                };
+                                                let mark = plicity_mark(arm.plicities.get(idx));
                                                 format!("{mark}{}", spelling.label(l))
                                             })
                                             .collect::<Vec<_>>()
