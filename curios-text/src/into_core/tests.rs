@@ -115,7 +115,8 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
     lowered_prefix.type_ = None;
-    lowered_prefix.body = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero));
+    lowered_prefix.body =
+        curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero));
     let prelude = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
@@ -1361,7 +1362,7 @@ fn genuine_value_cycle_leaves_unbound_name() {
     );
 }
 
-// `sys` is the trusted primitive substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.
+// `sys` is the trusted intrinsic substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.
 #[test]
 fn rejects_sys_use_from_user_code() {
     let error = lower_with_prelude("use /sys/{Nat}; Nat/add(1, 2)").unwrap_err();
@@ -1418,7 +1419,7 @@ fn rejects_sys_pub_use_reexport_from_user_code() {
     );
 }
 
-// The same primitive reached through its `/std` wrapper resolves: `std` is privileged to reference `sys`, and re-exports it.
+// The same intrinsic reached through its `/std` wrapper resolves: `std` is privileged to reference `sys`, and re-exports it.
 #[test]
 fn allows_sys_reference_through_std_wrapper() {
     assert!(lower_with_prelude("use /std/{Nat}; Nat/add(1, 2)").is_ok());
@@ -2061,7 +2062,7 @@ fn nat_literal_mixed_with_succ_is_rejected() {
 
 #[test]
 fn constant_atoms_fold_into_the_packed_run() {
-    // A constant written as a term denotes the same packed value as the escaped spelling: `fold_bin_constants` rejoins it to the neighbouring run, so the literal stays one `Prim::Bin` rather than an append onto one. Conversion equates the two spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
+    // A constant written as a term denotes the same packed value as the escaped spelling: `fold_bin_constants` rejoins it to the neighbouring run, so the literal stays one `Intrinsic::Bin` rather than an append onto one. Conversion equates the two spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
     assert_eq!(run(r"x[\48, 0x69]"), run(r"x[\48, \69]"));
     assert_eq!(run(r"b[\1, false]"), run(r"b[\1, \0]"));
     assert!(!format!("{:?}", run(r"x[\48, 0x69]")).contains("BinAppend"));
@@ -2121,7 +2122,7 @@ fn foreign_declaration_zero_arg_populates_the_store() {
 
 #[test]
 fn foreign_declaration_call_lowers() {
-    // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Prim::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
+    // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Intrinsic::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
     let _ = run(r#"
         foreign frobnicate : (Nat, Bytes) -> Nat;
         frobnicate(5, x[\00, \01])

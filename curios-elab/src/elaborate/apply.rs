@@ -225,7 +225,9 @@ pub(super) fn elaborate_apply(
                     && !context.parking_suppressed()
                     && matches!(
                         &*written,
-                        Subterm::Func(_) | Subterm::Tuple(_) | Subterm::Prim(Prim::Lst(..))
+                        Subterm::Func(_)
+                            | Subterm::Tuple(_)
+                            | Subterm::Intrinsic(Intrinsic::Lst(..))
                     )
                     && {
                         let result_metavars = result_metavars_from(context, &rest);

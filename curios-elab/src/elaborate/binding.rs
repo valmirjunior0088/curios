@@ -191,17 +191,17 @@ pub(super) fn park_checking(
     Ok((stand_in, expected.clone()))
 }
 
-/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar primitive. In `Check` mode the expected type pins the choice; an expected type that is still a bare unsolved metavar — and `Infer` mode — fall back to the literal's shape default (`Int` when a sign was written, else `Nat`), and the closing `expect` then solves that metavar to the chosen type. The literal resolves *eagerly*: deferring it would strand downstream elaboration that needs the type immediately (a projection off the literal's type, say). The operator (`elaborate_infix`) pins its operand type from the non-literal side first, so a literal there sees a concrete type and `1 + flt` still works. Decimal literals never reach here; they parse straight to `Flt`.
+/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar intrinsic. In `Check` mode the expected type pins the choice; an expected type that is still a bare unsolved metavar — and `Infer` mode — fall back to the literal's shape default (`Int` when a sign was written, else `Nat`), and the closing `expect` then solves that metavar to the chosen type. The literal resolves *eagerly*: deferring it would strand downstream elaboration that needs the type immediately (a projection off the literal's type, say). The operator (`elaborate_infix`) pins its operand type from the non-literal side first, so a literal there sees a concrete type and `1 + flt` still works. Decimal literals never reach here; they parse straight to `Flt`.
 pub(super) fn elaborate_num_lit(
     context: &mut Context,
     num_lit: &NumLit,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let nat_type: Term = Subterm::Prim(Prim::NatType).into();
-    let byte_type: Term = Subterm::Prim(Prim::ByteType).into();
-    let int_type: Term = Subterm::Prim(Prim::IntType).into();
-    let flt_type: Term = Subterm::Prim(Prim::FltType).into();
+    let nat_type: Term = Subterm::Intrinsic(Intrinsic::NatType).into();
+    let byte_type: Term = Subterm::Intrinsic(Intrinsic::ByteType).into();
+    let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
+    let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
 
     // A written sign rules out `Nat`, so the default lands on `Int`.
     let default_type: Term = if num_lit.signed {
@@ -224,35 +224,36 @@ pub(super) fn elaborate_num_lit(
         Mode::Infer => Term::unwrap_or_clone(default_type.clone()),
     };
 
-    let (prim, type_) = match &target {
-        Subterm::Prim(Prim::NatType) if !num_lit.negative => {
-            (Prim::Nat(Nat::new(num_lit.magnitude.clone())), nat_type)
-        }
-        Subterm::Prim(Prim::ByteType) if !num_lit.negative => {
+    let (intrinsic, type_) = match &target {
+        Subterm::Intrinsic(Intrinsic::NatType) if !num_lit.negative => (
+            Intrinsic::Nat(Nat::new(num_lit.magnitude.clone())),
+            nat_type,
+        ),
+        Subterm::Intrinsic(Intrinsic::ByteType) if !num_lit.negative => {
             let Some(value) = num_lit.magnitude.to_u8() else {
                 return Err(Error::ByteLiteralOutOfRange {
                     value: num_lit.magnitude.to_string(),
                 });
             };
-            (Prim::Byte(value), byte_type)
+            (Intrinsic::Byte(value), byte_type)
         }
-        Subterm::Prim(Prim::IntType) => {
+        Subterm::Intrinsic(Intrinsic::IntType) => {
             let magnitude = BigInt::from(num_lit.magnitude.clone());
             let value = if num_lit.negative {
                 -magnitude
             } else {
                 magnitude
             };
-            (Prim::Int(Int::new(value)), int_type)
+            (Intrinsic::Int(Int::new(value)), int_type)
         }
-        Subterm::Prim(Prim::FltType) => {
+        Subterm::Intrinsic(Intrinsic::FltType) => {
             let magnitude = num_lit.magnitude.to_f32().unwrap_or(f32::INFINITY);
             let value = if num_lit.negative {
                 -magnitude
             } else {
                 magnitude
             };
-            (Prim::Flt(Flt::from_f32(value)), flt_type)
+            (Intrinsic::Flt(Flt::from_f32(value)), flt_type)
         }
         // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
         _ => {
@@ -272,19 +273,19 @@ pub(super) fn elaborate_num_lit(
         expect(context, term, &type_, expected)?;
     }
 
-    Ok((Term::prim(prim), type_))
+    Ok((Term::intrinsic(intrinsic), type_))
 }
 
 /// The shape default for an infix operator whose operand type nothing pinned: any signed/negative literal operand forces `Int`, otherwise `Nat`.
 ///
 /// A free function rather than an inherent method on [`Infix`]: the node is representation and lives in `curios-core`, while literal defaulting is an elaboration decision.
-pub(super) fn infix_default_type(infix: &Infix) -> Prim {
+pub(super) fn infix_default_type(infix: &Infix) -> Intrinsic {
     let signed = |operand: &Term| matches!(&**operand, Subterm::Transient(Transient::NumLit(num_lit)) if num_lit.signed);
 
     if signed(&infix.left) || signed(&infix.right) {
-        Prim::IntType
+        Intrinsic::IntType
     } else {
-        Prim::NatType
+        Intrinsic::NatType
     }
 }
 
@@ -400,7 +401,7 @@ pub(super) fn elaborate_bang(
 
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
 ///
-/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/syn` concept ([`OperatorSyntax::concept_field`](curios_base::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known primitive witnesses collapse back to bare `Prim` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
+/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/syn` concept ([`OperatorSyntax::concept_field`](curios_base::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
@@ -448,7 +449,7 @@ pub(super) fn elaborate_infix(
     // Nothing pinned `?T` — every non-literal operand left it open. Default from the operand shapes so the literal operands have a concrete type to take.
     if context.metavar_solution(operand_id).is_none() {
         let default = infix_default_type(infix);
-        context.solve_metavar(operand_id, Subterm::Prim(default).into());
+        context.solve_metavar(operand_id, Subterm::Intrinsic(default).into());
     }
 
     // Phase 2: the literal operands resolve against the now-concrete `?T`.

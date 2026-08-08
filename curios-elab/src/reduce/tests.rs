@@ -1,9 +1,9 @@
-use crate::PrimBuilders;
+use crate::IntrinsicBuilders;
 use curios_core::*;
 use {
     crate::*,
     curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
-    curios_core::{Nat, Prim, Subterm, Term},
+    curios_core::{Intrinsic, Nat, Subterm, Term},
     std::time::Instant,
 };
 
@@ -17,7 +17,7 @@ fn context() -> Context {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 #[test]
@@ -25,7 +25,9 @@ fn nat_to_byte_reflects_byte_to_nat() {
     let mut context = context();
     let byte_binder = context.fresh(Some("byte"));
     let byte = Term::free_var(&byte_binder);
-    let term = Term::prim(Prim::NatToByte(Term::prim(Prim::ByteToNat(byte.clone()))));
+    let term = Term::intrinsic(Intrinsic::NatToByte(Term::intrinsic(Intrinsic::ByteToNat(
+        byte.clone(),
+    ))));
 
     assert_eq!(reduce(&mut context, term), Ok(byte));
 }
@@ -52,7 +54,7 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let ih = context.fresh(Some("ih"));
     let countdown = context.fresh(Some("countdown"));
     let x = context.fresh(Some("x"));
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
     let body = Term::func(
         [(n.clone(), nat_type.clone())],
         Term::nat_match(
@@ -105,7 +107,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
     let term: Term = Term::induct_match(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
@@ -124,7 +126,7 @@ fn reduce_inductive_match_absent_tag_takes_default() {
     let term: Term = Term::induct_match_default(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [("none", Vec::<Free>::new(), nat(0))],
         nat(99),
     );
@@ -142,7 +144,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
     let term: Term = Term::induct_match_default(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         Some(&m),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
@@ -161,18 +163,18 @@ fn reduce_nat_fold_zero_is_not_true() {
     let ih = context.fresh(Some("ih"));
 
     let term: Term = Term::nat_match(
-        Subterm::Prim(Prim::Nat(Nat::new(0usize))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
         Some(&m),
-        Term::prim(Prim::BoolType),
-        Term::prim(Prim::Bool(false)),
+        Term::intrinsic(Intrinsic::BoolType),
+        Term::intrinsic(Intrinsic::Bool(false)),
         &pred,
         &ih,
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
     );
 
     assert_ne!(
         reduce(&mut context, term.clone()),
-        Ok(Term::prim(Prim::Bool(true)))
+        Ok(Term::intrinsic(Intrinsic::Bool(true)))
     );
 }
 
@@ -230,7 +232,7 @@ fn reduce_let_binds_each_value_to_its_own_slot() {
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
 
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
     let pick_second = Term::apply(
         Term::func(
             [(p.clone(), nat_type.clone()), (q.clone(), nat_type.clone())],
@@ -255,7 +257,7 @@ fn reduce_let_shadowing_tail_picks_innermost() {
     let mut context = context();
     let x_binder = context.fresh(Some("x"));
 
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
     let term = Term::let_(
         &x_binder,
         nat_type.clone(),
@@ -272,7 +274,7 @@ fn reduce_let_shadowing_value_sees_the_outer_binding() {
     let mut context = context();
     let x_binder = context.fresh(Some("x"));
 
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
     let term = Term::let_(
         &x_binder,
         nat_type.clone(),
@@ -306,7 +308,12 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
             _ => Term::free_var(&binders[i - 1]),
         };
 
-        Term::let_(&binders[i], Term::prim(Prim::NatType), value, tail)
+        Term::let_(
+            &binders[i],
+            Term::intrinsic(Intrinsic::NatType),
+            value,
+            tail,
+        )
     });
     eprintln!("build: {:?}", t0.elapsed());
 
@@ -348,13 +355,13 @@ fn reduce_int_add_computes() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::int_add(
-                Subterm::Prim(Prim::Int(Int::new(1))),
-                Subterm::Prim(Prim::Int(Int::new(2)))
+            Subterm::Intrinsic(Intrinsic::int_add(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(2)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Int(Int::new(3))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Int(Int::new(3))).into())
     );
 }
 
@@ -365,24 +372,24 @@ fn reduce_int_eql_returns_true_or_false_bool() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::int_eql(
-                Subterm::Prim(Prim::Int(Int::new(4))),
-                Subterm::Prim(Prim::Int(Int::new(4)))
+            Subterm::Intrinsic(Intrinsic::int_eql(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(4))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(4)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Bool(true)).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bool(true)).into())
     );
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::int_eql(
-                Subterm::Prim(Prim::Int(Int::new(4))),
-                Subterm::Prim(Prim::Int(Int::new(5)))
+            Subterm::Intrinsic(Intrinsic::int_eql(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(4))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(5)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Bool(false)).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bool(false)).into())
     );
 }
 
@@ -391,9 +398,9 @@ fn reduce_flt_mul_stays_stuck() {
     let mut context = context();
 
     // `Flt` is opaque at the type level: the operation is its own normal form even over literals, so no IEEE semantics enters definitional equality. Runtime-faithful folding belongs to `curios-ersd`'s partial evaluator.
-    let product: Term = Subterm::Prim(Prim::flt_mul(
-        Subterm::Prim(Prim::Flt(Flt::from_f32(1.5))),
-        Subterm::Prim(Prim::Flt(Flt::from_f32(2.0))),
+    let product: Term = Subterm::Intrinsic(Intrinsic::flt_mul(
+        Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(1.5))),
+        Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(2.0))),
     ))
     .into();
     assert_eq!(reduce(&mut context, product.clone()), Ok(product));
@@ -403,38 +410,38 @@ fn reduce_flt_mul_stays_stuck() {
 fn reduce_lst_get_returns_element_at_index() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
+    let list = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
         vec![
-            Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(20usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize))).into(),
         ],
     ));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::lst_get(
-                Subterm::Prim(Prim::NatType),
+            Subterm::Intrinsic(Intrinsic::lst_get(
+                Subterm::Intrinsic(Intrinsic::NatType),
                 list.clone(),
-                Subterm::Prim(Prim::Nat(Nat::new(0usize)))
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Nat(Nat::new(10usize))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into())
     );
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::lst_get(
-                Subterm::Prim(Prim::NatType),
+            Subterm::Intrinsic(Intrinsic::lst_get(
+                Subterm::Intrinsic(Intrinsic::NatType),
                 list,
-                Subterm::Prim(Prim::Nat(Nat::new(2usize)))
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Nat(Nat::new(30usize))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize))).into())
     );
 }
 
@@ -442,18 +449,18 @@ fn reduce_lst_get_returns_element_at_index() {
 fn reduce_lst_get_errors_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
-        vec![Subterm::Prim(Prim::Nat(Nat::new(1usize))).into()],
+    let list = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
+        vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
     ));
 
     assert!(matches!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::lst_get(
-                Subterm::Prim(Prim::NatType),
+            Subterm::Intrinsic(Intrinsic::lst_get(
+                Subterm::Intrinsic(Intrinsic::NatType),
                 list,
-                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
             ))
             .into(),
         ),
@@ -469,15 +476,19 @@ fn reduce_lst_get_errors_on_out_of_bounds() {
 fn reduce_bin_append_adds_byte() {
     let mut context = context();
 
-    let bin = Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
-    let byte: Subterm = Subterm::Prim(Prim::Byte(3));
+    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
+    let byte: Subterm = Subterm::Intrinsic(Intrinsic::Byte(3));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::bin_append(Grain::X, bin, byte)).into()
+            Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)).into()
         ),
-        Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bin(
+            Grain::X,
+            PackedBin::from_bytes(vec![1, 2, 3])
+        ))
+        .into())
     );
 }
 
@@ -485,15 +496,19 @@ fn reduce_bin_append_adds_byte() {
 fn reduce_bin_append_adds_the_full_byte_range() {
     let mut context = context();
 
-    let bin = Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
-    let byte: Subterm = Subterm::Prim(Prim::Byte(255));
+    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
+    let byte: Subterm = Subterm::Intrinsic(Intrinsic::Byte(255));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::bin_append(Grain::X, bin, byte)).into()
+            Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)).into()
         ),
-        Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 255]))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bin(
+            Grain::X,
+            PackedBin::from_bytes(vec![1, 2, 255])
+        ))
+        .into())
     );
 }
 
@@ -501,30 +516,30 @@ fn reduce_bin_append_adds_the_full_byte_range() {
 fn reduce_lst_append_adds_element() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
+    let list = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
         vec![
-            Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(20usize))).into(),
         ],
     ));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::lst_append(
-                Subterm::Prim(Prim::NatType),
+            Subterm::Intrinsic(Intrinsic::lst_append(
+                Subterm::Intrinsic(Intrinsic::NatType),
                 list,
-                Subterm::Prim(Prim::Nat(Nat::new(30usize)))
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Lst(
-            Term::prim(Prim::NatType),
+        Ok(Subterm::Intrinsic(Intrinsic::Lst(
+            Term::intrinsic(Intrinsic::NatType),
             vec![
-                Subterm::Prim(Prim::Nat(Nat::new(10usize))).into(),
-                Subterm::Prim(Prim::Nat(Nat::new(20usize))).into(),
-                Subterm::Prim(Prim::Nat(Nat::new(30usize))).into(),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(20usize))).into(),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize))).into(),
             ]
         ))
         .into())
@@ -710,7 +725,7 @@ fn refinement_is_suppressible() {
     let mut context = context();
     let b_binder = context.fresh(Some("b"));
     let b = Term::free_var(&b_binder);
-    let truth = Term::prim(Prim::Bool(true));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
 
     context.refine(&b_binder, &truth);
 
@@ -734,9 +749,9 @@ fn reduce_nat_div_by_zero_reports() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::nat_div(
-                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
-                Subterm::Prim(Prim::Nat(Nat::new(0usize))),
+            Term::intrinsic(Intrinsic::nat_div(
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -749,9 +764,9 @@ fn reduce_nat_div_by_zero_reports() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::nat_div(
+            Term::intrinsic(Intrinsic::nat_div(
                 Term::free_var(&x),
-                Term::prim(Prim::Nat(Nat::new(0usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -761,8 +776,8 @@ fn reduce_nat_div_by_zero_reports() {
     );
 
     // A symbolic divisor is not a zero divisor: the term just stays stuck.
-    let stuck = Term::prim(Prim::nat_div(
-        Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+    let stuck = Term::intrinsic(Intrinsic::nat_div(
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         Subterm::Var(Var::free(y.clone())),
     ));
     assert_eq!(reduce(&mut context, stuck.clone()), Ok(stuck));
@@ -774,9 +789,9 @@ fn reduce_nat_rem_by_zero_reports() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::nat_rem(
-                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
-                Subterm::Prim(Prim::Nat(Nat::new(0usize))),
+            Term::intrinsic(Intrinsic::nat_rem(
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -792,9 +807,9 @@ fn reduce_int_div_by_zero_reports() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::int_div(
-                Subterm::Prim(Prim::Int(Int::new(1))),
-                Subterm::Prim(Prim::Int(Int::new(0))),
+            Term::intrinsic(Intrinsic::int_div(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(0))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -806,9 +821,9 @@ fn reduce_int_div_by_zero_reports() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::int_rem(
-                Subterm::Prim(Prim::Int(Int::new(1))),
-                Subterm::Prim(Prim::Int(Int::new(0))),
+            Term::intrinsic(Intrinsic::int_rem(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(0))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -826,23 +841,23 @@ fn reduce_int_arithmetic_is_unbounded() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::int_add(
-                Subterm::Prim(Prim::Int(Int::new((1i64 << 30) - 1))),
-                Subterm::Prim(Prim::Int(Int::new(1))),
+            Term::intrinsic(Intrinsic::int_add(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new((1i64 << 30) - 1))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
             )),
         ),
-        Ok(Term::prim(Prim::Int(Int::new(1i64 << 30))))
+        Ok(Term::intrinsic(Intrinsic::Int(Int::new(1i64 << 30))))
     );
 
     assert_eq!(
         reduce(
             &mut context,
-            Term::prim(Prim::int_mul(
-                Subterm::Prim(Prim::Int(Int::new(1i64 << 30))),
-                Subterm::Prim(Prim::Int(Int::new(1i64 << 30))),
+            Term::intrinsic(Intrinsic::int_mul(
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(1i64 << 30))),
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(1i64 << 30))),
             )),
         ),
-        Ok(Term::prim(Prim::Int(Int::new(1i64 << 60))))
+        Ok(Term::intrinsic(Intrinsic::Int(Int::new(1i64 << 60))))
     );
 }
 
@@ -851,18 +866,18 @@ fn reduce_flt_to_int_stays_stuck() {
     let mut context = context();
 
     // Opaque at the type level even on an exactly representable value: reading a float *is* float semantics, and none of it decides conversion.
-    let exact = Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
-        2147483648.0,
-    )))));
+    let exact = Term::intrinsic(Intrinsic::FltToInt(Term::intrinsic(Intrinsic::Flt(
+        Flt::from_f32(2147483648.0),
+    ))));
     assert_eq!(reduce(&mut context, exact.clone()), Ok(exact));
 
-    let nan = Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
-        f32::NAN,
-    )))));
+    let nan = Term::intrinsic(Intrinsic::FltToInt(Term::intrinsic(Intrinsic::Flt(
+        Flt::from_f32(f32::NAN),
+    ))));
     assert_eq!(reduce(&mut context, nan.clone()), Ok(nan));
 }
 
-mod prim {
+mod intrinsic {
     use curios_core::*;
     use {
         crate::{Context, reduce},
@@ -875,11 +890,11 @@ mod prim {
     }
 
     fn lit(n: u32) -> Term {
-        Term::prim(Prim::Nat(Nat::new(n as usize)))
+        Term::intrinsic(Intrinsic::Nat(Nat::new(n as usize)))
     }
 
     fn succ(inner: Term) -> Term {
-        Term::prim(Prim::Nat(Nat::Succ(BigUint::from(1u32), inner)))
+        Term::intrinsic(Intrinsic::Nat(Nat::Succ(BigUint::from(1u32), inner)))
     }
 
     fn reduced(context: &mut Context, term: Term) -> Subterm {
@@ -895,51 +910,66 @@ mod prim {
 
         // `succ x ≥ 1`: lt is false, gte is true; and `0 < succ x` is true.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_lt(succ(x()), lit(1)))),
-            Subterm::Prim(Prim::Bool(false)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_lt(succ(x()), lit(1)))
+            ),
+            Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_gte(succ(x()), lit(1)))),
-            Subterm::Prim(Prim::Bool(true)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_gte(succ(x()), lit(1)))
+            ),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_lt(lit(0), succ(x())))),
-            Subterm::Prim(Prim::Bool(true)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_lt(lit(0), succ(x())))
+            ),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
 
         // Shared inner: `lt(x, succ x) = true`, `gte(x, succ x) = false`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_lt(x(), succ(x())))),
-            Subterm::Prim(Prim::Bool(true)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_lt(x(), succ(x())))
+            ),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_gte(x(), succ(x())))),
-            Subterm::Prim(Prim::Bool(false)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_gte(x(), succ(x())))
+            ),
+            Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
 
         // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ once the shared floor is peeled).
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_eql(succ(succ(x())), lit(1)))
+                Term::intrinsic(Intrinsic::nat_eql(succ(succ(x())), lit(1)))
             ),
-            Subterm::Prim(Prim::Bool(false)),
+            Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
 
         // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_lte(lit(2), succ(succ(x()))))
+                Term::intrinsic(Intrinsic::nat_lte(lit(2), succ(succ(x()))))
             ),
-            Subterm::Prim(Prim::Bool(true)),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
         assert!(matches!(
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_lt(lit(2), succ(succ(x()))))
+                Term::intrinsic(Intrinsic::nat_lt(lit(2), succ(succ(x()))))
             ),
-            Subterm::Prim(Prim::NatLt(..)),
+            Subterm::Intrinsic(Intrinsic::NatLt(..)),
         ));
     }
 
@@ -951,8 +981,11 @@ mod prim {
         for &a in &samples {
             for &b in &samples {
                 assert_eq!(
-                    reduced(&mut context, Term::prim(Prim::nat_mul(lit(a), lit(b)))),
-                    Subterm::Prim(Prim::Nat(Nat::new((a * b) as usize))),
+                    reduced(
+                        &mut context,
+                        Term::intrinsic(Intrinsic::nat_mul(lit(a), lit(b)))
+                    ),
+                    Subterm::Intrinsic(Intrinsic::Nat(Nat::new((a * b) as usize))),
                     "mul disagreed with the literal product on ({a}, {b})",
                 );
             }
@@ -968,11 +1001,14 @@ mod prim {
 
         // `(x + 1) · 2 = x · 2 + 2`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_mul(succ(x()), lit(2)))),
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_add(
-                    Term::prim(Prim::nat_mul(x(), lit(2))),
+                Term::intrinsic(Intrinsic::nat_mul(succ(x()), lit(2)))
+            ),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_add(
+                    Term::intrinsic(Intrinsic::nat_mul(x(), lit(2))),
                     lit(2)
                 )),
             ),
@@ -980,11 +1016,14 @@ mod prim {
 
         // Commutative: `2 · (x + 1) = 2 · x + 2`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_mul(lit(2), succ(x())))),
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_add(
-                    Term::prim(Prim::nat_mul(lit(2), x())),
+                Term::intrinsic(Intrinsic::nat_mul(lit(2), succ(x())))
+            ),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::nat_add(
+                    Term::intrinsic(Intrinsic::nat_mul(lit(2), x())),
                     lit(2)
                 )),
             ),
@@ -992,17 +1031,20 @@ mod prim {
 
         // No literal factor ⇒ neutral.
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::nat_mul(x(), x()))),
-            Subterm::Prim(Prim::NatMul(..)),
+            reduced(&mut context, Term::intrinsic(Intrinsic::nat_mul(x(), x()))),
+            Subterm::Intrinsic(Intrinsic::NatMul(..)),
         ));
     }
 
     // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons `Lst/get` and `Lst/slice` previously could not peel (they folded only literal arrays), now decoded one element at a time like their `Bin` twins.
     fn lst_cons_seven(xs: &Term) -> Term {
-        Term::prim(Prim::lst_concat(
-            Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::lst_concat(
+            Term::intrinsic(Intrinsic::NatType),
             [
-                Term::prim(Prim::Lst(Term::prim(Prim::NatType), vec![lit(7)])),
+                Term::intrinsic(Intrinsic::Lst(
+                    Term::intrinsic(Intrinsic::NatType),
+                    vec![lit(7)],
+                )),
                 xs.clone(),
             ],
         ))
@@ -1018,22 +1060,26 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_get(
-                    Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::lst_get(
+                    Term::intrinsic(Intrinsic::NatType),
                     cons.clone(),
                     lit(0)
                 ))
             ),
-            Subterm::Prim(Prim::Nat(Nat::new(7usize))),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(7usize))),
         );
 
         // `get(cons(7, xs), 1)` peels to `get(xs, 0)` — neutral over a symbolic tail.
         assert!(matches!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_get(Term::prim(Prim::NatType), cons, lit(1)))
+                Term::intrinsic(Intrinsic::lst_get(
+                    Term::intrinsic(Intrinsic::NatType),
+                    cons,
+                    lit(1)
+                ))
             ),
-            Subterm::Prim(Prim::LstGet(..)),
+            Subterm::Intrinsic(Intrinsic::LstGet(..)),
         ));
     }
 
@@ -1047,28 +1093,34 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_slice(
-                    Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::lst_slice(
+                    Term::intrinsic(Intrinsic::NatType),
                     cons.clone(),
                     lit(0),
                     lit(1)
                 ))
             ),
-            Subterm::Prim(Prim::Lst(Term::prim(Prim::NatType), vec![lit(7)])),
+            Subterm::Intrinsic(Intrinsic::Lst(
+                Term::intrinsic(Intrinsic::NatType),
+                vec![lit(7)]
+            )),
         );
 
         // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_slice(
-                    Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::lst_slice(
+                    Term::intrinsic(Intrinsic::NatType),
                     cons,
                     lit(1),
                     lit(1)
                 ))
             ),
-            Subterm::Prim(Prim::Lst(Term::prim(Prim::NatType), Vec::new())),
+            Subterm::Intrinsic(Intrinsic::Lst(
+                Term::intrinsic(Intrinsic::NatType),
+                Vec::new()
+            )),
         );
     }
 
@@ -1082,9 +1134,12 @@ mod prim {
         let succ_len = |context: &mut Context| {
             reduced(
                 context,
-                Term::prim(Prim::nat_add(
+                Term::intrinsic(Intrinsic::nat_add(
                     lit(1),
-                    Term::prim(Prim::lst_len(Term::prim(Prim::NatType), xs.clone())),
+                    Term::intrinsic(Intrinsic::lst_len(
+                        Term::intrinsic(Intrinsic::NatType),
+                        xs.clone(),
+                    )),
                 )),
             )
         };
@@ -1093,23 +1148,23 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_len(
-                    Term::prim(Prim::NatType),
-                    Term::prim(Prim::Lst(
-                        Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::lst_len(
+                    Term::intrinsic(Intrinsic::NatType),
+                    Term::intrinsic(Intrinsic::Lst(
+                        Term::intrinsic(Intrinsic::NatType),
                         vec![lit(1), lit(2), lit(3)]
                     ))
                 )),
             ),
-            Subterm::Prim(Prim::Nat(Nat::new(3usize))),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(3usize))),
         );
 
         // `len(cons(7, xs)) = 1 + len(xs)`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_len(
-                    Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::lst_len(
+                    Term::intrinsic(Intrinsic::NatType),
                     lst_cons_seven(&xs)
                 ))
             ),
@@ -1117,15 +1172,18 @@ mod prim {
         );
 
         // `len(append(xs, 9)) = 1 + len(xs)`.
-        let appended = Term::prim(Prim::lst_append(
-            Term::prim(Prim::NatType),
+        let appended = Term::intrinsic(Intrinsic::lst_append(
+            Term::intrinsic(Intrinsic::NatType),
             xs.clone(),
             lit(9),
         ));
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_len(Term::prim(Prim::NatType), appended))
+                Term::intrinsic(Intrinsic::lst_len(
+                    Term::intrinsic(Intrinsic::NatType),
+                    appended
+                ))
             ),
             succ_len(&mut context),
         );
@@ -1137,12 +1195,15 @@ mod prim {
         let mut context = context();
         let xs_binder = context.fresh(Some("xs"));
         let xs = Term::free_var(&xs_binder);
-        let len = Term::prim(Prim::lst_len(Term::prim(Prim::NatType), xs.clone()));
+        let len = Term::intrinsic(Intrinsic::lst_len(
+            Term::intrinsic(Intrinsic::NatType),
+            xs.clone(),
+        ));
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::lst_slice(
-                    Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::lst_slice(
+                    Term::intrinsic(Intrinsic::NatType),
                     xs.clone(),
                     lit(0),
                     len
@@ -1158,47 +1219,63 @@ mod prim {
         let mut context = context();
         let x_binder = context.fresh(Some("x"));
         let y_binder = context.fresh(Some("y"));
-        let bin = |bytes: Vec<u8>| Term::prim(Prim::Bin(Grain::X, PackedBin::from_bytes(bytes)));
+        let bin = |bytes: Vec<u8>| {
+            Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(bytes)))
+        };
         let x = Term::free_var(&x_binder);
 
         // Reflexivity over a symbolic value: `eql(x, x) = true`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(Grain::X, x.clone(), x.clone()))
+                Term::intrinsic(Intrinsic::bin_eql(Grain::X, x.clone(), x.clone()))
             ),
-            Subterm::Prim(Prim::Bool(true)),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
 
         // Literal decisions: equal folds true, unequal folds false.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(Grain::X, bin(vec![1, 2]), bin(vec![1, 2])))
+                Term::intrinsic(Intrinsic::bin_eql(
+                    Grain::X,
+                    bin(vec![1, 2]),
+                    bin(vec![1, 2])
+                ))
             ),
-            Subterm::Prim(Prim::Bool(true)),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(Grain::X, bin(vec![1, 2]), bin(vec![1, 3])))
+                Term::intrinsic(Intrinsic::bin_eql(
+                    Grain::X,
+                    bin(vec![1, 2]),
+                    bin(vec![1, 3])
+                ))
             ),
-            Subterm::Prim(Prim::Bool(false)),
+            Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
 
         // A first-byte clash decides `false` even past a shared symbolic tail: `eql([1] ++ x, [2] ++ x) = false`.
-        let lhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![1]), x.clone()]));
-        let rhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![2]), x.clone()]));
+        let lhs = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bin(vec![1]), x.clone()]));
+        let rhs = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bin(vec![2]), x.clone()]));
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(Grain::X, lhs, rhs))),
-            Subterm::Prim(Prim::Bool(false)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::bin_eql(Grain::X, lhs, rhs))
+            ),
+            Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
 
         // Distinct variables are undecidable: `eql(x, y)` stays neutral.
         let y = Term::free_var(&y_binder);
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(Grain::X, x, y))),
-            Subterm::Prim(Prim::BinEql(Grain::X, ..)),
+            reduced(
+                &mut context,
+                Term::intrinsic(Intrinsic::bin_eql(Grain::X, x, y))
+            ),
+            Subterm::Intrinsic(Intrinsic::BinEql(Grain::X, ..)),
         ));
     }
 
@@ -1207,54 +1284,60 @@ mod prim {
         let mut context = context();
         let tail_binder = context.fresh(Some("tail"));
         let bits = |values: &[bool]| {
-            Term::prim(Prim::Bin(
+            Term::intrinsic(Intrinsic::Bin(
                 Grain::B,
                 PackedBin::from_bits(values.iter().copied()),
             ))
         };
         let tail = Term::free_var(&tail_binder);
-        let cons = Term::prim(Prim::bin_concat(Grain::B, [bits(&[true]), tail.clone()]));
+        let cons = Term::intrinsic(Intrinsic::bin_concat(
+            Grain::B,
+            [bits(&[true]), tail.clone()],
+        ));
 
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_get(Grain::B, cons.clone(), lit(0)))
+                Term::intrinsic(Intrinsic::bin_get(Grain::B, cons.clone(), lit(0)))
             ),
-            Subterm::Prim(Prim::Bool(true)),
+            Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_slice(Grain::B, cons.clone(), lit(0), lit(1)))
+                Term::intrinsic(Intrinsic::bin_slice(Grain::B, cons.clone(), lit(0), lit(1)))
             ),
             Term::unwrap_or_clone(bits(&[true])),
         );
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_len(Grain::B, cons.clone()))
+                Term::intrinsic(Intrinsic::bin_len(Grain::B, cons.clone()))
             ),
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_add(
+                Term::intrinsic(Intrinsic::nat_add(
                     lit(1),
-                    Term::prim(Prim::bin_len(Grain::B, tail.clone())),
+                    Term::intrinsic(Intrinsic::bin_len(Grain::B, tail.clone())),
                 ))
             ),
         );
 
-        let false_cons = Term::prim(Prim::bin_concat(Grain::B, [bits(&[false]), tail.clone()]));
+        let false_cons = Term::intrinsic(Intrinsic::bin_concat(
+            Grain::B,
+            [bits(&[false]), tail.clone()],
+        ));
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(Grain::B, cons, false_cons))
+                Term::intrinsic(Intrinsic::bin_eql(Grain::B, cons, false_cons))
             ),
-            Subterm::Prim(Prim::Bool(false)),
+            Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_concat(
+                Term::intrinsic(Intrinsic::bin_concat(
                     Grain::B,
                     [bits(&[]), tail.clone(), bits(&[])],
                 ))
@@ -1309,19 +1392,25 @@ mod kernel_agreement {
     }
 
     #[test]
-    fn primitive_folds_agree() {
-        agree(Term::prim(Prim::nat_add(nat(20), nat(22))));
-        agree(Term::prim(Prim::nat_mul(nat(6), nat(7))));
-        agree(Term::prim(Prim::nat_lt(nat(2), nat(3))));
+    fn intrinsic_folds_agree() {
+        agree(Term::intrinsic(Intrinsic::nat_add(nat(20), nat(22))));
+        agree(Term::intrinsic(Intrinsic::nat_mul(nat(6), nat(7))));
+        agree(Term::intrinsic(Intrinsic::nat_lt(nat(2), nat(3))));
     }
 
     #[test]
-    fn a_stuck_primitive_agrees() {
+    fn a_stuck_intrinsic_agrees() {
         let mut context = context();
         let n = context.fresh(Some("n"));
 
-        agree(Term::prim(Prim::nat_add(Term::free_var(&n), nat(0))));
-        agree(Term::prim(Prim::nat_add(nat(1), Term::free_var(&n))));
+        agree(Term::intrinsic(Intrinsic::nat_add(
+            Term::free_var(&n),
+            nat(0),
+        )));
+        agree(Term::intrinsic(Intrinsic::nat_add(
+            nat(1),
+            Term::free_var(&n),
+        )));
     }
 
     #[test]
@@ -1332,13 +1421,13 @@ mod kernel_agreement {
 
         agree(Term::let_(
             &x,
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             nat(4),
             Term::let_(
                 &y,
-                Term::prim(Prim::NatType),
-                Term::prim(Prim::nat_add(Term::free_var(&x), nat(5))),
-                Term::prim(Prim::nat_mul(Term::free_var(&x), Term::free_var(&y))),
+                Term::intrinsic(Intrinsic::NatType),
+                Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(5))),
+                Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&x), Term::free_var(&y))),
             ),
         ));
     }
@@ -1352,13 +1441,13 @@ mod kernel_agreement {
         agree(Term::induct_match(
             Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
             Some(&m),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             [
                 ("none", Vec::<Free>::new(), nat(0)),
                 (
                     "some",
                     vec![payload.clone()],
-                    Term::prim(Prim::nat_add(Term::free_var(&payload), nat(1))),
+                    Term::intrinsic(Intrinsic::nat_add(Term::free_var(&payload), nat(1))),
                 ),
             ],
         ));
@@ -1375,11 +1464,11 @@ mod kernel_agreement {
         agree(Term::nat_match(
             nat(5),
             Some(&m),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             nat(0),
             &pred,
             &ih,
-            Term::prim(Prim::nat_add(Term::free_var(&ih), nat(2))),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(2))),
         ));
     }
 
@@ -1394,7 +1483,7 @@ mod kernel_agreement {
         agree(Term::nat_match(
             Term::free_var(&n),
             Some(&m),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             nat(0),
             &pred,
             &ih,
@@ -1420,7 +1509,7 @@ mod kernel_agreement {
         let ih = context.fresh(Some("ih"));
         let countdown = context.fresh(Some("countdown"));
         let x = context.fresh(Some("x"));
-        let nat_type = Term::prim(Prim::NatType);
+        let nat_type = Term::intrinsic(Intrinsic::NatType);
 
         let body = Term::func(
             [(n.clone(), nat_type.clone())],

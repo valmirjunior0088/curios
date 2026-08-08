@@ -156,7 +156,7 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
             continue;
         }
         match module.node(node_id).unwrap() {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => work.push(*next),
+            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
             CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
             CpsNode::LetCont {
                 continuations,
@@ -192,7 +192,7 @@ pub(super) fn owned_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<C
         .collect::<BTreeSet<_>>();
     for node_id in function_nodes(module, function) {
         match module.node(node_id).unwrap() {
-            CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } => {
+            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 owned.insert(*result);
             }
             CpsNode::LetCont { continuations, .. } => {

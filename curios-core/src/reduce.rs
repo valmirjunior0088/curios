@@ -1,5 +1,5 @@
-mod prim;
-pub use prim::*;
+mod intrinsic;
+pub use intrinsic::*;
 
 use {
     super::{Subterm, Term, UniverseError},
@@ -10,7 +10,7 @@ use {
 
 /// Reduce a host call's operands and rebuild the node.
 ///
-/// There is nothing to fold: a foreign call denotes an inert description, so reduction does here exactly what it does for an `Io`-returning primitive — evaluate the operands, rebuild, and stop. It sits beside [`reduce_prim`] rather than within it because [`Subterm::Foreign`] is a term former of its own, and every consumer that folds primitives must fold this too or leave a host call's operands unevaluated.
+/// There is nothing to fold: a foreign call denotes an inert description, so reduction does here exactly what it does for an `Io`-returning intrinsic — evaluate the operands, rebuild, and stop. It sits beside [`reduce_intrinsic`] rather than within it because [`Subterm::Foreign`] is a term former of its own, and every consumer that folds intrinsics must fold this too or leave a host call's operands unevaluated.
 pub fn reduce_foreign(
     reducer: &mut impl Reducer,
     function: &Arc<ForeignFunction>,
@@ -23,7 +23,7 @@ pub fn reduce_foreign(
     Ok(Subterm::Foreign(Arc::clone(function), reduced))
 }
 
-/// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial primitive was folded outside its domain, carrying the offending redex's span. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
+/// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial intrinsic was folded outside its domain, carrying the offending redex's span. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReduceError {
     /// The declaration's step budget ran out. Deterministic: the same program spends the same steps on every machine, so this is a fact about the program rather than about the host that compiled it.
@@ -58,9 +58,9 @@ pub enum ReduceError {
     Universe(UniverseError),
 }
 
-/// The evaluator a primitive fold calls back into for its operands.
+/// The evaluator an intrinsic fold calls back into for its operands.
 ///
-/// Primitive folding is arithmetic on the representation and belongs here; deciding *how far* a term reduces — which definitions unfold, what a budget costs, which refinements are in scope, whether a `rec` is forced — is a strategy, and a strategy is a judgment. This trait is the seam between them: [`reduce_prim`] states only that it needs its operands' values, and each consumer supplies the strategy it is entitled to. The elaborator's `Context` implements it with metavariable resolution and scrutinee refinement; a kernel implements it without either, and folds the same primitives.
+/// Intrinsic folding is arithmetic on the representation and belongs here; deciding *how far* a term reduces — which definitions unfold, what a budget costs, which refinements are in scope, whether a `rec` is forced — is a strategy, and a strategy is a judgment. This trait is the seam between them: [`reduce_intrinsic`] states only that it needs its operands' values, and each consumer supplies the strategy it is entitled to. The elaborator's `Context` implements it with metavariable resolution and scrutinee refinement; a kernel implements it without either, and folds the same intrinsics.
 ///
 /// The two methods differ in what they do with a `rec` head: [`Reducer::reduce`] stops at one, treating the folded spelling as the normal form, while [`Reducer::reduce_forced`] unfolds it because an eliminator demands a value.
 pub trait Reducer {

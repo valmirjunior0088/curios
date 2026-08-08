@@ -1,6 +1,6 @@
 //! The fixed infix operators of the surface grammar.
 
-/// A fixed infix operator. The surface parser maps an operator symbol (with its precedence) onto one of these; elaboration dispatches it through its `/syn` operator concept once the operand type is known (`elaborate_infix`, [`OperatorSyntax::concept_field`](crate::OperatorSyntax::concept_field)). Both `NumOp` and the `Transient`-grouped `Infix`/`NumLit` nodes are *elaboration-transient*: born in `into_core`, consumed by `elaborate` (replaced with a `Prim` term), so they never reach reduce/convert/zonk/erase.
+/// A fixed infix operator. The surface parser maps an operator symbol (with its precedence) onto one of these; elaboration dispatches it through its `/syn` operator concept once the operand type is known (`elaborate_infix`, [`OperatorSyntax::concept_field`](crate::OperatorSyntax::concept_field)). Both `NumOp` and the `Transient`-grouped `Infix`/`NumLit` nodes are *elaboration-transient*: born in `into_core`, consumed by `elaborate` (replaced with an `Intrinsic` term), so they never reach reduce/convert/zonk/erase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",

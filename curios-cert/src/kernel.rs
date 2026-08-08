@@ -4,7 +4,7 @@
 //!
 //! The independence is structural, not a matter of discipline. This crate does not depend on `curios-elab`, so nothing here can consult a metavariable store, a refinement, or a cached elaboration — not because the code declines to, but because those types are not in scope. A judgment the elaborator gets wrong is re-decided here from the term alone.
 //!
-//! What the kernel *does* share is the representation: [`Term`], its binder discipline, the primitive roster, and the primitive folds. Sharing a representation is not sharing a judgment. Two checkers that disagree about a term's type while agreeing on what a term *is* still catch each other's mistakes; two that share the rule that admits a bad program catch nothing. That line is why [`Reducer`](curios_core::Reducer) exists, and it is why the match dispatch in `whnf` is written out again here rather than lifted from the elaborator's reducer, which it closely resembles.
+//! What the kernel *does* share is the representation: [`Term`], its binder discipline, the intrinsic roster, and the intrinsic folds. Sharing a representation is not sharing a judgment. Two checkers that disagree about a term's type while agreeing on what a term *is* still catch each other's mistakes; two that share the rule that admits a bad program catch nothing. That line is why [`Reducer`](curios_core::Reducer) exists, and it is why the match dispatch in `whnf` is written out again here rather than lifted from the elaborator's reducer, which it closely resembles.
 //!
 //! # Refusing beats guessing
 //!
@@ -60,7 +60,7 @@ use {
 /// Every variant is a refusal, never a warning: reaching one means the kernel declined to certify the term, and a caller must treat that as rejection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KernelError {
-    /// Reduction failed — the budget ran out, or a partial primitive was folded outside its domain.
+    /// Reduction failed — the budget ran out, or a partial intrinsic was folded outside its domain.
     Reduce(ReduceError),
     /// A variable with no binder and no definition. In a well-formed module this cannot happen, which is why it is an error rather than a stuck neutral: the kernel is checking a *finished* term.
     Unbound(Free),
@@ -101,7 +101,7 @@ pub enum KernelError {
     },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
     Oversized { domain: Level, bound: Level },
-    /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or a `Prim::ProcExit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
+    /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or an `Intrinsic::ProcExit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
     NotTotal {
         erased: crate::Erased,
         reached: Option<Global>,

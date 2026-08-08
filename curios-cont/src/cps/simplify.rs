@@ -186,7 +186,7 @@ pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
     let mut changed = false;
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetPrim {
+            CpsNode::LetIntrinsic {
                 result,
                 op,
                 args,
@@ -234,9 +234,9 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
             })
             .collect::<BTreeMap<_, _>>();
         let selected = module.nodes.iter_live().find_map(|(id, node)| {
-            let CpsNode::LetPrim {
+            let CpsNode::LetIntrinsic {
                 result,
-                op: CpsPrimOp::TplGet(field),
+                op: CpsIntrinsicOp::TplGet(field),
                 args,
                 next,
             } = node
@@ -275,7 +275,7 @@ pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
                 {
                     Some((*next, Some(*result)))
                 }
-                CpsNode::LetPrim {
+                CpsNode::LetIntrinsic {
                     result, op, next, ..
                 } if op.is_total() && counts.get(result).copied().unwrap_or(0) == 0 => {
                     Some((*next, Some(*result)))
@@ -319,7 +319,7 @@ fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsN
     }
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => {
+            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
                 *next = resolve_redirect(redirect, *next);
             }
             CpsNode::LetFun { body, .. } | CpsNode::LetCont { body, .. } => {
@@ -360,7 +360,7 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
     }
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => {
+            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
                 if *next == from {
                     *next = to;
                 }

@@ -1,8 +1,8 @@
 //! The Curios core language: the term representation both checkers build on.
 //!
-//! This crate holds **what a term is** and nothing that judges one. It defines [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]), the primitive roster ([`Prim`]) with its free-monoid spine algebra and its folds ([`reduce_prim`]), algebraic universe [`Level`]s and the [`UniverseContext`] declarations generalize into, the nominal registry entries ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) and the [`Polarity`] lattice they carry, the finished-program shape both checkers walk ([`Module`], [`Item`], [`Definition`]), compiler names, and the printer.
+//! This crate holds **what a term is** and nothing that judges one. It defines [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]), the intrinsic roster ([`Intrinsic`]) with its free-monoid spine algebra and its folds ([`reduce_intrinsic`]), algebraic universe [`Level`]s and the [`UniverseContext`] declarations generalize into, the nominal registry entries ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) and the [`Polarity`] lattice they carry, the finished-program shape both checkers walk ([`Module`], [`Item`], [`Definition`]), compiler names, and the printer.
 //!
-//! The judgments live on either side of it. `curios-cert` holds the kernel and the shared analyses — every rule that can admit a program — and `curios-elab` holds everything that makes the *surface language* work: elaboration, unification, zonking, witness resolution, erasure, and the universe *solver*, since a [`UniverseContext`] is data and deciding whether a constraint set is satisfiable is inference over that data, not a rule of the theory. Both depend on this crate and never the reverse. The primitive folds are the boundary case, and [`Reducer`] is where the line is drawn: what `2 + 2` folds to is arithmetic on the representation and belongs here, while how far an operand reduces before a fold sees it is a strategy each checker supplies for itself.
+//! The judgments live on either side of it. `curios-cert` holds the kernel and the shared analyses — every rule that can admit a program — and `curios-elab` holds everything that makes the *surface language* work: elaboration, unification, zonking, witness resolution, erasure, and the universe *solver*, since a [`UniverseContext`] is data and deciding whether a constraint set is satisfiable is inference over that data, not a rule of the theory. Both depend on this crate and never the reverse. The intrinsic folds are the boundary case, and [`Reducer`] is where the line is drawn: what `2 + 2` folds to is arithmetic on the representation and belongs here, while how far an operand reduces before a fold sees it is a strategy each checker supplies for itself.
 //!
 //! One module is not trusted and is here only because the representation needs it: `print` renders terms for diagnostics. Printing cannot admit a bad program, and it lives here solely because [`Term`]'s `Display` is used throughout the elaborator's error paths.
 //!
@@ -23,8 +23,8 @@ pub use nat::*;
 mod universe;
 pub use universe::*;
 
-mod prim;
-pub use prim::*;
+mod intrinsic;
+pub use intrinsic::*;
 
 mod spine;
 pub use spine::*;

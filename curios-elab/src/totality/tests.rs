@@ -18,7 +18,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         island: Qualifier::empty(),
         root: RootId::Entry,
         totality: Totality::default(),
-        type_: Term::prim(Prim::NatType),
+        type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&Free::from(&name(mentions))),
     })
 }
@@ -33,7 +33,7 @@ fn module(items: Vec<Item>) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::prim(Prim::Nat(Nat::new(0u32))),
+        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0u32))),
     }
 }
 

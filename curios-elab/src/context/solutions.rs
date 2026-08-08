@@ -271,7 +271,7 @@ impl Solutions {
         self.suppress_parking
     }
 
-    /// Flip the parking-suppression flag, returning the previous state — `Context::with_suppressed_parking`'s bracket primitive.
+    /// Flip the parking-suppression flag, returning the previous state — `Context::with_suppressed_parking`'s bracket intrinsic.
     pub(crate) fn set_parking_suppressed(&mut self, suppressed: bool) -> bool {
         mem::replace(&mut self.suppress_parking, suppressed)
     }

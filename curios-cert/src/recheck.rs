@@ -124,7 +124,7 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
 
 /// Every item the kernel refuses, rather than only the first.
 ///
-/// # Why this is the primitive
+/// # Why this is the intrinsic
 ///
 /// The kernel is incomplete in known places, so a walk over a real module stops at the first of them and says nothing about what lies past it. Discovering those one build at a time is how a checker gets patched in the order its gaps happen to be encountered, rather than in the order they matter. This exists so the gaps can be *counted* before any of them is designed for — the same move that settled every earlier question in this effort.
 ///

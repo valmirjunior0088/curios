@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Arity, Atom, Bang, Bound, Carrier, Cases, Field, Free, Func, FuncType, Global,
-        InductType, Infix, Let, Level, Match, Nat, Prim, Proj, Rec, Scope, Struct, StructType,
+        InductType, Infix, Intrinsic, Let, Level, Match, Nat, Proj, Rec, Scope, Struct, StructType,
         Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
@@ -164,7 +164,7 @@ pub fn display_names(term: &Term) -> BTreeSet<Free> {
     names
 }
 
-/// Collect every binder label in `term`, recursing through scope and telescope bodies. (`Prim` interiors are skipped: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.)
+/// Collect every binder label in `term`, recursing through scope and telescope bodies. (`Intrinsic` interiors are skipped: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.)
 fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
     fn push(out: &mut BTreeSet<Free>, binder: Option<&Free>) {
         if let Some(binder) = binder {
@@ -307,7 +307,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
         Subterm::Var(_)
         | Subterm::Type(_)
         | Subterm::Prop
-        | Subterm::Prim(_)
+        | Subterm::Intrinsic(_)
         | Subterm::Foreign(..) => {}
     }
 }
@@ -460,7 +460,7 @@ fn print_flt(flt: Flt) -> Printer {
     pure(string)
 }
 
-/// Render a binary primitive as `name left right`, the shape almost every scalar arithmetic/comparison/bitwise prim shares. `name` carries its own trailing space (`"Nat.add "`).
+/// Render a binary intrinsic as `name left right`, the shape almost every scalar arithmetic/comparison/bitwise intrinsic shares. `name` carries its own trailing space (`"Nat.add "`).
 fn print_binary(
     name: &'static str,
     left: Term,
@@ -481,32 +481,35 @@ fn print_unary(name: &'static str, inner: Term, depth: usize, spelling: &Rc<Spel
     flat([pure(name), sub(inner, depth, spelling)])
 }
 
-/// The surface infix symbol an operator primitive prints as, or `None` for a primitive with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
-fn infix_symbol(prim: &Prim) -> Option<&'static str> {
-    Some(match prim {
-        Prim::NatAdd(..) | Prim::IntAdd(..) | Prim::FltAdd(..) => "+",
-        Prim::NatSub(..) | Prim::IntSub(..) | Prim::FltSub(..) => "-",
-        Prim::NatMul(..) | Prim::IntMul(..) | Prim::FltMul(..) => "*",
-        Prim::NatDiv(..) | Prim::IntDiv(..) | Prim::FltDiv(..) => "/",
-        Prim::NatRem(..) | Prim::IntRem(..) | Prim::FltRem(..) => "%",
-        Prim::NatEql(..)
-        | Prim::IntEql(..)
-        | Prim::FltEql(..)
-        | Prim::BoolEql(..)
-        | Prim::BinEql(Grain::X, ..)
-        | Prim::HandleEql(..) => "==",
-        Prim::NatNeq(..) | Prim::IntNeq(..) | Prim::FltNeq(..) | Prim::BoolNeq(..) => "!=",
-        Prim::NatLt(..) | Prim::IntLt(..) | Prim::FltLt(..) => "<",
-        Prim::NatGt(..) | Prim::IntGt(..) | Prim::FltGt(..) => ">",
-        Prim::NatLte(..) | Prim::IntLte(..) | Prim::FltLte(..) => "<=",
-        Prim::NatGte(..) | Prim::IntGte(..) | Prim::FltGte(..) => ">=",
-        Prim::BoolAnd(..) => "&&",
-        Prim::BoolOr(..) => "||",
+/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
+fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
+    Some(match intrinsic {
+        Intrinsic::NatAdd(..) | Intrinsic::IntAdd(..) | Intrinsic::FltAdd(..) => "+",
+        Intrinsic::NatSub(..) | Intrinsic::IntSub(..) | Intrinsic::FltSub(..) => "-",
+        Intrinsic::NatMul(..) | Intrinsic::IntMul(..) | Intrinsic::FltMul(..) => "*",
+        Intrinsic::NatDiv(..) | Intrinsic::IntDiv(..) | Intrinsic::FltDiv(..) => "/",
+        Intrinsic::NatRem(..) | Intrinsic::IntRem(..) | Intrinsic::FltRem(..) => "%",
+        Intrinsic::NatEql(..)
+        | Intrinsic::IntEql(..)
+        | Intrinsic::FltEql(..)
+        | Intrinsic::BoolEql(..)
+        | Intrinsic::BinEql(Grain::X, ..)
+        | Intrinsic::HandleEql(..) => "==",
+        Intrinsic::NatNeq(..)
+        | Intrinsic::IntNeq(..)
+        | Intrinsic::FltNeq(..)
+        | Intrinsic::BoolNeq(..) => "!=",
+        Intrinsic::NatLt(..) | Intrinsic::IntLt(..) | Intrinsic::FltLt(..) => "<",
+        Intrinsic::NatGt(..) | Intrinsic::IntGt(..) | Intrinsic::FltGt(..) => ">",
+        Intrinsic::NatLte(..) | Intrinsic::IntLte(..) | Intrinsic::FltLte(..) => "<=",
+        Intrinsic::NatGte(..) | Intrinsic::IntGte(..) | Intrinsic::FltGte(..) => ">=",
+        Intrinsic::BoolAnd(..) => "&&",
+        Intrinsic::BoolOr(..) => "||",
         _ => return None,
     })
 }
 
-/// Render an operator primitive as `left <symbol> right`, each operand parenthesized when it is itself an infix operator so nesting stays unambiguous — `(a + b) * c`, never `a + b * c`.
+/// Render an operator intrinsic as `left <symbol> right`, each operand parenthesized when it is itself an infix operator so nesting stays unambiguous — `(a + b) * c`, never `a + b * c`.
 fn print_infix(
     symbol: &'static str,
     left: Term,
@@ -521,10 +524,10 @@ fn print_infix(
     ])
 }
 
-/// An operand of [`print_infix`], wrapped in parentheses when it too prints as an infix operator (a nested operator primitive or a residual `Infix` node); self-delimiting operands (variables, literals, applications) print bare.
+/// An operand of [`print_infix`], wrapped in parentheses when it too prints as an infix operator (a nested operator intrinsic or a residual `Infix` node); self-delimiting operands (variables, literals, applications) print bare.
 fn print_operand(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
     let parenthesize = match &*term {
-        Subterm::Prim(prim) => infix_symbol(prim).is_some(),
+        Subterm::Intrinsic(intrinsic) => infix_symbol(intrinsic).is_some(),
         Subterm::Transient(Transient::Infix(_)) => true,
         _ => false,
     };
@@ -536,113 +539,113 @@ fn print_operand(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
     }
 }
 
-fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
-    match prim {
-        Prim::BoolType => pure("Bool"),
-        Prim::Bool(false) => pure("false"),
-        Prim::Bool(true) => pure("true"),
-        Prim::BoolAnd(l, r) => print_infix("&&", l, r, depth, spelling),
-        Prim::BoolOr(l, r) => print_infix("||", l, r, depth, spelling),
-        Prim::BoolXor(l, r) => print_binary("Bool.xor ", l, r, depth, spelling),
-        Prim::BoolEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Prim::BoolNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Prim::NatType => pure("Nat"),
-        Prim::Nat(Nat::Zero) => pure("0"),
-        // A successor over a symbolic tail is that tail plus its literal floor — spelled infix (`n + 1`, `(n + m) + 3`) to match the operator prims, its tail parenthesized when it too is an operator. A successor over `0` is a plain numeral (`{spine}`).
-        Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
-            Subterm::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
+fn print_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+    match intrinsic {
+        Intrinsic::BoolType => pure("Bool"),
+        Intrinsic::Bool(false) => pure("false"),
+        Intrinsic::Bool(true) => pure("true"),
+        Intrinsic::BoolAnd(l, r) => print_infix("&&", l, r, depth, spelling),
+        Intrinsic::BoolOr(l, r) => print_infix("||", l, r, depth, spelling),
+        Intrinsic::BoolXor(l, r) => print_binary("Bool.xor ", l, r, depth, spelling),
+        Intrinsic::BoolEql(l, r) => print_infix("==", l, r, depth, spelling),
+        Intrinsic::BoolNeq(l, r) => print_infix("!=", l, r, depth, spelling),
+        Intrinsic::NatType => pure("Nat"),
+        Intrinsic::Nat(Nat::Zero) => pure("0"),
+        // A successor over a symbolic tail is that tail plus its literal floor — spelled infix (`n + 1`, `(n + m) + 3`) to match the operator intrinsics, its tail parenthesized when it too is an operator. A successor over `0` is a plain numeral (`{spine}`).
+        Intrinsic::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => pure(format!("{spine}")),
             _ => flat([
                 print_operand(inner.clone(), depth, spelling),
                 pure(format!(" + {spine}")),
             ]),
         },
-        Prim::NatEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Prim::HandleEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Prim::NatNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Prim::NatAdd(l, r) => print_infix("+", l, r, depth, spelling),
-        Prim::NatSub(l, r) => print_infix("-", l, r, depth, spelling),
-        Prim::NatMul(l, r) => print_infix("*", l, r, depth, spelling),
-        Prim::NatLt(l, r) => print_infix("<", l, r, depth, spelling),
-        Prim::NatDiv(l, r) => print_infix("/", l, r, depth, spelling),
-        Prim::NatRem(l, r) => print_infix("%", l, r, depth, spelling),
-        Prim::NatGt(l, r) => print_infix(">", l, r, depth, spelling),
-        Prim::NatLte(l, r) => print_infix("<=", l, r, depth, spelling),
-        Prim::NatGte(l, r) => print_infix(">=", l, r, depth, spelling),
-        Prim::NatAnd(l, r) => print_binary("Nat.and ", l, r, depth, spelling),
-        Prim::NatOr(l, r) => print_binary("Nat.or ", l, r, depth, spelling),
-        Prim::NatXor(l, r) => print_binary("Nat.xor ", l, r, depth, spelling),
-        Prim::NatShl(l, r) => print_binary("Nat.shl ", l, r, depth, spelling),
-        Prim::NatShr(l, r) => print_binary("Nat.shr ", l, r, depth, spelling),
-        Prim::NatRotl(l, r) => print_binary("Nat.rotl ", l, r, depth, spelling),
-        Prim::NatRotr(l, r) => print_binary("Nat.rotr ", l, r, depth, spelling),
-        Prim::NatClz(i) => print_unary("Nat.clz ", i, depth, spelling),
-        Prim::NatCtz(i) => print_unary("Nat.ctz ", i, depth, spelling),
-        Prim::NatPopcnt(i) => print_unary("Nat.popcnt ", i, depth, spelling),
-        Prim::ByteType => pure("Byte"),
-        Prim::Byte(value) => pure(format!("0x{value:02X}")),
-        Prim::ByteToNat(i) => print_unary("Byte.to_nat ", i, depth, spelling),
-        Prim::NatToByte(i) => print_unary("Nat.to_byte ", i, depth, spelling),
-        Prim::ByteEql(l, r) => print_binary("Byte.eql ", l, r, depth, spelling),
-        Prim::ByteLt(l, r) => print_binary("Byte.lt ", l, r, depth, spelling),
-        Prim::ByteLte(l, r) => print_binary("Byte.lte ", l, r, depth, spelling),
-        Prim::ByteGt(l, r) => print_binary("Byte.gt ", l, r, depth, spelling),
-        Prim::ByteGte(l, r) => print_binary("Byte.gte ", l, r, depth, spelling),
-        Prim::IntType => pure("Int"),
-        Prim::Int(value) => pure(format!("{value:+}")),
-        Prim::IntEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Prim::IntNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Prim::IntAdd(l, r) => print_infix("+", l, r, depth, spelling),
-        Prim::IntSub(l, r) => print_infix("-", l, r, depth, spelling),
-        Prim::IntMul(l, r) => print_infix("*", l, r, depth, spelling),
-        Prim::IntDiv(l, r) => print_infix("/", l, r, depth, spelling),
-        Prim::IntRem(l, r) => print_infix("%", l, r, depth, spelling),
-        Prim::IntLt(l, r) => print_infix("<", l, r, depth, spelling),
-        Prim::IntGt(l, r) => print_infix(">", l, r, depth, spelling),
-        Prim::IntLte(l, r) => print_infix("<=", l, r, depth, spelling),
-        Prim::IntGte(l, r) => print_infix(">=", l, r, depth, spelling),
-        Prim::IntAnd(l, r) => print_binary("Int.and ", l, r, depth, spelling),
-        Prim::IntOr(l, r) => print_binary("Int.or ", l, r, depth, spelling),
-        Prim::IntXor(l, r) => print_binary("Int.xor ", l, r, depth, spelling),
-        Prim::IntShl(l, r) => print_binary("Int.shl ", l, r, depth, spelling),
-        Prim::IntShr(l, r) => print_binary("Int.shr ", l, r, depth, spelling),
-        Prim::IntRotl(l, r) => print_binary("Int.rotl ", l, r, depth, spelling),
-        Prim::IntRotr(l, r) => print_binary("Int.rotr ", l, r, depth, spelling),
-        Prim::IntClz(i) => print_unary("Int.clz ", i, depth, spelling),
-        Prim::IntCtz(i) => print_unary("Int.ctz ", i, depth, spelling),
-        Prim::IntPopcnt(i) => print_unary("Int.popcnt ", i, depth, spelling),
-        Prim::FltType => pure("Flt"),
-        Prim::Flt(flt) => print_flt(flt),
-        Prim::FltAdd(l, r) => print_infix("+", l, r, depth, spelling),
-        Prim::FltSub(l, r) => print_infix("-", l, r, depth, spelling),
-        Prim::FltMul(l, r) => print_infix("*", l, r, depth, spelling),
-        Prim::FltDiv(l, r) => print_infix("/", l, r, depth, spelling),
-        Prim::FltRem(l, r) => print_infix("%", l, r, depth, spelling),
-        Prim::FltEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Prim::FltNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Prim::FltLt(l, r) => print_infix("<", l, r, depth, spelling),
-        Prim::FltGt(l, r) => print_infix(">", l, r, depth, spelling),
-        Prim::FltLte(l, r) => print_infix("<=", l, r, depth, spelling),
-        Prim::FltGte(l, r) => print_infix(">=", l, r, depth, spelling),
-        Prim::FltMin(l, r) => print_binary("Flt.min ", l, r, depth, spelling),
-        Prim::FltMax(l, r) => print_binary("Flt.max ", l, r, depth, spelling),
-        Prim::FltCopysign(l, r) => print_binary("Flt.copysign ", l, r, depth, spelling),
-        Prim::FltNeg(i) => print_unary("Flt.neg ", i, depth, spelling),
-        Prim::FltAbs(i) => print_unary("Flt.abs ", i, depth, spelling),
-        Prim::FltSqrt(i) => print_unary("Flt.sqrt ", i, depth, spelling),
-        Prim::FltFloor(i) => print_unary("Flt.floor ", i, depth, spelling),
-        Prim::FltCeil(i) => print_unary("Flt.ceil ", i, depth, spelling),
-        Prim::FltTrunc(i) => print_unary("Flt.trunc ", i, depth, spelling),
-        Prim::FltNearest(i) => print_unary("Flt.nearest ", i, depth, spelling),
-        Prim::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, depth, spelling),
-        Prim::FltOfLeBytes(i) => print_unary("Flt.of_le_bytes ", i, depth, spelling),
-        Prim::NatToInt(i) => print_unary("Nat.to_int ", i, depth, spelling),
-        Prim::NatToFlt(i) => print_unary("Nat.to_flt ", i, depth, spelling),
-        Prim::IntToNat(i) => print_unary("Int.to_nat ", i, depth, spelling),
-        Prim::IntToFlt(i) => print_unary("Int.to_flt ", i, depth, spelling),
-        Prim::FltToNat(i) => print_unary("Flt.to_nat ", i, depth, spelling),
-        Prim::FltToInt(i) => print_unary("Flt.to_int ", i, depth, spelling),
-        Prim::BinType(Grain::X) => pure("Bytes"),
-        Prim::Bin(Grain::X, bytes) => pure(format!(
+        Intrinsic::NatEql(l, r) => print_infix("==", l, r, depth, spelling),
+        Intrinsic::HandleEql(l, r) => print_infix("==", l, r, depth, spelling),
+        Intrinsic::NatNeq(l, r) => print_infix("!=", l, r, depth, spelling),
+        Intrinsic::NatAdd(l, r) => print_infix("+", l, r, depth, spelling),
+        Intrinsic::NatSub(l, r) => print_infix("-", l, r, depth, spelling),
+        Intrinsic::NatMul(l, r) => print_infix("*", l, r, depth, spelling),
+        Intrinsic::NatLt(l, r) => print_infix("<", l, r, depth, spelling),
+        Intrinsic::NatDiv(l, r) => print_infix("/", l, r, depth, spelling),
+        Intrinsic::NatRem(l, r) => print_infix("%", l, r, depth, spelling),
+        Intrinsic::NatGt(l, r) => print_infix(">", l, r, depth, spelling),
+        Intrinsic::NatLte(l, r) => print_infix("<=", l, r, depth, spelling),
+        Intrinsic::NatGte(l, r) => print_infix(">=", l, r, depth, spelling),
+        Intrinsic::NatAnd(l, r) => print_binary("Nat.and ", l, r, depth, spelling),
+        Intrinsic::NatOr(l, r) => print_binary("Nat.or ", l, r, depth, spelling),
+        Intrinsic::NatXor(l, r) => print_binary("Nat.xor ", l, r, depth, spelling),
+        Intrinsic::NatShl(l, r) => print_binary("Nat.shl ", l, r, depth, spelling),
+        Intrinsic::NatShr(l, r) => print_binary("Nat.shr ", l, r, depth, spelling),
+        Intrinsic::NatRotl(l, r) => print_binary("Nat.rotl ", l, r, depth, spelling),
+        Intrinsic::NatRotr(l, r) => print_binary("Nat.rotr ", l, r, depth, spelling),
+        Intrinsic::NatClz(i) => print_unary("Nat.clz ", i, depth, spelling),
+        Intrinsic::NatCtz(i) => print_unary("Nat.ctz ", i, depth, spelling),
+        Intrinsic::NatPopcnt(i) => print_unary("Nat.popcnt ", i, depth, spelling),
+        Intrinsic::ByteType => pure("Byte"),
+        Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
+        Intrinsic::ByteToNat(i) => print_unary("Byte.to_nat ", i, depth, spelling),
+        Intrinsic::NatToByte(i) => print_unary("Nat.to_byte ", i, depth, spelling),
+        Intrinsic::ByteEql(l, r) => print_binary("Byte.eql ", l, r, depth, spelling),
+        Intrinsic::ByteLt(l, r) => print_binary("Byte.lt ", l, r, depth, spelling),
+        Intrinsic::ByteLte(l, r) => print_binary("Byte.lte ", l, r, depth, spelling),
+        Intrinsic::ByteGt(l, r) => print_binary("Byte.gt ", l, r, depth, spelling),
+        Intrinsic::ByteGte(l, r) => print_binary("Byte.gte ", l, r, depth, spelling),
+        Intrinsic::IntType => pure("Int"),
+        Intrinsic::Int(value) => pure(format!("{value:+}")),
+        Intrinsic::IntEql(l, r) => print_infix("==", l, r, depth, spelling),
+        Intrinsic::IntNeq(l, r) => print_infix("!=", l, r, depth, spelling),
+        Intrinsic::IntAdd(l, r) => print_infix("+", l, r, depth, spelling),
+        Intrinsic::IntSub(l, r) => print_infix("-", l, r, depth, spelling),
+        Intrinsic::IntMul(l, r) => print_infix("*", l, r, depth, spelling),
+        Intrinsic::IntDiv(l, r) => print_infix("/", l, r, depth, spelling),
+        Intrinsic::IntRem(l, r) => print_infix("%", l, r, depth, spelling),
+        Intrinsic::IntLt(l, r) => print_infix("<", l, r, depth, spelling),
+        Intrinsic::IntGt(l, r) => print_infix(">", l, r, depth, spelling),
+        Intrinsic::IntLte(l, r) => print_infix("<=", l, r, depth, spelling),
+        Intrinsic::IntGte(l, r) => print_infix(">=", l, r, depth, spelling),
+        Intrinsic::IntAnd(l, r) => print_binary("Int.and ", l, r, depth, spelling),
+        Intrinsic::IntOr(l, r) => print_binary("Int.or ", l, r, depth, spelling),
+        Intrinsic::IntXor(l, r) => print_binary("Int.xor ", l, r, depth, spelling),
+        Intrinsic::IntShl(l, r) => print_binary("Int.shl ", l, r, depth, spelling),
+        Intrinsic::IntShr(l, r) => print_binary("Int.shr ", l, r, depth, spelling),
+        Intrinsic::IntRotl(l, r) => print_binary("Int.rotl ", l, r, depth, spelling),
+        Intrinsic::IntRotr(l, r) => print_binary("Int.rotr ", l, r, depth, spelling),
+        Intrinsic::IntClz(i) => print_unary("Int.clz ", i, depth, spelling),
+        Intrinsic::IntCtz(i) => print_unary("Int.ctz ", i, depth, spelling),
+        Intrinsic::IntPopcnt(i) => print_unary("Int.popcnt ", i, depth, spelling),
+        Intrinsic::FltType => pure("Flt"),
+        Intrinsic::Flt(flt) => print_flt(flt),
+        Intrinsic::FltAdd(l, r) => print_infix("+", l, r, depth, spelling),
+        Intrinsic::FltSub(l, r) => print_infix("-", l, r, depth, spelling),
+        Intrinsic::FltMul(l, r) => print_infix("*", l, r, depth, spelling),
+        Intrinsic::FltDiv(l, r) => print_infix("/", l, r, depth, spelling),
+        Intrinsic::FltRem(l, r) => print_infix("%", l, r, depth, spelling),
+        Intrinsic::FltEql(l, r) => print_infix("==", l, r, depth, spelling),
+        Intrinsic::FltNeq(l, r) => print_infix("!=", l, r, depth, spelling),
+        Intrinsic::FltLt(l, r) => print_infix("<", l, r, depth, spelling),
+        Intrinsic::FltGt(l, r) => print_infix(">", l, r, depth, spelling),
+        Intrinsic::FltLte(l, r) => print_infix("<=", l, r, depth, spelling),
+        Intrinsic::FltGte(l, r) => print_infix(">=", l, r, depth, spelling),
+        Intrinsic::FltMin(l, r) => print_binary("Flt.min ", l, r, depth, spelling),
+        Intrinsic::FltMax(l, r) => print_binary("Flt.max ", l, r, depth, spelling),
+        Intrinsic::FltCopysign(l, r) => print_binary("Flt.copysign ", l, r, depth, spelling),
+        Intrinsic::FltNeg(i) => print_unary("Flt.neg ", i, depth, spelling),
+        Intrinsic::FltAbs(i) => print_unary("Flt.abs ", i, depth, spelling),
+        Intrinsic::FltSqrt(i) => print_unary("Flt.sqrt ", i, depth, spelling),
+        Intrinsic::FltFloor(i) => print_unary("Flt.floor ", i, depth, spelling),
+        Intrinsic::FltCeil(i) => print_unary("Flt.ceil ", i, depth, spelling),
+        Intrinsic::FltTrunc(i) => print_unary("Flt.trunc ", i, depth, spelling),
+        Intrinsic::FltNearest(i) => print_unary("Flt.nearest ", i, depth, spelling),
+        Intrinsic::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, depth, spelling),
+        Intrinsic::FltOfLeBytes(i) => print_unary("Flt.of_le_bytes ", i, depth, spelling),
+        Intrinsic::NatToInt(i) => print_unary("Nat.to_int ", i, depth, spelling),
+        Intrinsic::NatToFlt(i) => print_unary("Nat.to_flt ", i, depth, spelling),
+        Intrinsic::IntToNat(i) => print_unary("Int.to_nat ", i, depth, spelling),
+        Intrinsic::IntToFlt(i) => print_unary("Int.to_flt ", i, depth, spelling),
+        Intrinsic::FltToNat(i) => print_unary("Flt.to_nat ", i, depth, spelling),
+        Intrinsic::FltToInt(i) => print_unary("Flt.to_int ", i, depth, spelling),
+        Intrinsic::BinType(Grain::X) => pure("Bytes"),
+        Intrinsic::Bin(Grain::X, bytes) => pure(format!(
             "x[{}]",
             bytes
                 .as_bytes()
@@ -652,10 +655,10 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
-        Prim::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, depth, spelling),
-        Prim::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, depth, spelling),
-        Prim::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, depth, spelling),
-        Prim::BinSlice(Grain::X, bin, start, end) => flat([
+        Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, depth, spelling),
+        Intrinsic::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, depth, spelling),
+        Intrinsic::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, depth, spelling),
+        Intrinsic::BinSlice(Grain::X, bin, start, end) => flat([
             pure("Bytes.slice "),
             sub(bin, depth, spelling),
             pure(" "),
@@ -663,18 +666,18 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(end, depth, spelling),
         ]),
-        Prim::BinAppend(Grain::X, b, byte) => {
+        Intrinsic::BinAppend(Grain::X, b, byte) => {
             print_binary("Bytes.append ", b, byte, depth, spelling)
         }
-        Prim::BinConcat(Grain::X, operands) => flat([
+        Intrinsic::BinConcat(Grain::X, operands) => flat([
             pure("Bytes.concat "),
             sep_flat(
                 operands.into_iter().map(move |e| sub(e, depth, spelling)),
                 || pure(", "),
             ),
         ]),
-        Prim::BinType(Grain::B) => pure("Bits"),
-        Prim::Bin(Grain::B, bits) => pure(format!(
+        Intrinsic::BinType(Grain::B) => pure("Bits"),
+        Intrinsic::Bin(Grain::B, bits) => pure(format!(
             "b[{}]",
             (0..bits.bit_length())
                 .map(|index| match bits.bit(index).unwrap() {
@@ -684,10 +687,10 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
-        Prim::BinLen(Grain::B, b) => print_unary("Bits.len ", b, depth, spelling),
-        Prim::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, depth, spelling),
-        Prim::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, depth, spelling),
-        Prim::BinSlice(Grain::B, bin, start, end) => flat([
+        Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, depth, spelling),
+        Intrinsic::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, depth, spelling),
+        Intrinsic::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, depth, spelling),
+        Intrinsic::BinSlice(Grain::B, bin, start, end) => flat([
             pure("Bits.slice "),
             sub(bin, depth, spelling),
             pure(" "),
@@ -695,16 +698,18 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(end, depth, spelling),
         ]),
-        Prim::BinAppend(Grain::B, b, bit) => print_binary("Bits.append ", b, bit, depth, spelling),
-        Prim::BinConcat(Grain::B, operands) => flat([
+        Intrinsic::BinAppend(Grain::B, b, bit) => {
+            print_binary("Bits.append ", b, bit, depth, spelling)
+        }
+        Intrinsic::BinConcat(Grain::B, operands) => flat([
             pure("Bits.concat "),
             sep_flat(
                 operands.into_iter().map(move |e| sub(e, depth, spelling)),
                 || pure(", "),
             ),
         ]),
-        Prim::LstType(elem) => print_unary("Lst ", elem, depth, spelling),
-        Prim::Lst(_, elems) => flat([
+        Intrinsic::LstType(elem) => print_unary("Lst ", elem, depth, spelling),
+        Intrinsic::Lst(_, elems) => flat([
             pure("["),
             sep_flat(
                 elems.into_iter().map(move |e| sub(e, depth, spelling)),
@@ -712,8 +717,8 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             ),
             pure("]"),
         ]),
-        Prim::LstLen(ty, list) => print_binary("Lst.len ", ty, list, depth, spelling),
-        Prim::LstGet(ty, list, index) => flat([
+        Intrinsic::LstLen(ty, list) => print_binary("Lst.len ", ty, list, depth, spelling),
+        Intrinsic::LstGet(ty, list, index) => flat([
             pure("Lst.get "),
             sub(ty, depth, spelling),
             pure(" "),
@@ -721,7 +726,7 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(index, depth, spelling),
         ]),
-        Prim::LstSlice(ty, list, start, end) => flat([
+        Intrinsic::LstSlice(ty, list, start, end) => flat([
             pure("Lst.slice "),
             sub(ty, depth, spelling),
             pure(" "),
@@ -731,7 +736,7 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(end, depth, spelling),
         ]),
-        Prim::LstAppend(ty, list, elem) => flat([
+        Intrinsic::LstAppend(ty, list, elem) => flat([
             pure("Lst.append "),
             sub(ty, depth, spelling),
             pure(" "),
@@ -739,7 +744,7 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(elem, depth, spelling),
         ]),
-        Prim::LstConcat(ty, operands) => flat([
+        Intrinsic::LstConcat(ty, operands) => flat([
             pure("Lst.concat "),
             sub(ty, depth, spelling),
             pure(" "),
@@ -748,7 +753,7 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
                 || pure(", "),
             ),
         ]),
-        Prim::LstMap(a, b, lst, f) => flat([
+        Intrinsic::LstMap(a, b, lst, f) => flat([
             pure("Lst.map "),
             sub(a, depth, spelling),
             pure(" "),
@@ -758,12 +763,12 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(f, depth, spelling),
         ]),
-        Prim::HandleType => pure("Handle"),
-        Prim::Handle(token) => pure(format!("Handle({token})")),
-        Prim::ProcExit(code) => print_unary("proc.exit ", code, depth, spelling),
-        Prim::CellType(elem) => print_unary("Cell ", elem, depth, spelling),
-        Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth, spelling),
-        Prim::CellSet(type_, cell, value) => flat([
+        Intrinsic::HandleType => pure("Handle"),
+        Intrinsic::Handle(token) => pure(format!("Handle({token})")),
+        Intrinsic::ProcExit(code) => print_unary("proc.exit ", code, depth, spelling),
+        Intrinsic::CellType(elem) => print_unary("Cell ", elem, depth, spelling),
+        Intrinsic::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth, spelling),
+        Intrinsic::CellSet(type_, cell, value) => flat([
             pure("Cell.set "),
             sub(type_, depth, spelling),
             pure(" "),
@@ -771,10 +776,10 @@ fn print_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
             pure(" "),
             sub(value, depth, spelling),
         ]),
-        Prim::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, depth, spelling),
-        Prim::IoType(result) => print_unary("Io ", result, depth, spelling),
-        Prim::IoPure(type_, value) => print_binary("Io.pure ", type_, value, depth, spelling),
-        Prim::IoBind(a, b, action, f) => flat([
+        Intrinsic::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, depth, spelling),
+        Intrinsic::IoType(result) => print_unary("Io ", result, depth, spelling),
+        Intrinsic::IoPure(type_, value) => print_binary("Io.pure ", type_, value, depth, spelling),
+        Intrinsic::IoBind(a, b, action, f) => flat([
             pure("Io.bind "),
             sub(a, depth, spelling),
             pure(" "),
@@ -809,10 +814,10 @@ fn listed(open: String, spaced: bool, items: Vec<Printer>, close: &'static str) 
     ]))
 }
 
-/// [`sub`] for a primitive's operands.
-fn sub_prim(prim: Prim, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+/// [`sub`] for an intrinsic's operands.
+fn sub_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) -> Printer {
     let spelling = Rc::clone(spelling);
-    deferred(move || print_prim(prim, depth, &spelling))
+    deferred(move || print_intrinsic(intrinsic, depth, &spelling))
 }
 
 pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
@@ -829,7 +834,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             sub(instance.head, depth, spelling),
             pure(universe_suffix(&instance.levels, spelling)),
         ]),
-        Subterm::Prim(prim) => sub_prim(prim, depth, spelling),
+        Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, depth, spelling),
         Subterm::Foreign(function, args) => flat(
             [pure(function.label.clone())]
                 .into_iter()
@@ -1376,7 +1381,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             };
             pure(format!("{sign}{}", num_lit.magnitude))
         }
-        // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the prim operators; display folds (`denoise`) nest these nodes.
+        // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the intrinsic operators; display folds (`denoise`) nest these nodes.
         Subterm::Transient(Transient::Infix(Infix { op, left, right })) => {
             print_infix(op.symbol(), left, right, depth, spelling)
         }

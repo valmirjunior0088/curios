@@ -1,9 +1,9 @@
-//! Backend lowering coverage: build a [`CpsModule`](crate::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the structural replacement for the deleted `curios/src/tests/codegen` fixtures — which built the old region API and *executed* the module — split into shape inspection here and end-to-end semantics in the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetPrim` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`CpsModule`](crate::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the structural replacement for the deleted `curios/src/tests/codegen` fixtures — which built the old region API and *executed* the module — split into shape inspection here and end-to-end semantics in the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsicOp,
-        CpsLiteral, CpsModule, CpsNode, CpsPrimOp, CpsValueExpr, into_wasm,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsicCall,
+        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, into_wasm,
     },
     curios_abi::host_ops,
     curios_base::{Grain, PackedBin},
@@ -28,7 +28,7 @@ fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
-/// Every `main` ends by diverging into `exit`, which the emitter follows with one `unreachable`. A trapping primitive adds another `unreachable` in its overflow/range guard, so the count distinguishes guarded ops from total ones without matching exact bytes.
+/// Every `main` ends by diverging into `exit`, which the emitter follows with one `unreachable`. A trapping intrinsic adds another `unreachable` in its overflow/range guard, so the count distinguishes guarded ops from total ones without matching exact bytes.
 #[track_caller]
 fn assert_traps(wat: &str) {
     assert!(
@@ -58,8 +58,8 @@ const fn flt(value: f32) -> CpsAtom {
     CpsAtom::Literal(CpsLiteral::Flt(value))
 }
 
-/// A nullary `main` that binds one primitive over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.
-fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
+/// A nullary `main` that binds one intrinsic over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.
+fn intrinsic_main(op: CpsIntrinsicOp, args: Vec<CpsAtom>) -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -67,7 +67,7 @@ fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(result)),
     });
-    let body = module.add_node(CpsNode::LetPrim {
+    let body = module.add_node(CpsNode::LetIntrinsic {
         result,
         op,
         args,
@@ -90,7 +90,10 @@ fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
 
 #[test]
 fn nat_add_guards_the_i31_carrier() {
-    let wat = wat(&prim_main(CpsPrimOp::NatAdd, vec![nat(3), nat(4)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::NatAdd,
+        vec![nat(3), nat(4)],
+    ));
     assert_contains(&wat, "i32.add");
     // Overflow past bit 31 traps through the special label.
     assert_traps(&wat);
@@ -98,7 +101,10 @@ fn nat_add_guards_the_i31_carrier() {
 
 #[test]
 fn nat_sub_is_saturating_monus_without_a_guard() {
-    let wat = wat(&prim_main(CpsPrimOp::NatSub, vec![nat(3), nat(4)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::NatSub,
+        vec![nat(3), nat(4)],
+    ));
     assert_contains(&wat, "i32.sub");
     assert_contains(&wat, "select");
     assert_total(&wat);
@@ -106,7 +112,10 @@ fn nat_sub_is_saturating_monus_without_a_guard() {
 
 #[test]
 fn nat_mul_widens_to_i64_and_guards() {
-    let wat = wat(&prim_main(CpsPrimOp::NatMul, vec![nat(3), nat(4)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::NatMul,
+        vec![nat(3), nat(4)],
+    ));
     assert_contains(&wat, "i64.mul");
     assert_traps(&wat);
 }
@@ -114,32 +123,41 @@ fn nat_mul_widens_to_i64_and_guards() {
 #[test]
 fn nat_div_is_unsigned_and_rem_unsigned() {
     assert_contains(
-        &wat(&prim_main(CpsPrimOp::NatDiv, vec![nat(9), nat(2)])),
+        &wat(&intrinsic_main(
+            CpsIntrinsicOp::NatDiv,
+            vec![nat(9), nat(2)],
+        )),
         "i32.div_u",
     );
     assert_contains(
-        &wat(&prim_main(CpsPrimOp::NatRem, vec![nat(9), nat(2)])),
+        &wat(&intrinsic_main(
+            CpsIntrinsicOp::NatRem,
+            vec![nat(9), nat(2)],
+        )),
         "i32.rem_u",
     );
 }
 
 #[test]
 fn nat_lt_compares_unsigned() {
-    let wat = wat(&prim_main(CpsPrimOp::NatLt, vec![nat(3), nat(4)]));
+    let wat = wat(&intrinsic_main(CpsIntrinsicOp::NatLt, vec![nat(3), nat(4)]));
     assert_contains(&wat, "i32.lt_u");
     assert_total(&wat);
 }
 
 #[test]
 fn nat_and_is_bitwise_and_total() {
-    let wat = wat(&prim_main(CpsPrimOp::NatAnd, vec![nat(6), nat(3)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::NatAnd,
+        vec![nat(6), nat(3)],
+    ));
     assert_contains(&wat, "i32.and");
     assert_total(&wat);
 }
 
 #[test]
 fn nat_to_flt_converts_unsigned() {
-    let wat = wat(&prim_main(CpsPrimOp::NatToFlt, vec![nat(7)]));
+    let wat = wat(&intrinsic_main(CpsIntrinsicOp::NatToFlt, vec![nat(7)]));
     assert_contains(&wat, "f32.convert_i32_u");
 }
 
@@ -147,28 +165,40 @@ fn nat_to_flt_converts_unsigned() {
 
 #[test]
 fn int_add_guards_the_signed_carrier() {
-    let wat = wat(&prim_main(CpsPrimOp::IntAdd, vec![int(3), int(-4)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::IntAdd,
+        vec![int(3), int(-4)],
+    ));
     assert_contains(&wat, "i32.add");
     assert_traps(&wat);
 }
 
 #[test]
 fn int_mul_widens_to_i64_and_guards() {
-    let wat = wat(&prim_main(CpsPrimOp::IntMul, vec![int(3), int(-4)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::IntMul,
+        vec![int(3), int(-4)],
+    ));
     assert_contains(&wat, "i64.mul");
     assert_traps(&wat);
 }
 
 #[test]
 fn int_div_is_signed_and_guarded() {
-    let wat = wat(&prim_main(CpsPrimOp::IntDiv, vec![int(-9), int(2)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::IntDiv,
+        vec![int(-9), int(2)],
+    ));
     assert_contains(&wat, "i32.div_s");
     assert_traps(&wat);
 }
 
 #[test]
 fn int_lt_compares_signed() {
-    let wat = wat(&prim_main(CpsPrimOp::IntLt, vec![int(-3), int(4)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::IntLt,
+        vec![int(-3), int(4)],
+    ));
     assert_contains(&wat, "i32.lt_s");
     assert_total(&wat);
 }
@@ -177,7 +207,10 @@ fn int_lt_compares_signed() {
 
 #[test]
 fn flt_add_boxes_into_the_flt_struct() {
-    let wat = wat(&prim_main(CpsPrimOp::FltAdd, vec![flt(1.5), flt(2.5)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::FltAdd,
+        vec![flt(1.5), flt(2.5)],
+    ));
     assert_contains(&wat, "f32.add");
     assert_contains(&wat, "struct.new $flt");
 }
@@ -185,14 +218,20 @@ fn flt_add_boxes_into_the_flt_struct() {
 #[test]
 fn flt_div_divides() {
     assert_contains(
-        &wat(&prim_main(CpsPrimOp::FltDiv, vec![flt(3.0), flt(2.0)])),
+        &wat(&intrinsic_main(
+            CpsIntrinsicOp::FltDiv,
+            vec![flt(3.0), flt(2.0)],
+        )),
         "f32.div",
     );
 }
 
 #[test]
 fn flt_to_le_bytes_packs_a_four_byte_leaf() {
-    let wat = wat(&prim_main(CpsPrimOp::FltToLeBytes, vec![flt(1.0)]));
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::FltToLeBytes,
+        vec![flt(1.0)],
+    ));
     assert_contains(&wat, "i32.reinterpret_f32");
     assert_contains(&wat, "array.new_fixed");
     assert_contains(&wat, "struct.new $rope/bin/leaf");
@@ -200,7 +239,7 @@ fn flt_to_le_bytes_packs_a_four_byte_leaf() {
 
 #[test]
 fn flt_to_int_truncates_and_guards_the_range() {
-    let wat = wat(&prim_main(CpsPrimOp::FltToInt, vec![flt(1.0)]));
+    let wat = wat(&intrinsic_main(CpsIntrinsicOp::FltToInt, vec![flt(1.0)]));
     assert_contains(&wat, "i32.trunc_f32_s");
     assert_traps(&wat);
 }
@@ -217,9 +256,9 @@ fn tuple_project() -> CpsModule {
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(field)),
     });
-    let project = module.add_node(CpsNode::LetPrim {
+    let project = module.add_node(CpsNode::LetIntrinsic {
         result: field,
-        op: CpsPrimOp::TplGet(0),
+        op: CpsIntrinsicOp::TplGet(0),
         args: vec![CpsAtom::Value(tuple)],
         next: exit,
     });
@@ -258,9 +297,9 @@ fn list_len() -> CpsModule {
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(len)),
     });
-    let measure = module.add_node(CpsNode::LetPrim {
+    let measure = module.add_node(CpsNode::LetIntrinsic {
         result: len,
-        op: CpsPrimOp::LstLen,
+        op: CpsIntrinsicOp::LstLen,
         args: vec![CpsAtom::Value(list)],
         next: exit,
     });
@@ -299,9 +338,9 @@ fn bin_len() -> CpsModule {
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(len)),
     });
-    let measure = module.add_node(CpsNode::LetPrim {
+    let measure = module.add_node(CpsNode::LetIntrinsic {
         result: len,
-        op: CpsPrimOp::BinLen(Grain::X),
+        op: CpsIntrinsicOp::BinLen(Grain::X),
         args: vec![CpsAtom::Value(bin)],
         next: exit,
     });
@@ -544,8 +583,8 @@ fn bin_lit(bytes: Vec<u8>) -> CpsAtom {
 
 #[test]
 fn bin_slice_calls_the_shared_slice_helper() {
-    let wat = wat(&prim_main(
-        CpsPrimOp::BinSlice(Grain::X),
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::BinSlice(Grain::X),
         vec![bin_lit(vec![1, 2, 3]), nat(0), nat(2)],
     ));
     assert_contains(&wat, "call $bytes/slice");
@@ -555,8 +594,8 @@ fn bin_slice_calls_the_shared_slice_helper() {
 
 #[test]
 fn bin_read_calls_the_read_helper_and_forces_its_input() {
-    let wat = wat(&prim_main(
-        CpsPrimOp::BinGet(Grain::X),
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::BinGet(Grain::X),
         vec![bin_lit(vec![1, 2, 3]), nat(1)],
     ));
     assert_contains(&wat, "call $bytes/read");
@@ -566,8 +605,8 @@ fn bin_read_calls_the_read_helper_and_forces_its_input() {
 
 #[test]
 fn bin_eql_calls_the_equality_helper() {
-    let wat = wat(&prim_main(
-        CpsPrimOp::BinEql(Grain::X),
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::BinEql(Grain::X),
         vec![bin_lit(vec![1, 2]), bin_lit(vec![1, 2])],
     ));
     assert_contains(&wat, "call $bytes/eql");
@@ -575,8 +614,8 @@ fn bin_eql_calls_the_equality_helper() {
 
 #[test]
 fn bin_concat_builds_o1_nodes_inline_without_a_helper() {
-    let wat = wat(&prim_main(
-        CpsPrimOp::BinConcat(Grain::X, 2),
+    let wat = wat(&intrinsic_main(
+        CpsIntrinsicOp::BinConcat(Grain::X, 2),
         vec![bin_lit(vec![1]), bin_lit(vec![2])],
     ));
     assert_contains(&wat, "struct.new $rope/bin/node");
@@ -593,9 +632,9 @@ fn list_read() -> CpsModule {
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(elem)),
     });
-    let read = module.add_node(CpsNode::LetPrim {
+    let read = module.add_node(CpsNode::LetIntrinsic {
         result: elem,
-        op: CpsPrimOp::LstGet,
+        op: CpsIntrinsicOp::LstGet,
         args: vec![CpsAtom::Value(list), nat(0)],
         next: exit,
     });
@@ -655,7 +694,7 @@ fn list_map() -> CpsModule {
         body: exit,
     });
     let map = module.add_node(CpsNode::Intrinsic {
-        op: CpsIntrinsicOp::LstMap,
+        op: CpsIntrinsicCall::LstMap,
         args: vec![CpsAtom::Value(list), CpsAtom::Fun(mapper)],
         return_to: resume,
     });
@@ -708,9 +747,9 @@ fn deep_bin_chain(depth: usize) -> CpsModule {
         } else {
             CpsAtom::Value(values[i - 1])
         };
-        next = module.add_node(CpsNode::LetPrim {
+        next = module.add_node(CpsNode::LetIntrinsic {
             result: values[i],
-            op: CpsPrimOp::BinAppend(Grain::X),
+            op: CpsIntrinsicOp::BinAppend(Grain::X),
             args: vec![carrier, nat(1)],
             next,
         });

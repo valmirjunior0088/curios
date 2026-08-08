@@ -20,8 +20,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
-        Apply, Bound, Field, FuncType, InductType, Level, Prim, Proj, Reducer, StructType, Subterm,
-        Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
+        Apply, Bound, Field, FuncType, InductType, Intrinsic, Level, Proj, Reducer, StructType,
+        Subterm, Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
     },
 };
 
@@ -116,7 +116,7 @@ impl Sort {
                 func_sort(kernel, telescope.clone(), Sort::of)
             }
 
-            Subterm::Prim(prim) => sort_of_prim(kernel, prim),
+            Subterm::Intrinsic(intrinsic) => sort_of_intrinsic(kernel, intrinsic),
 
             // A type-valued `match` (`rec Lt = match n : Prop | ..`): its motive is the sort, which every arm shares.
             Subterm::Match(m) => {
@@ -197,7 +197,7 @@ fn func_sort(
 
 /// The sort of `type_`, having **typed** every part a type former binds rather than classifying it — [`Sort::of`]'s judgment counterpart, and the one `infer` calls.
 ///
-/// Only the two binder-carrying formers differ from the lookup, because only they hold a part nothing else establishes: a nominal occurrence's arguments are typed where the occurrence is inferred, a primitive former's element type by `infer_prim`, and a neutral's sort is read off a binder that was assumed at a type its own telescope had checked. So every other shape delegates, on the *already reduced* term, and the memo makes that second reduction free.
+/// Only the two binder-carrying formers differ from the lookup, because only they hold a part nothing else establishes: a nominal occurrence's arguments are typed where the occurrence is inferred, an intrinsic former's element type by `infer_intrinsic`, and a neutral's sort is read off a binder that was assumed at a type its own telescope had checked. So every other shape delegates, on the *already reduced* term, and the memo makes that second reduction free.
 pub(super) fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
     let reduced = kernel.reduce_forced(type_.clone())?;
 
@@ -252,25 +252,28 @@ fn sort_of_binders<B: Bound>(
     }
 }
 
-/// The sort of a primitive type former.
+/// The sort of an intrinsic type former.
 ///
-/// A closed primitive quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `Lst : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
+/// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `Lst : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 ///
-/// Reachable from [`infer_prim`](super::infer::infer_prim) as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
-pub(crate) fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, KernelError> {
-    match prim {
-        Prim::BoolType
-        | Prim::NatType
-        | Prim::ByteType
-        | Prim::IntType
-        | Prim::FltType
-        | Prim::BinType(_)
-        | Prim::HandleType => Ok(Sort::Type(Level::zero())),
+/// Reachable from [`infer_intrinsic`](super::infer::infer_intrinsic) as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
+pub(crate) fn sort_of_intrinsic(
+    kernel: &mut Kernel,
+    intrinsic: &Intrinsic,
+) -> Result<Sort, KernelError> {
+    match intrinsic {
+        Intrinsic::BoolType
+        | Intrinsic::NatType
+        | Intrinsic::ByteType
+        | Intrinsic::IntType
+        | Intrinsic::FltType
+        | Intrinsic::BinType(_)
+        | Intrinsic::HandleType => Ok(Sort::Type(Level::zero())),
 
         // A list, cell, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
         //
         // For `Io` that is load-bearing rather than tidy. Erasure is sort-driven, so a `Prop`-sorted `Io(P)` would be dropped as proof content and its host effect would vanish with it.
-        Prim::LstType(element) | Prim::CellType(element) | Prim::IoType(element) => {
+        Intrinsic::LstType(element) | Intrinsic::CellType(element) | Intrinsic::IoType(element) => {
             let element = element.clone();
 
             Ok(match Sort::of(kernel, &element)? {
@@ -279,8 +282,8 @@ pub(crate) fn sort_of_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Sort, Ker
             })
         }
 
-        // A primitive *value* is not a type, so nothing here classifies it.
-        other => Err(KernelError::Unclassified(Term::prim(other.clone()))),
+        // An intrinsic *value* is not a type, so nothing here classifies it.
+        other => Err(KernelError::Unclassified(Term::intrinsic(other.clone()))),
     }
 }
 

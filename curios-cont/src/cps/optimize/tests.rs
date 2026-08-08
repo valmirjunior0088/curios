@@ -15,8 +15,8 @@ use {
         specialize::{specialize_call_patterns, specialize_scc_calls},
     },
     crate::{
-        CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
-        CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId, atoms,
+        CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
+        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -60,7 +60,7 @@ fn sccs_group_cycles_and_stay_deterministic() {
 fn preserves_traps_and_folds_exact_u32_nat_add() {
     assert_eq!(
         evaluate(
-            CpsPrimOp::NatAdd,
+            CpsIntrinsicOp::NatAdd,
             &[
                 CpsAtom::Literal(CpsLiteral::Nat(20)),
                 CpsAtom::Literal(CpsLiteral::Nat(22)),
@@ -71,7 +71,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
     // The numeric law: the folder computes in exact u32; the i31 envelope is the backend's problem (an out-of-range literal traps at materialization).
     assert_eq!(
         evaluate(
-            CpsPrimOp::NatAdd,
+            CpsIntrinsicOp::NatAdd,
             &[
                 CpsAtom::Literal(CpsLiteral::Nat(0x7fff_ffff)),
                 CpsAtom::Literal(CpsLiteral::Nat(1)),
@@ -81,7 +81,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
     );
     assert_eq!(
         evaluate(
-            CpsPrimOp::NatDiv,
+            CpsIntrinsicOp::NatDiv,
             &[
                 CpsAtom::Literal(CpsLiteral::Nat(1)),
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -101,9 +101,9 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
         args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
     }));
     let dead_total = module.add_value(Some("dead total".into()));
-    let total_node = module.add_node(CpsNode::LetPrim {
+    let total_node = module.add_node(CpsNode::LetIntrinsic {
         result: dead_total,
-        op: CpsPrimOp::NatEql,
+        op: CpsIntrinsicOp::NatEql,
         args: vec![
             CpsAtom::Literal(CpsLiteral::Nat(1)),
             CpsAtom::Literal(CpsLiteral::Nat(2)),
@@ -111,9 +111,9 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
         next: return_node,
     });
     let dead_trap = module.add_value(Some("dead trap".into()));
-    let trap_node = module.add_node(CpsNode::LetPrim {
+    let trap_node = module.add_node(CpsNode::LetIntrinsic {
         result: dead_trap,
-        op: CpsPrimOp::NatDiv,
+        op: CpsIntrinsicOp::NatDiv,
         args: vec![
             CpsAtom::Literal(CpsLiteral::Nat(1)),
             CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -135,8 +135,8 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     assert!(module.node(total_node).is_none());
     assert!(matches!(
         module.node(trap_node),
-        Some(CpsNode::LetPrim {
-            op: CpsPrimOp::NatDiv,
+        Some(CpsNode::LetIntrinsic {
+            op: CpsIntrinsicOp::NatDiv,
             next,
             ..
         }) if *next == return_node
@@ -725,7 +725,7 @@ struct PolymorphicLoop {
     loop_fn: CpsFunId,
 }
 
-/// Build `loop(op, n)` which indirectly calls `op(n)` and recurses forwarding `op`, called from `entry` as `loop(add, 3)` then `loop(second, 4)`. When `second` differs from `add` the two contexts disagree. `padding` prepends dead `LetPrim` nodes to `loop`'s body to inflate its node count.
+/// Build `loop(op, n)` which indirectly calls `op(n)` and recurses forwarding `op`, called from `entry` as `loop(add, 3)` then `loop(second, 4)`. When `second` differs from `add` the two contexts disagree. `padding` prepends dead `LetIntrinsic` nodes to `loop`'s body to inflate its node count.
 fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
@@ -808,9 +808,9 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let mut loop_body = scope;
     for _ in 0..padding {
         let dead = module.add_value(None);
-        loop_body = module.add_node(CpsNode::LetPrim {
+        loop_body = module.add_node(CpsNode::LetIntrinsic {
             result: dead,
-            op: CpsPrimOp::NatAdd,
+            op: CpsIntrinsicOp::NatAdd,
             args: vec![
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -1242,23 +1242,23 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
             args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
         }),
     });
-    let project_val = module.add_node(CpsNode::LetPrim {
+    let project_val = module.add_node(CpsNode::LetIntrinsic {
         result: val,
-        op: CpsPrimOp::TplGet(1),
+        op: CpsIntrinsicOp::TplGet(1),
         args: vec![CpsAtom::Value(t)],
         next: switch,
     });
-    let mut consume_body = module.add_node(CpsNode::LetPrim {
+    let mut consume_body = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsPrimOp::TplGet(0),
+        op: CpsIntrinsicOp::TplGet(0),
         args: vec![CpsAtom::Value(t)],
         next: project_val,
     });
     for _ in 0..padding {
         let dead = module.add_value(None);
-        consume_body = module.add_node(CpsNode::LetPrim {
+        consume_body = module.add_node(CpsNode::LetIntrinsic {
             result: dead,
-            op: CpsPrimOp::NatAdd,
+            op: CpsIntrinsicOp::NatAdd,
             args: vec![
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -1561,15 +1561,15 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
         continuations: vec![leaf, node],
         body: switch,
     });
-    let project_child = module.add_node(CpsNode::LetPrim {
+    let project_child = module.add_node(CpsNode::LetIntrinsic {
         result: child,
-        op: CpsPrimOp::TplGet(1),
+        op: CpsIntrinsicOp::TplGet(1),
         args: vec![CpsAtom::Value(t)],
         next: scope,
     });
-    let project_tag = module.add_node(CpsNode::LetPrim {
+    let project_tag = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsPrimOp::TplGet(0),
+        op: CpsIntrinsicOp::TplGet(0),
         args: vec![CpsAtom::Value(t)],
         next: project_child,
     });

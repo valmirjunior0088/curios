@@ -22,7 +22,7 @@ pub enum Error {
     OpaqueConstructorsCannotBeReExported {
         induct_decl: String,
     },
-    /// A root module reachable only from the standard library (e.g. `sys`) was referenced from user code. Such modules are the trusted primitive substrate; user code reaches them through their `/std` wrappers.
+    /// A root module reachable only from the standard library (e.g. `sys`) was referenced from user code. Such modules are the trusted intrinsic substrate; user code reaches them through their `/std` wrappers.
     InternalRootModule {
         segment: String,
     },

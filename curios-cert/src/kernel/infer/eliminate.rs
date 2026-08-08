@@ -140,7 +140,7 @@ fn check_arm(
 
 /// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.
 ///
-/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for a primitive carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead.
+/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for an intrinsic carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead.
 ///
 /// Every scrutinee gets its equation, because a term of non-`Io` type denotes one value. This used to ask a shared walk whether the spelling fixed one — an operation the host performs did not, nor did a call whose callee the walk could not read, since `f(true)` for a parameter `f` computes whatever the caller bound. Retyping the host surface to return `Io` answered both by construction: an `Io` is opaque and cannot be eliminated, so it never reaches a scrutinee position, and no inhabitant of an ordinary arrow performs an effect. The equation the walk had to withhold from a pure opaque head is admitted again.
 ///

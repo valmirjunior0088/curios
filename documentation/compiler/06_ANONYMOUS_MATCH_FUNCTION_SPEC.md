@@ -129,7 +129,7 @@ let unwrap = match =>
 unwrap(Option/some(42))
 ```
 
-Primitive arm shapes may constrain their carrier immediately through the ordinary match elaborator. Inductive constructor arms must not choose an inductive by tag spelling alone; if the carrier remains unknown, the same parked inference path used by an explicit lambda and headed match applies.
+Intrinsic arm shapes may constrain their carrier immediately through the ordinary match elaborator. Inductive constructor arms must not choose an inductive by tag spelling alone; if the carrier remains unknown, the same parked inference path used by an explicit lambda and headed match applies.
 
 If the function remains unconstrained at the enclosing item boundary, it fails with the same diagnostic as the explicit spelling. There is no implicit generalization.
 

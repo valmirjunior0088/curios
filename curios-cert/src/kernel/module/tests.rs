@@ -2,8 +2,8 @@ use {
     crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Level, Polarity, Prim, StructDecl, Telescope,
-        Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Polarity, StructDecl,
+        Telescope, Term, UniverseContext,
     },
 };
 
@@ -117,7 +117,7 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
 #[test]
 fn a_parameter_prefix_that_disagrees_with_the_family_is_refused() {
     let mut kernel = kernel();
-    let declaration = prefixed(&mut kernel, Term::prim(Prim::NatType));
+    let declaration = prefixed(&mut kernel, Term::intrinsic(Intrinsic::NatType));
 
     assert!(matches!(
         check_induct_decl(&mut kernel, &declaration),
@@ -146,7 +146,7 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
             Atom::from("mk"),
             InductParam {
                 telescope: Telescope::build(
-                    [(t, prefix), (payload, Term::prim(Prim::NatType))],
+                    [(t, prefix), (payload, Term::intrinsic(Intrinsic::NatType))],
                     Vec::new(),
                 ),
                 plicities: vec![Plicity::Implicit, Plicity::Explicit],
@@ -171,7 +171,10 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
 #[test]
 fn a_proposition_may_not_carry_an_informative_field() {
     let mut kernel = kernel();
-    let declaration = proposition_with_field(&mut kernel, Term::prim(curios_core::Prim::NatType));
+    let declaration = proposition_with_field(
+        &mut kernel,
+        Term::intrinsic(curios_core::Intrinsic::NatType),
+    );
 
     assert!(matches!(
         check_struct_decl(&mut kernel, &declaration),

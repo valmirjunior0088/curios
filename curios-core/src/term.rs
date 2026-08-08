@@ -10,8 +10,8 @@ use frees::*;
 
 use {
     super::{
-        Atom, Bound, Enter, Free, Global, Level, Many, Nat, Prim, Scope, SelfReference, Spelled,
-        Spelling, Telescope, Three, Two, UniverseContext, UniverseError, UniverseMetaId,
+        Atom, Bound, Enter, Free, Global, Intrinsic, Level, Many, Nat, Scope, SelfReference,
+        Spelled, Spelling, Telescope, Three, Two, UniverseContext, UniverseError, UniverseMetaId,
         UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
     },
     curios_abi::ForeignFunction,
@@ -38,7 +38,7 @@ use curios_base::BigUintBytes;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadTag<'a> {
     Name(&'a Free),
-    Prim(&'static str),
+    Intrinsic(&'static str),
 }
 
 /// A core-calculus term: an `Rc`-shared [`Node`] — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
@@ -514,41 +514,41 @@ impl Term {
         }))
     }
 
-    /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the primitive standing in for one where the normal form is a `Prim` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
+    /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the intrinsic standing in for one where the normal form is an `Intrinsic` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_key(),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
-            // A decidable comparison's normal form is a primitive node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee loses its arm refinement while the equivalent `Nat/lte(a, b)` keeps it.
-            Subterm::Prim(prim) => match prim {
-                Prim::BoolEql(..) => Some(HeadTag::Prim("prim:BoolEql")),
-                Prim::BoolNeq(..) => Some(HeadTag::Prim("prim:BoolNeq")),
-                Prim::NatEql(..) => Some(HeadTag::Prim("prim:NatEql")),
-                Prim::NatNeq(..) => Some(HeadTag::Prim("prim:NatNeq")),
-                Prim::NatLt(..) => Some(HeadTag::Prim("prim:NatLt")),
-                Prim::NatGt(..) => Some(HeadTag::Prim("prim:NatGt")),
-                Prim::NatLte(..) => Some(HeadTag::Prim("prim:NatLte")),
-                Prim::NatGte(..) => Some(HeadTag::Prim("prim:NatGte")),
-                Prim::ByteEql(..) => Some(HeadTag::Prim("prim:ByteEql")),
-                Prim::ByteLt(..) => Some(HeadTag::Prim("prim:ByteLt")),
-                Prim::ByteLte(..) => Some(HeadTag::Prim("prim:ByteLte")),
-                Prim::ByteGt(..) => Some(HeadTag::Prim("prim:ByteGt")),
-                Prim::ByteGte(..) => Some(HeadTag::Prim("prim:ByteGte")),
-                Prim::IntEql(..) => Some(HeadTag::Prim("prim:IntEql")),
-                Prim::IntNeq(..) => Some(HeadTag::Prim("prim:IntNeq")),
-                Prim::IntLt(..) => Some(HeadTag::Prim("prim:IntLt")),
-                Prim::IntGt(..) => Some(HeadTag::Prim("prim:IntGt")),
-                Prim::IntLte(..) => Some(HeadTag::Prim("prim:IntLte")),
-                Prim::IntGte(..) => Some(HeadTag::Prim("prim:IntGte")),
-                Prim::FltEql(..) => Some(HeadTag::Prim("prim:FltEql")),
-                Prim::FltNeq(..) => Some(HeadTag::Prim("prim:FltNeq")),
-                Prim::FltLt(..) => Some(HeadTag::Prim("prim:FltLt")),
-                Prim::FltGt(..) => Some(HeadTag::Prim("prim:FltGt")),
-                Prim::FltLte(..) => Some(HeadTag::Prim("prim:FltLte")),
-                Prim::FltGte(..) => Some(HeadTag::Prim("prim:FltGte")),
-                Prim::BinEql(..) => Some(HeadTag::Prim("prim:BinEql")),
-                Prim::HandleEql(..) => Some(HeadTag::Prim("prim:HandleEql")),
+            // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee loses its arm refinement while the equivalent `Nat/lte(a, b)` keeps it.
+            Subterm::Intrinsic(intrinsic) => match intrinsic {
+                Intrinsic::BoolEql(..) => Some(HeadTag::Intrinsic("intrinsic:BoolEql")),
+                Intrinsic::BoolNeq(..) => Some(HeadTag::Intrinsic("intrinsic:BoolNeq")),
+                Intrinsic::NatEql(..) => Some(HeadTag::Intrinsic("intrinsic:NatEql")),
+                Intrinsic::NatNeq(..) => Some(HeadTag::Intrinsic("intrinsic:NatNeq")),
+                Intrinsic::NatLt(..) => Some(HeadTag::Intrinsic("intrinsic:NatLt")),
+                Intrinsic::NatGt(..) => Some(HeadTag::Intrinsic("intrinsic:NatGt")),
+                Intrinsic::NatLte(..) => Some(HeadTag::Intrinsic("intrinsic:NatLte")),
+                Intrinsic::NatGte(..) => Some(HeadTag::Intrinsic("intrinsic:NatGte")),
+                Intrinsic::ByteEql(..) => Some(HeadTag::Intrinsic("intrinsic:ByteEql")),
+                Intrinsic::ByteLt(..) => Some(HeadTag::Intrinsic("intrinsic:ByteLt")),
+                Intrinsic::ByteLte(..) => Some(HeadTag::Intrinsic("intrinsic:ByteLte")),
+                Intrinsic::ByteGt(..) => Some(HeadTag::Intrinsic("intrinsic:ByteGt")),
+                Intrinsic::ByteGte(..) => Some(HeadTag::Intrinsic("intrinsic:ByteGte")),
+                Intrinsic::IntEql(..) => Some(HeadTag::Intrinsic("intrinsic:IntEql")),
+                Intrinsic::IntNeq(..) => Some(HeadTag::Intrinsic("intrinsic:IntNeq")),
+                Intrinsic::IntLt(..) => Some(HeadTag::Intrinsic("intrinsic:IntLt")),
+                Intrinsic::IntGt(..) => Some(HeadTag::Intrinsic("intrinsic:IntGt")),
+                Intrinsic::IntLte(..) => Some(HeadTag::Intrinsic("intrinsic:IntLte")),
+                Intrinsic::IntGte(..) => Some(HeadTag::Intrinsic("intrinsic:IntGte")),
+                Intrinsic::FltEql(..) => Some(HeadTag::Intrinsic("intrinsic:FltEql")),
+                Intrinsic::FltNeq(..) => Some(HeadTag::Intrinsic("intrinsic:FltNeq")),
+                Intrinsic::FltLt(..) => Some(HeadTag::Intrinsic("intrinsic:FltLt")),
+                Intrinsic::FltGt(..) => Some(HeadTag::Intrinsic("intrinsic:FltGt")),
+                Intrinsic::FltLte(..) => Some(HeadTag::Intrinsic("intrinsic:FltLte")),
+                Intrinsic::FltGte(..) => Some(HeadTag::Intrinsic("intrinsic:FltGte")),
+                Intrinsic::BinEql(..) => Some(HeadTag::Intrinsic("intrinsic:BinEql")),
+                Intrinsic::HandleEql(..) => Some(HeadTag::Intrinsic("intrinsic:HandleEql")),
                 _ => None,
             },
             _ => None,
@@ -592,7 +592,7 @@ impl Term {
         self
     }
 
-    /// Ground `Type 0`, used only where the calculus requires that exact universe (primitive carriers and the type of `Prop`).
+    /// Ground `Type 0`, used only where the calculus requires that exact universe (intrinsic carriers and the type of `Prop`).
     pub fn type_ground() -> Self {
         Self::type_at(Level::zero())
     }
@@ -607,9 +607,9 @@ impl Term {
         Self::from(Subterm::Prop)
     }
 
-    /// A primitive term — any literal or primitive operation that converts into [`Prim`].
-    pub fn prim<P: Into<Prim>>(prim: P) -> Self {
-        Self::from(Subterm::Prim(prim.into()))
+    /// An intrinsic term — any literal or intrinsic operation that converts into [`Intrinsic`].
+    pub fn intrinsic<P: Into<Intrinsic>>(intrinsic: P) -> Self {
+        Self::from(Subterm::Intrinsic(intrinsic.into()))
     }
 
     /// A host call against the ABI row `function` describes.
@@ -825,7 +825,7 @@ impl Term {
         Self::struct_at(name, Vec::<Level>::new(), params, fields)
     }
 
-    /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). [`Term::induct_match_marked`] carries per-binder plicity.
+    /// Build the intrinsic eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). [`Term::induct_match_marked`] carries per-binder plicity.
     pub fn induct_match<H, M, I, A, B>(
         head: H,
         motive_binder: Option<&Free>,
@@ -894,7 +894,7 @@ impl Term {
         )
     }
 
-    /// The primitive eliminator of a nominal inductive with an explicit `| _ =>` catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a binding-free default standing in for every other constructor tag. The dispatching analogue of [`Term::induct_match`], mirroring how [`Term::switch`] relates to [`Term::nat_match`].
+    /// The intrinsic eliminator of a nominal inductive with an explicit `| _ =>` catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a binding-free default standing in for every other constructor tag. The dispatching analogue of [`Term::induct_match`], mirroring how [`Term::switch`] relates to [`Term::nat_match`].
     pub fn induct_match_default<H, M, I, A, B, D>(
         head: H,
         motive_binder: Option<&Free>,
@@ -968,7 +968,7 @@ impl Term {
             .collect()
     }
 
-    /// Build a match's arity-1 motive scope from an optional source label: a named scope when the label is present, a constant one when not. Shared by every match constructor whose motive binds just the scrutinee — the canonical elaborated shape for a primitive carrier or an unindexed inductive.
+    /// Build a match's arity-1 motive scope from an optional source label: a named scope when the label is present, a constant one when not. Shared by every match constructor whose motive binds just the scrutinee — the canonical elaborated shape for an intrinsic carrier or an unindexed inductive.
     fn motive_scope(motive_binder: Option<&Free>, motive: Term) -> Scope<Many> {
         match motive_binder {
             Some(binder) => Scope::close(Many(1), &[binder], motive),
@@ -1580,7 +1580,7 @@ pub struct Infix {
     pub right: Term,
 }
 
-/// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` primitive by `elaborate_numlit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Prim::Flt`.
+/// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_numlit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Intrinsic::Flt`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1749,7 +1749,7 @@ pub struct Proj {
     pub field: Field,
 }
 
-/// An inductive type as a primitive normal form. Built inside the automatically-generated type-constructor function's body. Users never write one directly — they write `Result(A, E)` and the type-constructor function reduces to this. Two `InductType`s are convertible iff same `name` and pointwise-convertible `params` and `indices`.
+/// An inductive type as an intrinsic normal form. Built inside the automatically-generated type-constructor function's body. Users never write one directly — they write `Result(A, E)` and the type-constructor function reduces to this. Two `InductType`s are convertible iff same `name` and pointwise-convertible `params` and `indices`.
 ///
 /// `params` are uniform across constructors; `indices` are the per-case constrained binders — each constructor's registry terminal states its own index expressions. Use sites never distinguish them (`Vec(Bin, 3)` is one flat application of the type-constructor function); the split lives here and in the registry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1764,7 +1764,7 @@ pub struct InductType {
     pub indices: Vec<Term>,
 }
 
-/// A constructor application as a primitive normal form. Built inside the automatically-generated value-constructor function's body. Users never write one directly — they write `Result/success(value)` and the constructor function reduces to this.
+/// A constructor application as an intrinsic normal form. Built inside the automatically-generated value-constructor function's body. Users never write one directly — they write `Result/success(value)` and the constructor function reduces to this.
 ///
 /// `name` and `params` are recoverable from the term's inferred type; they are stored redundantly on purpose, so `convert` stays purely structural (no context lookups mid-comparison).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1780,7 +1780,7 @@ pub struct Variant {
     pub payload: Vec<Term>,
 }
 
-/// A struct type as a primitive normal form (cf. [`InductType`], no indices). Built inside the generated type-former's body; users write `Pair(A, B)` and the former reduces to this. Convertible iff same `name` and pointwise-convertible `params`.
+/// A struct type as an intrinsic normal form (cf. [`InductType`], no indices). Built inside the generated type-former's body; users write `Pair(A, B)` and the former reduces to this. Convertible iff same `name` and pointwise-convertible `params`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1804,7 +1804,7 @@ pub enum StructEntry {
     Spread,
 }
 
-/// A struct value as a primitive normal form (cf. [`Variant`], no tag). `name`/`params` are recoverable from the inferred type but stored redundantly so `convert` stays purely structural.
+/// A struct value as an intrinsic normal form (cf. [`Variant`], no tag). `name`/`params` are recoverable from the inferred type but stored redundantly so `convert` stays purely structural.
 ///
 /// `entries` carries the literal's written entry shapes from `into_core`: elaboration checks plain fields positionally against the declared labels, pairs `use` entries with the concept's `use`-marked positions, and rebuilds the value entry-free. Empty means "all plain, no names written" — the invariant for every internally-built and post-elaboration struct.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1822,7 +1822,7 @@ pub struct Struct {
 
 /// The unified eliminator: every match form shares a scrutinee and a motive and differs only in its [`Cases`] payload.
 ///
-/// An *elaborated* motive is closed at the eliminator's own arity: the scrutinee's indices in declaration order, then the scrutinee. That is 1 for every primitive carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope like any other term.
+/// An *elaborated* motive is closed at the eliminator's own arity: the scrutinee's indices in declaration order, then the scrutinee. That is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope like any other term.
 ///
 /// Before elaboration the motive is instead the *written term*, carried in an arity-0 scope — see [`Term::match_motive_written`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1896,17 +1896,17 @@ pub enum Cases {
         cases: BTreeMap<u32, Term>,
         default: Term,
     },
-    /// The primitive eliminator of a nominal inductive: one arm per constructor, each arm's arity equal to that constructor's payload arity. `default` is the optional catch-all arm (`| _ =>`, mirroring [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`. It binds nothing and stands in for every constructor tag absent from `cases`; `None` means the arms structurally cover every constructor (a true elimination). The enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones, so a catch-all is legal on an indexed family too.
+    /// The intrinsic eliminator of a nominal inductive: one arm per constructor, each arm's arity equal to that constructor's payload arity. `default` is the optional catch-all arm (`| _ =>`, mirroring [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`. It binds nothing and stands in for every constructor tag absent from `cases`; `None` means the arms structurally cover every constructor (a true elimination). The enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones, so a catch-all is legal on an indexed family too.
     Induct {
         /// The enumerated arms, in the owning inductive's *declaration order* — the same order `InductDecl::constructor_order` reports, which is what makes this a canonical form: two matches whose arms are written in different source order elaborate to the same sequence, so arm order never enters term identity. Elaboration establishes that by building the arms from `constructor_order` rather than from the written order (`elaborate_induct_match`). A subsequence is legal — an arm may be absent under a `default` or a Rung-C prune.
         cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
     },
-    /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/ `Bin`): the `carrier` selects the primitive and carries both its parameters (`Lst`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
+    /// Structural induction on a native free-monoid intrinsic (`Nat`/`Lst`/ `Bin`): the `carrier` selects the intrinsic and carries both its parameters (`Lst`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
     FreeMonoid { carrier: Carrier },
 }
 
-/// The native free-monoid primitive a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `Lst` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`Lst` (head, tail, ih).
+/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `Lst` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`Lst` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2255,10 +2255,10 @@ pub struct UniverseInst {
 pub enum Subterm {
     Type(Level),
     Prop,
-    Prim(Prim),
+    Intrinsic(Intrinsic),
     /// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     ///
-    /// A term former rather than a [`Prim`] variant, because it is the one construct here whose meaning is *not* fixed by the enum that holds it: every primitive has a signature this crate spells, while a foreign call reads its own off the ABI row it carries. Nothing about it is closed, so it does not belong in a closed set.
+    /// A term former rather than a [`Intrinsic`] variant, because it is the one construct here whose meaning is *not* fixed by the enum that holds it: every intrinsic has a signature this crate spells, while a foreign call reads its own off the ABI row it carries. Nothing about it is closed, so it does not belong in a closed set.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     FuncType(FuncType),
     Func(Func),
@@ -2324,21 +2324,21 @@ impl Subterm {
 
     pub fn as_nat(&self) -> Option<Nat> {
         match self {
-            Subterm::Prim(Prim::Nat(nat)) => Some(nat.clone()),
+            Subterm::Intrinsic(Intrinsic::Nat(nat)) => Some(nat.clone()),
             _ => None,
         }
     }
 
     pub(crate) fn as_int(&self) -> Option<Int> {
         match self {
-            Subterm::Prim(Prim::Int(value)) => Some(value.clone()),
+            Subterm::Intrinsic(Intrinsic::Int(value)) => Some(value.clone()),
             _ => None,
         }
     }
 
     pub fn as_bool(&self) -> Option<bool> {
         match self {
-            Subterm::Prim(Prim::Bool(value)) => Some(*value),
+            Subterm::Intrinsic(Intrinsic::Bool(value)) => Some(*value),
             _ => None,
         }
     }
@@ -2371,7 +2371,7 @@ impl Subterm {
                     .iter()
                     .for_each(|t| t.collect_construction_names(names));
             }
-            Subterm::Prim(prim) => prim.collect_construction_names(names),
+            Subterm::Intrinsic(intrinsic) => intrinsic.collect_construction_names(names),
             Subterm::Foreign(_, args) => args
                 .iter()
                 .for_each(|arg| arg.collect_construction_names(names)),
@@ -2528,7 +2528,7 @@ impl Subterm {
                 let mut children = transient.subterms();
                 children.any(|child| child.any_metavar(pred))
             }
-            Subterm::Prim(prim) => prim.any_metavar(pred),
+            Subterm::Intrinsic(intrinsic) => intrinsic.any_metavar(pred),
             Subterm::Foreign(_, args) => args.iter().any(|arg| arg.any_metavar(pred)),
             Subterm::Func(Func { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_metavar(pred),
@@ -2623,7 +2623,7 @@ impl Subterm {
                 let mut children = transient.subterms();
                 children.any(&mut *pred)
             }
-            Subterm::Prim(prim) => prim.any_term(pred),
+            Subterm::Intrinsic(intrinsic) => intrinsic.any_term(pred),
             Subterm::Foreign(_, args) => args.iter().any(&mut *pred),
             Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
@@ -2810,7 +2810,7 @@ impl Bound for Subterm {
         match self {
             Subterm::Type(level) => Subterm::Type(visit.visit_level(level)),
             Subterm::Prop => Subterm::Prop,
-            Subterm::Prim(prim) => Subterm::Prim(prim.traverse(visit)),
+            Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(intrinsic.traverse(visit)),
             Subterm::Foreign(function, args) => Subterm::Foreign(
                 Arc::clone(function),
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
@@ -3073,7 +3073,7 @@ impl Bound for Subterm {
                 Some(index) => index + 1,
                 None => 0,
             },
-            Subterm::Prim(prim) => prim.reach(),
+            Subterm::Intrinsic(intrinsic) => intrinsic.reach(),
             Subterm::Foreign(_, args) => max_reach(args),
             Subterm::Func(Func { telescope, .. }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),

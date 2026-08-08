@@ -20,7 +20,7 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Bound, Free, FuncType, Global, InductDecl, InductType, One, Polarity, Prim, Scope,
+        Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, One, Polarity, Scope,
         StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -523,9 +523,9 @@ impl<E: Env> Walk<'_, E> {
                 self.arguments(name, params, polarity);
             }
 
-            Subterm::Prim(prim) => self.prim(prim, polarity, &term),
+            Subterm::Intrinsic(intrinsic) => self.intrinsic(intrinsic, polarity, &term),
 
-            // A host call is opaque for the same reason an effectful primitive is: its result comes from outside the program, so nothing about the declaration being checked can be read out of it.
+            // A host call is opaque for the same reason an effectful intrinsic is: its result comes from outside the program, so nothing about the declaration being checked can be read out of it.
             Subterm::Foreign(..) => self.opaque(&term),
 
             Subterm::Apply(_)
@@ -543,142 +543,142 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// Primitive type formers, matched exhaustively rather than consulted through a side table — so adding a primitive forces a polarity decision at compile time instead of inheriting a default.
-    fn prim(&mut self, prim: &Prim, polarity: Polarity, term: &Term) {
-        match prim {
+    /// Intrinsic type formers, matched exhaustively rather than consulted through a side table — so adding an intrinsic forces a polarity decision at compile time instead of inheriting a default.
+    fn intrinsic(&mut self, intrinsic: &Intrinsic, polarity: Polarity, term: &Term) {
+        match intrinsic {
             // The nullary type formers name nothing.
-            Prim::BoolType
-            | Prim::NatType
-            | Prim::ByteType
-            | Prim::IntType
-            | Prim::FltType
-            | Prim::BinType(_)
-            | Prim::HandleType => {}
+            Intrinsic::BoolType
+            | Intrinsic::NatType
+            | Intrinsic::ByteType
+            | Intrinsic::IntType
+            | Intrinsic::FltType
+            | Intrinsic::BinType(_)
+            | Intrinsic::HandleType => {}
 
             // `Lst` is covariant: a list of `T`s is a finite product of `T`s, so a strict occurrence in the element stays strict. This is the rule that admits `Json/arr(Lst(Json))` and `Toml/arr(Lst(Toml))`.
-            Prim::LstType(element) => self.walk(element, polarity),
+            Intrinsic::LstType(element) => self.walk(element, polarity),
 
             // A cell is read *and* written, so it is invariant in its element.
-            Prim::CellType(element) => self.walk(element, Polarity::Mixed),
+            Intrinsic::CellType(element) => self.walk(element, Polarity::Mixed),
 
             // `Io` is covariant, and by the same reading as `Lst` rather than by analogy to `Cell`.
             //
             // A description of a `T` is operationally the delayed `T` its thunk erasure makes it — `{} -> T`, whose codomain is a strictly positive position. What decides the polarity is what the eliminations can extract, and `Io`'s are *weaker* than `Lst`'s: `Lst/at` hands back a `T` outright, while `bind` never exposes the `A` except inside another `Io`, and there is no `Io(T) -> T` for any other rule to lean on. A carrier whose only reader is stricter than a covariant carrier's cannot be less positive than it.
             //
             // This is the rule that admits a suspension whose continuation is computed by performing an effect — `Step(A) | step(Pause, next: Io(Step(A)))`, which is what `/std/Async` is once its hand-rolled delay is replaced by the typed one.
-            Prim::IoType(result) => self.walk(result, polarity),
+            Intrinsic::IoType(result) => self.walk(result, polarity),
 
             // Everything remaining is a value or an operation over values, not a type former. Its operands are terms; whatever they mention, they mention at `Mixed`.
-            Prim::Bool(_)
-            | Prim::BoolAnd(..)
-            | Prim::BoolOr(..)
-            | Prim::BoolXor(..)
-            | Prim::BoolEql(..)
-            | Prim::BoolNeq(..)
-            | Prim::Nat(_)
-            | Prim::NatEql(..)
-            | Prim::NatNeq(..)
-            | Prim::NatAdd(..)
-            | Prim::NatSub(..)
-            | Prim::NatMul(..)
-            | Prim::NatLt(..)
-            | Prim::NatDiv(..)
-            | Prim::NatRem(..)
-            | Prim::NatGt(..)
-            | Prim::NatLte(..)
-            | Prim::NatGte(..)
-            | Prim::NatAnd(..)
-            | Prim::NatOr(..)
-            | Prim::NatXor(..)
-            | Prim::NatShl(..)
-            | Prim::NatShr(..)
-            | Prim::NatRotl(..)
-            | Prim::NatRotr(..)
-            | Prim::NatClz(..)
-            | Prim::NatCtz(..)
-            | Prim::NatPopcnt(..)
-            | Prim::Byte(_)
-            | Prim::ByteToNat(..)
-            | Prim::NatToByte(..)
-            | Prim::ByteEql(..)
-            | Prim::ByteLt(..)
-            | Prim::ByteLte(..)
-            | Prim::ByteGt(..)
-            | Prim::ByteGte(..)
-            | Prim::Int(_)
-            | Prim::IntEql(..)
-            | Prim::IntNeq(..)
-            | Prim::IntAdd(..)
-            | Prim::IntSub(..)
-            | Prim::IntMul(..)
-            | Prim::IntDiv(..)
-            | Prim::IntRem(..)
-            | Prim::IntLt(..)
-            | Prim::IntGt(..)
-            | Prim::IntLte(..)
-            | Prim::IntGte(..)
-            | Prim::IntAnd(..)
-            | Prim::IntOr(..)
-            | Prim::IntXor(..)
-            | Prim::IntShl(..)
-            | Prim::IntShr(..)
-            | Prim::IntRotl(..)
-            | Prim::IntRotr(..)
-            | Prim::IntClz(..)
-            | Prim::IntCtz(..)
-            | Prim::IntPopcnt(..)
-            | Prim::Flt(_)
-            | Prim::FltAdd(..)
-            | Prim::FltSub(..)
-            | Prim::FltMul(..)
-            | Prim::FltDiv(..)
-            | Prim::FltRem(..)
-            | Prim::FltEql(..)
-            | Prim::FltNeq(..)
-            | Prim::FltLt(..)
-            | Prim::FltGt(..)
-            | Prim::FltLte(..)
-            | Prim::FltGte(..)
-            | Prim::FltMin(..)
-            | Prim::FltMax(..)
-            | Prim::FltNeg(..)
-            | Prim::FltAbs(..)
-            | Prim::FltSqrt(..)
-            | Prim::FltFloor(..)
-            | Prim::FltCeil(..)
-            | Prim::FltTrunc(..)
-            | Prim::FltNearest(..)
-            | Prim::FltCopysign(..)
-            | Prim::NatToInt(..)
-            | Prim::NatToFlt(..)
-            | Prim::IntToNat(..)
-            | Prim::IntToFlt(..)
-            | Prim::FltToNat(..)
-            | Prim::FltToLeBytes(..)
-            | Prim::FltOfLeBytes(..)
-            | Prim::FltToInt(..)
-            | Prim::Bin(..)
-            | Prim::BinLen(..)
-            | Prim::BinEql(..)
-            | Prim::BinGet(..)
-            | Prim::BinSlice(..)
-            | Prim::BinAppend(..)
-            | Prim::BinConcat(..)
-            | Prim::Lst(..)
-            | Prim::LstLen(..)
-            | Prim::LstGet(..)
-            | Prim::LstSlice(..)
-            | Prim::LstAppend(..)
-            | Prim::LstConcat(..)
-            | Prim::LstMap(..)
-            | Prim::Handle(_)
-            | Prim::HandleEql(..)
-            | Prim::ProcExit(..)
-            | Prim::Cell(..)
-            | Prim::CellSet(..)
-            | Prim::CellGet(..)
-            | Prim::IoPure(..)
-            | Prim::IoBind(..) => self.opaque(term),
+            Intrinsic::Bool(_)
+            | Intrinsic::BoolAnd(..)
+            | Intrinsic::BoolOr(..)
+            | Intrinsic::BoolXor(..)
+            | Intrinsic::BoolEql(..)
+            | Intrinsic::BoolNeq(..)
+            | Intrinsic::Nat(_)
+            | Intrinsic::NatEql(..)
+            | Intrinsic::NatNeq(..)
+            | Intrinsic::NatAdd(..)
+            | Intrinsic::NatSub(..)
+            | Intrinsic::NatMul(..)
+            | Intrinsic::NatLt(..)
+            | Intrinsic::NatDiv(..)
+            | Intrinsic::NatRem(..)
+            | Intrinsic::NatGt(..)
+            | Intrinsic::NatLte(..)
+            | Intrinsic::NatGte(..)
+            | Intrinsic::NatAnd(..)
+            | Intrinsic::NatOr(..)
+            | Intrinsic::NatXor(..)
+            | Intrinsic::NatShl(..)
+            | Intrinsic::NatShr(..)
+            | Intrinsic::NatRotl(..)
+            | Intrinsic::NatRotr(..)
+            | Intrinsic::NatClz(..)
+            | Intrinsic::NatCtz(..)
+            | Intrinsic::NatPopcnt(..)
+            | Intrinsic::Byte(_)
+            | Intrinsic::ByteToNat(..)
+            | Intrinsic::NatToByte(..)
+            | Intrinsic::ByteEql(..)
+            | Intrinsic::ByteLt(..)
+            | Intrinsic::ByteLte(..)
+            | Intrinsic::ByteGt(..)
+            | Intrinsic::ByteGte(..)
+            | Intrinsic::Int(_)
+            | Intrinsic::IntEql(..)
+            | Intrinsic::IntNeq(..)
+            | Intrinsic::IntAdd(..)
+            | Intrinsic::IntSub(..)
+            | Intrinsic::IntMul(..)
+            | Intrinsic::IntDiv(..)
+            | Intrinsic::IntRem(..)
+            | Intrinsic::IntLt(..)
+            | Intrinsic::IntGt(..)
+            | Intrinsic::IntLte(..)
+            | Intrinsic::IntGte(..)
+            | Intrinsic::IntAnd(..)
+            | Intrinsic::IntOr(..)
+            | Intrinsic::IntXor(..)
+            | Intrinsic::IntShl(..)
+            | Intrinsic::IntShr(..)
+            | Intrinsic::IntRotl(..)
+            | Intrinsic::IntRotr(..)
+            | Intrinsic::IntClz(..)
+            | Intrinsic::IntCtz(..)
+            | Intrinsic::IntPopcnt(..)
+            | Intrinsic::Flt(_)
+            | Intrinsic::FltAdd(..)
+            | Intrinsic::FltSub(..)
+            | Intrinsic::FltMul(..)
+            | Intrinsic::FltDiv(..)
+            | Intrinsic::FltRem(..)
+            | Intrinsic::FltEql(..)
+            | Intrinsic::FltNeq(..)
+            | Intrinsic::FltLt(..)
+            | Intrinsic::FltGt(..)
+            | Intrinsic::FltLte(..)
+            | Intrinsic::FltGte(..)
+            | Intrinsic::FltMin(..)
+            | Intrinsic::FltMax(..)
+            | Intrinsic::FltNeg(..)
+            | Intrinsic::FltAbs(..)
+            | Intrinsic::FltSqrt(..)
+            | Intrinsic::FltFloor(..)
+            | Intrinsic::FltCeil(..)
+            | Intrinsic::FltTrunc(..)
+            | Intrinsic::FltNearest(..)
+            | Intrinsic::FltCopysign(..)
+            | Intrinsic::NatToInt(..)
+            | Intrinsic::NatToFlt(..)
+            | Intrinsic::IntToNat(..)
+            | Intrinsic::IntToFlt(..)
+            | Intrinsic::FltToNat(..)
+            | Intrinsic::FltToLeBytes(..)
+            | Intrinsic::FltOfLeBytes(..)
+            | Intrinsic::FltToInt(..)
+            | Intrinsic::Bin(..)
+            | Intrinsic::BinLen(..)
+            | Intrinsic::BinEql(..)
+            | Intrinsic::BinGet(..)
+            | Intrinsic::BinSlice(..)
+            | Intrinsic::BinAppend(..)
+            | Intrinsic::BinConcat(..)
+            | Intrinsic::Lst(..)
+            | Intrinsic::LstLen(..)
+            | Intrinsic::LstGet(..)
+            | Intrinsic::LstSlice(..)
+            | Intrinsic::LstAppend(..)
+            | Intrinsic::LstConcat(..)
+            | Intrinsic::LstMap(..)
+            | Intrinsic::Handle(_)
+            | Intrinsic::HandleEql(..)
+            | Intrinsic::ProcExit(..)
+            | Intrinsic::Cell(..)
+            | Intrinsic::CellSet(..)
+            | Intrinsic::CellGet(..)
+            | Intrinsic::IoPure(..)
+            | Intrinsic::IoBind(..) => self.opaque(term),
         }
     }
 }

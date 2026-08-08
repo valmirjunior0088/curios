@@ -10,7 +10,7 @@ use {
     curios_text::{Entrypoint, RootSource},
 };
 
-/// Programs whose items sit at deliberately varied types — primitive, propositional, functional, indexed, and nominal — so the property is exercised against more than one shape of declaration. None declares anything at a sort, which is what makes [`foreign_body`] foreign to all of them.
+/// Programs whose items sit at deliberately varied types — intrinsic, propositional, functional, indexed, and nominal — so the property is exercised against more than one shape of declaration. None declares anything at a sort, which is what makes [`foreign_body`] foreign to all of them.
 const SUBJECTS: &[(&str, &str)] = &[
     (
         "values and a proof",
@@ -53,7 +53,7 @@ const SUBJECTS: &[(&str, &str)] = &[
 
 /// A term foreign to every *value* type: the sort itself.
 ///
-/// Picking a literal would mean recognizing the declaration it belongs to, and a declared type is rarely the primitive it reduces to — `Nat` reaches the kernel as `/sys/Nat/Nat`, so a structural test for `Prim::NatType` misses it and substitutes a `0` that is perfectly well typed. `Type` inhabits no value type at all, which needs no recognition to be sure of; the subject below accordingly declares nothing at a sort.
+/// Picking a literal would mean recognizing the declaration it belongs to, and a declared type is rarely the intrinsic it reduces to — `Nat` reaches the kernel as `/sys/Nat/Nat`, so a structural test for `Intrinsic::NatType` misses it and substitutes a `0` that is perfectly well typed. `Type` inhabits no value type at all, which needs no recognition to be sure of; the subject below accordingly declares nothing at a sort.
 fn foreign_body() -> Term {
     Term::type_ground()
 }

@@ -8,8 +8,8 @@ use {
     crate::derived_binder_floor,
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Level, Many,
-        Module, Prim, RecGroup, RecMemberScopes, Scope, Telescope, Term, Totality,
+        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Intrinsic, Item,
+        Level, Many, Module, RecGroup, RecMemberScopes, Scope, Telescope, Term, Totality,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseMetaId, UniverseParam,
     },
@@ -29,7 +29,7 @@ fn the_floor_clears_every_local_a_term_mentions() {
         island: Qualifier::default(),
         root: RootId::Entry,
         totality: Totality::Total,
-        type_: Term::prim(Prim::NatType),
+        type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&mentioned),
     };
 
@@ -43,7 +43,7 @@ fn the_floor_clears_every_local_a_term_mentions() {
         // The understated claim the walk must not believe.
         binder_floor: 0,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     assert_eq!(derived_binder_floor(&module), 4_243);
@@ -73,8 +73,8 @@ fn an_unsatisfiable_universe_context_is_refused() {
         island: Qualifier::default(),
         root: RootId::Entry,
         totality: Totality::Total,
-        type_: Term::prim(Prim::NatType),
-        body: Term::prim(Prim::Nat(curios_core::Nat::new(0usize))),
+        type_: Term::intrinsic(Intrinsic::NatType),
+        body: Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))),
     };
 
     let module = Module {
@@ -86,7 +86,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     assert!(
@@ -117,8 +117,8 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         island: Qualifier::default(),
         root: RootId::Entry,
         totality: Totality::Total,
-        type_: Term::prim(Prim::NatType),
-        body: Term::prim(Prim::Nat(curios_core::Nat::new(0usize))),
+        type_: Term::intrinsic(Intrinsic::NatType),
+        body: Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))),
     };
 
     let module = Module {
@@ -130,7 +130,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     assert!(
@@ -488,7 +488,7 @@ fn a_recursive_member_is_certified_only_with_its_group() {
 fn a_member_of_a_legal_group_is_still_accepted() {
     let f = member();
     let n = Free::local(901, Some("n"));
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
 
     let group = RecGroup::new(vec![RecMemberScopes {
         type_: Scope::close(
@@ -586,7 +586,7 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
 /// The control for the fixture above: a registry entry whose index target is a real term stays accepted.
 #[test]
 fn a_registry_index_target_of_a_real_term_is_accepted() {
-    let target = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+    let target = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
 
     assert_eq!(
         recheck_module_verdicts(&indexed_module(target), 1_000_000),
@@ -603,7 +603,10 @@ fn indexed_module(target: Term) -> Module {
         universe_context: UniverseContext::default(),
         // The family states one index, because its constructor aims at one. Declaring none while a constructor targets one is a malformed declaration in its own right, which the terminal clause now reports as an arity.
         arity: Telescope::done(Telescope::build(
-            [(Free::local(902, Some("i")), Term::prim(Prim::NatType))],
+            [(
+                Free::local(902, Some("i")),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
             (),
         )),
         constructors: vec![(
@@ -688,7 +691,7 @@ fn level_definition(level: &Level) -> Module {
         root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(level.clone()),
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     Module {
@@ -1220,7 +1223,7 @@ fn scheme_definition(level: &Level, parameter_count: usize) -> Module {
         root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(level.clone()),
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     Module {
@@ -1353,7 +1356,7 @@ fn instance_of_width(width: usize) -> Module {
 ///
 /// The foreign wire contract is the one perimeter row `curios/src/tests/perimeter.rs` records as enforced by the *grammar*: `parse_wire_type` is a closed keyword grammar, so `foreign bad : False` never parses and `both_checkers` returns `NotAsked` for both columns — which that file summarizes as "the rule is the parser's and neither checker backs it up". As a statement about where the rule is enforced that is right. As a soundness statement it understates the position, and it leaves open the question that matters: a host call is the one place an *embedder* supplies a value the compiler never saw, so what happens if a module reaches the kernel with the rule already broken?
 ///
-/// It cannot be broken, and the reason is representational rather than a check. `Prim::Foreign` carries a `ForeignFunction` whose `signature` is a `WireSignature` over `WireType` — a closed six-variant enum of `Nat`, `Int`, `Bool`, `Bytes`, `Handle` and `Lst`. No variant denotes a nominal type, so no row, forged by hand or not, can *say* its result is a proposition. And `infer`'s rule does not read a type off the term: it **constructs** the result from `wire_term` over that enum and checks each operand against its own wire type, so what the row claims about its namespace and name — the part a forgery controls — never reaches the type at all.
+/// It cannot be broken, and the reason is representational rather than a check. `Intrinsic::Foreign` carries a `ForeignFunction` whose `signature` is a `WireSignature` over `WireType` — a closed six-variant enum of `Nat`, `Int`, `Bool`, `Bytes`, `Handle` and `Lst`. No variant denotes a nominal type, so no row, forged by hand or not, can *say* its result is a proposition. And `infer`'s rule does not read a type off the term: it **constructs** the result from `wire_term` over that enum and checks each operand against its own wire type, so what the row claims about its namespace and name — the part a forgery controls — never reaches the type at all.
 ///
 /// A null result, recorded as one: nothing here was found to be wrong. What the fixture pins is that the boundary holds from Core and not merely from the parser, which is the half no surface program can reach and no fixture covered. The row below is a forgery — a namespace and name no store would issue — and the kernel is then made to type its call.
 ///
@@ -1381,7 +1384,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
     assert_eq!(
         recheck_module_verdicts(
             &forged_foreign(
-                &Term::prim(Prim::io_type(Term::prim(Prim::NatType))),
+                &Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::NatType))),
                 &false_name
             ),
             1_000_000
@@ -1605,7 +1608,7 @@ fn an_honest_motive_still_refuses_the_large_elimination() {
 /// `extract : (p : P(0)) -> Nat`, eliminating the two-constructor proposition `P` under a motive whose inner switch states `sort` while every arm of it is `Nat`.
 fn lying_motive(sort: Term) -> Module {
     let family = Global::Authored(Qualifier::from(["P"]));
-    let zero = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+    let zero = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
 
     let nullary = |tag: &str| {
         (
@@ -1619,7 +1622,10 @@ fn lying_motive(sort: Term) -> Module {
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::build(
-            [(Free::local(600, Some("i")), Term::prim(Prim::NatType))],
+            [(
+                Free::local(600, Some("i")),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
             (),
         )),
         constructors: vec![nullary("mk"), nullary("mk2")],
@@ -1637,17 +1643,17 @@ fn lying_motive(sort: Term) -> Module {
     let motive_body = Term::switch_scoped(
         Term::free_var(&index),
         Scope::close(Many(1), &[&Free::local(603, Some("k"))], sort),
-        [(0u32, Term::prim(Prim::NatType))],
-        Term::prim(Prim::NatType),
+        [(0u32, Term::intrinsic(Intrinsic::NatType))],
+        Term::intrinsic(Intrinsic::NatType),
     );
 
     let subject = Free::local(604, Some("p"));
-    let literal = |n: usize| Term::prim(Prim::Nat(curios_core::Nat::new(n)));
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
     let extract = authored(
         &Global::Authored(Qualifier::from(["extract"])),
         Term::func_type(
             [(subject.clone(), at_zero.clone())],
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
         ),
         Term::func(
             [(subject.clone(), at_zero)],
@@ -1682,7 +1688,7 @@ fn lying_motive(sort: Term) -> Module {
 ///
 /// It does not, and the reason is not an exploit. No route from a vacuous elimination to a forged term was demonstrated, and the honest reading of that is the weak one: an attempt failed, which is not the same as a proof that none exists. What makes the clause unconditional is that `infer` reads the elimination's **type** off the motive and hands it to the caller whether or not the elimination can run — so a motive nothing validated means a term whose type nothing validated, and `Sort::of` will classify it downstream. The module below was certified with **zero refusals** while the clause did not run: a vacuous elimination at an uninhabited `Held(Two/b())`, whose motive states `Prop` over arms inhabiting `Type`. What keeps the fixture pointed at the motive is the order `check` and `infer` run in, not the shape of the definition around it — see the note at the definition, and the one thing about it that had to change once `infer` began typing a type former's parts rather than classifying them.
 ///
-/// It also costs nothing. The clause sits in [`check_cases`](crate::infer) above the dispatch, where every `Cases` form shares one `motive` binding, so *not* running it here would mean pushing it down into `check_induct_arms`, guarding it with the vacuous condition, and duplicating it into the three primitive-carrier arms. Unconditional is the cheap implementation; the skip would have been the deliberate exception.
+/// It also costs nothing. The clause sits in [`check_cases`](crate::infer) above the dispatch, where every `Cases` form shares one `motive` binding, so *not* running it here would mean pushing it down into `check_induct_arms`, guarding it with the vacuous condition, and duplicating it into the three intrinsic-carrier arms. Unconditional is the cheap implementation; the skip would have been the deliberate exception.
 #[test]
 fn a_vacuous_elimination_still_has_its_motive_checked() {
     let two_name = Global::Authored(Qualifier::from(["Two"]));
@@ -1740,8 +1746,8 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         Term::switch_scoped(
             Term::free_var(&outer),
             Scope::close(Many(1), &[&Free::local(904, Some("k"))], Term::prop()),
-            [(0u32, Term::prim(Prim::NatType))],
-            Term::prim(Prim::NatType),
+            [(0u32, Term::intrinsic(Intrinsic::NatType))],
+            Term::intrinsic(Intrinsic::NatType),
         )
     };
     let subject = Free::local(902, Some("s"));
@@ -1751,14 +1757,14 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         &Global::Authored(Qualifier::from(["vacuous"])),
         Term::func_type(
             [
-                (outer.clone(), Term::prim(Prim::NatType)),
+                (outer.clone(), Term::intrinsic(Intrinsic::NatType)),
                 (subject.clone(), at_b.clone()),
             ],
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
         ),
         Term::func(
             [
-                (outer.clone(), Term::prim(Prim::NatType)),
+                (outer.clone(), Term::intrinsic(Intrinsic::NatType)),
                 (subject.clone(), at_b),
             ],
             Term::induct_match_scoped_marked(
@@ -1823,8 +1829,10 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
 #[test]
 fn an_occurrence_at_its_declared_arity_is_accepted() {
     let module = occurrence_module(
-        vec![Term::prim(Prim::NatType)],
-        vec![Term::prim(Prim::Nat(curios_core::Nat::new(0usize)))],
+        vec![Term::intrinsic(Intrinsic::NatType)],
+        vec![Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
+            0usize,
+        )))],
     );
 
     assert_eq!(
@@ -1836,13 +1844,17 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 
 /// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
 fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
-    let zero = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+    let zero = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
     vec![
         ("no parameters", Vec::new(), vec![zero.clone()]),
-        ("no indices", vec![Term::prim(Prim::NatType)], Vec::new()),
+        (
+            "no indices",
+            vec![Term::intrinsic(Intrinsic::NatType)],
+            Vec::new(),
+        ),
         (
             "two indices",
-            vec![Term::prim(Prim::NatType)],
+            vec![Term::intrinsic(Intrinsic::NatType)],
             vec![zero.clone(), zero],
         ),
     ]
@@ -1851,14 +1863,17 @@ fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
 /// `let held : Type = F(params)(indices)`, where `F(A : Type) : (i : Nat) -> Type` declares one of each.
 fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
     let family = Global::Authored(Qualifier::from(["F"]));
-    let zero = Term::prim(Prim::Nat(curios_core::Nat::new(0usize)));
+    let zero = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::build(
             [(Free::local(950, Some("A")), Term::type_ground())],
             Telescope::build(
-                [(Free::local(951, Some("i")), Term::prim(Prim::NatType))],
+                [(
+                    Free::local(951, Some("i")),
+                    Term::intrinsic(Intrinsic::NatType),
+                )],
                 (),
             ),
         ),
@@ -1926,7 +1941,7 @@ fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
 /// The control for the fixture above: one parameter each, as declared.
 #[test]
 fn a_nominal_value_at_its_declared_arity_is_accepted() {
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
 
     assert_eq!(
         recheck_module_verdicts(&struct_value_module(vec![nat.clone()]), 1_000_000),
@@ -1942,7 +1957,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
 
 /// The four ways a one-parameter nominal value can disagree with its declaration.
 fn nominal_value_cases() -> Vec<(&'static str, Module)> {
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
     vec![
         ("struct at no parameters", struct_value_module(Vec::new())),
         (
@@ -1977,7 +1992,7 @@ fn struct_value_module(params: Vec<Term>) -> Module {
     let declared: Term = curios_core::Subterm::StructType(curios_core::StructType {
         name: name.clone(),
         universes: Vec::new(),
-        params: vec![Term::prim(Prim::NatType)],
+        params: vec![Term::intrinsic(Intrinsic::NatType)],
     })
     .into();
 
@@ -1987,7 +2002,9 @@ fn struct_value_module(params: Vec<Term>) -> Module {
         Term::struct_(
             name.clone(),
             params,
-            [Term::prim(Prim::Nat(curios_core::Nat::new(3usize)))],
+            [Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
+                3usize,
+            )))],
         ),
     );
 
@@ -2035,14 +2052,16 @@ fn variant_value_module(params: Vec<Term>) -> Module {
         &Global::Authored(Qualifier::from(["held"])),
         Term::induct_type(
             family.clone(),
-            [Term::prim(Prim::NatType)],
+            [Term::intrinsic(Intrinsic::NatType)],
             Vec::<Term>::new(),
         ),
         Term::variant(
             family.clone(),
             params,
             "mk",
-            [Term::prim(Prim::Nat(curios_core::Nat::new(3usize)))],
+            [Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
+                3usize,
+            )))],
         ),
     );
 
@@ -2092,8 +2111,8 @@ fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
 fn a_saturated_application_in_a_type_position_is_accepted() {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
-    let nat = Term::prim(Prim::NatType);
-    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
     let former = Global::Authored(Qualifier::from(["f"]));
 
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
@@ -2124,7 +2143,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
             Term::free_var(&Free::from(&former)),
             [
                 three.clone(),
-                Term::prim(Prim::Nat(curios_core::Nat::new(4usize))),
+                Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(4usize))),
             ],
         ),
         three,
@@ -2154,8 +2173,8 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
     let g = Free::local(992, Some("g"));
-    let nat = Term::prim(Prim::NatType);
-    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
 
     let two_binder = |result: Term| {
         Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], result)
@@ -2258,7 +2277,7 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
 /// The control for the arm half: an arm binding exactly its constructor's payload still reduces, so the type position it computes is classified as it always was.
 #[test]
 fn an_arm_matching_its_payload_still_reduces() {
-    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
     let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
 
     assert_eq!(
@@ -2293,8 +2312,8 @@ fn unguarded_opener_cases() -> Vec<(&'static str, Module)> {
 /// `held : match F/mk(3) : (s) => Type | mk(<binders>) => Nat end`, for `induct F : Type | mk(x : Nat) end`.
 fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
     let family = Global::Authored(Qualifier::from(["F"]));
-    let nat = Term::prim(Prim::NatType);
-    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -2349,8 +2368,8 @@ fn rec_apply_module() -> Module {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
     let f = Free::local(992, Some("f"));
-    let nat = Term::prim(Prim::NatType);
-    let three = Term::prim(Prim::Nat(curios_core::Nat::new(3usize)));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
 
     let member_type: Term = curios_core::Subterm::FuncType(curios_core::FuncType {
@@ -2386,11 +2405,11 @@ fn rec_apply_module() -> Module {
     }
 }
 
-/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or a `Prim::ProcExit`.
+/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or an `Intrinsic::ProcExit`.
 ///
 /// Instrumented across a kernel walk of the whole prelude and every program in `curios`'s test corpus, the named route refused 9 times — 8 at a proof position, 1 at a type position — and the anonymous route refused **zero**, with no test in this crate asserting a `NotTotal` verdict at all. The reason is the one this module documents: every surface spelling that would reach it is refused during elaboration, so no module carries it here. `rec b : False = b; b`, the shape three of `curios`'s `tests::soundness` fixtures use, never arrives.
 ///
-/// `Prim::ProcExit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` types at `{}` — deliberately, so that nothing is forged by a term that never returns — and `Held/qed(exit(0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
+/// `Intrinsic::ProcExit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` types at `{}` — deliberately, so that nothing is forged by a term that never returns — and `Held/qed(exit(0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
 ///
 /// The control is the same module with `()` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
@@ -2445,7 +2464,7 @@ fn proof_carrying_unit(exiting: bool) -> Module {
     };
 
     let payload = match exiting {
-        true => Term::prim(Prim::ProcExit(Term::prim(Prim::Nat(
+        true => Term::intrinsic(Intrinsic::ProcExit(Term::intrinsic(Intrinsic::Nat(
             curios_core::Nat::new(0usize),
         )))),
         false => Term::tuple(Vec::<Term>::new()),
@@ -2467,7 +2486,7 @@ fn proof_carrying_unit(exiting: bool) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     }
 }
 
@@ -2513,7 +2532,10 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
             Atom::from("mk"),
             InductParam {
                 telescope: Telescope::build(
-                    [(Free::local(920, Some("n")), Term::prim(Prim::NatType))],
+                    [(
+                        Free::local(920, Some("n")),
+                        Term::intrinsic(Intrinsic::NatType),
+                    )],
                     Vec::new(),
                 ),
                 plicities: match honest {
@@ -2530,7 +2552,7 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
     };
 
     let payload = (0..payload_count)
-        .map(|_| Term::prim(Prim::Nat(curios_core::Nat::new(0usize))))
+        .map(|_| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))))
         .collect::<Vec<_>>();
 
     let mut induct_decls = BTreeMap::new();
@@ -2549,7 +2571,7 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     }
 }
 
@@ -2577,8 +2599,8 @@ fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) ->
 fn index_forgery() -> Module {
     let type_0 = Term::type_ground();
     let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
-    let nat_type = Term::prim(Prim::NatType);
-    let nat = |n: usize| Term::prim(Prim::Nat(curios_core::Nat::new(n)));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
 
     let true_name = Global::Authored(Qualifier::from(["True"]));
     let false_name = Global::Authored(Qualifier::from(["False"]));
@@ -2732,7 +2754,7 @@ fn index_forgery() -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     }
 }
 
@@ -2761,8 +2783,8 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held_decl = indexed_family(
         Free::local(70, Some("n")),
-        Term::prim(Prim::NatType),
-        Term::prim(Prim::Nat(curios_core::Nat::new(0usize))),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))),
         Term::type_ground(),
     );
 
@@ -2771,7 +2793,9 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         Term::induct_type(
             held_name.clone(),
             Vec::<Term>::new(),
-            [Term::prim(Prim::Nat(curios_core::Nat::new(0usize)))],
+            [Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
+                0usize,
+            )))],
         ),
         Term::variant(
             held_name.clone(),
@@ -2790,7 +2814,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     assert_eq!(recheck_module_verdicts(&module, 1_000_000), Vec::new());
@@ -2806,7 +2830,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
 #[test]
 fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
-    let nat = |n: usize| Term::prim(Prim::Nat(curios_core::Nat::new(n)));
+    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
 
     let true_name = Global::Authored(Qualifier::from(["True"]));
     let equality_name = Global::Authored(Qualifier::from(["Eq"]));
@@ -2876,7 +2900,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     let verdicts = recheck_module_verdicts(&module, 1_000_000);
@@ -2921,18 +2945,18 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::prim(Prim::NatType),
+        body: Term::intrinsic(Intrinsic::NatType),
     };
 
     let applied: Term = curios_core::Subterm::StructType(curios_core::StructType {
         name,
         universes: Vec::new(),
-        params: vec![Term::prim(Prim::NatType)],
+        params: vec![Term::intrinsic(Intrinsic::NatType)],
     })
     .into();
     let refusal = KernelError::Mismatch {
         inferred: Box::new(applied),
-        expected: Box::new(Term::prim(Prim::NatType)),
+        expected: Box::new(Term::intrinsic(Intrinsic::NatType)),
     };
 
     assert_eq!(

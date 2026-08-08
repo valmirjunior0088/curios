@@ -1,6 +1,6 @@
-mod prim;
+mod intrinsic;
 use crate::TermBuilders;
-use prim::*;
+use intrinsic::*;
 
 #[cfg(test)]
 mod tests;
@@ -9,10 +9,11 @@ use {
     super::{Context, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
     curios_base::Plicity,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Level, Match,
-        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseInst, Variant, Visit, instantiate_universe_levels_scoped, project_erased_universes,
+        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Level,
+        Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope,
+        Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseInst, Variant, Visit, instantiate_universe_levels_scoped,
+        project_erased_universes,
     },
     std::collections::{HashMap, HashSet, VecDeque},
 };
@@ -76,7 +77,7 @@ pub(crate) enum Outcome {
 /// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion goal (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a coinductive comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only, which the conversion history relies on: labels minted here are never recorded in `Convert::minted`, so they must never reach a goal. They cannot, because `Sort::of` returns a `Sort`.
 pub(crate) type Opened = [(Free, Term)];
 
-/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same primitives `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
+/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
 pub(crate) fn synth_neutral(
     context: &mut Context,
     opened: &Opened,
@@ -317,18 +318,20 @@ impl Sort {
             }
             // The empty tuple `{}` is unit — it quantifies over nothing, so level 0 is the answer rather than a default, and like `Prop` below it is not worth reporting as a fallback.
             Subterm::TupleType(_) => Sort::Type(Level::zero()),
-            // A primitive type former states its own level.
+            // An intrinsic type former states its own level.
             //
-            // A closed primitive is small: it quantifies over nothing, so it sits at level 0. A parameterized one carries its parameter's level — `Lst : Type u -> Type u` — and pinning those at 0 would claim the type is smaller than it is, which is the unsound direction: it is what would let a large type be stored in a small universe.
-            Subterm::Prim(prim) => match prim {
-                Prim::BoolType
-                | Prim::NatType
-                | Prim::ByteType
-                | Prim::IntType
-                | Prim::FltType
-                | Prim::BinType(_)
-                | Prim::HandleType => Sort::Type(Level::zero()),
-                Prim::LstType(element) | Prim::CellType(element) | Prim::IoType(element) => {
+            // A closed intrinsic is small: it quantifies over nothing, so it sits at level 0. A parameterized one carries its parameter's level — `Lst : Type u -> Type u` — and pinning those at 0 would claim the type is smaller than it is, which is the unsound direction: it is what would let a large type be stored in a small universe.
+            Subterm::Intrinsic(intrinsic) => match intrinsic {
+                Intrinsic::BoolType
+                | Intrinsic::NatType
+                | Intrinsic::ByteType
+                | Intrinsic::IntType
+                | Intrinsic::FltType
+                | Intrinsic::BinType(_)
+                | Intrinsic::HandleType => Sort::Type(Level::zero()),
+                Intrinsic::LstType(element)
+                | Intrinsic::CellType(element)
+                | Intrinsic::IoType(element) => {
                     let element = element.clone();
                     match Sort::of_in(context, opened, &element)? {
                         Sort::Type(level) => Sort::Type(level),
@@ -336,124 +339,124 @@ impl Sort {
                         Sort::Prop => Sort::Type(Level::zero()),
                     }
                 }
-                // A primitive *value* in type position is not a shape this can classify, and unlike the formers above it is not expected.
+                // An intrinsic *value* in type position is not a shape this can classify, and unlike the formers above it is not expected.
                 //
-                // Listed exhaustively rather than caught by a wildcard, because the wildcard's answer is *wrong* for any former added after it: it pins the level at 0 while `curios-cert`'s `sort_of_prim` reads the parameter's, and nothing catches the disagreement until the fixed prelude's kernel recheck reports a ground `Type` against a `Type.{u}`, naming no item. Every other primitive match in the workspace is exhaustive; this one has to be too, so a new former forces a level decision at compile time instead of inheriting a default.
-                Prim::Bin(..)
-                | Prim::BinAppend(..)
-                | Prim::BinConcat(..)
-                | Prim::BinEql(..)
-                | Prim::BinGet(..)
-                | Prim::BinLen(..)
-                | Prim::BinSlice(..)
-                | Prim::Bool(..)
-                | Prim::BoolAnd(..)
-                | Prim::BoolEql(..)
-                | Prim::BoolNeq(..)
-                | Prim::BoolOr(..)
-                | Prim::BoolXor(..)
-                | Prim::Byte(..)
-                | Prim::ByteEql(..)
-                | Prim::ByteGt(..)
-                | Prim::ByteGte(..)
-                | Prim::ByteLt(..)
-                | Prim::ByteLte(..)
-                | Prim::ByteToNat(..)
-                | Prim::Cell(..)
-                | Prim::CellGet(..)
-                | Prim::CellSet(..)
-                | Prim::ProcExit(..)
-                | Prim::Flt(..)
-                | Prim::FltAbs(..)
-                | Prim::FltAdd(..)
-                | Prim::FltCeil(..)
-                | Prim::FltCopysign(..)
-                | Prim::FltDiv(..)
-                | Prim::FltEql(..)
-                | Prim::FltFloor(..)
-                | Prim::FltGt(..)
-                | Prim::FltGte(..)
-                | Prim::FltLt(..)
-                | Prim::FltLte(..)
-                | Prim::FltMax(..)
-                | Prim::FltMin(..)
-                | Prim::FltMul(..)
-                | Prim::FltNearest(..)
-                | Prim::FltNeg(..)
-                | Prim::FltNeq(..)
-                | Prim::FltOfLeBytes(..)
-                | Prim::FltRem(..)
-                | Prim::FltSqrt(..)
-                | Prim::FltSub(..)
-                | Prim::FltToInt(..)
-                | Prim::FltToLeBytes(..)
-                | Prim::FltToNat(..)
-                | Prim::FltTrunc(..)
-                | Prim::Handle(..)
-                | Prim::HandleEql(..)
-                | Prim::Int(..)
-                | Prim::IntAdd(..)
-                | Prim::IntAnd(..)
-                | Prim::IntClz(..)
-                | Prim::IntCtz(..)
-                | Prim::IntDiv(..)
-                | Prim::IntEql(..)
-                | Prim::IntGt(..)
-                | Prim::IntGte(..)
-                | Prim::IntLt(..)
-                | Prim::IntLte(..)
-                | Prim::IntMul(..)
-                | Prim::IntNeq(..)
-                | Prim::IntOr(..)
-                | Prim::IntPopcnt(..)
-                | Prim::IntRem(..)
-                | Prim::IntRotl(..)
-                | Prim::IntRotr(..)
-                | Prim::IntShl(..)
-                | Prim::IntShr(..)
-                | Prim::IntSub(..)
-                | Prim::IntToFlt(..)
-                | Prim::IntToNat(..)
-                | Prim::IntXor(..)
-                | Prim::IoBind(..)
-                | Prim::IoPure(..)
-                | Prim::Lst(..)
-                | Prim::LstAppend(..)
-                | Prim::LstConcat(..)
-                | Prim::LstGet(..)
-                | Prim::LstLen(..)
-                | Prim::LstMap(..)
-                | Prim::LstSlice(..)
-                | Prim::Nat(..)
-                | Prim::NatAdd(..)
-                | Prim::NatAnd(..)
-                | Prim::NatClz(..)
-                | Prim::NatCtz(..)
-                | Prim::NatDiv(..)
-                | Prim::NatEql(..)
-                | Prim::NatGt(..)
-                | Prim::NatGte(..)
-                | Prim::NatLt(..)
-                | Prim::NatLte(..)
-                | Prim::NatMul(..)
-                | Prim::NatNeq(..)
-                | Prim::NatOr(..)
-                | Prim::NatPopcnt(..)
-                | Prim::NatRem(..)
-                | Prim::NatRotl(..)
-                | Prim::NatRotr(..)
-                | Prim::NatShl(..)
-                | Prim::NatShr(..)
-                | Prim::NatSub(..)
-                | Prim::NatToByte(..)
-                | Prim::NatToFlt(..)
-                | Prim::NatToInt(..)
-                | Prim::NatXor(..) => {
-                    probe_level_fallback("non-type primitive", &reduced);
+                // Listed exhaustively rather than caught by a wildcard, because the wildcard's answer is *wrong* for any former added after it: it pins the level at 0 while `curios-cert`'s `sort_of_intrinsic` reads the parameter's, and nothing catches the disagreement until the fixed prelude's kernel recheck reports a ground `Type` against a `Type.{u}`, naming no item. Every other intrinsic match in the workspace is exhaustive; this one has to be too, so a new former forces a level decision at compile time instead of inheriting a default.
+                Intrinsic::Bin(..)
+                | Intrinsic::BinAppend(..)
+                | Intrinsic::BinConcat(..)
+                | Intrinsic::BinEql(..)
+                | Intrinsic::BinGet(..)
+                | Intrinsic::BinLen(..)
+                | Intrinsic::BinSlice(..)
+                | Intrinsic::Bool(..)
+                | Intrinsic::BoolAnd(..)
+                | Intrinsic::BoolEql(..)
+                | Intrinsic::BoolNeq(..)
+                | Intrinsic::BoolOr(..)
+                | Intrinsic::BoolXor(..)
+                | Intrinsic::Byte(..)
+                | Intrinsic::ByteEql(..)
+                | Intrinsic::ByteGt(..)
+                | Intrinsic::ByteGte(..)
+                | Intrinsic::ByteLt(..)
+                | Intrinsic::ByteLte(..)
+                | Intrinsic::ByteToNat(..)
+                | Intrinsic::Cell(..)
+                | Intrinsic::CellGet(..)
+                | Intrinsic::CellSet(..)
+                | Intrinsic::ProcExit(..)
+                | Intrinsic::Flt(..)
+                | Intrinsic::FltAbs(..)
+                | Intrinsic::FltAdd(..)
+                | Intrinsic::FltCeil(..)
+                | Intrinsic::FltCopysign(..)
+                | Intrinsic::FltDiv(..)
+                | Intrinsic::FltEql(..)
+                | Intrinsic::FltFloor(..)
+                | Intrinsic::FltGt(..)
+                | Intrinsic::FltGte(..)
+                | Intrinsic::FltLt(..)
+                | Intrinsic::FltLte(..)
+                | Intrinsic::FltMax(..)
+                | Intrinsic::FltMin(..)
+                | Intrinsic::FltMul(..)
+                | Intrinsic::FltNearest(..)
+                | Intrinsic::FltNeg(..)
+                | Intrinsic::FltNeq(..)
+                | Intrinsic::FltOfLeBytes(..)
+                | Intrinsic::FltRem(..)
+                | Intrinsic::FltSqrt(..)
+                | Intrinsic::FltSub(..)
+                | Intrinsic::FltToInt(..)
+                | Intrinsic::FltToLeBytes(..)
+                | Intrinsic::FltToNat(..)
+                | Intrinsic::FltTrunc(..)
+                | Intrinsic::Handle(..)
+                | Intrinsic::HandleEql(..)
+                | Intrinsic::Int(..)
+                | Intrinsic::IntAdd(..)
+                | Intrinsic::IntAnd(..)
+                | Intrinsic::IntClz(..)
+                | Intrinsic::IntCtz(..)
+                | Intrinsic::IntDiv(..)
+                | Intrinsic::IntEql(..)
+                | Intrinsic::IntGt(..)
+                | Intrinsic::IntGte(..)
+                | Intrinsic::IntLt(..)
+                | Intrinsic::IntLte(..)
+                | Intrinsic::IntMul(..)
+                | Intrinsic::IntNeq(..)
+                | Intrinsic::IntOr(..)
+                | Intrinsic::IntPopcnt(..)
+                | Intrinsic::IntRem(..)
+                | Intrinsic::IntRotl(..)
+                | Intrinsic::IntRotr(..)
+                | Intrinsic::IntShl(..)
+                | Intrinsic::IntShr(..)
+                | Intrinsic::IntSub(..)
+                | Intrinsic::IntToFlt(..)
+                | Intrinsic::IntToNat(..)
+                | Intrinsic::IntXor(..)
+                | Intrinsic::IoBind(..)
+                | Intrinsic::IoPure(..)
+                | Intrinsic::Lst(..)
+                | Intrinsic::LstAppend(..)
+                | Intrinsic::LstConcat(..)
+                | Intrinsic::LstGet(..)
+                | Intrinsic::LstLen(..)
+                | Intrinsic::LstMap(..)
+                | Intrinsic::LstSlice(..)
+                | Intrinsic::Nat(..)
+                | Intrinsic::NatAdd(..)
+                | Intrinsic::NatAnd(..)
+                | Intrinsic::NatClz(..)
+                | Intrinsic::NatCtz(..)
+                | Intrinsic::NatDiv(..)
+                | Intrinsic::NatEql(..)
+                | Intrinsic::NatGt(..)
+                | Intrinsic::NatGte(..)
+                | Intrinsic::NatLt(..)
+                | Intrinsic::NatLte(..)
+                | Intrinsic::NatMul(..)
+                | Intrinsic::NatNeq(..)
+                | Intrinsic::NatOr(..)
+                | Intrinsic::NatPopcnt(..)
+                | Intrinsic::NatRem(..)
+                | Intrinsic::NatRotl(..)
+                | Intrinsic::NatRotr(..)
+                | Intrinsic::NatShl(..)
+                | Intrinsic::NatShr(..)
+                | Intrinsic::NatSub(..)
+                | Intrinsic::NatToByte(..)
+                | Intrinsic::NatToFlt(..)
+                | Intrinsic::NatToInt(..)
+                | Intrinsic::NatXor(..) => {
+                    probe_level_fallback("non-type intrinsic", &reduced);
                     Sort::Type(Level::zero())
                 }
             },
-            // A host call is a value, never a type, so it takes the same ground level the non-type primitives above do.
+            // A host call is a value, never a type, so it takes the same ground level the non-type intrinsics above do.
             Subterm::Foreign(..) => {
                 probe_level_fallback("host call", &reduced);
                 Sort::Type(Level::zero())
@@ -1688,12 +1691,12 @@ impl Convert {
         Ok(true)
     }
 
-    /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary primitive type former (`Lst`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
+    /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`Lst`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
     ///
     /// Deliberate v1 restrictions (cf. the guards in `solve`):
     /// - exact arity only — `ā.len()` must equal `params.len() + indices.len()`; partial application is future work;
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection (`?m := λx. x`) solutions are never produced;
-    /// - rigid heads only — nominal constructors and the unary primitive formers (`Lst`, `Cell`), whose argument rides inside the `Prim` node;
+    /// - rigid heads only — nominal constructors and the unary intrinsic formers (`Lst`, `Cell`), whose argument rides inside the `Intrinsic` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
     /// - a rejected or postponed guess *blocks* the goal, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable (a constant solution could still exist), and blocking preserves the drain's retry semantics — a permanently blocked goal surfaces as a type mismatch at its origin.
     ///
@@ -1746,20 +1749,20 @@ impl Convert {
                     }),
                 )
             }
-            // The unary primitive type formers: their argument rides inside the `Prim` node, so the imitation body rebuilds the node over the binder (`?m := λT. Lst(T)` for `?m(?A) ≡ Lst(Nat)`).
-            Subterm::Prim(Prim::LstType(elem)) => (
+            // The unary intrinsic type formers: their argument rides inside the `Intrinsic` node, so the imitation body rebuilds the node over the binder (`?m := λT. Lst(T)` for `?m(?A) ≡ Lst(Nat)`).
+            Subterm::Intrinsic(Intrinsic::LstType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::prim(Prim::LstType(vars[0].clone()))),
+                Box::new(|vars| Term::intrinsic(Intrinsic::LstType(vars[0].clone()))),
             ),
-            Subterm::Prim(Prim::CellType(elem)) => (
+            Subterm::Intrinsic(Intrinsic::CellType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::prim(Prim::CellType(vars[0].clone()))),
+                Box::new(|vars| Term::intrinsic(Intrinsic::CellType(vars[0].clone()))),
             ),
-            Subterm::Prim(Prim::IoType(elem)) => (
+            Subterm::Intrinsic(Intrinsic::IoType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::prim(Prim::IoType(vars[0].clone()))),
+                Box::new(|vars| Term::intrinsic(Intrinsic::IoType(vars[0].clone()))),
             ),
-            _ => unreachable!("the callers pass a nominal or prim-former rigid side"),
+            _ => unreachable!("the callers pass a nominal or intrinsic-former rigid side"),
         };
         let arity = rigid_args.len();
 
@@ -1881,7 +1884,7 @@ impl Convert {
     /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)` when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
-            // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict primitive operation.
+            // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {
                 continue;
             }
@@ -1986,7 +1989,9 @@ impl Convert {
             }
 
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
-                (Subterm::Prim(this), Subterm::Prim(that)) => convert_prim(self, this, that)?,
+                (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
+                    convert_intrinsic(self, this, that)?
+                }
                 (Subterm::Type(this), Subterm::Type(that)) => {
                     context
                         .universes_mut()
@@ -2152,16 +2157,24 @@ impl Convert {
                 }
                 (
                     Subterm::Apply(apply),
-                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_) | Prim::IoType(_))),
+                    Subterm::Intrinsic(
+                        rigid @ (Intrinsic::LstType(_)
+                        | Intrinsic::CellType(_)
+                        | Intrinsic::IoType(_)),
+                    ),
                 ) => {
-                    let rigid: Term = Subterm::Prim(rigid).into();
+                    let rigid: Term = Subterm::Intrinsic(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
                 }
                 (
-                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_) | Prim::IoType(_))),
+                    Subterm::Intrinsic(
+                        rigid @ (Intrinsic::LstType(_)
+                        | Intrinsic::CellType(_)
+                        | Intrinsic::IoType(_)),
+                    ),
                     Subterm::Apply(apply),
                 ) => {
-                    let rigid: Term = Subterm::Prim(rigid).into();
+                    let rigid: Term = Subterm::Intrinsic(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
                 }
                 (this_n, that_n) => {
@@ -2170,9 +2183,9 @@ impl Convert {
             };
 
             if !ok {
-                // A structural mismatch where a side is a primitive stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold the operation (`?m - 1` against `0` folds once `?m := 1` lands), which no structural rule anticipates. Park the goal instead of failing — rigid-head disagreements, which no solution can repair, still mismatch here. The goal leaves `history` so a retry after fresh progress is not skipped as already-handled.
-                if prim_blocked_on_metavar(context, &goal.this)
-                    || prim_blocked_on_metavar(context, &goal.that)
+                // A structural mismatch where a side is an intrinsic stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold the operation (`?m - 1` against `0` folds once `?m := 1` lands), which no structural rule anticipates. Park the goal instead of failing — rigid-head disagreements, which no solution can repair, still mismatch here. The goal leaves `history` so a retry after fresh progress is not skipped as already-handled.
+                if intrinsic_blocked_on_metavar(context, &goal.this)
+                    || intrinsic_blocked_on_metavar(context, &goal.that)
                 {
                     let key = self.history_key(context, &goal);
                     self.history.remove(&key);
@@ -2213,9 +2226,9 @@ fn as_metavar(term: &Term) -> Option<&Metavar> {
     }
 }
 
-/// `true` iff `term` — already in weak-head normal form, so a foldable literal would have folded — is a primitive operation still carrying an unsolved metavariable: the stuck-on-a-metavariable shape whose structural mismatches are undecided rather than definite.
-fn prim_blocked_on_metavar(context: &Context, term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(_))
+/// `true` iff `term` — already in weak-head normal form, so a foldable literal would have folded — is an intrinsic operation still carrying an unsolved metavariable: the stuck-on-a-metavariable shape whose structural mismatches are undecided rather than definite.
+fn intrinsic_blocked_on_metavar(context: &Context, term: &Term) -> bool {
+    matches!(&**term, Subterm::Intrinsic(_))
         && term
             .metavars()
             .iter()

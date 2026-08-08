@@ -21,7 +21,7 @@ fn global(path: &str) -> curios_core::Free {
 }
 
 fn nat_lit(n: usize) -> Term {
-    Term::prim(Prim::Nat(Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 fn definition(name: &str, type_: Term, body: Term) -> Item {
@@ -62,14 +62,14 @@ fn a_scalar_expression_erases_in_evaluation_order() {
     // let x = 2; x + 3
     let body = Term::let_(
         &x_binder,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         nat_lit(2),
-        Term::prim(Prim::nat_add(Term::free_var(&x_binder), nat_lit(3))),
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x_binder), nat_lit(3))),
     );
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -89,20 +89,20 @@ fn bool_and_byte_keep_their_shapes() {
     // Bool stays Bool-shaped and Byte stays Byte-shaped: no Nat carrier appears anywhere in the erased output.
     let body = Term::let_(
         &b,
-        Term::prim(Prim::BoolType),
-        Term::prim(Prim::BoolAnd(
-            Term::prim(Prim::Bool(true)),
-            Term::prim(Prim::Bool(false)),
+        Term::intrinsic(Intrinsic::BoolType),
+        Term::intrinsic(Intrinsic::BoolAnd(
+            Term::intrinsic(Intrinsic::Bool(true)),
+            Term::intrinsic(Intrinsic::Bool(false)),
         )),
-        Term::prim(Prim::ByteEql(
-            Term::prim(Prim::Byte(7)),
-            Term::prim(Prim::Byte(8)),
+        Term::intrinsic(Intrinsic::ByteEql(
+            Term::intrinsic(Intrinsic::Byte(7)),
+            Term::intrinsic(Intrinsic::Byte(8)),
         )),
     );
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::BoolType),
+        Term::intrinsic(Intrinsic::BoolType),
     );
     assert_eq!(
         erased.to_string(),
@@ -119,15 +119,19 @@ entry {
 #[test]
 fn a_nat_spine_over_a_variable_erases_to_one_addition() {
     let mut context = context();
-    let items = vec![definition("x", Term::prim(Prim::NatType), nat_lit(5))];
-    let body = Term::prim(Prim::Nat(Nat::Succ(
+    let items = vec![definition(
+        "x",
+        Term::intrinsic(Intrinsic::NatType),
+        nat_lit(5),
+    )];
+    let body = Term::intrinsic(Intrinsic::Nat(Nat::Succ(
         3u32.into(),
         Term::free_var(&global("x")),
     )));
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -147,15 +151,15 @@ fn items_erase_in_dominance_order() {
     let items = vec![
         definition(
             "a",
-            Term::prim(Prim::NatType),
-            Term::prim(Prim::nat_add(Term::free_var(&global("b")), nat_lit(1))),
+            Term::intrinsic(Intrinsic::NatType),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&global("b")), nat_lit(1))),
         ),
-        definition("b", Term::prim(Prim::NatType), nat_lit(2)),
+        definition("b", Term::intrinsic(Intrinsic::NatType), nat_lit(2)),
     ];
     let erased = erase(
         &mut context,
         &module(items, Term::free_var(&global("a"))),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -176,13 +180,13 @@ fn an_exit_seals_the_thunk_that_describes_it() {
     let body = Term::let_(
         &dead,
         Term::tuple_type_unit(),
-        Term::prim(Prim::ProcExit(nat_lit(3))),
+        Term::intrinsic(Intrinsic::ProcExit(nat_lit(3))),
         nat_lit(7),
     );
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -204,20 +208,20 @@ fn sequences_transcribe_without_carrier_choices() {
     let lst = context.fresh(Some("lst"));
     let body = Term::let_(
         &lst,
-        Term::prim(Prim::LstType(Term::prim(Prim::NatType))),
-        Term::prim(Prim::Lst(
-            Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::LstType(Term::intrinsic(Intrinsic::NatType))),
+        Term::intrinsic(Intrinsic::Lst(
+            Term::intrinsic(Intrinsic::NatType),
             vec![nat_lit(1), nat_lit(2)],
         )),
-        Term::prim(Prim::LstLen(
-            Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::LstLen(
+            Term::intrinsic(Intrinsic::NatType),
             Term::free_var(&lst),
         )),
     );
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -239,14 +243,14 @@ fn erasure_is_deterministic() {
     let build = |context: &mut Context| {
         let body = Term::let_(
             &x,
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             nat_lit(2),
-            Term::prim(Prim::nat_add(Term::free_var(&x), nat_lit(3))),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat_lit(3))),
         );
         erase(
             context,
             &module(Vec::new(), body),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
         )
         .to_string()
     };
@@ -323,12 +327,12 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
     )];
     let body = Term::apply(
         Term::free_var(&global("id")),
-        [Term::prim(Prim::NatType), nat_lit(4)],
+        [Term::intrinsic(Intrinsic::NatType), nat_lit(4)],
     );
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -352,10 +356,13 @@ fn a_capturing_closure_stores_no_capture_list() {
     let y_binder = context.fresh(Some("y"));
     // (y : Nat) => (x : Nat) => x + y — the inner closure references the outer parameter freely; analysis derives it, nothing is stored.
     let inner_type = Term::func_type(
-        [(x.clone(), Term::prim(Prim::NatType))],
-        Term::prim(Prim::NatType),
+        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        Term::intrinsic(Intrinsic::NatType),
     );
-    let outer_type = Term::func_type([(y_binder.clone(), Term::prim(Prim::NatType))], inner_type);
+    let outer_type = Term::func_type(
+        [(y_binder.clone(), Term::intrinsic(Intrinsic::NatType))],
+        inner_type,
+    );
     let items = vec![definition(
         "make",
         outer_type,
@@ -363,15 +370,18 @@ fn a_capturing_closure_stores_no_capture_list() {
             [(y_binder.clone(), Term::type_ground())],
             Term::func(
                 [(x.clone(), Term::type_ground())],
-                Term::prim(Prim::nat_add(Term::free_var(&x), Term::free_var(&y_binder))),
+                Term::intrinsic(Intrinsic::nat_add(
+                    Term::free_var(&x),
+                    Term::free_var(&y_binder),
+                )),
             ),
         ),
     )];
     let expected = Term::func_type(
-        [(y_binder.clone(), Term::prim(Prim::NatType))],
+        [(y_binder.clone(), Term::intrinsic(Intrinsic::NatType))],
         Term::func_type(
-            [(x.clone(), Term::prim(Prim::NatType))],
-            Term::prim(Prim::NatType),
+            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            Term::intrinsic(Intrinsic::NatType),
         ),
     );
     let erased = erase(
@@ -422,7 +432,7 @@ fn opt_induct() -> InductDecl {
                 Atom::from("some"),
                 InductParam {
                     telescope: Telescope::build(
-                        [(x.clone(), Term::prim(Prim::NatType))],
+                        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
                         Vec::new(),
                     ),
                     plicities: vec![Plicity::Explicit],
@@ -483,8 +493,8 @@ fn a_multi_field_tuple_shares_the_width_schema() {
     let b = context.fresh(Some("b"));
     let pair = context.fresh(Some("pair"));
     let tuple_type = Term::tuple_type([
-        (a.clone(), Term::prim(Prim::NatType)),
-        (b.clone(), Term::prim(Prim::NatType)),
+        (a.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (b.clone(), Term::intrinsic(Intrinsic::NatType)),
     ]);
     let body = Term::let_(
         &pair,
@@ -495,7 +505,7 @@ fn a_multi_field_tuple_shares_the_width_schema() {
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -518,7 +528,7 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
     let sub = context.fresh(Some("sub"));
     // { x : Nat, w : Prop-valued } erases to the bare Nat; its projection vanishes.
     let subset_type = Term::tuple_type([
-        (x.clone(), Term::prim(Prim::NatType)),
+        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
         (w.clone(), Term::prop()),
     ]);
     let body = Term::let_(
@@ -530,7 +540,7 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -546,16 +556,16 @@ entry {
 fn a_bool_match_erases_to_a_switch_bool() {
     let mut context = context();
     let body = Term::bool_match(
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
         None,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         nat_lit(10),
         nat_lit(20),
     );
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -581,11 +591,15 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
     let pred = context.fresh(Some("pred"));
     let ih = context.fresh(Some("ih"));
     // match n | 0 => 0 | succ pred (ih dead) => pred — a case split, not a fold.
-    let items = vec![definition("n", Term::prim(Prim::NatType), nat_lit(5))];
+    let items = vec![definition(
+        "n",
+        Term::intrinsic(Intrinsic::NatType),
+        nat_lit(5),
+    )];
     let body = Term::nat_match(
         Term::free_var(&global("n")),
         None,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         nat_lit(0),
         &pred,
         &ih,
@@ -594,7 +608,7 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -621,20 +635,24 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
     let pred = context.fresh(Some("pred"));
     let ih = context.fresh(Some("ih"));
     // match n | 0 => 0 | succ pred ih => ih + 2 — genuine induction.
-    let items = vec![definition("n", Term::prim(Prim::NatType), nat_lit(5))];
+    let items = vec![definition(
+        "n",
+        Term::intrinsic(Intrinsic::NatType),
+        nat_lit(5),
+    )];
     let body = Term::nat_match(
         Term::free_var(&global("n")),
         None,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         nat_lit(0),
         &pred,
         &ih,
-        Term::prim(Prim::nat_add(Term::free_var(&ih), nat_lit(2))),
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat_lit(2))),
     );
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -662,27 +680,30 @@ fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
     let t = context.fresh(Some("t"));
     let ih = context.fresh(Some("ih"));
     // match xs | [] => 0 | h :: t (ih) => ih + 1 — a length fold over a list.
-    let lst_ty = Term::prim(Prim::LstType(Term::prim(Prim::NatType)));
+    let lst_ty = Term::intrinsic(Intrinsic::LstType(Term::intrinsic(Intrinsic::NatType)));
     let items = vec![definition(
         "xs",
         lst_ty.clone(),
-        Term::prim(Prim::Lst(Term::prim(Prim::NatType), vec![nat_lit(1)])),
+        Term::intrinsic(Intrinsic::Lst(
+            Term::intrinsic(Intrinsic::NatType),
+            vec![nat_lit(1)],
+        )),
     )];
     let body = Term::lst_match(
         Term::free_var(&global("xs")),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         None,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         nat_lit(0),
         &h,
         &t,
         &ih,
-        Term::prim(Prim::nat_add(Term::free_var(&ih), nat_lit(1))),
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat_lit(1))),
     );
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -719,7 +740,7 @@ fn a_variant_match_binds_payload_without_projections() {
     let body = Term::induct_match(
         scrutinee,
         None,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<curios_core::Free>::new(), nat_lit(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
@@ -738,7 +759,7 @@ fn a_variant_match_binds_payload_without_projections() {
             type_: None,
             body,
         },
-        &Term::prim(Prim::NatType),
+        &Term::intrinsic(Intrinsic::NatType),
     )
     .expect("the module erases");
     assert_eq!(
@@ -772,15 +793,15 @@ fn an_effectful_scrutinee_is_erased_once() {
     let items = vec![definition(
         "read",
         Term::func_type(
-            [(x.clone(), Term::prim(Prim::NatType))],
-            Term::prim(Prim::NatType),
+            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            Term::intrinsic(Intrinsic::NatType),
         ),
         Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)),
     )];
     let body = Term::nat_match(
         io_read,
         None,
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         nat_lit(0),
         &pred,
         &ih,
@@ -789,7 +810,7 @@ fn an_effectful_scrutinee_is_erased_once() {
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     let printed = erased.to_string();
     assert_eq!(
@@ -806,8 +827,8 @@ fn a_recursive_function_group_erases_to_functions() {
     let f = context.fresh(Some("f"));
     // rec f(x) = f(x); body f(3)
     let func_type = Term::func_type(
-        [(x.clone(), Term::prim(Prim::NatType))],
-        Term::prim(Prim::NatType),
+        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        Term::intrinsic(Intrinsic::NatType),
     );
     let body = Term::rec(
         vec![(
@@ -823,7 +844,7 @@ fn a_recursive_function_group_erases_to_functions() {
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),
@@ -853,7 +874,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
             u.clone(),
             Term::tuple_type(Vec::<(curios_core::Free, Term)>::new()),
         )],
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     let body = Term::rec(
         vec![
@@ -896,7 +917,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
     // rec a = b; b = a — a mutual value-level cycle no initialization order satisfies. The verifier rejects it; erasure surfaces the diagnostic as an error, never a panic. (A *self*-knot `rec loop = loop` is admitted: the lowering drops it when unused, mirroring the legacy path.)
-    let type_ = Term::prim(Prim::NatType);
+    let type_ = Term::intrinsic(Intrinsic::NatType);
     let body = Term::rec(
         vec![
             (a.clone(), type_.clone(), Term::free_var(&b)),
@@ -917,8 +938,8 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let func_type = Term::func_type(
-        [(x.clone(), Term::prim(Prim::NatType))],
-        Term::prim(Prim::NatType),
+        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        Term::intrinsic(Intrinsic::NatType),
     );
     let items = vec![Item::Rec(RecItem::new(vec![Definition {
         name: Global::Authored(Qualifier::from(["go"])),
@@ -937,7 +958,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
     let erased = erase(
         &mut context,
         &module(items, body),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
         erased.to_string(),

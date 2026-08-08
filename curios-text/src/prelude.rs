@@ -1,7 +1,7 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Module, Name, Nat,
-        NatLiteral, Pattern, Prim, Subterm, Term, TopForeign, TopItem, TopLet, TopMod, TopUse,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, LetSignature, Module, Name,
+        Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem, TopLet, TopMod, TopUse,
         TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
@@ -9,53 +9,53 @@ use {
     std::sync::Arc,
 };
 
-// The `sys` module is the home of every primitive type and operation. It is built directly as `text` AST (never parsed) and prepended to every parsed `Entrypoint`, so primitives participate in the module system like any other binding. Bodies bake the `text::Prim::*` nodes in directly, so the prelude needs no internal name resolution.
+// The `sys` module is the home of every intrinsic type and operation. It is built directly as `text` AST (never parsed) and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the prelude needs no internal name resolution.
 
 fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
 }
 
-fn prim(p: Prim) -> Term {
-    Subterm::Prim(p).into()
+fn intrinsic(p: Intrinsic) -> Term {
+    Subterm::Intrinsic(p).into()
 }
 
 fn nat() -> Term {
-    prim(Prim::NatType)
+    intrinsic(Intrinsic::NatType)
 }
 
 fn byte() -> Term {
-    prim(Prim::ByteType)
+    intrinsic(Intrinsic::ByteType)
 }
 
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `poll`, and `mode`) into the `/sys/Handle` constant mirror.
 fn nat_lit(n: u32) -> Term {
     match n {
-        0 => prim(Prim::Nat(Nat::Zero)),
-        n => prim(Prim::Nat(Nat::Succ(
+        0 => intrinsic(Intrinsic::Nat(Nat::Zero)),
+        n => intrinsic(Intrinsic::Nat(Nat::Succ(
             NatLiteral::number(n),
-            prim(Prim::Nat(Nat::Zero)),
+            intrinsic(Intrinsic::Nat(Nat::Zero)),
         ))),
     }
 }
 
 fn int() -> Term {
-    prim(Prim::IntType)
+    intrinsic(Intrinsic::IntType)
 }
 
 fn flt() -> Term {
-    prim(Prim::FltType)
+    intrinsic(Intrinsic::FltType)
 }
 
 fn bin(grain: Grain) -> Term {
-    prim(Prim::BinType(grain))
+    intrinsic(Intrinsic::BinType(grain))
 }
 
 fn bool_() -> Term {
-    prim(Prim::BoolType)
+    intrinsic(Intrinsic::BoolType)
 }
 
 fn handle() -> Term {
-    prim(Prim::HandleType)
+    intrinsic(Intrinsic::HandleType)
 }
 
 fn unit() -> Term {
@@ -77,10 +77,10 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
 }
 
 fn lst_of(elem: Term) -> Term {
-    prim(Prim::LstType(elem))
+    intrinsic(Intrinsic::LstType(elem))
 }
 
-// A single-argument function type `(domain) -> output`, for higher-order primitives (the `f` of `Lst/map`).
+// A single-argument function type `(domain) -> output`, for higher-order intrinsics (the `f` of `Lst/map`).
 fn fn_of(domain: Term, output: Term) -> Term {
     Subterm::FuncType(FuncType {
         params: vec![FuncTypeParam {
@@ -94,11 +94,11 @@ fn fn_of(domain: Term, output: Term) -> Term {
 }
 
 fn cell_of(elem: Term) -> Term {
-    prim(Prim::CellType(elem))
+    intrinsic(Intrinsic::CellType(elem))
 }
 
 fn io_of(result: Term) -> Term {
-    prim(Prim::IoType(result))
+    intrinsic(Intrinsic::IoType(result))
 }
 
 fn type_() -> Term {
@@ -134,7 +134,7 @@ fn pub_use(label: &str) -> TopItem {
     })
 }
 
-// A primitive module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
+// An intrinsic module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
 fn with_type(type_decl: TopItem, mut ops: Vec<TopItem>) -> Vec<TopItem> {
     let mut items = vec![type_decl];
     items.append(&mut ops);
@@ -199,7 +199,7 @@ fn wire_type(type_: &WireType) -> Term {
     }
 }
 
-/// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` prim applied to the parameter names. Used both for the builtin store's rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
+/// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` intrinsic applied to the parameter names. Used both for the builtin store's rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
 ///
 /// The result is an `Io`, and this one site is what makes that true of every row the store describes — a user's own `foreign` declaration included, since a call across the wire is a host effect whoever declared it. The wire contract does not move: `curios-abi` describes the same shapes and only the guest-facing type changes, so a multi-result row reads `Io({status : Nat, bytes : Bytes})` with the record still inside the wrapper.
 ///
@@ -271,17 +271,22 @@ pub(crate) fn foreign_signature(
     host_fn(&Arc::new(function), declaration.vis_pub).signature
 }
 
-fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {
+fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Intrinsic) -> TopItem {
     pub_fn(
         label,
         vec![("a", operand.clone()), ("b", operand)],
         output,
-        prim(ctor(name("a"), name("b"))),
+        intrinsic(ctor(name("a"), name("b"))),
     )
 }
 
-fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Prim) -> TopItem {
-    pub_fn(label, vec![("a", input)], output, prim(ctor(name("a"))))
+fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Intrinsic) -> TopItem {
+    pub_fn(
+        label,
+        vec![("a", input)],
+        output,
+        intrinsic(ctor(name("a"))),
+    )
 }
 
 fn nat_succ() -> TopItem {
@@ -289,117 +294,120 @@ fn nat_succ() -> TopItem {
         "succ",
         vec![("a", nat())],
         nat(),
-        prim(Prim::Nat(Nat::Succ(NatLiteral::number(1usize), name("a")))),
+        intrinsic(Intrinsic::Nat(Nat::Succ(
+            NatLiteral::number(1usize),
+            name("a"),
+        ))),
     )
 }
 
 fn nat_ops() -> Vec<TopItem> {
     vec![
         nat_succ(),
-        binary("eql", nat(), bool_(), Prim::NatEql),
-        binary("neq", nat(), bool_(), Prim::NatNeq),
-        binary("add", nat(), nat(), Prim::NatAdd),
-        binary("sub", nat(), nat(), Prim::NatSub),
-        binary("mul", nat(), nat(), Prim::NatMul),
-        binary("div", nat(), nat(), Prim::NatDiv),
-        binary("rem", nat(), nat(), Prim::NatRem),
-        binary("lt", nat(), bool_(), Prim::NatLt),
-        binary("gt", nat(), bool_(), Prim::NatGt),
-        binary("lte", nat(), bool_(), Prim::NatLte),
-        binary("gte", nat(), bool_(), Prim::NatGte),
-        binary("and", nat(), nat(), Prim::NatAnd),
-        binary("or", nat(), nat(), Prim::NatOr),
-        binary("xor", nat(), nat(), Prim::NatXor),
-        binary("shl", nat(), nat(), Prim::NatShl),
-        binary("shr", nat(), nat(), Prim::NatShr),
-        binary("rotl", nat(), nat(), Prim::NatRotl),
-        binary("rotr", nat(), nat(), Prim::NatRotr),
-        unary("clz", nat(), nat(), Prim::NatClz),
-        unary("ctz", nat(), nat(), Prim::NatCtz),
-        unary("popcnt", nat(), nat(), Prim::NatPopcnt),
-        unary("to_int", nat(), int(), Prim::NatToInt),
-        unary("to_flt", nat(), flt(), Prim::NatToFlt),
-        unary("to_byte", nat(), byte(), Prim::NatToByte),
+        binary("eql", nat(), bool_(), Intrinsic::NatEql),
+        binary("neq", nat(), bool_(), Intrinsic::NatNeq),
+        binary("add", nat(), nat(), Intrinsic::NatAdd),
+        binary("sub", nat(), nat(), Intrinsic::NatSub),
+        binary("mul", nat(), nat(), Intrinsic::NatMul),
+        binary("div", nat(), nat(), Intrinsic::NatDiv),
+        binary("rem", nat(), nat(), Intrinsic::NatRem),
+        binary("lt", nat(), bool_(), Intrinsic::NatLt),
+        binary("gt", nat(), bool_(), Intrinsic::NatGt),
+        binary("lte", nat(), bool_(), Intrinsic::NatLte),
+        binary("gte", nat(), bool_(), Intrinsic::NatGte),
+        binary("and", nat(), nat(), Intrinsic::NatAnd),
+        binary("or", nat(), nat(), Intrinsic::NatOr),
+        binary("xor", nat(), nat(), Intrinsic::NatXor),
+        binary("shl", nat(), nat(), Intrinsic::NatShl),
+        binary("shr", nat(), nat(), Intrinsic::NatShr),
+        binary("rotl", nat(), nat(), Intrinsic::NatRotl),
+        binary("rotr", nat(), nat(), Intrinsic::NatRotr),
+        unary("clz", nat(), nat(), Intrinsic::NatClz),
+        unary("ctz", nat(), nat(), Intrinsic::NatCtz),
+        unary("popcnt", nat(), nat(), Intrinsic::NatPopcnt),
+        unary("to_int", nat(), int(), Intrinsic::NatToInt),
+        unary("to_flt", nat(), flt(), Intrinsic::NatToFlt),
+        unary("to_byte", nat(), byte(), Intrinsic::NatToByte),
     ]
 }
 
 fn byte_ops() -> Vec<TopItem> {
     vec![
-        unary("to_nat", byte(), nat(), Prim::ByteToNat),
-        binary("eql", byte(), bool_(), Prim::ByteEql),
-        binary("lt", byte(), bool_(), Prim::ByteLt),
-        binary("lte", byte(), bool_(), Prim::ByteLte),
-        binary("gt", byte(), bool_(), Prim::ByteGt),
-        binary("gte", byte(), bool_(), Prim::ByteGte),
+        unary("to_nat", byte(), nat(), Intrinsic::ByteToNat),
+        binary("eql", byte(), bool_(), Intrinsic::ByteEql),
+        binary("lt", byte(), bool_(), Intrinsic::ByteLt),
+        binary("lte", byte(), bool_(), Intrinsic::ByteLte),
+        binary("gt", byte(), bool_(), Intrinsic::ByteGt),
+        binary("gte", byte(), bool_(), Intrinsic::ByteGte),
     ]
 }
 
-// `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single bit, so all four are primitives rather than `match` definitions. `not` has no machine instruction; `/std/Bool` defines it as `xor(b, true)`.
+// `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single bit, so all four are intrinsics rather than `match` definitions. `not` has no machine instruction; `/std/Bool` defines it as `xor(b, true)`.
 fn bool_ops() -> Vec<TopItem> {
     vec![
-        binary("and", bool_(), bool_(), Prim::BoolAnd),
-        binary("or", bool_(), bool_(), Prim::BoolOr),
-        binary("xor", bool_(), bool_(), Prim::BoolXor),
-        binary("eql", bool_(), bool_(), Prim::BoolEql),
+        binary("and", bool_(), bool_(), Intrinsic::BoolAnd),
+        binary("or", bool_(), bool_(), Intrinsic::BoolOr),
+        binary("xor", bool_(), bool_(), Intrinsic::BoolXor),
+        binary("eql", bool_(), bool_(), Intrinsic::BoolEql),
     ]
 }
 
 fn int_ops() -> Vec<TopItem> {
     vec![
-        binary("eql", int(), bool_(), Prim::IntEql),
-        binary("neq", int(), bool_(), Prim::IntNeq),
-        binary("add", int(), int(), Prim::IntAdd),
-        binary("sub", int(), int(), Prim::IntSub),
-        binary("mul", int(), int(), Prim::IntMul),
-        binary("div", int(), int(), Prim::IntDiv),
-        binary("rem", int(), int(), Prim::IntRem),
-        binary("lt", int(), bool_(), Prim::IntLt),
-        binary("gt", int(), bool_(), Prim::IntGt),
-        binary("lte", int(), bool_(), Prim::IntLte),
-        binary("gte", int(), bool_(), Prim::IntGte),
+        binary("eql", int(), bool_(), Intrinsic::IntEql),
+        binary("neq", int(), bool_(), Intrinsic::IntNeq),
+        binary("add", int(), int(), Intrinsic::IntAdd),
+        binary("sub", int(), int(), Intrinsic::IntSub),
+        binary("mul", int(), int(), Intrinsic::IntMul),
+        binary("div", int(), int(), Intrinsic::IntDiv),
+        binary("rem", int(), int(), Intrinsic::IntRem),
+        binary("lt", int(), bool_(), Intrinsic::IntLt),
+        binary("gt", int(), bool_(), Intrinsic::IntGt),
+        binary("lte", int(), bool_(), Intrinsic::IntLte),
+        binary("gte", int(), bool_(), Intrinsic::IntGte),
         // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
-        binary("and", int(), int(), Prim::IntAnd),
-        binary("or", int(), int(), Prim::IntOr),
-        binary("xor", int(), int(), Prim::IntXor),
-        binary("shl", int(), int(), Prim::IntShl),
-        binary("shr", int(), int(), Prim::IntShr),
-        binary("rotl", int(), int(), Prim::IntRotl),
-        binary("rotr", int(), int(), Prim::IntRotr),
-        unary("clz", int(), int(), Prim::IntClz),
-        unary("ctz", int(), int(), Prim::IntCtz),
-        unary("popcnt", int(), int(), Prim::IntPopcnt),
-        unary("to_nat", int(), nat(), Prim::IntToNat),
-        unary("to_flt", int(), flt(), Prim::IntToFlt),
+        binary("and", int(), int(), Intrinsic::IntAnd),
+        binary("or", int(), int(), Intrinsic::IntOr),
+        binary("xor", int(), int(), Intrinsic::IntXor),
+        binary("shl", int(), int(), Intrinsic::IntShl),
+        binary("shr", int(), int(), Intrinsic::IntShr),
+        binary("rotl", int(), int(), Intrinsic::IntRotl),
+        binary("rotr", int(), int(), Intrinsic::IntRotr),
+        unary("clz", int(), int(), Intrinsic::IntClz),
+        unary("ctz", int(), int(), Intrinsic::IntCtz),
+        unary("popcnt", int(), int(), Intrinsic::IntPopcnt),
+        unary("to_nat", int(), nat(), Intrinsic::IntToNat),
+        unary("to_flt", int(), flt(), Intrinsic::IntToFlt),
     ]
 }
 
 fn flt_ops() -> Vec<TopItem> {
     vec![
-        binary("add", flt(), flt(), Prim::FltAdd),
-        binary("sub", flt(), flt(), Prim::FltSub),
-        binary("mul", flt(), flt(), Prim::FltMul),
-        binary("div", flt(), flt(), Prim::FltDiv),
-        binary("rem", flt(), flt(), Prim::FltRem),
-        binary("min", flt(), flt(), Prim::FltMin),
-        binary("max", flt(), flt(), Prim::FltMax),
-        binary("eql", flt(), bool_(), Prim::FltEql),
-        binary("neq", flt(), bool_(), Prim::FltNeq),
-        binary("lt", flt(), bool_(), Prim::FltLt),
-        binary("gt", flt(), bool_(), Prim::FltGt),
-        binary("lte", flt(), bool_(), Prim::FltLte),
-        binary("gte", flt(), bool_(), Prim::FltGte),
-        unary("neg", flt(), flt(), Prim::FltNeg),
-        unary("abs", flt(), flt(), Prim::FltAbs),
-        unary("sqrt", flt(), flt(), Prim::FltSqrt),
-        unary("floor", flt(), flt(), Prim::FltFloor),
-        unary("ceil", flt(), flt(), Prim::FltCeil),
-        unary("trunc", flt(), flt(), Prim::FltTrunc),
-        unary("nearest", flt(), flt(), Prim::FltNearest),
-        binary("copysign", flt(), flt(), Prim::FltCopysign),
-        unary("to_nat", flt(), nat(), Prim::FltToNat),
-        unary("to_int", flt(), int(), Prim::FltToInt),
-        unary("to_le_bytes", flt(), bin(Grain::X), Prim::FltToLeBytes),
-        unary("of_le_bytes", bin(Grain::X), flt(), Prim::FltOfLeBytes),
+        binary("add", flt(), flt(), Intrinsic::FltAdd),
+        binary("sub", flt(), flt(), Intrinsic::FltSub),
+        binary("mul", flt(), flt(), Intrinsic::FltMul),
+        binary("div", flt(), flt(), Intrinsic::FltDiv),
+        binary("rem", flt(), flt(), Intrinsic::FltRem),
+        binary("min", flt(), flt(), Intrinsic::FltMin),
+        binary("max", flt(), flt(), Intrinsic::FltMax),
+        binary("eql", flt(), bool_(), Intrinsic::FltEql),
+        binary("neq", flt(), bool_(), Intrinsic::FltNeq),
+        binary("lt", flt(), bool_(), Intrinsic::FltLt),
+        binary("gt", flt(), bool_(), Intrinsic::FltGt),
+        binary("lte", flt(), bool_(), Intrinsic::FltLte),
+        binary("gte", flt(), bool_(), Intrinsic::FltGte),
+        unary("neg", flt(), flt(), Intrinsic::FltNeg),
+        unary("abs", flt(), flt(), Intrinsic::FltAbs),
+        unary("sqrt", flt(), flt(), Intrinsic::FltSqrt),
+        unary("floor", flt(), flt(), Intrinsic::FltFloor),
+        unary("ceil", flt(), flt(), Intrinsic::FltCeil),
+        unary("trunc", flt(), flt(), Intrinsic::FltTrunc),
+        unary("nearest", flt(), flt(), Intrinsic::FltNearest),
+        binary("copysign", flt(), flt(), Intrinsic::FltCopysign),
+        unary("to_nat", flt(), nat(), Intrinsic::FltToNat),
+        unary("to_int", flt(), int(), Intrinsic::FltToInt),
+        unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
+        unary("of_le_bytes", bin(Grain::X), flt(), Intrinsic::FltOfLeBytes),
     ]
 }
 
@@ -414,37 +422,37 @@ fn bin_ops(grain: Grain) -> Vec<TopItem> {
             "len",
             vec![("b", type_.clone())],
             nat(),
-            prim(Prim::BinLen(grain, name("b"))),
+            intrinsic(Intrinsic::BinLen(grain, name("b"))),
         ),
         pub_fn(
             "eql",
             vec![("a", type_.clone()), ("b", type_.clone())],
             bool_(),
-            prim(Prim::BinEql(grain, name("a"), name("b"))),
+            intrinsic(Intrinsic::BinEql(grain, name("a"), name("b"))),
         ),
         pub_fn(
             "get",
             vec![("b", type_.clone()), ("i", nat())],
             atom.clone(),
-            prim(Prim::BinGet(grain, name("b"), name("i"))),
+            intrinsic(Intrinsic::BinGet(grain, name("b"), name("i"))),
         ),
         pub_fn(
             "slice",
             vec![("b", type_.clone()), ("s", nat()), ("e", nat())],
             type_.clone(),
-            prim(Prim::BinSlice(grain, name("b"), name("s"), name("e"))),
+            intrinsic(Intrinsic::BinSlice(grain, name("b"), name("s"), name("e"))),
         ),
         pub_fn(
             "append",
             vec![("b", type_.clone()), ("x", atom)],
             type_.clone(),
-            prim(Prim::BinAppend(grain, name("b"), name("x"))),
+            intrinsic(Intrinsic::BinAppend(grain, name("b"), name("x"))),
         ),
         pub_fn(
             "concat",
             vec![("a", type_.clone()), ("b", type_.clone())],
             type_,
-            prim(Prim::BinConcat(grain, name("a"), name("b"))),
+            intrinsic(Intrinsic::BinConcat(grain, name("a"), name("b"))),
         ),
     ]
 }
@@ -458,7 +466,7 @@ fn lst_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "a", lst_of(name("T"))),
             ],
             nat(),
-            prim(Prim::LstLen(name("T"), name("a"))),
+            intrinsic(Intrinsic::LstLen(name("T"), name("a"))),
         ),
         pub_fn_marked(
             "get",
@@ -468,7 +476,7 @@ fn lst_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "i", nat()),
             ],
             name("T"),
-            prim(Prim::LstGet(name("T"), name("a"), name("i"))),
+            intrinsic(Intrinsic::LstGet(name("T"), name("a"), name("i"))),
         ),
         pub_fn_marked(
             "slice",
@@ -479,7 +487,12 @@ fn lst_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "e", nat()),
             ],
             lst_of(name("T")),
-            prim(Prim::LstSlice(name("T"), name("a"), name("s"), name("e"))),
+            intrinsic(Intrinsic::LstSlice(
+                name("T"),
+                name("a"),
+                name("s"),
+                name("e"),
+            )),
         ),
         pub_fn_marked(
             "append",
@@ -489,7 +502,7 @@ fn lst_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "x", name("T")),
             ],
             lst_of(name("T")),
-            prim(Prim::LstAppend(name("T"), name("a"), name("x"))),
+            intrinsic(Intrinsic::LstAppend(name("T"), name("a"), name("x"))),
         ),
         pub_fn_marked(
             "concat",
@@ -499,7 +512,7 @@ fn lst_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "b", lst_of(name("T"))),
             ],
             lst_of(name("T")),
-            prim(Prim::LstConcat(name("T"), name("a"), name("b"))),
+            intrinsic(Intrinsic::LstConcat(name("T"), name("a"), name("b"))),
         ),
         pub_fn_marked(
             "map",
@@ -510,7 +523,12 @@ fn lst_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
             ],
             lst_of(name("B")),
-            prim(Prim::LstMap(name("A"), name("B"), name("a"), name("f"))),
+            intrinsic(Intrinsic::LstMap(
+                name("A"),
+                name("B"),
+                name("a"),
+                name("f"),
+            )),
         ),
     ]
 }
@@ -525,7 +543,7 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "x", name("T")),
             ],
             io_of(cell_of(name("T"))),
-            prim(Prim::Cell(name("T"), name("x"))),
+            intrinsic(Intrinsic::Cell(name("T"), name("x"))),
         ),
         pub_fn_marked(
             "set",
@@ -535,7 +553,7 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "v", name("T")),
             ],
             io_of(unit()),
-            prim(Prim::CellSet(name("T"), name("c"), name("v"))),
+            intrinsic(Intrinsic::CellSet(name("T"), name("c"), name("v"))),
         ),
         pub_fn_marked(
             "get",
@@ -544,7 +562,7 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "c", cell_of(name("T"))),
             ],
             io_of(name("T")),
-            prim(Prim::CellGet(name("T"), name("c"))),
+            intrinsic(Intrinsic::CellGet(name("T"), name("c"))),
         ),
     ]
 }
@@ -559,7 +577,7 @@ fn io_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "x", name("T")),
             ],
             io_of(name("T")),
-            prim(Prim::IoPure(name("T"), name("x"))),
+            intrinsic(Intrinsic::IoPure(name("T"), name("x"))),
         ),
         pub_fn_marked(
             "bind",
@@ -570,7 +588,12 @@ fn io_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "f", fn_of(name("A"), io_of(name("B")))),
             ],
             io_of(name("B")),
-            prim(Prim::IoBind(name("A"), name("B"), name("m"), name("f"))),
+            intrinsic(Intrinsic::IoBind(
+                name("A"),
+                name("B"),
+                name("m"),
+                name("f"),
+            )),
         ),
     ]
 }
@@ -578,14 +601,26 @@ fn io_ops() -> Vec<TopItem> {
 // The values and operations of the `/sys/Handle` type: the three standard streams, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `poll`, `close`), which join their type module rather than open one of their own.
 fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
     let mut items = vec![
-        pub_let("stdin", handle(), prim(Prim::Handle(stdio::STDIN))),
-        pub_let("stdout", handle(), prim(Prim::Handle(stdio::STDOUT))),
-        pub_let("stderr", handle(), prim(Prim::Handle(stdio::STDERR))),
+        pub_let(
+            "stdin",
+            handle(),
+            intrinsic(Intrinsic::Handle(stdio::STDIN)),
+        ),
+        pub_let(
+            "stdout",
+            handle(),
+            intrinsic(Intrinsic::Handle(stdio::STDOUT)),
+        ),
+        pub_let(
+            "stderr",
+            handle(),
+            intrinsic(Intrinsic::Handle(stdio::STDERR)),
+        ),
         pub_fn(
             "eql",
             vec![("a", handle()), ("b", handle())],
             bool_(),
-            prim(Prim::HandleEql(name("a"), name("b"))),
+            intrinsic(Intrinsic::HandleEql(name("a"), name("b"))),
         ),
     ];
 
@@ -593,7 +628,7 @@ fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
     items
 }
 
-// Every store-described host op, grouped by the `/sys` module its own row names as its subject — groups in the order their first row appears, rows within a group in store order. The grouping is read off the rows rather than listed here, so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful prim body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
+// Every store-described host op, grouped by the `/sys` module its own row names as its subject — groups in the order their first row appears, rows within a group in store order. The grouping is read off the rows rather than listed here, so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
 fn host_subjects(foreigns: &ForeignStore) -> Vec<(String, Vec<TopItem>)> {
     let mut subjects: Vec<(String, Vec<TopItem>)> = vec![];
 
@@ -628,13 +663,13 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     let mut items = subjects
         .into_iter()
         .map(|(subject, mut ops)| {
-            // `exit` is `Prim::ProcExit` rather than a store row — it traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it is placed by hand in the module its subject already opened. `(n : Nat) -> Io({})`: the result inside the wrapper is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge. An `Io`-polymorphic bottom is arguably sound now that no eliminator can extract the result, but it reopens a settled decision for no consumer.
+            // `exit` is `Intrinsic::ProcExit` rather than a store row — it traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it is placed by hand in the module its subject already opened. `(n : Nat) -> Io({})`: the result inside the wrapper is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge. An `Io`-polymorphic bottom is arguably sound now that no eliminator can extract the result, but it reopens a settled decision for no consumer.
             if subject == "proc" {
                 ops.push(pub_fn_marked(
                     "exit",
                     vec![(Plicity::Explicit, "n", nat())],
                     io_of(unit()),
-                    prim(Prim::ProcExit(name("n"))),
+                    intrinsic(Intrinsic::ProcExit(name("n"))),
                 ));
             }
 

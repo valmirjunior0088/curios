@@ -1,20 +1,20 @@
 //! Construction conveniences for the core representation, owned by the stage that exists to make building terms pleasant.
 //!
-//! Extension traits keep every call site spelling what it always spelled — `Prim::flt_add(…)`, `Term::struct_at(…)` — under a plain trait import (`use curios_elab::PrimBuilders;`). The representation crate keeps only the constructors its own fold table and the certifier name; everything that exists purely so a lowering or an elaborator reads well lives here.
+//! Extension traits keep every call site spelling what it always spelled — `Intrinsic::flt_add(…)`, `Term::struct_at(…)` — under a plain trait import (`use curios_elab::IntrinsicBuilders;`). The representation crate keeps only the constructors its own fold table and the certifier name; everything that exists purely so a lowering or an elaborator reads well lives here.
 
 use {
     curios_base::NumOp,
     curios_core::{
-        Apply, Bang, Free, Func, FuncType, Global, Infix, Level, Many, MetaId, Metavar,
-        MetavarOrigin, NumLit, Prim, Scope, Struct, StructEntry, StructType, Subterm, Term,
-        Transient, Tuple,
+        Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, MetaId, Metavar,
+        MetavarOrigin, NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient,
+        Tuple,
     },
     num_bigint::BigUint,
     std::rc::Rc,
 };
 
-/// Constructors for [`Prim`] operations no judgment ever builds.
-pub trait PrimBuilders {
+/// Constructors for [`Intrinsic`] operations no judgment ever builds.
+pub trait IntrinsicBuilders {
     /// An `HandleEql` node — handle identity, the one pure `Handle` operation — from anything term-shaped.
     fn io_eql<F, S>(left: F, right: S) -> Self
     where
@@ -246,7 +246,7 @@ pub trait PrimBuilders {
     where
         T: Into<Term>;
 
-    /// A cell allocation — the `Prim::Cell` variant — from a term-shaped element type and initial value.
+    /// A cell allocation — the `Intrinsic::Cell` variant — from a term-shaped element type and initial value.
     fn cell_new<T, I>(type_: T, init: I) -> Self
     where
         T: Into<Term>,
@@ -266,7 +266,7 @@ pub trait PrimBuilders {
         C: Into<Term>;
 }
 
-impl PrimBuilders for Prim {
+impl IntrinsicBuilders for Intrinsic {
     fn io_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -629,7 +629,7 @@ pub trait TermBuilders {
     where
         M: Into<Term>;
 
-    /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` primitive by `elaborate_numlit`.
+    /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_numlit`.
     fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self;
 
     /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.

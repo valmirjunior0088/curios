@@ -1,6 +1,6 @@
 //! De Bruijn machinery for the `core` stage's terms.
 //!
-//! `Scope`, `Telescope`, `Var`, the `Bound` traversal trait, and the `Visit` driver operate over `core`'s `Term` and `Subterm`. `core` keeps its own `Subterm::traverse` (the big structural match, including its primitives) and plugs it into this machinery by implementing `Bound`.
+//! `Scope`, `Telescope`, `Var`, the `Bound` traversal trait, and the `Visit` driver operate over `core`'s `Term` and `Subterm`. `core` keeps its own `Subterm::traverse` (the big structural match, including its intrinsics) and plugs it into this machinery by implementing `Bound`.
 
 use {
     super::{
@@ -170,7 +170,7 @@ impl Var {
 
 /// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); everything else here — `shift`, `capture`, `release`, `free_vars` — is derived from `traverse` alone.
 pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
-    /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single primitive the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
+    /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single intrinsic the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>;

@@ -458,7 +458,7 @@ fn utf8_inductive_spike() {
 
 #[test]
 fn utf8_construction_spike() {
-    // DE-RISKING PROBE 2 (Str migration), the CONSTRUCTING side: the `of_bin` checker must BUILD a derivation whose index matches the input `Bytes`, by native-`Bytes` recursion. That needs the native eliminator's motive to be DEPENDENT — refining `b` to `cons(h, t)` in the cons arm so the arm can return `P(cons h t)` from `ih : P(t)`. Probe with the trivial all-accepting relation `All` built by induction on `b`. If this typechecks, the checker is expressible (real decision-procedure work, but no missing primitive).
+    // DE-RISKING PROBE 2 (Str migration), the CONSTRUCTING side: the `of_bin` checker must BUILD a derivation whose index matches the input `Bytes`, by native-`Bytes` recursion. That needs the native eliminator's motive to be DEPENDENT — refining `b` to `cons(h, t)` in the cons arm so the arm can return `P(cons h t)` from `ih : P(t)`. Probe with the trivial all-accepting relation `All` built by induction on `b`. If this typechecks, the checker is expressible (real decision-procedure work, but no missing intrinsic).
     let source = r#"
         use /std/{Handle, Str, Nat, Bytes};
 

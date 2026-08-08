@@ -444,9 +444,9 @@ fn higher_kinded_superclass_projects() {
     assert_eq!(run(source), b"11");
 }
 
-// `Prim`-headed type constructors (`Lst`, `Cell`) carry their argument inside the `Prim` node; the imitation rule rebuilds the node over the binder (`?M := λT. Lst(T)`), so `Monad/bind` over an `Lst` pins the witness from the action's type like any nominal constructor would.
+// `Intrinsic`-headed type constructors (`Lst`, `Cell`) carry their argument inside the `Intrinsic` node; the imitation rule rebuilds the node over the binder (`?M := λT. Lst(T)`), so `Monad/bind` over an `Lst` pins the witness from the action's type like any nominal constructor would.
 #[test]
-fn monad_over_prim_constructor_resolves_by_imitation() {
+fn monad_over_intrinsic_constructor_resolves_by_imitation() {
     let source = r#"
         use /std/{Nat, Lst, Handle, Str, Monad};
         let a : Lst(Nat) = [1];
@@ -457,7 +457,7 @@ fn monad_over_prim_constructor_resolves_by_imitation() {
     assert_eq!(run(source), b"1");
 }
 
-// The syn-homed operator concepts: `Add/add` resolves on a primitive type through the `/std` witness (also proving the cached-prelude replay path registers the syn concepts and std witnesses), on a user struct through a user witness, and in generic code through a local `use Add(A)` premise.
+// The syn-homed operator concepts: `Add/add` resolves on an intrinsic type through the `/std` witness (also proving the cached-prelude replay path registers the syn concepts and std witnesses), on a user struct through a user witness, and in generic code through a local `use Add(A)` premise.
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
@@ -475,9 +475,9 @@ fn syn_add_concept_resolves_everywhere() {
     assert_eq!(run(source), b"27");
 }
 
-// `Eql` and `Cmp` resolve across primitives with the witnesses now homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
+// `Eql` and `Cmp` resolve across intrinsics with the witnesses now homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
 #[test]
-fn eql_and_cmp_resolve_across_primitives() {
+fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"
         use /std/{Nat, Flt, Bool, Handle, Str, Eql, Cmp};
         let a : Bool = Eql/eql(2, 2);

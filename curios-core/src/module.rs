@@ -29,7 +29,7 @@ use {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum Totality {
-    /// Every recursive group this definition contains descends, it does not mention `Prim::ProcExit`, and neither does anything it reaches.
+    /// Every recursive group this definition contains descends, it does not mention `Intrinsic::ProcExit`, and neither does anything it reaches.
     Total,
     /// Not proven total. The conservative default: a definition whose classification is unknown is `Partial`, never `Total`.
     #[default]

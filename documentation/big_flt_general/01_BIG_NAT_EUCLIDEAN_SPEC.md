@@ -90,7 +90,7 @@ Do not expose implementation-specific quotient-digit state in public theorem sta
 
 - Signed Euclidean division conventions for `BigInt`.
 - Extended GCD or Bézout coefficients unless a proof route demonstrates they are necessary.
-- Prime factorization, primality, modular exponentiation, or cryptographic constant-time behavior.
+- Intrinsice factorization, primality, modular exponentiation, or cryptographic constant-time behavior.
 - Rational storage or any `BigFlt` representation change.
 - Native `Nat`, `Int`, or `Flt` arithmetic laws.
 

@@ -118,7 +118,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
 }
 
-// TLS client (Stage A): `Socket/with` with `tls = true` upgrades the connected socket via `start_tls` before the body runs. The mock host serves the scripted endpoint cleartext (no real handshake under test), so the upgrade is a no-op identity and the round-trip still succeeds — exercising the wiring, types, and prim threading end to end through codegen.
+// TLS client (Stage A): `Socket/with` with `tls = true` upgrades the connected socket via `start_tls` before the body runs. The mock host serves the scripted endpoint cleartext (no real handshake under test), so the upgrade is a no-op identity and the round-trip still succeeds — exercising the wiring, types, and intrinsic threading end to end through codegen.
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"

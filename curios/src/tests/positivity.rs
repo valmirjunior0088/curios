@@ -89,9 +89,9 @@ fn a_mutually_recursive_group_reaching_itself_through_a_thunk_is_admitted() {
     assert_eq!(run(source), b"mutual");
 }
 
-// `Json/arr(Lst(Json))`: a list is a finite product of its element, so the primitive is covariant and a strict occurrence stays strict. Without polarity on primitives this shape is rejected outright.
+// `Json/arr(Lst(Json))`: a list is a finite product of its element, so the intrinsic is covariant and a strict occurrence stays strict. Without polarity on intrinsics this shape is rejected outright.
 #[test]
-fn recursion_through_a_covariant_primitive_is_admitted() {
+fn recursion_through_a_covariant_intrinsic_is_admitted() {
     let source = r#"
         use /std/{Lst};
 
@@ -110,7 +110,7 @@ fn recursion_through_a_covariant_primitive_is_admitted() {
     assert_eq!(run(source), b"listed");
 }
 
-// `Json/obj(Lst({Str, Json}))`: polarity has to travel through an anonymous tuple type as well as the primitive, since a product is as positive as its factors.
+// `Json/obj(Lst({Str, Json}))`: polarity has to travel through an anonymous tuple type as well as the intrinsic, since a product is as positive as its factors.
 #[test]
 fn recursion_through_an_anonymous_tuple_is_admitted() {
     let source = r#"
@@ -429,7 +429,7 @@ fn a_negative_struct_field_is_rejected() {
 
 // `Cell` is invariant — it is read *and* written — so nothing recursive may travel through one, even though the occurrence looks like a plain payload.
 #[test]
-fn recursion_through_an_invariant_primitive_is_rejected() {
+fn recursion_through_an_invariant_intrinsic_is_rejected() {
     rejected(
         r#"
         use /std/{Cell};

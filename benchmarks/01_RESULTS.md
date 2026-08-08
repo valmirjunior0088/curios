@@ -64,7 +64,7 @@ Node's `trees` row wandered from 189.1 to 293.8 ms. It belongs in the orientatio
 
 ## The part I did not expect to survive intact
 
-**The integer loop barely moved.** Curios went from 446.1 to 454.6 ms in the native table and from 444.6 to 453.0 ms in the wasm table: 1.9% in both cases. That is noise-sized movement beside the amount of language built around it. Every infix operator in the source now travels through the language's concept system before specialization brings primitive arithmetic back into view, yet the hot loop remains almost exactly 2× native Rust and 1.7× Rust → wasm.
+**The integer loop barely moved.** Curios went from 446.1 to 454.6 ms in the native table and from 444.6 to 453.0 ms in the wasm table: 1.9% in both cases. That is noise-sized movement beside the amount of language built around it. Every infix operator in the source now travels through the language's concept system before specialization brings intrinsic arithmetic back into view, yet the hot loop remains almost exactly 2× native Rust and 1.7× Rust → wasm.
 
 That is the best result in this run. Curios gained abstraction without imposing a blanket abstraction tax on its simplest compute workload. The new language is much larger; the loop is not meaningfully slower.
 

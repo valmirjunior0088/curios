@@ -563,7 +563,7 @@ fn process_items(
                 flat_items.push(FlatItem::Rec(items));
             }
             TopItem::Induct(group) => {
-                // Step 1: type bindings as one rec group. An inductive's type binding wraps a primitive `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Nat, Bin)` beta-reduces to `InductType { Result, [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
+                // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Nat, Bin)` beta-reduces to `InductType { Result, [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
                 let type_flat_items = group
                     .iter()
                     .map(|u| {
@@ -806,7 +806,7 @@ fn process_items(
                             param_tys.clone(),
                             lower.bound(&binders, || lower.term(&output_type))?,
                         );
-                        // Constructor body: (params..., _0, ...) => the variant's injection, a primitive `Variant` normal form.
+                        // Constructor body: (params..., _0, ...) => the variant's injection, an intrinsic `Variant` normal form.
                         let args: Vec<curios_core::Term> = payload_binders
                             .iter()
                             .map(|(_, id)| {
@@ -1171,7 +1171,7 @@ fn node_reference_names(
     names
 }
 
-/// The nodes a node depends on: those `owner` maps its referenced names to. Self-edges and names `owner` does not map (primitives, or items outside the partition `owner` was restricted to) drop out.
+/// The nodes a node depends on: those `owner` maps its referenced names to. Self-edges and names `owner` does not map (intrinsics, or items outside the partition `owner` was restricted to) drop out.
 fn dep_nodes(
     node: usize,
     names: &HashSet<curios_core::Global>,
@@ -1328,7 +1328,7 @@ fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_cor
         .collect()
 }
 
-/// The external references of a struct registry entry: every free var of its arity — its parameter domains and the field telescope they terminate in. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. primitive) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
+/// The external references of a struct registry entry: every free var of its arity — its parameter domains and the field telescope they terminate in. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. intrinsic) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
 fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
     struct_decl
         .arity
@@ -1758,7 +1758,7 @@ pub fn prepare_prelude(
         witnesses,
         binder_floor: binders.count(),
         type_: None,
-        body: curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
+        body: curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
     };
 
     Ok(PreparedPrelude {

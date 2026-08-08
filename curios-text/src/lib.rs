@@ -21,8 +21,8 @@ pub use root_source::*;
 mod nat;
 pub use nat::*;
 
-mod prim;
-pub use prim::*;
+mod intrinsic;
+pub use intrinsic::*;
 
 mod term;
 pub use term::*;

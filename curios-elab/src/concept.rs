@@ -7,7 +7,7 @@ mod tests;
 
 use {
     curios_base::{Grain, Qualifier, RootId},
-    curios_core::{Global, Prim, Subterm, Telescope, Term, UniverseContext},
+    curios_core::{Global, Intrinsic, Subterm, Telescope, Term, UniverseContext},
     std::fmt,
 };
 
@@ -53,7 +53,7 @@ impl std::fmt::Display for WitnessKey {
     }
 }
 
-/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, or a primitive type constructor. Parameters past the heads are checked by unification at resolution time, not by the key.
+/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, or an intrinsic type constructor. Parameters past the heads are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(
     feature = "archive",
@@ -74,13 +74,13 @@ pub enum HeadKey {
 }
 
 impl HeadKey {
-    /// The key of a term already in weak-head normal form, if its head is rigid and nominal/primitive. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, Π/Σ types, `Type`/`Prop` — which are not keyable.
+    /// The key of a term already in weak-head normal form, if its head is rigid and nominal/intrinsic. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, Π/Σ types, `Type`/`Prop` — which are not keyable.
     pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {
             Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name.clone())),
             Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name.clone())),
-            Subterm::Prim(prim) => Self::of_prim(prim),
-            // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. LstType(T)` for a primitive former like `/sys/Lst`). The binders need not be opened — the name/former sits on the node.
+            Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
+            // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. LstType(T)` for an intrinsic former like `/sys/Lst`). The binders need not be opened — the name/former sits on the node.
             Subterm::Func(func) => {
                 let mut telescope = &func.telescope;
                 while let Telescope::Cons(_, rest) = telescope {
@@ -96,7 +96,7 @@ impl HeadKey {
                     Subterm::StructType(struct_decl) => {
                         Some(HeadKey::Nominal(struct_decl.name.clone()))
                     }
-                    Subterm::Prim(prim) => Self::of_prim(prim),
+                    Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
                     _ => None,
                 }
             }
@@ -104,20 +104,20 @@ impl HeadKey {
         }
     }
 
-    /// The key of a primitive type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
-    fn of_prim(prim: &Prim) -> Option<HeadKey> {
-        use curios_core::Prim;
-        match prim {
-            Prim::NatType => Some(HeadKey::Nat),
-            Prim::ByteType => Some(HeadKey::Byte),
-            Prim::IntType => Some(HeadKey::Int),
-            Prim::FltType => Some(HeadKey::Flt),
-            Prim::BoolType => Some(HeadKey::Bool),
-            Prim::BinType(grain) => Some(HeadKey::Bin(*grain)),
-            Prim::HandleType => Some(HeadKey::Handle),
-            Prim::LstType(_) => Some(HeadKey::Lst),
-            Prim::CellType(_) => Some(HeadKey::Cell),
-            Prim::IoType(_) => Some(HeadKey::Io),
+    /// The key of an intrinsic type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
+    fn of_intrinsic(intrinsic: &Intrinsic) -> Option<HeadKey> {
+        use curios_core::Intrinsic;
+        match intrinsic {
+            Intrinsic::NatType => Some(HeadKey::Nat),
+            Intrinsic::ByteType => Some(HeadKey::Byte),
+            Intrinsic::IntType => Some(HeadKey::Int),
+            Intrinsic::FltType => Some(HeadKey::Flt),
+            Intrinsic::BoolType => Some(HeadKey::Bool),
+            Intrinsic::BinType(grain) => Some(HeadKey::Bin(*grain)),
+            Intrinsic::HandleType => Some(HeadKey::Handle),
+            Intrinsic::LstType(_) => Some(HeadKey::Lst),
+            Intrinsic::CellType(_) => Some(HeadKey::Cell),
+            Intrinsic::IoType(_) => Some(HeadKey::Io),
             _ => None,
         }
     }

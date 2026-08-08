@@ -94,7 +94,7 @@ fn a_non_io_tail_is_refused() {
     );
 }
 
-/// `Io` is opaque: no constructors, no `PrimHead` entry, no projection, and above all no eliminator from `Io(T)` to `T`. A scrutinee of description type therefore has nothing to eliminate — a bare `_` would be an irrefutable binder match rather than an elimination, so the arms here are concrete.
+/// `Io` is opaque: no constructors, no `IntrinsicHead` entry, no projection, and above all no eliminator from `Io(T)` to `T`. A scrutinee of description type therefore has nothing to eliminate — a bare `_` would be an irrefutable binder match rather than an elimination, so the arms here are concrete.
 #[test]
 fn an_io_scrutinee_is_refused() {
     let error = typecheck(

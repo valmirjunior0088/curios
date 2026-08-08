@@ -15,8 +15,8 @@
 mod eliminate;
 use eliminate::check_induct_arms;
 
-mod prim;
-use prim::infer_prim;
+mod intrinsic;
+use intrinsic::infer_intrinsic;
 
 #[cfg(test)]
 mod tests;
@@ -28,9 +28,9 @@ use {
     },
     curios_base::{Grain, PackedBin},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Let, Many, Nat, One,
-        Prim, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, UniverseInst, Variant, wire_term,
+        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
+        Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, UniverseInst, Variant, wire_term,
     },
 };
 
@@ -89,9 +89,9 @@ fn infer_node(
         Subterm::Type(level) => Ok(Term::type_at(level.succ()?)),
         Subterm::Prop => Ok(Term::type_ground()),
 
-        Subterm::Prim(prim) => infer_prim(kernel, prim),
+        Subterm::Intrinsic(intrinsic) => infer_intrinsic(kernel, intrinsic),
 
-        // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature. The rule is here rather than among the primitives because the row, not this crate, is what states the signature.
+        // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature. The rule is here rather than among the intrinsics because the row, not this crate, is what states the signature.
         Subterm::Foreign(function, args) => {
             let signature = &function.signature;
 
@@ -112,15 +112,17 @@ fn infer_node(
                 .map(|(label, wire)| (label.clone(), wire_term(wire)))
                 .collect::<Vec<_>>();
 
-            Ok(Term::prim(Prim::io_type(match results.as_slice() {
-                [] => Term::tuple_type_unit(),
-                [(_, result)] => result.clone(),
-                many => Term::tuple_type(
-                    many.iter()
-                        .map(|(label, result)| (kernel.fresh(Some(label)), result.clone()))
-                        .collect::<Vec<_>>(),
-                ),
-            })))
+            Ok(Term::intrinsic(Intrinsic::io_type(
+                match results.as_slice() {
+                    [] => Term::tuple_type_unit(),
+                    [(_, result)] => result.clone(),
+                    many => Term::tuple_type(
+                        many.iter()
+                            .map(|(label, result)| (kernel.fresh(Some(label)), result.clone()))
+                            .collect::<Vec<_>>(),
+                    ),
+                },
+            )))
         }
 
         // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.
@@ -536,7 +538,7 @@ fn check_motive(
 
 /// Check an elimination's arms against its motive.
 ///
-/// A nominal elimination is verified in full, each arm at its own constructor's index targets. The primitive carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms.
+/// A nominal elimination is verified in full, each arm at its own constructor's index targets. The intrinsic carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms.
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
@@ -591,21 +593,21 @@ fn check_cases(
             false_case,
             true_case,
         } => {
-            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::BoolType)) {
+            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::BoolType)) {
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             }
 
-            at(kernel, Term::prim(Prim::Bool(false)), false_case)?;
-            at(kernel, Term::prim(Prim::Bool(true)), true_case)
+            at(kernel, Term::intrinsic(Intrinsic::Bool(false)), false_case)?;
+            at(kernel, Term::intrinsic(Intrinsic::Bool(true)), true_case)
         }
 
         Cases::Switch { cases, default } => {
-            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::NatType)) {
+            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::NatType)) {
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             }
 
             for (key, body) in cases {
-                let literal = Term::prim(Prim::Nat(Nat::new(*key as usize)));
+                let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(*key as usize)));
                 at(kernel, literal, body)?;
             }
 
@@ -661,25 +663,29 @@ fn check_free_monoid(
             empty_case,
             cons_case,
         } => {
-            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::NatType)) {
+            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::NatType)) {
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             }
 
-            at(kernel, Term::prim(Prim::Nat(Nat::new(0usize))), empty_case)?;
+            at(
+                kernel,
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+                empty_case,
+            )?;
 
             let pred = kernel.fresh(cons_case.first_hint());
             let ih = kernel.fresh(cons_case.second_hint());
             let pred_occurrence = Term::free_var(&pred);
-            let succ_value = Term::prim(Prim::nat_add(
+            let succ_value = Term::intrinsic(Intrinsic::nat_add(
                 pred_occurrence.clone(),
-                Term::prim(Prim::Nat(Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
             ));
             let body = cons_case.open(&[&pred_occurrence, &Term::free_var(&ih)]);
 
             cons(
                 kernel,
                 vec![
-                    (&pred, Term::prim(Prim::NatType)),
+                    (&pred, Term::intrinsic(Intrinsic::NatType)),
                     (&ih, motive.open(&[&pred_occurrence])),
                 ],
                 succ_value,
@@ -692,7 +698,7 @@ fn check_free_monoid(
             empty_case,
             cons_case,
         } => {
-            let Subterm::Prim(Prim::LstType(scrutinee_elem)) = &**scrutinee_type else {
+            let Subterm::Intrinsic(Intrinsic::LstType(scrutinee_elem)) = &**scrutinee_type else {
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             };
             if !convert(kernel, &Term::type_ground(), elem, scrutinee_elem)? {
@@ -704,7 +710,7 @@ fn check_free_monoid(
 
             at(
                 kernel,
-                Term::prim(Prim::Lst(elem.clone(), Vec::new())),
+                Term::intrinsic(Intrinsic::Lst(elem.clone(), Vec::new())),
                 empty_case,
             )?;
 
@@ -712,10 +718,10 @@ fn check_free_monoid(
             let tail = kernel.fresh(cons_case.second_hint());
             let ih = kernel.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
-            let cons_value = Term::prim(Prim::LstConcat(
+            let cons_value = Term::intrinsic(Intrinsic::LstConcat(
                 elem.clone(),
                 vec![
-                    Term::prim(Prim::Lst(elem.clone(), vec![Term::free_var(&head)])),
+                    Term::intrinsic(Intrinsic::Lst(elem.clone(), vec![Term::free_var(&head)])),
                     tail_occurrence.clone(),
                 ],
             ));
@@ -729,7 +735,7 @@ fn check_free_monoid(
                 kernel,
                 vec![
                     (&head, elem.clone()),
-                    (&tail, Term::prim(Prim::LstType(elem.clone()))),
+                    (&tail, Term::intrinsic(Intrinsic::LstType(elem.clone()))),
                     (&ih, motive.open(&[&tail_occurrence])),
                 ],
                 cons_value,
@@ -742,23 +748,25 @@ fn check_free_monoid(
             empty_case,
             cons_case,
         } => {
-            if !matches!(&**scrutinee_type, Subterm::Prim(Prim::BinType(found)) if found == grain) {
+            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::BinType(found)) if found == grain)
+            {
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             }
 
-            let empty = Term::prim(Prim::Bin(*grain, PackedBin::empty()));
+            let empty = Term::intrinsic(Intrinsic::Bin(*grain, PackedBin::empty()));
             at(kernel, empty.clone(), empty_case)?;
 
-            let atom_type = Term::prim(match grain {
-                Grain::X => Prim::ByteType,
-                Grain::B => Prim::BoolType,
+            let atom_type = Term::intrinsic(match grain {
+                Grain::X => Intrinsic::ByteType,
+                Grain::B => Intrinsic::BoolType,
             });
             let head = kernel.fresh(cons_case.first_hint());
             let tail = kernel.fresh(cons_case.second_hint());
             let ih = kernel.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
-            let singleton = Term::prim(Prim::BinAppend(*grain, empty, Term::free_var(&head)));
-            let cons_value = Term::prim(Prim::BinConcat(
+            let singleton =
+                Term::intrinsic(Intrinsic::BinAppend(*grain, empty, Term::free_var(&head)));
+            let cons_value = Term::intrinsic(Intrinsic::BinConcat(
                 *grain,
                 vec![singleton, tail_occurrence.clone()],
             ));
@@ -772,7 +780,7 @@ fn check_free_monoid(
                 kernel,
                 vec![
                     (&head, atom_type),
-                    (&tail, Term::prim(Prim::BinType(*grain))),
+                    (&tail, Term::intrinsic(Intrinsic::BinType(*grain))),
                     (&ih, motive.open(&[&tail_occurrence])),
                 ],
                 cons_value,

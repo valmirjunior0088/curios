@@ -605,7 +605,7 @@ fn a_proposition_may_not_carry_a_type_field() {
 
 // Definitional proof irrelevance, at the premise the rule is stated over rather than at the rule: *which* types are propositions. `Prop` is the type of propositions, so anything admitted at `Prop` is one as far as every later rule is concerned, and irrelevance then identifies its inhabitants without looking at them.
 //
-// `Lst(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized primitive former was a second implementation of that one rule and reported the element's sort as the former's, so `Lst(True)` inferred at `Prop` on both sides. Nothing here needed the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `LstType` node.
+// `Lst(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former was a second implementation of that one rule and reported the element's sort as the former's, so `Lst(True)` inferred at `Prop` on both sides. Nothing here needed the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `LstType` node.
 //
 // From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — reflexivity discharges `Eq(@X, x, y)` because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at `Lst(True)` yields `Eq(one, none)` for a one-element list against the empty one; `Eq/cong` through `Lst/len` carries that to `Eq(1, 0)`, and `Eq/subst` transports `()` into `False`.
 //
@@ -632,7 +632,7 @@ fn a_catch_all_is_checked_at_its_scrutinee() {
     assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");
 }
 
-/// The premise every rule above is stated over and no entry of `PERIMETER.md` names: a type is a *pure* term. It used to be enforced by `reduce_prim`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and `ProcExit` arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/get(c) : Io(Bool)` *describes* a read instead of being one, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The cell is forced on the line above so that the refusal lands here and not on the binding.
+/// The premise every rule above is stated over and no entry of `PERIMETER.md` names: a type is a *pure* term. It used to be enforced by `reduce_intrinsic`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and `ProcExit` arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/get(c) : Io(Bool)` *describes* a read instead of being one, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The cell is forced on the line above so that the refusal lands here and not on the binding.
 const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, False, Str};
 
@@ -668,11 +668,11 @@ const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
     )
     "#;
 
-// The purity premise, attacked through the one store that rewrites a term before the guard can see it. `refine_head`'s fallback registers the whole canonical scrutinee against the arm's case value, and the reducer consults that store *ahead of* folding the primitive — so inside `| true =>` the effectful `Cell/get(c)` reduces to `true` and never reaches `reduce_prim`. The annotation `Eq(Cell/get(c), true)` is admitted on those terms, and it is stored **as written**: `p`'s recorded type keeps the `Cell/get(c)`, and only the conversion that discharged `Eq/refl` ever saw it as `true`.
+// The purity premise, attacked through the one store that rewrites a term before the guard can see it. `refine_head`'s fallback registers the whole canonical scrutinee against the arm's case value, and the reducer consults that store *ahead of* folding the intrinsic — so inside `| true =>` the effectful `Cell/get(c)` reduces to `true` and never reaches `reduce_intrinsic`. The annotation `Eq(Cell/get(c), true)` is admitted on those terms, and it is stored **as written**: `p`'s recorded type keeps the `Cell/get(c)`, and only the conversion that discharged `Eq/refl` ever saw it as `true`.
 //
 // Two occurrences of one syntactic term then denote two different values. After `Cell/set(c, false)` the inner `match Cell/get(c)` refines that same term to `false`, `p` re-reads at `Eq(false, true)`, and `/std/Bool/false_neq_true` turns it into `/syn/False`. The arm deriving it is *reachable*: the first read is `true`, so the outer arm runs, and the second is `false`, so the inner one runs too.
 //
-// Verified while the hole was open, and the acceptance is the refinement's doing rather than a fixture that never reached the check: the identical program with the derivation moved to the inner `| true =>` arm — where the refinement is `true`, so `p` re-reads at `Eq(true, true)` — is refused by `curios-elab` with `type mismatch`, while this one passes elaboration entire. It never compiled, because `curios-cert` refuses it, but not by any rule of its own: `whnf` folds a `Prim` at the top of its loop and only consults `refinement_of` on the value that comes back, so the same conversion dies on `reduction failed in the kernel`. The kernel's ordering is what stood between this and a closed inhabitant of `False`; this asserts the elaborator's half.
+// Verified while the hole was open, and the acceptance is the refinement's doing rather than a fixture that never reached the check: the identical program with the derivation moved to the inner `| true =>` arm — where the refinement is `true`, so `p` re-reads at `Eq(true, true)` — is refused by `curios-elab` with `type mismatch`, while this one passes elaboration entire. It never compiled, because `curios-cert` refuses it, but not by any rule of its own: `whnf` folds an `Intrinsic` at the top of its loop and only consults `refinement_of` on the value that comes back, so the same conversion dies on `reduction failed in the kernel`. The kernel's ordering is what stood between this and a closed inhabitant of `False`; this asserts the elaborator's half.
 #[test]
 fn an_effectful_scrutinee_is_not_a_value() {
     rejected_by(AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE, "Io");
@@ -685,7 +685,7 @@ fn a_match_on_a_forced_cell_read_still_compiles() {
 
 // **The four paragraphs below are the history of a hole that is now closed by typing rather than by any of the guards they describe.** They are kept because this row's grade rests on what was actually attacked, and because a reader who meets `Cell/get` in a scrutinee should find out why it was hard before it was impossible. The program is still a regression fixture; what refuses it changed.
 //
-// The same premise, past the guard that closed the entry above, because that guard asked a question weak-head reduction cannot answer. `refuses_type_level_reduction` reduced the scrutinee and read the refusal, and `reduce` stops at a *stuck head* handing the application back with its arguments untouched — so `f(Cell/get(c))`, a variable-headed application carrying the effect in an argument, never reaches `reduce_prim`, answers `Ok`, and is registered as a spelling that fixes a value. The effect is then inside a type: `Eq(g(Cell/get(c)), true)` is admitted on those terms exactly as `Eq(Cell/get(c), true)` was.
+// The same premise, past the guard that closed the entry above, because that guard asked a question weak-head reduction cannot answer. `refuses_type_level_reduction` reduced the scrutinee and read the refusal, and `reduce` stops at a *stuck head* handing the application back with its arguments untouched — so `f(Cell/get(c))`, a variable-headed application carrying the effect in an argument, never reaches `reduce_intrinsic`, answers `Ok`, and is registered as a spelling that fixes a value. The effect is then inside a type: `Eq(g(Cell/get(c)), true)` is admitted on those terms exactly as `Eq(Cell/get(c), true)` was.
 //
 // `curios-cert` has the same hole for the same reason and is not the backstop here: `assume_case_value` records at its own `whnf`, whose `step_apply` likewise stops at a stuck head without visiting an argument. Both checkers register the equation, which is what makes this agreement on a wrong rule rather than a disagreement — and why, unlike the entry above, it compiled.
 //
@@ -743,7 +743,7 @@ fn a_stuck_application_scrutinee_still_refines() {
     assert_eq!(run(A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES), b"t");
 }
 
-// The route no search over the term could have closed, and the one this whole discipline exists for. The scrutinee is `f(true)` for a *parameter* `f`: no `Prim::CellGet` in it, none in anything it names, so every walk answered *pure* and both checkers recorded the equation. The caller then bound `f := (b) => Cell/get(c)`, and one spelling read `true` before the `Cell/set` and `false` after. Effectfulness of `f(true)` is not a property of `f(true)` — it is a property of the environment, and at the moment an arm records its equation the binder has no value to inspect, so asking the term was never sufficient.
+// The route no search over the term could have closed, and the one this whole discipline exists for. The scrutinee is `f(true)` for a *parameter* `f`: no `Intrinsic::CellGet` in it, none in anything it names, so every walk answered *pure* and both checkers recorded the equation. The caller then bound `f := (b) => Cell/get(c)`, and one spelling read `true` before the `Cell/set` and `false` after. Effectfulness of `f(true)` is not a property of `f(true)` — it is a property of the environment, and at the moment an arm records its equation the binder has no value to inspect, so asking the term was never sufficient.
 //
 // `fixes_no_value`'s cure was to ask a second question — does the walk read the body of every function the term would call — and refuse the equation when it does not. It worked and it was expensive in exactly the direction that matters: a *pure* opaque head stopped refining too, because nothing distinguished it. `(Bool) -> Bool` said nothing about purity, since the function space admitted `Cell/get`.
 //
@@ -986,7 +986,7 @@ enum Verdict {
 fn both_checkers(source: &str) -> (Verdict, Verdict) {
     // A rule enforced by the grammar refuses here, before either checker exists. `foreign`'s wire contract is the standing example, and recording it is more honest than asserting the fixture parses: it says plainly that the rule is the parser's.
     //
-    // What it does not mean is that the contract rests on the parser alone, and this comment used to read as though it did. A host call's type is not something the kernel takes on trust: `Prim::Foreign` carries a wire signature over `WireType`, a closed six-variant enum with no case for a nominal type, and `infer` *constructs* the result from it rather than reading one off the term. So the boundary holds from Core as well, where no surface program can reach — `curios-cert`'s `recheck::tests::a_forged_foreign_row_cannot_inhabit_a_proposition` forges a row and pins it. `NotAsked` below records that neither checker is *asked*, not that neither would refuse.
+    // What it does not mean is that the contract rests on the parser alone, and this comment used to read as though it did. A host call's type is not something the kernel takes on trust: `Intrinsic::Foreign` carries a wire signature over `WireType`, a closed six-variant enum with no case for a nominal type, and `infer` *constructs* the result from it rather than reading one off the term. So the boundary holds from Core as well, where no surface program can reach — `curios-cert`'s `recheck::tests::a_forged_foreign_row_cannot_inhabit_a_proposition` forges a row and pins it. `NotAsked` below records that neither checker is *asked*, not that neither would refuse.
     let entrypoint = match source.parse::<Entrypoint>() {
         Ok(entrypoint) => entrypoint,
         Err(error) => return (Verdict::Refuses(format!("{error:?}")), Verdict::NotAsked),
@@ -1111,7 +1111,7 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Refuses("is informative"),
         Expect::NotAsked,
     ),
-    // Both accepted this one: the sort of a parameterized primitive former was implemented twice on
+    // Both accepted this one: the sort of a parameterized intrinsic former was implemented twice on
     // each side, and the typing rule's copy disagreed with `Sort::of`'s. Its kernel half is guarded
     // where the rule lives, in `curios_cert::kernel::infer::tests`.
     (

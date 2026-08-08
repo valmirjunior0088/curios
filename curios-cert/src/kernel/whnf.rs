@@ -1,10 +1,10 @@
 //! Weak-head normalization: the kernel's reduction strategy.
 //!
-//! This is the kernel's answer to "what does this term compute to, as far as its head". It is deliberately the *whole* strategy — beta, delta, iota, projection, universe instantiation, primitive folding, and `rec` unfolding — and deliberately nothing else. In particular there is no reduction cache, no scrutinee refinement, and no metavariable resolution. Those are what make the elaborator's reducer fast and forgiving; here they would be three more ways for the answer to come from somewhere other than the term.
+//! This is the kernel's answer to "what does this term compute to, as far as its head". It is deliberately the *whole* strategy — beta, delta, iota, projection, universe instantiation, intrinsic folding, and `rec` unfolding — and deliberately nothing else. In particular there is no reduction cache, no scrutinee refinement, and no metavariable resolution. Those are what make the elaborator's reducer fast and forgiving; here they would be three more ways for the answer to come from somewhere other than the term.
 //!
 //! It resembles the elaborator's reducer closely, and that resemblance is the point of writing it out rather than sharing it. Reduction decides which programs convert, and conversion decides which programs typecheck; a bug shared by both checkers is a bug neither can catch. The crate boundary enforces this — `curios-elab`'s reducer is not visible from here — so the duplication cannot quietly collapse back into a call.
 //!
-//! Two things *are* shared, and both are representation rather than judgment: the binder discipline that `open`/`release` implement, and [`reduce_prim`](curios_core::reduce_prim), which decides what `2 + 2` folds to. Neither can admit an ill-typed program on its own.
+//! Two things *are* shared, and both are representation rather than judgment: the binder discipline that `open`/`release` implement, and [`reduce_intrinsic`](curios_core::reduce_intrinsic), which decides what `2 + 2` folds to. Neither can admit an ill-typed program on its own.
 
 #[cfg(test)]
 mod tests;
@@ -14,7 +14,7 @@ use {
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat, Proj,
         Rec, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst, Var, Variant,
-        instantiate_universe_levels_scoped, reduce_prim,
+        instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     num_traits::ToPrimitive,
 };
@@ -74,7 +74,9 @@ pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
         kernel.spend()?;
 
         let mut step = match Term::unwrap_or_clone(term) {
-            Subterm::Prim(prim) => Step::Stop(reduce_prim(kernel, &prim)?.into()),
+            Subterm::Intrinsic(intrinsic) => {
+                Step::Stop(reduce_intrinsic(kernel, &intrinsic)?.into())
+            }
             Subterm::Var(var) => step_var(kernel, var)?,
             Subterm::Apply(apply) => step_apply(kernel, apply)?,
             Subterm::Proj(proj) => step_proj(kernel, proj)?,

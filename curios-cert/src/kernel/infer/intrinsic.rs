@@ -1,205 +1,210 @@
-//! Typing rules for primitive operations.
+//! Typing rules for intrinsic operations.
 //!
-//! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — a primitive's signature is fixed by the language, so this module is a table, and the table is the specification.
+//! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — an intrinsic's signature is fixed by the language, so this module is a table, and the table is the specification.
 //!
 //! The scalar families are monomorphic and read directly. The container operations carry their element type as an operand, which is what lets them be typed without inventing anything: `Lst/get` is `(T : Type, Lst(T), Nat) -> T`, with `T` present in the term. The one operation that does *not* carry its type is a bare list literal, and the rule for it is the only place here that has to look at an operand to decide a type.
 
 use {
     super::{check, infer},
-    crate::{Kernel, KernelError, sort_of_prim},
+    crate::{Kernel, KernelError, sort_of_intrinsic},
     curios_base::Grain,
-    curios_core::{Prim, Subterm, Term},
+    curios_core::{Intrinsic, Subterm, Term},
 };
 
 fn bool_type() -> Term {
-    Term::prim(Prim::BoolType)
+    Term::intrinsic(Intrinsic::BoolType)
 }
 
 fn nat_type() -> Term {
-    Term::prim(Prim::NatType)
+    Term::intrinsic(Intrinsic::NatType)
 }
 
 fn byte_type() -> Term {
-    Term::prim(Prim::ByteType)
+    Term::intrinsic(Intrinsic::ByteType)
 }
 
 fn int_type() -> Term {
-    Term::prim(Prim::IntType)
+    Term::intrinsic(Intrinsic::IntType)
 }
 
 fn flt_type() -> Term {
-    Term::prim(Prim::FltType)
+    Term::intrinsic(Intrinsic::FltType)
 }
 
 fn handle_type() -> Term {
-    Term::prim(Prim::HandleType)
+    Term::intrinsic(Intrinsic::HandleType)
 }
 
 fn bin_type(grain: Grain) -> Term {
-    Term::prim(Prim::BinType(grain))
+    Term::intrinsic(Intrinsic::BinType(grain))
 }
 
 fn lst_type(element: Term) -> Term {
-    Term::prim(Prim::LstType(element))
+    Term::intrinsic(Intrinsic::LstType(element))
 }
 
 fn cell_type(element: Term) -> Term {
-    Term::prim(Prim::CellType(element))
+    Term::intrinsic(Intrinsic::CellType(element))
 }
 
 fn io_type(result: Term) -> Term {
-    Term::prim(Prim::IoType(result))
+    Term::intrinsic(Intrinsic::IoType(result))
 }
 
-/// The type of `prim`, having checked every operand against the type this operation demands of it.
-pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, KernelError> {
+/// The type of `intrinsic`, having checked every operand against the type this operation demands of it.
+pub(super) fn infer_intrinsic(
+    kernel: &mut Kernel,
+    intrinsic: &Intrinsic,
+) -> Result<Term, KernelError> {
     // A grain says what a `Bin` is a sequence *of*: bytes at `X`, bits at `B`. Every `Bin` operation is the same rule at two different element types.
     let grain_element = |grain: Grain| match grain {
         Grain::X => byte_type(),
         Grain::B => bool_type(),
     };
 
-    match prim {
+    match intrinsic {
         // Type formers are types, and every closed one is small.
-        Prim::BoolType
-        | Prim::NatType
-        | Prim::ByteType
-        | Prim::IntType
-        | Prim::FltType
-        | Prim::BinType(_)
-        | Prim::HandleType => Ok(Term::type_ground()),
+        Intrinsic::BoolType
+        | Intrinsic::NatType
+        | Intrinsic::ByteType
+        | Intrinsic::IntType
+        | Intrinsic::FltType
+        | Intrinsic::BinType(_)
+        | Intrinsic::HandleType => Ok(Term::type_ground()),
 
         // A parameterized former's sort is whatever `Sort::of` computes for it, asked here rather than restated: the element's own sort is *not* the answer, because a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
-        Prim::LstType(element) | Prim::CellType(element) | Prim::IoType(element) => {
-            let sort = sort_of_prim(kernel, prim)?;
+        Intrinsic::LstType(element) | Intrinsic::CellType(element) | Intrinsic::IoType(element) => {
+            let sort = sort_of_intrinsic(kernel, intrinsic)?;
             let _ = check_is_type(kernel, element)?;
 
             Ok(sort.term())
         }
 
         // Literals.
-        Prim::Bool(_) => Ok(bool_type()),
-        Prim::Nat(_) => Ok(nat_type()),
-        Prim::Byte(_) => Ok(byte_type()),
-        Prim::Int(_) => Ok(int_type()),
-        Prim::Flt(_) => Ok(flt_type()),
-        Prim::Bin(grain, _) => Ok(bin_type(*grain)),
-        Prim::Handle(_) => Ok(handle_type()),
+        Intrinsic::Bool(_) => Ok(bool_type()),
+        Intrinsic::Nat(_) => Ok(nat_type()),
+        Intrinsic::Byte(_) => Ok(byte_type()),
+        Intrinsic::Int(_) => Ok(int_type()),
+        Intrinsic::Flt(_) => Ok(flt_type()),
+        Intrinsic::Bin(grain, _) => Ok(bin_type(*grain)),
+        Intrinsic::Handle(_) => Ok(handle_type()),
 
         // Comparisons: same-typed operands in, a boolean out.
-        Prim::BoolEql(l, r) | Prim::BoolNeq(l, r) => binary(kernel, l, r, bool_type(), bool_type()),
-        Prim::NatEql(l, r)
-        | Prim::NatNeq(l, r)
-        | Prim::NatLt(l, r)
-        | Prim::NatGt(l, r)
-        | Prim::NatLte(l, r)
-        | Prim::NatGte(l, r) => binary(kernel, l, r, nat_type(), bool_type()),
-        Prim::ByteEql(l, r)
-        | Prim::ByteLt(l, r)
-        | Prim::ByteLte(l, r)
-        | Prim::ByteGt(l, r)
-        | Prim::ByteGte(l, r) => binary(kernel, l, r, byte_type(), bool_type()),
-        Prim::IntEql(l, r)
-        | Prim::IntNeq(l, r)
-        | Prim::IntLt(l, r)
-        | Prim::IntGt(l, r)
-        | Prim::IntLte(l, r)
-        | Prim::IntGte(l, r) => binary(kernel, l, r, int_type(), bool_type()),
-        Prim::FltEql(l, r)
-        | Prim::FltNeq(l, r)
-        | Prim::FltLt(l, r)
-        | Prim::FltGt(l, r)
-        | Prim::FltLte(l, r)
-        | Prim::FltGte(l, r) => binary(kernel, l, r, flt_type(), bool_type()),
-        Prim::HandleEql(l, r) => binary(kernel, l, r, handle_type(), bool_type()),
-
-        // Arithmetic and bitwise: closed on their carrier.
-        Prim::BoolAnd(l, r) | Prim::BoolOr(l, r) | Prim::BoolXor(l, r) => {
+        Intrinsic::BoolEql(l, r) | Intrinsic::BoolNeq(l, r) => {
             binary(kernel, l, r, bool_type(), bool_type())
         }
-        Prim::NatAdd(l, r)
-        | Prim::NatSub(l, r)
-        | Prim::NatMul(l, r)
-        | Prim::NatDiv(l, r)
-        | Prim::NatRem(l, r)
-        | Prim::NatAnd(l, r)
-        | Prim::NatOr(l, r)
-        | Prim::NatXor(l, r)
-        | Prim::NatShl(l, r)
-        | Prim::NatShr(l, r)
-        | Prim::NatRotl(l, r)
-        | Prim::NatRotr(l, r) => binary(kernel, l, r, nat_type(), nat_type()),
-        Prim::IntAdd(l, r)
-        | Prim::IntSub(l, r)
-        | Prim::IntMul(l, r)
-        | Prim::IntDiv(l, r)
-        | Prim::IntRem(l, r)
-        | Prim::IntAnd(l, r)
-        | Prim::IntOr(l, r)
-        | Prim::IntXor(l, r)
-        | Prim::IntShl(l, r)
-        | Prim::IntShr(l, r)
-        | Prim::IntRotl(l, r)
-        | Prim::IntRotr(l, r) => binary(kernel, l, r, int_type(), int_type()),
-        Prim::FltAdd(l, r)
-        | Prim::FltSub(l, r)
-        | Prim::FltMul(l, r)
-        | Prim::FltDiv(l, r)
-        | Prim::FltRem(l, r)
-        | Prim::FltMin(l, r)
-        | Prim::FltMax(l, r)
-        | Prim::FltCopysign(l, r) => binary(kernel, l, r, flt_type(), flt_type()),
+        Intrinsic::NatEql(l, r)
+        | Intrinsic::NatNeq(l, r)
+        | Intrinsic::NatLt(l, r)
+        | Intrinsic::NatGt(l, r)
+        | Intrinsic::NatLte(l, r)
+        | Intrinsic::NatGte(l, r) => binary(kernel, l, r, nat_type(), bool_type()),
+        Intrinsic::ByteEql(l, r)
+        | Intrinsic::ByteLt(l, r)
+        | Intrinsic::ByteLte(l, r)
+        | Intrinsic::ByteGt(l, r)
+        | Intrinsic::ByteGte(l, r) => binary(kernel, l, r, byte_type(), bool_type()),
+        Intrinsic::IntEql(l, r)
+        | Intrinsic::IntNeq(l, r)
+        | Intrinsic::IntLt(l, r)
+        | Intrinsic::IntGt(l, r)
+        | Intrinsic::IntLte(l, r)
+        | Intrinsic::IntGte(l, r) => binary(kernel, l, r, int_type(), bool_type()),
+        Intrinsic::FltEql(l, r)
+        | Intrinsic::FltNeq(l, r)
+        | Intrinsic::FltLt(l, r)
+        | Intrinsic::FltGt(l, r)
+        | Intrinsic::FltLte(l, r)
+        | Intrinsic::FltGte(l, r) => binary(kernel, l, r, flt_type(), bool_type()),
+        Intrinsic::HandleEql(l, r) => binary(kernel, l, r, handle_type(), bool_type()),
 
-        Prim::NatClz(i) | Prim::NatCtz(i) | Prim::NatPopcnt(i) => {
+        // Arithmetic and bitwise: closed on their carrier.
+        Intrinsic::BoolAnd(l, r) | Intrinsic::BoolOr(l, r) | Intrinsic::BoolXor(l, r) => {
+            binary(kernel, l, r, bool_type(), bool_type())
+        }
+        Intrinsic::NatAdd(l, r)
+        | Intrinsic::NatSub(l, r)
+        | Intrinsic::NatMul(l, r)
+        | Intrinsic::NatDiv(l, r)
+        | Intrinsic::NatRem(l, r)
+        | Intrinsic::NatAnd(l, r)
+        | Intrinsic::NatOr(l, r)
+        | Intrinsic::NatXor(l, r)
+        | Intrinsic::NatShl(l, r)
+        | Intrinsic::NatShr(l, r)
+        | Intrinsic::NatRotl(l, r)
+        | Intrinsic::NatRotr(l, r) => binary(kernel, l, r, nat_type(), nat_type()),
+        Intrinsic::IntAdd(l, r)
+        | Intrinsic::IntSub(l, r)
+        | Intrinsic::IntMul(l, r)
+        | Intrinsic::IntDiv(l, r)
+        | Intrinsic::IntRem(l, r)
+        | Intrinsic::IntAnd(l, r)
+        | Intrinsic::IntOr(l, r)
+        | Intrinsic::IntXor(l, r)
+        | Intrinsic::IntShl(l, r)
+        | Intrinsic::IntShr(l, r)
+        | Intrinsic::IntRotl(l, r)
+        | Intrinsic::IntRotr(l, r) => binary(kernel, l, r, int_type(), int_type()),
+        Intrinsic::FltAdd(l, r)
+        | Intrinsic::FltSub(l, r)
+        | Intrinsic::FltMul(l, r)
+        | Intrinsic::FltDiv(l, r)
+        | Intrinsic::FltRem(l, r)
+        | Intrinsic::FltMin(l, r)
+        | Intrinsic::FltMax(l, r)
+        | Intrinsic::FltCopysign(l, r) => binary(kernel, l, r, flt_type(), flt_type()),
+
+        Intrinsic::NatClz(i) | Intrinsic::NatCtz(i) | Intrinsic::NatPopcnt(i) => {
             unary(kernel, i, nat_type(), nat_type())
         }
-        Prim::IntClz(i) | Prim::IntCtz(i) | Prim::IntPopcnt(i) => {
+        Intrinsic::IntClz(i) | Intrinsic::IntCtz(i) | Intrinsic::IntPopcnt(i) => {
             unary(kernel, i, int_type(), int_type())
         }
-        Prim::FltNeg(i)
-        | Prim::FltAbs(i)
-        | Prim::FltSqrt(i)
-        | Prim::FltFloor(i)
-        | Prim::FltCeil(i)
-        | Prim::FltTrunc(i)
-        | Prim::FltNearest(i) => unary(kernel, i, flt_type(), flt_type()),
+        Intrinsic::FltNeg(i)
+        | Intrinsic::FltAbs(i)
+        | Intrinsic::FltSqrt(i)
+        | Intrinsic::FltFloor(i)
+        | Intrinsic::FltCeil(i)
+        | Intrinsic::FltTrunc(i)
+        | Intrinsic::FltNearest(i) => unary(kernel, i, flt_type(), flt_type()),
 
         // Conversions.
-        Prim::ByteToNat(i) => unary(kernel, i, byte_type(), nat_type()),
-        Prim::NatToByte(i) => unary(kernel, i, nat_type(), byte_type()),
-        Prim::NatToInt(i) => unary(kernel, i, nat_type(), int_type()),
-        Prim::NatToFlt(i) => unary(kernel, i, nat_type(), flt_type()),
-        Prim::IntToNat(i) => unary(kernel, i, int_type(), nat_type()),
-        Prim::IntToFlt(i) => unary(kernel, i, int_type(), flt_type()),
-        Prim::FltToNat(i) => unary(kernel, i, flt_type(), nat_type()),
-        Prim::FltToInt(i) => unary(kernel, i, flt_type(), int_type()),
+        Intrinsic::ByteToNat(i) => unary(kernel, i, byte_type(), nat_type()),
+        Intrinsic::NatToByte(i) => unary(kernel, i, nat_type(), byte_type()),
+        Intrinsic::NatToInt(i) => unary(kernel, i, nat_type(), int_type()),
+        Intrinsic::NatToFlt(i) => unary(kernel, i, nat_type(), flt_type()),
+        Intrinsic::IntToNat(i) => unary(kernel, i, int_type(), nat_type()),
+        Intrinsic::IntToFlt(i) => unary(kernel, i, int_type(), flt_type()),
+        Intrinsic::FltToNat(i) => unary(kernel, i, flt_type(), nat_type()),
+        Intrinsic::FltToInt(i) => unary(kernel, i, flt_type(), int_type()),
         // The IEEE-754 bytes of a float, and its inverse.
-        Prim::FltToLeBytes(i) => unary(kernel, i, flt_type(), bin_type(Grain::X)),
-        Prim::FltOfLeBytes(i) => unary(kernel, i, bin_type(Grain::X), flt_type()),
+        Intrinsic::FltToLeBytes(i) => unary(kernel, i, flt_type(), bin_type(Grain::X)),
+        Intrinsic::FltOfLeBytes(i) => unary(kernel, i, bin_type(Grain::X), flt_type()),
 
         // `Bin`: a sequence of bytes or of bits, depending on the grain.
-        Prim::BinLen(grain, bin) => unary(kernel, bin, bin_type(*grain), nat_type()),
-        Prim::BinEql(grain, l, r) => binary(kernel, l, r, bin_type(*grain), bool_type()),
-        Prim::BinGet(grain, bin, index) => {
+        Intrinsic::BinLen(grain, bin) => unary(kernel, bin, bin_type(*grain), nat_type()),
+        Intrinsic::BinEql(grain, l, r) => binary(kernel, l, r, bin_type(*grain), bool_type()),
+        Intrinsic::BinGet(grain, bin, index) => {
             check(kernel, bin, &bin_type(*grain))?;
             check(kernel, index, &nat_type())?;
 
             Ok(grain_element(*grain))
         }
-        Prim::BinSlice(grain, bin, start, end) => {
+        Intrinsic::BinSlice(grain, bin, start, end) => {
             check(kernel, bin, &bin_type(*grain))?;
             check(kernel, start, &nat_type())?;
             check(kernel, end, &nat_type())?;
 
             Ok(bin_type(*grain))
         }
-        Prim::BinAppend(grain, bin, element) => {
+        Intrinsic::BinAppend(grain, bin, element) => {
             check(kernel, bin, &bin_type(*grain))?;
             check(kernel, element, &grain_element(*grain))?;
 
             Ok(bin_type(*grain))
         }
-        Prim::BinConcat(grain, operands) => {
+        Intrinsic::BinConcat(grain, operands) => {
             for operand in operands {
                 check(kernel, operand, &bin_type(*grain))?;
             }
@@ -208,7 +213,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         }
 
         // A list literal carries its element type like every other `Lst` operation — `[]` included, which is the case that used to be refused for having no element to read a type from.
-        Prim::Lst(element, elements) => {
+        Intrinsic::Lst(element, elements) => {
             let element = check_is_type(kernel, element)?;
             for entry in elements {
                 check(kernel, entry, &element)?;
@@ -216,20 +221,20 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
 
             Ok(lst_type(element))
         }
-        Prim::LstLen(element, list) => {
+        Intrinsic::LstLen(element, list) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &lst_type(element))?;
 
             Ok(nat_type())
         }
-        Prim::LstGet(element, list, index) => {
+        Intrinsic::LstGet(element, list, index) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &lst_type(element.clone()))?;
             check(kernel, index, &nat_type())?;
 
             Ok(element)
         }
-        Prim::LstSlice(element, list, start, end) => {
+        Intrinsic::LstSlice(element, list, start, end) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &lst_type(element.clone()))?;
             check(kernel, start, &nat_type())?;
@@ -237,14 +242,14 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
 
             Ok(lst_type(element))
         }
-        Prim::LstAppend(element, list, value) => {
+        Intrinsic::LstAppend(element, list, value) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &lst_type(element.clone()))?;
             check(kernel, value, &element)?;
 
             Ok(lst_type(element))
         }
-        Prim::LstConcat(element, operands) => {
+        Intrinsic::LstConcat(element, operands) => {
             let element = check_is_type(kernel, element)?;
             for operand in operands {
                 check(kernel, operand, &lst_type(element.clone()))?;
@@ -252,7 +257,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
 
             Ok(lst_type(element))
         }
-        Prim::LstMap(from, to, list, function) => {
+        Intrinsic::LstMap(from, to, list, function) => {
             let from = check_is_type(kernel, from)?;
             let to = check_is_type(kernel, to)?;
             check(kernel, list, &lst_type(from.clone()))?;
@@ -270,19 +275,19 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         // A mutable cell. Its identity is what makes a `Cell` of proofs relevant — see `Sort::of`.
         //
         // All three operations are host effects and so describe rather than do. `CellGet` returning `Io(T)` rather than `T` is what makes `match Cell/get(c)` ill-typed, which is the whole of what the purity analysis used to decide by walking the scrutinee.
-        Prim::Cell(element, initial) => {
+        Intrinsic::Cell(element, initial) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, initial, &element)?;
 
             Ok(io_type(cell_type(element)))
         }
-        Prim::CellGet(element, cell) => {
+        Intrinsic::CellGet(element, cell) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, cell, &cell_type(element.clone()))?;
 
             Ok(io_type(element))
         }
-        Prim::CellSet(element, cell, value) => {
+        Intrinsic::CellSet(element, cell, value) => {
             let element = check_is_type(kernel, element)?;
             check(kernel, cell, &cell_type(element.clone()))?;
             check(kernel, value, &element)?;
@@ -293,20 +298,20 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
         // `exit` ends the process, and its result is the unit type rather than whatever the caller demanded.
         //
         // That is the whole of the rule, and it is why there is no side condition here. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits — the forgery is the problem, not the non-return — and restricting *which* type it may be given cannot fix that, because any `Type`-sorted empty inductive eliminates into `Prop` unguarded. Fixing the result at `{}`, which `()` already inhabits, leaves nothing to forge.
-        Prim::ProcExit(code) => {
+        Intrinsic::ProcExit(code) => {
             check(kernel, code, &nat_type())?;
 
             Ok(io_type(Term::tuple_type_unit()))
         }
 
         // The two constructors of the opaque effect carrier. There is no third: nothing here or anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
-        Prim::IoPure(result, value) => {
+        Intrinsic::IoPure(result, value) => {
             let result = check_is_type(kernel, result)?;
             check(kernel, value, &result)?;
 
             Ok(io_type(result))
         }
-        Prim::IoBind(from, to, action, continuation) => {
+        Intrinsic::IoBind(from, to, action, continuation) => {
             let from = check_is_type(kernel, from)?;
             let to = check_is_type(kernel, to)?;
             check(kernel, action, &io_type(from.clone()))?;
@@ -323,7 +328,7 @@ pub(super) fn infer_prim(kernel: &mut Kernel, prim: &Prim) -> Result<Term, Kerne
     }
 }
 
-/// Check that `term` is a type, and hand it back. A primitive that carries its element type carries a *type*, and taking that on trust is how a container of nonsense would be admitted.
+/// Check that `term` is a type, and hand it back. An intrinsic that carries its element type carries a *type*, and taking that on trust is how a container of nonsense would be admitted.
 fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     let inferred = infer(kernel, term)?;
 

@@ -13,8 +13,8 @@ use binding::*;
 mod metavar;
 use metavar::*;
 
-mod prim;
-use prim::*;
+mod intrinsic;
+use intrinsic::*;
 
 mod match_;
 use match_::*;
@@ -32,8 +32,8 @@ use {
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
     curios_core::{
-        Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix, Let,
-        MetaId, Metavar, MetavarOrigin, Nat, NumLit, One, Prim, Proj, Rec, Scope, Struct,
+        Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
+        Intrinsic, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit, One, Proj, Rec, Scope, Struct,
         StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, TupleType,
         Variant, WitnessOrigin, instantiate_universe_levels_scoped,
     },
@@ -209,7 +209,7 @@ fn elaborate_subterm(
 
             (
                 Term::foreign(std::sync::Arc::clone(function), elaborated),
-                Term::prim(Prim::io_type(result)),
+                Term::intrinsic(Intrinsic::io_type(result)),
             )
         }
         Subterm::UniverseInst(instance) => {
@@ -235,7 +235,9 @@ fn elaborate_subterm(
             };
             (term.clone(), type_)
         }
-        Subterm::Prim(prim) => return elaborate_prim(context, term, prim, mode),
+        Subterm::Intrinsic(intrinsic) => {
+            return elaborate_intrinsic(context, term, intrinsic, mode);
+        }
         Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
         Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),

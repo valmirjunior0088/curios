@@ -20,8 +20,8 @@
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
-mod prim;
-use prim::convert_prim;
+mod intrinsic;
+use intrinsic::convert_intrinsic;
 
 #[cfg(test)]
 mod tests;
@@ -267,8 +267,8 @@ fn structural(
         (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right).into()),
         (Subterm::Prop, Subterm::Prop) => Ok(Turn::Done(true)),
 
-        (Subterm::Prim(left), Subterm::Prim(right)) => {
-            convert_prim(kernel, history, left, right).map(Turn::from)
+        (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
+            convert_intrinsic(kernel, history, left, right).map(Turn::from)
         }
 
         (Subterm::Var(left), Subterm::Var(right)) => Ok((left.unwrap() == right.unwrap()).into()),

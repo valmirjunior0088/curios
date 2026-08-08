@@ -1,10 +1,10 @@
-use curios_elab::{PrimBuilders, TermBuilders};
+use curios_elab::{IntrinsicBuilders, TermBuilders};
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Let, LetBinding, LstEntry, Name,
-        Nat, NatLiteral, NumLit, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn,
-        Term,
+        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Intrinsic, Let, LetBinding,
+        LstEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField, Rec, StructLitEntry,
+        Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName},
     num_bigint::BigUint,
@@ -144,9 +144,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // Reduction is still linear — measured at about 16 steps per byte against the derivation's 42, so a literal's ceiling against the default budget moves from roughly 23KiB to roughly 61KiB rather than away. Removing it needs one of two things, and both are deferred deliberately until the trusted-base work settles:
     //
     // - Full reflection: restate `Valid` as `Eq(scan_from(lead, b), lead)` and rewrite `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation — as lemmas about the fold's algebra. That deletes the family this bridge preserves, and it is a rewrite of that module rather than an edit to it.
-    // - A native scan primitive folded over packed `Bytes`, which would make the check O(1) steps. That moves a UTF-8 validator into the trusted base, which is the wrong direction while the kernel is being made load-bearing.
+    // - A native scan intrinsic folded over packed `Bytes`, which would make the check O(1) steps. That moves a UTF-8 validator into the trusted base, which is the wrong direction while the kernel is being made load-bearing.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
-        let packed = curios_core::Term::prim(curios_core::Prim::Bin(
+        let packed = curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
             Grain::X,
             PackedBin::from_bytes(bytes.to_vec()),
         ));
@@ -169,10 +169,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// A Rust `char` is already a Unicode scalar, so the literal meta-emitter selects the corresponding `/syn/Char/Scalar` range constructor and supplies a closed reflected proof. The proof erases and the single relevant `code` field collapses to the ordinary Nat carrier.
     pub(super) fn char_literal(&self, character: char) -> curios_core::Term {
-        let code = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Succ(
-            BigUint::from(character as u32),
-            curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
-        )));
+        let code =
+            curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Succ(
+                BigUint::from(character as u32),
+                curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
+            )));
         let constructor = if (character as u32) < 0xD800 {
             self.context.syntax().character().scalar_below()
         } else {
@@ -213,7 +214,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core primitive.
+    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core intrinsic.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
             Syn::Char(character) => Ok(self.char_literal(*character)),
@@ -232,9 +233,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Hole => curios_core::Term::metavar(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk reports what elaboration determined for it instead of splicing.
             Subterm::Goal => curios_core::Term::goal(self.context.fresh_metavar()),
-            // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core primitive.
+            // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core intrinsic.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
-            Subterm::Prim(prim) => curios_core::Term::prim(self.prim(prim)?),
+            Subterm::Intrinsic(intrinsic) => {
+                curios_core::Term::intrinsic(self.intrinsic(intrinsic)?)
+            }
             Subterm::Foreign(function, args) => curios_core::Term::foreign(
                 Arc::clone(function),
                 args.iter()
@@ -616,12 +619,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.collect(&infix.right, binds)?,
             ),
             // An `Lst` literal's elements and spread operands hoist their bangs into this region, like an application's arguments.
-            Subterm::Prim(Prim::Lst(entries)) => curios_core::Term::prim(
+            Subterm::Intrinsic(Intrinsic::Lst(entries)) => curios_core::Term::intrinsic(
                 self.lower_lst_literal(entries, |term| self.collect(term, binds))?,
             ),
             // A `Bits`/`Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
-            Subterm::Prim(Prim::Bin(grain, segments)) => {
-                curios_core::Term::prim(Self::lower_bin_literal(*grain, segments, |term| {
+            Subterm::Intrinsic(Intrinsic::Bin(grain, segments)) => {
+                curios_core::Term::intrinsic(Self::lower_bin_literal(*grain, segments, |term| {
                     self.collect(term, binds)
                 })?)
             }
@@ -872,25 +875,23 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             (1, Some(_)) => {
                 let base = operands.pop().expect("the operand just matched");
                 let elem = run.pop().expect("the run just measured one");
-                operands.push(curios_core::Term::prim(curios_core::Prim::lst_append(
-                    element(),
-                    base,
-                    elem,
-                )));
+                operands.push(curios_core::Term::intrinsic(
+                    curios_core::Intrinsic::lst_append(element(), base, elem),
+                ));
             }
-            _ => operands.push(curios_core::Term::prim(curios_core::Prim::Lst(
+            _ => operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::Lst(
                 element(),
                 std::mem::take(run),
             ))),
         }
     }
 
-    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `Lst` — exactly the pre-spread lowering, `[]` included. With spreads, elements join the literal through [`Self::flush_lst_run`] and the whole becomes an n-ary `LstConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `LstConcat` case in `curios_elab`'s `elaborate_prim`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
+    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `Lst` — exactly the pre-spread lowering, `[]` included. With spreads, elements join the literal through [`Self::flush_lst_run`] and the whole becomes an n-ary `LstConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `LstConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
     pub(super) fn lower_lst_literal(
         &self,
         entries: &[LstEntry],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
-    ) -> Result<curios_core::Prim, Error> {
+    ) -> Result<curios_core::Intrinsic, Error> {
         // The literal's element-type slot: an implicit the literal cannot name, minted fresh and solved by elaboration — bidirectionally from the expected type when checking, from the elements otherwise.
         let element = || curios_core::Term::metavar(self.context.fresh_metavar());
 
@@ -908,7 +909,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
 
         if operands.is_empty() {
-            return Ok(curios_core::Prim::Lst(element(), run));
+            return Ok(curios_core::Intrinsic::Lst(element(), run));
         }
 
         self.flush_lst_run(&mut operands, &mut run);
@@ -916,10 +917,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         match operands.len() {
             // A lone append is the value itself; the concatenation would only be normalised away.
             1 => match &*operands[0] {
-                curios_core::Subterm::Prim(prim) => Ok(prim.clone()),
-                _ => Ok(curios_core::Prim::LstConcat(element(), operands)),
+                curios_core::Subterm::Intrinsic(intrinsic) => Ok(intrinsic.clone()),
+                _ => Ok(curios_core::Intrinsic::LstConcat(element(), operands)),
             },
-            _ => Ok(curios_core::Prim::LstConcat(element(), operands)),
+            _ => Ok(curios_core::Intrinsic::LstConcat(element(), operands)),
         }
     }
 
@@ -928,8 +929,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A written sign excludes `Byte` (see `SYNTAX.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
     fn bin_constant_atom(grain: Grain, term: &Term) -> Option<u8> {
         match (grain, term.as_subterm()) {
-            (Grain::B, Subterm::Prim(Prim::Bool(bit))) => Some(u8::from(*bit)),
-            (Grain::X, Subterm::Prim(Prim::Byte(byte))) => Some(*byte),
+            (Grain::B, Subterm::Intrinsic(Intrinsic::Bool(bit))) => Some(u8::from(*bit)),
+            (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => Some(*byte),
             (
                 Grain::X,
                 Subterm::NumLit(NumLit {
@@ -968,14 +969,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         folded
     }
 
-    /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).
+    /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot).
     ///
     /// An atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[\48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b[h, ..t]` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
         grain: Grain,
         segments: &[BinSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
-    ) -> Result<curios_core::Prim, Error> {
+    ) -> Result<curios_core::Intrinsic, Error> {
         let segments = Self::fold_bin_constants(grain, segments);
 
         if segments
@@ -997,7 +998,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 Grain::B => PackedBin::from_bits(atoms.into_iter().map(|atom| atom != 0)),
                 Grain::X => PackedBin::from_bytes(atoms),
             };
-            return Ok(curios_core::Prim::Bin(grain, value));
+            return Ok(curios_core::Intrinsic::Bin(grain, value));
         }
 
         let packed = |run: &[u8]| match grain {
@@ -1008,17 +1009,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut operands: Vec<curios_core::Term> = Vec::new();
         for segment in &segments {
             match segment {
-                BinSegment::Bytes(run) => operands.push(curios_core::Term::prim(
-                    curios_core::Prim::Bin(grain, packed(run)),
+                BinSegment::Bytes(run) => operands.push(curios_core::Term::intrinsic(
+                    curios_core::Intrinsic::Bin(grain, packed(run)),
                 )),
                 BinSegment::Atom(term) => {
                     let base = operands.pop().unwrap_or_else(|| {
-                        curios_core::Term::prim(curios_core::Prim::Bin(grain, PackedBin::empty()))
+                        curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
+                            grain,
+                            PackedBin::empty(),
+                        ))
                     });
                     let atom = lower(term)?;
-                    operands.push(curios_core::Term::prim(curios_core::Prim::bin_append(
-                        grain, base, atom,
-                    )));
+                    operands.push(curios_core::Term::intrinsic(
+                        curios_core::Intrinsic::bin_append(grain, base, atom),
+                    ));
                 }
                 BinSegment::Spread(term) => operands.push(lower(term)?),
             }
@@ -1026,303 +1030,314 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
         // A lone operand is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away.
         if operands.len() == 1
-            && let curios_core::Subterm::Prim(prim) = &*operands[0]
+            && let curios_core::Subterm::Intrinsic(intrinsic) = &*operands[0]
         {
-            return Ok(prim.clone());
+            return Ok(intrinsic.clone());
         }
 
-        Ok(curios_core::Prim::BinConcat(grain, operands))
+        Ok(curios_core::Intrinsic::BinConcat(grain, operands))
     }
 
-    pub(super) fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
-        Ok(match prim {
-            Prim::BoolType => curios_core::Prim::BoolType,
-            Prim::Bool(b) => curios_core::Prim::Bool(*b),
-            Prim::BoolAnd(left, right) => {
-                curios_core::Prim::BoolAnd(self.term(left)?, self.term(right)?)
+    pub(super) fn intrinsic(&self, intrinsic: &Intrinsic) -> Result<curios_core::Intrinsic, Error> {
+        Ok(match intrinsic {
+            Intrinsic::BoolType => curios_core::Intrinsic::BoolType,
+            Intrinsic::Bool(b) => curios_core::Intrinsic::Bool(*b),
+            Intrinsic::BoolAnd(left, right) => {
+                curios_core::Intrinsic::BoolAnd(self.term(left)?, self.term(right)?)
             }
-            Prim::BoolOr(left, right) => {
-                curios_core::Prim::BoolOr(self.term(left)?, self.term(right)?)
+            Intrinsic::BoolOr(left, right) => {
+                curios_core::Intrinsic::BoolOr(self.term(left)?, self.term(right)?)
             }
-            Prim::BoolXor(left, right) => {
-                curios_core::Prim::BoolXor(self.term(left)?, self.term(right)?)
+            Intrinsic::BoolXor(left, right) => {
+                curios_core::Intrinsic::BoolXor(self.term(left)?, self.term(right)?)
             }
-            Prim::BoolEql(left, right) => {
-                curios_core::Prim::BoolEql(self.term(left)?, self.term(right)?)
+            Intrinsic::BoolEql(left, right) => {
+                curios_core::Intrinsic::BoolEql(self.term(left)?, self.term(right)?)
             }
-            Prim::BoolNeq(left, right) => {
-                curios_core::Prim::BoolNeq(self.term(left)?, self.term(right)?)
+            Intrinsic::BoolNeq(left, right) => {
+                curios_core::Intrinsic::BoolNeq(self.term(left)?, self.term(right)?)
             }
-            Prim::NatType => curios_core::Prim::NatType,
-            Prim::Nat(Nat::Zero) => curios_core::Prim::Nat(curios_core::Nat::Zero),
-            Prim::Nat(Nat::Succ(NatLiteral(spine, _), inner)) => {
-                curios_core::Prim::Nat(curios_core::Nat::Succ(spine.clone(), self.term(inner)?))
+            Intrinsic::NatType => curios_core::Intrinsic::NatType,
+            Intrinsic::Nat(Nat::Zero) => curios_core::Intrinsic::Nat(curios_core::Nat::Zero),
+            Intrinsic::Nat(Nat::Succ(NatLiteral(spine, _), inner)) => curios_core::Intrinsic::Nat(
+                curios_core::Nat::Succ(spine.clone(), self.term(inner)?),
+            ),
+            Intrinsic::ByteType => curios_core::Intrinsic::ByteType,
+            Intrinsic::Byte(value) => curios_core::Intrinsic::Byte(*value),
+            Intrinsic::ByteToNat(inner) => curios_core::Intrinsic::ByteToNat(self.term(inner)?),
+            Intrinsic::NatToByte(inner) => curios_core::Intrinsic::NatToByte(self.term(inner)?),
+            Intrinsic::ByteEql(left, right) => {
+                curios_core::Intrinsic::ByteEql(self.term(left)?, self.term(right)?)
             }
-            Prim::ByteType => curios_core::Prim::ByteType,
-            Prim::Byte(value) => curios_core::Prim::Byte(*value),
-            Prim::ByteToNat(inner) => curios_core::Prim::ByteToNat(self.term(inner)?),
-            Prim::NatToByte(inner) => curios_core::Prim::NatToByte(self.term(inner)?),
-            Prim::ByteEql(left, right) => {
-                curios_core::Prim::ByteEql(self.term(left)?, self.term(right)?)
+            Intrinsic::ByteLt(left, right) => {
+                curios_core::Intrinsic::ByteLt(self.term(left)?, self.term(right)?)
             }
-            Prim::ByteLt(left, right) => {
-                curios_core::Prim::ByteLt(self.term(left)?, self.term(right)?)
+            Intrinsic::ByteLte(left, right) => {
+                curios_core::Intrinsic::ByteLte(self.term(left)?, self.term(right)?)
             }
-            Prim::ByteLte(left, right) => {
-                curios_core::Prim::ByteLte(self.term(left)?, self.term(right)?)
+            Intrinsic::ByteGt(left, right) => {
+                curios_core::Intrinsic::ByteGt(self.term(left)?, self.term(right)?)
             }
-            Prim::ByteGt(left, right) => {
-                curios_core::Prim::ByteGt(self.term(left)?, self.term(right)?)
+            Intrinsic::ByteGte(left, right) => {
+                curios_core::Intrinsic::ByteGte(self.term(left)?, self.term(right)?)
             }
-            Prim::ByteGte(left, right) => {
-                curios_core::Prim::ByteGte(self.term(left)?, self.term(right)?)
+            Intrinsic::NatEql(left, right) => {
+                curios_core::Intrinsic::nat_eql(self.term(left)?, self.term(right)?)
             }
-            Prim::NatEql(left, right) => {
-                curios_core::Prim::nat_eql(self.term(left)?, self.term(right)?)
+            Intrinsic::NatNeq(left, right) => {
+                curios_core::Intrinsic::nat_neq(self.term(left)?, self.term(right)?)
             }
-            Prim::NatNeq(left, right) => {
-                curios_core::Prim::nat_neq(self.term(left)?, self.term(right)?)
+            Intrinsic::NatAdd(left, right) => {
+                curios_core::Intrinsic::nat_add(self.term(left)?, self.term(right)?)
             }
-            Prim::NatAdd(left, right) => {
-                curios_core::Prim::nat_add(self.term(left)?, self.term(right)?)
+            Intrinsic::NatSub(left, right) => {
+                curios_core::Intrinsic::nat_sub(self.term(left)?, self.term(right)?)
             }
-            Prim::NatSub(left, right) => {
-                curios_core::Prim::nat_sub(self.term(left)?, self.term(right)?)
+            Intrinsic::NatMul(left, right) => {
+                curios_core::Intrinsic::nat_mul(self.term(left)?, self.term(right)?)
             }
-            Prim::NatMul(left, right) => {
-                curios_core::Prim::nat_mul(self.term(left)?, self.term(right)?)
+            Intrinsic::NatLt(left, right) => {
+                curios_core::Intrinsic::nat_lt(self.term(left)?, self.term(right)?)
             }
-            Prim::NatLt(left, right) => {
-                curios_core::Prim::nat_lt(self.term(left)?, self.term(right)?)
+            Intrinsic::NatDiv(left, right) => {
+                curios_core::Intrinsic::nat_div(self.term(left)?, self.term(right)?)
             }
-            Prim::NatDiv(left, right) => {
-                curios_core::Prim::nat_div(self.term(left)?, self.term(right)?)
+            Intrinsic::NatRem(left, right) => {
+                curios_core::Intrinsic::nat_rem(self.term(left)?, self.term(right)?)
             }
-            Prim::NatRem(left, right) => {
-                curios_core::Prim::nat_rem(self.term(left)?, self.term(right)?)
+            Intrinsic::NatGt(left, right) => {
+                curios_core::Intrinsic::nat_gt(self.term(left)?, self.term(right)?)
             }
-            Prim::NatGt(left, right) => {
-                curios_core::Prim::nat_gt(self.term(left)?, self.term(right)?)
+            Intrinsic::NatLte(left, right) => {
+                curios_core::Intrinsic::nat_lte(self.term(left)?, self.term(right)?)
             }
-            Prim::NatLte(left, right) => {
-                curios_core::Prim::nat_lte(self.term(left)?, self.term(right)?)
+            Intrinsic::NatGte(left, right) => {
+                curios_core::Intrinsic::nat_gte(self.term(left)?, self.term(right)?)
             }
-            Prim::NatGte(left, right) => {
-                curios_core::Prim::nat_gte(self.term(left)?, self.term(right)?)
+            Intrinsic::NatAnd(left, right) => {
+                curios_core::Intrinsic::NatAnd(self.term(left)?, self.term(right)?)
             }
-            Prim::NatAnd(left, right) => {
-                curios_core::Prim::NatAnd(self.term(left)?, self.term(right)?)
+            Intrinsic::NatOr(left, right) => {
+                curios_core::Intrinsic::NatOr(self.term(left)?, self.term(right)?)
             }
-            Prim::NatOr(left, right) => {
-                curios_core::Prim::NatOr(self.term(left)?, self.term(right)?)
+            Intrinsic::NatXor(left, right) => {
+                curios_core::Intrinsic::NatXor(self.term(left)?, self.term(right)?)
             }
-            Prim::NatXor(left, right) => {
-                curios_core::Prim::NatXor(self.term(left)?, self.term(right)?)
+            Intrinsic::NatShl(left, right) => {
+                curios_core::Intrinsic::NatShl(self.term(left)?, self.term(right)?)
             }
-            Prim::NatShl(left, right) => {
-                curios_core::Prim::NatShl(self.term(left)?, self.term(right)?)
+            Intrinsic::NatShr(left, right) => {
+                curios_core::Intrinsic::NatShr(self.term(left)?, self.term(right)?)
             }
-            Prim::NatShr(left, right) => {
-                curios_core::Prim::NatShr(self.term(left)?, self.term(right)?)
+            Intrinsic::NatRotl(left, right) => {
+                curios_core::Intrinsic::NatRotl(self.term(left)?, self.term(right)?)
             }
-            Prim::NatRotl(left, right) => {
-                curios_core::Prim::NatRotl(self.term(left)?, self.term(right)?)
+            Intrinsic::NatRotr(left, right) => {
+                curios_core::Intrinsic::NatRotr(self.term(left)?, self.term(right)?)
             }
-            Prim::NatRotr(left, right) => {
-                curios_core::Prim::NatRotr(self.term(left)?, self.term(right)?)
+            Intrinsic::NatClz(inner) => curios_core::Intrinsic::NatClz(self.term(inner)?),
+            Intrinsic::NatCtz(inner) => curios_core::Intrinsic::NatCtz(self.term(inner)?),
+            Intrinsic::NatPopcnt(inner) => curios_core::Intrinsic::NatPopcnt(self.term(inner)?),
+            Intrinsic::IntType => curios_core::Intrinsic::IntType,
+            Intrinsic::Int(value) => curios_core::Intrinsic::Int(value.clone()),
+            Intrinsic::IntEql(left, right) => {
+                curios_core::Intrinsic::int_eql(self.term(left)?, self.term(right)?)
             }
-            Prim::NatClz(inner) => curios_core::Prim::NatClz(self.term(inner)?),
-            Prim::NatCtz(inner) => curios_core::Prim::NatCtz(self.term(inner)?),
-            Prim::NatPopcnt(inner) => curios_core::Prim::NatPopcnt(self.term(inner)?),
-            Prim::IntType => curios_core::Prim::IntType,
-            Prim::Int(value) => curios_core::Prim::Int(value.clone()),
-            Prim::IntEql(left, right) => {
-                curios_core::Prim::int_eql(self.term(left)?, self.term(right)?)
+            Intrinsic::IntNeq(left, right) => {
+                curios_core::Intrinsic::int_neq(self.term(left)?, self.term(right)?)
             }
-            Prim::IntNeq(left, right) => {
-                curios_core::Prim::int_neq(self.term(left)?, self.term(right)?)
+            Intrinsic::IntAdd(left, right) => {
+                curios_core::Intrinsic::int_add(self.term(left)?, self.term(right)?)
             }
-            Prim::IntAdd(left, right) => {
-                curios_core::Prim::int_add(self.term(left)?, self.term(right)?)
+            Intrinsic::IntSub(left, right) => {
+                curios_core::Intrinsic::int_sub(self.term(left)?, self.term(right)?)
             }
-            Prim::IntSub(left, right) => {
-                curios_core::Prim::int_sub(self.term(left)?, self.term(right)?)
+            Intrinsic::IntMul(left, right) => {
+                curios_core::Intrinsic::int_mul(self.term(left)?, self.term(right)?)
             }
-            Prim::IntMul(left, right) => {
-                curios_core::Prim::int_mul(self.term(left)?, self.term(right)?)
+            Intrinsic::IntDiv(left, right) => {
+                curios_core::Intrinsic::int_div(self.term(left)?, self.term(right)?)
             }
-            Prim::IntDiv(left, right) => {
-                curios_core::Prim::int_div(self.term(left)?, self.term(right)?)
+            Intrinsic::IntRem(left, right) => {
+                curios_core::Intrinsic::int_rem(self.term(left)?, self.term(right)?)
             }
-            Prim::IntRem(left, right) => {
-                curios_core::Prim::int_rem(self.term(left)?, self.term(right)?)
+            Intrinsic::IntLt(left, right) => {
+                curios_core::Intrinsic::int_lt(self.term(left)?, self.term(right)?)
             }
-            Prim::IntLt(left, right) => {
-                curios_core::Prim::int_lt(self.term(left)?, self.term(right)?)
+            Intrinsic::IntGt(left, right) => {
+                curios_core::Intrinsic::int_gt(self.term(left)?, self.term(right)?)
             }
-            Prim::IntGt(left, right) => {
-                curios_core::Prim::int_gt(self.term(left)?, self.term(right)?)
+            Intrinsic::IntLte(left, right) => {
+                curios_core::Intrinsic::int_lte(self.term(left)?, self.term(right)?)
             }
-            Prim::IntLte(left, right) => {
-                curios_core::Prim::int_lte(self.term(left)?, self.term(right)?)
+            Intrinsic::IntGte(left, right) => {
+                curios_core::Intrinsic::int_gte(self.term(left)?, self.term(right)?)
             }
-            Prim::IntGte(left, right) => {
-                curios_core::Prim::int_gte(self.term(left)?, self.term(right)?)
+            Intrinsic::IntAnd(left, right) => {
+                curios_core::Intrinsic::IntAnd(self.term(left)?, self.term(right)?)
             }
-            Prim::IntAnd(left, right) => {
-                curios_core::Prim::IntAnd(self.term(left)?, self.term(right)?)
+            Intrinsic::IntOr(left, right) => {
+                curios_core::Intrinsic::IntOr(self.term(left)?, self.term(right)?)
             }
-            Prim::IntOr(left, right) => {
-                curios_core::Prim::IntOr(self.term(left)?, self.term(right)?)
+            Intrinsic::IntXor(left, right) => {
+                curios_core::Intrinsic::IntXor(self.term(left)?, self.term(right)?)
             }
-            Prim::IntXor(left, right) => {
-                curios_core::Prim::IntXor(self.term(left)?, self.term(right)?)
+            Intrinsic::IntShl(left, right) => {
+                curios_core::Intrinsic::IntShl(self.term(left)?, self.term(right)?)
             }
-            Prim::IntShl(left, right) => {
-                curios_core::Prim::IntShl(self.term(left)?, self.term(right)?)
+            Intrinsic::IntShr(left, right) => {
+                curios_core::Intrinsic::IntShr(self.term(left)?, self.term(right)?)
             }
-            Prim::IntShr(left, right) => {
-                curios_core::Prim::IntShr(self.term(left)?, self.term(right)?)
+            Intrinsic::IntRotl(left, right) => {
+                curios_core::Intrinsic::IntRotl(self.term(left)?, self.term(right)?)
             }
-            Prim::IntRotl(left, right) => {
-                curios_core::Prim::IntRotl(self.term(left)?, self.term(right)?)
+            Intrinsic::IntRotr(left, right) => {
+                curios_core::Intrinsic::IntRotr(self.term(left)?, self.term(right)?)
             }
-            Prim::IntRotr(left, right) => {
-                curios_core::Prim::IntRotr(self.term(left)?, self.term(right)?)
+            Intrinsic::IntClz(inner) => curios_core::Intrinsic::IntClz(self.term(inner)?),
+            Intrinsic::IntCtz(inner) => curios_core::Intrinsic::IntCtz(self.term(inner)?),
+            Intrinsic::IntPopcnt(inner) => curios_core::Intrinsic::IntPopcnt(self.term(inner)?),
+            Intrinsic::FltType => curios_core::Intrinsic::FltType,
+            Intrinsic::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
+            Intrinsic::FltAdd(left, right) => {
+                curios_core::Intrinsic::flt_add(self.term(left)?, self.term(right)?)
             }
-            Prim::IntClz(inner) => curios_core::Prim::IntClz(self.term(inner)?),
-            Prim::IntCtz(inner) => curios_core::Prim::IntCtz(self.term(inner)?),
-            Prim::IntPopcnt(inner) => curios_core::Prim::IntPopcnt(self.term(inner)?),
-            Prim::FltType => curios_core::Prim::FltType,
-            Prim::Flt(flt) => curios_core::Prim::Flt(*flt),
-            Prim::FltAdd(left, right) => {
-                curios_core::Prim::flt_add(self.term(left)?, self.term(right)?)
+            Intrinsic::FltSub(left, right) => {
+                curios_core::Intrinsic::flt_sub(self.term(left)?, self.term(right)?)
             }
-            Prim::FltSub(left, right) => {
-                curios_core::Prim::flt_sub(self.term(left)?, self.term(right)?)
+            Intrinsic::FltMul(left, right) => {
+                curios_core::Intrinsic::flt_mul(self.term(left)?, self.term(right)?)
             }
-            Prim::FltMul(left, right) => {
-                curios_core::Prim::flt_mul(self.term(left)?, self.term(right)?)
+            Intrinsic::FltDiv(left, right) => {
+                curios_core::Intrinsic::flt_div(self.term(left)?, self.term(right)?)
             }
-            Prim::FltDiv(left, right) => {
-                curios_core::Prim::flt_div(self.term(left)?, self.term(right)?)
+            Intrinsic::FltRem(left, right) => {
+                curios_core::Intrinsic::FltRem(self.term(left)?, self.term(right)?)
             }
-            Prim::FltRem(left, right) => {
-                curios_core::Prim::FltRem(self.term(left)?, self.term(right)?)
+            Intrinsic::FltEql(left, right) => {
+                curios_core::Intrinsic::flt_eql(self.term(left)?, self.term(right)?)
             }
-            Prim::FltEql(left, right) => {
-                curios_core::Prim::flt_eql(self.term(left)?, self.term(right)?)
+            Intrinsic::FltNeq(left, right) => {
+                curios_core::Intrinsic::flt_neq(self.term(left)?, self.term(right)?)
             }
-            Prim::FltNeq(left, right) => {
-                curios_core::Prim::flt_neq(self.term(left)?, self.term(right)?)
+            Intrinsic::FltLt(left, right) => {
+                curios_core::Intrinsic::flt_lt(self.term(left)?, self.term(right)?)
             }
-            Prim::FltLt(left, right) => {
-                curios_core::Prim::flt_lt(self.term(left)?, self.term(right)?)
+            Intrinsic::FltGt(left, right) => {
+                curios_core::Intrinsic::flt_gt(self.term(left)?, self.term(right)?)
             }
-            Prim::FltGt(left, right) => {
-                curios_core::Prim::flt_gt(self.term(left)?, self.term(right)?)
+            Intrinsic::FltLte(left, right) => {
+                curios_core::Intrinsic::flt_lte(self.term(left)?, self.term(right)?)
             }
-            Prim::FltLte(left, right) => {
-                curios_core::Prim::flt_lte(self.term(left)?, self.term(right)?)
+            Intrinsic::FltGte(left, right) => {
+                curios_core::Intrinsic::flt_gte(self.term(left)?, self.term(right)?)
             }
-            Prim::FltGte(left, right) => {
-                curios_core::Prim::flt_gte(self.term(left)?, self.term(right)?)
+            Intrinsic::FltMin(left, right) => {
+                curios_core::Intrinsic::flt_min(self.term(left)?, self.term(right)?)
             }
-            Prim::FltMin(left, right) => {
-                curios_core::Prim::flt_min(self.term(left)?, self.term(right)?)
+            Intrinsic::FltMax(left, right) => {
+                curios_core::Intrinsic::flt_max(self.term(left)?, self.term(right)?)
             }
-            Prim::FltMax(left, right) => {
-                curios_core::Prim::flt_max(self.term(left)?, self.term(right)?)
+            Intrinsic::FltNeg(inner) => curios_core::Intrinsic::flt_neg(self.term(inner)?),
+            Intrinsic::FltAbs(inner) => curios_core::Intrinsic::flt_abs(self.term(inner)?),
+            Intrinsic::FltCopysign(left, right) => {
+                curios_core::Intrinsic::FltCopysign(self.term(left)?, self.term(right)?)
             }
-            Prim::FltNeg(inner) => curios_core::Prim::flt_neg(self.term(inner)?),
-            Prim::FltAbs(inner) => curios_core::Prim::flt_abs(self.term(inner)?),
-            Prim::FltCopysign(left, right) => {
-                curios_core::Prim::FltCopysign(self.term(left)?, self.term(right)?)
+            Intrinsic::FltSqrt(inner) => curios_core::Intrinsic::flt_sqrt(self.term(inner)?),
+            Intrinsic::FltFloor(inner) => curios_core::Intrinsic::flt_floor(self.term(inner)?),
+            Intrinsic::FltCeil(inner) => curios_core::Intrinsic::flt_ceil(self.term(inner)?),
+            Intrinsic::FltTrunc(inner) => curios_core::Intrinsic::flt_trunc(self.term(inner)?),
+            Intrinsic::FltNearest(inner) => curios_core::Intrinsic::flt_nearest(self.term(inner)?),
+            Intrinsic::FltToLeBytes(inner) => {
+                curios_core::Intrinsic::flt_to_le_bytes(self.term(inner)?)
             }
-            Prim::FltSqrt(inner) => curios_core::Prim::flt_sqrt(self.term(inner)?),
-            Prim::FltFloor(inner) => curios_core::Prim::flt_floor(self.term(inner)?),
-            Prim::FltCeil(inner) => curios_core::Prim::flt_ceil(self.term(inner)?),
-            Prim::FltTrunc(inner) => curios_core::Prim::flt_trunc(self.term(inner)?),
-            Prim::FltNearest(inner) => curios_core::Prim::flt_nearest(self.term(inner)?),
-            Prim::FltToLeBytes(inner) => curios_core::Prim::flt_to_le_bytes(self.term(inner)?),
-            Prim::FltOfLeBytes(inner) => curios_core::Prim::flt_of_le_bytes(self.term(inner)?),
-            Prim::NatToInt(inner) => curios_core::Prim::nat_to_int(self.term(inner)?),
-            Prim::HandleType => curios_core::Prim::HandleType,
-            Prim::Handle(token) => curios_core::Prim::Handle(*token),
-            Prim::HandleEql(left, right) => {
-                curios_core::Prim::io_eql(self.term(left)?, self.term(right)?)
+            Intrinsic::FltOfLeBytes(inner) => {
+                curios_core::Intrinsic::flt_of_le_bytes(self.term(inner)?)
             }
-            Prim::ProcExit(code) => curios_core::Prim::ProcExit(self.term(code)?),
-            Prim::NatToFlt(inner) => curios_core::Prim::nat_to_flt(self.term(inner)?),
-            Prim::IntToNat(inner) => curios_core::Prim::int_to_nat(self.term(inner)?),
-            Prim::IntToFlt(inner) => curios_core::Prim::int_to_flt(self.term(inner)?),
-            Prim::FltToNat(inner) => curios_core::Prim::flt_to_nat(self.term(inner)?),
-            Prim::FltToInt(inner) => curios_core::Prim::flt_to_int(self.term(inner)?),
-            Prim::BinType(grain) => curios_core::Prim::BinType(*grain),
+            Intrinsic::NatToInt(inner) => curios_core::Intrinsic::nat_to_int(self.term(inner)?),
+            Intrinsic::HandleType => curios_core::Intrinsic::HandleType,
+            Intrinsic::Handle(token) => curios_core::Intrinsic::Handle(*token),
+            Intrinsic::HandleEql(left, right) => {
+                curios_core::Intrinsic::io_eql(self.term(left)?, self.term(right)?)
+            }
+            Intrinsic::ProcExit(code) => curios_core::Intrinsic::ProcExit(self.term(code)?),
+            Intrinsic::NatToFlt(inner) => curios_core::Intrinsic::nat_to_flt(self.term(inner)?),
+            Intrinsic::IntToNat(inner) => curios_core::Intrinsic::int_to_nat(self.term(inner)?),
+            Intrinsic::IntToFlt(inner) => curios_core::Intrinsic::int_to_flt(self.term(inner)?),
+            Intrinsic::FltToNat(inner) => curios_core::Intrinsic::flt_to_nat(self.term(inner)?),
+            Intrinsic::FltToInt(inner) => curios_core::Intrinsic::flt_to_int(self.term(inner)?),
+            Intrinsic::BinType(grain) => curios_core::Intrinsic::BinType(*grain),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
-            Prim::Bin(grain, segments) => {
+            Intrinsic::Bin(grain, segments) => {
                 Self::lower_bin_literal(*grain, segments, |term| self.term(term))?
             }
-            Prim::BinLen(grain, inner) => curios_core::Prim::bin_len(*grain, self.term(inner)?),
-            Prim::BinEql(grain, left, right) => {
-                curios_core::Prim::bin_eql(*grain, self.term(left)?, self.term(right)?)
+            Intrinsic::BinLen(grain, inner) => {
+                curios_core::Intrinsic::bin_len(*grain, self.term(inner)?)
             }
-            Prim::BinGet(grain, bin, index) => {
-                curios_core::Prim::bin_get(*grain, self.term(bin)?, self.term(index)?)
+            Intrinsic::BinEql(grain, left, right) => {
+                curios_core::Intrinsic::bin_eql(*grain, self.term(left)?, self.term(right)?)
             }
-            Prim::BinSlice(grain, bin, start, end) => curios_core::Prim::bin_slice(
+            Intrinsic::BinGet(grain, bin, index) => {
+                curios_core::Intrinsic::bin_get(*grain, self.term(bin)?, self.term(index)?)
+            }
+            Intrinsic::BinSlice(grain, bin, start, end) => curios_core::Intrinsic::bin_slice(
                 *grain,
                 self.term(bin)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
-            Prim::BinAppend(grain, bin, atom) => {
-                curios_core::Prim::bin_append(*grain, self.term(bin)?, self.term(atom)?)
+            Intrinsic::BinAppend(grain, bin, atom) => {
+                curios_core::Intrinsic::bin_append(*grain, self.term(bin)?, self.term(atom)?)
             }
-            Prim::BinConcat(grain, left, right) => {
-                curios_core::Prim::bin_concat(*grain, [self.term(left)?, self.term(right)?])
+            Intrinsic::BinConcat(grain, left, right) => {
+                curios_core::Intrinsic::bin_concat(*grain, [self.term(left)?, self.term(right)?])
             }
-            Prim::LstType(inner) => curios_core::Prim::lst_type(self.term(inner)?),
-            Prim::Lst(entries) => self.lower_lst_literal(entries, |term| self.term(term))?,
-            Prim::LstLen(ty, inner) => {
-                curios_core::Prim::lst_len(self.term(ty)?, self.term(inner)?)
+            Intrinsic::LstType(inner) => curios_core::Intrinsic::lst_type(self.term(inner)?),
+            Intrinsic::Lst(entries) => self.lower_lst_literal(entries, |term| self.term(term))?,
+            Intrinsic::LstLen(ty, inner) => {
+                curios_core::Intrinsic::lst_len(self.term(ty)?, self.term(inner)?)
             }
-            Prim::LstGet(ty, list, index) => {
-                curios_core::Prim::lst_get(self.term(ty)?, self.term(list)?, self.term(index)?)
+            Intrinsic::LstGet(ty, list, index) => {
+                curios_core::Intrinsic::lst_get(self.term(ty)?, self.term(list)?, self.term(index)?)
             }
-            Prim::LstSlice(ty, list, start, end) => curios_core::Prim::lst_slice(
+            Intrinsic::LstSlice(ty, list, start, end) => curios_core::Intrinsic::lst_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
-            Prim::LstAppend(ty, list, elem) => {
-                curios_core::Prim::lst_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
-            }
-            Prim::LstConcat(ty, left, right) => {
-                curios_core::Prim::lst_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
-            }
-            Prim::LstMap(a, b, lst, f) => curios_core::Prim::lst_map(
+            Intrinsic::LstAppend(ty, list, elem) => curios_core::Intrinsic::lst_append(
+                self.term(ty)?,
+                self.term(list)?,
+                self.term(elem)?,
+            ),
+            Intrinsic::LstConcat(ty, left, right) => curios_core::Intrinsic::lst_concat(
+                self.term(ty)?,
+                [self.term(left)?, self.term(right)?],
+            ),
+            Intrinsic::LstMap(a, b, lst, f) => curios_core::Intrinsic::lst_map(
                 self.term(a)?,
                 self.term(b)?,
                 self.term(lst)?,
                 self.term(f)?,
             ),
-            Prim::CellType(inner) => curios_core::Prim::cell_type(self.term(inner)?),
-            Prim::Cell(type_, init) => {
-                curios_core::Prim::cell_new(self.term(type_)?, self.term(init)?)
+            Intrinsic::CellType(inner) => curios_core::Intrinsic::cell_type(self.term(inner)?),
+            Intrinsic::Cell(type_, init) => {
+                curios_core::Intrinsic::cell_new(self.term(type_)?, self.term(init)?)
             }
-            Prim::CellSet(type_, cell, value) => {
-                curios_core::Prim::cell_set(self.term(type_)?, self.term(cell)?, self.term(value)?)
+            Intrinsic::CellSet(type_, cell, value) => curios_core::Intrinsic::cell_set(
+                self.term(type_)?,
+                self.term(cell)?,
+                self.term(value)?,
+            ),
+            Intrinsic::CellGet(type_, cell) => {
+                curios_core::Intrinsic::cell_get(self.term(type_)?, self.term(cell)?)
             }
-            Prim::CellGet(type_, cell) => {
-                curios_core::Prim::cell_get(self.term(type_)?, self.term(cell)?)
+            Intrinsic::IoType(result) => curios_core::Intrinsic::io_type(self.term(result)?),
+            Intrinsic::IoPure(type_, value) => {
+                curios_core::Intrinsic::io_pure(self.term(type_)?, self.term(value)?)
             }
-            Prim::IoType(result) => curios_core::Prim::io_type(self.term(result)?),
-            Prim::IoPure(type_, value) => {
-                curios_core::Prim::io_pure(self.term(type_)?, self.term(value)?)
-            }
-            Prim::IoBind(from, to, action, f) => curios_core::Prim::io_bind(
+            Intrinsic::IoBind(from, to, action, f) => curios_core::Intrinsic::io_bind(
                 self.term(from)?,
                 self.term(to)?,
                 self.term(action)?,

@@ -10,7 +10,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Σ-types and dependent pairs
 - [x] `let` and `let-rec` bindings
 - [x] Value-level mutual recursion in `rec`
-- [x] Bidirectional dependent type checking with full definitional equality (β/ι/δ reduction, primitive computation, indexed-inductive inversion)
+- [x] Bidirectional dependent type checking with full definitional equality (β/ι/δ reduction, intrinsic computation, indexed-inductive inversion)
 - [x] Eta-reduction for Π-types and Σ-types
 - [x] Named tuple fields
 - [x] `Prop` universe with definitional proof irrelevance
@@ -22,7 +22,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
   - [x] Multi-parameter keying (tuple of every parameter head)
   - [x] Orphan rule (a witness must be declared where its concept, or a type in its key, is already declared; the standard library's three roots — `sys`/`syn`/`std` — are exempt from the check against each other, one coordinated implementation rather than independent packages)
-  - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
+  - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp` with `/sys` witnesses; intrinsic codegen unchanged)
 - [x] Unified `struct` declarations (independent nominal and declaration-local representation visibility)
 - [x] Inductive types (`induct` declarations)
   - [x] Independent nominal/representation visibility with opaque construction and elimination
@@ -47,7 +47,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler — full enumeration, no row priority)
 - [x] Multi-scrutinee matrix matching (a tuple scrutinee matched column by column with grouped rows; a binder may occupy a later column once earlier columns distinguish its row)
 - [x] Explicit match motives (a term checked against the eliminator's motive type — `match v : (k, v) => Vec(T, k + m)`)
-- [x] Primitive match families (Boolean arms, natural-number induction and literal dispatch, list fold and case split, and packed `Bits`/`Bytes` folds)
+- [x] Intrinsic match families (Boolean arms, natural-number induction and literal dispatch, list fold and case split, and packed `Bits`/`Bytes` folds)
 - [x] `choose` (an ordered guarded `Bool` condition ladder `choose | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
@@ -61,12 +61,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Field projection sugar (`.0`/`.label`)
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in every comma-separated list
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
-- [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b[\1, ..bits, \0]`, `x[\00, ..bytes, \01]` — positional splices, any position/count, desugared to n-ary concat prims; packed literals are bracketed like lists behind a glued grain letter; no tuple/string spread)
+- [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b[\1, ..bits, \0]`, `x[\00, ..bytes, \01]` — positional splices, any position/count, desugared to n-ary concat intrinsics; packed literals are bracketed like lists behind a glued grain letter; no tuple/string spread)
 - [x] Packed single-atom entry (`b[head, ..tail]`, `x[..acc, b]` — one `Bool`/`Byte` generator where `..` takes a whole value, desugared to `append` over what precedes it; the cons and append forms are literal syntax rather than named `/std` functions)
 
-## Primitive Types
+## Intrinsic Types
 
-- [x] Primitives as orthogonal builtins _(uniform `/sys` builtin declarations, not parser-special-cased)_
+- [x] Intrinsics as orthogonal builtins _(uniform `/sys` builtin declarations, not parser-special-cased)_
   - [x] `Nat`
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and wrapping `Nat/to_byte`)
   - [x] `Int`
@@ -96,7 +96,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length (the `elaborate → elaborate_apply → check` cycle defunctionalized onto a frame stack for ground, all-explicit applications; each term's cached derivations carried on the shared `Rc` node and filled by an iterative post-order walk — so a literal or generated spine of any size compiles on a default 2MB stack, the ceiling now being the reduction deadline and memory)
 - [x] Names as identity only (a compiler name distinguishes bindings and renders for a human, and nothing branches on its spelling: `Free`/`Global`/`Mint`/`WitnessId` replace the five facts that were flattened into one `String`, constructor runtime tags are declaration order rather than alphabetical rank, anonymous witnesses carry an identity rather than a manufactured name, and no accessor reaches a spelling from a `Free` outside the printer)
 - [x] Totality of everything erasure deletes, so no closed term inhabits `/syn/False` by a divergent type or a divergent proof (size-change termination per `rec` group, classifying rather than rejecting; obligation **(T)** over type positions and **(V)** over `Prop`-sorted terms, both seeded from what elaboration settled; partiality persisted on `Definition` and inherited across the prelude archive — see [DESIGN.md](DESIGN.md), "Totality of the erased program", and [PERIMETER.md](PERIMETER.md), which also records the one route still open)
-- [x] Crate-boundary split separating the term representation from the elaborator (`curios-core` holds `Term`, its binder discipline, the primitive roster and folds, universes, and the nominal registry; `curios-elab` holds elaboration, unification, zonking, the universe solver, witness resolution, and erasure — with `Reducer` as the seam that shares primitive folding while leaving reduction strategy to each side)
+- [x] Crate-boundary split separating the term representation from the elaborator (`curios-core` holds `Term`, its binder discipline, the intrinsic roster and folds, universes, and the nominal registry; `curios-elab` holds elaboration, unification, zonking, the universe solver, witness resolution, and erasure — with `Reducer` as the seam that shares intrinsic folding while leaving reduction strategy to each side)
 - [x] Independent kernel in `curios-cert` re-checking what the elaborator accepts, from the finished terms alone — reduction, sort, conversion, the typing judgment, nominal elimination (the large-elimination guard's singleton condition decided rather than approximated), subsumption as its own cumulative relation, universe constraint entailment in both directions, and declaration acceptance (constructor/field sizing, strict positivity, size-change totality), with index inversion, positivity, totality, and universe entailment shared rather than duplicated behind the `Env`/`Judge` seam (see [DESIGN.md](DESIGN.md), "An independent kernel re-checks what the elaborator accepts"). On the compile path in production: `recheck_module_suffix` runs inside `compile_entrypoint` and a refusal fails the compile, with the fixed prelude validated the same way at archive-build time and no source fallback. The whole-prelude disagreement count closed at **0 of 1052** across all three profiles; two positions remain named rather than closed — an elimination's motive/arms and `rec`-group/spine-argument comparison at `Type` — both recorded conversion incompleteness that does not count against the gate.
 - [ ] [Full data section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
 - [ ] [Full element section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
@@ -175,7 +175,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] concurrent `both`/`race`/`select`
   - [x] result cell (`Cell`)
   - [x] `sleep`/`timeout`
-- [x] Purity through an opaque Io monad (three primitives — `Io(T)`, `pure`, `bind` — every host operation retyped to return `Io`, the entrypoint tail an `Io({})` the emitted boundary forces once, and `curios-cert`'s purity analysis deleted in favor of the typing invariant; supersedes the reverted algebraic-effects design)
+- [x] Purity through an opaque Io monad (three intrinsics — `Io(T)`, `pure`, `bind` — every host operation retyped to return `Io`, the entrypoint tail an `Io({})` the emitted boundary forces once, and `curios-cert`'s purity analysis deleted in favor of the typing invariant; supersedes the reverted algebraic-effects design)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness; no behavior change)
   - [x] Stage 2: the flip — the host surface and `/std` retyped, the `Io({})` entrypoint contract, `curios-cert/src/purity.rs` deleted _(breaking: every program's tail becomes an `Io`)_
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)

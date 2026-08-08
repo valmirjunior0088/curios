@@ -15,11 +15,11 @@ fn context() -> Context {
 }
 
 fn nat() -> Term {
-    Subterm::Prim(Prim::NatType).into()
+    Subterm::Intrinsic(Intrinsic::NatType).into()
 }
 
 fn nat_lit(n: usize) -> Term {
-    Subterm::Prim(Prim::Nat(Nat::new(n))).into()
+    Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n))).into()
 }
 
 fn opt_type() -> Term {
@@ -47,7 +47,7 @@ fn register_opt(context: &mut Context) {
                         Atom::from("some"),
                         InductParam {
                             telescope: Telescope::build(
-                                [(payload, Term::prim(Prim::NatType))],
+                                [(payload, Term::intrinsic(Intrinsic::NatType))],
                                 Vec::new(),
                             ),
                             plicities: vec![Plicity::Explicit],
@@ -178,7 +178,7 @@ fn oracle_suppresses_privacy_as_part_of_its_package() {
 }
 
 #[test]
-fn infer_synthesizes_a_primitive_type() {
+fn infer_synthesizes_an_intrinsic_type() {
     let mut context = context();
 
     let (term, type_) = elaborate(&mut context, &nat_lit(0), Mode::Infer).unwrap();
@@ -201,7 +201,7 @@ fn check_accepts_a_well_typed_term() {
 fn check_rejects_a_type_mismatch() {
     let mut context = context();
 
-    let bool_ = Subterm::Prim(Prim::BoolType).into();
+    let bool_ = Subterm::Intrinsic(Intrinsic::BoolType).into();
     let result = elaborate(&mut context, &nat_lit(3), Mode::Check(bool_));
 
     assert!(result.is_err());

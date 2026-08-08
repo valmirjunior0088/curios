@@ -46,9 +46,9 @@ pub enum CpsValueExpr {
     Tuple(Vec<CpsAtom>),
 }
 
-/// Primitive identity without operands. Operand order and arity live on the surrounding `LetPrim`, so every analysis sees one uniform operand vector.
+/// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CpsPrimOp {
+pub enum CpsIntrinsicOp {
     NatEql,
     NatNeq,
     NatAdd,
@@ -137,13 +137,13 @@ pub enum CpsPrimOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CpsPrimitiveEffect {
+pub enum CpsIntrinsicEffect {
     Total,
     MayTrap,
     Allocates,
 }
 
-impl CpsPrimOp {
+impl CpsIntrinsicOp {
     pub fn arity(self) -> usize {
         match self {
             Self::NatClz
@@ -178,7 +178,7 @@ impl CpsPrimOp {
         }
     }
 
-    pub fn effect(self) -> CpsPrimitiveEffect {
+    pub fn effect(self) -> CpsIntrinsicEffect {
         match self {
             Self::NatDiv
             | Self::NatRem
@@ -197,26 +197,26 @@ impl CpsPrimOp {
             | Self::NatRotl
             | Self::IntAdd
             | Self::IntSub
-            | Self::IntMul => CpsPrimitiveEffect::MayTrap,
+            | Self::IntMul => CpsIntrinsicEffect::MayTrap,
             Self::BinAppend(_)
             | Self::BinConcat(_, _)
             | Self::LstAppend
             | Self::LstConcat(_)
-            | Self::FltToLeBytes => CpsPrimitiveEffect::Allocates,
-            _ => CpsPrimitiveEffect::Total,
+            | Self::FltToLeBytes => CpsIntrinsicEffect::Allocates,
+            _ => CpsIntrinsicEffect::Total,
         }
     }
 
     pub fn is_total(self) -> bool {
-        self.effect() == CpsPrimitiveEffect::Total
+        self.effect() == CpsIntrinsicEffect::Total
     }
 
     pub fn may_trap(self) -> bool {
-        self.effect() == CpsPrimitiveEffect::MayTrap
+        self.effect() == CpsIntrinsicEffect::MayTrap
     }
 
     pub fn allocates(self) -> bool {
-        self.effect() == CpsPrimitiveEffect::Allocates
+        self.effect() == CpsIntrinsicEffect::Allocates
     }
 
     pub fn is_commutative(self) -> bool {
@@ -285,7 +285,7 @@ impl CpsCellOp {
 
 /// A call-like intrinsic. `LstMap` takes the list then the mapper — the carrier-first order of the whole sequence family, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CpsIntrinsicOp {
+pub enum CpsIntrinsicCall {
     LstMap,
 }
 
@@ -296,9 +296,9 @@ pub enum CpsNode {
         value: CpsValueExpr,
         next: CpsNodeId,
     },
-    LetPrim {
+    LetIntrinsic {
         result: CpsValueId,
-        op: CpsPrimOp,
+        op: CpsIntrinsicOp,
         args: Vec<CpsAtom>,
         next: CpsNodeId,
     },
@@ -332,7 +332,7 @@ pub enum CpsNode {
         return_to: CpsContId,
     },
     Intrinsic {
-        op: CpsIntrinsicOp,
+        op: CpsIntrinsicCall,
         args: Vec<CpsAtom>,
         return_to: CpsContId,
     },
@@ -437,7 +437,7 @@ impl CpsModule {
         self.continuations.get(id)
     }
 
-    /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetPrim` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
+    /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetIntrinsic` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
     pub(crate) fn value_use_counts(&self) -> BTreeMap<CpsValueId, usize> {
         let mut counts = BTreeMap::new();
         for (_, node) in self.nodes.iter_live() {
@@ -684,7 +684,8 @@ impl CpsModule {
             }
 
             match node {
-                CpsNode::LetValue { result, next, .. } | CpsNode::LetPrim { result, next, .. } => {
+                CpsNode::LetValue { result, next, .. }
+                | CpsNode::LetIntrinsic { result, next, .. } => {
                     if !bound_values.insert(*result) {
                         return Err(CpsVerifyError(format!(
                             "node result {result} is bound more than once"
@@ -834,7 +835,7 @@ impl CpsModule {
             self.verify_node(owner, function.return_cont, returns, &scope, id, node)?;
 
             match node {
-                CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => {
+                CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
                     work.push((*next, scope));
                 }
                 CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => {
@@ -891,17 +892,17 @@ impl CpsModule {
                 self.require_value(*result, "let-value result")?;
                 self.require_node(*next, "let-value successor")?;
             }
-            CpsNode::LetPrim {
+            CpsNode::LetIntrinsic {
                 result,
                 op,
                 args,
                 next,
             } => {
-                self.require_value(*result, "let-prim result")?;
-                self.require_node(*next, "let-prim successor")?;
+                self.require_value(*result, "let-intrinsic result")?;
+                self.require_node(*next, "let-intrinsic successor")?;
                 if args.len() != op.arity() {
                     return Err(CpsVerifyError(format!(
-                        "{id} primitive {op:?} expects {} operands, got {}",
+                        "{id} intrinsic {op:?} expects {} operands, got {}",
                         op.arity(),
                         args.len()
                     )));
@@ -1016,7 +1017,7 @@ impl CpsModule {
                 }
             }
             CpsNode::Intrinsic {
-                op: CpsIntrinsicOp::LstMap,
+                op: CpsIntrinsicCall::LstMap,
                 args,
                 return_to,
             } => {
@@ -1151,7 +1152,7 @@ pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
             CpsValueExpr::Literal(_) => {}
             CpsValueExpr::List(values) | CpsValueExpr::Tuple(values) => output.extend(values),
         },
-        CpsNode::LetPrim { args, .. }
+        CpsNode::LetIntrinsic { args, .. }
         | CpsNode::ApplyFun { args, .. }
         | CpsNode::Foreign { args, .. }
         | CpsNode::Cell { args, .. }
@@ -1187,7 +1188,7 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
                 values.iter_mut().for_each(visitor)
             }
         },
-        CpsNode::LetPrim { args, .. }
+        CpsNode::LetIntrinsic { args, .. }
         | CpsNode::ApplyFun { args, .. }
         | CpsNode::Foreign { args, .. }
         | CpsNode::Cell { args, .. }
@@ -1286,7 +1287,7 @@ impl fmt::Display for CpsDisplayNode<'_> {
                 value,
                 next,
             } => write!(f, "let {result} = {value:?}; {next}"),
-            CpsNode::LetPrim {
+            CpsNode::LetIntrinsic {
                 result,
                 op,
                 args,
@@ -1350,8 +1351,8 @@ impl fmt::Display for CpsDisplayNode<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpsAtom, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral, CpsModule, CpsNode,
-        CpsNodeId, CpsPrimOp, CpsUseTarget, CpsValueExpr, CpsValueId,
+        CpsAtom, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp, CpsLiteral,
+        CpsModule, CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId,
     };
 
     fn minimal_module() -> CpsModule {
@@ -1438,13 +1439,13 @@ mod tests {
     }
 
     #[test]
-    fn verifier_rejects_primitive_arity_mismatch() {
+    fn verifier_rejects_intrinsic_arity_mismatch() {
         let mut module = minimal_module();
         let result = module.add_value(None);
         let next = module.add_node(CpsNode::Unreachable);
-        module.add_node(CpsNode::LetPrim {
+        module.add_node(CpsNode::LetIntrinsic {
             result,
-            op: CpsPrimOp::NatAdd,
+            op: CpsIntrinsicOp::NatAdd,
             args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
             next,
         });
@@ -1460,9 +1461,9 @@ mod tests {
     }
 
     #[test]
-    fn lst_map_is_not_a_primitive_opcode() {
-        assert!(CpsPrimOp::LstAppend.allocates());
-        assert!(!CpsPrimOp::NatAdd.is_total());
+    fn lst_map_is_not_an_intrinsic_opcode() {
+        assert!(CpsIntrinsicOp::LstAppend.allocates());
+        assert!(!CpsIntrinsicOp::NatAdd.is_total());
     }
 
     #[test]

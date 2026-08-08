@@ -39,7 +39,7 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
             }
         };
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => {
+            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
                 node_work.push_back(*next)
             }
             CpsNode::LetFun { body, .. } => node_work.push_back(*body),
@@ -104,7 +104,7 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
     }
     for (_, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } => {
+            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 values.insert(*result);
             }
             CpsNode::RecInit {

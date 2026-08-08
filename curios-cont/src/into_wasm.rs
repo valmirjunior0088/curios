@@ -64,7 +64,7 @@ pub(crate) enum EmissionData {
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
-/// One pure primitive computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`EmissionTail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely. The scalar families (`Nat*`/`Int*`/`Flt*`) mirror the wasm ops they lower to one-for-one; the `Bin*`/`Lst*` families are rope operations codegen services through shared helper functions.
+/// One pure intrinsic computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`EmissionTail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely. The scalar families (`Nat*`/`Int*`/`Flt*`) mirror the wasm ops they lower to one-for-one; the `Bin*`/`Lst*` families are rope operations codegen services through shared helper functions.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
     NatEql(EmissionValueName, EmissionValueName),
@@ -206,7 +206,7 @@ pub(crate) enum EmissionCallTarget {
     },
 }
 
-/// A host-provided primitive in tail position. Returning foreign calls carry the block that receives their results; direct process termination does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
+/// A host-provided intrinsic in tail position. Returning foreign calls carry the block that receives their results; direct process termination does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionHostTarget {
     /// A store-described host call: `function`'s `WireSignature` fixes the operand order/types and the resume shape — `resume` takes one block parameter per signature result (the multi-result records arrive as parallel block parameters, exactly like the per-op variants did).
@@ -248,7 +248,7 @@ impl EmissionCellTarget {
     }
 }
 
-/// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful primitives (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Unreachable` traps, marking a path that cannot be taken (an absurd match).
+/// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful intrinsics (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Unreachable` traps, marking a path that cannot be taken (an absurd match).
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionTail {
     Jump(EmissionJumpTarget),

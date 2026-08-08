@@ -4,8 +4,8 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp,
-        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId, atoms,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicCall,
+        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
     },
     curios_abi::ForeignFunction,
     curios_base::{Entropy, id},
@@ -42,9 +42,9 @@ pub(crate) enum MachineInstruction {
         result: MachineValueId,
         value: MachineConstruct,
     },
-    Prim {
+    Intrinsic {
         result: MachineValueId,
-        op: CpsPrimOp,
+        op: CpsIntrinsicOp,
         args: Vec<MachineOperand>,
     },
     /// Retained-ABI closure wrapper around direct code. The wrapper unpacks these captures and tail-calls `function`.
@@ -117,12 +117,12 @@ pub(crate) enum MachineTerminator {
         args: Vec<MachineOperand>,
     },
     Intrinsic {
-        op: CpsIntrinsicOp,
+        op: CpsIntrinsicCall,
         args: Vec<MachineOperand>,
         resume: MachineBlockId,
     },
     IntrinsicReturn {
-        op: CpsIntrinsicOp,
+        op: CpsIntrinsicCall,
         args: Vec<MachineOperand>,
     },
     Exit(Option<MachineOperand>),
@@ -297,7 +297,7 @@ fn free_runtime_values(source: &CpsModule, function: CpsFunId) -> Vec<MachineVal
             used.insert(value_id(*value));
         }
         match node {
-            CpsNode::LetValue { result, next, .. } | CpsNode::LetPrim { result, next, .. } => {
+            CpsNode::LetValue { result, next, .. } | CpsNode::LetIntrinsic { result, next, .. } => {
                 bound.insert(value_id(*result));
                 work.push(*next);
             }
@@ -328,7 +328,7 @@ fn owned_runtime_values(source: &CpsModule, function: CpsFunId) -> BTreeSet<Mach
         .collect::<BTreeSet<_>>();
     for node_id in function_nodes(source, function) {
         match source.node(node_id).unwrap() {
-            CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } => {
+            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 owned.insert(value_id(*result));
             }
             CpsNode::LetCont { continuations, .. } => {
@@ -379,7 +379,7 @@ fn function_nodes(source: &CpsModule, function: CpsFunId) -> Vec<CpsNodeId> {
         }
         nodes.push(node_id);
         match source.node(node_id).unwrap() {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => work.push(*next),
+            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
             CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
             CpsNode::LetCont {
                 continuations,
@@ -517,14 +517,14 @@ impl<'a> MachineFunctionLowerer<'a> {
                     });
                     node_id = *next;
                 }
-                CpsNode::LetPrim {
+                CpsNode::LetIntrinsic {
                     result,
                     op,
                     args,
                     next,
                 } => {
                     let args = self.lower_atoms(args, &mut instructions);
-                    instructions.push(MachineInstruction::Prim {
+                    instructions.push(MachineInstruction::Intrinsic {
                         result: value_id(*result),
                         op: *op,
                         args,
@@ -822,7 +822,7 @@ fn initialization_function_atoms(
             }
         }
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => work.push(*next),
+            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
             CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
             CpsNode::LetCont {
                 continuations,
@@ -1009,7 +1009,7 @@ impl MachineModule {
                         )));
                     }
                 }
-                MachineInstruction::Construct { .. } | MachineInstruction::Prim { .. } => {}
+                MachineInstruction::Construct { .. } | MachineInstruction::Intrinsic { .. } => {}
             }
         }
         if shells.keys().copied().collect::<BTreeSet<_>>() != fills {
@@ -1028,9 +1028,9 @@ impl MachineModule {
     ) -> Result<(), MachineVerifyError> {
         for instruction in &block.instructions {
             match instruction {
-                MachineInstruction::Prim { op, args, .. } if args.len() != op.arity() => {
+                MachineInstruction::Intrinsic { op, args, .. } if args.len() != op.arity() => {
                     return Err(MachineVerifyError(format!(
-                        "{owner} machine primitive {op:?} has wrong arity"
+                        "{owner} machine intrinsic {op:?} has wrong arity"
                     )));
                 }
                 MachineInstruction::MakeClosure { function, .. }
@@ -1085,7 +1085,7 @@ impl MachineModule {
                 verify_block_resume(function, *resume, 1)?
             }
             MachineTerminator::Intrinsic {
-                op: CpsIntrinsicOp::LstMap,
+                op: CpsIntrinsicCall::LstMap,
                 args,
                 resume,
             } => {
@@ -1098,7 +1098,7 @@ impl MachineModule {
             }
             MachineTerminator::TailIndirectCall { .. } => {}
             MachineTerminator::IntrinsicReturn {
-                op: CpsIntrinsicOp::LstMap,
+                op: CpsIntrinsicCall::LstMap,
                 args,
             } if args.len() != 2 => {
                 return Err(MachineVerifyError(format!(

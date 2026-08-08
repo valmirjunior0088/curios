@@ -7,7 +7,7 @@ use {
         MachineWrapper,
     },
     crate::{
-        CpsCellOp, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsPrimOp,
+        CpsCellOp, CpsFunId, CpsIntrinsicCall, CpsIntrinsicOp, CpsLiteral,
         into_wasm::{
             EmissionArgument, EmissionBlock, EmissionBlockName, EmissionBody, EmissionCallTarget,
             EmissionCellTarget, EmissionClosure, EmissionClosureName, EmissionCode, EmissionData,
@@ -140,11 +140,11 @@ impl<'a> MachineFunctionBridge<'a> {
                     };
                     values.push((value_name(*result), value));
                 }
-                MachineInstruction::Prim { result, op, args } => {
+                MachineInstruction::Intrinsic { result, op, args } => {
                     let args = self.operands(args, &mut values);
                     values.push((
                         value_name(*result),
-                        EmissionValue::Eval(primitive(*op, args)),
+                        EmissionValue::Eval(intrinsic(*op, args)),
                     ));
                 }
                 MachineInstruction::MakeClosure {
@@ -300,7 +300,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 self.cell(*op, args, self.resume.clone(), values)
             }
             MachineTerminator::Intrinsic {
-                op: CpsIntrinsicOp::LstMap,
+                op: CpsIntrinsicCall::LstMap,
                 args,
                 resume,
             } => {
@@ -308,7 +308,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 self.list_map(args, resume, values)
             }
             MachineTerminator::IntrinsicReturn {
-                op: CpsIntrinsicOp::LstMap,
+                op: CpsIntrinsicCall::LstMap,
                 args,
             } => self.list_map(args, self.resume.clone(), values),
             MachineTerminator::Exit(value) => {
@@ -495,7 +495,7 @@ fn block_captures(function: &MachineFunction) -> BTreeMap<MachineBlockId, Vec<Ma
             for instruction in &block.instructions {
                 match instruction {
                     MachineInstruction::Construct { result, .. }
-                    | MachineInstruction::Prim { result, .. }
+                    | MachineInstruction::Intrinsic { result, .. }
                     | MachineInstruction::MakeClosure { result, .. }
                     | MachineInstruction::FallbackShell { result, .. } => {
                         bound.insert(*result);
@@ -537,7 +537,7 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
                     operands.iter().for_each(&mut insert);
                 }
             },
-            MachineInstruction::Prim { args, .. }
+            MachineInstruction::Intrinsic { args, .. }
             | MachineInstruction::MakeClosure { captures: args, .. } => {
                 args.iter().for_each(&mut insert);
             }
@@ -608,267 +608,267 @@ fn literal_data(literal: &CpsLiteral) -> EmissionData {
     }
 }
 
-fn primitive(op: CpsPrimOp, args: Vec<EmissionValueName>) -> EmissionCode {
+fn intrinsic(op: CpsIntrinsicOp, args: Vec<EmissionValueName>) -> EmissionCode {
     let unary = || args[0].clone();
     let binary = || (args[0].clone(), args[1].clone());
     let ternary = || (args[0].clone(), args[1].clone(), args[2].clone());
     match op {
-        CpsPrimOp::NatEql => {
+        CpsIntrinsicOp::NatEql => {
             let (a, b) = binary();
             EmissionCode::NatEql(a, b)
         }
-        CpsPrimOp::NatNeq => {
+        CpsIntrinsicOp::NatNeq => {
             let (a, b) = binary();
             EmissionCode::NatNeq(a, b)
         }
-        CpsPrimOp::NatAdd => {
+        CpsIntrinsicOp::NatAdd => {
             let (a, b) = binary();
             EmissionCode::NatAdd(a, b)
         }
-        CpsPrimOp::NatSub => {
+        CpsIntrinsicOp::NatSub => {
             let (a, b) = binary();
             EmissionCode::NatSub(a, b)
         }
-        CpsPrimOp::NatMul => {
+        CpsIntrinsicOp::NatMul => {
             let (a, b) = binary();
             EmissionCode::NatMul(a, b)
         }
-        CpsPrimOp::NatLt => {
+        CpsIntrinsicOp::NatLt => {
             let (a, b) = binary();
             EmissionCode::NatLt(a, b)
         }
-        CpsPrimOp::NatDiv => {
+        CpsIntrinsicOp::NatDiv => {
             let (a, b) = binary();
             EmissionCode::NatDiv(a, b)
         }
-        CpsPrimOp::NatRem => {
+        CpsIntrinsicOp::NatRem => {
             let (a, b) = binary();
             EmissionCode::NatRem(a, b)
         }
-        CpsPrimOp::NatGt => {
+        CpsIntrinsicOp::NatGt => {
             let (a, b) = binary();
             EmissionCode::NatGt(a, b)
         }
-        CpsPrimOp::NatLte => {
+        CpsIntrinsicOp::NatLte => {
             let (a, b) = binary();
             EmissionCode::NatLte(a, b)
         }
-        CpsPrimOp::NatGte => {
+        CpsIntrinsicOp::NatGte => {
             let (a, b) = binary();
             EmissionCode::NatGte(a, b)
         }
-        CpsPrimOp::NatAnd => {
+        CpsIntrinsicOp::NatAnd => {
             let (a, b) = binary();
             EmissionCode::NatAnd(a, b)
         }
-        CpsPrimOp::NatOr => {
+        CpsIntrinsicOp::NatOr => {
             let (a, b) = binary();
             EmissionCode::NatOr(a, b)
         }
-        CpsPrimOp::NatXor => {
+        CpsIntrinsicOp::NatXor => {
             let (a, b) = binary();
             EmissionCode::NatXor(a, b)
         }
-        CpsPrimOp::NatShl => {
+        CpsIntrinsicOp::NatShl => {
             let (a, b) = binary();
             EmissionCode::NatShl(a, b)
         }
-        CpsPrimOp::NatShr => {
+        CpsIntrinsicOp::NatShr => {
             let (a, b) = binary();
             EmissionCode::NatShr(a, b)
         }
-        CpsPrimOp::NatRotl => {
+        CpsIntrinsicOp::NatRotl => {
             let (a, b) = binary();
             EmissionCode::NatRotl(a, b)
         }
-        CpsPrimOp::NatRotr => {
+        CpsIntrinsicOp::NatRotr => {
             let (a, b) = binary();
             EmissionCode::NatRotr(a, b)
         }
-        CpsPrimOp::NatClz => EmissionCode::NatClz(unary()),
-        CpsPrimOp::NatCtz => EmissionCode::NatCtz(unary()),
-        CpsPrimOp::NatPopcnt => EmissionCode::NatPopcnt(unary()),
-        CpsPrimOp::NatEqz => EmissionCode::NatEqz(unary()),
-        CpsPrimOp::NatToInt => EmissionCode::NatToInt(unary()),
-        CpsPrimOp::NatToFlt => EmissionCode::NatToFlt(unary()),
-        CpsPrimOp::IntEql => {
+        CpsIntrinsicOp::NatClz => EmissionCode::NatClz(unary()),
+        CpsIntrinsicOp::NatCtz => EmissionCode::NatCtz(unary()),
+        CpsIntrinsicOp::NatPopcnt => EmissionCode::NatPopcnt(unary()),
+        CpsIntrinsicOp::NatEqz => EmissionCode::NatEqz(unary()),
+        CpsIntrinsicOp::NatToInt => EmissionCode::NatToInt(unary()),
+        CpsIntrinsicOp::NatToFlt => EmissionCode::NatToFlt(unary()),
+        CpsIntrinsicOp::IntEql => {
             let (a, b) = binary();
             EmissionCode::IntEql(a, b)
         }
-        CpsPrimOp::IntNeq => {
+        CpsIntrinsicOp::IntNeq => {
             let (a, b) = binary();
             EmissionCode::IntNeq(a, b)
         }
-        CpsPrimOp::IntAdd => {
+        CpsIntrinsicOp::IntAdd => {
             let (a, b) = binary();
             EmissionCode::IntAdd(a, b)
         }
-        CpsPrimOp::IntSub => {
+        CpsIntrinsicOp::IntSub => {
             let (a, b) = binary();
             EmissionCode::IntSub(a, b)
         }
-        CpsPrimOp::IntMul => {
+        CpsIntrinsicOp::IntMul => {
             let (a, b) = binary();
             EmissionCode::IntMul(a, b)
         }
-        CpsPrimOp::IntDiv => {
+        CpsIntrinsicOp::IntDiv => {
             let (a, b) = binary();
             EmissionCode::IntDiv(a, b)
         }
-        CpsPrimOp::IntRem => {
+        CpsIntrinsicOp::IntRem => {
             let (a, b) = binary();
             EmissionCode::IntRem(a, b)
         }
-        CpsPrimOp::IntLt => {
+        CpsIntrinsicOp::IntLt => {
             let (a, b) = binary();
             EmissionCode::IntLt(a, b)
         }
-        CpsPrimOp::IntGt => {
+        CpsIntrinsicOp::IntGt => {
             let (a, b) = binary();
             EmissionCode::IntGt(a, b)
         }
-        CpsPrimOp::IntLte => {
+        CpsIntrinsicOp::IntLte => {
             let (a, b) = binary();
             EmissionCode::IntLte(a, b)
         }
-        CpsPrimOp::IntGte => {
+        CpsIntrinsicOp::IntGte => {
             let (a, b) = binary();
             EmissionCode::IntGte(a, b)
         }
-        CpsPrimOp::IntAnd => {
+        CpsIntrinsicOp::IntAnd => {
             let (a, b) = binary();
             EmissionCode::IntAnd(a, b)
         }
-        CpsPrimOp::IntOr => {
+        CpsIntrinsicOp::IntOr => {
             let (a, b) = binary();
             EmissionCode::IntOr(a, b)
         }
-        CpsPrimOp::IntXor => {
+        CpsIntrinsicOp::IntXor => {
             let (a, b) = binary();
             EmissionCode::IntXor(a, b)
         }
-        CpsPrimOp::IntShl => {
+        CpsIntrinsicOp::IntShl => {
             let (a, b) = binary();
             EmissionCode::IntShl(a, b)
         }
-        CpsPrimOp::IntShr => {
+        CpsIntrinsicOp::IntShr => {
             let (a, b) = binary();
             EmissionCode::IntShr(a, b)
         }
-        CpsPrimOp::IntRotl => {
+        CpsIntrinsicOp::IntRotl => {
             let (a, b) = binary();
             EmissionCode::IntRotl(a, b)
         }
-        CpsPrimOp::IntRotr => {
+        CpsIntrinsicOp::IntRotr => {
             let (a, b) = binary();
             EmissionCode::IntRotr(a, b)
         }
-        CpsPrimOp::IntClz => EmissionCode::IntClz(unary()),
-        CpsPrimOp::IntCtz => EmissionCode::IntCtz(unary()),
-        CpsPrimOp::IntPopcnt => EmissionCode::IntPopcnt(unary()),
-        CpsPrimOp::IntEqz => EmissionCode::IntEqz(unary()),
-        CpsPrimOp::IntToNat => EmissionCode::IntToNat(unary()),
-        CpsPrimOp::IntToFlt => EmissionCode::IntToFlt(unary()),
-        CpsPrimOp::FltAdd => {
+        CpsIntrinsicOp::IntClz => EmissionCode::IntClz(unary()),
+        CpsIntrinsicOp::IntCtz => EmissionCode::IntCtz(unary()),
+        CpsIntrinsicOp::IntPopcnt => EmissionCode::IntPopcnt(unary()),
+        CpsIntrinsicOp::IntEqz => EmissionCode::IntEqz(unary()),
+        CpsIntrinsicOp::IntToNat => EmissionCode::IntToNat(unary()),
+        CpsIntrinsicOp::IntToFlt => EmissionCode::IntToFlt(unary()),
+        CpsIntrinsicOp::FltAdd => {
             let (a, b) = binary();
             EmissionCode::FltAdd(a, b)
         }
-        CpsPrimOp::FltSub => {
+        CpsIntrinsicOp::FltSub => {
             let (a, b) = binary();
             EmissionCode::FltSub(a, b)
         }
-        CpsPrimOp::FltMul => {
+        CpsIntrinsicOp::FltMul => {
             let (a, b) = binary();
             EmissionCode::FltMul(a, b)
         }
-        CpsPrimOp::FltDiv => {
+        CpsIntrinsicOp::FltDiv => {
             let (a, b) = binary();
             EmissionCode::FltDiv(a, b)
         }
-        CpsPrimOp::FltRem => {
+        CpsIntrinsicOp::FltRem => {
             let (a, b) = binary();
             EmissionCode::FltRem(a, b)
         }
-        CpsPrimOp::FltEql => {
+        CpsIntrinsicOp::FltEql => {
             let (a, b) = binary();
             EmissionCode::FltEql(a, b)
         }
-        CpsPrimOp::FltNeq => {
+        CpsIntrinsicOp::FltNeq => {
             let (a, b) = binary();
             EmissionCode::FltNeq(a, b)
         }
-        CpsPrimOp::FltLt => {
+        CpsIntrinsicOp::FltLt => {
             let (a, b) = binary();
             EmissionCode::FltLt(a, b)
         }
-        CpsPrimOp::FltGt => {
+        CpsIntrinsicOp::FltGt => {
             let (a, b) = binary();
             EmissionCode::FltGt(a, b)
         }
-        CpsPrimOp::FltLte => {
+        CpsIntrinsicOp::FltLte => {
             let (a, b) = binary();
             EmissionCode::FltLte(a, b)
         }
-        CpsPrimOp::FltGte => {
+        CpsIntrinsicOp::FltGte => {
             let (a, b) = binary();
             EmissionCode::FltGte(a, b)
         }
-        CpsPrimOp::FltMin => {
+        CpsIntrinsicOp::FltMin => {
             let (a, b) = binary();
             EmissionCode::FltMin(a, b)
         }
-        CpsPrimOp::FltMax => {
+        CpsIntrinsicOp::FltMax => {
             let (a, b) = binary();
             EmissionCode::FltMax(a, b)
         }
-        CpsPrimOp::FltNeg => EmissionCode::FltNeg(unary()),
-        CpsPrimOp::FltAbs => EmissionCode::FltAbs(unary()),
-        CpsPrimOp::FltSqrt => EmissionCode::FltSqrt(unary()),
-        CpsPrimOp::FltFloor => EmissionCode::FltFloor(unary()),
-        CpsPrimOp::FltCeil => EmissionCode::FltCeil(unary()),
-        CpsPrimOp::FltTrunc => EmissionCode::FltTrunc(unary()),
-        CpsPrimOp::FltNearest => EmissionCode::FltNearest(unary()),
-        CpsPrimOp::FltCopysign => {
+        CpsIntrinsicOp::FltNeg => EmissionCode::FltNeg(unary()),
+        CpsIntrinsicOp::FltAbs => EmissionCode::FltAbs(unary()),
+        CpsIntrinsicOp::FltSqrt => EmissionCode::FltSqrt(unary()),
+        CpsIntrinsicOp::FltFloor => EmissionCode::FltFloor(unary()),
+        CpsIntrinsicOp::FltCeil => EmissionCode::FltCeil(unary()),
+        CpsIntrinsicOp::FltTrunc => EmissionCode::FltTrunc(unary()),
+        CpsIntrinsicOp::FltNearest => EmissionCode::FltNearest(unary()),
+        CpsIntrinsicOp::FltCopysign => {
             let (a, b) = binary();
             EmissionCode::FltCopysign(a, b)
         }
-        CpsPrimOp::FltToNat => EmissionCode::FltToNat(unary()),
-        CpsPrimOp::FltToLeBytes => EmissionCode::FltToLeBytes(unary()),
-        CpsPrimOp::FltOfLeBytes => EmissionCode::FltOfLeBytes(unary()),
-        CpsPrimOp::FltToInt => EmissionCode::FltToInt(unary()),
-        CpsPrimOp::BinLen(grain) => EmissionCode::BinLen(grain, unary()),
-        CpsPrimOp::BinEql(grain) => {
+        CpsIntrinsicOp::FltToNat => EmissionCode::FltToNat(unary()),
+        CpsIntrinsicOp::FltToLeBytes => EmissionCode::FltToLeBytes(unary()),
+        CpsIntrinsicOp::FltOfLeBytes => EmissionCode::FltOfLeBytes(unary()),
+        CpsIntrinsicOp::FltToInt => EmissionCode::FltToInt(unary()),
+        CpsIntrinsicOp::BinLen(grain) => EmissionCode::BinLen(grain, unary()),
+        CpsIntrinsicOp::BinEql(grain) => {
             let (a, b) = binary();
             EmissionCode::BinEql(grain, a, b)
         }
-        CpsPrimOp::BinGet(grain) => {
+        CpsIntrinsicOp::BinGet(grain) => {
             let (a, b) = binary();
             EmissionCode::BinGet(grain, a, b)
         }
-        CpsPrimOp::BinSlice(grain) => {
+        CpsIntrinsicOp::BinSlice(grain) => {
             let (a, b, c) = ternary();
             EmissionCode::BinSlice(grain, a, b, c)
         }
-        CpsPrimOp::BinAppend(grain) => {
+        CpsIntrinsicOp::BinAppend(grain) => {
             let (a, b) = binary();
             EmissionCode::BinAppend(grain, a, b)
         }
-        CpsPrimOp::BinConcat(grain, _) => EmissionCode::BinConcat(grain, args),
-        CpsPrimOp::LstLen => EmissionCode::LstLen(unary()),
-        CpsPrimOp::LstGet => {
+        CpsIntrinsicOp::BinConcat(grain, _) => EmissionCode::BinConcat(grain, args),
+        CpsIntrinsicOp::LstLen => EmissionCode::LstLen(unary()),
+        CpsIntrinsicOp::LstGet => {
             let (a, b) = binary();
             EmissionCode::LstGet(a, b)
         }
-        CpsPrimOp::LstSlice => {
+        CpsIntrinsicOp::LstSlice => {
             let (a, b, c) = ternary();
             EmissionCode::LstSlice(a, b, c)
         }
-        CpsPrimOp::LstAppend => {
+        CpsIntrinsicOp::LstAppend => {
             let (a, b) = binary();
             EmissionCode::LstAppend(a, b)
         }
-        CpsPrimOp::LstConcat(_) => EmissionCode::LstConcat(args),
-        CpsPrimOp::TplGet(index) => EmissionCode::TplGet(unary(), index),
+        CpsIntrinsicOp::LstConcat(_) => EmissionCode::LstConcat(args),
+        CpsIntrinsicOp::TplGet(index) => EmissionCode::TplGet(unary(), index),
     }
 }
 

@@ -67,32 +67,32 @@ fn parse_integer_literals_are_polymorphic_num_lits() {
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, true, true));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))))
     );
     assert_eq!(
         "-42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(-42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(-42.0))))
     );
 }
 
 #[test]
-fn parse_prim() {
+fn parse_intrinsic() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
     assert_eq!(
         "1.5".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(1.5))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(1.5))))
     );
     assert_eq!(
         "false".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Bool(false)))
+        Term::from(Subterm::Intrinsic(Intrinsic::Bool(false)))
     );
     assert_eq!(
         "true".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Bool(true)))
+        Term::from(Subterm::Intrinsic(Intrinsic::Bool(true)))
     );
 }
 
@@ -1602,7 +1602,7 @@ fn lst_literal_spread_entries() {
     // Spreads splice anywhere, any count; plain elements stay `Elem`.
     assert_eq!(
         "[1, ..xs, 2]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Lst(vec![
+        Subterm::Intrinsic(Intrinsic::Lst(vec![
             LstEntry::Elem(nat(1)),
             LstEntry::Spread(name("xs")),
             LstEntry::Elem(nat(2)),
@@ -1611,7 +1611,7 @@ fn lst_literal_spread_entries() {
     );
     assert_eq!(
         "[..xs, ..ys]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Lst(vec![
+        Subterm::Intrinsic(Intrinsic::Lst(vec![
             LstEntry::Spread(name("xs")),
             LstEntry::Spread(name("ys")),
         ]))
@@ -1632,7 +1632,7 @@ fn bin_literal_spread_segments() {
     // Bytes coalesce into runs around the spread segments.
     assert_eq!(
         r"x[\00, ..xs, \01]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(
+        Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
                 BinSegment::Bytes(vec![0x00]),
@@ -1644,7 +1644,7 @@ fn bin_literal_spread_segments() {
     );
     assert_eq!(
         r"x[\00, \01, ..x, \02, \03]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(
+        Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
                 BinSegment::Bytes(vec![0x00, 0x01]),
@@ -1658,7 +1658,7 @@ fn bin_literal_spread_segments() {
     // A spread operand is an ordinary term: projections and absolute paths need no special grammar.
     assert_eq!(
         r"x[..hdr.bytes]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(
+        Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![BinSegment::Spread(
                 Subterm::Proj(Proj {
@@ -1671,7 +1671,7 @@ fn bin_literal_spread_segments() {
         .into()
     );
     let term = r"x[../std/x]".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     let BinSegment::Spread(operand) = &segments[0] else {
@@ -1681,7 +1681,7 @@ fn bin_literal_spread_segments() {
 
     // Commas delimit, so an operand that the tight grammar could only take parenthesized — an infix chain — is now written bare.
     let term = r"x[..x + y, \01]".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -1689,7 +1689,7 @@ fn bin_literal_spread_segments() {
     );
     assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
     let term = r"x[..read()!, \01]".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -1699,11 +1699,11 @@ fn bin_literal_spread_segments() {
     // Each grain has an empty literal, spelled like `[]` behind its grain letter.
     assert_eq!(
         "x[]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(Grain::X, vec![])).into()
+        Subterm::Intrinsic(Intrinsic::Bin(Grain::X, vec![])).into()
     );
     assert_eq!(
         "b[]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(Grain::B, vec![])).into()
+        Subterm::Intrinsic(Intrinsic::Bin(Grain::B, vec![])).into()
     );
 
     // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
@@ -1733,7 +1733,7 @@ fn bin_literal_atom_segments() {
     // A bare term entry splices one generator between literal runs, in either grain.
     assert_eq!(
         r"x[\48, b, \00]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(
+        Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
                 BinSegment::Bytes(vec![0x48]),
@@ -1745,7 +1745,7 @@ fn bin_literal_atom_segments() {
     );
     assert_eq!(
         r"b[\1, flag, \0]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(
+        Subterm::Intrinsic(Intrinsic::Bin(
             Grain::B,
             vec![
                 BinSegment::Bytes(vec![1]),
@@ -1757,13 +1757,13 @@ fn bin_literal_atom_segments() {
     );
     assert_eq!(
         r"x[b]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
+        Subterm::Intrinsic(Intrinsic::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
     );
 
     // `..` marks the spread; without it the same operand contributes a single atom.
     assert_eq!(
         r"x[..xs, b]".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(
+        Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![BinSegment::Spread(name("xs")), BinSegment::Atom(name("b")),]
         ))
@@ -1772,7 +1772,7 @@ fn bin_literal_atom_segments() {
 
     // An atom operand is an ordinary term, exactly as a spread operand is.
     let term = r"x[hdr.byte, \01]".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -1780,7 +1780,7 @@ fn bin_literal_atom_segments() {
     );
     assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
     let term = r"x[f( x , y ), \01]".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -1789,7 +1789,7 @@ fn bin_literal_atom_segments() {
 
     // The escape is the only constant spelling the parser recognises. A numeric element stays an `Atom` here — the surface keeps what was written, and `into_core` folds a constant one back into the run — so the two spellings stay distinguishable in the text IR.
     let term = r"x[\48, 0x69]".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(matches!(&segments[0], BinSegment::Bytes(bytes) if bytes == &vec![0x48]));

@@ -124,7 +124,7 @@ impl Program {
         &self.concepts
     }
 
-    /// The compilation root that declares one witness key's rigid head — a nominal head's own `root` (looked up from whichever registry has it, struct or inductive), or the fixed `RootId::Sys` for a primitive head, which is never user-declarable. Consulted by the orphan-rule check in `register_witness`.
+    /// The compilation root that declares one witness key's rigid head — a nominal head's own `root` (looked up from whichever registry has it, struct or inductive), or the fixed `RootId::Sys` for an intrinsic head, which is never user-declarable. Consulted by the orphan-rule check in `register_witness`.
     pub(crate) fn root_of_head(&self, head: &HeadKey) -> RootId {
         match head {
             HeadKey::Nominal(name) => self

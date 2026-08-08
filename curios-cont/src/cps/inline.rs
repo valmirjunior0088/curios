@@ -153,7 +153,7 @@ fn collect_control_targets(node: &CpsNode, targets: &mut BTreeSet<CpsContId>) {
             targets.extend(cases.values().chain(default.iter()).map(|edge| edge.target));
         }
         CpsNode::LetValue { .. }
-        | CpsNode::LetPrim { .. }
+        | CpsNode::LetIntrinsic { .. }
         | CpsNode::LetFun { .. }
         | CpsNode::LetCont { .. }
         | CpsNode::Exit { .. }
@@ -283,7 +283,7 @@ pub(super) fn inline_call(
     }
 
     for node in nodes.values() {
-        if let CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } = node {
+        if let CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } = node {
             let definition = module.values.get(*result).unwrap().clone();
             let fresh = module.add_value(definition.debug_name);
             values.insert(*result, CpsAtom::Value(fresh));
@@ -352,12 +352,12 @@ pub(super) fn inline_call(
                 },
                 next: node_map[next],
             },
-            CpsNode::LetPrim {
+            CpsNode::LetIntrinsic {
                 result,
                 op,
                 args,
                 next,
-            } => CpsNode::LetPrim {
+            } => CpsNode::LetIntrinsic {
                 result: map_value(*result),
                 op: *op,
                 args: args.iter().map(&map_atom).collect(),

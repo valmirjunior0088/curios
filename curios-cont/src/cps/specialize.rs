@@ -404,8 +404,8 @@ pub(super) fn deconstructs_param(
     function_nodes(module, function).iter().any(|&id| {
         matches!(
             module.node(id),
-            Some(CpsNode::LetPrim {
-                op: CpsPrimOp::TplGet(_),
+            Some(CpsNode::LetIntrinsic {
+                op: CpsIntrinsicOp::TplGet(_),
                 args,
                 ..
             }) if args.first() == Some(&CpsAtom::Value(param))
@@ -487,7 +487,7 @@ pub(super) fn clone_scc(
         owned.extend(def.params.iter().copied());
     }
     for node in node_defs.values() {
-        if let CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } = node {
+        if let CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } = node {
             owned.push(*result);
         }
     }
@@ -561,12 +561,12 @@ pub(super) fn clone_scc(
                 },
                 next: nodes[next],
             },
-            CpsNode::LetPrim {
+            CpsNode::LetIntrinsic {
                 result,
                 op,
                 args,
                 next,
-            } => CpsNode::LetPrim {
+            } => CpsNode::LetIntrinsic {
                 result: map_value(*result),
                 op: *op,
                 args: args.iter().map(&map_atom).collect(),

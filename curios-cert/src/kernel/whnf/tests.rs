@@ -2,7 +2,7 @@ use {
     super::unfold_rec,
     crate::{Kernel, whnf},
     curios_base::Qualifier,
-    curios_core::{Apply, Free, Nat, Prim, Reducer, Subterm, Term, UniverseContext},
+    curios_core::{Apply, Free, Intrinsic, Nat, Reducer, Subterm, Term, UniverseContext},
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
@@ -18,11 +18,11 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 fn nat_type() -> Term {
-    Term::prim(Prim::NatType)
+    Term::intrinsic(Intrinsic::NatType)
 }
 
 fn monomorphic() -> UniverseContext {
@@ -103,7 +103,7 @@ fn zeta_substitutes_let_bindings_left_to_right() {
         Term::let_(
             &y,
             nat_type(),
-            Term::prim(Prim::nat_add(Term::free_var(&x), nat(3))),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(3))),
             Term::free_var(&y),
         ),
     );
@@ -111,14 +111,14 @@ fn zeta_substitutes_let_bindings_left_to_right() {
     assert_eq!(whnf(&mut kernel, term), Ok(nat(5)));
 }
 
-/// The primitive folds are shared with the elaborator through `Reducer`; this is the kernel reaching them with its own strategy underneath.
+/// The intrinsic folds are shared with the elaborator through `Reducer`; this is the kernel reaching them with its own strategy underneath.
 #[test]
-fn primitives_fold_through_the_reducer_seam() {
+fn intrinsics_fold_through_the_reducer_seam() {
     let mut kernel = kernel();
     let x = binder(0, "x");
     kernel.define(&x, &nat_type(), &nat(2), &monomorphic());
 
-    let term = Term::prim(Prim::nat_add(Term::free_var(&x), nat(2)));
+    let term = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(2)));
 
     assert_eq!(whnf(&mut kernel, term), Ok(nat(4)));
 }
@@ -225,7 +225,7 @@ fn a_bool_match_dispatches_on_a_literal() {
     let motive = binder(0, "m");
 
     let term = Term::bool_match(
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
         Some(&motive),
         nat_type(),
         nat(0),
@@ -396,7 +396,7 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
     kernel.define(
         &name,
         &nat_type(),
-        &Term::prim(Prim::nat_add(nat(1), nat(1))),
+        &Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))),
         &UniverseContext::default(),
     );
 

@@ -5,15 +5,15 @@ use {
     super::{Context, zonk_solved_term_metas},
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl,
-        InductType, Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError,
+        InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec, ReduceError,
         Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
         UniverseInst, Var, Variant, instantiate_universe_levels_scoped, project_erased_universes,
-        reduce_prim,
+        reduce_intrinsic,
     },
     num_traits::ToPrimitive,
 };
 
-/// The elaborator's reduction strategy, supplied to `curios-core`'s primitive folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.
+/// The elaborator's reduction strategy, supplied to `curios-core`'s intrinsic folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.
 impl Reducer for Context {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         reduce(self, term)
@@ -169,7 +169,7 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 
 /// The canonical form of a (potential) scrutinee refinement key: the head kept verbatim — so the refined function (`classify`, `Nat/in_range`) is *not* unfolded and stays the key — with each argument reduced to WHNF. Storing and probing through one canonicalizer makes occurrences that differ only in argument spelling (`c` vs `Bin/at(cons(c,t),0,_)`, `lo` vs a projection that reduces to it) collapse to the same key. A non-application is its own canonical form.
 ///
-/// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO primitive like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
+/// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO intrinsic like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     let canonical = match &**term {
         Subterm::Apply(Apply {
@@ -296,8 +296,8 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
             false_case,
             true_case,
         } => match Term::unwrap_or_clone(forced) {
-            Subterm::Prim(Prim::Bool(false)) => Reduce::Continue(false_case),
-            Subterm::Prim(Prim::Bool(true)) => Reduce::Continue(true_case),
+            Subterm::Intrinsic(Intrinsic::Bool(false)) => Reduce::Continue(false_case),
+            Subterm::Intrinsic(Intrinsic::Bool(true)) => Reduce::Continue(true_case),
             forced => Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced.into(),
                 motive,
@@ -356,7 +356,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
             })))
         }
 
-        // Structural induction on a native free-monoid primitive (`Nat`/`Bin`/`Lst`). The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the eliminator-side analogue of `spine::peel_prim`); this driver is the shared catamorphism over it. An identity `Layer` takes the empty arm; a cons `Layer` peels a generator (its head absent for the unary `Nat`) and recurses symbolically for the induction hypothesis; a stuck scrutinee rebuilds.
+        // Structural induction on a native free-monoid intrinsic (`Nat`/`Bin`/`Lst`). The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the eliminator-side analogue of `spine::peel_intrinsic`); this driver is the shared catamorphism over it. An identity `Layer` takes the empty arm; a cons `Layer` peels a generator (its head absent for the unary `Nat`) and recurses symbolically for the induction hypothesis; a stuck scrutinee rebuilds.
         Cases::FreeMonoid { carrier } => {
             let scrutinee = Term::unwrap_or_clone(forced);
 
@@ -495,7 +495,9 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
             }
 
             match Term::unwrap_or_clone(term) {
-                Subterm::Prim(prim) => Reduce::Break(reduce_prim(context, &prim)?.into()),
+                Subterm::Intrinsic(intrinsic) => {
+                    Reduce::Break(reduce_intrinsic(context, &intrinsic)?.into())
+                }
                 Subterm::Match(m) => match context.cached_reduced(&m.head) {
                     // A warm scrutinee dispatches immediately — the frame-free analogue of the nested call's cache hit.
                     Some(value) => {
@@ -518,7 +520,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
                 Subterm::UniverseInst(instance) => reduce_universe_inst(context, instance)?,
-                // `InductType`/`Variant` and `StructType`/`Struct` are primitive normal forms, like `Tuple`: their sub-terms are not reduced in WHNF.
+                // `InductType`/`Variant` and `StructType`/`Struct` are intrinsic normal forms, like `Tuple`: their sub-terms are not reduced in WHNF.
                 term => Reduce::Break(term.into()),
             }
         };
@@ -547,7 +549,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
 
 /// Reduce `term` to a deep normal form for **diagnostic display**: every position is taken to weak-head normal form and its sub-terms recursively normalized, opening the type-former binders (`FuncType`/`Func`/`TupleType`) under fresh variables.
 ///
-/// `reduce` alone stops at the head: an inductive type's indices are not sub-reduced, so a concept-method projection standing in an index position — `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness@0).0(0, 1))` once resolution has picked the primitive witness — survives verbatim into a type-mismatch message. Normalizing the index collapses it to the value it denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying operator primitive (`Vec(Nat, n + m)`) the printer spells infix.
+/// `reduce` alone stops at the head: an inductive type's indices are not sub-reduced, so a concept-method projection standing in an index position — `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness@0).0(0, 1))` once resolution has picked the intrinsic witness — survives verbatim into a type-mismatch message. Normalizing the index collapses it to the value it denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying operator intrinsic (`Vec(Nat, n + m)`) the printer spells infix.
 ///
 /// Display-only and best-effort: the result is never fed back into the kernel, and an exhausted step budget propagates so callers can fall back to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`) keep their WHNF shape rather than being reduced under their own binders — they seldom carry the arithmetic this targets, and opening every case arm buys a diagnostic nothing.
 pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
@@ -644,7 +646,7 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
             spine: normalize_each(context, spine.to_vec())?.into(),
             origin,
         }),
-        // Leaves (`Type`/`Prop`/`Var`/`Prim`, the last already carrying reduced operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep their weak-head normal shape.
+        // Leaves (`Type`/`Prop`/`Var`/`Intrinsic`, the last already carrying reduced operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep their weak-head normal shape.
         other => other,
     };
 

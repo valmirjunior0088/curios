@@ -126,7 +126,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     Ok((Term::proj(head, index), field_type))
 }
 
-/// Type a primitive inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`.
+/// Type an intrinsic inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`.
 pub(super) fn elaborate_induct_type(
     context: &mut Context,
     ut: &InductType,
@@ -183,7 +183,7 @@ pub(super) fn elaborate_induct_type(
     ))
 }
 
-/// Type a primitive constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`.
+/// Type an intrinsic constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`.
 pub(super) fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,

@@ -2,7 +2,8 @@ use {
     crate::{Kernel, KernelError, check, infer},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Level, Prim, Telescope, Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
+        UniverseContext,
     },
 };
 
@@ -17,15 +18,15 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(curios_core::Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)))
 }
 
 fn nat_type() -> Term {
-    Term::prim(Prim::NatType)
+    Term::intrinsic(Intrinsic::NatType)
 }
 
 fn bool_type() -> Term {
-    Term::prim(Prim::BoolType)
+    Term::intrinsic(Intrinsic::BoolType)
 }
 
 fn one() -> Level {
@@ -49,7 +50,7 @@ fn a_literal_has_its_carriers_type() {
 
     assert_eq!(infer(&mut kernel, &nat(7)), Ok(nat_type()));
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::Bool(true))),
+        infer(&mut kernel, &Term::intrinsic(Intrinsic::Bool(true))),
         Ok(bool_type()),
     );
 }
@@ -127,7 +128,7 @@ fn an_argument_of_the_wrong_type_is_refused() {
     let x = binder(0, "x");
 
     let f = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
-    let applied = Term::apply(f, [Term::prim(Prim::Bool(true))]);
+    let applied = Term::apply(f, [Term::intrinsic(Intrinsic::Bool(true))]);
 
     assert!(matches!(
         infer(&mut kernel, &applied),
@@ -166,7 +167,7 @@ fn applying_a_non_function_is_refused() {
 fn a_tuple_has_the_product_of_its_components_types() {
     let mut kernel = kernel();
 
-    let pair = Term::tuple([nat(1), Term::prim(Prim::Bool(false))]);
+    let pair = Term::tuple([nat(1), Term::intrinsic(Intrinsic::Bool(false))]);
     let type_ = infer(&mut kernel, &pair).expect("a closed pair has a type");
 
     assert_eq!(
@@ -243,7 +244,7 @@ fn a_recursive_body_that_misses_its_declared_type_is_refused() {
     let n = binder(1, "n");
 
     let signature = Term::func_type([(n.clone(), nat_type())], nat_type());
-    let body = Term::func([(n, nat_type())], Term::prim(Prim::Bool(true)));
+    let body = Term::func([(n, nat_type())], Term::intrinsic(Intrinsic::Bool(true)));
 
     let term = Term::rec(
         [(f.clone(), signature, body)],
@@ -320,7 +321,7 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
         name,
         Vec::<Term>::new(),
         "mk",
-        [Term::prim(Prim::Bool(true))],
+        [Term::intrinsic(Intrinsic::Bool(true))],
     );
     assert!(matches!(
         infer(&mut kernel, &value),
@@ -368,12 +369,15 @@ fn a_small_universe_is_admitted_where_a_larger_one_is_wanted() {
     ));
 }
 
-/// A primitive's operands are checked against the types its rule demands.
+/// An intrinsic's operands are checked against the types its rule demands.
 #[test]
-fn a_primitive_operand_of_the_wrong_type_is_refused() {
+fn an_intrinsic_operand_of_the_wrong_type_is_refused() {
     let mut kernel = kernel();
 
-    let mixed = Term::prim(Prim::nat_add(Term::prim(Prim::Bool(true)), nat(1)));
+    let mixed = Term::intrinsic(Intrinsic::nat_add(
+        Term::intrinsic(Intrinsic::Bool(true)),
+        nat(1),
+    ));
 
     assert!(matches!(
         infer(&mut kernel, &mixed),
@@ -382,15 +386,21 @@ fn a_primitive_operand_of_the_wrong_type_is_refused() {
 }
 
 #[test]
-fn a_primitive_operation_has_the_result_type_its_rule_states() {
+fn an_intrinsic_operation_has_the_result_type_its_rule_states() {
     let mut kernel = kernel();
 
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::nat_add(nat(1), nat(2)))),
+        infer(
+            &mut kernel,
+            &Term::intrinsic(Intrinsic::nat_add(nat(1), nat(2)))
+        ),
         Ok(nat_type()),
     );
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::nat_lt(nat(1), nat(2)))),
+        infer(
+            &mut kernel,
+            &Term::intrinsic(Intrinsic::nat_lt(nat(1), nat(2)))
+        ),
         Ok(bool_type()),
     );
 }
@@ -403,25 +413,28 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::prim(Prim::Lst(nat_type(), vec![nat(1), nat(2)])),
+            &Term::intrinsic(Intrinsic::Lst(nat_type(), vec![nat(1), nat(2)])),
         ),
-        Ok(Term::prim(Prim::LstType(nat_type()))),
+        Ok(Term::intrinsic(Intrinsic::LstType(nat_type()))),
     );
 
     assert!(matches!(
         infer(
             &mut kernel,
-            &Term::prim(Prim::Lst(
+            &Term::intrinsic(Intrinsic::Lst(
                 nat_type(),
-                vec![nat(1), Term::prim(Prim::Bool(true))],
+                vec![nat(1), Term::intrinsic(Intrinsic::Bool(true))],
             )),
         ),
         Err(KernelError::Mismatch { .. }),
     ));
 
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::Lst(nat_type(), Vec::new()))),
-        Ok(Term::prim(Prim::LstType(nat_type()))),
+        infer(
+            &mut kernel,
+            &Term::intrinsic(Intrinsic::Lst(nat_type(), Vec::new()))
+        ),
+        Ok(Term::intrinsic(Intrinsic::LstType(nat_type()))),
     );
 }
 
@@ -611,7 +624,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
         nat(0),
         &pred,
         &ih,
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
     );
     assert!(matches!(
         infer(&mut kernel, &wrong),
@@ -623,7 +636,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
         Term::free_var(&n),
         Some(&motive),
         nat_type(),
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
         &pred,
         &ih,
         Term::free_var(&ih),
@@ -643,7 +656,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
     let head = binder(2, "head");
     let tail = binder(3, "tail");
     let ih = binder(4, "ih");
-    kernel.assume(&xs, &Term::prim(Prim::LstType(nat_type())));
+    kernel.assume(&xs, &Term::intrinsic(Intrinsic::LstType(nat_type())));
 
     // Carrier claims Bool elements over a Nat-list scrutinee.
     let mismatched = Term::lst_match(
@@ -665,7 +678,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 
 /// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
 ///
-/// The two answers came from two implementations of one rule. `Sort::of` routes a parameterized former through `sort_of_prim`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule computed the *element's* sort instead and reported that as the former's, so `Lst(P)` inferred at `Prop` while `Sort::of(Lst(P))` said `Type 0`.
+/// The two answers came from two implementations of one rule. `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule computed the *element's* sort instead and reported that as the former's, so `Lst(P)` inferred at `Prop` while `Sort::of(Lst(P))` said `Type 0`.
 ///
 /// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Eq(@X, x, y)` — reflexivity discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `Lst(P)` yields `Eq(Lst(P), [p], [])` for a one-element list against the empty one. Congruence through `Lst/len` carries that to `Eq(1, 0)`, and transport turns `()` into a proof of `False`.
 ///
@@ -693,8 +706,8 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     );
     let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    let list = Term::prim(Prim::LstType(proposition.clone()));
-    let cell = Term::prim(Prim::CellType(proposition.clone()));
+    let list = Term::intrinsic(Intrinsic::LstType(proposition.clone()));
+    let cell = Term::intrinsic(Intrinsic::CellType(proposition.clone()));
 
     assert_eq!(infer(&mut kernel, &list), Ok(Term::type_ground()));
     assert_eq!(infer(&mut kernel, &cell), Ok(Term::type_ground()));
@@ -710,11 +723,17 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
 
     // A former still carries its element's level rather than being pinned at zero, and a proposition still stands where one is wanted.
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::LstType(nat_type()))),
+        infer(
+            &mut kernel,
+            &Term::intrinsic(Intrinsic::LstType(nat_type()))
+        ),
         Ok(Term::type_ground()),
     );
     assert_eq!(
-        infer(&mut kernel, &Term::prim(Prim::LstType(Term::type_ground())),),
+        infer(
+            &mut kernel,
+            &Term::intrinsic(Intrinsic::LstType(Term::type_ground())),
+        ),
         Ok(Term::type_at(one())),
     );
     assert_eq!(check(&mut kernel, &proposition, &Term::prop()), Ok(()));
@@ -831,7 +850,7 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
 ///
 /// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::Lst` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The other two forms read the claim and checked nothing, which is the same shape as every count the boundary now checks: no typing rule looks at a case form, so no ordering discipline would ever have caught it.
 ///
-/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_prim_head`, which is why no surface program reaches them and why the certifier's copy of the rule went unwritten.
+/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, which is why no surface program reaches them and why the certifier's copy of the rule went unwritten.
 #[test]
 fn a_boolean_elimination_requires_a_boolean_scrutinee() {
     let mut kernel = kernel();
@@ -852,7 +871,7 @@ fn a_dispatch_requires_a_natural_scrutinee() {
 
     // `match (true : Bool) : (_) => Nat | 0 => 1 | _ => 2 end`
     let eliminated = Term::switch(
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
         None,
         nat_type(),
         [(0u32, nat(1))],
@@ -867,11 +886,11 @@ fn a_dispatch_requires_a_natural_scrutinee() {
 
 /// The control for both, and it is what a fix by brick would fail: each form at its own carrier is ordinary code and must keep typing.
 #[test]
-fn each_primitive_elimination_at_its_own_carrier_is_still_accepted() {
+fn each_intrinsic_elimination_at_its_own_carrier_is_still_accepted() {
     let mut kernel = kernel();
 
     let boolean = Term::bool_match(
-        Term::prim(Prim::Bool(true)),
+        Term::intrinsic(Intrinsic::Bool(true)),
         None,
         nat_type(),
         nat(1),

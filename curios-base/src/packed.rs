@@ -1,4 +1,4 @@
-//! Shared packed storage for the two primitive binary-sequence grains.
+//! Shared packed storage for the two intrinsic binary-sequence grains.
 //!
 //! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte, so advancing a B tail is O(1).
 

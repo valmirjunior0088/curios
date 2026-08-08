@@ -466,7 +466,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.induct_match(scrutinee, top_motive.unwrap_or(&None), cases)
     }
 
-    /// Groups rows into `Bool`'s two literal shapes and emits [`curios_core::Term::bool_match`] directly — never `induct_match` (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see this module's own notes on hardcoded-primitive carriers). `Bool` carries no payload at all, so — unlike [`Self::compile_ctor`] — there is no single-row/multi-row naming discipline needed here.
+    /// Groups rows into `Bool`'s two literal shapes and emits [`curios_core::Term::bool_match`] directly — never `induct_match` (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see this module's own notes on hardcoded-intrinsic carriers). `Bool` carries no payload at all, so — unlike [`Self::compile_ctor`] — there is no single-row/multi-row naming discipline needed here.
     ///
     /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to `induct_match`'s Rung-C vacuity inversion), `Cases::Bool` has no core-side exhaustiveness escape hatch (`elaborate_bool_match`) — both groups must be present here, checked eagerly before recursing on either.
     fn compile_bool(

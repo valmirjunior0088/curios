@@ -3,13 +3,13 @@ use curios_core::*;
 
 #[test]
 fn display_unbound_variable() {
-    let err = Error::unbound_variable(Subterm::Prim(Prim::NatType));
+    let err = Error::unbound_variable(Subterm::Intrinsic(Intrinsic::NatType));
     assert_eq!(err.to_string(), "unbound variable: Nat");
 }
 
 #[test]
 fn display_not_a_function() {
-    let err = Error::not_a_function(Subterm::Prim(Prim::NatType));
+    let err = Error::not_a_function(Subterm::Intrinsic(Intrinsic::NatType));
     assert_eq!(
         err.to_string(),
         "applied a non-function\n  head has type: Nat"
@@ -18,7 +18,10 @@ fn display_not_a_function() {
 
 #[test]
 fn display_type_mismatch_shows_both_types() {
-    let err = Error::type_mismatch(Subterm::Prim(Prim::NatType), Subterm::Prim(Prim::BoolType));
+    let err = Error::type_mismatch(
+        Subterm::Intrinsic(Intrinsic::NatType),
+        Subterm::Intrinsic(Intrinsic::BoolType),
+    );
     let s = err.to_string();
     assert!(s.contains("Nat"), "should contain inferred Nat: {s}");
     assert!(s.contains("Bool"), "should contain expected Bool: {s}");
@@ -30,7 +33,7 @@ fn display_type_mismatch_shows_both_types() {
 ///
 /// No compile could have observed the disagreement. This side refuses such a declaration during elaboration, so the kernel's copy is asked only about declarations that already passed here — which is what `Expect::NotAsked` records for `informative_prop_field` and `multi_constructor_prop` in `curios/src/tests/perimeter.rs`, a cell that file's own documentation calls "not a pass". So the comparison has to be made directly, as `curios-cert`'s `satisfy` module now does for universe contexts.
 ///
-/// Both checkers are told the same single thing — one nullary `Prop`-sorted family — and nothing else, so a disagreement here is about the rule rather than about what either was handed. That declaration is unavoidable rather than convenient: `Prop` is itself `Type`-sorted, so no closed proposition can be built out of primitives and type formers alone. The first draft of this table had no declaration and therefore compared eleven *informative* types against each other, agreeing perfectly while testing nothing; the control below is what caught it, and that is what a control is for.
+/// Both checkers are told the same single thing — one nullary `Prop`-sorted family — and nothing else, so a disagreement here is about the rule rather than about what either was handed. That declaration is unavoidable rather than convenient: `Prop` is itself `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. The first draft of this table had no declaration and therefore compared eleven *informative* types against each other, agreeing perfectly while testing nothing; the control below is what caught it, and that is what a control is for.
 ///
 /// The table spans the shapes the rule turns on: both universes, a proof, an impredicative `Π` into a proposition beside a `Π` into a *universe* — a type family, not a proposition — a `Σ` whose fields are all propositions, and the unit type, which is `Type`-sorted deliberately, being what an effect returns, so calling it a proposition would erase it.
 #[test]
@@ -39,11 +42,11 @@ fn both_checkers_decide_non_informativeness_alike() {
     let mut kernel = curios_cert::Kernel::new(100_000);
     kernel.set_local_floor(1_000);
 
-    let nat = || Term::prim(Prim::NatType);
+    let nat = || Term::intrinsic(Intrinsic::NatType);
     let binder = |index: u32| Free::local(index, Some("x"));
 
     // A `Prop`-sorted family has to be declared: `Prop` itself is `Type`-sorted, so no closed
-    // proposition can be built out of primitives and type formers alone. Registering it in both
+    // proposition can be built out of intrinsics and type formers alone. Registering it in both
     // checkers is the whole of the setup either one needs.
     let held = Global::Authored(curios_base::Qualifier::from(["Held"]));
     let declaration = InductDecl {
@@ -64,8 +67,8 @@ fn both_checkers_decide_non_informativeness_alike() {
 
     let types = vec![
         ("Nat", nat()),
-        ("Bool", Term::prim(Prim::BoolType)),
-        ("Lst(Nat)", Term::prim(Prim::LstType(nat()))),
+        ("Bool", Term::intrinsic(Intrinsic::BoolType)),
+        ("Lst(Nat)", Term::intrinsic(Intrinsic::LstType(nat()))),
         // The position that diverged: a term at `Type` is a type, and conversion reads it back in full.
         ("Type 0", Term::type_ground()),
         (

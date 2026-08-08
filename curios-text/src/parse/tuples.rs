@@ -1,7 +1,7 @@
 use super::*;
 
-pub(super) fn parse_prim<'a>() -> Parser<'a, Term> {
-    parse_bool_prim()
+pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
+    parse_bool_intrinsic()
         // Decimal floats first: `5.0` is a `Flt`, not the integer `5` projected.
         .or(parse_flt_value())
         .or(parse_char_lit())

@@ -25,7 +25,7 @@ fn entrypoint_type_is_used_as_expected_type() {
 
 #[test]
 fn an_entrypoint_type_may_apply_a_type_former() {
-    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the primitive it denotes. Left raw it reached conversion as an `Apply` that no unfolding could reconcile with the inferred `Prim::LstType`, and the mismatch was reported between two spellings of one type — `Lst Nat` against `Lst(Nat)`.
+    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the intrinsic it denotes. Left raw it reached conversion as an `Apply` that no unfolding could reconcile with the inferred `Intrinsic::LstType`, and the mismatch was reported between two spellings of one type — `Lst Nat` against `Lst(Nat)`.
     let source = r#"
         use /std/{Lst, Nat};
         [1]
@@ -152,7 +152,7 @@ fn compile_printed_stages(source: &str, type_: Option<&str>) -> Result<(String, 
 
 #[test]
 fn let_bound_tuple_with_an_effectful_field_lowers() {
-    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`. Head-only purity classification used to route the whole `let` through `lower_pure_name` and panic the compiler on the field's host primitive. End-to-end guard for `is_pure_term`. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
+    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`. Head-only purity classification used to route the whole `let` through `lower_pure_name` and panic the compiler on the field's host intrinsic. End-to-end guard for `is_pure_term`. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
     let source = r#"
         foreign frobnicate : (Nat) -> Nat;
         let t = (frobnicate(5), 2);
@@ -663,7 +663,7 @@ fn an_abstract_witness_folds_back_in_a_mismatch_too() {
 
 #[test]
 fn goal_types_spell_negated_equality_as_neq() {
-    // `a != b` elaborates as an xor-negated equality call (no `BoolNot` prim exists); the report folds the pair back to `!=`.
+    // `a != b` elaborates as an xor-negated equality call (no `BoolNot` intrinsic exists); the report folds the pair back to `!=`.
     let source = r#"
         use /std/{Nat, Bool, Eq};
         let claim : Eq(1 != 2, true) = ?;
@@ -993,7 +993,7 @@ fn inductive_match_on_a_non_inductive_scrutinee_is_rejected_directly() {
 
 #[test]
 fn new_style_inductive_match_lowers_end_to_end() {
-    // The same program with correct arities compiles through to wasm: the `Result` declaration takes the primitive-inductive path (InductiveType / Variant / InductiveMatch) and erases back to the legacy tagged-tuple runtime shape.
+    // The same program with correct arities compiles through to wasm: the `Result` declaration takes the intrinsic-inductive path (InductiveType / Variant / InductiveMatch) and erases back to the legacy tagged-tuple runtime shape.
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};

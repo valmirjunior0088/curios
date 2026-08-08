@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::Judge,
-    curios_core::{Free, Peel, Subterm, Telescope, Term, peel_prim},
+    curios_core::{Free, Peel, Subterm, Telescope, Term, peel_intrinsic},
     std::collections::BTreeSet,
 };
 
@@ -27,7 +27,7 @@ pub fn pinned_by_targets(targets: &[Term]) -> Vec<Free> {
         .iter()
         .filter_map(|target| match &**target {
             Subterm::Var(var) => Some(var.unwrap().clone()),
-            // Anything else — an application, a constructor's included, as well as a projection, a primitive, or a stuck match — determines nothing.
+            // Anything else — an application, a constructor's included, as well as a projection, an intrinsic, or a stuck match — determines nothing.
             _ => None,
         })
         .collect()
@@ -174,7 +174,7 @@ fn unify_index<J: Judge>(
     match (&*actual, &*target) {
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Ok(Step::Refuse),
 
-        (Subterm::Prim(this), Subterm::Prim(that)) => match peel_prim(this, that) {
+        (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => match peel_intrinsic(this, that) {
             Some(Peel::Equal) => Ok(Step::Ok),
             Some(Peel::Clash) => Ok(Step::Clash),
             Some(Peel::Stuck) => Ok(Step::Refuse),
@@ -198,7 +198,7 @@ fn unify_index<J: Judge>(
             }
             // Injectivity and tag disjointness are claims about values a program can tell apart, and a proposition's inhabitants are not: proof irrelevance makes every one of them definitionally equal. Deciding this position by either claim contradicts conversion — `Two/a()` against `Two/b()` reads as a clash while conversion calls them the same value, and `Tag/t(a)` against `Tag/t(7)` manufactures the *relevant* equation `a := 7` from a premise that `Tag/t(0)` satisfies equally. Both are inconsistent, and each was a closed inhabitant of `False`: the first through a vacuous elimination, the second through the singleton rung of the large-elimination guard. So the position is satisfied — the two sides really are equal — and it yields nothing: no clash, no equations. That is strictly the refusing direction, since an arm that was excused as impossible becomes mandatory and a binder forced only here stays unsolved.
             //
-            // Only a variant can reach this: a `Prim` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
+            // Only a variant can reach this: an `Intrinsic` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
             // Matched on the nose rather than reduced: `check_induct_decl` requires a declared result sort to be a literal sort, which is the clause this test is licensed by. Without it a family declared at a redex unfolding to `Prop` reads as relevant here and as a proposition everywhere else, and the clash below excuses an arm that irrelevance says is reachable.
             if judge
                 .induct_decl(&a.name)

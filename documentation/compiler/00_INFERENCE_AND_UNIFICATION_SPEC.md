@@ -92,7 +92,7 @@ and equate the retained prefix pairwise as the saturated case already does.
 
 **Reproduction.** `satisfy (@S : Type) => Monad((A : Type) => Box(S, A))` is refused with *witness cannot be keyed: its concept's parameter 1 reduces to `A => Box(S, A)`*. The same declaration with a unary family — `satisfy Monad((A : Type) => Uni(A))` — is accepted and runs.
 
-**Cause.** Two mechanisms compose. Surface `Box(S, A)` lowers to `Apply(Box, [S, A])`, and weak-head reduction does not go under the `λA`, so the lambda body stays a stuck application. `HeadKey::of_whnf`'s `Func` arm (`concept.rs:80`) walks the telescope to its body and accepts only `InductType`, `StructType`, or a primitive former there; an `Apply` falls to `_ => None`, and `resolve.rs:651` raises the error.
+**Cause.** Two mechanisms compose. Surface `Box(S, A)` lowers to `Apply(Box, [S, A])`, and weak-head reduction does not go under the `λA`, so the lambda body stays a stuck application. `HeadKey::of_whnf`'s `Func` arm (`concept.rs:80`) walks the telescope to its body and accepts only `InductType`, `StructType`, or an intrinsic former there; an `Apply` falls to `_ => None`, and `resolve.rs:651` raises the error.
 
 The unary case is not an exception to this — it is `reduce_func_eta` firing first. `λA. Uni(A)` contracts to bare `Uni`, whose own whnf is the family node. Eta-contraction cannot fire on a partial application, which is why the two spellings diverge.
 
@@ -166,7 +166,7 @@ let id = (x) => x;
 
 **No constructor-name guessing.** An inductive match whose scrutinee type is unknown must wait for an actual type constraint. Inferring an inductive from arm tags alone is forbidden: tags are not globally unique, and guessing would make name resolution affect typing unpredictably.
 
-**Primitive matches constrain their carriers eagerly.** Primitive match forms have an unambiguous carrier and should solve an unknown scrutinee type immediately rather than park — Boolean arms to `Bool`, numeric switch arms to `Nat`, bit and byte arms to their packed primitives, list-shaped arms to `Lst(?Element)` with the element type free to remain unknown.
+**Intrinsic matches constrain their carriers eagerly.** Intrinsic match forms have an unambiguous carrier and should solve an unknown scrutinee type immediately rather than park — Boolean arms to `Bool`, numeric switch arms to `Nat`, bit and byte arms to their packed intrinsics, list-shaped arms to `Lst(?Element)` with the element type free to remain unknown.
 
 ### Core design
 
@@ -202,7 +202,7 @@ Solving these internal placeholders directly is justified by the same invariant 
 - **Inductive matching** (`elaborate_induct_match`) — if the rebuilt scrutinee type reduces to an unsolved metavariable, park the entire residual match; on retry, run the ordinary inductive lookup, motive construction, coverage checks, refinement handling, and branch elaboration. Do not pre-resolve tags.
 - **Projection** (`elaborate_proj`) — if the rebuilt head type is an unsolved metavariable, park the residual projection, enabling `(pair) => pair.0`. Do not guess a tuple or record skeleton.
 - **Application** (`elaborate_apply`) — if the rebuilt callee type is an unsolved metavariable, park the residual application, enabling `(f, x) => f(x)`. Do not solve the callee type to an invented function skeleton: Curios functions carry explicit, implicit, and witness plicities and may have dependent codomains, and guessing a skeleton commits to semantics the source did not supply.
-- **Primitive matching** — before the generic path, recognize primitive arm shapes and unify the scrutinee with their known carrier, introducing a fresh element metavariable for `Lst(?Element)`.
+- **Intrinsic matching** — before the generic path, recognize intrinsic arm shapes and unify the scrutinee with their known carrier, introducing a fresh element metavariable for `Lst(?Element)`.
 
 ### Retry and scheduler invariants
 
@@ -237,7 +237,7 @@ The six items are not equally coupled, and two orderings are load-bearing rather
 2. **1.5 (witness keying)** next. Independent of everything else, roughly five lines, and it settles the universe-instance question early on the cheapest possible surface. It also lands user-visible value alone: the parametric witness declaration becomes writable even before `!` dispatches to it.
 3. **1.2 and 1.4 together.** Both change what the solver does with a flex head against a spine, and 1.4's guard sits inside the function 1.2 extends. Landing 1.4 first means writing that guard twice.
 4. **1.1 (pruning)** after 1.2/1.4. Pruning is what lets the solver commit where it currently postpones, and it is easiest to evaluate once the imitation rules that feed it are settled.
-5. **Part 2 (lambda inference)** last, in its own sequence: relax the domain rejection and add the groundness obligation; add paired placeholders and scheduler support against a narrow blocker; then application and projection parking; then inductive-match parking; then eager primitive carriers; then dependent, witness, refinement, privacy, and diagnostic coverage. This produces testable scheduler behavior before the richest match path depends on it.
+5. **Part 2 (lambda inference)** last, in its own sequence: relax the domain rejection and add the groundness obligation; add paired placeholders and scheduler support against a narrow blocker; then application and projection parking; then inductive-match parking; then eager intrinsic carriers; then dependent, witness, refinement, privacy, and diagnostic coverage. This produces testable scheduler behavior before the richest match path depends on it.
 
 Part 2 does not require 1.1: its placeholder equations are deliberately oriented so the placeholder is solved directly by a term elaborated in its own frame, minimizing dependence on unfinished flex-flex behavior. That orientation is a design constraint, not an accident, and should survive any reordering.
 
@@ -256,7 +256,7 @@ The likely surface, to be re-read rather than trusted:
 - `curios-elab/src/elaborate/binding.rs` — provisional unannotated domains and groundness registration (Part 2).
 - `curios-elab/src/elaborate/apply.rs` — application blocking and shared transitive-groundness support (Part 2).
 - `curios-elab/src/elaborate/aggregate.rs` — projection blocking (Part 2).
-- `curios-elab/src/elaborate/match_.rs` — inductive-match blocking and eager primitive carriers (Part 2).
+- `curios-elab/src/elaborate/match_.rs` — inductive-match blocking and eager intrinsic carriers (Part 2).
 - Test modules beside each, plus `curios/src/tests/` for cross-stage programs proving accepted terms compile and run.
 - `documentation/SYNTAX.md`, `documentation/ROADMAP.md`, `documentation/DESIGN.md`, and affected module rustdocs once items land.
 
@@ -274,7 +274,7 @@ No core representation change is expected, and none of the six items adds a `Hea
 
 **1.5 Witness keying** — `satisfy (@S : Type) => Monad((A : Type) => Box(S, A))` registers and keys on `Nominal(Box)`; a second ground witness at the same head is refused as `DuplicateWitness`; the unary eta-contracting path is unchanged; a witness registered before universe finalization keys soundly (the open question above).
 
-**Part 2** — a local identity lambda fixed by a later `Nat` call; repeated uses at one type succeeding and incompatible uses failing monomorphically; a standalone `(x) => x` failing at its parameter span; an `Option` match inside a lambda inferred from a later call; a `Result` match and a user-defined indexed-inductive match retrying with correct refinements; Boolean, numeric, bit, byte and list primitive matches constraining their carrier immediately; a list match leaving its element type open and then either constrained or failed at the boundary; projection from an initially unknown parameter type; calling an initially unknown function parameter, including its plicities; a dependent inferred result mentioning a lambda parameter without escaping; nested structural blockers making progress without duplicate placeholders or infinite retry; witness goals created before or during a retry resolved once with source spans retained; representation privacy and match refinements identical before and after parking; no work surviving a top-level item boundary; oracle-mode elaboration leaking no parked obligations; successful zonking leaving no unsolved metavariables.
+**Part 2** — a local identity lambda fixed by a later `Nat` call; repeated uses at one type succeeding and incompatible uses failing monomorphically; a standalone `(x) => x` failing at its parameter span; an `Option` match inside a lambda inferred from a later call; a `Result` match and a user-defined indexed-inductive match retrying with correct refinements; Boolean, numeric, bit, byte and list intrinsic matches constraining their carrier immediately; a list match leaving its element type open and then either constrained or failed at the boundary; projection from an initially unknown parameter type; calling an initially unknown function parameter, including its plicities; a dependent inferred result mentioning a lambda parameter without escaping; nested structural blockers making progress without duplicate placeholders or infinite retry; witness goals created before or during a retry resolved once with source spans retained; representation privacy and match refinements identical before and after parking; no work surviving a top-level item boundary; oracle-mode elaboration leaking no parked obligations; successful zonking leaving no unsolved metavariables.
 
 Where practical, scheduler tests should assert obligation counts or placeholder reuse, so a superficially successful program cannot hide duplicated delayed work.
 

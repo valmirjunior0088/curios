@@ -6,11 +6,11 @@ fn context() -> Context {
 }
 
 fn nat() -> Term {
-    Subterm::Prim(Prim::NatType).into()
+    Subterm::Intrinsic(Intrinsic::NatType).into()
 }
 
 fn nat_lit(n: usize) -> Term {
-    Subterm::Prim(Prim::Nat(Nat::new(n))).into()
+    Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n))).into()
 }
 
 fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {

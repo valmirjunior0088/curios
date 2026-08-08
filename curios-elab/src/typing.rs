@@ -3,8 +3,8 @@ mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
-    Apply, Bound, Field, Free, Func, FuncType, Global, Level, Many, MetaId, Metavar, Prim,
-    PrimHead, Proj, ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
+    Apply, Bound, Field, Free, Func, FuncType, Global, Intrinsic, IntrinsicHead, Level, Many,
+    MetaId, Metavar, Proj, ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
     UniverseConstraintOrigin, UniverseRole, Visit,
 };
 use std::{collections::BTreeSet, rc::Rc};
@@ -123,10 +123,10 @@ fn is_sequencing(context: &Context, term: &Term) -> bool {
 
 /// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.
 ///
-/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io Str` against `Io Nat` disagrees about the result, while `Io _` against `Nat` is a region that cannot sequence at all. `Io` is named among the primitives because it is the one monad whose former is a primitive node rather than an application or a parameterized nominal type.
+/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io Str` against `Io Nat` disagrees about the result, while `Io _` against `Nat` is a region that cannot sequence at all. `Io` is named among the intrinsics because it is the one monad whose former is an intrinsic node rather than an application or a parameterized nominal type.
 fn wraps_a_result(type_: &Term) -> bool {
     match &**type_ {
-        Subterm::Apply(_) | Subterm::Prim(Prim::IoType(_)) => true,
+        Subterm::Apply(_) | Subterm::Intrinsic(Intrinsic::IoType(_)) => true,
         Subterm::InductType(induct) => !induct.params.is_empty(),
         Subterm::StructType(struct_) => !struct_.params.is_empty(),
         _ => false,
@@ -219,7 +219,7 @@ pub(crate) fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_list = matches!(&**arg, Subterm::Prim(Prim::Lst(..)));
+    let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::Lst(..)));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
     if !is_lambda && !is_list && !is_tuple {
         return Ok(false);
@@ -506,7 +506,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
             })?;
 
-            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the primitive normal form `NatLte(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/lte(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
+            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLte(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/lte(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
             if canonical.head_key().is_none()
                 && let Some(spined) = spine_whnf(context, head)?
             {
@@ -527,7 +527,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
     Ok(())
 }
 
-/// Weak-head normal form of the *spine only*: reduce the function position and beta-open it over the arguments, repeating, but never reduce an argument and never evaluate the primitive node this lands on.
+/// Weak-head normal form of the *spine only*: reduce the function position and beta-open it over the arguments, repeating, but never reduce an argument and never evaluate the intrinsic node this lands on.
 ///
 /// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the `NatLte(a, hi)` the reducer actually probes, while leaving `a` and `hi` exactly as written. Reducing the whole application would do the same, but it forces the arguments — and an argument may legitimately contain an effect at the value level, which must keep being an error at the type level rather than being evaluated here.
 ///
@@ -554,8 +554,8 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 
 /// What an eliminator's motive must abstract: the scrutinee's indices, then the scrutinee itself. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type.
 pub(crate) enum MotiveShape<'a> {
-    /// A primitive carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
-    Prim(&'a Term),
+    /// An intrinsic carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
+    Intrinsic(&'a Term),
     /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices_at`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
     Induct {
         name: &'a Global,
@@ -569,7 +569,7 @@ impl MotiveShape<'_> {
     /// The motive's binder count: one per index, then the scrutinee.
     pub(crate) fn arity(&self) -> usize {
         match self {
-            MotiveShape::Prim(_) => 1,
+            MotiveShape::Intrinsic(_) => 1,
             MotiveShape::Induct { indices, .. } => indices.len() + 1,
         }
     }
@@ -577,7 +577,7 @@ impl MotiveShape<'_> {
     /// The eliminated family's name, for diagnostics.
     fn name(&self) -> Option<&Global> {
         match self {
-            MotiveShape::Prim(_) => None,
+            MotiveShape::Intrinsic(_) => None,
             MotiveShape::Induct { name, .. } => Some(name),
         }
     }
@@ -589,7 +589,7 @@ impl MotiveShape<'_> {
             .expect("a motive binds at least the scrutinee");
 
         let scrutinee_type = match self {
-            MotiveShape::Prim(head_type) => (*head_type).clone(),
+            MotiveShape::Intrinsic(head_type) => (*head_type).clone(),
             MotiveShape::Induct {
                 name,
                 universes,
@@ -629,7 +629,7 @@ impl MotiveShape<'_> {
         let mut binders = Vec::with_capacity(self.arity());
 
         let scrutinee_type = match self {
-            MotiveShape::Prim(head_type) => (*head_type).clone(),
+            MotiveShape::Intrinsic(head_type) => (*head_type).clone(),
             MotiveShape::Induct {
                 name,
                 universes,
@@ -776,34 +776,37 @@ fn check_written_motive(
     })
 }
 
-/// Accept `head_type` (already reduced) when it is `expected`'s type-former, else the matching `not_*_type` error. The shared core of `expect_prim_head` and `elaborate`'s `elaborate_prim_head` — one source of truth for the `PrimHead` → type-former / error mapping.
-pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Error> {
+/// Accept `head_type` (already reduced) when it is `expected`'s type-former, else the matching `not_*_type` error. The shared core of `expect_intrinsic_head` and `elaborate`'s `elaborate_intrinsic_head` — one source of truth for the `IntrinsicHead` → type-former / error mapping.
+pub(crate) fn check_intrinsic_head(
+    expected: IntrinsicHead,
+    head_type: Term,
+) -> Result<Term, Error> {
     let matches = match expected {
-        PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
-        PrimHead::Bool => matches!(&*head_type, Subterm::Prim(Prim::BoolType)),
-        PrimHead::Bin(grain) => {
-            matches!(&*head_type, Subterm::Prim(Prim::BinType(actual)) if *actual == grain)
+        IntrinsicHead::Nat => matches!(&*head_type, Subterm::Intrinsic(Intrinsic::NatType)),
+        IntrinsicHead::Bool => matches!(&*head_type, Subterm::Intrinsic(Intrinsic::BoolType)),
+        IntrinsicHead::Bin(grain) => {
+            matches!(&*head_type, Subterm::Intrinsic(Intrinsic::BinType(actual)) if *actual == grain)
         }
     };
 
     match matches {
         true => Ok(head_type),
         false => Err(match expected {
-            PrimHead::Nat => Error::not_nat_type(head_type),
-            PrimHead::Bool => Error::not_bool_type(head_type),
-            PrimHead::Bin(grain) => Error::not_bin_type(grain, head_type),
+            IntrinsicHead::Nat => Error::not_nat_type(head_type),
+            IntrinsicHead::Bool => Error::not_bool_type(head_type),
+            IntrinsicHead::Bin(grain) => Error::not_bin_type(grain, head_type),
         }),
     }
 }
 
-/// Infer the scrutinee's type, reduce it, and require it to be the given prim type. Returns the reduced head type — used by `erase` to erase the head.
-pub(crate) fn expect_prim_head(
+/// Infer the scrutinee's type, reduce it, and require it to be the given intrinsic type. Returns the reduced head type — used by `erase` to erase the head.
+pub(crate) fn expect_intrinsic_head(
     context: &mut Context,
     head: &Term,
-    expected: PrimHead,
+    expected: IntrinsicHead,
 ) -> Result<Term, Error> {
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    check_prim_head(expected, head_type)
+    check_intrinsic_head(expected, head_type)
 }

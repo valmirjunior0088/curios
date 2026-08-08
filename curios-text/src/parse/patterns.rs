@@ -185,7 +185,7 @@ pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
         )
 }
 
-// A nested `Bool` leaf: `true` or `false`. Tried as dedicated keywords before the generic `Binder` fallback in `parse_match_pattern` — `parse_binder` doesn't itself reject keyword text, mirroring the same precedent already used for `Bool` literals at term level (see the `Subterm::Prim(Prim::Bool)` case above).
+// A nested `Bool` leaf: `true` or `false`. Tried as dedicated keywords before the generic `Binder` fallback in `parse_match_pattern` — `parse_binder` doesn't itself reject keyword text, mirroring the same precedent already used for `Bool` literals at term level (see the `Subterm::Intrinsic(Intrinsic::Bool)` case above).
 pub(super) fn parse_bool_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_keyword("false"))
         .map(|()| MatchPattern::Bool(false))
@@ -200,7 +200,7 @@ pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     }))
 }
 
-// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `Lst`/`Bin` cons leaves below (`parse_cons_ih`). Tried after `Ctor` and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` primitives and a `take_exact` operator token that doesn't itself eat trailing whitespace) — `pred+1` sets this apart visually from a plain binder in a way `pred + 1` doesn't need help with.
+// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `Lst`/`Bin` cons leaves below (`parse_cons_ih`). Tried after `Ctor` and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace) — `pred+1` sets this apart visually from a plain binder in a way `pred + 1` doesn't need help with.
 pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(
         parse_identifier()

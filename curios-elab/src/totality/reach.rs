@@ -12,7 +12,7 @@
 
 use {
     curios_core::{
-        Bound, Definition, Enter, Func, FuncType, Global, Item, Let, Match, Module, Prim, Rec,
+        Bound, Definition, Enter, Func, FuncType, Global, Intrinsic, Item, Let, Match, Module, Rec,
         Struct, Subterm, Telescope, Term, Variant,
     },
     std::collections::{BTreeMap, BTreeSet, HashSet},
@@ -35,7 +35,7 @@ fn push(positions: &mut Vec<Position>, site: &str, term: &Term) {
 
 /// Every term in a type position.
 ///
-/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, a primitive type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/BigNat/Canonical` into `is_trimmed`.
+/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/BigNat/Canonical` into `is_trimmed`.
 pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
     let mut positions = Vec::new();
 
@@ -172,7 +172,7 @@ fn ends_in_sort(type_: &Term) -> bool {
     }
 }
 
-/// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and primitive type formers.
+/// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and intrinsic type formers.
 #[allow(clippy::mutable_key_type)]
 fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
     // On the shared `Term::walk` driver, deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack overflow above 16KiB.
@@ -231,9 +231,9 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>) -> Ente
         }
 
         // The type formers name their element types.
-        Subterm::Prim(Prim::LstType(type_) | Prim::CellType(type_) | Prim::IoType(type_)) => {
-            push(positions, site, type_)
-        }
+        Subterm::Intrinsic(
+            Intrinsic::LstType(type_) | Intrinsic::CellType(type_) | Intrinsic::IoType(type_),
+        ) => push(positions, site, type_),
 
         _ => {}
     }
@@ -259,7 +259,7 @@ pub(crate) fn offenders(
 
 /// Why one position fails its obligation.
 ///
-/// A position can fail without naming anything: an inline `rec` that does not descend, or a `Prim::ProcExit`, is partial on its own account. Reporting only reached names would miss exactly the shapes that need no name.
+/// A position can fail without naming anything: an inline `rec` that does not descend, or an `Intrinsic::ProcExit`, is partial on its own account. Reporting only reached names would miss exactly the shapes that need no name.
 pub(crate) enum Fault {
     Named(Global),
     Inline,

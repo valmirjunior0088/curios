@@ -28,7 +28,7 @@ use {
     crate::{Env, forceable},
     curios_core::{
         Apply, Arity, Atom, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductArm,
-        InductType, Layer, Let, Many, Match, Nat, Prim, Proj, Rec, RecGroup, Scope, Struct,
+        InductType, Intrinsic, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst,
         Variant,
     },
@@ -52,7 +52,7 @@ const EXPAND_FUEL: usize = 16;
 
 /// Whether every recursive call path in `group` descends.
 ///
-/// This is the whole of size-change termination as this compiler applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the primitive eliminator's, already structural by construction.
+/// This is the whole of size-change termination as this compiler applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
 pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
     let mut members = Vec::new();
     for index in 0..group.length() {
@@ -224,28 +224,33 @@ impl<E: Env> Walk<'_, E> {
                 Shape::Node(Tag::Tuple, kids)
             }
 
-            Subterm::Prim(Prim::Bool(value)) => Shape::Node(Tag::Bool(*value), Vec::new()),
+            Subterm::Intrinsic(Intrinsic::Bool(value)) => {
+                Shape::Node(Tag::Bool(*value), Vec::new())
+            }
 
-            Subterm::Prim(Prim::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term),
+            Subterm::Intrinsic(Intrinsic::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term),
 
-            Subterm::Prim(
-                Prim::Bin(grain, _)
-                | Prim::BinAppend(grain, ..)
-                | Prim::BinConcat(grain, ..)
-                | Prim::BinSlice(grain, ..),
+            Subterm::Intrinsic(
+                Intrinsic::Bin(grain, _)
+                | Intrinsic::BinAppend(grain, ..)
+                | Intrinsic::BinConcat(grain, ..)
+                | Intrinsic::BinSlice(grain, ..),
             ) => self.monoid_shape(FreeMonoid::Bin(*grain), term),
 
-            Subterm::Prim(
-                Prim::Lst(..) | Prim::LstAppend(..) | Prim::LstConcat(..) | Prim::LstSlice(..),
+            Subterm::Intrinsic(
+                Intrinsic::Lst(..)
+                | Intrinsic::LstAppend(..)
+                | Intrinsic::LstConcat(..)
+                | Intrinsic::LstSlice(..),
             ) => self.monoid_shape(FreeMonoid::Lst, term),
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `BigUint` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
-            Subterm::Prim(Prim::NatDiv(left, right)) => {
+            Subterm::Intrinsic(Intrinsic::NatDiv(left, right)) => {
                 let (left, right) = (left.clone(), right.clone());
                 self.arithmetic_shape(&left, &right, &BigUint::from(2usize))
             }
 
-            Subterm::Prim(Prim::NatSub(left, right)) => {
+            Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
                 let (left, right) = (left.clone(), right.clone());
                 self.arithmetic_shape(&left, &right, &BigUint::from(1usize))
             }
@@ -297,7 +302,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Unfold weak-head steps until the term reads as a shape, or stops moving.
     ///
-    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` primitive wrappers, and 65 are ordinary definitions like `/std/BigNat/mul/small` and `/syn/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
+    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` intrinsic wrappers, and 65 are ordinary definitions like `/std/BigNat/mul/small` and `/syn/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
     ///
     /// There is no step count. Termination rests on what this pass is handed rather than on a budget: `check_rec_group` types every member body *before* asking for a verdict, positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the kernel's own reduction budget (`kernel::whnf`) remains the backstop for anything that still fails to settle.
     ///
@@ -317,7 +322,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Read a boolean scrutinee as a comparison against a literal.
     ///
-    /// Neither spelling arrives as a primitive: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Walk::shape_of`] uses is what exposes the primitive under both.
+    /// Neither spelling arrives as an intrinsic: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Walk::shape_of`] uses is what exposes the intrinsic under both.
     fn guard(&mut self, head: &Term) -> Option<Guard> {
         if let Some(guard) = Guard::read(head) {
             return Some(guard);
@@ -496,9 +501,9 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
-            Subterm::Prim(prim) => {
+            Subterm::Intrinsic(intrinsic) => {
                 let mut terms = Vec::new();
-                prim.any_term(&mut |child| {
+                intrinsic.any_term(&mut |child| {
                     terms.push(child.clone());
                     false
                 });
@@ -562,7 +567,7 @@ impl<E: Env> Walk<'_, E> {
 
             Cases::Switch { cases, default } => {
                 for (value, body) in cases {
-                    let literal = Term::prim(Prim::Nat(Nat::new(*value)));
+                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(*value)));
                     let shape = self.shape_of(&literal);
                     self.refine(scrutinee, shape, body);
                 }

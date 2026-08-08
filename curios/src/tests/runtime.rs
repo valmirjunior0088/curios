@@ -462,11 +462,11 @@ fn diagnostic_shortens_global_names() {
     );
     assert!(
         !error.contains("sys/"),
-        "qualified prim path leaked: {error}"
+        "qualified intrinsic path leaked: {error}"
     );
 }
 
-// A mismatch report deep-normalizes both sides: the arithmetic in an index position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which, once resolution picks the primitive `Nat` witness, would otherwise surface as the compiler-internal `(sys/witness@N).0(0, 1)`. Normalizing collapses the literal case to its value (`1`), leaving no witness machinery in the message.
+// A mismatch report deep-normalizes both sides: the arithmetic in an index position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which, once resolution picks the intrinsic `Nat` witness, would otherwise surface as the compiler-internal `(sys/witness@N).0(0, 1)`. Normalizing collapses the literal case to its value (`1`), leaving no witness machinery in the message.
 #[test]
 fn diagnostic_collapses_witness_dispatch_in_index() {
     let source = r#"
@@ -487,7 +487,7 @@ fn diagnostic_collapses_witness_dispatch_in_index() {
     );
 }
 
-// The residual symbolic arithmetic a normalized index keeps is spelled in surface infix form, not the internal `Nat.add`/`Nat.succ` primitive spelling: the `n + m` and `n + 1` the source would have written.
+// The residual symbolic arithmetic a normalized index keeps is spelled in surface infix form, not the internal `Nat.add`/`Nat.succ` intrinsic spelling: the `n + m` and `n + 1` the source would have written.
 #[test]
 fn diagnostic_spells_index_arithmetic_infix() {
     let source = r#"

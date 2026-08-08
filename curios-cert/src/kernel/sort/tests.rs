@@ -2,8 +2,8 @@ use {
     crate::{Kernel, Sort},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Free, Global, InductDecl, Level, Many, Prim, RecGroup, RecMemberScopes, Scope, Telescope,
-        Term, UniverseContext,
+        Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
+        Telescope, Term, UniverseContext,
     },
 };
 
@@ -39,11 +39,11 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
 }
 
 #[test]
-fn a_primitive_type_sits_at_level_zero() {
+fn an_intrinsic_type_sits_at_level_zero() {
     let mut kernel = kernel();
 
     assert_eq!(
-        Sort::of(&mut kernel, &Term::prim(Prim::NatType)),
+        Sort::of(&mut kernel, &Term::intrinsic(Intrinsic::NatType)),
         Ok(Sort::Type(Level::zero())),
     );
 }
@@ -82,7 +82,7 @@ fn a_function_into_a_proposition_is_a_proposition() {
     let proposition = declare(&mut kernel, "P", Term::prop());
     let binder = curios_core::Free::local(0, Some("n"));
 
-    let pi = Term::func_type([(binder, Term::prim(Prim::NatType))], proposition);
+    let pi = Term::func_type([(binder, Term::intrinsic(Intrinsic::NatType))], proposition);
 
     assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Prop));
 }
@@ -93,8 +93,8 @@ fn a_function_into_data_takes_the_join_of_its_parts() {
     let binder = curios_core::Free::local(0, Some("n"));
 
     let pi = Term::func_type(
-        [(binder, Term::prim(Prim::NatType))],
-        Term::prim(Prim::NatType),
+        [(binder, Term::intrinsic(Intrinsic::NatType))],
+        Term::intrinsic(Intrinsic::NatType),
     );
 
     assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Type(Level::zero())));
@@ -124,7 +124,7 @@ fn one_relevant_field_makes_a_record_relevant() {
 
     let mixed = Term::tuple_type([
         (binder(0, "a"), proposition),
-        (binder(1, "b"), Term::prim(Prim::NatType)),
+        (binder(1, "b"), Term::intrinsic(Intrinsic::NatType)),
     ]);
 
     assert_eq!(Sort::of(&mut kernel, &mixed), Ok(Sort::Type(Level::zero())));
@@ -136,7 +136,7 @@ fn a_list_of_proofs_is_not_a_proposition() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
 
-    let list = Term::prim(Prim::LstType(proposition));
+    let list = Term::intrinsic(Intrinsic::LstType(proposition));
 
     assert_eq!(Sort::of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
 }
@@ -194,13 +194,13 @@ fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     );
 }
 
-/// A primitive *value* is not a type, so nothing classifies it — again a refusal rather than a default.
+/// An intrinsic *value* is not a type, so nothing classifies it — again a refusal rather than a default.
 #[test]
 fn a_value_in_type_position_is_refused() {
     let mut kernel = kernel();
 
     assert!(matches!(
-        Sort::of(&mut kernel, &Term::prim(Prim::Bool(true))),
+        Sort::of(&mut kernel, &Term::intrinsic(Intrinsic::Bool(true))),
         Err(crate::KernelError::Unclassified(_)),
     ));
 }

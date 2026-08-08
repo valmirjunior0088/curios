@@ -264,7 +264,7 @@ pub enum Error {
     PostponedCheck {
         expected: Box<Term>,
     },
-    /// An overloaded infix operator applied at an operand type with no matching scalar primitive — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
+    /// An overloaded infix operator applied at an operand type with no matching scalar intrinsic — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
         type_: Box<Term>,
@@ -330,7 +330,7 @@ pub enum Error {
         concept: String,
         target: String,
     },
-    /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or primitive head — nothing to key the table entry on.
+    /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or intrinsic head — nothing to key the table entry on.
     InvalidWitnessHead {
         witness: String,
         position: usize,
@@ -361,7 +361,7 @@ pub enum Error {
     IntOverflow {
         value: Box<Int>,
     },
-    /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (a primitive carrier has none).
+    /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
     MotiveBinderCount {
         name: Option<String>,
         expected: usize,
@@ -1576,7 +1576,7 @@ impl fmt::Display for Displayed<'_> {
                 let head = head.spelled(spelling);
                 write!(
                     f,
-                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, or a primitive type",
+                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, or an intrinsic type",
                     n = position + 1
                 )
             }

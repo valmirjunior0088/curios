@@ -1,4 +1,4 @@
-//! Structural traversal primitives shared by the derived analyses (and any later pass that walks the graph without caring which form it visits).
+//! Structural traversal intrinsics shared by the derived analyses (and any later pass that walks the graph without caring which form it visits).
 //!
 //! Each accessor enumerates one structural dimension of a right-hand side — its atom operands, its owned sub-blocks, the values its sub-blocks bind — in deterministic evaluation order. Consumers drive their own explicit worklists over these, keeping every whole-module walk iterative.
 

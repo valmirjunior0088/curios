@@ -413,7 +413,7 @@ fn trees_build_and_sum_stay_direct_recursive() {
     );
 }
 
-/// T2: the recursive arithmetic is folded to bare primitive instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_ref` witness projection left behind. The SCC known-argument propagation that enables this is owned by `curios-cont`'s specialization tests; this pins its emitted consequence.
+/// T2: the recursive arithmetic is folded to bare intrinsic instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_ref` witness projection left behind. The SCC known-argument propagation that enables this is owned by `curios-cont`'s specialization tests; this pins its emitted consequence.
 #[test]
 fn trees_invariant_arithmetic_propagates_through_scc() {
     let wat = wat(TREES);

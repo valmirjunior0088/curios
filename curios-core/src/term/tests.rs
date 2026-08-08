@@ -127,7 +127,7 @@ fn metavars_collects_ids_across_structure() {
         Term::func([(x.clone(), Term::type_ground())], Term::metavar(1)),
         [
             Term::metavar(2),
-            Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
+            Term::intrinsic(Intrinsic::nat_add(Term::metavar(3), Term::metavar(1))),
         ],
     );
     assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetaId)));
@@ -141,7 +141,7 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
         Term::func([(x.clone(), Term::type_ground())], Term::metavar(1)),
         [
             Term::metavar(2),
-            Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
+            Term::intrinsic(Intrinsic::nat_add(Term::metavar(3), Term::metavar(1))),
         ],
     );
 
@@ -235,7 +235,7 @@ fn variant_collects_metavars_and_prints_as_function_call() {
 
     let type_ = Term::induct_type(
         nominal("Result"),
-        [Term::prim(Prim::NatType), Term::metavar(3)],
+        [Term::intrinsic(Intrinsic::NatType), Term::metavar(3)],
         Vec::<Term>::new(),
     );
     assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetaId)));

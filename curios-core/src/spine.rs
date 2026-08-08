@@ -1,7 +1,7 @@
-//! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). A primitive whose values are a literal run of generators over a symbolic tail — a `Nat` count, a `Bin` byte run, an `Lst` element run — reduces two values by stripping their longest common literal head; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_prim` arm and nothing else — the drivers, the `Peel` vocabulary, and the termination argument are shared, and `Bin`/`Lst` further share the `peel_prefix` step itself (they differ only in element type and whether a stalled literal head is a clash).
+//! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). An intrinsic whose values are a literal run of generators over a symbolic tail — a `Nat` count, a `Bin` byte run, an `Lst` element run — reduces two values by stripping their longest common literal head; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_intrinsic` arm and nothing else — the drivers, the `Peel` vocabulary, and the termination argument are shared, and `Bin`/`Lst` further share the `peel_prefix` step itself (they differ only in element type and whether a stalled literal head is a clash).
 
 use {
-    super::{Nat, Prim, Subterm, Term},
+    super::{Intrinsic, Nat, Subterm, Term},
     curios_base::{Grain, PackedBin},
     num_traits::Zero,
     std::{cmp::Ordering, collections::VecDeque},
@@ -15,17 +15,17 @@ pub enum Peel {
     Continue(Term, Term),
     /// Literal heads differ, or a positive head meets the identity — unequal.
     Clash,
-    /// Undecidable by peeling (a symbolic-length head); the caller falls back. Unreachable for `Nat` — it is the seam the harder primitives plug into.
+    /// Undecidable by peeling (a symbolic-length head); the caller falls back. Unreachable for `Nat` — it is the seam the harder intrinsics plug into.
     Stuck,
 }
 
-/// Classify a reduced primitive pair. `None` means the pair is not a matched spine-primitive, so the caller keeps its own handling; `Some` is the peel outcome.
-pub fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
+/// Classify a reduced intrinsic pair. `None` means the pair is not a matched spine-intrinsic, so the caller keeps its own handling; `Some` is the peel outcome.
+pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     match (left, right) {
-        (Prim::Nat(actual), Prim::Nat(target)) => Some(peel_nat(actual, target)),
+        (Intrinsic::Nat(actual), Intrinsic::Nat(target)) => Some(peel_nat(actual, target)),
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
-        (Prim::Bool(actual), Prim::Bool(target)) => Some(decide(actual == target)),
-        (Prim::Int(actual), Prim::Int(target)) => Some(decide(actual == target)),
+        (Intrinsic::Bool(actual), Intrinsic::Bool(target)) => Some(decide(actual == target)),
+        (Intrinsic::Int(actual), Intrinsic::Int(target)) => Some(decide(actual == target)),
         // `Bin`/`Lst` are the free monoids on their bytes/elements: peel the longest common prefix (each returns `None` for the other's shapes).
         _ => peel_bin(left, right).or_else(|| peel_lst(left, right)),
     }
@@ -40,8 +40,8 @@ fn decide(equal: bool) -> Peel {
 
 /// `Nat` is the free monoid on one generator: `k + a ~ k' + t` peels the shared successor spine and the leftover rides on the longer side — `2 ~ ?n + 1` becomes `1 ~ ?n`. A leftover positive spine against zero is a definite clash. The `is_zero` guards mirror the inverter's defence against a non-canonical `Succ(0, _)` (which `Nat::new` normalisation never actually produces).
 pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
-    let zero = || Term::prim(Prim::Nat(Nat::Zero));
-    let succ = |spine, rest: &Term| Term::prim(Prim::Nat(Nat::Succ(spine, rest.clone())));
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+    let succ = |spine, rest: &Term| Term::intrinsic(Intrinsic::Nat(Nat::Succ(spine, rest.clone())));
 
     match (actual, target) {
         (Nat::Zero, Nat::Zero) => Peel::Equal,
@@ -61,7 +61,7 @@ pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
     }
 }
 
-/// One segment of a flattened free-monoid value: a run of consecutive literal elements — concrete bytes (`Bin`) or terms (`Lst`) — a `Window` into a base value (a `Bin/slice(base, lo, hi)`: contents symbolic, but length `hi - lo` statically known as a `Nat` term), or an opaque symbolic chunk (a variable, an append: anything whose contents *and* length are unknown). A value is a sequence of these, and the concatenation primitive is their juxtaposition; flattening normalises the monoid laws — associativity, the empty identity, re-segmented literal runs, and fused adjacent windows of one base (`slice(b, s, m) ++ slice(b, m, e) = slice(b, s, e)`) — so two definitionally equal values decompose to the same list.
+/// One segment of a flattened free-monoid value: a run of consecutive literal elements — concrete bytes (`Bin`) or terms (`Lst`) — a `Window` into a base value (a `Bin/slice(base, lo, hi)`: contents symbolic, but length `hi - lo` statically known as a `Nat` term), or an opaque symbolic chunk (a variable, an append: anything whose contents *and* length are unknown). A value is a sequence of these, and the concatenation intrinsic is their juxtaposition; flattening normalises the monoid laws — associativity, the empty identity, re-segmented literal runs, and fused adjacent windows of one base (`slice(b, s, m) ++ slice(b, m, e) = slice(b, s, e)`) — so two definitionally equal values decompose to the same list.
 enum Atom<E> {
     Literal(Vec<E>),
     Window { base: Term, lo: Term, hi: Term },
@@ -165,7 +165,7 @@ fn against_identity<E>(atom: &Atom<E>) -> Peel {
 /// `Bin` is the free monoid on its bytes. Two values reduce by stripping their longest common prefix — concrete bytes byte-for-byte, identical symbolic chunks whole, and equal slice windows whole (after `bin_atoms` has fused adjacent windows of one base) — and the residual tails ride back on `Continue` (so the inverter can solve a flex binder forced to equal a leftover suffix, and conversion can enqueue the rest). A definite byte disagreement, or a positive run meeting the empty bytestring, is a `Clash`; a symbolic chunk or window facing an unlike one or the identity is `Stuck` (its length is unknown, so peeling cannot decide). `None` means the pair is not two `Bin` values, so the caller keeps its own handling.
 ///
 /// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ x[\01] ~ y ++ x[\01]`) is sound to cancel but not yet attempted. Symbolic chunks and windows are matched by syntactic equality, so two convertible-but-unequal chunks (`append(x[], h1)` vs `append(x[], h2)`) — or two windows whose bounds differ only up to arithmetic — are left to the caller's structural comparison rather than decided here.
-pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
+pub fn peel_bin(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     let grain = bin_grain(left)?;
     if bin_grain(right) != Some(grain) {
         return None;
@@ -189,7 +189,7 @@ pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
 }
 
 /// `Lst` is the free monoid on its elements — the same peel as `peel_bin`, with two differences. Its literal runs hold *terms*, not decided bytes, so two leading runs whose heads disagree are NOT a clash (the elements may still be convertible): the peel defers, and the caller's structural element-wise comparison settles it. And its concatenation carries an element type, recovered here to rebuild a residual `LstConcat`. A leftover literal run against the empty identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
-pub fn peel_lst(left: &Prim, right: &Prim) -> Option<Peel> {
+pub fn peel_lst(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     if !lst_valued(left) || !lst_valued(right) {
         return None;
     }
@@ -215,13 +215,13 @@ pub fn peel_lst(left: &Prim, right: &Prim) -> Option<Peel> {
     })
 }
 
-/// The `Bin`-valued primitives `peel_bin` decomposes. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a measured `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte. Any other producer stays an opaque symbolic chunk left to the caller's own (structural) comparison.
-fn bin_grain(prim: &Prim) -> Option<Grain> {
-    match prim {
-        Prim::Bin(grain, _)
-        | Prim::BinConcat(grain, _)
-        | Prim::BinSlice(grain, ..)
-        | Prim::BinAppend(grain, ..) => Some(*grain),
+/// The `Bin`-valued intrinsics `peel_bin` decomposes. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a measured `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte. Any other producer stays an opaque symbolic chunk left to the caller's own (structural) comparison.
+fn bin_grain(intrinsic: &Intrinsic) -> Option<Grain> {
+    match intrinsic {
+        Intrinsic::Bin(grain, _)
+        | Intrinsic::BinConcat(grain, _)
+        | Intrinsic::BinSlice(grain, ..)
+        | Intrinsic::BinAppend(grain, ..) => Some(*grain),
         _ => None,
     }
 }
@@ -229,41 +229,44 @@ fn bin_grain(prim: &Prim) -> Option<Grain> {
 /// The concrete byte an already-reduced `Bin/append` operand carries, taken mod 256 (matching the runtime's packed store), or `None` for a symbolic byte.
 fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
     match (grain, &**term) {
-        (Grain::B, Subterm::Prim(Prim::Bool(bit))) => Some(u8::from(*bit)),
-        (Grain::X, Subterm::Prim(Prim::Byte(byte))) => Some(*byte),
+        (Grain::B, Subterm::Intrinsic(Intrinsic::Bool(bit))) => Some(u8::from(*bit)),
+        (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => Some(*byte),
         _ => None,
     }
 }
 
 /// The `Lst` analogue of [`bin_grain`]: `Lst` and `LstConcat` carry the monoid's literals and juxtaposition, `LstSlice` rides in as a measured `Window` (like `BinSlice`), and `LstAppend` rides in as its base followed by a length-1 literal run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer stays an opaque chunk left to the caller's comparison.
-fn lst_valued(prim: &Prim) -> bool {
+fn lst_valued(intrinsic: &Intrinsic) -> bool {
     matches!(
-        prim,
-        Prim::Lst(..) | Prim::LstConcat(_, _) | Prim::LstSlice(..) | Prim::LstAppend(..)
+        intrinsic,
+        Intrinsic::Lst(..)
+            | Intrinsic::LstConcat(_, _)
+            | Intrinsic::LstSlice(..)
+            | Intrinsic::LstAppend(..)
     )
 }
 
 /// The element type carried by an `LstConcat`, `LstSlice`, or `LstAppend`, for rebuilding residuals (every atom of an `Lst(T)` value shares `T`, so one suffices for the whole list). `None` for a bare `Lst` literal, which rebuilds as a single run that never needs it.
-fn lst_elem(prim: &Prim) -> Option<Term> {
-    match prim {
-        Prim::Lst(elem, _)
-        | Prim::LstConcat(elem, _)
-        | Prim::LstSlice(elem, ..)
-        | Prim::LstAppend(elem, ..) => Some(elem.clone()),
+fn lst_elem(intrinsic: &Intrinsic) -> Option<Term> {
+    match intrinsic {
+        Intrinsic::Lst(elem, _)
+        | Intrinsic::LstConcat(elem, _)
+        | Intrinsic::LstSlice(elem, ..)
+        | Intrinsic::LstAppend(elem, ..) => Some(elem.clone()),
         _ => None,
     }
 }
 
 /// Flatten a `Bin` value to its segment list, normalising the monoid laws: nested `BinConcat`s splice in, empty runs drop out, adjacent runs merge.
-fn bin_atoms(grain: Grain, prim: &Prim) -> VecDeque<Atom<u8>> {
+fn bin_atoms(grain: Grain, intrinsic: &Intrinsic) -> VecDeque<Atom<u8>> {
     let mut out = Vec::new();
-    bin_collect_prim(grain, prim, &mut out);
+    bin_collect_intrinsic(grain, intrinsic, &mut out);
     out.into()
 }
 
-fn bin_collect_prim(grain: Grain, prim: &Prim, out: &mut Vec<Atom<u8>>) {
-    match prim {
-        Prim::Bin(found, value) if *found == grain => push(
+fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom<u8>>) {
+    match intrinsic {
+        Intrinsic::Bin(found, value) if *found == grain => push(
             out,
             Atom::Literal(match grain {
                 Grain::B => (0..value.bit_length())
@@ -272,10 +275,10 @@ fn bin_collect_prim(grain: Grain, prim: &Prim, out: &mut Vec<Atom<u8>>) {
                 Grain::X => value.to_bytes().unwrap(),
             }),
         ),
-        Prim::BinConcat(found, operands) if *found == grain => operands
+        Intrinsic::BinConcat(found, operands) if *found == grain => operands
             .iter()
             .for_each(|op| bin_collect_term(grain, op, out)),
-        Prim::BinSlice(found, base, lo, hi) if *found == grain => push(
+        Intrinsic::BinSlice(found, base, lo, hi) if *found == grain => push(
             out,
             Atom::Window {
                 base: base.clone(),
@@ -284,41 +287,43 @@ fn bin_collect_prim(grain: Grain, prim: &Prim, out: &mut Vec<Atom<u8>>) {
             },
         ),
         // `append(base, b) = base ++ [b]`: decode the base, then the appended byte. A concrete byte is a length-1 literal run (so it merges with an abutting run and unifies with `concat(base, \b)`); a symbolic byte is the canonical one-byte chunk `append(x[], b)` — opaque, so its emptiness stays undecidable.
-        Prim::BinAppend(found, base, atom) if *found == grain => {
+        Intrinsic::BinAppend(found, base, atom) if *found == grain => {
             bin_collect_term(grain, base, out);
 
             match bin_atom(grain, atom) {
                 Some(b) => push(out, Atom::Literal(vec![b])),
                 None => {
-                    let empty = Subterm::Prim(Prim::Bin(grain, PackedBin::empty()));
-                    let chunk = Term::prim(Prim::bin_append(grain, empty, atom.clone()));
+                    let empty = Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty()));
+                    let chunk = Term::intrinsic(Intrinsic::bin_append(grain, empty, atom.clone()));
                     push(out, Atom::Symbolic(chunk));
                 }
             }
         }
-        other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
+        other => push(out, Atom::Symbolic(Term::intrinsic(other.clone()))),
     }
 }
 
 fn bin_collect_term(grain: Grain, term: &Term, out: &mut Vec<Atom<u8>>) {
     match &**term {
-        Subterm::Prim(prim) => bin_collect_prim(grain, prim, out),
+        Subterm::Intrinsic(intrinsic) => bin_collect_intrinsic(grain, intrinsic, out),
         _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
 
 /// Flatten an `Lst` value to its segment list — the [`bin_atoms`] decomposition over element terms rather than bytes.
-fn lst_atoms(prim: &Prim) -> VecDeque<Atom<Term>> {
+fn lst_atoms(intrinsic: &Intrinsic) -> VecDeque<Atom<Term>> {
     let mut out = Vec::new();
-    lst_collect_prim(prim, &mut out);
+    lst_collect_intrinsic(intrinsic, &mut out);
     out.into()
 }
 
-fn lst_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
-    match prim {
-        Prim::Lst(_, elems) => push(out, Atom::Literal(elems.clone())),
-        Prim::LstConcat(_, operands) => operands.iter().for_each(|op| lst_collect_term(op, out)),
-        Prim::LstSlice(_, base, lo, hi) => push(
+fn lst_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
+    match intrinsic {
+        Intrinsic::Lst(_, elems) => push(out, Atom::Literal(elems.clone())),
+        Intrinsic::LstConcat(_, operands) => {
+            operands.iter().for_each(|op| lst_collect_term(op, out))
+        }
+        Intrinsic::LstSlice(_, base, lo, hi) => push(
             out,
             Atom::Window {
                 base: base.clone(),
@@ -327,17 +332,17 @@ fn lst_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
             },
         ),
         // `append(base, e) = base ++ [e]`: decode the base, then the appended element as a length-1 literal run, so it merges with an abutting run and unifies with `concat(base, single(e))`.
-        Prim::LstAppend(_, base, elem) => {
+        Intrinsic::LstAppend(_, base, elem) => {
             lst_collect_term(base, out);
             push(out, Atom::Literal(vec![elem.clone()]));
         }
-        other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
+        other => push(out, Atom::Symbolic(Term::intrinsic(other.clone()))),
     }
 }
 
 fn lst_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
     match &**term {
-        Subterm::Prim(prim) => lst_collect_prim(prim, out),
+        Subterm::Intrinsic(intrinsic) => lst_collect_intrinsic(intrinsic, out),
         _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
@@ -345,20 +350,20 @@ fn lst_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
 /// Rebuild a `Bin` term from a residual segment list: a lone run is a `Bin` literal, a window is its `BinSlice`, a lone symbolic chunk is itself (so the inverter sees the bare binder it must solve), and a mixture is their `BinConcat`.
 fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
     let into_term = |atom| match atom {
-        Atom::Literal(atoms) => Term::prim(Prim::Bin(
+        Atom::Literal(atoms) => Term::intrinsic(Intrinsic::Bin(
             grain,
             match grain {
                 Grain::B => PackedBin::from_bits(atoms.into_iter().map(|bit| bit != 0)),
                 Grain::X => PackedBin::from_bytes(atoms),
             },
         )),
-        Atom::Window { base, lo, hi } => Term::prim(Prim::bin_slice(grain, base, lo, hi)),
+        Atom::Window { base, lo, hi } => Term::intrinsic(Intrinsic::bin_slice(grain, base, lo, hi)),
         Atom::Symbolic(term) => term,
     };
 
     match atoms.len() {
         1 => into_term(atoms.into_iter().next().unwrap()),
-        _ => Term::prim(Prim::BinConcat(
+        _ => Term::intrinsic(Intrinsic::BinConcat(
             grain,
             atoms.into_iter().map(into_term).collect(),
         )),
@@ -374,7 +379,7 @@ fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
                     .clone()
                     .expect("every Lst-valued producer carries its element type");
 
-                Term::prim(Prim::Lst(elem, elems))
+                Term::intrinsic(Intrinsic::Lst(elem, elems))
             }
             // A slice window rebuilds with the value's element type, threaded through `elem` (every atom of an `Lst(T)` shares `T`).
             Atom::Window { base, lo, hi } => {
@@ -382,7 +387,7 @@ fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
                     .clone()
                     .expect("an Lst slice window carries its element type via `elem`");
 
-                Term::prim(Prim::lst_slice(elem, base, lo, hi))
+                Term::intrinsic(Intrinsic::lst_slice(elem, base, lo, hi))
             }
             Atom::Symbolic(term) => term,
         }
@@ -397,7 +402,7 @@ fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
                 .collect::<Vec<Term>>();
             let elem = elem.expect("a multi-segment Lst residual implies an LstConcat operand");
 
-            Term::prim(Prim::LstConcat(elem, parts))
+            Term::intrinsic(Intrinsic::LstConcat(elem, parts))
         }
     }
 }

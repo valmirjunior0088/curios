@@ -413,7 +413,7 @@ fn lst_spread_identity_and_multi() {
 
 #[test]
 fn lst_spread_borrows_expected_element_type() {
-    // The `LstConcat` bidirectionality case in `elaborate_prim`: checking `[1, ..xs]` against `Lst(Int)` must solve the lowering-minted element slot from the expected type BEFORE the literal chunk elaborates, so the unsigned `1` lands at `Int`. Without the borrow, `1` would default-solve the slot to `Nat` and this program would be rejected.
+    // The `LstConcat` bidirectionality case in `elaborate_intrinsic`: checking `[1, ..xs]` against `Lst(Int)` must solve the lowering-minted element slot from the expected type BEFORE the literal chunk elaborates, so the unsigned `1` lands at `Int`. Without the borrow, `1` would default-solve the slot to `Nat` and this program would be rejected.
     let source = r#"
         use /std/{Handle, Str, Nat, Int, Lst};
         let xs : Lst(Int) = [-1, +2];
@@ -514,7 +514,7 @@ fn bin_spread_of_non_bin_is_rejected() {
 
 #[test]
 fn bin_spread_operand_hoists_bangs() {
-    // The `Bytes` sibling of `lst_spread_operand_hoists_bangs`, through the dedicated `Prim::Bytes` collect arm — the glued `!` binds to the operand.
+    // The `Bytes` sibling of `lst_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         r#"

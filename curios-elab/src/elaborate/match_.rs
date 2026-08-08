@@ -1,25 +1,25 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
-    crate::{MotiveShape, check_motive, check_prim_head, is_prop, reduce_with, refine_head},
+    crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
     curios_base::{Grain, PackedBin},
     curios_cert::{Invert, case_target_indices, invert_indices, pinned_by_targets},
     curios_core::{
-        Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Many, Match, Nat, Prim,
-        PrimHead, Scope, Subterm, Telescope, Term, Three, Two,
+        Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
+        Many, Match, Nat, Scope, Subterm, Telescope, Term, Three, Two,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Infer and rebuild a match scrutinee, requiring its reduced type to be the given primitive type. The authoritative analogue of `expect_prim_head` (kept for `erase`): it returns the rebuilt head alongside its reduced type.
-fn elaborate_prim_head(
+/// Infer and rebuild a match scrutinee, requiring its reduced type to be the given intrinsic type. The authoritative analogue of `expect_intrinsic_head` (kept for `erase`): it returns the rebuilt head alongside its reduced type.
+fn elaborate_intrinsic_head(
     context: &mut Context,
     head: &Term,
-    expected: PrimHead,
+    expected: IntrinsicHead,
 ) -> Result<(Term, Term), Error> {
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    check_prim_head(expected, head_type).map(|head_type| (head, head_type))
+    check_intrinsic_head(expected, head_type).map(|head_type| (head, head_type))
 }
 
 /// When a match is elaborated in checking mode, solve its motive against the expected type *before* the arms are checked. An omitted motive is a constant scope wrapping a fresh metavar (`text::into_core::match_compile`'s `motive_parts`), so `motive.open` is that bare metavar and this pins it to `expected` up front — checking-only arms (tuples, constructors) then see a concrete target instead of an unsolved hole, and a result mentioning an enclosing type variable is taken straight from `expected` rather than inverted out of an arm. For an explicit motive it is the same consistency check that the `Check` turnaround would otherwise run post-hoc on the match's type (`elaborate_subterm`), only earlier.
@@ -37,17 +37,17 @@ fn seed_motive(
     Ok(())
 }
 
-/// Resolve the (arity-one) motive of a primitive eliminator. An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
+/// Resolve the (arity-one) motive of an intrinsic eliminator. An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
 ///
 /// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job exactly as before.
-fn resolve_prim_motive(
+fn resolve_intrinsic_motive(
     context: &mut Context,
     head_type: &Term,
     head: &Term,
     motive: &Scope<Many>,
     mode: &Mode,
 ) -> Result<Scope<Many>, Error> {
-    let shape = MotiveShape::Prim(head_type);
+    let shape = MotiveShape::Intrinsic(head_type);
 
     if let (Mode::Check(expected), Subterm::Var(var)) = (mode, &**head)
         && is_elided_motive(motive)
@@ -69,12 +69,12 @@ fn elaborate_nat_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Nat)?;
+    let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Nat)?;
 
     // Everything below opens the *rebuilt* motive: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
-    let motive = resolve_prim_motive(
+    let motive = resolve_intrinsic_motive(
         context,
-        &Subterm::Prim(Prim::NatType).into(),
+        &Subterm::Intrinsic(Intrinsic::NatType).into(),
         &head_elaborated,
         motive,
         &mode,
@@ -83,7 +83,7 @@ fn elaborate_nat_match(
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its constructor in each arm (as `Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
-    let zero_value: Term = Subterm::Prim(Prim::Nat(Nat::new(0usize))).into();
+    let zero_value: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))).into();
     let zero_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &zero_value)?;
         check(context, zero_case, motive.open(&[&zero_value]))
@@ -93,12 +93,12 @@ fn elaborate_nat_match(
     let ih_label = context.fresh(succ_case.second_hint());
 
     let succ_body = context.with_frame(|context| {
-        context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
+        context.assume(&pred_label, &Subterm::Intrinsic(Intrinsic::NatType).into());
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&pred_label)]));
 
-        let succ_value: Term = Subterm::Prim(Prim::nat_add(
+        let succ_value: Term = Subterm::Intrinsic(Intrinsic::nat_add(
             Term::free_var(&pred_label),
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         ))
         .into();
         refine_head(context, &head_elaborated, &succ_value)?;
@@ -142,17 +142,17 @@ fn elaborate_lst_match(
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
     let elem = match &*head_type {
-        Subterm::Prim(Prim::LstType(elem)) => elem.clone(),
+        Subterm::Intrinsic(Intrinsic::LstType(elem)) => elem.clone(),
         _ => return Err(Error::not_lst_type(head_type)),
     };
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_prim_motive(context, &head_type, &head_elaborated, motive, &mode)?;
+    let motive = resolve_intrinsic_motive(context, &head_type, &head_elaborated, motive, &mode)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do), so a hypothesis whose type mentions the scrutinee reduces at the arm's value without a hand-written convoy.
-    let empty_value: Term = Subterm::Prim(Prim::Lst(elem.clone(), vec![])).into();
+    let empty_value: Term = Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), vec![])).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -167,11 +167,15 @@ fn elaborate_lst_match(
         context.assume(&tail_label, &head_type);
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
-        // The cons value `head :: tail`, encoded as the monoid operation on a singleton and the tail (no separate prepend primitive).
-        let cons_value: Term = Subterm::Prim(Prim::LstConcat(
+        // The cons value `head :: tail`, encoded as the monoid operation on a singleton and the tail (no separate prepend intrinsic).
+        let cons_value: Term = Subterm::Intrinsic(Intrinsic::LstConcat(
             elem.clone(),
             vec![
-                Subterm::Prim(Prim::Lst(elem.clone(), vec![Term::free_var(&head_label)])).into(),
+                Subterm::Intrinsic(Intrinsic::Lst(
+                    elem.clone(),
+                    vec![Term::free_var(&head_label)],
+                ))
+                .into(),
                 Term::free_var(&tail_label),
             ],
         ))
@@ -219,15 +223,16 @@ fn elaborate_bin_match(
 ) -> Result<(Term, Term), Error> {
     let (empty_case, cons_case) = cases;
     // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bin` — no element type to read off the head as `Lst` needs.
-    let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin(grain))?;
+    let (head_elaborated, head_type) =
+        elaborate_intrinsic_head(context, head, IntrinsicHead::Bin(grain))?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_prim_motive(context, &head_type, &head_elaborated, motive, &mode)?;
+    let motive = resolve_intrinsic_motive(context, &head_type, &head_elaborated, motive, &mode)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
-    let empty_value: Term = Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into();
+    let empty_value: Term = Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -238,9 +243,9 @@ fn elaborate_bin_match(
     let ih_label = context.fresh(cons_case.third_hint());
 
     let cons_body = context.with_frame(|context| {
-        let atom_type: Term = Subterm::Prim(match grain {
-            Grain::B => Prim::BoolType,
-            Grain::X => Prim::ByteType,
+        let atom_type: Term = Subterm::Intrinsic(match grain {
+            Grain::B => Intrinsic::BoolType,
+            Grain::X => Intrinsic::ByteType,
         })
         .into();
         context.assume(&head_label, &atom_type);
@@ -248,13 +253,13 @@ fn elaborate_bin_match(
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
         // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
-        let singleton: Term = Subterm::Prim(Prim::BinAppend(
+        let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend(
             grain,
-            Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into(),
+            Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
             Term::free_var(&head_label),
         ))
         .into();
-        let cons_value: Term = Subterm::Prim(Prim::BinConcat(
+        let cons_value: Term = Subterm::Intrinsic(Intrinsic::BinConcat(
             grain,
             vec![singleton, Term::free_var(&tail_label)],
         ))
@@ -300,12 +305,12 @@ fn elaborate_switch(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Nat)?;
+    let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Nat)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_prim_motive(
+    let motive = resolve_intrinsic_motive(
         context,
-        &Subterm::Prim(Prim::NatType).into(),
+        &Subterm::Intrinsic(Intrinsic::NatType).into(),
         &head_elaborated,
         motive,
         &mode,
@@ -319,12 +324,12 @@ fn elaborate_switch(
             refine_head(
                 context,
                 &head_elaborated,
-                &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
+                &Subterm::Intrinsic(Intrinsic::Nat(Nat::new(*n))).into(),
             )?;
             check(
                 context,
                 body,
-                motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]),
+                motive.open(&[&Subterm::Intrinsic(Intrinsic::Nat(Nat::new(*n))).into()]),
             )
         })?;
         cases_elaborated.insert(*n, body);
@@ -428,12 +433,12 @@ fn elaborate_bool_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Bool)?;
+    let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Bool)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_prim_motive(
+    let motive = resolve_intrinsic_motive(
         context,
-        &Subterm::Prim(Prim::BoolType).into(),
+        &Subterm::Intrinsic(Intrinsic::BoolType).into(),
         &head_elaborated,
         motive,
         &mode,
@@ -445,12 +450,12 @@ fn elaborate_bool_match(
         refine_head(
             context,
             &head_elaborated,
-            &Subterm::Prim(Prim::Bool(false)).into(),
+            &Subterm::Intrinsic(Intrinsic::Bool(false)).into(),
         )?;
         check(
             context,
             false_case,
-            motive.open(&[&Subterm::Prim(Prim::Bool(false)).into()]),
+            motive.open(&[&Subterm::Intrinsic(Intrinsic::Bool(false)).into()]),
         )
     })?;
 
@@ -458,12 +463,12 @@ fn elaborate_bool_match(
         refine_head(
             context,
             &head_elaborated,
-            &Subterm::Prim(Prim::Bool(true)).into(),
+            &Subterm::Intrinsic(Intrinsic::Bool(true)).into(),
         )?;
         check(
             context,
             true_case,
-            motive.open(&[&Subterm::Prim(Prim::Bool(true)).into()]),
+            motive.open(&[&Subterm::Intrinsic(Intrinsic::Bool(true)).into()]),
         )
     })?;
 
@@ -516,7 +521,7 @@ fn singleton_eliminable(
     Ok(true)
 }
 
-/// The primitive eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's binder count is statically checked against that telescope.
+/// The intrinsic eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's binder count is statically checked against that telescope.
 ///
 /// The motive binds the scrutinee's indices and then the scrutinee, whatever its body does with them: each arm checks against the motive at *that case's* target indices, the whole match types at the scrutinee's *actual* indices, and a catch-all default — which binds nothing and refines no index — checks at the actual indices too.
 fn elaborate_induct_match(

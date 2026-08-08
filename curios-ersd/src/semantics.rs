@@ -43,7 +43,7 @@ impl Allocation {
 pub struct ObservableBehavior {
     /// May raise a runtime trap (out-of-bounds access, division by zero, an `Unreachable` terminator).
     pub may_trap: bool,
-    /// May fail to terminate. No primitive diverges; this is acquired through the call graph (a recursive component) by the effect summary.
+    /// May fail to terminate. No intrinsic diverges; this is acquired through the call graph (a recursive component) by the effect summary.
     pub may_diverge: bool,
     /// May terminate the process (an `Exit` terminator).
     pub may_exit: bool,

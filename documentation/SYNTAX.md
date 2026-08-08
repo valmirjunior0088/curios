@@ -40,7 +40,7 @@ A path is one or more identifier segments separated by `/`. A leading `/` makes 
 Nat                 -- relative name
 Option/some         -- member of Option
 /std/Lst            -- absolute name
-/sys/Handle         -- absolute primitive declaration
+/sys/Handle         -- absolute intrinsic declaration
 ```
 
 Whitespace may appear around ordinary path separators. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
@@ -428,7 +428,7 @@ All infix operators require whitespace on both sides and associate to the left.
 
 Both operands of an operator have the same type. `==` and `!=` are two separate methods of `Eql`, `eql` and `neq`, so a witness supplies both; `!=` is not a negation applied to `eql`.
 
-Operator notation always uses witness resolution, including primitive operands. Standard witnesses cover the primitive types, while a `satisfy` declaration enables the same notation for a user-defined type.
+Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
 ## Pattern matching
 
@@ -453,7 +453,7 @@ match p : discriminates_eq                      -- a named family
 match v                                         -- omitted; inferred
 ```
 
-The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every primitive carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. `Vec(T)` has one index and takes two binders; `Eq` has two and takes three.
+The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. `Vec(T)` has one index and takes two binders; `Eq` has two and takes three.
 
 Parameters are never binders. They are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope, exactly as the declaration side states only index expressions in a constructor's case target.
 
@@ -825,7 +825,7 @@ satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
 }
 ```
 
-Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, primitive type, or supported higher-kinded type constructor. Remaining arguments below those heads are checked by unification after lookup.
+Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor. Remaining arguments below those heads are checked by unification after lookup.
 
 A globally registered witness therefore requires a concept with at least one parameter. A parameterless concept can still be used through an ordinary value supplied in a local `use` scope.
 

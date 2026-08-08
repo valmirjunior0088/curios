@@ -2,7 +2,7 @@ use {
     crate::{Kernel, KernelError, infer},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Many, Prim, Scope, Telescope, Term,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Scope, Telescope, Term,
         UniverseContext,
     },
 };
@@ -18,11 +18,11 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(curios_core::Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)))
 }
 
 fn nat_type() -> Term {
-    Term::prim(Prim::NatType)
+    Term::intrinsic(Intrinsic::NatType)
 }
 
 /// One constructor of a test family: its tag, the payload binder it carries if any, and the index target this case aims at.
@@ -81,7 +81,10 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec
         &InductDecl {
             universe_context: UniverseContext::default(),
             arity: Telescope::done(Telescope::build(
-                [(Free::local(9_000, Some("i")), Term::prim(Prim::NatType))],
+                [(
+                    Free::local(9_000, Some("i")),
+                    Term::intrinsic(Intrinsic::NatType),
+                )],
                 (),
             )),
             constructors: entries,
@@ -131,7 +134,7 @@ fn eliminate(
 
 /// A successor over `tail`, in the successor-floor form reduction keeps.
 fn succ(tail: Term) -> Term {
-    Term::prim(Prim::Nat(curios_core::Nat::Succ(1u32.into(), tail)))
+    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::Succ(1u32.into(), tail)))
 }
 
 /// An opaque `P : (n : Nat, x : family(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index.
@@ -253,14 +256,14 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     kernel.declare(
         &p,
         &Term::func_type(
-            [(binder(90, "x"), Term::prim(Prim::BoolType))],
+            [(binder(90, "x"), Term::intrinsic(Intrinsic::BoolType))],
             Term::type_ground(),
         ),
         &UniverseContext::default(),
     );
     let p = Term::free_var(&p);
 
-    kernel.assume(&h, &Term::prim(Prim::BoolType));
+    kernel.assume(&h, &Term::intrinsic(Intrinsic::BoolType));
     kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&h)]));
 
     let term = Term::bool_match(
@@ -775,7 +778,7 @@ fn an_arm_body_of_the_wrong_type_is_refused() {
         nat_type(),
         vec![
             ("on", Vec::new(), nat(1)),
-            ("off", Vec::new(), Term::prim(Prim::Bool(true))),
+            ("off", Vec::new(), Term::intrinsic(Intrinsic::Bool(true))),
         ],
     );
 

@@ -614,7 +614,7 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: embed }]
     }
 
-    /// Emit a host primitive call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
+    /// Emit a host intrinsic call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
     pub(crate) fn host_instrs(&self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 

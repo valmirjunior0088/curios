@@ -9,7 +9,7 @@ mod tests;
 
 use std::{collections::BTreeSet, fmt::Display, marker::PhantomData};
 
-/// A `u32`-backed arena identity, implemented by every [`id!`](crate::id) newtype. `from_index` is the arena's minting primitive — loud on exhaustion, never wrapping — and not meant to be called outside an arena, which is what keeps "identities are minted by their owning arena" a discipline with one door.
+/// A `u32`-backed arena identity, implemented by every [`id!`](crate::id) newtype. `from_index` is the arena's minting intrinsic — loud on exhaustion, never wrapping — and not meant to be called outside an arena, which is what keeps "identities are minted by their owning arena" a discipline with one door.
 pub trait ArenaId: Copy + Display {
     #[doc(hidden)]
     fn from_index(index: usize) -> Self;
@@ -67,7 +67,7 @@ impl<I: ArenaId, T> Arena<I, T> {
         *slot = Some(value);
     }
 
-    /// Replace a *live* slot's value in place — the install primitive for rewrites; a tombstoned or reserved slot is a caller bug.
+    /// Replace a *live* slot's value in place — the install intrinsic for rewrites; a tombstoned or reserved slot is a caller bug.
     pub fn set(&mut self, id: I, value: T) {
         let slot = self
             .slots

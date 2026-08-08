@@ -8,7 +8,7 @@ This pre-bootstrap document specifies executable conversion behavior. Formal rou
 
 Native `Flt` is IEEE-754 binary32 stored bitwise in `curios-base/src/flt.rs`. Term identity is bitwise: NaN equals itself as a term and `+0.0` differs from `-0.0`, unlike IEEE numeric equality.
 
-Open native primitives are opaque to reduction. `Flt/to_le_bytes` and `Flt/of_le_bytes` are therefore the explicit trust boundary, while all inspectable conversion logic operates on `Bytes`.
+Open native intrinsics are opaque to reduction. `Flt/to_le_bytes` and `Flt/of_le_bytes` are therefore the explicit trust boundary, while all inspectable conversion logic operates on `Bytes`.
 
 Do not add a conversion rule asserting `of_le_bytes(to_le_bytes(x)) ≡ x`; that would be a postulate disguised as reduction.
 
@@ -18,11 +18,11 @@ Do not add a conversion rule asserting `of_le_bytes(to_le_bytes(x)) ≡ x`; that
 Flt/of_le_bytes : Bytes -> Flt
 ```
 
-The primitive requires exactly four little-endian bytes, assembles their reflected Nat values into an i32 bit pattern, and emits `F32ReinterpretI32`. Invalid lengths trap through the established primitive-level `Unreachable` behavior.
+The intrinsic requires exactly four little-endian bytes, assembles their reflected Nat values into an i32 bit pattern, and emits `F32ReinterpretI32`. Invalid lengths trap through the established intrinsic-level `Unreachable` behavior.
 
-The primitive uses `Byte/to_nat` internally; no user-visible Nat-byte convention remains.
+The intrinsic uses `Byte/to_nat` internally; no user-visible Nat-byte convention remains.
 
-Its compiler footprint includes the primitive models and printers across Core, Ersd, Cont, Wasm lowering, text lowering, standard-library exposure, optimization walkers, scalar evaluation, and codegen tests. Preserve round-trip fixtures for positive and negative zero, normal values, subnormals, payloaded NaNs, and both infinities. Compare bytes, never native `Flt` equality.
+Its compiler footprint includes the intrinsic models and printers across Core, Ersd, Cont, Wasm lowering, text lowering, standard-library exposure, optimization walkers, scalar evaluation, and codegen tests. Preserve round-trip fixtures for positive and negative zero, normal values, subnormals, payloaded NaNs, and both infinities. Compare bytes, never native `Flt` equality.
 
 ## Exact conversion from binary32
 

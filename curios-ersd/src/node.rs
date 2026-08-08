@@ -18,7 +18,7 @@ pub enum Rhs {
     Alias(Atom),
     /// Application of a callee to its full, saturated argument list.
     Apply { callee: Atom, arguments: Vec<Atom> },
-    /// A scalar primitive operation (see [`Operation`]).
+    /// A scalar intrinsic operation (see [`Operation`]).
     Operation {
         operation: Operation,
         operands: Vec<Atom>,
@@ -165,7 +165,7 @@ impl CellOperation {
 
 /// A call-like intrinsic. `LstMap` takes the list then the mapper — the carrier-first order of the whole sequence family — and runs the mapper once per element, in order.
 ///
-/// `LstMap` stays a compiler primitive because its runtime helper fills a flat output array in place — a construction the language cannot express (there are no mutable-array operations, by design). The library definition (fold + append) was measured two orders of magnitude slower with a shape-quadratic result rope; proofs about map need no primitive (list-fold reduction peels rope shapes symbolically).
+/// `LstMap` stays a compiler intrinsic because its runtime helper fills a flat output array in place — a construction the language cannot express (there are no mutable-array operations, by design). The library definition (fold + append) was measured two orders of magnitude slower with a shape-quadratic result rope; proofs about map need no intrinsic (list-fold reduction peels rope shapes symbolically).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
     feature = "archive",

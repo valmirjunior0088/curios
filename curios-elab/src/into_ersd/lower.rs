@@ -4,8 +4,8 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, InductDecl, Let, Prim, Subterm, Telescope,
-        Term, emitted, prim, reduce_with,
+        Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Subterm,
+        Telescope, Term, emitted, intrinsic, reduce_with,
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
@@ -273,7 +273,7 @@ fn force_entry(
     };
     if !matches!(
         &*reduce_with(context, expected)?,
-        Subterm::Prim(Prim::IoType(_))
+        Subterm::Intrinsic(Intrinsic::IoType(_))
     ) {
         return Ok(Outcome::Emitted(description));
     }
@@ -379,7 +379,9 @@ impl Lowering {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         match &**term {
-            Subterm::Prim(primitive) => prim::erase_prim(self, context, primitive, expected, hint),
+            Subterm::Intrinsic(intrinsic) => {
+                intrinsic::erase_intrinsic(self, context, intrinsic, expected, hint)
+            }
             // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
             Subterm::Foreign(function, arguments) => {
                 let mut atoms = Vec::with_capacity(arguments.len());

@@ -5,7 +5,7 @@
 //! The relation table below is therefore an accepting rule, and each row says what it takes for the arm's fact to exclude zero. `documentation/PERIMETER.md`'s `record_totality` entry records the probes.
 
 use {
-    curios_core::{Free, Prim, Subterm, Term},
+    curios_core::{Free, Intrinsic, Subterm, Term},
     num_bigint::BigUint,
 };
 
@@ -44,12 +44,12 @@ pub(super) struct Guard {
 impl Guard {
     pub(super) fn read(term: &Term) -> Option<Guard> {
         let (left, right, relation) = match &**term {
-            Subterm::Prim(Prim::NatLt(left, right)) => (left, right, Relation::Lt),
-            Subterm::Prim(Prim::NatLte(left, right)) => (left, right, Relation::Lte),
-            Subterm::Prim(Prim::NatGt(left, right)) => (left, right, Relation::Gt),
-            Subterm::Prim(Prim::NatGte(left, right)) => (left, right, Relation::Gte),
-            Subterm::Prim(Prim::NatEql(left, right)) => (left, right, Relation::Eql),
-            Subterm::Prim(Prim::NatNeq(left, right)) => (left, right, Relation::Neq),
+            Subterm::Intrinsic(Intrinsic::NatLt(left, right)) => (left, right, Relation::Lt),
+            Subterm::Intrinsic(Intrinsic::NatLte(left, right)) => (left, right, Relation::Lte),
+            Subterm::Intrinsic(Intrinsic::NatGt(left, right)) => (left, right, Relation::Gt),
+            Subterm::Intrinsic(Intrinsic::NatGte(left, right)) => (left, right, Relation::Gte),
+            Subterm::Intrinsic(Intrinsic::NatEql(left, right)) => (left, right, Relation::Eql),
+            Subterm::Intrinsic(Intrinsic::NatNeq(left, right)) => (left, right, Relation::Neq),
             _ => return None,
         };
 

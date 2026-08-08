@@ -1,7 +1,7 @@
 use {
     crate::{Kernel, KernelError, convert},
     curios_base::{Plicity, Qualifier, RootId},
-    curios_core::{Free, Global, InductDecl, MetaId, Prim, Telescope, Term, UniverseContext},
+    curios_core::{Free, Global, InductDecl, Intrinsic, MetaId, Telescope, Term, UniverseContext},
 };
 
 fn kernel() -> Kernel {
@@ -15,11 +15,11 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(curios_core::Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)))
 }
 
 fn nat_type() -> Term {
-    Term::prim(Prim::NatType)
+    Term::intrinsic(Intrinsic::NatType)
 }
 
 /// A nominal family at a stated sort — the only way to obtain a base proposition, since the registry is what says a nominal type is one.
@@ -168,9 +168,9 @@ fn irrelevance_does_not_leak_into_a_relevant_type() {
     );
 }
 
-/// A primitive is congruent when it is the same operation on convertible operands — decided generically, so no operation can be omitted from the rule.
+/// An intrinsic is congruent when it is the same operation on convertible operands — decided generically, so no operation can be omitted from the rule.
 #[test]
-fn a_primitive_is_congruent_in_its_operands() {
+fn an_intrinsic_is_congruent_in_its_operands() {
     let mut kernel = kernel();
     let n = binder(0, "n");
     let m = binder(1, "m");
@@ -181,8 +181,8 @@ fn a_primitive_is_congruent_in_its_operands() {
         &UniverseContext::default(),
     );
 
-    let left = Term::prim(Prim::nat_mul(Term::free_var(&n), nat(3)));
-    let right = Term::prim(Prim::nat_mul(Term::free_var(&m), nat(3)));
+    let left = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&n), nat(3)));
+    let right = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&m), nat(3)));
 
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(true));
 }
@@ -192,8 +192,8 @@ fn different_operations_do_not_convert() {
     let mut kernel = kernel();
     let n = binder(0, "n");
 
-    let add = Term::prim(Prim::nat_add(Term::free_var(&n), nat(3)));
-    let mul = Term::prim(Prim::nat_mul(Term::free_var(&n), nat(3)));
+    let add = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(3)));
+    let mul = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&n), nat(3)));
 
     assert_eq!(convert(&mut kernel, &nat_type(), &add, &mul), Ok(false));
 }
@@ -205,14 +205,14 @@ fn a_shared_successor_floor_is_peeled_before_comparing() {
     let n = binder(0, "n");
     let m = binder(1, "m");
 
-    let left = Term::prim(Prim::nat_add(Term::free_var(&n), nat(2)));
-    let right = Term::prim(Prim::nat_add(Term::free_var(&m), nat(2)));
+    let left = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(2)));
+    let right = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&m), nat(2)));
 
     // Distinct symbolic bases: the peel exposes the real disagreement.
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(false));
 
     // The same base: equal after the shared floor comes off.
-    let same = Term::prim(Prim::nat_add(Term::free_var(&n), nat(2)));
+    let same = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(2)));
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &same), Ok(true));
 }
 
@@ -397,7 +397,7 @@ fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
     let mut kernel = Kernel::new(100_000);
     kernel.set_local_floor(0);
 
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
     kernel.assume(&colliding, &nat);
 
     let parameter = Free::local(9_000, Some("x"));
@@ -486,7 +486,7 @@ fn irrelevance_fires_at_a_computed_proposition() {
     let empty = declare(&mut kernel, "Empty", Term::prop());
 
     let scrutinee = binder(40, "b");
-    kernel.assume(&scrutinee, &Term::prim(Prim::BoolType));
+    kernel.assume(&scrutinee, &Term::intrinsic(Intrinsic::BoolType));
 
     let computed = Term::bool_match(Term::free_var(&scrutinee), None, Term::prop(), empty, held);
 
@@ -514,7 +514,7 @@ fn irrelevance_does_not_fire_at_a_computed_relevant_type() {
     let two = declare(&mut kernel, "Two", Term::type_ground());
 
     let scrutinee = binder(50, "b");
-    kernel.assume(&scrutinee, &Term::prim(Prim::BoolType));
+    kernel.assume(&scrutinee, &Term::intrinsic(Intrinsic::BoolType));
 
     let computed = Term::bool_match(
         Term::free_var(&scrutinee),

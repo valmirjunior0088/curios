@@ -1,4 +1,4 @@
-use crate::{PrimBuilders, TermBuilders};
+use crate::{IntrinsicBuilders, TermBuilders};
 use curios_core::*;
 use {
     crate::*,
@@ -19,7 +19,7 @@ fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceE
 }
 
 fn nat(n: usize) -> Term {
-    Term::prim(Prim::Nat(Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 #[test]
@@ -30,10 +30,13 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     context.define(
         &partial,
         &Term::func(
-            [(ignored.clone(), Term::prim(Prim::NatType))],
-            Term::prim(Prim::bin_get(
+            [(ignored.clone(), Term::intrinsic(Intrinsic::NatType))],
+            Term::intrinsic(Intrinsic::bin_get(
                 Grain::X,
-                Term::prim(Prim::Bin(Grain::X, PackedBin::from_bytes(Vec::<u8>::new()))),
+                Term::intrinsic(Intrinsic::Bin(
+                    Grain::X,
+                    PackedBin::from_bytes(Vec::<u8>::new()),
+                )),
                 nat(0),
             )),
         ),
@@ -52,7 +55,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     assert_eq!(
         convert(
             &mut context,
-            &Term::prim(Prim::ByteType),
+            &Term::intrinsic(Intrinsic::ByteType),
             &applied(0),
             &applied(1),
         ),
@@ -138,7 +141,7 @@ fn convert_inductive_match_compares_cases_and_motive() {
         Term::induct_match(
             Term::free_var(&r),
             Some(motive_label),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             [
                 ("none", Vec::<Free>::new(), nat(0)),
                 ("some", vec![binder.clone()], Term::free_var(&binder)),
@@ -152,7 +155,7 @@ fn convert_inductive_match_compares_cases_and_motive() {
     let different = Term::induct_match(
         Term::free_var(&r),
         Some(&m),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(1)),
             ("some", vec![x.clone()], Term::free_var(&x)),
@@ -172,7 +175,7 @@ fn convert_inductive_match_compares_default() {
         Term::induct_match_default(
             Term::free_var(&r),
             Some(&m),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             [("none", Vec::<Free>::new(), nat(0))],
             nat(d),
         )
@@ -194,31 +197,31 @@ fn convert_inductive_match_compares_default() {
     let bare = Term::induct_match(
         Term::free_var(&r),
         Some(&m),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [("none", Vec::<Free>::new(), nat(0))],
     );
     assert_eq!(conv(&mut context, &with_default(9), &bare), Ok(false));
 }
 
 #[test]
-fn convert_prim_recurses_into_operands() {
+fn convert_intrinsic_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
     let this = func(
         [&x],
-        Subterm::Prim(Prim::int_add(
+        Subterm::Intrinsic(Intrinsic::int_add(
             Term::free_var(&x),
-            Subterm::Prim(Prim::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
         )),
     );
 
     let that = func(
         [&y],
-        Subterm::Prim(Prim::int_add(
+        Subterm::Intrinsic(Intrinsic::int_add(
             Term::free_var(&y),
-            Subterm::Prim(Prim::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
         )),
     );
 
@@ -226,23 +229,23 @@ fn convert_prim_recurses_into_operands() {
 }
 
 #[test]
-fn convert_prim_distinguishes_operator_kind() {
+fn convert_intrinsic_distinguishes_operator_kind() {
     let mut context = context();
     let x = context.fresh(Some("x"));
 
     let this = func(
         [&x],
-        Subterm::Prim(Prim::int_add(
+        Subterm::Intrinsic(Intrinsic::int_add(
             Term::free_var(&x),
-            Subterm::Prim(Prim::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
         )),
     );
 
     let that = func(
         [&x],
-        Subterm::Prim(Prim::int_sub(
+        Subterm::Intrinsic(Intrinsic::int_sub(
             Term::free_var(&x),
-            Subterm::Prim(Prim::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
         )),
     );
 
@@ -257,11 +260,11 @@ fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> T
     let motive = context.fresh(Some("m"));
     let payload = context.fresh(Some("p"));
     Term::func(
-        [(scrutinee.clone(), Term::prim(Prim::NatType))],
+        [(scrutinee.clone(), Term::intrinsic(Intrinsic::NatType))],
         Term::induct_match(
             Term::free_var(&scrutinee),
             Some(&motive),
-            Term::prim(Prim::NatType),
+            Term::intrinsic(Intrinsic::NatType),
             [
                 ("none", Vec::<Free>::new(), nat(none_value)),
                 (
@@ -291,7 +294,7 @@ fn convert_folded_recursive_call_against_its_unfolding() {
     let unfolded = Term::induct_match(
         Term::free_var(&a),
         Some(&m),
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
             (
@@ -342,12 +345,12 @@ fn structural_rec_proj(context: &mut Context, body: impl FnOnce(&Free) -> Term) 
     let member = context.fresh(Some("f"));
     let parameter = context.fresh(Some("x"));
     let body = body(&parameter);
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
     let rec = Term::rec(
         [(
             member.clone(),
             Term::func_type([(parameter.clone(), nat_type.clone())], nat_type),
-            Term::func([(parameter, Term::prim(Prim::NatType))], body),
+            Term::func([(parameter, Term::intrinsic(Intrinsic::NatType))], body),
         )],
         Term::free_var(&member),
     );
@@ -421,11 +424,11 @@ fn convert_growing_recursive_unfolding_spends_the_budget() {
     // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs — every unfolding round's arm goal is structurally new, one more `s` on the folded argument — so no cycle exists to detect and the comparison rightly spends the budget: the accepted cost of fully general recursion. (The growth rides the match arm so each round refolds and returns to the drain queue; bare `f = λx. f(s(x))` growth would nest inside one `reduce` call instead.)
     let growing = |head: &Free| {
         Term::func(
-            [(x.clone(), Term::prim(Prim::NatType))],
+            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
             Term::induct_match(
                 Term::free_var(&x),
                 Some(&m),
-                Term::prim(Prim::NatType),
+                Term::intrinsic(Intrinsic::NatType),
                 [
                     (
                         "none",
@@ -514,24 +517,24 @@ fn convert_rec_is_alpha_equivalent() {
 }
 
 #[test]
-fn convert_prim_nat_add_recurses_into_operands() {
+fn convert_intrinsic_nat_add_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
     let this = func(
         [&x],
-        Subterm::Prim(Prim::nat_add(
+        Subterm::Intrinsic(Intrinsic::nat_add(
             Term::free_var(&x),
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         )),
     );
 
     let that = func(
         [&y],
-        Subterm::Prim(Prim::nat_add(
+        Subterm::Intrinsic(Intrinsic::nat_add(
             Term::free_var(&y),
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         )),
     );
 
@@ -539,48 +542,60 @@ fn convert_prim_nat_add_recurses_into_operands() {
 }
 
 #[test]
-fn convert_prim_flt_neg_recurses_into_operand() {
+fn convert_intrinsic_flt_neg_recurses_into_operand() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
-    let this = func([&x], Subterm::Prim(Prim::flt_neg(Term::free_var(&x))));
+    let this = func(
+        [&x],
+        Subterm::Intrinsic(Intrinsic::flt_neg(Term::free_var(&x))),
+    );
 
-    let that = func([&y], Subterm::Prim(Prim::flt_neg(Term::free_var(&y))));
+    let that = func(
+        [&y],
+        Subterm::Intrinsic(Intrinsic::flt_neg(Term::free_var(&y))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
 #[test]
-fn convert_prim_nat_to_int_recurses_into_operand() {
+fn convert_intrinsic_nat_to_int_recurses_into_operand() {
     let mut context = context();
 
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
-    let this = func([&x], Subterm::Prim(Prim::nat_to_int(Term::free_var(&x))));
-    let that = func([&y], Subterm::Prim(Prim::nat_to_int(Term::free_var(&y))));
+    let this = func(
+        [&x],
+        Subterm::Intrinsic(Intrinsic::nat_to_int(Term::free_var(&x))),
+    );
+    let that = func(
+        [&y],
+        Subterm::Intrinsic(Intrinsic::nat_to_int(Term::free_var(&y))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
 #[test]
-fn convert_prim_lst_compares_element_wise() {
+fn convert_intrinsic_lst_compares_element_wise() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
+    let this = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
         vec![
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))).into(),
         ],
     ))
     .into();
 
-    let that = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
+    let that = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
         vec![
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))).into(),
         ],
     ))
     .into();
@@ -589,20 +604,20 @@ fn convert_prim_lst_compares_element_wise() {
 }
 
 #[test]
-fn convert_prim_lst_rejects_different_lengths() {
+fn convert_intrinsic_lst_rejects_different_lengths() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
-        vec![Subterm::Prim(Prim::Nat(Nat::new(1usize))).into()],
+    let this = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
+        vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
     ))
     .into();
 
-    let that = Subterm::Prim(Prim::Lst(
-        Term::prim(Prim::NatType),
+    let that = Subterm::Intrinsic(Intrinsic::Lst(
+        Term::intrinsic(Intrinsic::NatType),
         vec![
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))).into(),
-            Subterm::Prim(Prim::Nat(Nat::new(2usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))).into(),
         ],
     ))
     .into();
@@ -611,24 +626,24 @@ fn convert_prim_lst_rejects_different_lengths() {
 }
 
 #[test]
-fn convert_prim_bin_type_is_equal_to_itself() {
+fn convert_intrinsic_bin_type_is_equal_to_itself() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::BinType(Grain::X)).into();
-    let that = Subterm::Prim(Prim::BinType(Grain::X)).into();
+    let this = Subterm::Intrinsic(Intrinsic::BinType(Grain::X)).into();
+    let that = Subterm::Intrinsic(Intrinsic::BinType(Grain::X)).into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
 #[test]
-fn convert_prim_bin_literal_compares_bytes() {
+fn convert_intrinsic_bin_literal_compares_bytes() {
     let mut context = context();
 
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
-            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
         ),
         Ok(true)
     );
@@ -636,33 +651,33 @@ fn convert_prim_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
-            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 3]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 3]))).into(),
         ),
         Ok(false)
     );
 }
 
 #[test]
-fn convert_prim_bin_len_recurses_into_operand() {
+fn convert_intrinsic_bin_len_recurses_into_operand() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
     let this = func(
         [&x],
-        Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var(&x))),
+        Subterm::Intrinsic(Intrinsic::bin_len(Grain::X, Term::free_var(&x))),
     );
     let that = func(
         [&y],
-        Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var(&y))),
+        Subterm::Intrinsic(Intrinsic::bin_len(Grain::X, Term::free_var(&y))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
 #[test]
-fn convert_prim_bin_get_recurses_into_operands() {
+fn convert_intrinsic_bin_get_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let a = context.fresh(Some("a"));
@@ -673,7 +688,7 @@ fn convert_prim_bin_get_recurses_into_operands() {
         [&x],
         func(
             [&a],
-            Subterm::Prim(Prim::bin_get(
+            Subterm::Intrinsic(Intrinsic::bin_get(
                 Grain::X,
                 Term::free_var(&x),
                 Term::free_var(&a),
@@ -685,7 +700,7 @@ fn convert_prim_bin_get_recurses_into_operands() {
         [&y],
         func(
             [&b],
-            Subterm::Prim(Prim::bin_get(
+            Subterm::Intrinsic(Intrinsic::bin_get(
                 Grain::X,
                 Term::free_var(&y),
                 Term::free_var(&b),
@@ -697,7 +712,7 @@ fn convert_prim_bin_get_recurses_into_operands() {
 }
 
 #[test]
-fn convert_prim_bin_concat_recurses_into_operands() {
+fn convert_intrinsic_bin_concat_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let a = context.fresh(Some("a"));
@@ -708,7 +723,7 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         [&x],
         func(
             [&a],
-            Subterm::Prim(Prim::bin_concat(
+            Subterm::Intrinsic(Intrinsic::bin_concat(
                 Grain::X,
                 [Term::free_var(&x), Term::free_var(&a)],
             )),
@@ -719,7 +734,7 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         [&y],
         func(
             [&b],
-            Subterm::Prim(Prim::bin_concat(
+            Subterm::Intrinsic(Intrinsic::bin_concat(
                 Grain::X,
                 [Term::free_var(&y), Term::free_var(&b)],
             )),
@@ -730,7 +745,7 @@ fn convert_prim_bin_concat_recurses_into_operands() {
 }
 
 #[test]
-fn convert_prim_bin_slice_recurses_into_operands() {
+fn convert_intrinsic_bin_slice_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let a = context.fresh(Some("a"));
@@ -745,7 +760,7 @@ fn convert_prim_bin_slice_recurses_into_operands() {
             [&a],
             func(
                 [&p],
-                Subterm::Prim(Prim::bin_slice(
+                Subterm::Intrinsic(Intrinsic::bin_slice(
                     Grain::X,
                     Term::free_var(&x),
                     Term::free_var(&a),
@@ -761,7 +776,7 @@ fn convert_prim_bin_slice_recurses_into_operands() {
             [&b],
             func(
                 [&q],
-                Subterm::Prim(Prim::bin_slice(
+                Subterm::Intrinsic(Intrinsic::bin_slice(
                     Grain::X,
                     Term::free_var(&y),
                     Term::free_var(&b),
@@ -825,8 +840,8 @@ fn convert_eta_tuple_neutral_with_known_type() {
     let s_binder = context.fresh(Some("s"));
 
     let tuple_type: Term = Term::tuple_type([
-        (x.clone(), Term::prim(Prim::NatType)),
-        (y.clone(), Term::prim(Prim::BoolType)),
+        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (y.clone(), Term::intrinsic(Intrinsic::BoolType)),
     ]);
 
     let r: Term = Term::free_var(&r_binder);
@@ -849,7 +864,7 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     context.define(&q, &Term::tuple([nat(1), nat(3)]), None);
 
     // A 1-field tuple type {x : Nat}.
-    let type_: Term = Term::tuple_type([(x.clone(), Term::prim(Prim::NatType))]);
+    let type_: Term = Term::tuple_type([(x.clone(), Term::intrinsic(Intrinsic::NatType))]);
 
     // this = (p.0), that = (q.0). At the 1-field type both denote (a), so conversion should return true.
     let this: Term = Term::tuple([Term::proj(Term::free_var(&p), 0)]);
@@ -934,7 +949,7 @@ fn convert_struct_unit_field_is_irrelevant() {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(Telescope::build(
                     [
-                        (x.clone(), Term::prim(Prim::NatType)),
+                        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
                         (u.clone(), Term::tuple_type_unit()),
                     ],
                     (),
@@ -982,7 +997,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                     InductParam {
                         telescope: Telescope::build(
                             [
-                                (x.clone(), Term::prim(Prim::NatType)),
+                                (x.clone(), Term::intrinsic(Intrinsic::NatType)),
                                 (u.clone(), Term::tuple_type_unit()),
                             ],
                             Vec::new(),
@@ -1020,7 +1035,7 @@ fn solve_flex_rigid_commits_solution() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     // ?0 ≟ Nat  (at type Type)
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
     assert_eq!(conv(&mut context, &Term::metavar(0), &nat), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&nat));
 }
@@ -1030,7 +1045,7 @@ fn solve_is_symmetric() {
     let mut context = context();
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
     // rigid on the left, flex on the right
     assert_eq!(conv(&mut context, &nat, &Term::metavar(0)), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&nat));
@@ -1043,7 +1058,10 @@ fn occurs_check_rejects_cyclic_solution() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     // ?0 ≟ (x : ?0) -> Nat  — the candidate mentions ?0 itself.
-    let cyclic = Term::func_type([(x.clone(), Term::metavar(0))], Term::prim(Prim::NatType));
+    let cyclic = Term::func_type(
+        [(x.clone(), Term::metavar(0))],
+        Term::intrinsic(Intrinsic::NatType),
+    );
     assert_eq!(conv(&mut context, &Term::metavar(0), &cyclic), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -1086,8 +1104,8 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
     let y = context.fresh(Some("y"));
     // ?0 : (x : Nat, y : Nat) — a tuple type, born in empty Γ.
     let pair_type = Term::tuple_type([
-        (x.clone(), Term::prim(Prim::NatType)),
-        (y.clone(), Term::prim(Prim::NatType)),
+        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (y.clone(), Term::intrinsic(Intrinsic::NatType)),
     ]);
     context.birth_metavar(MetaId(0), Vec::new(), pair_type);
 
@@ -1104,8 +1122,8 @@ fn revalidation_rejects_ill_typed_candidate_through_checking() {
     let y = context.fresh(Some("y"));
     // ?0 : (x : Nat, y : Nat).
     let pair_type = Term::tuple_type([
-        (x.clone(), Term::prim(Prim::NatType)),
-        (y.clone(), Term::prim(Prim::NatType)),
+        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (y.clone(), Term::intrinsic(Intrinsic::NatType)),
     ]);
     context.birth_metavar(MetaId(0), Vec::new(), pair_type);
 
@@ -1145,7 +1163,7 @@ fn flex_flex_distinct_is_residual() {
 fn conversion_cannot_solve_a_protected_recursive_slot() {
     let mut context = context();
     let (id, slot) = context.fresh_rec_slot(Term::type_ground());
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
 
     assert!(matches!(
         convert_outcome(&mut context, &Term::type_ground(), &slot, &nat_type),
@@ -1165,7 +1183,10 @@ fn embedded_metavar_postpones_to_residual() {
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
 
     // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the solve is postponed; nothing solves ?1, so it stays residual.
-    let candidate = Term::func_type([(x.clone(), Term::metavar(1))], Term::prim(Prim::NatType));
+    let candidate = Term::func_type(
+        [(x.clone(), Term::metavar(1))],
+        Term::intrinsic(Intrinsic::NatType),
+    );
     assert_eq!(conv(&mut context, &Term::metavar(0), &candidate), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -1174,9 +1195,9 @@ fn embedded_metavar_postpones_to_residual() {
 fn revalidation_rejects_ill_typed_solution() {
     let mut context = context();
     // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bool`) does not type-check against Nat, so re-validation rejects it.
-    context.birth_metavar(MetaId(0), Vec::new(), Term::prim(Prim::NatType));
+    context.birth_metavar(MetaId(0), Vec::new(), Term::intrinsic(Intrinsic::NatType));
 
-    let bool_ = Term::prim(Prim::BoolType);
+    let bool_ = Term::intrinsic(Intrinsic::BoolType);
     assert_eq!(conv(&mut context, &Term::metavar(0), &bool_), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -1187,7 +1208,7 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     let mut context = context();
     let t_binder = context.fresh(Some("t"));
     context.assume(&t_binder, &Term::type_ground());
-    context.refine(&t_binder, &Term::prim(Prim::NatType));
+    context.refine(&t_binder, &Term::intrinsic(Intrinsic::NatType));
     context.birth_metavar(
         MetaId(0),
         vec![(t_binder.clone(), Term::type_ground())],
@@ -1197,7 +1218,7 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds, but re-validation suppresses refinements, leaving `t` abstract, so `5 : t` fails and the solution is rejected — the program is unsound otherwise.
     let t = Term::free_var(&t_binder);
     let occurrence = Term::metavar_birthed(0, None, vec![t.clone()]);
-    let five = Term::prim(Prim::Nat(Nat::new(5usize)));
+    let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
@@ -1208,16 +1229,16 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     let mut context = context();
     let t = context.fresh(Some("t"));
     context.assume(&t, &Term::type_ground());
-    context.refine(&t, &Term::prim(Prim::NatType));
+    context.refine(&t, &Term::intrinsic(Intrinsic::NatType));
     context.birth_metavar(
         MetaId(0),
         vec![(t.clone(), Term::type_ground())],
-        Term::prim(Prim::NatType),
+        Term::intrinsic(Intrinsic::NatType),
     );
 
-    let nat = Term::prim(Prim::NatType);
+    let nat = Term::intrinsic(Intrinsic::NatType);
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&t)]);
-    let five = Term::prim(Prim::Nat(Nat::new(5usize)));
+    let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &nat, &occurrence, &five), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&five));
 }
@@ -1225,7 +1246,7 @@ fn revalidation_accepts_a_refinement_independent_solution() {
 // === Spine inversion (contextual metavariables) =============================
 
 fn nat_type() -> Term {
-    Term::prim(Prim::NatType)
+    Term::intrinsic(Intrinsic::NatType)
 }
 
 #[test]
@@ -1297,7 +1318,7 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
         nat_type(),
     );
     // First slot a pattern variable, second a compound term: the candidate may depend on the first but not (yet) on the second.
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var(&z), nat(1))).into();
+    let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
 
     // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
@@ -1323,7 +1344,7 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
         vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
         nat_type(),
     );
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var(&z), nat(1))).into();
+    let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound]);
 
     // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot (and is not an occurrence of the whole entry): undecided.
@@ -1465,7 +1486,7 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
         nat_type(),
     );
     // `z + 1` successor-peels under reduction, and the candidate side arrives reduced — each subject contributes both spellings, so the occurrence still abstracts, and the round-trip verification accepts the pair by definitional (not syntactic) equality.
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var(&z), nat(1))).into();
+    let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
 
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
@@ -1482,7 +1503,7 @@ fn flex_flex_same_id_converts_through_equal_spines() {
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
 
     // Two occurrences of the same unsolved metavariable whose spines differ syntactically but agree definitionally (`1 + 1` reduces to `2`): the congruence probe discharges the goal without solving anything.
-    let sum: Term = Subterm::Prim(Prim::nat_add(nat(1), nat(1))).into();
+    let sum: Term = Subterm::Intrinsic(Intrinsic::nat_add(nat(1), nat(1))).into();
     let this = Term::metavar_birthed(0, None, vec![sum]);
     let that = Term::metavar_birthed(0, None, vec![nat(2)]);
 
@@ -1542,12 +1563,12 @@ fn rollback_solutions_unwinds_to_the_mark() {
 }
 
 #[test]
-fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
+fn stuck_intrinsic_on_a_metavar_parks_instead_of_mismatching() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     let m = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
-    let stuck: Term = Subterm::Prim(Prim::NatSub(m.clone(), nat(1))).into();
+    let stuck: Term = Subterm::Intrinsic(Intrinsic::NatSub(m.clone(), nat(1))).into();
 
     // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the subtraction. (`NatAdd` escapes via successor peeling; the other operators rely on this parking.)
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &stuck, &nat(0));
@@ -1648,7 +1669,7 @@ fn register_vec(context: &mut Context) {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::build(
                     [(elem, Term::type_ground())],
-                    Telescope::build([(length, Term::prim(Prim::NatType))], ()),
+                    Telescope::build([(length, Term::intrinsic(Intrinsic::NatType))], ()),
                 ),
                 constructors: Vec::new(),
                 result_sort: Term::type_ground(),
@@ -1683,10 +1704,10 @@ fn imitation_solves_flex_apply_against_inductive() {
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
     // The committed solution is the imitation, not the constant: applied to a different argument it yields Lst of *that* argument.
-    let at_bool = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
+    let at_bool = Term::apply(Term::metavar(0), [Term::intrinsic(Intrinsic::BoolType)]);
     let lst_bool = Term::induct_type(
         nominal("Lst"),
-        [Term::prim(Prim::BoolType)],
+        [Term::intrinsic(Intrinsic::BoolType)],
         Vec::<Term>::new(),
     );
     assert_eq!(conv(&mut context, &at_bool, &lst_bool), Ok(true));
@@ -1734,7 +1755,7 @@ fn imitation_splits_params_and_indices() {
         Term::func_type(
             [
                 (elem.clone(), Term::type_ground()),
-                (n.clone(), Term::prim(Prim::NatType)),
+                (n.clone(), Term::intrinsic(Intrinsic::NatType)),
             ],
             Term::type_ground(),
         ),
@@ -1746,8 +1767,15 @@ fn imitation_splits_params_and_indices() {
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
-    let at_two = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType), nat(2)]);
-    let vec_two = Term::induct_type(nominal("Vec"), [Term::prim(Prim::BoolType)], [nat(2)]);
+    let at_two = Term::apply(
+        Term::metavar(0),
+        [Term::intrinsic(Intrinsic::BoolType), nat(2)],
+    );
+    let vec_two = Term::induct_type(
+        nominal("Vec"),
+        [Term::intrinsic(Intrinsic::BoolType)],
+        [nat(2)],
+    );
     assert_eq!(conv(&mut context, &at_two, &vec_two), Ok(true));
 }
 
@@ -1838,7 +1866,7 @@ fn imitation_leaves_rigid_apply_pairs_alone() {
 }
 
 #[test]
-fn imitation_solves_flex_apply_against_prim_former() {
+fn imitation_solves_flex_apply_against_intrinsic_former() {
     let mut context = context();
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
@@ -1846,7 +1874,7 @@ fn imitation_solves_flex_apply_against_prim_former() {
     // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0 := λT. Lst(T), the pairwise equation ?1 := Nat. This is what pins `M := Lst` for `Monad(Lst)`.
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
-    let rigid = Term::prim(Prim::LstType(nat_type()));
+    let rigid = Term::intrinsic(Intrinsic::LstType(nat_type()));
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
     assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
@@ -1897,27 +1925,27 @@ fn irrelevance_does_not_fire_at_a_computed_relevant_type() {
 /// `match n | 0 => Nat | _ => Nat end` at the given motive, stuck because `n` is a neutral assumption. The arms are deliberately a *relevant* type in both fixtures: what decides the sort is the motive, and picking arms that agree with it would let a rule reading the arms pass too.
 fn computed_type(context: &mut Context, motive: Term) -> Term {
     let subject = context.fresh(Some("n"));
-    context.assume(&subject, &Term::prim(Prim::NatType));
+    context.assume(&subject, &Term::intrinsic(Intrinsic::NatType));
 
     let scrutinee = context.fresh(Some("k"));
     Term::switch_scoped(
         Term::free_var(&subject),
         Scope::close(Many(1), &[&scrutinee], motive),
-        [(0u32, Term::prim(Prim::NatType))],
-        Term::prim(Prim::NatType),
+        [(0u32, Term::intrinsic(Intrinsic::NatType))],
+        Term::intrinsic(Intrinsic::NatType),
     )
 }
 
-/// A primitive with no hand-written congruence arm is still compared operand by operand.
+/// An intrinsic with no hand-written congruence arm is still compared operand by operand.
 ///
-/// `LstMap` had no arm, and the wildcard beneath the table answered a *hard* mismatch rather than a postponement — so a metavariable standing in one of its operands was refused instead of solved. `convert`'s syntactic-identity short circuit hid that for every spelling that happened to be identical, which is why the omission survived. The rule now reads the operands off `Prim::traverse`, so the table cannot be short an operation.
+/// `LstMap` had no arm, and the wildcard beneath the table answered a *hard* mismatch rather than a postponement — so a metavariable standing in one of its operands was refused instead of solved. `convert`'s syntactic-identity short circuit hid that for every spelling that happened to be identical, which is why the omission survived. The rule now reads the operands off `Intrinsic::traverse`, so the table cannot be short an operation.
 #[test]
-fn a_primitive_without_a_hand_written_arm_solves_a_metavariable_in_its_operand() {
+fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand() {
     let mut context = context();
-    let nat_type = Term::prim(Prim::NatType);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
 
     let xs = context.fresh(Some("xs"));
-    context.assume(&xs, &Term::prim(Prim::lst_type(nat_type.clone())));
+    context.assume(&xs, &Term::intrinsic(Intrinsic::lst_type(nat_type.clone())));
 
     let n = context.fresh(Some("n"));
     let mapper_type = Term::func_type([(n, nat_type.clone())], nat_type.clone());
@@ -1926,13 +1954,13 @@ fn a_primitive_without_a_hand_written_arm_solves_a_metavariable_in_its_operand()
 
     context.birth_metavar(MetaId(0), Vec::new(), mapper_type);
 
-    let flexible = Term::prim(Prim::lst_map(
+    let flexible = Term::intrinsic(Intrinsic::lst_map(
         nat_type.clone(),
         nat_type.clone(),
         Term::free_var(&xs),
         Term::metavar(0),
     ));
-    let rigid = Term::prim(Prim::lst_map(
+    let rigid = Term::intrinsic(Intrinsic::lst_map(
         nat_type.clone(),
         nat_type,
         Term::free_var(&xs),

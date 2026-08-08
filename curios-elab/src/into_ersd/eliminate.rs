@@ -6,9 +6,9 @@
 
 use {
     super::{
-        Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Lowering, Many,
-        Match, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
-        expect_prim_head, infer, is_erasable, reduce_with, refine_head,
+        Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Intrinsic,
+        IntrinsicHead, Lowering, Many, Match, Outcome, Scope, Subterm, Telescope, Term, Three, Two,
+        emitted, expect_intrinsic_head, infer, is_erasable, reduce_with, refine_head,
     },
     curios_base::{Grain, PackedBin},
     curios_core::{Free, Level},
@@ -33,9 +33,9 @@ impl SeqCarrier<'_> {
     fn element_type(self) -> Term {
         match self {
             SeqCarrier::Lst { element } => element.clone(),
-            SeqCarrier::Bin { grain } => Term::prim(match grain {
-                Grain::B => Prim::BoolType,
-                Grain::X => Prim::ByteType,
+            SeqCarrier::Bin { grain } => Term::intrinsic(match grain {
+                Grain::B => Intrinsic::BoolType,
+                Grain::X => Intrinsic::ByteType,
             }),
         }
     }
@@ -43,27 +43,27 @@ impl SeqCarrier<'_> {
     /// The empty sequence — the value the empty arm refines the scrutinee to.
     fn empty_value(self) -> Term {
         match self {
-            SeqCarrier::Lst { element } => Term::prim(Prim::Lst(element.clone(), vec![])),
-            SeqCarrier::Bin { grain } => Term::prim(Prim::Bin(grain, PackedBin::empty())),
+            SeqCarrier::Lst { element } => Term::intrinsic(Intrinsic::Lst(element.clone(), vec![])),
+            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
         }
     }
 
     /// The cons value `head :: tail` — the monoid operation on a singleton and the tail, the same shape elaboration checked the arm under, so the arm refines the scrutinee to the term it was elaborated against.
     fn cons_value(self, head: &Term, tail: &Term) -> Term {
         match self {
-            SeqCarrier::Lst { element } => Term::prim(Prim::LstConcat(
+            SeqCarrier::Lst { element } => Term::intrinsic(Intrinsic::LstConcat(
                 element.clone(),
                 vec![
-                    Term::prim(Prim::Lst(element.clone(), vec![head.clone()])),
+                    Term::intrinsic(Intrinsic::Lst(element.clone(), vec![head.clone()])),
                     tail.clone(),
                 ],
             )),
-            SeqCarrier::Bin { grain } => Term::prim(Prim::BinConcat(
+            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinConcat(
                 grain,
                 vec![
-                    Term::prim(Prim::BinAppend(
+                    Term::intrinsic(Intrinsic::BinAppend(
                         grain,
-                        Term::prim(Prim::Bin(grain, PackedBin::empty())),
+                        Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
                         head.clone(),
                     )),
                     tail.clone(),
@@ -76,9 +76,11 @@ impl SeqCarrier<'_> {
     fn len(self, sequence: &Term) -> Term {
         match self {
             SeqCarrier::Lst { element } => {
-                Term::prim(Prim::LstLen(element.clone(), sequence.clone()))
+                Term::intrinsic(Intrinsic::LstLen(element.clone(), sequence.clone()))
             }
-            SeqCarrier::Bin { grain } => Term::prim(Prim::BinLen(grain, sequence.clone())),
+            SeqCarrier::Bin { grain } => {
+                Term::intrinsic(Intrinsic::BinLen(grain, sequence.clone()))
+            }
         }
     }
 
@@ -86,20 +88,25 @@ impl SeqCarrier<'_> {
     fn get(self, sequence: &Term, index: Term) -> Term {
         match self {
             SeqCarrier::Lst { element } => {
-                Term::prim(Prim::LstGet(element.clone(), sequence.clone(), index))
+                Term::intrinsic(Intrinsic::LstGet(element.clone(), sequence.clone(), index))
             }
-            SeqCarrier::Bin { grain } => Term::prim(Prim::BinGet(grain, sequence.clone(), index)),
+            SeqCarrier::Bin { grain } => {
+                Term::intrinsic(Intrinsic::BinGet(grain, sequence.clone(), index))
+            }
         }
     }
 
     /// The sub-slice `sequence[lo .. hi]`.
     fn slice(self, sequence: &Term, lo: Term, hi: Term) -> Term {
         match self {
-            SeqCarrier::Lst { element } => {
-                Term::prim(Prim::LstSlice(element.clone(), sequence.clone(), lo, hi))
-            }
+            SeqCarrier::Lst { element } => Term::intrinsic(Intrinsic::LstSlice(
+                element.clone(),
+                sequence.clone(),
+                lo,
+                hi,
+            )),
             SeqCarrier::Bin { grain } => {
-                Term::prim(Prim::BinSlice(grain, sequence.clone(), lo, hi))
+                Term::intrinsic(Intrinsic::BinSlice(grain, sequence.clone(), lo, hi))
             }
         }
     }
@@ -241,20 +248,20 @@ impl Lowering {
         true_case: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_prim_head(context, head, PrimHead::Bool)?;
+        let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Bool)?;
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let if_false = self.refined_arm(
             context,
             head,
-            &Term::prim(Prim::Bool(false)),
+            &Term::intrinsic(Intrinsic::Bool(false)),
             motive,
             false_case,
         )?;
         let if_true = self.refined_arm(
             context,
             head,
-            &Term::prim(Prim::Bool(true)),
+            &Term::intrinsic(Intrinsic::Bool(true)),
             motive,
             true_case,
         )?;
@@ -279,12 +286,12 @@ impl Lowering {
         default: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
+        let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Nat)?;
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut nat_cases = Vec::with_capacity(cases.len());
         for (&key, body) in cases {
-            let value = Term::prim(Prim::Nat(super::Nat::new(key)));
+            let value = Term::intrinsic(Intrinsic::Nat(super::Nat::new(key)));
             let block = self.refined_arm(context, head, &value, motive, body)?;
             nat_cases.push(curios_ersd::NatCase { key, block });
         }
@@ -312,7 +319,7 @@ impl Lowering {
         cons_case: &Scope<Two>,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
+        let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Nat)?;
         let (head, scrutinee) = match self.scrutinee_operand(context, head, &head_type)? {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
@@ -321,19 +328,19 @@ impl Lowering {
         let zero = self.refined_arm(
             context,
             &head,
-            &Term::prim(Prim::Nat(super::Nat::new(0usize))),
+            &Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize))),
             motive,
             empty_case,
         )?;
 
         // The hypothesis is dead: a case split, not a fold.
         if !cons_case.uses(1) {
-            let pred = Term::prim(Prim::nat_sub(
+            let pred = Term::intrinsic(Intrinsic::nat_sub(
                 head.clone(),
-                Term::prim(Prim::Nat(super::Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(super::Nat::new(1usize))),
             ));
             // The hypothesis never appears, so any term serves its slot.
-            let dead_hypothesis = Term::prim(Prim::Nat(super::Nat::new(0usize)));
+            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize)));
             let peeled = cons_case.open(&[&pred, &dead_hypothesis]);
             let expected = motive.open(&[&head]);
             let default = self.open_arm(context, &expected, &peeled)?;
@@ -366,12 +373,12 @@ impl Lowering {
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
             let pred_var = Term::free_var(&pred_label);
-            context.assume(&pred_label, &Term::prim(Prim::NatType));
+            context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
             context.assume(&hypothesis_label, &motive.open(&[&pred_var]));
 
-            let successor = Term::prim(Prim::nat_add(
+            let successor = Term::intrinsic(Intrinsic::nat_add(
                 pred_var.clone(),
-                Term::prim(Prim::Nat(super::Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(super::Nat::new(1usize))),
             ));
             refine_head(context, &head, &successor)?;
 
@@ -419,16 +426,24 @@ impl Lowering {
         // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
         if !cons_case.uses(2) {
             let length = carrier.len(&head);
-            let index = emitted!(self.walk(context, &length, &Term::prim(Prim::NatType), None)?);
+            let index = emitted!(self.walk(
+                context,
+                &length,
+                &Term::intrinsic(Intrinsic::NatType),
+                None
+            )?);
 
-            let element = carrier.get(&head, Term::prim(Prim::Nat(super::Nat::new(0usize))));
+            let element = carrier.get(
+                &head,
+                Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize))),
+            );
             let suffix = carrier.slice(
                 &head,
-                Term::prim(Prim::Nat(super::Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(super::Nat::new(1usize))),
                 length.clone(),
             );
             // The hypothesis never appears, so any term serves its slot.
-            let dead_hypothesis = Term::prim(Prim::Nat(super::Nat::new(0usize)));
+            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize)));
             let peeled = cons_case.open(&[&element, &suffix, &dead_hypothesis]);
             let expected = motive.open(&[&head]);
             let default = self.open_arm(context, &expected, &peeled)?;

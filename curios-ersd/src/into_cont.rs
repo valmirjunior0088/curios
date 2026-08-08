@@ -637,9 +637,9 @@ impl Lowerer<'_> {
                         }
                     });
                 }
-                let op = sequence_prim(*operation, args.len());
+                let op = sequence_intrinsic(*operation, args.len());
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
                         op,
                         args,
@@ -697,9 +697,9 @@ impl Lowerer<'_> {
                 let product = self.lower_atom(*product);
                 let index = *field as usize;
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
-                        op: curios_cont::CpsPrimOp::TplGet(index),
+                        op: curios_cont::CpsIntrinsicOp::TplGet(index),
                         args: vec![product],
                         next,
                     }
@@ -791,7 +791,7 @@ impl Lowerer<'_> {
                 operands,
             } => {
                 let op = match intrinsic {
-                    Intrinsic::LstMap => curios_cont::CpsIntrinsicOp::LstMap,
+                    Intrinsic::LstMap => curios_cont::CpsIntrinsicCall::LstMap,
                 };
                 // Both representations bind the mapper first; the operands transcribe in order.
                 let args = operands
@@ -809,7 +809,7 @@ impl Lowerer<'_> {
         }
     }
 
-    /// Lower a scalar operation to a straight-line `LetPrim`. `Byte` and `Nat` share the runtime carrier, so `ByteToNat` is the identity and `NatToByte` masks to a byte.
+    /// Lower a scalar operation to a straight-line `LetIntrinsic`. `Byte` and `Nat` share the runtime carrier, so `ByteToNat` is the identity and `NatToByte` masks to a byte.
     fn lower_operation(
         &mut self,
         result: ValueId,
@@ -828,9 +828,9 @@ impl Lowerer<'_> {
             Operation::NatToByte => {
                 let value = self.lower_atom(operands[0]);
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
-                        op: curios_cont::CpsPrimOp::NatAnd,
+                        op: curios_cont::CpsIntrinsicOp::NatAnd,
                         args: vec![
                             value,
                             curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0xFF)),
@@ -840,10 +840,10 @@ impl Lowerer<'_> {
                 })
             }
             _ => {
-                let op = operation_prim(operation);
+                let op = operation_intrinsic(operation);
                 let args = operands.iter().map(|&atom| self.lower_atom(atom)).collect();
                 self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::CpsNode::LetPrim {
+                    curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
                         op,
                         args,
@@ -1002,9 +1002,9 @@ impl Lowerer<'_> {
             cases,
             default,
         });
-        let dispatch = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let dispatch = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: tag,
-            op: curios_cont::CpsPrimOp::TplGet(0),
+            op: curios_cont::CpsIntrinsicOp::TplGet(0),
             args: vec![scrutinee],
             next: switch,
         });
@@ -1027,9 +1027,9 @@ impl Lowerer<'_> {
             .collect();
         let mut body = self.lower_block(arm.block, join);
         for index in (0..bindings.len()).rev() {
-            body = self.module.add_node(curios_cont::CpsNode::LetPrim {
+            body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                 result: bindings[index],
-                op: curios_cont::CpsPrimOp::TplGet(index + 1),
+                op: curios_cont::CpsIntrinsicOp::TplGet(index + 1),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1085,9 +1085,9 @@ impl Lowerer<'_> {
                 curios_cont::CpsAtom::Value(next_acc),
             ],
         );
-        let increment = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let increment = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: next_index,
-            op: curios_cont::CpsPrimOp::NatAdd,
+            op: curios_cont::CpsIntrinsicOp::NatAdd,
             args: vec![
                 curios_cont::CpsAtom::Value(step_index),
                 curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
@@ -1136,9 +1136,9 @@ impl Lowerer<'_> {
                 args: vec![curios_cont::CpsAtom::Value(loop_acc)],
             }),
         });
-        let loop_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let loop_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: comparison,
-            op: curios_cont::CpsPrimOp::NatEql,
+            op: curios_cont::CpsIntrinsicOp::NatEql,
             args: vec![curios_cont::CpsAtom::Value(loop_index), head],
             next: switch,
         });
@@ -1231,7 +1231,7 @@ impl Lowerer<'_> {
             continuations: vec![step_resume],
             body: step_body,
         });
-        let step_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: suffix,
             op: sequence_slice_op(grain),
             args: vec![
@@ -1241,15 +1241,15 @@ impl Lowerer<'_> {
             ],
             next: step_body,
         });
-        let step_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: element,
             op: sequence_get_op(grain),
             args: vec![sequence.clone(), curios_cont::CpsAtom::Value(element_index)],
             next: step_body,
         });
-        let step_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: element_index,
-            op: curios_cont::CpsPrimOp::NatSub,
+            op: curios_cont::CpsIntrinsicOp::NatSub,
             args: vec![
                 curios_cont::CpsAtom::Value(step_index),
                 curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
@@ -1283,9 +1283,9 @@ impl Lowerer<'_> {
                 args: vec![curios_cont::CpsAtom::Value(loop_acc)],
             }),
         });
-        let loop_body = self.module.add_node(curios_cont::CpsNode::LetPrim {
+        let loop_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: comparison,
-            op: curios_cont::CpsPrimOp::NatEql,
+            op: curios_cont::CpsIntrinsicOp::NatEql,
             args: vec![
                 curios_cont::CpsAtom::Value(loop_index),
                 curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
@@ -1324,7 +1324,7 @@ impl Lowerer<'_> {
             body: entry,
         });
         // Compute the length up front so every continuation sees it.
-        self.module.add_node(curios_cont::CpsNode::LetPrim {
+        self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: length,
             op: sequence_len_op(grain),
             args: vec![sequence],
@@ -1529,113 +1529,113 @@ impl Lowerer<'_> {
     }
 }
 
-/// The Cont primitive of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at byte grain. The `Byte` conversions are handled before this table.
-fn operation_prim(operation: Operation) -> curios_cont::CpsPrimOp {
+/// The Cont intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at byte grain. The `Byte` conversions are handled before this table.
+fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntrinsicOp {
     use Operation as O;
     match operation {
-        O::BoolAnd => curios_cont::CpsPrimOp::NatAnd,
-        O::BoolOr => curios_cont::CpsPrimOp::NatOr,
-        O::BoolXor => curios_cont::CpsPrimOp::NatXor,
-        O::BoolEql => curios_cont::CpsPrimOp::NatEql,
-        O::BoolNeq => curios_cont::CpsPrimOp::NatXor,
-        O::NatEql => curios_cont::CpsPrimOp::NatEql,
-        O::NatNeq => curios_cont::CpsPrimOp::NatNeq,
-        O::NatAdd => curios_cont::CpsPrimOp::NatAdd,
-        O::NatSub => curios_cont::CpsPrimOp::NatSub,
-        O::NatMul => curios_cont::CpsPrimOp::NatMul,
-        O::NatLt => curios_cont::CpsPrimOp::NatLt,
-        O::NatDiv => curios_cont::CpsPrimOp::NatDiv,
-        O::NatRem => curios_cont::CpsPrimOp::NatRem,
-        O::NatGt => curios_cont::CpsPrimOp::NatGt,
-        O::NatLte => curios_cont::CpsPrimOp::NatLte,
-        O::NatGte => curios_cont::CpsPrimOp::NatGte,
-        O::NatAnd => curios_cont::CpsPrimOp::NatAnd,
-        O::NatOr => curios_cont::CpsPrimOp::NatOr,
-        O::NatXor => curios_cont::CpsPrimOp::NatXor,
-        O::NatShl => curios_cont::CpsPrimOp::NatShl,
-        O::NatShr => curios_cont::CpsPrimOp::NatShr,
-        O::NatRotl => curios_cont::CpsPrimOp::NatRotl,
-        O::NatRotr => curios_cont::CpsPrimOp::NatRotr,
-        O::NatClz => curios_cont::CpsPrimOp::NatClz,
-        O::NatCtz => curios_cont::CpsPrimOp::NatCtz,
-        O::NatPopcnt => curios_cont::CpsPrimOp::NatPopcnt,
-        O::ByteEql => curios_cont::CpsPrimOp::NatEql,
-        O::ByteLt => curios_cont::CpsPrimOp::NatLt,
-        O::ByteLte => curios_cont::CpsPrimOp::NatLte,
-        O::ByteGt => curios_cont::CpsPrimOp::NatGt,
-        O::ByteGte => curios_cont::CpsPrimOp::NatGte,
-        O::IntEql => curios_cont::CpsPrimOp::IntEql,
-        O::IntNeq => curios_cont::CpsPrimOp::IntNeq,
-        O::IntAdd => curios_cont::CpsPrimOp::IntAdd,
-        O::IntSub => curios_cont::CpsPrimOp::IntSub,
-        O::IntMul => curios_cont::CpsPrimOp::IntMul,
-        O::IntDiv => curios_cont::CpsPrimOp::IntDiv,
-        O::IntRem => curios_cont::CpsPrimOp::IntRem,
-        O::IntLt => curios_cont::CpsPrimOp::IntLt,
-        O::IntGt => curios_cont::CpsPrimOp::IntGt,
-        O::IntLte => curios_cont::CpsPrimOp::IntLte,
-        O::IntGte => curios_cont::CpsPrimOp::IntGte,
-        O::IntAnd => curios_cont::CpsPrimOp::IntAnd,
-        O::IntOr => curios_cont::CpsPrimOp::IntOr,
-        O::IntXor => curios_cont::CpsPrimOp::IntXor,
-        O::IntShl => curios_cont::CpsPrimOp::IntShl,
-        O::IntShr => curios_cont::CpsPrimOp::IntShr,
-        O::IntRotl => curios_cont::CpsPrimOp::IntRotl,
-        O::IntRotr => curios_cont::CpsPrimOp::IntRotr,
-        O::IntClz => curios_cont::CpsPrimOp::IntClz,
-        O::IntCtz => curios_cont::CpsPrimOp::IntCtz,
-        O::IntPopcnt => curios_cont::CpsPrimOp::IntPopcnt,
-        O::FltAdd => curios_cont::CpsPrimOp::FltAdd,
-        O::FltSub => curios_cont::CpsPrimOp::FltSub,
-        O::FltMul => curios_cont::CpsPrimOp::FltMul,
-        O::FltDiv => curios_cont::CpsPrimOp::FltDiv,
-        O::FltRem => curios_cont::CpsPrimOp::FltRem,
-        O::FltEql => curios_cont::CpsPrimOp::FltEql,
-        O::FltNeq => curios_cont::CpsPrimOp::FltNeq,
-        O::FltLt => curios_cont::CpsPrimOp::FltLt,
-        O::FltGt => curios_cont::CpsPrimOp::FltGt,
-        O::FltLte => curios_cont::CpsPrimOp::FltLte,
-        O::FltGte => curios_cont::CpsPrimOp::FltGte,
-        O::FltMin => curios_cont::CpsPrimOp::FltMin,
-        O::FltMax => curios_cont::CpsPrimOp::FltMax,
-        O::FltCopysign => curios_cont::CpsPrimOp::FltCopysign,
-        O::FltNeg => curios_cont::CpsPrimOp::FltNeg,
-        O::FltAbs => curios_cont::CpsPrimOp::FltAbs,
-        O::FltSqrt => curios_cont::CpsPrimOp::FltSqrt,
-        O::FltFloor => curios_cont::CpsPrimOp::FltFloor,
-        O::FltCeil => curios_cont::CpsPrimOp::FltCeil,
-        O::FltTrunc => curios_cont::CpsPrimOp::FltTrunc,
-        O::FltNearest => curios_cont::CpsPrimOp::FltNearest,
-        O::NatToInt => curios_cont::CpsPrimOp::NatToInt,
-        O::NatToFlt => curios_cont::CpsPrimOp::NatToFlt,
-        O::IntToNat => curios_cont::CpsPrimOp::IntToNat,
-        O::IntToFlt => curios_cont::CpsPrimOp::IntToFlt,
-        O::FltToNat => curios_cont::CpsPrimOp::FltToNat,
-        O::FltToInt => curios_cont::CpsPrimOp::FltToInt,
-        O::FltToLeBytes => curios_cont::CpsPrimOp::FltToLeBytes,
-        O::FltOfLeBytes => curios_cont::CpsPrimOp::FltOfLeBytes,
-        O::HandleEql => curios_cont::CpsPrimOp::BinEql(Grain::X),
+        O::BoolAnd => curios_cont::CpsIntrinsicOp::NatAnd,
+        O::BoolOr => curios_cont::CpsIntrinsicOp::NatOr,
+        O::BoolXor => curios_cont::CpsIntrinsicOp::NatXor,
+        O::BoolEql => curios_cont::CpsIntrinsicOp::NatEql,
+        O::BoolNeq => curios_cont::CpsIntrinsicOp::NatXor,
+        O::NatEql => curios_cont::CpsIntrinsicOp::NatEql,
+        O::NatNeq => curios_cont::CpsIntrinsicOp::NatNeq,
+        O::NatAdd => curios_cont::CpsIntrinsicOp::NatAdd,
+        O::NatSub => curios_cont::CpsIntrinsicOp::NatSub,
+        O::NatMul => curios_cont::CpsIntrinsicOp::NatMul,
+        O::NatLt => curios_cont::CpsIntrinsicOp::NatLt,
+        O::NatDiv => curios_cont::CpsIntrinsicOp::NatDiv,
+        O::NatRem => curios_cont::CpsIntrinsicOp::NatRem,
+        O::NatGt => curios_cont::CpsIntrinsicOp::NatGt,
+        O::NatLte => curios_cont::CpsIntrinsicOp::NatLte,
+        O::NatGte => curios_cont::CpsIntrinsicOp::NatGte,
+        O::NatAnd => curios_cont::CpsIntrinsicOp::NatAnd,
+        O::NatOr => curios_cont::CpsIntrinsicOp::NatOr,
+        O::NatXor => curios_cont::CpsIntrinsicOp::NatXor,
+        O::NatShl => curios_cont::CpsIntrinsicOp::NatShl,
+        O::NatShr => curios_cont::CpsIntrinsicOp::NatShr,
+        O::NatRotl => curios_cont::CpsIntrinsicOp::NatRotl,
+        O::NatRotr => curios_cont::CpsIntrinsicOp::NatRotr,
+        O::NatClz => curios_cont::CpsIntrinsicOp::NatClz,
+        O::NatCtz => curios_cont::CpsIntrinsicOp::NatCtz,
+        O::NatPopcnt => curios_cont::CpsIntrinsicOp::NatPopcnt,
+        O::ByteEql => curios_cont::CpsIntrinsicOp::NatEql,
+        O::ByteLt => curios_cont::CpsIntrinsicOp::NatLt,
+        O::ByteLte => curios_cont::CpsIntrinsicOp::NatLte,
+        O::ByteGt => curios_cont::CpsIntrinsicOp::NatGt,
+        O::ByteGte => curios_cont::CpsIntrinsicOp::NatGte,
+        O::IntEql => curios_cont::CpsIntrinsicOp::IntEql,
+        O::IntNeq => curios_cont::CpsIntrinsicOp::IntNeq,
+        O::IntAdd => curios_cont::CpsIntrinsicOp::IntAdd,
+        O::IntSub => curios_cont::CpsIntrinsicOp::IntSub,
+        O::IntMul => curios_cont::CpsIntrinsicOp::IntMul,
+        O::IntDiv => curios_cont::CpsIntrinsicOp::IntDiv,
+        O::IntRem => curios_cont::CpsIntrinsicOp::IntRem,
+        O::IntLt => curios_cont::CpsIntrinsicOp::IntLt,
+        O::IntGt => curios_cont::CpsIntrinsicOp::IntGt,
+        O::IntLte => curios_cont::CpsIntrinsicOp::IntLte,
+        O::IntGte => curios_cont::CpsIntrinsicOp::IntGte,
+        O::IntAnd => curios_cont::CpsIntrinsicOp::IntAnd,
+        O::IntOr => curios_cont::CpsIntrinsicOp::IntOr,
+        O::IntXor => curios_cont::CpsIntrinsicOp::IntXor,
+        O::IntShl => curios_cont::CpsIntrinsicOp::IntShl,
+        O::IntShr => curios_cont::CpsIntrinsicOp::IntShr,
+        O::IntRotl => curios_cont::CpsIntrinsicOp::IntRotl,
+        O::IntRotr => curios_cont::CpsIntrinsicOp::IntRotr,
+        O::IntClz => curios_cont::CpsIntrinsicOp::IntClz,
+        O::IntCtz => curios_cont::CpsIntrinsicOp::IntCtz,
+        O::IntPopcnt => curios_cont::CpsIntrinsicOp::IntPopcnt,
+        O::FltAdd => curios_cont::CpsIntrinsicOp::FltAdd,
+        O::FltSub => curios_cont::CpsIntrinsicOp::FltSub,
+        O::FltMul => curios_cont::CpsIntrinsicOp::FltMul,
+        O::FltDiv => curios_cont::CpsIntrinsicOp::FltDiv,
+        O::FltRem => curios_cont::CpsIntrinsicOp::FltRem,
+        O::FltEql => curios_cont::CpsIntrinsicOp::FltEql,
+        O::FltNeq => curios_cont::CpsIntrinsicOp::FltNeq,
+        O::FltLt => curios_cont::CpsIntrinsicOp::FltLt,
+        O::FltGt => curios_cont::CpsIntrinsicOp::FltGt,
+        O::FltLte => curios_cont::CpsIntrinsicOp::FltLte,
+        O::FltGte => curios_cont::CpsIntrinsicOp::FltGte,
+        O::FltMin => curios_cont::CpsIntrinsicOp::FltMin,
+        O::FltMax => curios_cont::CpsIntrinsicOp::FltMax,
+        O::FltCopysign => curios_cont::CpsIntrinsicOp::FltCopysign,
+        O::FltNeg => curios_cont::CpsIntrinsicOp::FltNeg,
+        O::FltAbs => curios_cont::CpsIntrinsicOp::FltAbs,
+        O::FltSqrt => curios_cont::CpsIntrinsicOp::FltSqrt,
+        O::FltFloor => curios_cont::CpsIntrinsicOp::FltFloor,
+        O::FltCeil => curios_cont::CpsIntrinsicOp::FltCeil,
+        O::FltTrunc => curios_cont::CpsIntrinsicOp::FltTrunc,
+        O::FltNearest => curios_cont::CpsIntrinsicOp::FltNearest,
+        O::NatToInt => curios_cont::CpsIntrinsicOp::NatToInt,
+        O::NatToFlt => curios_cont::CpsIntrinsicOp::NatToFlt,
+        O::IntToNat => curios_cont::CpsIntrinsicOp::IntToNat,
+        O::IntToFlt => curios_cont::CpsIntrinsicOp::IntToFlt,
+        O::FltToNat => curios_cont::CpsIntrinsicOp::FltToNat,
+        O::FltToInt => curios_cont::CpsIntrinsicOp::FltToInt,
+        O::FltToLeBytes => curios_cont::CpsIntrinsicOp::FltToLeBytes,
+        O::FltOfLeBytes => curios_cont::CpsIntrinsicOp::FltOfLeBytes,
+        O::HandleEql => curios_cont::CpsIntrinsicOp::BinEql(Grain::X),
         O::ByteToNat | O::NatToByte => {
-            unreachable!("Byte conversions are lowered before the primitive table")
+            unreachable!("Byte conversions are lowered before the intrinsic table")
         }
     }
 }
 
-/// The Cont primitive of a [`SequenceOp`], threading the operand count into the variadic concatenations. `LstBuild` is a list value, never a prim.
-fn sequence_prim(operation: SequenceOp, arity: usize) -> curios_cont::CpsPrimOp {
+/// The Cont intrinsic of a [`SequenceOp`], threading the operand count into the variadic concatenations. `LstBuild` is a list value, never an intrinsic.
+fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cont::CpsIntrinsicOp {
     use SequenceOp as S;
     match operation {
-        S::BinLen(grain) => curios_cont::CpsPrimOp::BinLen(grain),
-        S::BinEql(grain) => curios_cont::CpsPrimOp::BinEql(grain),
-        S::BinGet(grain) => curios_cont::CpsPrimOp::BinGet(grain),
-        S::BinSlice(grain) => curios_cont::CpsPrimOp::BinSlice(grain),
-        S::BinAppend(grain) => curios_cont::CpsPrimOp::BinAppend(grain),
-        S::BinConcat(grain) => curios_cont::CpsPrimOp::BinConcat(grain, arity),
-        S::LstLen => curios_cont::CpsPrimOp::LstLen,
-        S::LstGet => curios_cont::CpsPrimOp::LstGet,
-        S::LstSlice => curios_cont::CpsPrimOp::LstSlice,
-        S::LstAppend => curios_cont::CpsPrimOp::LstAppend,
-        S::LstConcat => curios_cont::CpsPrimOp::LstConcat(arity),
+        S::BinLen(grain) => curios_cont::CpsIntrinsicOp::BinLen(grain),
+        S::BinEql(grain) => curios_cont::CpsIntrinsicOp::BinEql(grain),
+        S::BinGet(grain) => curios_cont::CpsIntrinsicOp::BinGet(grain),
+        S::BinSlice(grain) => curios_cont::CpsIntrinsicOp::BinSlice(grain),
+        S::BinAppend(grain) => curios_cont::CpsIntrinsicOp::BinAppend(grain),
+        S::BinConcat(grain) => curios_cont::CpsIntrinsicOp::BinConcat(grain, arity),
+        S::LstLen => curios_cont::CpsIntrinsicOp::LstLen,
+        S::LstGet => curios_cont::CpsIntrinsicOp::LstGet,
+        S::LstSlice => curios_cont::CpsIntrinsicOp::LstSlice,
+        S::LstAppend => curios_cont::CpsIntrinsicOp::LstAppend,
+        S::LstConcat => curios_cont::CpsIntrinsicOp::LstConcat(arity),
         S::LstBuild => unreachable!("LstBuild is lowered as a list value"),
     }
 }
@@ -1648,23 +1648,23 @@ fn cell_op(operation: CellOperation) -> curios_cont::CpsCellOp {
     }
 }
 
-fn sequence_len_op(grain: SequenceGrain) -> curios_cont::CpsPrimOp {
+fn sequence_len_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsPrimOp::LstLen,
-        SequenceGrain::Bin(grain) => curios_cont::CpsPrimOp::BinLen(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::LstLen,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinLen(grain),
     }
 }
 
-fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsPrimOp {
+fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsPrimOp::LstGet,
-        SequenceGrain::Bin(grain) => curios_cont::CpsPrimOp::BinGet(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::LstGet,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinGet(grain),
     }
 }
 
-fn sequence_slice_op(grain: SequenceGrain) -> curios_cont::CpsPrimOp {
+fn sequence_slice_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsPrimOp::LstSlice,
-        SequenceGrain::Bin(grain) => curios_cont::CpsPrimOp::BinSlice(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::LstSlice,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinSlice(grain),
     }
 }

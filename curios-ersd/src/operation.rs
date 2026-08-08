@@ -1,8 +1,8 @@
 //! The scalar operation alphabet.
 //!
-//! One fieldless variant per primitive operation over the scalar shapes — `Bool`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving binary32), and `Handle` — transcribed one-to-one from Core's primitive vocabulary. Every shape stays distinct: there are no carrier choices here (`Bool`→`Nat`, `Byte`→`Nat`, `Handle`→`Bin` belong exclusively to the lowering), and no 31-bit fact appears anywhere in this alphabet. Sequence operations live in their own family ([`super::SequenceOp`]).
+//! One fieldless variant per intrinsic operation over the scalar shapes — `Bool`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving binary32), and `Handle` — transcribed one-to-one from Core's intrinsic vocabulary. Every shape stays distinct: there are no carrier choices here (`Bool`→`Nat`, `Byte`→`Nat`, `Handle`→`Bin` belong exclusively to the lowering), and no 31-bit fact appears anywhere in this alphabet. Sequence operations live in their own family ([`super::SequenceOp`]).
 
-/// A scalar primitive operation. [`arity`](Operation::arity) is the single authoritative operand count; the verifier and every later consumer delegate to it.
+/// A scalar intrinsic operation. [`arity`](Operation::arity) is the single authoritative operand count; the verifier and every later consumer delegate to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",

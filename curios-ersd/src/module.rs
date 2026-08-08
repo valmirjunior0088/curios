@@ -1,4 +1,4 @@
-//! The module: crate-private arenas, checked accessors, and the low-level construction and removal primitives the checked builder drives.
+//! The module: crate-private arenas, checked accessors, and the low-level construction and removal intrinsics the checked builder drives.
 //!
 //! Arena slots never move and identities are never reused: removal writes `None` (a tombstone) and compaction, when its consumer lands, is an explicit deterministic pass. Constants are interned by their exact bitwise identity, so equal constants share one identity; the interning index is a derived lookup structure, never iterated, and identity order is insertion order — construction is deterministic, so identities are too.
 //!
@@ -225,12 +225,12 @@ impl Module {
         self.items = items;
     }
 
-    /// Rewrite one live statement in place — partial evaluation's install primitive (a folded call becomes an alias or a residual).
+    /// Rewrite one live statement in place — partial evaluation's install intrinsic (a folded call becomes an alias or a residual).
     pub(crate) fn set_statement(&mut self, id: StatementId, statement: Statement) {
         self.statements.set(id, statement);
     }
 
-    /// Replace one live block's statement list — the splice primitive for materialized reifications and taken match arms.
+    /// Replace one live block's statement list — the splice intrinsic for materialized reifications and taken match arms.
     pub(crate) fn set_block_statements(&mut self, id: BlockId, statements: Vec<StatementId>) {
         let block = self.blocks.get_mut(id).expect("a spliced block is live");
         block.statements = statements;

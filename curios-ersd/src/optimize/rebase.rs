@@ -45,7 +45,7 @@ impl Monoid {
         })
     }
 
-    /// The monoid a combine right-hand side performs: a direct operation, or a two-argument call that resolves through *forwarder* functions to one. The corpus combines through concept witnesses (`a + b` is `Add/add(a, b)`, a forwarder onto `Nat/add`, a forwarder onto the primitive), so the resolver is what makes the envelope reach idiomatic code at all; unfolding a pure forwarder chain preserves meaning exactly.
+    /// The monoid a combine right-hand side performs: a direct operation, or a two-argument call that resolves through *forwarder* functions to one. The corpus combines through concept witnesses (`a + b` is `Add/add(a, b)`, a forwarder onto `Nat/add`, a forwarder onto the intrinsic), so the resolver is what makes the envelope reach idiomatic code at all; unfolding a pure forwarder chain preserves meaning exactly.
     fn of_rhs(module: &Module, rhs: &Rhs) -> Option<(Monoid, Atom, Atom)> {
         match rhs {
             Rhs::Operation {

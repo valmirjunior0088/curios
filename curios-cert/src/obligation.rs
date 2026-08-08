@@ -15,7 +15,7 @@
 use {
     super::{Kernel, KernelError, Sort, group_totality},
     curios_core::{
-        Bound, Enter, Free, Global, Item, Module, Prim, Rec, Reducer, Subterm, Term, Totality,
+        Bound, Enter, Free, Global, Intrinsic, Item, Module, Rec, Reducer, Subterm, Term, Totality,
     },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
@@ -36,7 +36,7 @@ impl std::fmt::Display for Erased {
     }
 }
 
-/// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or a `Prim::ProcExit`.
+/// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or an `Intrinsic::ProcExit`.
 ///
 /// Post-order over the term's DAG on the shared [`Term::walk`] driver. The memo is structural and caller-owned, carried across the whole module rather than per walk — definitions share subterms heavily, and a node settled for one is settled for all.
 // Safety: the memo is keyed on `Term`, whose interior scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
@@ -50,7 +50,7 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
             None => Enter::Descend,
         },
         |state, term, mut children| {
-            let mut partial = matches!(&**term, Subterm::Prim(Prim::ProcExit(..)));
+            let mut partial = matches!(&**term, Subterm::Intrinsic(Intrinsic::ProcExit(..)));
             if let Subterm::Rec(Rec { group, .. }) = &**term {
                 partial = partial || group_totality(state.0, group) == Totality::Partial;
             }

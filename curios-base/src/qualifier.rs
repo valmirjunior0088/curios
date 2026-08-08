@@ -171,7 +171,7 @@ impl Qualifier {
 
     /// Whether this qualifier lies within `ancestor`'s subtree — equal to it, or nested below it at any depth. The comparison is segment-wise, not textual, so `/Foobar` is not within `/Foo`; the empty qualifier is the root, and every qualifier lies within it.
     ///
-    /// This is the module system's visibility primitive: a declaration written without `pub` in module `M` is visible exactly to the qualifiers within `M`.
+    /// This is the module system's visibility intrinsic: a declaration written without `pub` in module `M` is visible exactly to the qualifiers within `M`.
     pub fn is_within(&self, ancestor: &Qualifier) -> bool {
         let (here, there) = (self.segments_slice(), ancestor.segments_slice());
         here.len() >= there.len() && here.iter().zip(there).all(|(here, there)| here == there)

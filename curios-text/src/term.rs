@@ -1,5 +1,5 @@
 use {
-    super::{Name, Prim, Radix, print_term},
+    super::{Intrinsic, Name, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
     curios_abi::ForeignFunction,
     curios_base::{
@@ -465,7 +465,7 @@ pub struct Rec {
     pub tail: Term,
 }
 
-/// A surface infix application `left <op> right`, produced by the precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved to a concrete scalar primitive during elaboration (the operand types are not yet known at lowering).
+/// A surface infix application `left <op> right`, produced by the precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved to a concrete scalar intrinsic during elaboration (the operand types are not yet known at lowering).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Infix {
     pub op: NumOp,
@@ -473,7 +473,7 @@ pub struct Infix {
     pub right: Term,
 }
 
-/// A surface polymorphic numeric literal: an integer `magnitude` with an optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Prim::Flt`.
+/// A surface polymorphic numeric literal: an integer `magnitude` with an optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Intrinsic::Flt`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumLit {
     pub magnitude: BigUint,
@@ -487,8 +487,8 @@ pub struct NumLit {
 pub enum Subterm {
     Type,
     Prop,
-    Prim(Prim),
-    /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than a [`Prim`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
+    Intrinsic(Intrinsic),
+    /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than a [`Intrinsic`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     FuncType(FuncType),
     Func(Func),
@@ -509,7 +509,7 @@ pub enum Subterm {
     Hole,
     /// A written goal `?`: elaborated to a metavariable like [`Subterm::Hole`], but marked so zonk *reports* what elaboration determined for it (scope, type, and solution, if any) instead of splicing silently — writing `?` always fails compilation with that report. Minted only by the parser; carries no payload — its span rides on the wrapping [`Term`].
     Goal,
-    /// A literal whose value is synthesized from `/syn` rather than lowered to a core primitive (see [`Syn`]). The lowerer runs a meta-emitter on it instead of `prim()`.
+    /// A literal whose value is synthesized from `/syn` rather than lowered to a core intrinsic (see [`Syn`]). The lowerer runs a meta-emitter on it instead of `intrinsic()`.
     Syn(Syn),
     /// An infix operator application `left <op> right` (see [`Infix`]).
     Infix(Infix),
@@ -517,7 +517,7 @@ pub enum Subterm {
     NumLit(NumLit),
 }
 
-/// The literals the lowerer desugars to a `/syn` construction: a character becomes a proof-carrying `/syn/Char`, and a string becomes a proof-carrying `/syn/Str`. Held as a dedicated [`Subterm`] variant (not a `Prim`) because the result is a core term, never a core primitive.
+/// The literals the lowerer desugars to a `/syn` construction: a character becomes a proof-carrying `/syn/Char`, and a string becomes a proof-carrying `/syn/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Syn {
     Char(char),

@@ -2,7 +2,7 @@
 //!
 //! An infix operator elaborates to a projection of its `/syn` concept witness applied to the operands (`a + b` ≙ `Add/add(a, b)` — see `elaborate_infix`), so a goal report would spell `0 + 0` as `(witness2).0(0, 0)`: an anonymous witness projection no reader should have to decode. The fold reverses exactly that rebuild, recognizing the three forms the call reaches a report in — a still-unsolved witness metavariable, whose `WitnessOrigin` carries the operator symbol; a solved-and-substituted witness global, resolved back to its operator through the witness table and the concept's field roster; and an *abstract* witness, a `use` binder standing for a witness the caller will supply, resolved through the concept its declared type names.
 //!
-//! The abstract case is the one reduction cannot reach. Where the operand type is concrete the projection reduces to its primitive and prints infix without any of this, so the fold only earns its keep under a `use Add(A)` parameter — exactly where the reader has least else to go on.
+//! The abstract case is the one reduction cannot reach. Where the operand type is concrete the projection reduces to its intrinsic and prints infix without any of this, so the fold only earns its keep under a `use Add(A)` parameter — exactly where the reader has least else to go on.
 //!
 //! The folded term reintroduces the elaboration-transient `Infix` node (under [`Subterm::Transient`]) purely for observation: it only ever meets the printer, never checking, reduction, or erasure.
 
@@ -10,8 +10,8 @@ use {
     super::{Context, TermBuilders},
     curios_base::NumOp,
     curios_core::{
-        Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Prim, Proj, StructType, Subterm,
-        Term, UniverseInst, Visit,
+        Apply, Bound, Field, Free, Global, Intrinsic, Metavar, MetavarOrigin, Proj, StructType,
+        Subterm, Term, UniverseInst, Visit,
     },
     std::{collections::BTreeMap, rc::Rc},
 };
@@ -76,9 +76,9 @@ pub(crate) fn denoise_for_display(table: &Operators, binders: &BinderTypes, term
 
 /// The node-level fold. A substituted node is not descended into, so a folded call denoises its own operands before wrapping them.
 fn fold(table: &Operators, binders: &BinderTypes, term: &Term) -> Option<Term> {
-    // `a != b` elaborates as `BoolXor(<Eql call>, true)` — no `BoolNot` prim exists (`elaborate_infix`). Match the wrapper before the bare call so the pair folds to `!=` rather than to a stray xor around `==`.
-    if let Subterm::Prim(Prim::BoolXor(call, negate)) = &**term
-        && matches!(&**negate, Subterm::Prim(Prim::Bool(true)))
+    // `a != b` elaborates as `BoolXor(<Eql call>, true)` — no `BoolNot` intrinsic exists (`elaborate_infix`). Match the wrapper before the bare call so the pair folds to `!=` rather than to a stray xor around `==`.
+    if let Subterm::Intrinsic(Intrinsic::BoolXor(call, negate)) = &**term
+        && matches!(&**negate, Subterm::Intrinsic(Intrinsic::Bool(true)))
         && let Some((op, left, right)) = operator_call(table, binders, call)
     {
         let op = match op {

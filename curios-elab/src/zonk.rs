@@ -6,8 +6,8 @@ use {
     curios_base::{Grain, Span},
     curios_core::{
         Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
-        FuncType, Global, InductDecl, InductParam, InductType, Item, Let, LetBinding, Level,
-        LevelHead, Match, MetaId, Metavar, MetavarOrigin, Module, Nat, Prim, Proj, Rec, RecGroup,
+        FuncType, Global, InductDecl, InductParam, InductType, Intrinsic, Item, Let, LetBinding,
+        Level, LevelHead, Match, MetaId, Metavar, MetavarOrigin, Module, Nat, Proj, Rec, RecGroup,
         RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped, shift_universe_params,
@@ -998,7 +998,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         // Transients are consumed by `elaborate` before zonk ever runs.
         Subterm::Transient(_) => unreachable!("transient node survived elaboration into zonk"),
 
-        Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim)?),
+        Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(zonk_intrinsic(context, intrinsic)?),
 
         Subterm::Func(Func {
             telescope,
@@ -1193,198 +1193,314 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
     })
 }
 
-/// Zonk a primitive's term operands. Mirrors `traverse_prim`'s rebuild, but fallibly substitutes metavariable solutions rather than de Bruijn shifting.
-fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
-    Ok(match prim {
-        Prim::BoolType
-        | Prim::Bool(_)
-        | Prim::NatType
-        | Prim::Nat(Nat::Zero)
-        | Prim::ByteType
-        | Prim::Byte(_)
-        | Prim::IntType
-        | Prim::Int(_)
-        | Prim::FltType
-        | Prim::Flt(_)
-        | Prim::BinType(Grain::X)
-        | Prim::Bin(Grain::X, _)
-        | Prim::BinType(Grain::B)
-        | Prim::Bin(Grain::B, _)
-        | Prim::HandleType
-        | Prim::Handle(_) => prim.clone(),
+/// Zonk an intrinsic's term operands. Mirrors `traverse_intrinsic`'s rebuild, but fallibly substitutes metavariable solutions rather than de Bruijn shifting.
+fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic, Error> {
+    Ok(match intrinsic {
+        Intrinsic::BoolType
+        | Intrinsic::Bool(_)
+        | Intrinsic::NatType
+        | Intrinsic::Nat(Nat::Zero)
+        | Intrinsic::ByteType
+        | Intrinsic::Byte(_)
+        | Intrinsic::IntType
+        | Intrinsic::Int(_)
+        | Intrinsic::FltType
+        | Intrinsic::Flt(_)
+        | Intrinsic::BinType(Grain::X)
+        | Intrinsic::Bin(Grain::X, _)
+        | Intrinsic::BinType(Grain::B)
+        | Intrinsic::Bin(Grain::B, _)
+        | Intrinsic::HandleType
+        | Intrinsic::Handle(_) => intrinsic.clone(),
 
-        Prim::Nat(Nat::Succ(spine, inner)) => {
-            Prim::Nat(Nat::Succ(spine.clone(), zonk_term(context, inner)?))
+        Intrinsic::Nat(Nat::Succ(spine, inner)) => {
+            Intrinsic::Nat(Nat::Succ(spine.clone(), zonk_term(context, inner)?))
         }
 
-        Prim::NatEql(a, b) => Prim::NatEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::HandleEql(a, b) => Prim::HandleEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatNeq(a, b) => Prim::NatNeq(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatAdd(a, b) => Prim::NatAdd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatSub(a, b) => Prim::NatSub(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatMul(a, b) => Prim::NatMul(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatLt(a, b) => Prim::NatLt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatDiv(a, b) => Prim::NatDiv(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatRem(a, b) => Prim::NatRem(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatGt(a, b) => Prim::NatGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatLte(a, b) => Prim::NatLte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatGte(a, b) => Prim::NatGte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatAnd(a, b) => Prim::NatAnd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatOr(a, b) => Prim::NatOr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatXor(a, b) => Prim::NatXor(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatShl(a, b) => Prim::NatShl(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatShr(a, b) => Prim::NatShr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatRotl(a, b) => Prim::NatRotl(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatRotr(a, b) => Prim::NatRotr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::NatClz(a) => Prim::NatClz(zonk_term(context, a)?),
-        Prim::NatCtz(a) => Prim::NatCtz(zonk_term(context, a)?),
-        Prim::NatPopcnt(a) => Prim::NatPopcnt(zonk_term(context, a)?),
-        Prim::ByteToNat(t) => Prim::ByteToNat(zonk_term(context, t)?),
-        Prim::NatToByte(t) => Prim::NatToByte(zonk_term(context, t)?),
-        Prim::ByteEql(a, b) => Prim::ByteEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::ByteLt(a, b) => Prim::ByteLt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::ByteLte(a, b) => Prim::ByteLte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::ByteGt(a, b) => Prim::ByteGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::ByteGte(a, b) => Prim::ByteGte(zonk_term(context, a)?, zonk_term(context, b)?),
-
-        Prim::BoolAnd(a, b) => Prim::BoolAnd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BoolOr(a, b) => Prim::BoolOr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BoolXor(a, b) => Prim::BoolXor(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BoolEql(a, b) => Prim::BoolEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BoolNeq(a, b) => Prim::BoolNeq(zonk_term(context, a)?, zonk_term(context, b)?),
-
-        Prim::IntEql(a, b) => Prim::IntEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntNeq(a, b) => Prim::IntNeq(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntAdd(a, b) => Prim::IntAdd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntSub(a, b) => Prim::IntSub(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntMul(a, b) => Prim::IntMul(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntDiv(a, b) => Prim::IntDiv(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntRem(a, b) => Prim::IntRem(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntLt(a, b) => Prim::IntLt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntGt(a, b) => Prim::IntGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntLte(a, b) => Prim::IntLte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntGte(a, b) => Prim::IntGte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntAnd(a, b) => Prim::IntAnd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntOr(a, b) => Prim::IntOr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntXor(a, b) => Prim::IntXor(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntShl(a, b) => Prim::IntShl(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntShr(a, b) => Prim::IntShr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntRotl(a, b) => Prim::IntRotl(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntRotr(a, b) => Prim::IntRotr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IntClz(a) => Prim::IntClz(zonk_term(context, a)?),
-        Prim::IntCtz(a) => Prim::IntCtz(zonk_term(context, a)?),
-        Prim::IntPopcnt(a) => Prim::IntPopcnt(zonk_term(context, a)?),
-
-        Prim::FltAdd(a, b) => Prim::FltAdd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltSub(a, b) => Prim::FltSub(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltMul(a, b) => Prim::FltMul(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltDiv(a, b) => Prim::FltDiv(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltRem(a, b) => Prim::FltRem(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltEql(a, b) => Prim::FltEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltNeq(a, b) => Prim::FltNeq(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltLt(a, b) => Prim::FltLt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltGt(a, b) => Prim::FltGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltLte(a, b) => Prim::FltLte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltGte(a, b) => Prim::FltGte(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltMin(a, b) => Prim::FltMin(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltMax(a, b) => Prim::FltMax(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::FltCopysign(a, b) => {
-            Prim::FltCopysign(zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::NatEql(a, b) => {
+            Intrinsic::NatEql(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::HandleEql(a, b) => {
+            Intrinsic::HandleEql(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatNeq(a, b) => {
+            Intrinsic::NatNeq(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatAdd(a, b) => {
+            Intrinsic::NatAdd(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatSub(a, b) => {
+            Intrinsic::NatSub(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatMul(a, b) => {
+            Intrinsic::NatMul(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatLt(a, b) => Intrinsic::NatLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::NatDiv(a, b) => {
+            Intrinsic::NatDiv(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatRem(a, b) => {
+            Intrinsic::NatRem(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatGt(a, b) => Intrinsic::NatGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::NatLte(a, b) => {
+            Intrinsic::NatLte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatGte(a, b) => {
+            Intrinsic::NatGte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatAnd(a, b) => {
+            Intrinsic::NatAnd(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatOr(a, b) => Intrinsic::NatOr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::NatXor(a, b) => {
+            Intrinsic::NatXor(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatShl(a, b) => {
+            Intrinsic::NatShl(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatShr(a, b) => {
+            Intrinsic::NatShr(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatRotl(a, b) => {
+            Intrinsic::NatRotl(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatRotr(a, b) => {
+            Intrinsic::NatRotr(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::NatClz(a) => Intrinsic::NatClz(zonk_term(context, a)?),
+        Intrinsic::NatCtz(a) => Intrinsic::NatCtz(zonk_term(context, a)?),
+        Intrinsic::NatPopcnt(a) => Intrinsic::NatPopcnt(zonk_term(context, a)?),
+        Intrinsic::ByteToNat(t) => Intrinsic::ByteToNat(zonk_term(context, t)?),
+        Intrinsic::NatToByte(t) => Intrinsic::NatToByte(zonk_term(context, t)?),
+        Intrinsic::ByteEql(a, b) => {
+            Intrinsic::ByteEql(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::ByteLt(a, b) => {
+            Intrinsic::ByteLt(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::ByteLte(a, b) => {
+            Intrinsic::ByteLte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::ByteGt(a, b) => {
+            Intrinsic::ByteGt(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::ByteGte(a, b) => {
+            Intrinsic::ByteGte(zonk_term(context, a)?, zonk_term(context, b)?)
         }
 
-        Prim::FltNeg(t) => Prim::FltNeg(zonk_term(context, t)?),
-        Prim::FltAbs(t) => Prim::FltAbs(zonk_term(context, t)?),
-        Prim::FltSqrt(t) => Prim::FltSqrt(zonk_term(context, t)?),
-        Prim::FltFloor(t) => Prim::FltFloor(zonk_term(context, t)?),
-        Prim::FltCeil(t) => Prim::FltCeil(zonk_term(context, t)?),
-        Prim::FltTrunc(t) => Prim::FltTrunc(zonk_term(context, t)?),
-        Prim::FltNearest(t) => Prim::FltNearest(zonk_term(context, t)?),
+        Intrinsic::BoolAnd(a, b) => {
+            Intrinsic::BoolAnd(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BoolOr(a, b) => {
+            Intrinsic::BoolOr(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BoolXor(a, b) => {
+            Intrinsic::BoolXor(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BoolEql(a, b) => {
+            Intrinsic::BoolEql(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BoolNeq(a, b) => {
+            Intrinsic::BoolNeq(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
 
-        Prim::FltToLeBytes(t) => Prim::FltToLeBytes(zonk_term(context, t)?),
-        Prim::FltOfLeBytes(t) => Prim::FltOfLeBytes(zonk_term(context, t)?),
-        Prim::NatToInt(t) => Prim::NatToInt(zonk_term(context, t)?),
-        Prim::NatToFlt(t) => Prim::NatToFlt(zonk_term(context, t)?),
-        Prim::IntToNat(t) => Prim::IntToNat(zonk_term(context, t)?),
-        Prim::IntToFlt(t) => Prim::IntToFlt(zonk_term(context, t)?),
-        Prim::FltToNat(t) => Prim::FltToNat(zonk_term(context, t)?),
-        Prim::FltToInt(t) => Prim::FltToInt(zonk_term(context, t)?),
+        Intrinsic::IntEql(a, b) => {
+            Intrinsic::IntEql(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntNeq(a, b) => {
+            Intrinsic::IntNeq(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntAdd(a, b) => {
+            Intrinsic::IntAdd(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntSub(a, b) => {
+            Intrinsic::IntSub(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntMul(a, b) => {
+            Intrinsic::IntMul(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntDiv(a, b) => {
+            Intrinsic::IntDiv(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntRem(a, b) => {
+            Intrinsic::IntRem(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntLt(a, b) => Intrinsic::IntLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::IntGt(a, b) => Intrinsic::IntGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::IntLte(a, b) => {
+            Intrinsic::IntLte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntGte(a, b) => {
+            Intrinsic::IntGte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntAnd(a, b) => {
+            Intrinsic::IntAnd(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntOr(a, b) => Intrinsic::IntOr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::IntXor(a, b) => {
+            Intrinsic::IntXor(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntShl(a, b) => {
+            Intrinsic::IntShl(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntShr(a, b) => {
+            Intrinsic::IntShr(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntRotl(a, b) => {
+            Intrinsic::IntRotl(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntRotr(a, b) => {
+            Intrinsic::IntRotr(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IntClz(a) => Intrinsic::IntClz(zonk_term(context, a)?),
+        Intrinsic::IntCtz(a) => Intrinsic::IntCtz(zonk_term(context, a)?),
+        Intrinsic::IntPopcnt(a) => Intrinsic::IntPopcnt(zonk_term(context, a)?),
 
-        Prim::BinLen(Grain::X, t) => Prim::BinLen(Grain::X, zonk_term(context, t)?),
-        Prim::BinEql(Grain::X, a, b) => {
-            Prim::BinEql(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::FltAdd(a, b) => {
+            Intrinsic::FltAdd(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinGet(Grain::X, a, b) => {
-            Prim::BinGet(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::FltSub(a, b) => {
+            Intrinsic::FltSub(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinAppend(Grain::X, a, b) => {
-            Prim::BinAppend(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::FltMul(a, b) => {
+            Intrinsic::FltMul(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinSlice(Grain::X, a, b, c) => Prim::BinSlice(
+        Intrinsic::FltDiv(a, b) => {
+            Intrinsic::FltDiv(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltRem(a, b) => {
+            Intrinsic::FltRem(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltEql(a, b) => {
+            Intrinsic::FltEql(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltNeq(a, b) => {
+            Intrinsic::FltNeq(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltLt(a, b) => Intrinsic::FltLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::FltGt(a, b) => Intrinsic::FltGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::FltLte(a, b) => {
+            Intrinsic::FltLte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltGte(a, b) => {
+            Intrinsic::FltGte(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltMin(a, b) => {
+            Intrinsic::FltMin(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltMax(a, b) => {
+            Intrinsic::FltMax(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::FltCopysign(a, b) => {
+            Intrinsic::FltCopysign(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+
+        Intrinsic::FltNeg(t) => Intrinsic::FltNeg(zonk_term(context, t)?),
+        Intrinsic::FltAbs(t) => Intrinsic::FltAbs(zonk_term(context, t)?),
+        Intrinsic::FltSqrt(t) => Intrinsic::FltSqrt(zonk_term(context, t)?),
+        Intrinsic::FltFloor(t) => Intrinsic::FltFloor(zonk_term(context, t)?),
+        Intrinsic::FltCeil(t) => Intrinsic::FltCeil(zonk_term(context, t)?),
+        Intrinsic::FltTrunc(t) => Intrinsic::FltTrunc(zonk_term(context, t)?),
+        Intrinsic::FltNearest(t) => Intrinsic::FltNearest(zonk_term(context, t)?),
+
+        Intrinsic::FltToLeBytes(t) => Intrinsic::FltToLeBytes(zonk_term(context, t)?),
+        Intrinsic::FltOfLeBytes(t) => Intrinsic::FltOfLeBytes(zonk_term(context, t)?),
+        Intrinsic::NatToInt(t) => Intrinsic::NatToInt(zonk_term(context, t)?),
+        Intrinsic::NatToFlt(t) => Intrinsic::NatToFlt(zonk_term(context, t)?),
+        Intrinsic::IntToNat(t) => Intrinsic::IntToNat(zonk_term(context, t)?),
+        Intrinsic::IntToFlt(t) => Intrinsic::IntToFlt(zonk_term(context, t)?),
+        Intrinsic::FltToNat(t) => Intrinsic::FltToNat(zonk_term(context, t)?),
+        Intrinsic::FltToInt(t) => Intrinsic::FltToInt(zonk_term(context, t)?),
+
+        Intrinsic::BinLen(Grain::X, t) => Intrinsic::BinLen(Grain::X, zonk_term(context, t)?),
+        Intrinsic::BinEql(Grain::X, a, b) => {
+            Intrinsic::BinEql(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BinGet(Grain::X, a, b) => {
+            Intrinsic::BinGet(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BinAppend(Grain::X, a, b) => {
+            Intrinsic::BinAppend(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BinSlice(Grain::X, a, b, c) => Intrinsic::BinSlice(
             Grain::X,
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::BinConcat(Grain::X, terms) => Prim::BinConcat(Grain::X, zonk_terms(context, terms)?),
-        Prim::BinLen(Grain::B, t) => Prim::BinLen(Grain::B, zonk_term(context, t)?),
-        Prim::BinEql(Grain::B, a, b) => {
-            Prim::BinEql(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::BinConcat(Grain::X, terms) => {
+            Intrinsic::BinConcat(Grain::X, zonk_terms(context, terms)?)
         }
-        Prim::BinGet(Grain::B, a, b) => {
-            Prim::BinGet(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::BinLen(Grain::B, t) => Intrinsic::BinLen(Grain::B, zonk_term(context, t)?),
+        Intrinsic::BinEql(Grain::B, a, b) => {
+            Intrinsic::BinEql(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinAppend(Grain::B, a, b) => {
-            Prim::BinAppend(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::BinGet(Grain::B, a, b) => {
+            Intrinsic::BinGet(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinSlice(Grain::B, a, b, c) => Prim::BinSlice(
+        Intrinsic::BinAppend(Grain::B, a, b) => {
+            Intrinsic::BinAppend(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::BinSlice(Grain::B, a, b, c) => Intrinsic::BinSlice(
             Grain::B,
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::BinConcat(Grain::B, terms) => Prim::BinConcat(Grain::B, zonk_terms(context, terms)?),
+        Intrinsic::BinConcat(Grain::B, terms) => {
+            Intrinsic::BinConcat(Grain::B, zonk_terms(context, terms)?)
+        }
 
-        Prim::LstType(t) => Prim::LstType(zonk_term(context, t)?),
-        Prim::Lst(elem, elems) => Prim::Lst(zonk_term(context, elem)?, zonk_terms(context, elems)?),
-        Prim::LstLen(a, b) => Prim::LstLen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::LstGet(a, b, c) => Prim::LstGet(
+        Intrinsic::LstType(t) => Intrinsic::LstType(zonk_term(context, t)?),
+        Intrinsic::Lst(elem, elems) => {
+            Intrinsic::Lst(zonk_term(context, elem)?, zonk_terms(context, elems)?)
+        }
+        Intrinsic::LstLen(a, b) => {
+            Intrinsic::LstLen(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::LstGet(a, b, c) => Intrinsic::LstGet(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::LstAppend(a, b, c) => Prim::LstAppend(
+        Intrinsic::LstAppend(a, b, c) => Intrinsic::LstAppend(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::LstSlice(a, b, c, d) => Prim::LstSlice(
+        Intrinsic::LstSlice(a, b, c, d) => Intrinsic::LstSlice(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
             zonk_term(context, d)?,
         ),
-        Prim::LstConcat(ty, operands) => {
-            Prim::LstConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
+        Intrinsic::LstConcat(ty, operands) => {
+            Intrinsic::LstConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
         }
-        Prim::LstMap(a, b, lst, f) => Prim::LstMap(
+        Intrinsic::LstMap(a, b, lst, f) => Intrinsic::LstMap(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, lst)?,
             zonk_term(context, f)?,
         ),
 
-        Prim::ProcExit(code) => Prim::ProcExit(zonk_term(context, code)?),
-        Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
-        Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::CellSet(a, b, c) => Prim::CellSet(
+        Intrinsic::ProcExit(code) => Intrinsic::ProcExit(zonk_term(context, code)?),
+        Intrinsic::CellType(a) => Intrinsic::CellType(zonk_term(context, a)?),
+        Intrinsic::Cell(a, b) => Intrinsic::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::CellSet(a, b, c) => Intrinsic::CellSet(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::CellGet(a, b) => Prim::CellGet(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoType(a) => Prim::IoType(zonk_term(context, a)?),
-        Prim::IoPure(a, b) => Prim::IoPure(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoBind(a, b, action, f) => Prim::IoBind(
+        Intrinsic::CellGet(a, b) => {
+            Intrinsic::CellGet(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IoType(a) => Intrinsic::IoType(zonk_term(context, a)?),
+        Intrinsic::IoPure(a, b) => {
+            Intrinsic::IoPure(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Intrinsic::IoBind(a, b, action, f) => Intrinsic::IoBind(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, action)?,

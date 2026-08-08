@@ -209,7 +209,7 @@ pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
             .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
             .or(parse_type())
             .or(parse_prop())
-            .or(parse_prim())
+            .or(parse_intrinsic())
             .or(parse_tuple_type())
             .or(parse_empty_tuple())
             .or(parse_tuple())

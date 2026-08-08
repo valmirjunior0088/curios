@@ -1,5 +1,5 @@
 use {
-    super::{Prim, Subterm, Term},
+    super::{Intrinsic, Subterm, Term},
     num_bigint::BigUint,
     num_traits::{ToPrimitive, Zero},
     std::fmt,
@@ -30,7 +30,7 @@ impl Nat {
         if value.is_zero() {
             Nat::Zero
         } else {
-            Nat::Succ(value, Subterm::Prim(Prim::Nat(Nat::Zero)).into())
+            Nat::Succ(value, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)).into())
         }
     }
 
@@ -38,7 +38,7 @@ impl Nat {
         match self {
             Nat::Zero => Some(BigUint::zero()),
             Nat::Succ(spine, inner) => match inner.as_ref() {
-                Subterm::Prim(Prim::Nat(Nat::Zero)) => Some(spine.clone()),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Some(spine.clone()),
                 _ => None,
             },
         }
@@ -86,10 +86,12 @@ impl Nat {
         ))
     }
 
-    /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck prim — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.
+    /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck intrinsic — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.
     pub fn decompose(term: &Term) -> (BigUint, Term) {
         match &**term {
-            Subterm::Prim(Prim::Nat(Nat::Succ(floor, inner))) => (floor.clone(), inner.clone()),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {
+                (floor.clone(), inner.clone())
+            }
             _ => (BigUint::zero(), term.clone()),
         }
     }
@@ -98,13 +100,13 @@ impl Nat {
     pub(crate) fn rebuild(floor: BigUint, inner: Term) -> Term {
         match floor.is_zero() {
             true => inner,
-            false => Term::prim(Prim::Nat(Nat::Succ(floor, inner))),
+            false => Term::intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))),
         }
     }
 
     /// Whether a reduced term is literal zero — the identity floor.
     pub fn is_zero(term: &Term) -> bool {
-        matches!(&**term, Subterm::Prim(Prim::Nat(Nat::Zero)))
+        matches!(&**term, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
     }
 }
 

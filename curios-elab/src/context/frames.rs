@@ -378,7 +378,7 @@ impl Frames {
         self.suppress_refinements
     }
 
-    /// Flip the refinement-suppression flag, returning the previous state — the bracket primitive for `Context::with_suppressed_refinements`.
+    /// Flip the refinement-suppression flag, returning the previous state — the bracket intrinsic for `Context::with_suppressed_refinements`.
     pub(crate) fn set_refinements_suppressed(&mut self, suppressed: bool) -> bool {
         std::mem::replace(&mut self.suppress_refinements, suppressed)
     }

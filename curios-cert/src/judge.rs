@@ -2,7 +2,7 @@
 //!
 //! # Why some analyses are shared and others are written twice
 //!
-//! [`Reducer`](curios_core::Reducer) already draws this line for primitive folding: the arithmetic is algebra over the representation and belongs in this crate, while how far an operand reduces before a fold sees it is a strategy each side supplies for itself. The traits here extend that line to whole analyses, and the test for which side an analysis falls on is:
+//! [`Reducer`](curios_core::Reducer) already draws this line for intrinsic folding: the arithmetic is algebra over the representation and belongs in this crate, while how far an operand reduces before a fold sees it is a strategy each side supplies for itself. The traits here extend that line to whole analyses, and the test for which side an analysis falls on is:
 //!
 //! > Do the two checkers see different inputs?
 //!
