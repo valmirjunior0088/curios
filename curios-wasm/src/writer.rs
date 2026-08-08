@@ -93,6 +93,12 @@ where
         self.buffer.push_leb128_unsigned(sub)
     }
 
+    /// Emit the `0xfc` miscellaneous-opcode prefix and its sub-opcode (the saturating truncations).
+    fn fc_op(&mut self, sub: u64) -> Result<()> {
+        self.buffer.push_byte(0xfc)?;
+        self.buffer.push_leb128_unsigned(sub)
+    }
+
     /// A GC op with one type operand (`struct.new`, `array.get`, …).
     fn gc_type_op(&mut self, sub: u64, type_name: &TypeName) -> Result<()> {
         self.gc_op(sub)?;
@@ -579,8 +585,7 @@ where
                 source_type,
                 target_type,
             } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(24)?;
+                self.gc_op(24)?;
                 self.write_cast_flags(source_type, target_type)?;
 
                 self.buffer
@@ -594,8 +599,7 @@ where
                 source_type,
                 target_type,
             } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(25)?;
+                self.gc_op(25)?;
                 self.write_cast_flags(source_type, target_type)?;
 
                 self.buffer
@@ -870,38 +874,14 @@ where
             Instr::I64Extend8S => self.buffer.push_byte(0xc2)?,
             Instr::I64Extend16S => self.buffer.push_byte(0xc3)?,
             Instr::I64Extend32S => self.buffer.push_byte(0xc4)?,
-            Instr::I32TruncSatF32S => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(0)?;
-            }
-            Instr::I32TruncSatF32U => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(1)?;
-            }
-            Instr::I32TruncSatF64S => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(2)?;
-            }
-            Instr::I32TruncSatF64U => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(3)?;
-            }
-            Instr::I64TruncSatF32S => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(4)?;
-            }
-            Instr::I64TruncSatF32U => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(5)?;
-            }
-            Instr::I64TruncSatF64S => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(6)?;
-            }
-            Instr::I64TruncSatF64U => {
-                self.buffer.push_byte(0xfc)?;
-                self.buffer.push_leb128_unsigned(7)?;
-            }
+            Instr::I32TruncSatF32S => self.fc_op(0)?,
+            Instr::I32TruncSatF32U => self.fc_op(1)?,
+            Instr::I32TruncSatF64S => self.fc_op(2)?,
+            Instr::I32TruncSatF64U => self.fc_op(3)?,
+            Instr::I64TruncSatF32S => self.fc_op(4)?,
+            Instr::I64TruncSatF32U => self.fc_op(5)?,
+            Instr::I64TruncSatF64S => self.fc_op(6)?,
+            Instr::I64TruncSatF64U => self.fc_op(7)?,
         }
 
         Ok(())
