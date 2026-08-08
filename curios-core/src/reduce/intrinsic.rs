@@ -1149,6 +1149,14 @@ pub fn reduce_intrinsic(
                         span,
                     });
             }
+            // The cons head's bit: `get(append(b[], bit), 0) = bit` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(b[], bit)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
+            if let Subterm::Intrinsic(Intrinsic::BinAppend(Grain::B, base, bit)) = &*bin
+                && let Subterm::Intrinsic(Intrinsic::Bin(Grain::B, b)) = &**base
+                && b.is_empty()
+                && let Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) = &*index_reduced
+            {
+                return reducer.reduce(bit.clone()).map(Term::unwrap_or_clone);
+            }
             if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
@@ -1552,8 +1560,9 @@ pub fn reduce_intrinsic(
 #[cfg(test)]
 mod tests {
     use {
-        super::{Reducer, compare_nat, from_ordering},
-        crate::{Intrinsic, Nat, ReduceError, Term},
+        super::{Reducer, compare_nat, from_ordering, reduce_intrinsic},
+        crate::{Free, Intrinsic, Nat, ReduceError, Subterm, Term},
+        curios_base::{Grain, PackedBin},
     };
 
     /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
@@ -1571,6 +1580,20 @@ mod tests {
 
     fn lit(n: u32) -> Term {
         Term::intrinsic(Intrinsic::Nat(Nat::new(n as usize)))
+    }
+
+    // Regression: `get(append(b[], x), 0)` must reduce to `x` through its own base-case arm — the cons peel's symbolic head chunk IS `append(b[], x)`, so without that arm the rewrite rebuilt the redex it came from until the step budget exhausted.
+    #[test]
+    fn bit_get_of_a_symbolic_cons_head_is_the_bit() {
+        let bit = Term::free_var(&Free::local(0, Some("bit")));
+        let empty: Term = Subterm::Intrinsic(Intrinsic::Bin(Grain::B, PackedBin::empty())).into();
+        let cons = Term::intrinsic(Intrinsic::bin_append(Grain::B, empty, bit.clone()));
+        let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+        let get = Intrinsic::bin_get(Grain::B, cons, zero);
+
+        let reduced = reduce_intrinsic(&mut Inert, &get).expect("reduces");
+
+        assert_eq!(Term::from(reduced), bit);
     }
 
     // Soundness gate: the structural body agrees with the host ordering on every pair of literals — the decidable closed case where the two routes into a `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
