@@ -1,29 +1,6 @@
 //! Production-path property gates for the arena vertical: partial-evaluation collapse of the format machinery, pure computation folding around ordered host effects, and the worker/wrapper rebase at stack-breaking depth. Properties, never bytes.
 
-use {
-    super::run,
-    crate::DEFAULT_STEP_BUDGET,
-    curios_pipeline::{Stage, compile_entrypoint},
-    curios_text::{Entrypoint, RootSource},
-};
-
-/// Compile through production and capture the optimized Cont printout.
-fn cont_optm(source: &str) -> String {
-    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    let mut printed = String::new();
-    let (_module, _foreigns) = compile_entrypoint(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |stage| {
-            if let Stage::ContOptm(module) = stage {
-                printed = module.to_string();
-            }
-        },
-    )
-    .expect("fixture compiles");
-    printed
-}
+use super::{cont_optm, run};
 
 /// The partial-evaluation gate: `Fmt/print("literal")` with constant arguments collapses at the arena level — the emitted Cont carries no `/std/Fmt/` or `/std/Parse/` machinery, just the residual host call chain.
 #[test]

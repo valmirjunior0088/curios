@@ -1,31 +1,6 @@
 //! Codegen parity for concept-dispatched operators (the witness-projection folding gate). No dedicated folding rule exists in core — none is needed: after erasure a witness is a bakeable value (a one-method dictionary collapses to its bare method field, a many-method one is a tuple of methods), so its resolved instance argument is a specialization candidate. Closure specialization bakes it into the caller, the `Tpl.get`s (for a tuple witness) fold to the known methods, and the cont inliner beta-reduces the chain down to the bare intrinsic instruction. These tests pin that pipeline behavior: a concept method call at a concrete intrinsic type must emit the *same operations* as calling the intrinsic wrapper directly. The generated names differ — the concept path threads the witness through an extra specialization, decorating clone names with its key — but that provenance names no instruction, so the emitted operations match exactly. These gate (and then guard) the infix rewrite that routes every operator through the concepts.
 
-use {
-    curios_pipeline::{Stage, compile_entrypoint},
-    curios_text::{Entrypoint, RootSource},
-};
-
-/// The optimized cont-stage dump for `source`.
-///
-/// Handed to [`operations`] verbatim rather than digit-normalized first. Entropy-derived name counters (`~v37`, `~f26`) do differ between the compared programs, but [`operations`] discards names entirely, and the digits that survive into an operation token — a projection's index, a concatenation's arity — are its semantics, so collapsing them would make `TplGet(0)` and `TplGet(1)` compare equal.
-fn cont_optm(source: &str) -> String {
-    let entrypoint = source.parse::<Entrypoint>().expect("parity source parses");
-
-    let mut dump = String::new();
-    compile_entrypoint(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |stage| {
-            if let Stage::ContOptm(module) = stage {
-                dump = module.to_string();
-            }
-        },
-    )
-    .expect("parity source compiles");
-
-    dump
-}
+use crate::tests::cont_optm;
 
 /// `Add/add(x, 1)` at `Nat` — dictionary resolved from the sys witness — emits the same operations as the direct intrinsic wrapper call, over a runtime (non-constant-foldable) operand. `Add` is a one-method concept, so its witness erases to the bare `Nat/add` closure; the resolved instance is baked in by specialization and inlined to `Nat.add`. The clone names carry the extra witness key, so the dumps are not byte-identical — but the emitted operations are.
 #[test]
@@ -118,6 +93,8 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
 }
 
 /// The instructions a cont dump emits, sorted — `NatAdd`, `TplGet(0)`, `BinLen(X)`, and the qualified `cell.Set` / `intrinsic.LstMap` forms — with the generated names that wire them together and the operands they read left out. Sorted because the two programs may emit their top-level closures in a different order while their bodies agree, which is the whole point of comparing operations rather than dumps.
+///
+/// The dump arrives verbatim, never digit-normalized. Entropy-derived name counters (`~v37`, `~f26`) do differ between the compared programs, but the names are discarded entirely, and the digits that survive into an operation token — a projection's index, a concatenation's arity — are its semantics, so collapsing them would make `TplGet(0)` and `TplGet(1)` compare equal.
 ///
 /// `curios_cont`'s `Display` prints an instruction as its `Debug` spelling immediately followed by its bracketed operand list, so each `[` is a candidate — but the shape alone is not enough to identify one, which is why [`operation_ending_at`] decides on position instead.
 ///

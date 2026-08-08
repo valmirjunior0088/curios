@@ -3,7 +3,8 @@
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail` labels and is not a dispatcher.
 
 use {
-    curios_pipeline::{Stage, compile_entrypoint},
+    crate::tests::cont_optm,
+    curios_pipeline::compile_entrypoint,
     curios_runtime::{ForeignBindings, MockHost, run_bytes, shared_engine},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
@@ -122,26 +123,6 @@ fn compile_raw(source: &str) -> Module {
 /// The raw module's WAT text. Not digit-normalized: literal constants and exact token counts are load-bearing here.
 fn wat(source: &str) -> String {
     compile_raw(source).to_string()
-}
-
-/// The optimized high-CPS dump, for the cont-level gates.
-fn cont_optm_text(source: &str) -> String {
-    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-
-    let mut dump = String::new();
-    compile_entrypoint(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |stage| {
-            if let Stage::ContOptm(module) = stage {
-                dump = module.to_string();
-            }
-        },
-    )
-    .expect("fixture compiles");
-
-    dump
 }
 
 /// The lines of `wat` mentioning `needle` that are not the `Io` carrier's own.
@@ -315,7 +296,7 @@ fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
 /// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
-    let cont = cont_optm_text(LCG);
+    let cont = cont_optm(LCG);
     assert!(
         cont.contains("NatRem") && cont.contains("65537"),
         "the kernel arithmetic must survive into the optimized cont module",

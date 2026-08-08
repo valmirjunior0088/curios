@@ -34,7 +34,7 @@ mod toml;
 mod universes;
 
 use {
-    curios_pipeline::compile_entrypoint,
+    curios_pipeline::{Stage, compile_entrypoint},
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
@@ -68,4 +68,24 @@ fn error(source: &str) -> String {
         Ok(_) => panic!("expected an error, program succeeded"),
         Err(error) => error.to_string(),
     }
+}
+
+/// Compile through production and capture the optimized Cont printout.
+fn cont_optm(source: &str) -> String {
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
+
+    let mut printed = String::new();
+    compile_entrypoint(
+        crate::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        RootSource::none(),
+        |stage| {
+            if let Stage::ContOptm(module) = stage {
+                printed = module.to_string();
+            }
+        },
+    )
+    .expect("fixture compiles");
+
+    printed
 }
