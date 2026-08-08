@@ -47,12 +47,13 @@ pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
             let mut alternatives = Vec::new();
             for upper in parts(&constraint.upper) {
                 match bound(&nodes, lower, upper) {
-                    // Nothing can make this clause true, so nothing can make the set true.
+                    // This alternative can never hold, so it leaves the disjunction.
                     Bound::Impossible => continue,
                     Bound::Holds => alternatives.push(None),
                     Bound::Difference(arc) => alternatives.push(Some(arc)),
                 }
             }
+            // Every alternative was impossible: nothing can make this clause true, so nothing can make the set true.
             if alternatives.is_empty() {
                 return false;
             }
