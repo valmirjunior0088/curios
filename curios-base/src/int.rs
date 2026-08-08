@@ -1,5 +1,5 @@
 use {
-    num_bigint::BigInt,
+    num_bigint::{BigInt, BigUint},
     num_traits::{FromPrimitive, ToPrimitive, Zero},
     std::{
         fmt,
@@ -28,6 +28,11 @@ impl Int {
 
     pub fn to_i32(&self) -> Option<i32> {
         self.value.to_i32()
+    }
+
+    /// The same number as a `BigUint`; `None` on a negative, which no natural equals.
+    pub fn to_big_uint(&self) -> Option<BigUint> {
+        self.value.to_biguint()
     }
 
     /// `self << amount` as `self * 2^amount`, and `self >> amount` as the arithmetic (floor) shift `num-bigint` provides — both unbounded. `None` when `amount` is negative or too large to be a shift count, leaving the op a neutral term rather than fabricating a value.

@@ -4,9 +4,7 @@ use {
         Intrinsic, Nat, Peel, Subterm, Term, normalize_concat, peel_bin, peel_first_atom,
         peel_first_elem,
     },
-    curios_base::{
-        Grain, Int, PackedBin, int_rotl, int_rotr, int_to_nat, nat_rotl, nat_rotr, nat_to_int,
-    },
+    curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };
@@ -867,27 +865,29 @@ pub fn reduce_intrinsic(
             let inner = reducer.reduce_forced(inner.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::FltOfLeBytes(inner)))
         }
-        // The conversions are the shared 32-bit carrier-bit reinterpretation (`curios_base::scalar`) — the one definition ersd's evaluator also folds with — declining only a literal beyond the u32/i32 view. 30/31-bitness exists solely as `into_wasm`'s carrier traps, never here.
+        // The conversions preserve the number, never the bits — a bit view belongs to explicit `Bin` casts. `Nat/to_int` is total: ℕ embeds in ℤ, and both are unbounded here. The runtime's carrier-range traps stay where they always were, at the `into_wasm` boundary.
         Intrinsic::NatToInt(inner) => reduce_nat_unary(
             reducer,
             inner,
-            |v| {
-                Some(Intrinsic::Int(Int::new(nat_to_int(
-                    v.to_big_uint()?.to_u32()?,
-                ))))
-            },
+            |v| Some(Intrinsic::Int(Int::new(v.to_big_uint()?))),
             Intrinsic::NatToInt,
         ),
         // Opaque at the type level, like every `Flt` operation: constructing a float *is* float semantics.
         Intrinsic::NatToFlt(inner) => {
             reduce_nat_unary(reducer, inner, |_| None, Intrinsic::NatToFlt)
         }
-        Intrinsic::IntToNat(inner) => reduce_int_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Nat(Nat::new(int_to_nat(v.to_i32()?)))),
-            Intrinsic::IntToNat,
-        ),
+        // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. A symbolic operand rebuilds the neutral term.
+        Intrinsic::IntToNat(inner) => {
+            let span = inner.span();
+            let inner = reducer.reduce_forced(inner.clone())?;
+            match inner.as_int() {
+                Some(value) => match value.to_big_uint() {
+                    Some(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
+                    None => Err(ReduceError::IntToNatNegative { value, span }),
+                },
+                None => Ok(Subterm::Intrinsic(Intrinsic::IntToNat(inner))),
+            }
+        }
         Intrinsic::IntToFlt(inner) => {
             reduce_int_unary(reducer, inner, |_| None, Intrinsic::IntToFlt)
         }
@@ -1561,7 +1561,7 @@ mod tests {
     use {
         super::{Reducer, compare_nat, from_ordering, reduce_intrinsic},
         crate::{Free, Intrinsic, Nat, ReduceError, Subterm, Term},
-        curios_base::{Grain, Int, PackedBin, int_to_nat, nat_to_int},
+        curios_base::{Grain, Int, PackedBin},
     };
 
     /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
@@ -1595,33 +1595,42 @@ mod tests {
         assert_eq!(Term::from(reduced), bit);
     }
 
-    // Soundness gate: the `Nat`/`Int` conversion folds are the shared 32-bit reinterpretation (`curios_base::scalar`), the definition ersd's evaluator folds with — including the samples the leftover i31 fold used to wrap at bit 30/31.
+    // Soundness gate: the conversions preserve the number. `Nat/to_int` folds every literal — ℕ embeds in ℤ, both unbounded here — and `Int/to_nat` folds a non-negative to the same value and reports a negative like a zero divisor, never wrapping bits.
     #[test]
-    fn conversion_folds_are_the_shared_reinterpretation() {
+    fn conversion_folds_preserve_the_number() {
         for n in [
-            0u32,
+            0u64,
             1,
             0x3FFF_FFFF,
             0x4000_0000,
             0x7FFF_FFFF,
             0x8000_0000,
-            u32::MAX,
+            0xFFFF_FFFF,
+            0x1_0000_0000,
         ] {
             let nat = Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
             let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::NatToInt(nat)).expect("reduces");
             assert_eq!(
                 reduced,
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(nat_to_int(n)))),
-                "Nat/to_int diverged from the shared reinterpretation on {n}",
+                Subterm::Intrinsic(Intrinsic::Int(Int::new(n))),
+                "Nat/to_int changed the number on {n}",
             );
         }
-        for i in [0i32, 1, -1, 0x3FFF_FFFF, -0x4000_0000, i32::MAX, i32::MIN] {
+        for i in [0i64, 1, 0x3FFF_FFFF, 0x7FFF_FFFF, 0x1_0000_0000] {
             let int = Term::intrinsic(Intrinsic::Int(Int::new(i)));
             let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int)).expect("reduces");
             assert_eq!(
                 reduced,
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(int_to_nat(i)))),
-                "Int/to_nat diverged from the shared reinterpretation on {i}",
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(i as u64))),
+                "Int/to_nat changed the number on {i}",
+            );
+        }
+        for i in [-1i64, -0x4000_0000, i32::MIN as i64, i64::MIN] {
+            let int = Term::intrinsic(Intrinsic::Int(Int::new(i)));
+            let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int));
+            assert!(
+                matches!(reduced, Err(ReduceError::IntToNatNegative { .. })),
+                "Int/to_nat failed to report the negative {i}",
             );
         }
     }

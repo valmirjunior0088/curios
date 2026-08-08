@@ -4,7 +4,7 @@ pub use intrinsic::*;
 use {
     super::{Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
-    curios_base::Span,
+    curios_base::{Int, Span},
     std::sync::Arc,
 };
 
@@ -53,6 +53,11 @@ pub enum ReduceError {
     /// A `Nat`/`Int` division whose divisor reduced to literal zero — mathematically undefined, so reported like [`ReduceError::BinGetOutOfBounds`] rather than panicking the fold. (Runtime *range* limits, by contrast, never error at the type level: `Nat`/`Int` folds are unbounded there.)
     DivisionByZero {
         kind: &'static str,
+        span: Option<Span>,
+    },
+    /// An `Int/to_nat` whose operand reduced to a negative literal — a value no natural holds, so it is reported like [`ReduceError::DivisionByZero`] rather than folded by bit reinterpretation.
+    IntToNatNegative {
+        value: Int,
         span: Option<Span>,
     },
     Universe(UniverseError),

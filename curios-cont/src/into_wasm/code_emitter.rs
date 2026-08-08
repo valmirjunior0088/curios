@@ -932,7 +932,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             ),
             CpsIntrinsicOp::NatToInt => {
                 let operand = &args[0];
-                // The conversion is a carrier-bit reinterpretation; a `Nat` at or above 2^30 has no signed-i31 representation, so it traps at the boundary rather than silently reloading negative.
+                // The conversion preserves the number: below 2^30 the i31 bits already spell the same value, and a `Nat` at or above it has no signed-i31 `Int` holding it, so it traps at the boundary rather than silently reloading negative.
                 let local_name = self.context.push_local(
                     "nat_to_int",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -964,7 +964,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             ),
             CpsIntrinsicOp::IntToNat => {
                 let operand = &args[0];
-                // The conversion is a carrier-bit reinterpretation; a negative `Int` maps to a `Nat` at or above 2^31, which has no i31 representation, so it traps at the boundary rather than silently dropping the sign bit.
+                // The conversion preserves the number: a negative `Int` is a value no `Nat` holds, so it traps at the boundary rather than silently dropping the sign bit.
                 let local_name = self.context.push_local(
                     "int_to_nat",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),

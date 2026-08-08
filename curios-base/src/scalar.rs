@@ -113,14 +113,14 @@ pub fn int_rem(left: i32, right: i32) -> Result<i32, DivTrap> {
     }
 }
 
-/// `Nat` to `Int` is a carrier-bit reinterpretation.
-pub fn nat_to_int(value: u32) -> i32 {
-    value as i32
+/// `Nat` to `Int` preserving the number; `None` traps above `i32::MAX`, where no `i32` holds the same value. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
+pub fn nat_to_int(value: u32) -> Option<i32> {
+    i32::try_from(value).ok()
 }
 
-/// `Int` to `Nat` is a carrier-bit reinterpretation.
-pub fn int_to_nat(value: i32) -> u32 {
-    value as u32
+/// `Int` to `Nat` preserving the number; `None` traps on a negative, which no natural equals.
+pub fn int_to_nat(value: i32) -> Option<u32> {
+    u32::try_from(value).ok()
 }
 
 /// Truncate to `u32`; `None` traps outside `(-1, 2^32)` or on a non-finite input.

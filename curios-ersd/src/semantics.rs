@@ -445,9 +445,9 @@ impl Semantics {
 
                 HandleEql => Constant::Bool(io(0)? == io(1)?),
 
-                NatToInt => Constant::Int(nat_to_int(nat(0)?)),
+                NatToInt => return Some(fold_nat_to_int(nat(0)?)),
                 NatToFlt => Constant::Flt(Flt::from_f32(nat(0)? as f32)),
-                IntToNat => Constant::Nat(int_to_nat(int(0)?)),
+                IntToNat => return Some(fold_int_to_nat(int(0)?)),
                 IntToFlt => Constant::Flt(Flt::from_f32(int(0)? as f32)),
                 FltToNat => return Some(fold_flt_to_nat(flt(0)?)),
                 FltToInt => return Some(fold_flt_to_int(flt(0)?)),
@@ -557,6 +557,20 @@ fn fold_min(left: Flt, right: Flt) -> Option<Flt> {
 
 fn fold_max(left: Flt, right: Flt) -> Option<Flt> {
     flt_max(left.to_f32(), right.to_f32()).map(Flt::from_f32)
+}
+
+/// `Nat` to `Int` preserving the number, trapping above `i32::MAX`.
+fn fold_nat_to_int(value: u32) -> Result<Constant, TrapKind> {
+    nat_to_int(value)
+        .map(Constant::Int)
+        .ok_or(TrapKind::ConversionRange)
+}
+
+/// `Int` to `Nat` preserving the number, trapping on a negative.
+fn fold_int_to_nat(value: i32) -> Result<Constant, TrapKind> {
+    int_to_nat(value)
+        .map(Constant::Nat)
+        .ok_or(TrapKind::ConversionRange)
 }
 
 fn fold_flt_to_nat(value: Flt) -> Result<Constant, TrapKind> {

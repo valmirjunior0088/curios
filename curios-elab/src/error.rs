@@ -66,6 +66,9 @@ pub enum Error {
     DivisionByZero {
         kind: &'static str,
     },
+    IntToNatNegative {
+        value: Box<Int>,
+    },
     UniverseInconsistency {
         lower: Level,
         upper: Level,
@@ -434,6 +437,10 @@ impl Error {
             ReduceError::DivisionByZero { kind, span } => {
                 Error::DivisionByZero { kind }.at_opt(span)
             }
+            ReduceError::IntToNatNegative { value, span } => Error::IntToNatNegative {
+                value: Box::new(value),
+            }
+            .at_opt(span),
             ReduceError::Universe(error) => Error::from(error),
         }
     }
@@ -1794,6 +1801,9 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::DivisionByZero { kind } => {
                 write!(f, "division by zero in {kind}")
+            }
+            Error::IntToNatNegative { value } => {
+                write!(f, "Int/to_nat of {value}, a value no Nat holds")
             }
             Error::ByteLiteralOutOfRange { value } => {
                 write!(f, "Byte literal {value} is out of range (expected 0..=255)")
