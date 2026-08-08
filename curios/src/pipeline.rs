@@ -7,15 +7,25 @@ use {
     std::path::Path,
 };
 
-/// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; an unlisted stage is skipped.
-fn stage_printer(print: &str) -> impl Fn(Stage<'_>) + '_ {
-    let stages = print.split(',').collect::<Vec<_>>();
+/// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; empty segments are dropped (the flag's absence arrives as `""`), and an unknown stage name is an error rather than a silently empty selection.
+fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
+    let stages = print
+        .split(',')
+        .filter(|name| !name.is_empty())
+        .collect::<Vec<_>>();
 
-    move |stage| {
+    if let Some(unknown) = stages.iter().find(|name| !Stage::NAMES.contains(name)) {
+        return Err(format!(
+            "unknown --print stage {unknown:?}; the stages are {}",
+            Stage::NAMES.join(", ")
+        ));
+    }
+
+    Ok(move |stage: Stage<'_>| {
         if stages.contains(&stage.name()) {
             eprintln!("\n=== {} ===\n{stage}", stage.name());
         }
-    }
+    })
 }
 
 /// Compile `input_path` through the full pipeline to a wasm module, printing any requested IR stages along the way. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
@@ -24,9 +34,9 @@ pub(crate) fn compile_file(
     print: &str,
     input_path: &Path,
 ) -> Result<Module, CompileError> {
+    let printer = stage_printer(print).map_err(CompileError::Failure)?;
     let (entrypoint, loader) = load(input_path).map_err(CompileError::Failure)?;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
-    compile_entrypoint(budget, &entrypoint, loader, stage_printer(print))
-        .map(|(module, _foreigns)| module)
+    compile_entrypoint(budget, &entrypoint, loader, printer).map(|(module, _foreigns)| module)
 }
