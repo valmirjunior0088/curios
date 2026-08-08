@@ -391,9 +391,8 @@ impl Minter {
                                 None => continue,
                             },
                         };
-                    if bindings.len() == payload.len()
-                        && take_block(module, block, index, result, &bindings, &payload, arm)
-                    {
+                    // An explicit arm's binding count is the verifier's guarantee; the default binds nothing, whatever the payload width.
+                    if take_block(module, block, index, result, &bindings, &payload, arm) {
                         return true;
                     }
                 }
