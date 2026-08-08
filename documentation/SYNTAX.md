@@ -852,7 +852,7 @@ satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
 }
 ```
 
-Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor. Remaining arguments below those heads are checked by unification after lookup.
+Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A : Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
 A globally registered witness therefore requires a concept with at least one parameter. A parameterless concept can still be used through an ordinary value supplied in a local `use` scope.
 
@@ -913,7 +913,7 @@ An omitted witness argument is resolved in this order:
 
 If any concept parameter is still headed by an unsolved metavariable, resolution waits until that metavariable is solved. A selected global witness is instantiated with fresh implicit arguments, its witness premises are resolved recursively, and its full result type is unified with the goal.
 
-Higher-kinded parameters are keyable. When conversion establishes a shape such as `M(A) = Option(Nat)`, it may infer `M` as the `Option` type constructor, allowing `Monad(Option)` lookup.
+Higher-kinded parameters are keyable. When conversion establishes a shape such as `M(A) = Option(Nat)`, it may infer `M` as the `Option` type constructor, allowing `Monad(Option)` lookup. An under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one, which is why a family intended as a monad orders its parameters context first and result last.
 
 ## Foreign declarations
 

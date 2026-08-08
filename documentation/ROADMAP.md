@@ -39,8 +39,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Pruning of out-of-scope metavariables](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
   - [ ] [η-equate metavariable heads](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
   - [ ] [Surface residual unification constraints](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
-  - [ ] [Right-biased partial imitation for flex-apply](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (solve `?M(?A) ≟ T(b̄, ī)` under-applied, abstracting the argument suffix)
-  - [ ] [Witness keying through a partially applied type constructor](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (`satisfy (@S) => Monad((A) => Free(S, A))`; key on the head of a stuck application under a binder)
+  - [x] Right-biased partial imitation for flex-apply (`?M(?A) ≟ T(b̄, x)` under-applied commits `λx. T(b̄, x)` with the suffix equated pairwise and the split re-validated against the birth type — what pins a two-parameter monad's `?M` from its region)
+  - [x] Witness keying through a partially applied type constructor (`satisfy (@S) => Monad((A) => State(S, A))` keys on the stuck application's head; registration and goal lookup share the one `of_whnf` arm)
 - [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (park structurally blocked inference within one enclosing item)
 
 ## Pattern Matching
@@ -162,6 +162,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Foundational proof/logic types (`std/True`, `std/False`)
 - [x] Equality and ordering (`std/Eq`, `std/Order`)
 - [x] Foundational sum types (`std/Option`, `std/Result`)
+- [x] Pure state threading (`std/State`: the context-first carrier `State(S, A)` with `state`/`get`/`put`/`modify`/`run` and the parametric `Monad` witness; deliberately no `Lift(Io, State(S))` edge, so a `State` region provably performs nothing)
+- [x] Short-circuiting failure (`std/Throw` over `Result`: `raise`/`rescue`/`of`/`run` with the parametric `Monad` witness — `!` as checked early return)
 - [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys — same entries, same shape — with injective key encodings via its `Key` concept)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`; decoded scalar values are exposed as certified `Char` values while storage remains packed `Bytes`)

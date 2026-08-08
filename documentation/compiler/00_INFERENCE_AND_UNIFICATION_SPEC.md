@@ -12,8 +12,6 @@ It consolidates what were three scattered plans — an unrefined unification umb
 - η-equating metavariable heads
 - Surfacing residual unification constraints (distinguishing postponed from rigid-mismatch diagnostics)
 - Monomorphic, use-driven inference for unannotated lambda parameters
-- Witness keying through a partially applied type constructor
-- Right-biased partial imitation for flex-apply
 
 ## Status ledger
 
@@ -25,8 +23,6 @@ Verified against the tree rather than inherited from the superseded documents. E
 | η-equating metavariable heads | Nothing for this item. `eta_expand_neutral` (`convert.rs:1254`) is *type-directed* Π/Σ/struct eta, which is the separate, already-checked roadmap entry | The metavariable-head rule itself |
 | Residual constraints | The checking-shaped half: a parked `Checking` obligation surviving every retry reports `Error::PostponedCheck` (`error.rs:245`) at the expression's own span, naming the expected type it waited on | The conversion-shaped residue. A parked `Conversion` goal still reports as a plain mismatch at its origin, distinguished only when it stands between witness holes |
 | Lambda inference | The scheduling machinery, hardened in production: `ParkedGoal` freezes its birth frame and watch set (`context/solutions.rs:51`), `elaborate_apply` settles a whole telescope through `ParkedWork::Checking`, and drains run at item boundaries | The feature. `ParkedWork` (`context/solutions.rs:34`) has exactly `Conversion`, `Checking`, `Witness` — no inference-shaped or groundness-shaped variant — and `binding.rs:519` still rejects an unannotated domain outright |
-| Witness keying | Keying works wherever the concept parameter reduces to a rigid head, including the higher-kinded case through `HeadKey::of_whnf`'s `Func` arm (`concept.rs:78`) | A partially applied family. `(A : Type) => Free(S, A)` leaves a stuck `Apply` under the binder, which the arm does not read |
-| Partial imitation | Full-arity imitation, with pre-commit re-validation against the metavariable's frozen birth type (`convert.rs:1691`) | The under-applied case. `convert.rs:1646` blocks when `flex.params.len() != arity` |
 
 The last two items are the newest and the least discussed, so they carry a reproduction each below. The first four are inherited scope whose superseded documents this file replaces.
 
@@ -51,7 +47,7 @@ Distinct from the type-directed eta already implemented. The rule wanted here eq
 
 `reduce_func_eta` (`reduce.rs:274`) already implements exactly that contraction for the *rigid* case, with the three guards that make it sound: the application is saturated by the binder count, each argument is precisely the corresponding binder, and the head does not mention any of them. The item is to make the solver reach for the same contraction when the head is a metavariable, rather than only when reduction happens to normalize into it.
 
-Interacts with 1.4: both change what the solver does with a flex head against a spine, and 1.4's guard sits in the function 1.2 would extend the reach of. Land 1.2 first or land them together; landing 1.4 first means writing its guard twice.
+Interacts with the landed right-biased partial imitation (2026-08-08): both change what the solver does with a flex head against a spine, and the landed spine/arity guards sit in the function this item would extend — `imitate_flex_apply`'s under-application rule must survive the extension unchanged.
 
 ### 1.3 Surfacing residual unification constraints
 
@@ -62,47 +58,6 @@ The remaining half is `ParkedWork::Conversion`. A parked conversion goal that ne
 The diagnostic should distinguish them, name the metavariables the goal was watching, and anchor at the origin term the `ParkedGoal` already carries (`context/solutions.rs:55` — "its span anchors the eventual error if the problem never resolves"). The existing witness-hole special case is a third state and should remain reachable rather than being folded into either.
 
 This item is a prerequisite for 1.1 and Part 2 in practice, not in principle: both add ways for work to park, and both are much harder to debug against a diagnostic that cannot say whether the solver stalled or the program disagreed.
-
-### 1.4 Right-biased partial imitation for flex-apply
-
-**Reproduction.** With `induct Box(S : Type, A : Type) : Type | wrap(A) end`, a `!` on an action of type `Box(Str, Nat)` raises the goal `Monad(?M)` with the equation `?M(?A) ≡ Box(Str, Nat)`. (Strict postponement reads the region's monad from the region's *type*, but the `Monad` goal's `?M` is still pinned by unification against that type — an application of the same shape — so this item remains the gate for every multi-parameter monad.) Imitation blocks at `convert.rs:1646`:
-
-```rust
-let arity = rigid_args.len();          // params + indices
-if flex.params.len() != arity { return self.block(context, goal); }
-```
-
-One binder against a two-argument rigid, so `?M` is never pinned and the witness never resolves.
-
-**Rule.** When `flex.params.len() == k` and `k < arity == n`, commit the right-biased imitation:
-
-```text
-?m := λx₁ … xₖ. T(b₁, …, b_{n−k}, x₁, …, xₖ)
-```
-
-and equate the retained prefix pairwise as the saturated case already does.
-
-**Why it is well-formed here.** A parameter telescope orders dependencies left to right — a later parameter may depend on an earlier one, never the reverse — so the fixed prefix `b₁ … b_{n−k}` can never mention the abstracted suffix. The candidate is always well-scoped. `k` is not guessed either: it is read from `?m`'s frozen birth type, which the arity check at `convert.rs:1658` already consults.
-
-**Why it stays a guess, and why that is consistent.** `?m(x) ≡ Box(Str, Nat)` also admits `λx. Box(x, Nat)`; there is no most-general unifier. The existing design is already guess-and-block — `convert.rs:1582` states that "a rejected or postponed guess *blocks* the goal, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable" — and the candidate is checked against the frozen birth type under the birth context before it commits (`convert.rs:1691`), so a wrong split is refused rather than landed. Right-biased is the conventional choice and the one kind-currying makes in Haskell, which is why `Monad (Either e)` works there.
-
-**What must not change.** The `flex.params.len() == arity` path is untouched, so nothing that resolves today resolves differently. Incompleteness moves rather than disappearing: an equation whose intended solution abstracts a *prefix* will now be guessed wrong, blocked, and surface through 1.3's diagnostic, where today it blocks immediately. Determinism is preserved because the split is fixed.
-
-### 1.5 Witness keying through a partially applied type constructor
-
-**Reproduction.** `satisfy (@S : Type) => Monad((A : Type) => Box(S, A))` is refused with *witness cannot be keyed: its concept's parameter 1 reduces to `A => Box(S, A)`*. The same declaration with a unary family — `satisfy Monad((A : Type) => Uni(A))` — is accepted and runs.
-
-**Cause.** Two mechanisms compose. Surface `Box(S, A)` lowers to `Apply(Box, [S, A])`, and weak-head reduction does not go under the `λA`, so the lambda body stays a stuck application. `HeadKey::of_whnf`'s `Func` arm (`concept.rs:78`) walks the telescope to its body and accepts only `InductType`, `StructType`, or an intrinsic former there; an `Apply` falls to `_ => None`, and `resolve.rs:690` raises the error.
-
-The unary case is not an exception to this — it is `reduce_func_eta` firing first. `λA. Uni(A)` contracts to bare `Uni`, whose own whnf is the family node. Eta-contraction cannot fire on a partial application, which is why the two spellings diverge.
-
-**Rule.** When the `Func` body is an `Apply`, key on that application's head. This makes registration and lookup agree, and both call sites (`resolve.rs:319` for the goal, `resolve.rs:690` for the declaration) go through the one function.
-
-**Asymmetry worth knowing.** Only the registration side needs this. On the goal side, a committed imitation constructs its body through `Term::induct_type_at` (`convert.rs:1611`) — a materialized node — so once 1.4 lands, the solved `?M` keys through the existing arm unchanged. The two items are therefore independent fixes to opposite sides of the same wall, and 1.5 is independently useful: it admits the parametric witness declaration even before 1.4 makes `!` dispatch to it.
-
-**Coherence.** `insert_witness` (`context/program.rs:154`) is strict-unique and a collision is a hard `DuplicateWitness`. Keying `λA. Box(Str, A)` as `Nominal(Box)` therefore collides with `λA. Box(Nat, A)`. This is the same no-overlap discipline the corpus already lives under: every parameterized-head witness in the prelude is written once and parametrically — `Show(Lst(A))`, `Show(Option(A))`, `Show(Result(A, E))` — with no ground-instance overlap anywhere. The intended spelling here is likewise one parametric witness, and the implementation should not relax uniqueness to accommodate ground instances.
-
-**Open question the implementation must settle.** The failing diagnostic prints unsolved universe metavariables in the head (`Box.{?u264,?u265}`). Witness schemes have their own finalization route (`universe_solver.rs:1122`, `finalize_at_instance`), and whether keying on an `Apply` head reads a sound `UniverseInst` before levels are solved is not determinable by reading. Settle it with a test before relying on the rule.
 
 ## Part 2 — monomorphic, use-driven lambda inference
 
@@ -231,13 +186,12 @@ The primary diagnostic for an unresolved lambda domain is the existing `CannotIn
 
 ## Ordering
 
-The six items are not equally coupled, and two orderings are load-bearing rather than preferential.
+The remaining items are not equally coupled, and one ordering is load-bearing rather than preferential. (Right-biased partial imitation and partially-applied witness keying landed 2026-08-08 — the durable rules live on `imitate_flex_apply` and `HeadKey::of_whnf`, and `/std/State` and `/std/Throw` are their consumers.)
 
 1. **1.3 (residual constraint diagnostics)** first. It is cheap, half-done, and every later item adds ways for work to park. Debugging 1.1 or Part 2 against a diagnostic that cannot distinguish *the solver stalled* from *the program disagreed* is the avoidable cost here.
-2. **1.5 (witness keying)** next. Independent of everything else, roughly five lines, and it settles the universe-instance question early on the cheapest possible surface. It also lands user-visible value alone: the parametric witness declaration becomes writable even before `!` dispatches to it.
-3. **1.2 and 1.4 together.** Both change what the solver does with a flex head against a spine, and 1.4's guard sits inside the function 1.2 extends. Landing 1.4 first means writing that guard twice.
-4. **1.1 (pruning)** after 1.2/1.4. Pruning is what lets the solver commit where it currently postpones, and it is easiest to evaluate once the imitation rules that feed it are settled.
-5. **Part 2 (lambda inference)** last, in its own sequence: relax the domain rejection and add the groundness obligation; add paired placeholders and scheduler support against a narrow blocker; then application and projection parking; then inductive-match parking; then eager intrinsic carriers; then dependent, witness, refinement, privacy, and diagnostic coverage. This produces testable scheduler behavior before the richest match path depends on it.
+2. **1.2 (metavariable-head eta)** next. It extends the reach of the same function the landed partial imitation guards, and its contraction must preserve those spine/arity guards.
+3. **1.1 (pruning)** after 1.2. Pruning is what lets the solver commit where it currently postpones, and it is easiest to evaluate once the imitation rules that feed it are settled.
+4. **Part 2 (lambda inference)** last, in its own sequence: relax the domain rejection and add the groundness obligation; add paired placeholders and scheduler support against a narrow blocker; then application and projection parking; then inductive-match parking; then eager intrinsic carriers; then dependent, witness, refinement, privacy, and diagnostic coverage. This produces testable scheduler behavior before the richest match path depends on it.
 
 Part 2 does not require 1.1: its placeholder equations are deliberately oriented so the placeholder is solved directly by a term elaborated in its own frame, minimizing dependence on unfinished flex-flex behavior. That orientation is a design constraint, not an accident, and should survive any reordering.
 
@@ -247,9 +201,7 @@ Part 2 does not require 1.1: its placeholder equations are deliberately oriented
 
 The likely surface, to be re-read rather than trusted:
 
-- `curios-elab/src/convert.rs` — imitation (1.4), metavariable-head eta (1.2), pruning at the solve site (1.1).
-- `curios-elab/src/concept.rs` — `HeadKey::of_whnf`'s `Func` arm (1.5).
-- `curios-elab/src/resolve.rs` — the two keying call sites (1.5).
+- `curios-elab/src/convert.rs` — metavariable-head eta (1.2), pruning at the solve site (1.1).
 - `curios-elab/src/context/solutions.rs` — new parked-work variants, blocker watchers, obligation bookkeeping (Part 2, 1.3).
 - `curios-elab/src/typing.rs` — retry behavior, placeholder solving, wake-up policy, final draining diagnostics (Part 2, 1.3).
 - `curios-elab/src/error.rs` — the conversion-shaped residual diagnostic (1.3).
@@ -270,10 +222,6 @@ No core representation change is expected, and none of the six items adds a `Hea
 
 **1.3 Residual constraints** — a never-woken `Conversion` goal reports a postponement diagnostic naming its watched metavariables, distinct from a rigid mismatch; a genuine rigid mismatch still reports as a mismatch; the witness-hole case remains its own third state; the landed `PostponedCheck` behavior is unchanged.
 
-**1.4 Partial imitation** — `?M(?A) ≡ Box(Str, Nat)` commits `λx. Box(Str, x)`; the retained prefix is equated pairwise; an ill-kinded split is refused by pre-commit re-validation rather than committed; a full-arity equation resolves exactly as it does today; a prefix-intended equation blocks and surfaces through 1.3.
-
-**1.5 Witness keying** — `satisfy (@S : Type) => Monad((A : Type) => Box(S, A))` registers and keys on `Nominal(Box)`; a second ground witness at the same head is refused as `DuplicateWitness`; the unary eta-contracting path is unchanged; a witness registered before universe finalization keys soundly (the open question above).
-
 **Part 2** — a local identity lambda fixed by a later `Nat` call; repeated uses at one type succeeding and incompatible uses failing monomorphically; a standalone `(x) => x` failing at its parameter span; an `Option` match inside a lambda inferred from a later call; a `Result` match and a user-defined indexed-inductive match retrying with correct refinements; Boolean, numeric, bit, byte and list intrinsic matches constraining their carrier immediately; a list match leaving its element type open and then either constrained or failed at the boundary; projection from an initially unknown parameter type; calling an initially unknown function parameter, including its plicities; a dependent inferred result mentioning a lambda parameter without escaping; nested structural blockers making progress without duplicate placeholders or infinite retry; witness goals created before or during a retry resolved once with source spans retained; representation privacy and match refinements identical before and after parking; no work surviving a top-level item boundary; oracle-mode elaboration leaking no parked obligations; successful zonking leaving no unsolved metavariables.
 
 Where practical, scheduler tests should assert obligation counts or placeholder reuse, so a superficially successful program cannot hide duplicated delayed work.
@@ -293,7 +241,7 @@ Where practical, scheduler tests should assert obligation counts or placeholder 
 
 ## Effort estimate
 
-Part 1 is a set of small-to-medium solver changes: 1.3 and 1.5 are each a focused change plus tests; 1.2 and 1.4 are moderate and share a surface; 1.1 is the largest of the four and the one with the most soundness exposure, since it touches the file carrying the most perimeter weight.
+Part 1 is a set of small-to-medium solver changes: 1.3 is a focused change plus tests; 1.2 is moderate; 1.1 is the largest and the one with the most soundness exposure, since it touches the file carrying the most perimeter weight.
 
 Part 2 is a medium-to-large core elaboration project on its own, roughly 250–450 lines of implementation and 300–500 lines of tests across 7–10 files. Its uncertainty lies less in the individual park sites than in preserving retry monotonicity, lexical scope, diagnostics, and solver transaction boundaries. A match-only proof of concept would be smaller but would leave ordinary lambdas inconsistent across match, projection, and application bodies, and should not be treated as the finished feature.
 
@@ -315,9 +263,9 @@ Items touching `convert.rs` should additionally be weighed against `PERIMETER.md
 
 ## Retirement criteria
 
-Each item is retired individually; the file is deleted when all six are.
+Each item is retired individually; the file is deleted when all are. (Right-biased partial imitation and partially-applied witness keying retired 2026-08-08: semantics in `SYNTAX.md`'s witness-keying and resolution sections, rules on `imitate_flex_apply` and `HeadKey::of_whnf`, obligations as `curios/src/tests/concepts.rs`' partial-family tests, consumers `/std/State` and `/std/Throw`.)
 
-- Durable user-facing semantics are recorded in `SYNTAX.md` — for Part 2, lambda inference semantics; for 1.4 and 1.5, whatever becomes writable that was not.
+- Durable user-facing semantics are recorded in `SYNTAX.md` — for Part 2, lambda inference semantics.
 - Solver, parking, and retry invariants are recorded in the owning `curios-elab` module documentation and tests.
 - Cross-cutting rationale — notably that imitation is a deliberate guess and that witness keying is head-only with uniqueness enforced — is recorded in `DESIGN.md` or `curios-elab/README.md` as appropriate.
 - Remaining plans refer to landed elaborator behavior rather than this file.
