@@ -1326,7 +1326,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             pure("]; "),
                             pure(spelling.label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([sub(cons_case, depth, spelling), pure(";")])),
+                            indent(flat([sub(cons_case, depth + 3, spelling), pure(";")])),
                         ])
                     };
                     let cons_lst = |cons_case: Scope<Three>| {
@@ -1340,7 +1340,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             pure("]; "),
                             pure(spelling.label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([sub(cons_case, depth, spelling), pure(";")])),
+                            indent(flat([sub(cons_case, depth + 3, spelling), pure(";")])),
                         ])
                     };
 
@@ -1358,7 +1358,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                                 pure(" "),
                                 pure(spelling.label(&ih_label)),
                                 pure(" =>\n"),
-                                indent(flat([sub(cons_case, depth, spelling), pure(";")])),
+                                indent(flat([sub(cons_case, depth + 2, spelling), pure(";")])),
                             ]);
                             ("\n| 0n =>\n", empty_case, cons_arm)
                         }
