@@ -7,6 +7,7 @@ use {
     },
     curios_abi::host_ops,
     curios_base::{Grain, PackedBin},
+    std::collections::BTreeMap,
 };
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
@@ -817,8 +818,6 @@ fn reducible_loop() -> CpsModule {
 
 /// Two continuations that jump to each other, entered from *both* arms of a switch — a two-entry (irreducible) component that only a localized dispatcher can structure.
 fn irreducible_pair() -> CpsModule {
-    use std::collections::BTreeMap;
-
     let mut module = CpsModule::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
