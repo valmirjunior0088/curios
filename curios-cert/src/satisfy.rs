@@ -253,8 +253,9 @@ impl Search {
         };
 
         while let Some(node) = pending.pop() {
-            for outgoing in self.outgoing[node].clone() {
-                match self.relax(outgoing, &mut undo.touched) {
+            // `relax` moves only `distance` and `predecessor`, so the outgoing list is stable across the loop.
+            for index in 0..self.outgoing[node].len() {
+                match self.relax(self.outgoing[node][index], &mut undo.touched) {
                     Ok(None) => {}
                     Ok(Some(next)) => pending.push(next),
                     Err(()) => return Err(undo),
