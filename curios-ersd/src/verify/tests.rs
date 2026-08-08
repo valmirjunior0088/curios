@@ -210,6 +210,39 @@ fn an_unsaturated_direct_application_is_rejected() {
     assert!(error.0.contains("arity"), "{error}");
 }
 
+/// The mapper is `LstMap`'s second operand — the list comes first, like every sequence operation. The rule once read the first operand, whose list value never looks like a function atom, and so checked nothing.
+#[test]
+fn a_two_parameter_mapper_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let mapper = builder.reserve_function();
+    let left = builder.value(None);
+    let right = builder.value(None);
+    builder.open_block();
+    let body = builder.seal_block(Terminator::Return(Atom::Value(left)));
+    builder.define_function(mapper, Some("mapper".into()), vec![left, right], body);
+    builder.item_functions(vec![mapper]);
+
+    builder.open_block();
+    let list = builder.let_value(
+        None,
+        Rhs::Sequence {
+            operation: SequenceOp::LstBuild,
+            operands: vec![],
+        },
+    );
+    let mapped = builder.let_value(
+        None,
+        Rhs::Intrinsic {
+            intrinsic: Intrinsic::LstMap,
+            operands: vec![Atom::Value(list), Atom::Function(mapper)],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(mapped)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("a mapper takes one element");
+    assert!(error.0.contains("mapper takes one element"), "{error}");
+}
+
 #[test]
 fn a_match_missing_a_constructor_is_rejected() {
     let mut builder = ErsdBuilder::new();
