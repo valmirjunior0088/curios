@@ -47,9 +47,6 @@ impl Sort {
     }
 }
 
-/// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
-///
-/// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
 /// An occurrence supplies exactly as many parameters, or indices, as its declaration declares.
 ///
 /// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the arities a nominal term carries beside its universe instance — an occurrence's parameters and indices, and a value's parameters. Both are read from the declaration the moment anything asks what an occurrence *is*, and both were taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family was classified as a well-formed type, and every consumer of the arity after that was wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
@@ -60,6 +57,9 @@ pub(super) fn arity_matches(expected: usize, actual: usize) -> Result<(), Kernel
     }
 }
 
+/// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
+///
+/// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
 pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, KernelError> {
     let reduced = whnf(kernel, universe.clone())?;
 
