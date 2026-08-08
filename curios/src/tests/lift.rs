@@ -77,9 +77,10 @@ fn a_missing_edge_reports_the_lift_witness() {
         "#;
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
+    // The former-eta display fold renders the goal's monads as bare heads, not binder lambdas.
     assert!(
-        error.contains("no witness of") && error.contains("Lift"),
-        "expected the missing Lift witness, got: {error}"
+        error.contains("no witness of Lift(Async, /Job)"),
+        "expected the missing Lift witness with folded formers, got: {error}"
     );
 }
 

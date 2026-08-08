@@ -524,6 +524,73 @@ fn print_infix(
     ])
 }
 
+/// A recognized type-former eta shape: the former's identity and the argument prefix left after stripping the binder.
+enum FormerEta {
+    Nominal(Global, Vec<Term>),
+    Intrinsic(&'static str),
+}
+
+/// Recognize `x => T(…, x)` on the *unopened* telescope: one explicit binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. The prefix arguments must be closed under the binder (`reach() == 0`), which is what guarantees the binder occurs nowhere else.
+fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
+    if telescope.len() != 1 || plicities.len() != 1 {
+        return None;
+    }
+    let Telescope::Cons(_, rest) = telescope else {
+        return None;
+    };
+    let Telescope::Done(body) = rest.body() else {
+        return None;
+    };
+
+    let bound_zero =
+        |term: &Term| matches!(&**term, Subterm::Var(var) if var.as_bound() == Some(0));
+    let closed_prefix = |terms: &[Term]| terms.iter().all(|term| term.reach() == 0);
+
+    match &***body {
+        Subterm::InductType(InductType {
+            name,
+            params,
+            indices,
+            ..
+        }) if indices.is_empty() => {
+            let (last, prefix) = params.split_last()?;
+            (bound_zero(last) && closed_prefix(prefix))
+                .then(|| FormerEta::Nominal(name.clone(), prefix.to_vec()))
+        }
+        Subterm::StructType(StructType { name, params, .. }) => {
+            let (last, prefix) = params.split_last()?;
+            (bound_zero(last) && closed_prefix(prefix))
+                .then(|| FormerEta::Nominal(name.clone(), prefix.to_vec()))
+        }
+        Subterm::Intrinsic(Intrinsic::IoType(payload)) => {
+            bound_zero(payload).then_some(FormerEta::Intrinsic("Io"))
+        }
+        Subterm::Intrinsic(Intrinsic::LstType(payload)) => {
+            bound_zero(payload).then_some(FormerEta::Intrinsic("Lst"))
+        }
+        Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
+            bound_zero(payload).then_some(FormerEta::Intrinsic("Cell"))
+        }
+        _ => None,
+    }
+}
+
+/// Print a recognized former: the name alone when the binder was its only argument, the prefix application otherwise — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
+fn former_doc(former: FormerEta, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+    match former {
+        FormerEta::Intrinsic(name) => pure(name),
+        FormerEta::Nominal(name, prefix) => {
+            let reference = Term::var(Var::free(Free::Global(name)));
+            let term = if prefix.is_empty() {
+                reference
+            } else {
+                Term::apply(reference, prefix)
+            };
+            sub(term, depth, spelling)
+        }
+    }
+}
+
 /// An operand of [`print_infix`], wrapped in parentheses when it too prints as an infix operator (a nested operator intrinsic or a residual `Infix` node); self-delimiting operands (variables, literals, applications) print bare.
 fn print_operand(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
     let parenthesize = match &*term {
@@ -895,6 +962,10 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             telescope,
             plicities,
         }) => {
+            // A type-former lambda `x => T(…, x)` — the shape witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binder is its only argument, the prefix application otherwise. Recognition demands the exact eta shape (the binder is the final argument and occurs nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
+            if let Some(former) = former_eta(&telescope, &plicities) {
+                return former_doc(former, depth, spelling);
+            }
             let n = telescope.len();
             let (labels, body) = open_telescope(telescope, depth);
             // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above.
