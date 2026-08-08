@@ -36,10 +36,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Unification solver
   - [x] Pattern unification for higher-order metavariable spines
   - [x] Re-validate solutions in checking mode
-  - [ ] [Surface residual unification constraints](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
-  - [ ] [Metavariable-blocked conversions postpone instead of mismatching](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (a conversion stuck on an unsolved metavariable parks watching it; empty watch sets still fail fast)
-  - [ ] [Pruning of out-of-scope metavariables](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md)
-  - [ ] [Packed-literal views in unification decomposition](roadmap/compiler/00_INFERENCE_AND_UNIFICATION_SPEC.md) (a nonempty `Bits`/`Bytes` literal decomposes as the cons the reducer folded away)
+  - [x] Surface residual unification constraints (a drain survivor reports as a postponement naming its still-unsolved watched metavariables, noting live match-arm refinements, distinct from a rigid mismatch; the witness-hole case stays its own third state)
+  - [x] Metavariable-blocked conversions postpone instead of mismatching (a structural mismatch stuck on an unsolved metavariable parks watching it, empty watch sets still fail fast; flex-scrutinee match pairs decompose only with identical motives and case tables)
+  - [x] Solving reads materialized candidates and parks blocked goals under raw spellings (committed solutions splice before the occurs/scope analyses, so a solved metavariable's spine cannot strand a cascade; retries re-reduce raw goals in their restored frames)
+  - [x] Packed-literal views in unification decomposition (a nonempty `Bits`/`Bytes` literal decomposes against `append`/`concat` spines length-directedly, solving-side only — the shared reduction and peel laws are untouched)
   - [x] Right-biased partial imitation for flex-apply (`?M(?A) ≟ T(b̄, x)` under-applied commits `λx. T(b̄, x)` with the suffix equated pairwise and the split re-validated against the birth type — what pins a two-parameter monad's `?M` from its region)
   - [x] Witness keying through a partially applied type constructor (`satisfy (@S) => Monad((A) => State(S, A))` keys on the stuck application's head; registration and goal lookup share the one `of_whnf` arm)
 
@@ -53,6 +53,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
+- [x] Irrefutable patterns at the `;` fold-hypothesis binder (`| pred + 1; (count, live) =>` — the hypothesis binds the fold result rather than scrutinee shape, so it takes the same patterns a `let` binder does, desugared to projections)
 - [ ] [Anonymous match functions](roadmap/compiler/06_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match; staged — the syntax ships checking-position first, then the form's own parked inference-position machinery)
 
 ## Syntax Sugar

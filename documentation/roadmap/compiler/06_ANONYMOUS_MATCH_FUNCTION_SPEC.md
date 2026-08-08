@@ -6,7 +6,7 @@ This document is the implementation handoff for the feature. Its durable user-fa
 
 ## Design decision: the form carries the inference
 
-On 2026-08-08, monomorphic use-driven lambda inference was cut from [`00_INFERENCE_AND_UNIFICATION_SPEC.md`](00_INFERENCE_AND_UNIFICATION_SPEC.md) as a general language feature and reframed as this form's machinery. The corpus measurement recorded there found no demand for it in `/std` — prelude lambdas sit in checking position, where domains already flow from the expected type — and its only concrete consumer was this syntax.
+On 2026-08-08, monomorphic use-driven lambda inference was cut from the inference-and-unification specification (retired the same day; its solver items landed — see `curios-elab/README.md`'s "Undecided conversions park" decision — and its corpus record lives in that campaign's history) as a general language feature and reframed as this form's machinery. The corpus measurement found no demand for it among `/std`'s explicit implicit arguments — prelude lambdas sit in checking position, where domains already flow from the expected type — and its only concrete consumer was this syntax. One *indirect* consumer class did surface: `/std/Toml`'s builders keep ~15 local-`let` annotations solely because their values are inference-position matches (`let permitted: Result({}, Str) = match Map/get(side, kp) …`), exactly the park-on-unknown-structure shape stage 2 specifies — dropping those annotations is a stage-2 acceptance probe.
 
 The reframing changes the language story, not just the document layout. An unannotated lambda in inference position stays rejected, uniformly (`curios-elab/src/elaborate/binding.rs:722` refuses a bare-metavariable domain with `CannotInfer`); `match =>` is the one form that acquires use-driven inference, because the form itself declares that its single parameter is the scrutinee. The prior specification warned that implementing only match-shaped parking "would leave ordinary lambdas inconsistent across match, projection, and application bodies" — that worry assumed general lambda inference was the goal, and dissolves with it: there is no partially-inferring lambda feature to be inconsistent about, only a syntax form with defined behavior. This follows the same philosophy as the closed operator grammar: the form is fixed, and the form carries its semantics.
 
@@ -17,7 +17,7 @@ What the reframing cuts from the inherited plan, deliberately: projection parkin
 The project lands in two independent stages:
 
 - **Stage 1 — the syntax** (`curios-text` only): parsing, printing, and lowering. In checking position the form works through the ordinary elaborator, since the expected function type supplies the domain and the desugared match proceeds normally. In inference position the lowered lambda's metavariable domain hits the existing rejection, which must then anchor its `CannotInfer` at the `match =>` introducer; the diagnostic should suggest annotating or using the form where its type is known. Stage 1 is shippable alone and expects no `curios-elab` change.
-- **Stage 2 — inference-position elaboration** (`curios-elab`): the parked-inference machinery that lets a later use in the same item pin the scrutinee carrier. Stage 2 should preferably follow the inference specification's Item 1 (residual-constraint diagnostics), for the same reason recorded there: it adds ways for work to park, and debugging parked work against a diagnostic that cannot distinguish a stalled solver from a wrong program is the avoidable cost.
+- **Stage 2 — inference-position elaboration** (`curios-elab`): the parked-inference machinery that lets a later use in the same item pin the scrutinee carrier. Its diagnostic prerequisite already landed: a parked conversion surviving the drain reports as a postponement naming its watched metavariables (`Error::PostponedConversion`), so stage-2 parking failures will be attributable rather than surfacing as bare mismatches.
 
 ## Proposed syntax
 
@@ -302,7 +302,7 @@ The primary diagnostic for an unresolved domain is the existing `CannotInfer` fa
 
 ### Relationship to the inference specification
 
-Stage 2 does not require pruning: its placeholder equations are deliberately oriented so the placeholder is solved directly by a term elaborated in its own frame, minimizing dependence on flex-flex behavior. That orientation is a design constraint, not an accident, and should survive any reordering. The practical dependency is on Item 1 of [`00_INFERENCE_AND_UNIFICATION_SPEC.md`](00_INFERENCE_AND_UNIFICATION_SPEC.md) — residual diagnostics — as recorded under Staging.
+Stage 2 does not require pruning (which was itself resolved without implementation when its measured consumers turned out to be a solve-materialization defect, since fixed): its placeholder equations are deliberately oriented so the placeholder is solved directly by a term elaborated in its own frame, minimizing dependence on flex-flex behavior. That orientation is a design constraint, not an accident, and should survive any reordering. The residual-diagnostics prerequisite named under Staging has landed.
 
 ## Implementation map
 
