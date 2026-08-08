@@ -33,7 +33,7 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`std/Vec/Vec`, `sys/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so the faithful `Display` for a bare term leaves names untouched.
 //
-// The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, so these axes were once three thread-locals installed around a render — which made a term's spelling depend on an enclosing frame nobody could see from the call, and made "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function takes the spelling beside the depth it already threaded.
+// The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, so these axes were once three thread-locals installed around a render — which made a term's spelling depend on an enclosing frame nobody could see from the call, and made "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a literally-rendered global, take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
@@ -398,37 +398,65 @@ fn binder_or(binder: Option<&Free>, depth: usize) -> Free {
     }
 }
 
-/// Every binder of a scope, unnamed ones filled with stand-ins positioned from `depth`.
-fn scope_labels<'a>(binders: impl Iterator<Item = Option<&'a Free>>, depth: usize) -> Vec<Free> {
-    binders
-        .enumerate()
-        .map(|(index, binder)| binder_or(binder, depth + index))
-        .collect()
-}
-
 fn label_terms(binders: &[Free]) -> Vec<Term> {
     binders.iter().map(Term::free_var).collect()
 }
 
-fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((Free, Free), Term) {
-    let fst = binder_or(scope.binder(0), depth);
-    let snd = binder_or(scope.binder(1), depth + 1);
-    let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
-
-    ((fst, snd), body)
+/// The state a recursive print call threads: the render-constant [`Spelling`] beside the binder depth descended so far. Depth exists only to position [`binder_or`] stand-ins, and the opening helpers advance it as they mint, so an arm that opens binders is handed the frame its body prints under instead of recomputing it.
+#[derive(Clone, Copy)]
+struct Frame<'a> {
+    spelling: &'a Rc<Spelling>,
+    depth: usize,
 }
 
-fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((Free, Free, Free), Term) {
-    let fst = binder_or(scope.binder(0), depth);
-    let snd = binder_or(scope.binder(1), depth + 1);
-    let thd = binder_or(scope.binder(2), depth + 2);
-    let body = scope.open(&[
-        &Term::free_var(&fst),
-        &Term::free_var(&snd),
-        &Term::free_var(&thd),
-    ]);
+impl<'a> Frame<'a> {
+    /// This frame, `count` binders deeper.
+    fn deeper(self, count: usize) -> Self {
+        Self {
+            depth: self.depth + count,
+            ..self
+        }
+    }
 
-    ((fst, snd, thd), body)
+    /// One binder's display label minted at the current depth, the frame advanced past it — the telescope loops mint one label per entry as they walk.
+    fn label(&mut self, binder: Option<&Free>) -> Free {
+        let label = binder_or(binder, self.depth);
+        self.depth += 1;
+        label
+    }
+
+    /// Every binder of a scope, unnamed ones filled with stand-ins, beside the frame past them.
+    fn labels<'b>(self, binders: impl Iterator<Item = Option<&'b Free>>) -> (Vec<Free>, Self) {
+        let labels: Vec<Free> = binders
+            .enumerate()
+            .map(|(index, binder)| binder_or(binder, self.depth + index))
+            .collect();
+        let past = self.deeper(labels.len());
+        (labels, past)
+    }
+
+    /// Open a two-binder scope under minted labels, beside the frame its body prints under.
+    fn open_two(self, scope: Scope<Two>) -> ((Free, Free), Term, Self) {
+        let fst = binder_or(scope.binder(0), self.depth);
+        let snd = binder_or(scope.binder(1), self.depth + 1);
+        let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
+
+        ((fst, snd), body, self.deeper(2))
+    }
+
+    /// The three-binder counterpart of [`Frame::open_two`].
+    fn open_three(self, scope: Scope<Three>) -> ((Free, Free, Free), Term, Self) {
+        let fst = binder_or(scope.binder(0), self.depth);
+        let snd = binder_or(scope.binder(1), self.depth + 1);
+        let thd = binder_or(scope.binder(2), self.depth + 2);
+        let body = scope.open(&[
+            &Term::free_var(&fst),
+            &Term::free_var(&snd),
+            &Term::free_var(&thd),
+        ]);
+
+        ((fst, snd, thd), body, self.deeper(3))
+    }
 }
 
 fn print_var(var: Var, spelling: &Rc<Spelling>) -> Printer {
@@ -457,24 +485,13 @@ fn print_flt(flt: Flt) -> Printer {
 }
 
 /// Render a binary intrinsic as `name left right`, the shape almost every scalar arithmetic/comparison/bitwise intrinsic shares. `name` carries its own trailing space (`"Nat.add "`).
-fn print_binary(
-    name: &'static str,
-    left: Term,
-    right: Term,
-    depth: usize,
-    spelling: &Rc<Spelling>,
-) -> Printer {
-    flat([
-        pure(name),
-        sub(left, depth, spelling),
-        pure(" "),
-        sub(right, depth, spelling),
-    ])
+fn print_binary(name: &'static str, left: Term, right: Term, frame: Frame) -> Printer {
+    flat([pure(name), sub(left, frame), pure(" "), sub(right, frame)])
 }
 
 /// The unary counterpart of [`print_binary`]: `name inner`.
-fn print_unary(name: &'static str, inner: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
-    flat([pure(name), sub(inner, depth, spelling)])
+fn print_unary(name: &'static str, inner: Term, frame: Frame) -> Printer {
+    flat([pure(name), sub(inner, frame)])
 }
 
 /// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
@@ -506,17 +523,11 @@ fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
 }
 
 /// Render an operator intrinsic as `left <symbol> right`, each operand parenthesized when it is itself an infix operator so nesting stays unambiguous — `(a + b) * c`, never `a + b * c`.
-fn print_infix(
-    symbol: &'static str,
-    left: Term,
-    right: Term,
-    depth: usize,
-    spelling: &Rc<Spelling>,
-) -> Printer {
+fn print_infix(symbol: &'static str, left: Term, right: Term, frame: Frame) -> Printer {
     flat([
-        print_operand(left, depth, spelling),
+        print_operand(left, frame),
         pure(format!(" {symbol} ")),
-        print_operand(right, depth, spelling),
+        print_operand(right, frame),
     ])
 }
 
@@ -572,7 +583,7 @@ fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<Form
 }
 
 /// Print a recognized former: the name alone when the binder was its only argument, the prefix application otherwise — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
-fn former_doc(former: FormerEta, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+fn former_doc(former: FormerEta, frame: Frame) -> Printer {
     match former {
         FormerEta::Intrinsic(name) => pure(name),
         FormerEta::Nominal(name, prefix) => {
@@ -582,13 +593,13 @@ fn former_doc(former: FormerEta, depth: usize, spelling: &Rc<Spelling>) -> Print
             } else {
                 Term::apply(reference, prefix)
             };
-            sub(term, depth, spelling)
+            sub(term, frame)
         }
     }
 }
 
 /// An operand of [`print_infix`], wrapped in parentheses when it too prints as an infix operator (a nested operator intrinsic or a residual `Infix` node); self-delimiting operands (variables, literals, applications) print bare.
-fn print_operand(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+fn print_operand(term: Term, frame: Frame) -> Printer {
     let parenthesize = match &*term {
         Subterm::Intrinsic(intrinsic) => infix_symbol(intrinsic).is_some(),
         Subterm::Transient(Transient::Infix(_)) => true,
@@ -596,117 +607,117 @@ fn print_operand(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
     };
 
     if parenthesize {
-        flat([pure("("), sub(term, depth, spelling), pure(")")])
+        flat([pure("("), sub(term, frame), pure(")")])
     } else {
-        sub(term, depth, spelling)
+        sub(term, frame)
     }
 }
 
-fn print_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
     match intrinsic {
         Intrinsic::BoolType => pure("Bool"),
         Intrinsic::Bool(false) => pure("false"),
         Intrinsic::Bool(true) => pure("true"),
-        Intrinsic::BoolAnd(l, r) => print_infix("&&", l, r, depth, spelling),
-        Intrinsic::BoolOr(l, r) => print_infix("||", l, r, depth, spelling),
-        Intrinsic::BoolXor(l, r) => print_binary("Bool.xor ", l, r, depth, spelling),
-        Intrinsic::BoolEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Intrinsic::BoolNeq(l, r) => print_infix("!=", l, r, depth, spelling),
+        Intrinsic::BoolAnd(l, r) => print_infix("&&", l, r, frame),
+        Intrinsic::BoolOr(l, r) => print_infix("||", l, r, frame),
+        Intrinsic::BoolXor(l, r) => print_binary("Bool.xor ", l, r, frame),
+        Intrinsic::BoolEql(l, r) => print_infix("==", l, r, frame),
+        Intrinsic::BoolNeq(l, r) => print_infix("!=", l, r, frame),
         Intrinsic::NatType => pure("Nat"),
         Intrinsic::Nat(Nat::Zero) => pure("0"),
         // A successor over a symbolic tail is that tail plus its literal floor — spelled infix (`n + 1`, `(n + m) + 3`) to match the operator intrinsics, its tail parenthesized when it too is an operator. A successor over `0` is a plain numeral (`{spine}`).
         Intrinsic::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
             Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => pure(format!("{spine}")),
             _ => flat([
-                print_operand(inner.clone(), depth, spelling),
+                print_operand(inner.clone(), frame),
                 pure(format!(" + {spine}")),
             ]),
         },
-        Intrinsic::NatEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Intrinsic::HandleEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Intrinsic::NatNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Intrinsic::NatAdd(l, r) => print_infix("+", l, r, depth, spelling),
-        Intrinsic::NatSub(l, r) => print_infix("-", l, r, depth, spelling),
-        Intrinsic::NatMul(l, r) => print_infix("*", l, r, depth, spelling),
-        Intrinsic::NatLt(l, r) => print_infix("<", l, r, depth, spelling),
-        Intrinsic::NatDiv(l, r) => print_infix("/", l, r, depth, spelling),
-        Intrinsic::NatRem(l, r) => print_infix("%", l, r, depth, spelling),
-        Intrinsic::NatGt(l, r) => print_infix(">", l, r, depth, spelling),
-        Intrinsic::NatLte(l, r) => print_infix("<=", l, r, depth, spelling),
-        Intrinsic::NatGte(l, r) => print_infix(">=", l, r, depth, spelling),
-        Intrinsic::NatAnd(l, r) => print_binary("Nat.and ", l, r, depth, spelling),
-        Intrinsic::NatOr(l, r) => print_binary("Nat.or ", l, r, depth, spelling),
-        Intrinsic::NatXor(l, r) => print_binary("Nat.xor ", l, r, depth, spelling),
-        Intrinsic::NatShl(l, r) => print_binary("Nat.shl ", l, r, depth, spelling),
-        Intrinsic::NatShr(l, r) => print_binary("Nat.shr ", l, r, depth, spelling),
-        Intrinsic::NatRotl(l, r) => print_binary("Nat.rotl ", l, r, depth, spelling),
-        Intrinsic::NatRotr(l, r) => print_binary("Nat.rotr ", l, r, depth, spelling),
-        Intrinsic::NatClz(i) => print_unary("Nat.clz ", i, depth, spelling),
-        Intrinsic::NatCtz(i) => print_unary("Nat.ctz ", i, depth, spelling),
-        Intrinsic::NatPopcnt(i) => print_unary("Nat.popcnt ", i, depth, spelling),
+        Intrinsic::NatEql(l, r) => print_infix("==", l, r, frame),
+        Intrinsic::HandleEql(l, r) => print_infix("==", l, r, frame),
+        Intrinsic::NatNeq(l, r) => print_infix("!=", l, r, frame),
+        Intrinsic::NatAdd(l, r) => print_infix("+", l, r, frame),
+        Intrinsic::NatSub(l, r) => print_infix("-", l, r, frame),
+        Intrinsic::NatMul(l, r) => print_infix("*", l, r, frame),
+        Intrinsic::NatLt(l, r) => print_infix("<", l, r, frame),
+        Intrinsic::NatDiv(l, r) => print_infix("/", l, r, frame),
+        Intrinsic::NatRem(l, r) => print_infix("%", l, r, frame),
+        Intrinsic::NatGt(l, r) => print_infix(">", l, r, frame),
+        Intrinsic::NatLte(l, r) => print_infix("<=", l, r, frame),
+        Intrinsic::NatGte(l, r) => print_infix(">=", l, r, frame),
+        Intrinsic::NatAnd(l, r) => print_binary("Nat.and ", l, r, frame),
+        Intrinsic::NatOr(l, r) => print_binary("Nat.or ", l, r, frame),
+        Intrinsic::NatXor(l, r) => print_binary("Nat.xor ", l, r, frame),
+        Intrinsic::NatShl(l, r) => print_binary("Nat.shl ", l, r, frame),
+        Intrinsic::NatShr(l, r) => print_binary("Nat.shr ", l, r, frame),
+        Intrinsic::NatRotl(l, r) => print_binary("Nat.rotl ", l, r, frame),
+        Intrinsic::NatRotr(l, r) => print_binary("Nat.rotr ", l, r, frame),
+        Intrinsic::NatClz(i) => print_unary("Nat.clz ", i, frame),
+        Intrinsic::NatCtz(i) => print_unary("Nat.ctz ", i, frame),
+        Intrinsic::NatPopcnt(i) => print_unary("Nat.popcnt ", i, frame),
         Intrinsic::ByteType => pure("Byte"),
         Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
-        Intrinsic::ByteToNat(i) => print_unary("Byte.to_nat ", i, depth, spelling),
-        Intrinsic::NatToByte(i) => print_unary("Nat.to_byte ", i, depth, spelling),
-        Intrinsic::ByteEql(l, r) => print_binary("Byte.eql ", l, r, depth, spelling),
-        Intrinsic::ByteLt(l, r) => print_binary("Byte.lt ", l, r, depth, spelling),
-        Intrinsic::ByteLte(l, r) => print_binary("Byte.lte ", l, r, depth, spelling),
-        Intrinsic::ByteGt(l, r) => print_binary("Byte.gt ", l, r, depth, spelling),
-        Intrinsic::ByteGte(l, r) => print_binary("Byte.gte ", l, r, depth, spelling),
+        Intrinsic::ByteToNat(i) => print_unary("Byte.to_nat ", i, frame),
+        Intrinsic::NatToByte(i) => print_unary("Nat.to_byte ", i, frame),
+        Intrinsic::ByteEql(l, r) => print_binary("Byte.eql ", l, r, frame),
+        Intrinsic::ByteLt(l, r) => print_binary("Byte.lt ", l, r, frame),
+        Intrinsic::ByteLte(l, r) => print_binary("Byte.lte ", l, r, frame),
+        Intrinsic::ByteGt(l, r) => print_binary("Byte.gt ", l, r, frame),
+        Intrinsic::ByteGte(l, r) => print_binary("Byte.gte ", l, r, frame),
         Intrinsic::IntType => pure("Int"),
         Intrinsic::Int(value) => pure(format!("{value:+}")),
-        Intrinsic::IntEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Intrinsic::IntNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Intrinsic::IntAdd(l, r) => print_infix("+", l, r, depth, spelling),
-        Intrinsic::IntSub(l, r) => print_infix("-", l, r, depth, spelling),
-        Intrinsic::IntMul(l, r) => print_infix("*", l, r, depth, spelling),
-        Intrinsic::IntDiv(l, r) => print_infix("/", l, r, depth, spelling),
-        Intrinsic::IntRem(l, r) => print_infix("%", l, r, depth, spelling),
-        Intrinsic::IntLt(l, r) => print_infix("<", l, r, depth, spelling),
-        Intrinsic::IntGt(l, r) => print_infix(">", l, r, depth, spelling),
-        Intrinsic::IntLte(l, r) => print_infix("<=", l, r, depth, spelling),
-        Intrinsic::IntGte(l, r) => print_infix(">=", l, r, depth, spelling),
-        Intrinsic::IntAnd(l, r) => print_binary("Int.and ", l, r, depth, spelling),
-        Intrinsic::IntOr(l, r) => print_binary("Int.or ", l, r, depth, spelling),
-        Intrinsic::IntXor(l, r) => print_binary("Int.xor ", l, r, depth, spelling),
-        Intrinsic::IntShl(l, r) => print_binary("Int.shl ", l, r, depth, spelling),
-        Intrinsic::IntShr(l, r) => print_binary("Int.shr ", l, r, depth, spelling),
-        Intrinsic::IntRotl(l, r) => print_binary("Int.rotl ", l, r, depth, spelling),
-        Intrinsic::IntRotr(l, r) => print_binary("Int.rotr ", l, r, depth, spelling),
-        Intrinsic::IntClz(i) => print_unary("Int.clz ", i, depth, spelling),
-        Intrinsic::IntCtz(i) => print_unary("Int.ctz ", i, depth, spelling),
-        Intrinsic::IntPopcnt(i) => print_unary("Int.popcnt ", i, depth, spelling),
+        Intrinsic::IntEql(l, r) => print_infix("==", l, r, frame),
+        Intrinsic::IntNeq(l, r) => print_infix("!=", l, r, frame),
+        Intrinsic::IntAdd(l, r) => print_infix("+", l, r, frame),
+        Intrinsic::IntSub(l, r) => print_infix("-", l, r, frame),
+        Intrinsic::IntMul(l, r) => print_infix("*", l, r, frame),
+        Intrinsic::IntDiv(l, r) => print_infix("/", l, r, frame),
+        Intrinsic::IntRem(l, r) => print_infix("%", l, r, frame),
+        Intrinsic::IntLt(l, r) => print_infix("<", l, r, frame),
+        Intrinsic::IntGt(l, r) => print_infix(">", l, r, frame),
+        Intrinsic::IntLte(l, r) => print_infix("<=", l, r, frame),
+        Intrinsic::IntGte(l, r) => print_infix(">=", l, r, frame),
+        Intrinsic::IntAnd(l, r) => print_binary("Int.and ", l, r, frame),
+        Intrinsic::IntOr(l, r) => print_binary("Int.or ", l, r, frame),
+        Intrinsic::IntXor(l, r) => print_binary("Int.xor ", l, r, frame),
+        Intrinsic::IntShl(l, r) => print_binary("Int.shl ", l, r, frame),
+        Intrinsic::IntShr(l, r) => print_binary("Int.shr ", l, r, frame),
+        Intrinsic::IntRotl(l, r) => print_binary("Int.rotl ", l, r, frame),
+        Intrinsic::IntRotr(l, r) => print_binary("Int.rotr ", l, r, frame),
+        Intrinsic::IntClz(i) => print_unary("Int.clz ", i, frame),
+        Intrinsic::IntCtz(i) => print_unary("Int.ctz ", i, frame),
+        Intrinsic::IntPopcnt(i) => print_unary("Int.popcnt ", i, frame),
         Intrinsic::FltType => pure("Flt"),
         Intrinsic::Flt(flt) => print_flt(flt),
-        Intrinsic::FltAdd(l, r) => print_infix("+", l, r, depth, spelling),
-        Intrinsic::FltSub(l, r) => print_infix("-", l, r, depth, spelling),
-        Intrinsic::FltMul(l, r) => print_infix("*", l, r, depth, spelling),
-        Intrinsic::FltDiv(l, r) => print_infix("/", l, r, depth, spelling),
-        Intrinsic::FltRem(l, r) => print_infix("%", l, r, depth, spelling),
-        Intrinsic::FltEql(l, r) => print_infix("==", l, r, depth, spelling),
-        Intrinsic::FltNeq(l, r) => print_infix("!=", l, r, depth, spelling),
-        Intrinsic::FltLt(l, r) => print_infix("<", l, r, depth, spelling),
-        Intrinsic::FltGt(l, r) => print_infix(">", l, r, depth, spelling),
-        Intrinsic::FltLte(l, r) => print_infix("<=", l, r, depth, spelling),
-        Intrinsic::FltGte(l, r) => print_infix(">=", l, r, depth, spelling),
-        Intrinsic::FltMin(l, r) => print_binary("Flt.min ", l, r, depth, spelling),
-        Intrinsic::FltMax(l, r) => print_binary("Flt.max ", l, r, depth, spelling),
-        Intrinsic::FltCopysign(l, r) => print_binary("Flt.copysign ", l, r, depth, spelling),
-        Intrinsic::FltNeg(i) => print_unary("Flt.neg ", i, depth, spelling),
-        Intrinsic::FltAbs(i) => print_unary("Flt.abs ", i, depth, spelling),
-        Intrinsic::FltSqrt(i) => print_unary("Flt.sqrt ", i, depth, spelling),
-        Intrinsic::FltFloor(i) => print_unary("Flt.floor ", i, depth, spelling),
-        Intrinsic::FltCeil(i) => print_unary("Flt.ceil ", i, depth, spelling),
-        Intrinsic::FltTrunc(i) => print_unary("Flt.trunc ", i, depth, spelling),
-        Intrinsic::FltNearest(i) => print_unary("Flt.nearest ", i, depth, spelling),
-        Intrinsic::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, depth, spelling),
-        Intrinsic::FltOfLeBytes(i) => print_unary("Flt.of_le_bytes ", i, depth, spelling),
-        Intrinsic::NatToInt(i) => print_unary("Nat.to_int ", i, depth, spelling),
-        Intrinsic::NatToFlt(i) => print_unary("Nat.to_flt ", i, depth, spelling),
-        Intrinsic::IntToNat(i) => print_unary("Int.to_nat ", i, depth, spelling),
-        Intrinsic::IntToFlt(i) => print_unary("Int.to_flt ", i, depth, spelling),
-        Intrinsic::FltToNat(i) => print_unary("Flt.to_nat ", i, depth, spelling),
-        Intrinsic::FltToInt(i) => print_unary("Flt.to_int ", i, depth, spelling),
+        Intrinsic::FltAdd(l, r) => print_infix("+", l, r, frame),
+        Intrinsic::FltSub(l, r) => print_infix("-", l, r, frame),
+        Intrinsic::FltMul(l, r) => print_infix("*", l, r, frame),
+        Intrinsic::FltDiv(l, r) => print_infix("/", l, r, frame),
+        Intrinsic::FltRem(l, r) => print_infix("%", l, r, frame),
+        Intrinsic::FltEql(l, r) => print_infix("==", l, r, frame),
+        Intrinsic::FltNeq(l, r) => print_infix("!=", l, r, frame),
+        Intrinsic::FltLt(l, r) => print_infix("<", l, r, frame),
+        Intrinsic::FltGt(l, r) => print_infix(">", l, r, frame),
+        Intrinsic::FltLte(l, r) => print_infix("<=", l, r, frame),
+        Intrinsic::FltGte(l, r) => print_infix(">=", l, r, frame),
+        Intrinsic::FltMin(l, r) => print_binary("Flt.min ", l, r, frame),
+        Intrinsic::FltMax(l, r) => print_binary("Flt.max ", l, r, frame),
+        Intrinsic::FltCopysign(l, r) => print_binary("Flt.copysign ", l, r, frame),
+        Intrinsic::FltNeg(i) => print_unary("Flt.neg ", i, frame),
+        Intrinsic::FltAbs(i) => print_unary("Flt.abs ", i, frame),
+        Intrinsic::FltSqrt(i) => print_unary("Flt.sqrt ", i, frame),
+        Intrinsic::FltFloor(i) => print_unary("Flt.floor ", i, frame),
+        Intrinsic::FltCeil(i) => print_unary("Flt.ceil ", i, frame),
+        Intrinsic::FltTrunc(i) => print_unary("Flt.trunc ", i, frame),
+        Intrinsic::FltNearest(i) => print_unary("Flt.nearest ", i, frame),
+        Intrinsic::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, frame),
+        Intrinsic::FltOfLeBytes(i) => print_unary("Flt.of_le_bytes ", i, frame),
+        Intrinsic::NatToInt(i) => print_unary("Nat.to_int ", i, frame),
+        Intrinsic::NatToFlt(i) => print_unary("Nat.to_flt ", i, frame),
+        Intrinsic::IntToNat(i) => print_unary("Int.to_nat ", i, frame),
+        Intrinsic::IntToFlt(i) => print_unary("Int.to_flt ", i, frame),
+        Intrinsic::FltToNat(i) => print_unary("Flt.to_nat ", i, frame),
+        Intrinsic::FltToInt(i) => print_unary("Flt.to_int ", i, frame),
         Intrinsic::BinType(Grain::X) => pure("Bytes"),
         Intrinsic::Bin(Grain::X, bytes) => pure(format!(
             "x[{}]",
@@ -718,26 +729,23 @@ fn print_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) 
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
-        Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, depth, spelling),
-        Intrinsic::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, depth, spelling),
-        Intrinsic::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, depth, spelling),
+        Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, frame),
+        Intrinsic::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, frame),
+        Intrinsic::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, frame),
         Intrinsic::BinSlice(Grain::X, bin, start, end) => flat([
             pure("Bytes.slice "),
-            sub(bin, depth, spelling),
+            sub(bin, frame),
             pure(" "),
-            sub(start, depth, spelling),
+            sub(start, frame),
             pure(" "),
-            sub(end, depth, spelling),
+            sub(end, frame),
         ]),
-        Intrinsic::BinAppend(Grain::X, b, byte) => {
-            print_binary("Bytes.append ", b, byte, depth, spelling)
-        }
+        Intrinsic::BinAppend(Grain::X, b, byte) => print_binary("Bytes.append ", b, byte, frame),
         Intrinsic::BinConcat(Grain::X, operands) => flat([
             pure("Bytes.concat "),
-            sep_flat(
-                operands.into_iter().map(move |e| sub(e, depth, spelling)),
-                || pure(", "),
-            ),
+            sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
+                pure(", ")
+            }),
         ]),
         Intrinsic::BinType(Grain::B) => pure("Bits"),
         Intrinsic::Bin(Grain::B, bits) => pure(format!(
@@ -750,107 +758,100 @@ fn print_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) 
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
-        Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, depth, spelling),
-        Intrinsic::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, depth, spelling),
-        Intrinsic::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, depth, spelling),
+        Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, frame),
+        Intrinsic::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, frame),
+        Intrinsic::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, frame),
         Intrinsic::BinSlice(Grain::B, bin, start, end) => flat([
             pure("Bits.slice "),
-            sub(bin, depth, spelling),
+            sub(bin, frame),
             pure(" "),
-            sub(start, depth, spelling),
+            sub(start, frame),
             pure(" "),
-            sub(end, depth, spelling),
+            sub(end, frame),
         ]),
-        Intrinsic::BinAppend(Grain::B, b, bit) => {
-            print_binary("Bits.append ", b, bit, depth, spelling)
-        }
+        Intrinsic::BinAppend(Grain::B, b, bit) => print_binary("Bits.append ", b, bit, frame),
         Intrinsic::BinConcat(Grain::B, operands) => flat([
             pure("Bits.concat "),
-            sep_flat(
-                operands.into_iter().map(move |e| sub(e, depth, spelling)),
-                || pure(", "),
-            ),
+            sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
+                pure(", ")
+            }),
         ]),
-        Intrinsic::LstType(elem) => print_unary("Lst ", elem, depth, spelling),
+        Intrinsic::LstType(elem) => print_unary("Lst ", elem, frame),
         Intrinsic::Lst(_, elems) => flat([
             pure("["),
-            sep_flat(
-                elems.into_iter().map(move |e| sub(e, depth, spelling)),
-                || pure(", "),
-            ),
+            sep_flat(elems.into_iter().map(move |e| sub(e, frame)), || pure(", ")),
             pure("]"),
         ]),
-        Intrinsic::LstLen(ty, list) => print_binary("Lst.len ", ty, list, depth, spelling),
+        Intrinsic::LstLen(ty, list) => print_binary("Lst.len ", ty, list, frame),
         Intrinsic::LstGet(ty, list, index) => flat([
             pure("Lst.get "),
-            sub(ty, depth, spelling),
+            sub(ty, frame),
             pure(" "),
-            sub(list, depth, spelling),
+            sub(list, frame),
             pure(" "),
-            sub(index, depth, spelling),
+            sub(index, frame),
         ]),
         Intrinsic::LstSlice(ty, list, start, end) => flat([
             pure("Lst.slice "),
-            sub(ty, depth, spelling),
+            sub(ty, frame),
             pure(" "),
-            sub(list, depth, spelling),
+            sub(list, frame),
             pure(" "),
-            sub(start, depth, spelling),
+            sub(start, frame),
             pure(" "),
-            sub(end, depth, spelling),
+            sub(end, frame),
         ]),
         Intrinsic::LstAppend(ty, list, elem) => flat([
             pure("Lst.append "),
-            sub(ty, depth, spelling),
+            sub(ty, frame),
             pure(" "),
-            sub(list, depth, spelling),
+            sub(list, frame),
             pure(" "),
-            sub(elem, depth, spelling),
+            sub(elem, frame),
         ]),
         Intrinsic::LstConcat(ty, operands) => flat([
             pure("Lst.concat "),
-            sub(ty, depth, spelling),
+            sub(ty, frame),
             pure(" "),
-            sep_flat(
-                operands.into_iter().map(move |e| sub(e, depth, spelling)),
-                || pure(", "),
-            ),
+            sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
+                pure(", ")
+            }),
         ]),
         Intrinsic::LstMap(a, b, lst, f) => flat([
             pure("Lst.map "),
-            sub(a, depth, spelling),
+            sub(a, frame),
             pure(" "),
-            sub(b, depth, spelling),
+            sub(b, frame),
             pure(" "),
-            sub(lst, depth, spelling),
+            sub(lst, frame),
             pure(" "),
-            sub(f, depth, spelling),
+            sub(f, frame),
         ]),
         Intrinsic::HandleType => pure("Handle"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        Intrinsic::ProcExit(code) => print_unary("proc.exit ", code, depth, spelling),
-        Intrinsic::CellType(elem) => print_unary("Cell ", elem, depth, spelling),
-        Intrinsic::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth, spelling),
+        Intrinsic::ProcExit(code) => print_unary("proc.exit ", code, frame),
+        Intrinsic::CellType(elem) => print_unary("Cell ", elem, frame),
+        Intrinsic::Cell(type_, init) => print_binary("Cell.new ", type_, init, frame),
         Intrinsic::CellSet(type_, cell, value) => flat([
             pure("Cell.set "),
-            sub(type_, depth, spelling),
+            sub(type_, frame),
             pure(" "),
-            sub(cell, depth, spelling),
+            sub(cell, frame),
             pure(" "),
-            sub(value, depth, spelling),
+            sub(value, frame),
         ]),
-        Intrinsic::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, depth, spelling),
-        Intrinsic::IoType(result) => print_unary("Io ", result, depth, spelling),
-        Intrinsic::IoPure(type_, value) => print_binary("Io.pure ", type_, value, depth, spelling),
+        Intrinsic::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, frame),
+        Intrinsic::IoType(result) => print_unary("Io ", result, frame),
+        Intrinsic::IoPure(type_, value) => print_binary("Io.pure ", type_, value, frame),
         Intrinsic::IoBind(a, b, action, f) => flat([
             pure("Io.bind "),
-            sub(a, depth, spelling),
+            sub(a, frame),
             pure(" "),
-            sub(b, depth, spelling),
+            sub(b, frame),
             pure(" "),
-            sub(action, depth, spelling),
+            sub(action, frame),
             pure(" "),
-            sub(f, depth, spelling),
+            sub(f, frame),
         ]),
     }
 }
@@ -858,9 +859,18 @@ fn print_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) 
 /// A child document, deferred.
 ///
 /// Every recursive call in this module goes through here. Printing a term is a recursive function over a recursive structure, so building the document descended as deep as the term — one native frame per link of a string literal's UTF-8 derivation, which aborted the compiler while it was trying to *report* that the same literal had exhausted the reduction budget. The thunk moves that descent onto `run_printer`'s stack.
-fn sub(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
-    let spelling = Rc::clone(spelling);
-    deferred(move || print_term(term, depth, &spelling))
+fn sub(term: Term, frame: Frame) -> Printer {
+    let spelling = Rc::clone(frame.spelling);
+    let depth = frame.depth;
+    deferred(move || {
+        term_doc(
+            term,
+            Frame {
+                spelling: &spelling,
+                depth,
+            },
+        )
+    })
 }
 
 /// A delimited comma-list that fits on one line or breaks one item per line, indented — `f(a, b)` against `f(\n  a,\n  b\n)`. `spaced` spells the flat padding inside the delimiters so the flat form stays byte-identical to the fixed layout it replaced: `false` for parenthesized lists, `true` for brace literals (`S { a, b }`). Behavior-neutral on the unbounded `Display` path, where every group renders flat.
@@ -878,15 +888,29 @@ fn listed(open: String, spaced: bool, items: Vec<Printer>, close: &'static str) 
 }
 
 /// [`sub`] for an intrinsic's operands.
-fn sub_intrinsic(intrinsic: Intrinsic, depth: usize, spelling: &Rc<Spelling>) -> Printer {
-    let spelling = Rc::clone(spelling);
-    deferred(move || print_intrinsic(intrinsic, depth, &spelling))
+fn sub_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
+    let spelling = Rc::clone(frame.spelling);
+    let depth = frame.depth;
+    deferred(move || {
+        print_intrinsic(
+            intrinsic,
+            Frame {
+                spelling: &spelling,
+                depth,
+            },
+        )
+    })
 }
 
-pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
+pub(crate) fn print_term(term: Term, spelling: &Rc<Spelling>) -> Printer {
+    term_doc(term, Frame { spelling, depth: 0 })
+}
+
+fn term_doc(term: Term, frame: Frame) -> Printer {
     match Term::unwrap_or_clone(term) {
         Subterm::Type(level) => {
-            if level.is_zero() || (spelling.erase_universes && level.metas().next().is_some()) {
+            if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
+            {
                 pure("Type")
             } else {
                 pure(format!("Type.{{{level}}}"))
@@ -894,16 +918,16 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
         }
         Subterm::Prop => pure("Prop"),
         Subterm::UniverseInst(instance) => flat([
-            sub(instance.head, depth, spelling),
-            pure(universe_suffix(&instance.levels, spelling)),
+            sub(instance.head, frame),
+            pure(universe_suffix(&instance.levels, frame.spelling)),
         ]),
-        Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, depth, spelling),
+        Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
         Subterm::Foreign(function, args) => flat(
             [pure(function.label.clone())]
                 .into_iter()
                 .chain(
                     args.into_iter()
-                        .flat_map(|arg| [pure(" "), sub(arg, depth, spelling)]),
+                        .flat_map(|arg| [pure(" "), sub(arg, frame)]),
                 )
                 .collect::<Vec<_>>(),
         ),
@@ -911,25 +935,31 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             telescope,
             plicities,
         }) => {
-            let n = telescope.len();
-            let mut printers = Vec::with_capacity(n);
+            let after = frame.deeper(telescope.len());
+            let mut printers = Vec::with_capacity(telescope.len());
             let mut cur = telescope;
+            let mut minting = frame;
             let mut idx = 0;
             let output = loop {
                 match cur {
                     Telescope::Done(body) => break *body,
                     Telescope::Cons(ty, rest) => {
                         let raw = rest.binder(0);
-                        let label = binder_or(raw, depth + idx);
+                        let label = minting.label(raw);
                         let mark = plicity_mark(plicities.get(idx));
-                        let typed = sub(ty, depth + n, spelling);
+                        let typed = sub(ty, after);
                         // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
                         let named = match raw {
                             Some(name) => name.hint().is_some() || rest.uses(0),
                             None => false,
                         };
                         let printer = if named {
-                            flat([pure(mark), pure(spelling.label(&label)), pure(": "), typed])
+                            flat([
+                                pure(mark),
+                                pure(frame.spelling.label(&label)),
+                                pure(": "),
+                                typed,
+                            ])
                         } else {
                             flat([pure(mark), typed])
                         };
@@ -942,7 +972,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             flat([
                 listed("(".into(), false, printers, ")"),
                 pure(" -> "),
-                sub(output, depth + n, spelling),
+                sub(output, after),
             ])
         }
         Subterm::Func(Func {
@@ -951,23 +981,23 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
         }) => {
             // A type-former lambda `x => T(…, x)` — the shape witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binder is its only argument, the prefix application otherwise. Recognition demands the exact eta shape (the binder is the final argument and occurs nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
             if let Some(former) = former_eta(&telescope, &plicities) {
-                return former_doc(former, depth, spelling);
+                return former_doc(former, frame);
             }
-            let n = telescope.len();
             // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above. A parameter position cannot be elided, so an unnameable binder nothing references prints the way source spells it: `_`.
-            let mut marked = Vec::with_capacity(n);
+            let mut marked = Vec::with_capacity(telescope.len());
             let mut cur = telescope;
+            let mut minting = frame;
             let mut idx = 0;
             let body = loop {
                 match cur {
                     Telescope::Done(body) => break *body,
                     Telescope::Cons(_ty, rest) => {
-                        let label = binder_or(rest.binder(0), depth + idx);
+                        let label = minting.label(rest.binder(0));
                         let mark = plicity_mark(plicities.get(idx));
                         let shown = if label.hint().is_none() && !rest.uses(0) {
                             "_".to_string()
                         } else {
-                            spelling.label(&label)
+                            frame.spelling.label(&label)
                         };
                         marked.push(format!("{mark}{shown}"));
                         cur = rest.open(&[&Term::free_var(&label)]);
@@ -980,51 +1010,46 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             } else {
                 format!("({})", marked.join(", "))
             };
-            flat([
-                pure(param_str),
-                pure(" =>\n"),
-                indent(sub(body, depth + n, spelling)),
-            ])
+            flat([pure(param_str), pure(" =>\n"), indent(sub(body, minting))])
         }
         Subterm::Apply(Apply {
             head,
             params,
             plicities,
         }) => flat([
-            sub(head, depth, spelling),
+            sub(head, frame),
             listed(
                 "(".into(),
                 false,
                 params
                     .into_iter()
                     .zip(plicities)
-                    .map(|(p, plicity)| marked_argument(sub(p, depth, spelling), Some(&plicity)))
+                    .map(|(p, plicity)| marked_argument(sub(p, frame), Some(&plicity)))
                     .collect::<Vec<_>>(),
                 ")",
             ),
         ]),
         Subterm::TupleType(TupleType { telescope, .. }) => {
-            let n = telescope.len();
-            let mut items = Vec::with_capacity(n);
+            let after = frame.deeper(telescope.len());
+            let mut items = Vec::with_capacity(telescope.len());
             let mut cur = telescope;
-            let mut idx = 0;
+            let mut minting = frame;
             while let Telescope::Cons(ty, rest) = cur {
                 let raw = rest.binder(0);
-                let label = binder_or(raw, depth + idx);
+                let label = minting.label(raw);
                 // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
                 let named = match raw {
                     Some(name) => name.hint().is_some() || rest.uses(0),
                     None => false,
                 };
-                let typed = sub(ty, depth + n, spelling);
+                let typed = sub(ty, after);
                 let printer = if named {
-                    flat([pure(spelling.label(&label)), pure(": "), typed])
+                    flat([pure(frame.spelling.label(&label)), pure(": "), typed])
                 } else {
                     typed
                 };
                 items.push(indent(printer));
                 cur = rest.open(&[&Term::free_var(&label)]);
-                idx += 1;
             }
 
             // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/SYNTAX.md` spells. Unspaced for the same reason the surface printer is.
@@ -1038,8 +1063,8 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 fields
                     .into_iter()
                     .map(move |f| match names.next().flatten() {
-                        Some(name) => flat([pure(name), pure(" = "), sub(f, depth, spelling)]),
-                        None => sub(f, depth, spelling),
+                        Some(name) => flat([pure(name), pure(" = "), sub(f, frame)]),
+                        None => sub(f, frame),
                     })
                     .collect(),
                 ")",
@@ -1050,7 +1075,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 Field::Index(index) => format!(").{index}"),
                 Field::Label(label) => format!(").{label}"),
             };
-            flat([pure("("), sub(head, depth, spelling), pure(field)])
+            flat([pure("("), sub(head, frame), pure(field)])
         }
         // Params then indices, one flat argument list — exactly how the type-constructor function is applied at use sites, and marked the same way. Without the marks this spells `Eq(Nat, 5, 5)`, three positional arguments where `Eq(@A : Type) : (A, A) -> Prop` accepts two: a rendering no use site could reproduce.
         Subterm::InductType(InductType {
@@ -1060,11 +1085,11 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             indices,
         }) => {
             let arity = params.len() + indices.len();
-            let marks = spelling.nominal_marks(&name, arity);
+            let marks = frame.spelling.nominal_marks(&name, arity);
             let label = format!(
                 "{}{}",
-                spelling.symbol(&name),
-                universe_suffix(&universes, spelling)
+                frame.spelling.symbol(&name),
+                universe_suffix(&universes, frame.spelling)
             );
             if arity == 0 {
                 pure(label)
@@ -1077,10 +1102,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                         .chain(indices)
                         .enumerate()
                         .map(|(index, p)| {
-                            marked_argument(
-                                sub(p, depth, spelling),
-                                marks.and_then(|marks| marks.get(index)),
-                            )
+                            marked_argument(sub(p, frame), marks.and_then(|marks| marks.get(index)))
                         })
                         .collect(),
                     ")",
@@ -1097,8 +1119,8 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
         }) => {
             let name = format!(
                 "{}{}",
-                spelling.symbol(&name),
-                universe_suffix(&universes, spelling)
+                frame.spelling.symbol(&name),
+                universe_suffix(&universes, frame.spelling)
             );
             if payload.is_empty() {
                 pure(format!("{name}/{tag}"))
@@ -1106,10 +1128,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 listed(
                     format!("{name}/{tag}("),
                     false,
-                    payload
-                        .into_iter()
-                        .map(|p| sub(p, depth, spelling))
-                        .collect(),
+                    payload.into_iter().map(|p| sub(p, frame)).collect(),
                     ")",
                 )
             }
@@ -1120,11 +1139,11 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             universes,
             params,
         }) => {
-            let marks = spelling.nominal_marks(&name, params.len());
+            let marks = frame.spelling.nominal_marks(&name, params.len());
             let label = format!(
                 "{}{}",
-                spelling.symbol(&name),
-                universe_suffix(&universes, spelling)
+                frame.spelling.symbol(&name),
+                universe_suffix(&universes, frame.spelling)
             );
             if params.is_empty() {
                 pure(label)
@@ -1136,10 +1155,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                         .into_iter()
                         .enumerate()
                         .map(|(index, p)| {
-                            marked_argument(
-                                sub(p, depth, spelling),
-                                marks.and_then(|marks| marks.get(index)),
-                            )
+                            marked_argument(sub(p, frame), marks.and_then(|marks| marks.get(index)))
                         })
                         .collect(),
                     ")",
@@ -1155,14 +1171,11 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
         }) => listed(
             format!(
                 "{}{} {{",
-                spelling.symbol(&name),
-                universe_suffix(&universes, spelling)
+                frame.spelling.symbol(&name),
+                universe_suffix(&universes, frame.spelling)
             ),
             true,
-            fields
-                .into_iter()
-                .map(|f| sub(f, depth, spelling))
-                .collect(),
+            fields.into_iter().map(|f| sub(f, frame)).collect(),
             "}",
         ),
         Subterm::Match(Match {
@@ -1171,13 +1184,12 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             cases,
         }) => {
             // Arity 1 everywhere except an annotated inductive-match motive, whose pattern binders precede the scrutinee binder.
-            let motive_labels = scope_labels(motive.binder_iter(), depth);
+            let (motive_labels, motive_frame) = frame.labels(motive.binder_iter());
             let motive_terms = label_terms(&motive_labels);
             let motive_refs = motive_terms.iter().collect::<Vec<_>>();
-            let motive_arity = motive_labels.len();
             let motive_label = motive_labels
                 .iter()
-                .map(|label| spelling.label(label))
+                .map(|label| frame.spelling.label(label))
                 .collect::<Vec<_>>()
                 .join(", ");
             let motive = motive.open(&motive_refs);
@@ -1196,11 +1208,11 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
 
             let prefix = flat([
                 pure(keyword),
-                sub(head, depth, spelling),
+                sub(head, frame),
                 pure(": "),
                 pure(motive_label),
                 pure(" => "),
-                sub(motive, depth + motive_arity, spelling),
+                sub(motive, motive_frame),
                 pure(";"),
             ]);
 
@@ -1210,9 +1222,9 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                     true_case,
                 } => flat([
                     pure("\n| false =>\n"),
-                    indent(flat([sub(false_case, depth, spelling), pure(";")])),
+                    indent(flat([sub(false_case, frame), pure(";")])),
                     pure("\n| true =>\n"),
-                    indent(flat([sub(true_case, depth, spelling), pure(";")])),
+                    indent(flat([sub(true_case, frame), pure(";")])),
                 ]),
                 Cases::Switch { cases, default } => {
                     let case_printers = flat(
@@ -1221,7 +1233,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             .map(|(n, body)| {
                                 flat([
                                     pure(format!("\n| {n}n =>\n")),
-                                    indent(flat([sub(body, depth, spelling), pure(";")])),
+                                    indent(flat([sub(body, frame), pure(";")])),
                                 ])
                             })
                             .collect::<Vec<_>>(),
@@ -1229,7 +1241,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                     flat([
                         case_printers,
                         pure("\n| _ =>\n"),
-                        indent(flat([sub(default, depth, spelling), pure(";")])),
+                        indent(flat([sub(default, frame), pure(";")])),
                     ])
                 }
                 Cases::Induct { cases, default, .. } => {
@@ -1237,7 +1249,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                         cases
                             .into_iter()
                             .map(|(atom, arm)| {
-                                let labels = scope_labels(arm.binder_iter(), depth);
+                                let (labels, inner) = frame.labels(arm.binder_iter());
                                 let label_terms = label_terms(&labels);
                                 let label_terms = label_terms.iter().collect::<Vec<_>>();
                                 let body = arm.open(&label_terms);
@@ -1252,7 +1264,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                                             .enumerate()
                                             .map(|(idx, l)| {
                                                 let mark = plicity_mark(arm.plicities.get(idx));
-                                                format!("{mark}{}", spelling.label(l))
+                                                format!("{mark}{}", frame.spelling.label(l))
                                             })
                                             .collect::<Vec<_>>()
                                             .join(", ")
@@ -1264,10 +1276,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                                     print_atom(atom),
                                     binders,
                                     pure(" =>\n"),
-                                    indent(flat([
-                                        sub(body, depth + labels.len(), spelling),
-                                        pure(";"),
-                                    ])),
+                                    indent(flat([sub(body, inner), pure(";")])),
                                 ])
                             })
                             .collect::<Vec<_>>(),
@@ -1276,7 +1285,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                         Some(default) => flat([
                             case_printers,
                             pure("\n| _ =>\n"),
-                            indent(flat([sub(default, depth, spelling), pure(";")])),
+                            indent(flat([sub(default, frame), pure(";")])),
                         ]),
                         None => case_printers,
                     }
@@ -1284,34 +1293,34 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 Cases::FreeMonoid { carrier } => {
                     // The cons arm mirrors each carrier's own literal delimiters: `b[head, ..tail]; ih` for `Bin`, `[head, ..tail]; ih` for `Lst` — the same bracketed shape, told apart by the grain letter.
                     let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
-                        let ((head_label, tail_label, ih_label), cons_case) =
-                            open_scope_three(cons_case, depth);
+                        let ((head_label, tail_label, ih_label), cons_case, inner) =
+                            frame.open_three(cons_case);
                         flat([
                             pure(match grain {
                                 Grain::B => "\n| b[",
                                 Grain::X => "\n| x[",
                             }),
-                            pure(spelling.label(&head_label)),
+                            pure(frame.spelling.label(&head_label)),
                             pure(", .."),
-                            pure(spelling.label(&tail_label)),
+                            pure(frame.spelling.label(&tail_label)),
                             pure("]; "),
-                            pure(spelling.label(&ih_label)),
+                            pure(frame.spelling.label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([sub(cons_case, depth + 3, spelling), pure(";")])),
+                            indent(flat([sub(cons_case, inner), pure(";")])),
                         ])
                     };
                     let cons_lst = |cons_case: Scope<Three>| {
-                        let ((head_label, tail_label, ih_label), cons_case) =
-                            open_scope_three(cons_case, depth);
+                        let ((head_label, tail_label, ih_label), cons_case, inner) =
+                            frame.open_three(cons_case);
                         flat([
                             pure("\n| ["),
-                            pure(spelling.label(&head_label)),
+                            pure(frame.spelling.label(&head_label)),
                             pure(", .."),
-                            pure(spelling.label(&tail_label)),
+                            pure(frame.spelling.label(&tail_label)),
                             pure("]; "),
-                            pure(spelling.label(&ih_label)),
+                            pure(frame.spelling.label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([sub(cons_case, depth + 3, spelling), pure(";")])),
+                            indent(flat([sub(cons_case, inner), pure(";")])),
                         ])
                     };
 
@@ -1321,15 +1330,15 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             empty_case,
                             cons_case,
                         } => {
-                            let ((pred_label, ih_label), cons_case) =
-                                open_scope_two(cons_case, depth);
+                            let ((pred_label, ih_label), cons_case, inner) =
+                                frame.open_two(cons_case);
                             let cons_arm = flat([
                                 pure("\n| "),
-                                pure(spelling.label(&pred_label)),
+                                pure(frame.spelling.label(&pred_label)),
                                 pure(" "),
-                                pure(spelling.label(&ih_label)),
+                                pure(frame.spelling.label(&ih_label)),
                                 pure(" =>\n"),
-                                indent(flat([sub(cons_case, depth + 2, spelling), pure(";")])),
+                                indent(flat([sub(cons_case, inner), pure(";")])),
                             ]);
                             ("\n| 0n =>\n", empty_case, cons_arm)
                         }
@@ -1353,7 +1362,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                     };
                     flat([
                         pure(empty_lit),
-                        indent(flat([sub(empty_case, depth, spelling), pure(";")])),
+                        indent(flat([sub(empty_case, frame), pure(";")])),
                         cons_arm,
                     ])
                 }
@@ -1362,7 +1371,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             flat([prefix, arms])
         }
         Subterm::Let(Let { bindings, tail, .. }) => {
-            let labels = scope_labels(tail.binder_iter(), depth);
+            let (labels, inner) = frame.labels(tail.binder_iter());
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
@@ -1372,29 +1381,27 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 .map(|(index, binding)| {
                     let type_ = binding.type_().release(&label_terms[..index]);
                     let value = binding.value().release(&label_terms[..index]);
+                    // Binding `index` sits under the `index` bindings above it.
+                    let at = frame.deeper(index);
 
                     flat([
                         pure("let "),
-                        pure(spelling.label(&labels[index])),
+                        pure(frame.spelling.label(&labels[index])),
                         pure(": "),
-                        sub(type_, depth + index, spelling),
+                        sub(type_, at),
                         pure(" =\n"),
-                        indent(flat([sub(value, depth + index, spelling), pure(";")])),
+                        indent(flat([sub(value, at), pure(";")])),
                         pure("\n"),
                     ])
                 })
                 .collect::<Vec<_>>();
 
-            flat([
-                flat(lines),
-                sub(tail.open(&label_terms), depth + labels.len(), spelling),
-            ])
+            flat([flat(lines), sub(tail.open(&label_terms), inner)])
         }
         Subterm::Rec(Rec { group, tail }) => {
-            let labels = scope_labels(tail.binder_iter(), depth);
+            let (labels, inner) = frame.labels(tail.binder_iter());
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
-            let inner_depth = depth + labels.len();
 
             let bindings = group
                 .iter()
@@ -1405,11 +1412,11 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                     let body = member.body.open(&label_terms);
 
                     flat([
-                        pure(spelling.label(&labels[index])),
+                        pure(frame.spelling.label(&labels[index])),
                         pure(": "),
-                        sub(type_, inner_depth, spelling),
+                        sub(type_, inner),
                         pure(" =\n"),
-                        indent(sub(body, inner_depth, spelling)),
+                        indent(sub(body, inner)),
                     ])
                 })
                 .collect::<Vec<_>>();
@@ -1420,10 +1427,10 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                 pure("rec "),
                 sep_flat(bindings, || pure("\nand ")),
                 pure(";\n"),
-                sub(tail, inner_depth, spelling),
+                sub(tail, inner),
             ])
         }
-        Subterm::Var(var) => print_var(var, spelling),
+        Subterm::Var(var) => print_var(var, frame.spelling),
         Subterm::Transient(Transient::NumLit(num_lit)) => {
             let sign = if num_lit.negative {
                 "-"
@@ -1436,17 +1443,13 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
         }
         // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the intrinsic operators; display folds (`denoise`) nest these nodes.
         Subterm::Transient(Transient::Infix(Infix { op, left, right })) => {
-            print_infix(op.symbol(), left, right, depth, spelling)
+            print_infix(op.symbol(), left, right, frame)
         }
         // A `!` sequencing site prints as the written bang followed by its hoisted continuation, so a lowered-stage dump reads close to the source region.
         Subterm::Transient(Transient::Bang(Bang {
             action,
             continuation,
-        })) => flat([
-            sub(action, depth, spelling),
-            pure("!; "),
-            sub(continuation, depth, spelling),
-        ]),
+        })) => flat([sub(action, frame), pure("!; "), sub(continuation, frame)]),
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing.
         Subterm::Metavar(metavar) => {
             if metavar
@@ -1462,7 +1465,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                         metavar
                             .spine
                             .iter()
-                            .map(|entry| sub(entry.clone(), depth, spelling))
+                            .map(|entry| sub(entry.clone(), frame))
                             .collect::<Vec<_>>(),
                         || pure(", "),
                     ),

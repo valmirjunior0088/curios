@@ -1287,7 +1287,7 @@ impl From<Subterm> for Term {
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         run_printer(
-            print_term(self.clone(), 0, &Rc::new(Spelling::default())),
+            print_term(self.clone(), &Rc::new(Spelling::default())),
             formatter,
             4,
         )
@@ -1303,7 +1303,7 @@ impl Term {
 
 impl fmt::Display for Spelled<'_, Term> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let printer = print_term(self.value().clone(), 0, self.spelling());
+        let printer = print_term(self.value().clone(), self.spelling());
         match self.width() {
             // The width is a target, not a guarantee: content with no break point still overruns.
             Some(width) => run_printer_within(printer, formatter, 4, width),
@@ -2794,7 +2794,7 @@ impl Subterm {
 impl fmt::Display for Subterm {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         run_printer(
-            print_term(self.clone().into(), 0, &Rc::new(Spelling::default())),
+            print_term(self.clone().into(), &Rc::new(Spelling::default())),
             formatter,
             4,
         )
