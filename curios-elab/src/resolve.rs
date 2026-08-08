@@ -51,7 +51,7 @@ pub(crate) fn diagnose_embedding(context: &mut Context, goal: &Term) -> Option<E
     let Global::Authored(concept_path) = &concept_name else {
         return None;
     };
-    if *concept_path != context.syntax().lift().lift().concept().qualifier() {
+    if *concept_path != context.syntax().lift.lift.concept.qualifier() {
         return None;
     }
     let [source, target] = params.as_slice() else {
@@ -63,8 +63,7 @@ pub(crate) fn diagnose_embedding(context: &mut Context, goal: &Term) -> Option<E
     let target_key = HeadKey::of_whnf(&target_whnf);
 
     // Monad-hood of the source: any registered Monad witness under its head. The concept's name derives from the registry's bind wrapper — its namespace is the concept.
-    let monad_concept =
-        Global::Authored(context.syntax().monad().bind().qualifier().without_last());
+    let monad_concept = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
     let source_is_monad = match &source_key {
         Some(key) => context
             .witness(&monad_concept, &WitnessKey(vec![key.clone()]))

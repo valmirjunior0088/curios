@@ -38,80 +38,24 @@ impl SyntaxName {
 /// The label is deliberately not a [`SyntaxName`]. A concept field is a structure field resolved positionally against its declaration, not a global anything can name, so it travels beside the concept it belongs to instead of pretending to be a name of its own — and it is checked differently: presence in the declaration's field list rather than presence in the module's declared names.
 #[derive(Debug, Clone, Copy)]
 pub struct ConceptField {
-    concept: SyntaxName,
-    field: &'static str,
-}
-
-impl ConceptField {
-    pub const fn new(concept: SyntaxName, field: &'static str) -> Self {
-        Self { concept, field }
-    }
-
-    pub const fn concept(self) -> SyntaxName {
-        self.concept
-    }
-
-    pub const fn field(self) -> &'static str {
-        self.field
-    }
+    pub concept: SyntaxName,
+    pub field: &'static str,
 }
 
 /// The compiler-known `/syn` names, grouped by the surface feature that emits them.
 ///
-/// Fields are private so this crate owns the shape of the contract, while the crate that owns the corresponding source declarations chooses the canonical value. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
+/// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot — where a positional constructor once let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
-    monad: MonadSyntax,
-    lift: LiftSyntax,
-    operator: OperatorSyntax,
-    character: CharacterSyntax,
-    string: StringSyntax,
-    proof: ProofSyntax,
+    pub monad: MonadSyntax,
+    pub lift: LiftSyntax,
+    pub operator: OperatorSyntax,
+    pub character: CharacterSyntax,
+    pub string: StringSyntax,
+    pub proof: ProofSyntax,
 }
 
 impl SyntaxRegistry {
-    pub const fn new(
-        monad: MonadSyntax,
-        lift: LiftSyntax,
-        operator: OperatorSyntax,
-        character: CharacterSyntax,
-        string: StringSyntax,
-        proof: ProofSyntax,
-    ) -> Self {
-        Self {
-            monad,
-            lift,
-            operator,
-            character,
-            string,
-            proof,
-        }
-    }
-
-    pub const fn monad(self) -> MonadSyntax {
-        self.monad
-    }
-
-    pub const fn lift(self) -> LiftSyntax {
-        self.lift
-    }
-
-    pub const fn operator(self) -> OperatorSyntax {
-        self.operator
-    }
-
-    pub const fn character(self) -> CharacterSyntax {
-        self.character
-    }
-
-    pub const fn string(self) -> StringSyntax {
-        self.string
-    }
-
-    pub const fn proof(self) -> ProofSyntax {
-        self.proof
-    }
-
     /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/syn/Cmp` recurs — a duplicate costs a redundant assertion and nothing else, and enumerating per slot is what keeps a newly added slot impossible to omit here.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
         [
@@ -126,7 +70,7 @@ impl SyntaxRegistry {
             self.proof.false_absurd,
         ]
         .into_iter()
-        .chain(self.concept_fields().map(ConceptField::concept))
+        .chain(self.concept_fields().map(|target| target.concept))
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
@@ -140,33 +84,13 @@ impl SyntaxRegistry {
 /// The target postfix `!` sequences with: `/syn/Monad`'s `bind`, projected from the witness the operand's type resolves.
 #[derive(Debug, Clone, Copy)]
 pub struct MonadSyntax {
-    bind: SyntaxName,
-}
-
-impl MonadSyntax {
-    pub const fn new(bind: SyntaxName) -> Self {
-        Self { bind }
-    }
-
-    pub const fn bind(self) -> SyntaxName {
-        self.bind
-    }
+    pub bind: SyntaxName,
 }
 
 /// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/syn/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
 #[derive(Debug, Clone, Copy)]
 pub struct LiftSyntax {
-    lift: ConceptField,
-}
-
-impl LiftSyntax {
-    pub const fn new(lift: ConceptField) -> Self {
-        Self { lift }
-    }
-
-    pub const fn lift(self) -> ConceptField {
-        self.lift
-    }
+    pub lift: ConceptField,
 }
 
 /// The operator→concept table backing `elaborate_infix`: one slot per method the fixed infix operators dispatch through.
@@ -174,58 +98,22 @@ impl LiftSyntax {
 /// One slot per *method* rather than per concept, because that is the granularity the elaborator asks at — `Cmp` answers four operators and `Eql` answers two, and a per-concept grouping would have to reintroduce the method as a positional index into a field list. Every operator, `&&`/`||` included, resolves through a witness projection of its concept; there is no carved-out exception, so there is no operator without a slot.
 #[derive(Debug, Clone, Copy)]
 pub struct OperatorSyntax {
-    add: ConceptField,
-    sub: ConceptField,
-    mul: ConceptField,
-    div: ConceptField,
-    rem: ConceptField,
-    eql: ConceptField,
-    neq: ConceptField,
-    lt: ConceptField,
-    gt: ConceptField,
-    lte: ConceptField,
-    gte: ConceptField,
-    and: ConceptField,
-    or: ConceptField,
+    pub add: ConceptField,
+    pub sub: ConceptField,
+    pub mul: ConceptField,
+    pub div: ConceptField,
+    pub rem: ConceptField,
+    pub eql: ConceptField,
+    pub neq: ConceptField,
+    pub lt: ConceptField,
+    pub gt: ConceptField,
+    pub lte: ConceptField,
+    pub gte: ConceptField,
+    pub and: ConceptField,
+    pub or: ConceptField,
 }
 
 impl OperatorSyntax {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one argument per registered slot is the point: a slot cannot be forgotten, and grouping them into sub-structs would only move the same count behind another constructor"
-    )]
-    pub const fn new(
-        add: ConceptField,
-        sub: ConceptField,
-        mul: ConceptField,
-        div: ConceptField,
-        rem: ConceptField,
-        eql: ConceptField,
-        neq: ConceptField,
-        lt: ConceptField,
-        gt: ConceptField,
-        lte: ConceptField,
-        gte: ConceptField,
-        and: ConceptField,
-        or: ConceptField,
-    ) -> Self {
-        Self {
-            add,
-            sub,
-            mul,
-            div,
-            rem,
-            eql,
-            neq,
-            lt,
-            gt,
-            lte,
-            gte,
-            and,
-            or,
-        }
-    }
-
     /// The concept and method `op` dispatches through. `Neq` has its own slot rather than sharing `Eql`'s: it projects `neq`, so a carrier with a native disequality instruction names it instead of paying for an equality and a negation.
     pub const fn concept_field(self, op: NumOp) -> ConceptField {
         match op {
@@ -249,7 +137,7 @@ impl OperatorSyntax {
     pub fn operator_for(self, concept: &Qualifier, field: &str) -> Option<NumOp> {
         NumOp::ALL.into_iter().find(|op| {
             let target = self.concept_field(*op);
-            target.concept().qualifier() == *concept && target.field() == field
+            target.concept.qualifier() == *concept && target.field == field
         })
     }
 
@@ -264,85 +152,20 @@ impl OperatorSyntax {
 
 #[derive(Debug, Clone, Copy)]
 pub struct CharacterSyntax {
-    character: SyntaxName,
-    scalar_below: SyntaxName,
-    scalar_above: SyntaxName,
-}
-
-impl CharacterSyntax {
-    pub const fn new(
-        character: SyntaxName,
-        scalar_below: SyntaxName,
-        scalar_above: SyntaxName,
-    ) -> Self {
-        Self {
-            character,
-            scalar_below,
-            scalar_above,
-        }
-    }
-
-    pub const fn character(self) -> SyntaxName {
-        self.character
-    }
-
-    pub const fn scalar_below(self) -> SyntaxName {
-        self.scalar_below
-    }
-
-    pub const fn scalar_above(self) -> SyntaxName {
-        self.scalar_above
-    }
+    pub character: SyntaxName,
+    pub scalar_below: SyntaxName,
+    pub scalar_above: SyntaxName,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct StringSyntax {
-    string: SyntaxName,
-    of_scan_eq: SyntaxName,
-    refl_scan: SyntaxName,
-}
-
-impl StringSyntax {
-    pub const fn new(string: SyntaxName, of_scan_eq: SyntaxName, refl_scan: SyntaxName) -> Self {
-        Self {
-            string,
-            of_scan_eq,
-            refl_scan,
-        }
-    }
-
-    pub const fn of_scan_eq(self) -> SyntaxName {
-        self.of_scan_eq
-    }
-
-    pub const fn refl_scan(self) -> SyntaxName {
-        self.refl_scan
-    }
-
-    pub const fn string(self) -> SyntaxName {
-        self.string
-    }
+    pub string: SyntaxName,
+    pub of_scan_eq: SyntaxName,
+    pub refl_scan: SyntaxName,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProofSyntax {
-    true_qed: SyntaxName,
-    false_absurd: SyntaxName,
-}
-
-impl ProofSyntax {
-    pub const fn new(true_qed: SyntaxName, false_absurd: SyntaxName) -> Self {
-        Self {
-            true_qed,
-            false_absurd,
-        }
-    }
-
-    pub const fn true_qed(self) -> SyntaxName {
-        self.true_qed
-    }
-
-    pub const fn false_absurd(self) -> SyntaxName {
-        self.false_absurd
-    }
+    pub true_qed: SyntaxName,
+    pub false_absurd: SyntaxName,
 }

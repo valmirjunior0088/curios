@@ -39,11 +39,7 @@ pub(crate) fn operator_table(context: &Context) -> Operators {
             continue;
         };
         for (index, field) in concept.fields.iter().enumerate() {
-            if let Some(op) = context
-                .syntax()
-                .operator()
-                .operator_for(concept_path, field)
-            {
+            if let Some(op) = context.syntax().operator.operator_for(concept_path, field) {
                 table.by_concept.insert((concept_name.clone(), index), op);
             }
         }

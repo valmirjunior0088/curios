@@ -406,10 +406,9 @@ pub(super) fn elaborate_bang(
         action_result_key(context, &bang.action),
     ) {
         (Some(region_key), Some(action_key)) if region_key != action_key => {
-            let field = context.syntax().lift().lift();
-            let wrapper = Term::free_var(&Free::global(
-                field.concept().qualifier().with(field.field()),
-            ));
+            let field = context.syntax().lift.lift;
+            let wrapper =
+                Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
             let wrapped = Term::apply(wrapper, vec![bang.action.clone()]);
             match bang.action.span().or_else(|| term.span()) {
                 Some(span) => Term::spanned(span, wrapped),
@@ -419,7 +418,7 @@ pub(super) fn elaborate_bang(
         _ => bang.action.clone(),
     };
 
-    let head = Term::free_var(&Free::global(context.syntax().monad().bind().qualifier()));
+    let head = Term::free_var(&Free::global(context.syntax().monad.bind.qualifier()));
     let app = Term::apply(head, vec![action, bang.continuation.clone()]);
     let app = match term.span() {
         Some(span) => Term::spanned(span, app),
@@ -511,9 +510,9 @@ pub(super) fn elaborate_infix(
     let classifier = context.fresh_classifier_type("infix operand classifier");
     let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.span());
 
-    let target = context.syntax().operator().concept_field(infix.op);
-    let field_name = target.field();
-    let concept_name = Global::Authored(target.concept().qualifier());
+    let target = context.syntax().operator.concept_field(infix.op);
+    let field_name = target.field;
+    let concept_name = Global::Authored(target.concept.qualifier());
     let method = infix_method(
         context,
         infix.op,

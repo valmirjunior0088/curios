@@ -12,39 +12,46 @@ const fn name(segments: &'static [&'static str]) -> SyntaxName {
 }
 
 const fn field(segments: &'static [&'static str], label: &'static str) -> ConceptField {
-    ConceptField::new(name(segments), label)
+    ConceptField {
+        concept: name(segments),
+        field: label,
+    }
 }
 
-pub(crate) const SYNTAX: SyntaxRegistry = SyntaxRegistry::new(
-    MonadSyntax::new(name(&["syn", "Monad", "bind"])),
-    LiftSyntax::new(field(&["syn", "Lift"], "lift")),
-    OperatorSyntax::new(
-        field(&["syn", "Add"], "add"),
-        field(&["syn", "Sub"], "sub"),
-        field(&["syn", "Mul"], "mul"),
-        field(&["syn", "Div"], "div"),
-        field(&["syn", "Rem"], "rem"),
-        field(&["syn", "Eql", "Eql"], "eql"),
-        field(&["syn", "Eql", "Eql"], "neq"),
-        field(&["syn", "Cmp"], "lt"),
-        field(&["syn", "Cmp"], "gt"),
-        field(&["syn", "Cmp"], "lte"),
-        field(&["syn", "Cmp"], "gte"),
-        field(&["syn", "And"], "and"),
-        field(&["syn", "Or"], "or"),
-    ),
-    CharacterSyntax::new(
-        name(&["syn", "Char", "Char"]),
-        name(&["syn", "Char", "Scalar", "below"]),
-        name(&["syn", "Char", "Scalar", "above"]),
-    ),
-    StringSyntax::new(
-        name(&["syn", "Str", "Str"]),
-        name(&["syn", "Str", "of_scan_eq"]),
-        name(&["syn", "Str", "refl_scan"]),
-    ),
-    ProofSyntax::new(
-        name(&["syn", "True", "True", "qed"]),
-        name(&["syn", "False", "absurd"]),
-    ),
-);
+pub(crate) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    monad: MonadSyntax {
+        bind: name(&["syn", "Monad", "bind"]),
+    },
+    lift: LiftSyntax {
+        lift: field(&["syn", "Lift"], "lift"),
+    },
+    operator: OperatorSyntax {
+        add: field(&["syn", "Add"], "add"),
+        sub: field(&["syn", "Sub"], "sub"),
+        mul: field(&["syn", "Mul"], "mul"),
+        div: field(&["syn", "Div"], "div"),
+        rem: field(&["syn", "Rem"], "rem"),
+        eql: field(&["syn", "Eql", "Eql"], "eql"),
+        neq: field(&["syn", "Eql", "Eql"], "neq"),
+        lt: field(&["syn", "Cmp"], "lt"),
+        gt: field(&["syn", "Cmp"], "gt"),
+        lte: field(&["syn", "Cmp"], "lte"),
+        gte: field(&["syn", "Cmp"], "gte"),
+        and: field(&["syn", "And"], "and"),
+        or: field(&["syn", "Or"], "or"),
+    },
+    character: CharacterSyntax {
+        character: name(&["syn", "Char", "Char"]),
+        scalar_below: name(&["syn", "Char", "Scalar", "below"]),
+        scalar_above: name(&["syn", "Char", "Scalar", "above"]),
+    },
+    string: StringSyntax {
+        string: name(&["syn", "Str", "Str"]),
+        of_scan_eq: name(&["syn", "Str", "of_scan_eq"]),
+        refl_scan: name(&["syn", "Str", "refl_scan"]),
+    },
+    proof: ProofSyntax {
+        true_qed: name(&["syn", "True", "True", "qed"]),
+        false_absurd: name(&["syn", "False", "absurd"]),
+    },
+};

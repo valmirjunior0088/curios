@@ -256,11 +256,11 @@ fn validate_syntax_targets(module: &curios_core::Module) {
 
     // A concept can exist under the registered name and still not declare the method the elaborator projects, which the presence check above cannot see. `elaborate_infix` resolves that method *positionally* against the declaration, so a drifted label is not a compile error here but a panic on the first program that writes the operator.
     for target in SYNTAX.concept_fields() {
-        let symbol = target.concept().symbol();
-        let field = target.field();
+        let symbol = target.concept.symbol();
+        let field = target.field;
         let concept = module
             .concepts
-            .get(&Global::Authored(target.concept().qualifier()))
+            .get(&Global::Authored(target.concept.qualifier()))
             .unwrap_or_else(|| {
                 panic!(
                     "registered operator concept '{symbol}' is not a concept in the lowered prelude"

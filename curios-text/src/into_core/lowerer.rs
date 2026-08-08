@@ -151,17 +151,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             PackedBin::from_bytes(bytes.to_vec()),
         ));
 
-        let syntax = self.context.syntax().string();
+        let syntax = self.context.syntax().string;
         let valid = Self::syn_call(
-            syntax.of_scan_eq(),
+            syntax.of_scan_eq,
             [
                 packed.clone(),
-                Self::syn_call(syntax.refl_scan(), [packed.clone()]),
+                Self::syn_call(syntax.refl_scan, [packed.clone()]),
             ],
         );
 
         curios_core::Term::struct_(
-            curios_core::Global::Authored(syntax.string().qualifier()),
+            curios_core::Global::Authored(syntax.string.qualifier()),
             Vec::<curios_core::Term>::new(),
             [packed, valid],
         )
@@ -175,9 +175,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
             )));
         let constructor = if (character as u32) < 0xD800 {
-            self.context.syntax().character().scalar_below()
+            self.context.syntax().character.scalar_below
         } else {
-            self.context.syntax().character().scalar_above()
+            self.context.syntax().character.scalar_above
         };
         let scalar = curios_core::Term::apply_marked(
             curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
@@ -187,15 +187,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 (Plicity::Implicit, code.clone()),
                 (
                     Plicity::Explicit,
-                    Self::syn_call(self.context.syntax().proof().true_qed(), []),
+                    Self::syn_call(self.context.syntax().proof.true_qed, []),
                 ),
             ],
         );
 
         curios_core::Term::struct_(
-            curios_core::Global::Authored(
-                self.context.syntax().character().character().qualifier(),
-            ),
+            curios_core::Global::Authored(self.context.syntax().character.character.qualifier()),
             Vec::<curios_core::Term>::new(),
             [code, scalar],
         )

@@ -118,7 +118,7 @@ fn is_sequencing(context: &Context, term: &Term) -> bool {
         return false;
     };
 
-    head.head_name() == Some(&Free::global(context.syntax().monad().bind().qualifier()))
+    head.head_name() == Some(&Free::global(context.syntax().monad.bind.qualifier()))
 }
 
 /// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.
