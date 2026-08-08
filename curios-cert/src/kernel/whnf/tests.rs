@@ -2,7 +2,10 @@ use {
     super::unfold_rec,
     crate::{Kernel, whnf},
     curios_base::Qualifier,
-    curios_core::{Apply, Free, Intrinsic, Nat, Reducer, Subterm, Term, UniverseContext},
+    curios_core::{
+        Apply, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm, Term,
+        UniverseContext,
+    },
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
@@ -76,7 +79,7 @@ fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let f = binder(0, "f");
     kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
 
-    let instance = Term::universe_inst(Term::free_var(&f), vec![curios_core::Level::zero()]);
+    let instance = Term::universe_inst(Term::free_var(&f), vec![Level::zero()]);
     assert_eq!(whnf(&mut kernel, instance), Ok(nat(3)));
 }
 
@@ -131,7 +134,7 @@ fn iota_selects_an_inductive_arm_and_binds_its_payload() {
 
     let term = Term::induct_match(
         Term::variant(
-            curios_core::Global::Authored(Qualifier::from(["E"])),
+            Global::Authored(Qualifier::from(["E"])),
             Vec::<Term>::new(),
             "some",
             [nat(42)],
@@ -248,7 +251,7 @@ fn projection_selects_a_tuple_field() {
 #[test]
 fn projection_skips_a_variants_tag_but_not_a_structs() {
     let mut kernel = kernel();
-    let name = curios_core::Global::Authored(Qualifier::from(["E"]));
+    let name = Global::Authored(Qualifier::from(["E"]));
 
     let variant = Term::proj(
         Term::variant(name.clone(), Vec::<Term>::new(), "some", [nat(42)]),
@@ -359,10 +362,7 @@ fn a_non_productive_recursion_exhausts_the_budget() {
         Term::apply(Term::free_var(&loop_), [nat(1)]),
     );
 
-    assert_eq!(
-        kernel.reduce_forced(term),
-        Err(curios_core::ReduceError::Exhausted)
-    );
+    assert_eq!(kernel.reduce_forced(term), Err(ReduceError::Exhausted));
 }
 
 /// Each judgment gets the full budget back, so one expensive declaration cannot starve the next.
@@ -381,7 +381,7 @@ fn restoring_the_budget_refills_it() {
     );
     assert_eq!(
         whnf(&mut kernel, occurrence.clone()),
-        Err(curios_core::ReduceError::Exhausted)
+        Err(ReduceError::Exhausted)
     );
 
     kernel.restore_budget();
