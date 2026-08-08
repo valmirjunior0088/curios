@@ -22,8 +22,8 @@ impl LocalData {
 #[derive(Debug, Clone)]
 enum Dispatch {
     Loop {
-        bloink_label: curios_wasm::LabelName,
-        bloink_local: curios_wasm::LocalName,
+        dispatch_label: curios_wasm::LabelName,
+        index_local: curios_wasm::LocalName,
         index: usize,
     },
     NaturalLoop {
@@ -32,7 +32,7 @@ enum Dispatch {
     /// Entering a localized dispatcher from *outside* the irreducible component: set the target member's index, then branch to the enter block that falls into the dispatch loop. Cross-edges *inside* the component use the [`Dispatch::Loop`] registration instead, branching to the loop directly.
     Enter {
         enter_label: curios_wasm::LabelName,
-        bloink_local: curios_wasm::LocalName,
+        index_local: curios_wasm::LocalName,
         index: usize,
     },
     Direct,
@@ -47,16 +47,16 @@ pub(crate) struct BlockData<'a> {
 
 impl<'a> BlockData<'a> {
     pub(crate) fn new(
-        bloink_label: curios_wasm::LabelName,
-        bloink_local: curios_wasm::LocalName,
+        dispatch_label: curios_wasm::LabelName,
+        index_local: curios_wasm::LocalName,
         index: usize,
         block_name: &'a EmissionBlockName,
         params: Vec<(&'a EmissionValueName, LocalData)>,
     ) -> Self {
         Self {
             dispatch: Dispatch::Loop {
-                bloink_label,
-                bloink_local,
+                dispatch_label,
+                index_local,
                 index,
             },
             label_name: curios_wasm::LabelName::from(format!("${}", block_name)),
@@ -93,7 +93,7 @@ impl<'a> BlockData<'a> {
     /// A member of an irreducible component referenced from *outside* it: branch in through the dispatcher's enter block, having set this member's index.
     pub(crate) fn new_dispatch_enter(
         enter_label: curios_wasm::LabelName,
-        bloink_local: curios_wasm::LocalName,
+        index_local: curios_wasm::LocalName,
         index: usize,
         block_name: &'a EmissionBlockName,
         params: Vec<(&'a EmissionValueName, LocalData)>,
@@ -101,7 +101,7 @@ impl<'a> BlockData<'a> {
         Self {
             dispatch: Dispatch::Enter {
                 enter_label,
-                bloink_local,
+                index_local,
                 index,
             },
             label_name: curios_wasm::LabelName::from(format!("${}", block_name)),
@@ -133,18 +133,18 @@ impl<'a> BlockData<'a> {
 
         let branch = match &self.dispatch {
             Dispatch::Loop {
-                bloink_label,
-                bloink_local,
+                dispatch_label,
+                index_local,
                 index,
             } => vec![
                 curios_wasm::Instr::I32Const {
                     value: *index as i32,
                 },
                 curios_wasm::Instr::LocalSet {
-                    local_name: bloink_local.clone(),
+                    local_name: index_local.clone(),
                 },
                 curios_wasm::Instr::Br {
-                    label_name: bloink_label.clone(),
+                    label_name: dispatch_label.clone(),
                 },
             ],
             Dispatch::NaturalLoop { loop_label } => vec![curios_wasm::Instr::Br {
@@ -152,14 +152,14 @@ impl<'a> BlockData<'a> {
             }],
             Dispatch::Enter {
                 enter_label,
-                bloink_local,
+                index_local,
                 index,
             } => vec![
                 curios_wasm::Instr::I32Const {
                     value: *index as i32,
                 },
                 curios_wasm::Instr::LocalSet {
-                    local_name: bloink_local.clone(),
+                    local_name: index_local.clone(),
                 },
                 curios_wasm::Instr::Br {
                     label_name: enter_label.clone(),

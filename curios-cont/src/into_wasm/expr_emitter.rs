@@ -360,7 +360,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 LayoutItem::Block(_) => {}
                 LayoutItem::Loop { body, .. } => self.collect_dispatch(body, region, out),
                 LayoutItem::Dispatch { members } => {
-                    let bloink_local = self
+                    let index_local = self
                         .context
                         .push_local("", curios_wasm::ValType::Num(curios_wasm::NumType::I32));
                     let anchor = &region.blocks[members[0]].0;
@@ -378,7 +378,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                         DispatchPlan {
                             enter_label,
                             dispatch_label,
-                            bloink_local,
+                            index_local,
                             index_of,
                         },
                     );
@@ -485,7 +485,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     name,
                     BlockData::new(
                         plan.dispatch_label.clone(),
-                        plan.bloink_local.clone(),
+                        plan.index_local.clone(),
                         plan.index_of[member],
                         name,
                         block_params[*member].clone(),
@@ -515,7 +515,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         let default = member_labels[0].clone();
         let inner = vec![
             curios_wasm::Instr::LocalGet {
-                local_name: plan.bloink_local.clone(),
+                local_name: plan.index_local.clone(),
             },
             curios_wasm::Instr::BrTable {
                 label_names: member_labels,
@@ -555,7 +555,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 struct DispatchPlan {
     enter_label: curios_wasm::LabelName,
     dispatch_label: curios_wasm::LabelName,
-    bloink_local: curios_wasm::LocalName,
+    index_local: curios_wasm::LocalName,
     index_of: BTreeMap<usize, usize>,
 }
 
@@ -584,7 +584,7 @@ fn scope_registrations<'a>(
                         name,
                         BlockData::new_dispatch_enter(
                             plan.enter_label.clone(),
-                            plan.bloink_local.clone(),
+                            plan.index_local.clone(),
                             plan.index_of[member],
                             name,
                             block_params[*member].clone(),
