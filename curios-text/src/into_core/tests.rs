@@ -428,6 +428,19 @@ fn a_level_only_in_the_result_is_minimized_away() {
     assert_eq!(universe_parameters(&module, "/Holds"), 0);
 }
 
+/// Superclass fields are anonymous positional slots: no namespace binding, no wrapper. Registering their empty labels used to make a concept's *second* superclass collide with the first as an empty-named duplicate declaration, refusing the whole module at discovery.
+#[test]
+fn a_concept_with_two_superclasses_lowers() {
+    run("pub concept A(T : Type) : pub Type { fa(T) -> T, }
+         pub concept B(T : Type) : pub Type { fb(T) -> T, }
+         pub concept C(T : Type) : pub Type {
+             use A(T),
+             use B(T),
+             fc(T) -> T,
+         }
+         C");
+}
+
 /// A generated method wrapper belongs to *its concept's* universe context, not to one generalized from its own signature. The wrapper's type names only the levels its own field needs, yet it also carries `use w : C(…)` applied at all of the concept's; a level outside the wrapper's own generalized set would then have nothing to denote it.
 #[test]
 fn a_concept_method_wrapper_shares_its_concept_universe_context() {

@@ -404,13 +404,14 @@ fn seed(
                 let namespace = prefix.with(&concept.label);
 
                 let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
-                for field in &concept.fields {
+                // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
+                for field in concept.fields.iter().filter(|field| !field.is_super) {
                     direct.insert_binding(field.label.clone(), true)?;
                 }
                 table.insert(namespace.clone(), direct);
 
                 let mut interface = PublicInterface::new();
-                for field in &concept.fields {
+                for field in concept.fields.iter().filter(|field| !field.is_super) {
                     let target = namespace.with(&field.label);
                     interface.bindings.insert(
                         field.label.clone(),
