@@ -1403,7 +1403,7 @@ pub fn reduce_intrinsic(
                     }),
                 };
             }
-            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `Lst` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s - 1, e - 1)`.
+            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `Lst` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
