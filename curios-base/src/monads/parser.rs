@@ -19,17 +19,6 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn take_exact(self, width: usize) -> Option<(&'a str, Self)> {
-        Some((
-            self.string.get(..width)?,
-            Self {
-                offset: self.offset + width,
-                string: self.string.get(width..)?,
-                source: self.source,
-            },
-        ))
-    }
-
     fn take_n(self, n: usize) -> Option<(&'a str, Self)> {
         let mut iter = self.string.char_indices();
 
@@ -74,7 +63,7 @@ impl<'a> ParserState<'a> {
         self.string.is_empty()
     }
 
-    /// Rebuilds the state at an absolute byte `offset` into the same source. Used by [`memoize`] to resume from a cached parse without re-walking the input; all parser offsets are byte offsets, so slicing `source.text` is exact.
+    /// Rebuilds the state at an absolute byte `offset` into the same source. Used by [`memoize`] to resume from a cached parse without re-walking the input, and by [`take_exact`] to step over a matched literal; all parser offsets are byte offsets, so slicing `source.text` is exact.
     fn jump_to(self, offset: usize) -> Self {
         Self {
             offset,
@@ -326,18 +315,25 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message)))
 }
 
-/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so failing here never commits — a keyword or punctuation probe is always safe as the first token of an [`Parser::or`] alternative.
+/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so failing here never commits — a keyword or punctuation probe is always safe as the first token of an [`Parser::or`] alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file.
 pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
-    Parser::new(move |state| match state.take_exact(expected.len()) {
-        Some((obtained, state)) if expected == obtained => Ok(((), state)),
-        Some((obtained, _)) => Err(ParserError::new(
-            state,
-            format!("Expected '{expected}', obtained '{obtained}'"),
-        )),
-        None => Err(ParserError::new(
-            state,
-            format!("Expected '{expected}', obtained 'end-of-file'"),
-        )),
+    Parser::new(move |state| match state.string.starts_with(expected) {
+        true => Ok(((), state.jump_to(state.offset + expected.len()))),
+        false => {
+            let obtained: String = state
+                .string
+                .chars()
+                .take(expected.chars().count())
+                .collect();
+
+            Err(ParserError::new(
+                state,
+                match obtained.is_empty() {
+                    true => format!("Expected '{expected}', obtained 'end-of-file'"),
+                    false => format!("Expected '{expected}', obtained '{obtained}'"),
+                },
+            ))
+        }
     })
 }
 
