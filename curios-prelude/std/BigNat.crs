@@ -71,7 +71,7 @@ let tail_is_trimmed(
     match tail: (t) => Eq(is_trimmed(t), true) | b[] => Eq/refl() | b[_, .._] => p end;
 
 pub let is_trimmed_of_canonical(rep: Bits, c: Canonical(rep)) -> Eq(is_trimmed(rep), true) =
-    match is_trimmed(rep): (r) => Eq(r, true) | true => Eq/refl() | false => False/absurd(c) end;
+    match is_trimmed(rep): (r) => Eq(r, true) | true => Eq/refl() | false => match c end end;
 
 pub let of_trimmed_bits(rep: Bits, p: Eq(is_trimmed(rep), true)) -> BigNat =
     BigNat { rep = rep, canonical = canonical_of_is_trimmed(rep, p) };
@@ -196,7 +196,7 @@ let is_trimmed_cons(
     pn: Eq(nonempty(u), true),
 ) -> Eq(is_trimmed(b[head, ..u]), true) =
     match u: (v) => Eq(is_trimmed(b[head, ..v]), true)
-    | b[] => False/absurd(false_neq_true(pn))
+    | b[] => match false_neq_true(pn) end
     | b[_, .._] => pt
     end;
 
@@ -208,7 +208,7 @@ pub rec trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
         | b[] =>
             match h: (g) => Eq(trim(b[g]), b[g])
             | true => Eq/refl()
-            | false => False/absurd(false_neq_true(p))
+            | false => match false_neq_true(p) end
             end
         | b[th, ..tt] => cong_combine(h, trim_of_trimmed(b[th, ..tt], p))
         end

@@ -7,7 +7,7 @@ use /std/NonZero/{is_cons, nz_trimmed, raw_non_zero, trim_head_non_zero, trim_he
 -- the raw sum of a cons-headed left operand is cons-headed
 let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
     match x: (r) => is_cons(BigNat/add/raw(r, y, c))
-    | b[] => False/absurd(ne)
+    | b[] => match ne end
     | b[xh, ..xt] =>
         match y: (yy) => is_cons(BigNat/add/raw(b[xh, ..xt], yy, c))
         | b[] => True/qed()
@@ -34,7 +34,7 @@ pub rec trim_non_zero(
     ne: is_cons(a),
 ) -> is_cons(trim(BigNat/add/raw(a, b, c))) =
     match a
-    | b[] => False/absurd(ne)
+    | b[] => match ne end
     | b[ah, ..at] =>
         match at
         | b[] =>
@@ -64,7 +64,7 @@ pub rec trim_non_zero(
                         end
                     end
                 end
-            | false => False/absurd(false_neq_true(tr))
+            | false => match false_neq_true(tr) end
             end
         | b[ath, ..att] =>
             match b

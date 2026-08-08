@@ -13,13 +13,13 @@ rec raw_trim_cons(
     nq: is_cons(q),
 ) -> is_cons(trim(BigNat/mul/raw(p, q))) =
     match p
-    | b[] => False/absurd(np)
+    | b[] => match np end
     | b[ph, ..pt] =>
         match ph
         | true => add/trim_non_zero(q, b[\0, ..BigNat/mul/raw(pt, q)], false, tq, nq)
         | false =>
             match pt
-            | b[] => False/absurd(false_neq_true(tp))
+            | b[] => match false_neq_true(tp) end
             | b[_, .._] =>
                 trim_head_non_zero(
                     false,

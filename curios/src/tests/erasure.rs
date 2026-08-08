@@ -182,8 +182,9 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
 fn erased_void_discharges_to_relevant_result() {
     let source = r#"
         use /std/{False, Handle};
+        let absurd(@A : Type, c : False) -> A = match c end;
         let direct(@A : Type, c : False) -> A = match c : (_) => A end;
-        let via_absurd(@A : Type, c : False) -> A = False/absurd(c);
+        let via_absurd(@A : Type, c : False) -> A = absurd(c);
         let proofs = (direct, via_absurd);
         /std/print("ok")
         "#;
@@ -211,7 +212,7 @@ fn erased_indexed_relevant_repro() {
     assert_eq!(run(source), b"ok");
 }
 
-// Regression: a type-valued *application* (`Box(m)`, here `False/absurd`'s inferred `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type; erasing it structurally used to leave `m` in the runtime term, so codegen demanded a value for an erased binder ("`into_cont` lacks value").
+// Regression: a type-valued *application* (`Box(m)`, here `absurd`'s explicit `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type; erasing it structurally used to leave `m` in the runtime term, so codegen demanded a value for an erased binder ("`into_cont` lacks value").
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"
@@ -219,8 +220,9 @@ fn erased_index_in_type_valued_arg() {
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
+        let absurd(@A : Type, c : False) -> A = match c end;
         let id_void(w : False) -> False = w;
-        let f(m : Type) -> (False) -> Box(m) = (v) => False/absurd(@Box(m), id_void(v));
+        let f(m : Type) -> (False) -> Box(m) = (v) => absurd(@Box(m), id_void(v));
         let g = f;
         /std/print("ok")
         "#;

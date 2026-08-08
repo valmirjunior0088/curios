@@ -67,7 +67,6 @@ impl SyntaxRegistry {
             self.string.of_scan_eq,
             self.string.refl_scan,
             self.proof.true_qed,
-            self.proof.false_absurd,
         ]
         .into_iter()
         .chain(self.concept_fields().map(|target| target.concept))
@@ -167,5 +166,4 @@ pub struct StringSyntax {
 #[derive(Debug, Clone, Copy)]
 pub struct ProofSyntax {
     pub true_qed: SyntaxName,
-    pub false_absurd: SyntaxName,
 }

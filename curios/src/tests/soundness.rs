@@ -530,7 +530,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
         rec f(n : Nat) -> False =
             (rec g(m : Nat) -> False = f(m); g)(n);
 
-        /std/print(False/absurd(@Str, f(0)))
+        /std/print(match f(0) : (_) => Str end)
         "#,
     );
 }

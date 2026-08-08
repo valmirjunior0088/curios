@@ -56,7 +56,6 @@ const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     proof: ProofSyntax {
         true_qed: syn_name(&["syn", "True", "True", "qed"]),
-        false_absurd: syn_name(&["syn", "False", "absurd"]),
     },
 };
 

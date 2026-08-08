@@ -61,18 +61,18 @@ let xor3_inj_mid(
             | true =>
                 match b2
                 | true => refl_at(true)
-                | false => False/absurd(false_neq_true(Eq/sym(p)))
+                | false => match false_neq_true(Eq/sym(p)) end
                 end
             | false =>
-                match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
+                match b2 | true => match false_neq_true(p) end | false => refl_at(false) end
             end
         | false =>
             match b1
             | true =>
-                match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
+                match b2 | true => refl_at(true) | false => match false_neq_true(p) end end
             | false =>
                 match b2
-                | true => False/absurd(false_neq_true(Eq/sym(p)))
+                | true => match false_neq_true(Eq/sym(p)) end
                 | false => refl_at(false)
                 end
             end
@@ -82,10 +82,10 @@ let xor3_inj_mid(
         | true =>
             match b1
             | true =>
-                match b2 | true => refl_at(true) | false => False/absurd(false_neq_true(p)) end
+                match b2 | true => refl_at(true) | false => match false_neq_true(p) end end
             | false =>
                 match b2
-                | true => False/absurd(false_neq_true(Eq/sym(p)))
+                | true => match false_neq_true(Eq/sym(p)) end
                 | false => refl_at(false)
                 end
             end
@@ -94,10 +94,10 @@ let xor3_inj_mid(
             | true =>
                 match b2
                 | true => refl_at(true)
-                | false => False/absurd(false_neq_true(Eq/sym(p)))
+                | false => match false_neq_true(Eq/sym(p)) end
                 end
             | false =>
-                match b2 | true => False/absurd(false_neq_true(p)) | false => refl_at(false) end
+                match b2 | true => match false_neq_true(p) end | false => refl_at(false) end
             end
         end
     end;
@@ -1147,8 +1147,8 @@ pub rec raw_trimmed(
                 | b[] =>
                     match xh
                     | true =>
-                        match yh | true => Eq/refl() | false => False/absurd(false_neq_true(py)) end
-                    | false => False/absurd(false_neq_true(px))
+                        match yh | true => Eq/refl() | false => match false_neq_true(py) end end
+                    | false => match false_neq_true(px) end
                     end
                 | b[a2, ..b2] =>
                     is_trimmed_cons(
@@ -1229,11 +1229,11 @@ pub rec raw_cancel_l(
         | b[] =>
             match z: (d) => Eq(b[], d)
             | b[] => Eq/refl()
-            | b[zh, ..zt] => False/absurd(raw_cancel_absurd(xh, xt, zh, zt, c, pz, p))
+            | b[zh, ..zt] => match raw_cancel_absurd(xh, xt, zh, zt, c, pz, p) end
             end
         | b[yh, ..yt] =>
             match z: (d) => Eq(b[yh, ..yt], d)
-            | b[] => False/absurd(raw_cancel_absurd(xh, xt, yh, yt, c, py, Eq/sym(p)))
+            | b[] => match raw_cancel_absurd(xh, xt, yh, yt, c, py, Eq/sym(p)) end
             | b[zh, ..zt] =>
                 cong_cons2(
                     xor3_inj_mid(xh, c, cons_inj_head(p)),

@@ -520,4 +520,4 @@ fn bin_fold_sums_bytes() {
     assert_eq!(run(source), b"60");
 }
 
-// An empty match is a vacuous elimination: it never inspects its scrutinee. A `False` is a `Prop`, so it erases (sort-driven) — a contradiction may therefore discharge into a *relevant* result, both directly (`match c : (_) => A end`) and through `False/absurd`. This is what lets an impossible runtime branch be closed off by an erased witness, the crux of the UTF-8 decode certification.
+// An empty match is a vacuous elimination: it never inspects its scrutinee. A `False` is a `Prop`, so it erases (sort-driven) — a contradiction may therefore discharge into a *relevant* result, both directly (`match c : (_) => A end`) and through a discharging definition (`let absurd(@A : Type, c : False) -> A = match c end`). This is what lets an impossible runtime branch be closed off by an erased witness, the crux of the UTF-8 decode certification.

@@ -1,2 +1,2 @@
 pub use /syn/{False};
-pub use /syn/False/{absurd, Not};
+pub use /syn/False/{Not};

@@ -123,7 +123,7 @@ pub rec cont_len(
                 Nat/Lte/s(
                     match Nat/in_range(Byte/to_nat(c), lo, hi)
                     | true => cont_len(kpp + 1, rest)
-                    | false => False/absurd(bad_uninhabited(rest))
+                    | false => match bad_uninhabited(rest) end
                     end)
             end
         end
@@ -175,10 +175,7 @@ pub rec peel_byte(
     w: Utf8(s, b),
 ) -> Utf8(step(Bytes/at(b, 0, nz), s), Bytes/slice(b, 1, Bytes/len(b))) =
     match w
-    | stop() =>
-        False/absurd(
-            @Utf8(step(Bytes/at(x[], 0, nz), Scan/lead()), Bytes/slice(x[], 1, Bytes/len(x[]))),
-            nz)
+    | stop() => match nz end
     | more(c, st, t, rest) => rest
     end;
 
@@ -214,7 +211,7 @@ pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> 
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat
     | ascii() => (w2) => Byte/to_nat(c)
     | lead(k, lo, hi, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0
-    | bad() => (w2) => False/absurd(bad_uninhabited(w2))
+    | bad() => (w2) => match bad_uninhabited(w2) end
     end)(peeled);
 
 pub let certify_decoded(code: Nat) -> Char =
@@ -225,7 +222,7 @@ pub let decode_head(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Char
 
 pub rec lte_succ_of_lt(i: Nat, n: Nat, p: Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
     match n
-    | 0 => False/absurd(p)
+    | 0 => match p end
     | np + 1 =>
         match i | 0 => Nat/Lte/s(Nat/Lte/z()) | ip + 1 => Nat/Lte/s(lte_succ_of_lt(ip, np, p)) end
     end;

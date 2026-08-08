@@ -71,8 +71,8 @@ let sub_split(
 ) -> Eq(s, Order/eq()) =
     match s: (r) => Eq(r, Order/eq())
     | eq() => Eq/refl()
-    | lt() => False/absurd(lt_neq_eq(p))
-    | gt() => False/absurd(gt_neq_eq(p))
+    | lt() => match lt_neq_eq(p) end
+    | gt() => match gt_neq_eq(p) end
     end;
 
 let cong_cmp_match(
@@ -92,10 +92,10 @@ let cong_cmp_match(
 
 pub rec raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
     match x
-    | b[] => match y | b[] => Eq/refl() | b[_, .._] => False/absurd(lt_neq_eq(p)) end
+    | b[] => match y | b[] => Eq/refl() | b[_, .._] => match lt_neq_eq(p) end end
     | b[xh, ..xt] =>
         match y
-        | b[] => False/absurd(gt_neq_eq(p))
+        | b[] => match gt_neq_eq(p) end
         | b[yh, ..yt] =>
             cong_cons2(
                 cmp_head_eq(xh, yh, Eq/trans(Eq/sym(cong_cmp_match(sub_split(raw(xt, yt), p))), p)),
@@ -113,8 +113,8 @@ and cmp_head_eq(
         Order/eq()),
 ) -> Eq(xh, yh) =
     match xh
-    | true => match yh | true => Eq/refl() | false => False/absurd(gt_neq_eq(p)) end
-    | false => match yh | true => False/absurd(lt_neq_eq(p)) | false => Eq/refl() end
+    | true => match yh | true => Eq/refl() | false => match gt_neq_eq(p) end end
+    | false => match yh | true => match lt_neq_eq(p) end | false => Eq/refl() end
     end;
 
 let flip_heads(
@@ -201,8 +201,8 @@ let head_lt_yh(
 ) -> Eq(yh, true) =
     match xh
     | true =>
-        match yh | true => False/absurd(eq_neq_lt(p)) | false => False/absurd(gt_neq_lt(p)) end
-    | false => match yh | true => Eq/refl() | false => False/absurd(eq_neq_lt(p)) end
+        match yh | true => match eq_neq_lt(p) end | false => match gt_neq_lt(p) end end
+    | false => match yh | true => Eq/refl() | false => match eq_neq_lt(p) end end
     end;
 
 let head_lt_xh(
@@ -217,7 +217,7 @@ let head_lt_xh(
 ) -> Eq(xh, false) =
     match xh
     | true =>
-        match yh | true => False/absurd(eq_neq_lt(p)) | false => False/absurd(gt_neq_lt(p)) end
+        match yh | true => match eq_neq_lt(p) end | false => match gt_neq_lt(p) end end
     | false => Eq/refl()
     end;
 
@@ -267,10 +267,10 @@ let trans_cons(
         Order/lt()),
 ) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
     match s1: (r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
-    | gt() => False/absurd(gt_neq_lt(reduce_whole(e1, p)))
+    | gt() => match gt_neq_lt(reduce_whole(e1, p)) end
     | lt() =>
         match s2: (r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
-        | gt() => False/absurd(gt_neq_lt(reduce_whole(e2, q)))
+        | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
         | eq() =>
             cons_lt(
@@ -280,7 +280,7 @@ let trans_cons(
         end
     | eq() =>
         match s2: (r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
-        | gt() => False/absurd(gt_neq_lt(reduce_whole(e2, q)))
+        | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() =>
             cons_lt(
                 xh,
@@ -290,11 +290,10 @@ let trans_cons(
                     Eq/sym(raw_to_eq(xt, yt, e1)),
                     e2))
         | eq() =>
-            False/absurd(
-                false_neq_true(
+            match false_neq_true(
                     Eq/trans(
                         Eq/sym(head_lt_xh(yh, zh, reduce_whole(e2, q))),
-                        head_lt_yh(xh, yh, reduce_whole(e1, p)))))
+                        head_lt_yh(xh, yh, reduce_whole(e1, p)))) end
         end
     end;
 
@@ -308,15 +307,15 @@ pub rec raw_trans(
     match x
     | b[] =>
         match y
-        | b[] => False/absurd(eq_neq_lt(p))
-        | b[yh, ..yt] => match z | b[] => False/absurd(gt_neq_lt(q)) | b[_, .._] => Eq/refl() end
+        | b[] => match eq_neq_lt(p) end
+        | b[yh, ..yt] => match z | b[] => match gt_neq_lt(q) end | b[_, .._] => Eq/refl() end
         end
     | b[xh, ..xt] =>
         match y
-        | b[] => False/absurd(gt_neq_lt(p))
+        | b[] => match gt_neq_lt(p) end
         | b[yh, ..yt] =>
             match z
-            | b[] => False/absurd(gt_neq_lt(q))
+            | b[] => match gt_neq_lt(q) end
             | b[zh, ..zt] =>
                 trans_cons(
                     raw(xt, yt),

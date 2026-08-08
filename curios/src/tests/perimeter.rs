@@ -645,7 +645,7 @@ const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
             let done = Cell/set(c, false);
             match Cell/get(c)
             | true => "second read true"
-            | false => False/absurd(Bool/false_neq_true(p))
+            | false => match Bool/false_neq_true(p) end
             end
         | false => "first read false"
         end;
@@ -706,7 +706,7 @@ const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
                     let done = Cell/set(c, false);
                     match g(Cell/get(@Bool, c))
                     | true => "second read true"
-                    | false => False/absurd(Bool/false_neq_true(p))
+                    | false => match Bool/false_neq_true(p) end
                     end;
                 step(h(Cell/get(@Bool, c)))
             | false => "first read false"
@@ -726,7 +726,7 @@ const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     let refined(b : Bool, p : Eq(flip(b), true)) -> Str =
         match flip(b)
         | true => "t"
-        | false => False/absurd(Bool/false_neq_true(p))
+        | false => match Bool/false_neq_true(p) end
         end;
 
     /std/print(refined(false, Eq/refl()))
@@ -756,7 +756,7 @@ const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
         match f(true)
         | false =>
             let contradiction : False = Bool/false_neq_true(p);
-            False/absurd(contradiction)
+            match contradiction end
         | true => "no contradiction"
         end;
 
@@ -785,7 +785,7 @@ const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
     let refined(f : (Bool) -> Bool, b : Bool, p : Eq(f(b), true)) -> Str =
         match f(b)
         | true => "t"
-        | false => False/absurd(Bool/false_neq_true(p))
+        | false => match Bool/false_neq_true(p) end
         end;
 
     /std/print(refined((x) => x, true, Eq/refl()))

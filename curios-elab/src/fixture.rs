@@ -52,6 +52,5 @@ pub(crate) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     proof: ProofSyntax {
         true_qed: name(&["syn", "True", "True", "qed"]),
-        false_absurd: name(&["syn", "False", "absurd"]),
     },
 };
