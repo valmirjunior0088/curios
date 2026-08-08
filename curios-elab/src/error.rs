@@ -24,6 +24,17 @@ pub struct GoalReport {
     pub candidates: Vec<Term>,
 }
 
+/// The embedding-specific half of a missing-witness report, computed when the unresolved goal is the registry's `Lift`: the two monads, whether the source is a monad at all, and any chain of declared edges connecting the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table.
+#[derive(Debug)]
+pub struct EmbeddingDiagnosis {
+    pub source: Box<Term>,
+    pub target: Box<Term>,
+    /// Whether any `Monad` witness exists for the source's head: an edge out of a non-monad could never be declared, so suggesting one would be a trap.
+    pub source_is_monad: bool,
+    /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically.
+    pub chain: Vec<(String, String)>,
+}
+
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
@@ -291,6 +302,8 @@ pub enum Error {
         goal: Box<Term>,
         func: String,
         binder: String,
+        /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
+        embedding: Option<EmbeddingDiagnosis>,
     },
     /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently.
     ///
@@ -734,11 +747,17 @@ impl Error {
         Self::TooManyWitnessArgs { expected, got }
     }
 
-    pub(crate) fn no_witness<T: Into<Term>>(goal: T, func: String, binder: String) -> Self {
+    pub(crate) fn no_witness<T: Into<Term>>(
+        goal: T,
+        func: String,
+        binder: String,
+        embedding: Option<EmbeddingDiagnosis>,
+    ) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
             func,
             binder,
+            embedding,
         }
     }
 
@@ -1004,7 +1023,15 @@ impl Error {
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
             Self::PostponedCheck { expected } => out.push(expected),
-            Self::NoWitness { goal, .. } => out.push(goal),
+            Self::NoWitness {
+                goal, embedding, ..
+            } => {
+                out.push(goal);
+                if let Some(diagnosis) = embedding {
+                    out.push(&diagnosis.source);
+                    out.push(&diagnosis.target);
+                }
+            }
             Self::Goal {
                 scope,
                 goal,
@@ -1462,12 +1489,49 @@ impl fmt::Display for Displayed<'_> {
                     "call supplies {got} 'use' argument(s) but the function has only {expected} 'use' parameter(s)"
                 )
             }
-            Error::NoWitness { goal, func, binder } => {
+            Error::NoWitness {
+                goal,
+                func,
+                binder,
+                embedding,
+            } => {
                 let goal = goal.spelled(spelling);
-                write!(
-                    f,
-                    "no witness of {goal} found\n  needed by '{func}' for its 'use' binder '{binder}'"
-                )
+                write!(f, "no witness of {goal} found")?;
+                match embedding {
+                    None => write!(f, "\n  needed by '{func}' for its 'use' binder '{binder}'"),
+                    Some(diagnosis) => {
+                        let source = diagnosis.source.spelled(spelling).to_string();
+                        let target = diagnosis.target.spelled(spelling);
+                        let article = match source.trim_start_matches('/').chars().next() {
+                            Some('A' | 'E' | 'I' | 'O' | 'U' | 'a' | 'e' | 'i' | 'o' | 'u') => "an",
+                            _ => "a",
+                        };
+                        write!(
+                            f,
+                            "\n  needed to sequence {article} {source} action in this {target} region"
+                        )?;
+                        if !diagnosis.source_is_monad {
+                            write!(
+                                f,
+                                "\n  {source} is not a monad — no Monad witness exists for it, so no embedding out of it can be declared"
+                            )?;
+                        }
+                        if !diagnosis.chain.is_empty() {
+                            write!(
+                                f,
+                                "\n  declared embeddings chain from {source} to {target}:"
+                            )?;
+                            for (pair, module) in &diagnosis.chain {
+                                write!(f, "\n    Lift{pair} — declared in {module}")?;
+                            }
+                            write!(
+                                f,
+                                "\n  embeddings never chain automatically; declare the composite Lift({source}, {target}) edge beside one of the two monads"
+                            )?;
+                        }
+                        Ok(())
+                    }
+                }
             }
             Error::Goal {
                 scope,

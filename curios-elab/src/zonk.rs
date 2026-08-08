@@ -910,7 +910,8 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                         .map(|entry| entry.result.clone())
                         .unwrap_or_else(Term::type_ground);
                     let goal = zonk_term(context, &goal).unwrap_or(goal);
-                    Error::no_witness(goal, origin.func.clone(), origin.binder.clone())
+                    // No embedding diagnosis on this path: zonk holds the context immutably, and a `Lift` goal that survives to the splice report has already been reported richer by the resolution drains.
+                    Error::no_witness(goal, origin.func.clone(), origin.binder.clone(), None)
                 }
                 None => Error::CannotInfer,
                 // Handled by the unconditional report above.

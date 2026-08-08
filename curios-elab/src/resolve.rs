@@ -6,15 +6,15 @@
 
 use {
     super::{
-        Context, Error, HeadKey, Outcome, ParkedGoal, ParkedWork, Witness, WitnessKey,
-        convert_outcome, reduce_with,
+        Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedGoal, ParkedWork, Witness,
+        WitnessKey, convert_outcome, reduce_with,
     },
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
         ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType,
         Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
-    std::collections::{BTreeSet, HashSet},
+    std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 
 /// The outcome of one resolution attempt.
@@ -34,12 +34,105 @@ fn display_goal(context: &Context, goal: &Term) -> Term {
     super::zonk(context, goal).unwrap_or_else(|_| goal.clone())
 }
 
-fn no_witness_error(context: &Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
+fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
+    let embedding = diagnose_embedding(context, goal);
     Error::no_witness(
         display_goal(context, goal),
         provenance.func.clone(),
         provenance.binder.clone(),
+        embedding,
     )
+}
+
+/// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Error-path only; a diagnosis that cannot be computed is simply absent.
+pub(crate) fn diagnose_embedding(context: &mut Context, goal: &Term) -> Option<EmbeddingDiagnosis> {
+    let goal = reduce_with(context, goal).ok()?;
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+    let Global::Authored(concept_path) = &concept_name else {
+        return None;
+    };
+    if *concept_path != context.syntax().lift().lift().concept().qualifier() {
+        return None;
+    }
+    let [source, target] = params.as_slice() else {
+        return None;
+    };
+    let source_whnf = reduce_with(context, source).ok()?;
+    let target_whnf = reduce_with(context, target).ok()?;
+    let source_key = HeadKey::of_whnf(&source_whnf);
+    let target_key = HeadKey::of_whnf(&target_whnf);
+
+    // Monad-hood of the source: any registered Monad witness under its head. The concept's name derives from the registry's bind wrapper — its namespace is the concept.
+    let monad_concept =
+        Global::Authored(context.syntax().monad().bind().qualifier().without_last());
+    let source_is_monad = match &source_key {
+        Some(key) => context
+            .witness(&monad_concept, &WitnessKey(vec![key.clone()]))
+            .is_some(),
+        None => false,
+    };
+
+    let chain = match (&source_key, &target_key) {
+        (Some(from), Some(to)) if from != to => lift_chain(context, &concept_name, from, to),
+        _ => Vec::new(),
+    };
+
+    Some(EmbeddingDiagnosis {
+        source: Box::new(display_goal(context, &source_whnf)),
+        target: Box::new(display_goal(context, &target_whnf)),
+        source_is_monad,
+        chain,
+    })
+}
+
+/// A shortest chain of declared `Lift` edges from `from` to `to`, each hop rendered as its key and declaring module — breadth-first over the witness table's keys, so the result is minimal and deterministic.
+fn lift_chain(
+    context: &Context,
+    lift: &Global,
+    from: &HeadKey,
+    to: &HeadKey,
+) -> Vec<(String, String)> {
+    let mut edges: Vec<(HeadKey, HeadKey, String, String)> = Vec::new();
+    for (concept, key, witness) in context.witness_keyed_entries() {
+        if concept != lift {
+            continue;
+        }
+        let [m, n] = key.0.as_slice() else {
+            continue;
+        };
+        let module = match witness.module.is_root() {
+            true => "the entry module".to_string(),
+            false => witness.module.join(),
+        };
+        edges.push((m.clone(), n.clone(), key.to_string(), module));
+    }
+
+    let mut parents: BTreeMap<HeadKey, usize> = BTreeMap::new();
+    let mut queue = std::collections::VecDeque::from([from.clone()]);
+    while let Some(node) = queue.pop_front() {
+        if node == *to {
+            break;
+        }
+        for (index, (m, n, _, _)) in edges.iter().enumerate() {
+            if *m == node && !parents.contains_key(n) && *n != *from {
+                parents.insert(n.clone(), index);
+                queue.push_back(n.clone());
+            }
+        }
+    }
+
+    let mut hops = Vec::new();
+    let mut node = to.clone();
+    while let Some(&index) = parents.get(&node) {
+        let (m, _, pair, module) = &edges[index];
+        hops.push((pair.clone(), module.clone()));
+        node = m.clone();
+    }
+    if node != *from {
+        return Vec::new();
+    }
+    hops.reverse();
+    hops
 }
 
 /// Whether the (reduced) term is headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case (`?M(?A)`).

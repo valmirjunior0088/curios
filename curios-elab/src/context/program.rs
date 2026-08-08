@@ -157,6 +157,15 @@ impl Program {
             .map(|((concept, _), witness)| (concept, witness))
     }
 
+    /// [`Self::witness_entries`] with the keys kept — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
+    pub(crate) fn witness_keyed_entries(
+        &self,
+    ) -> impl Iterator<Item = (&Global, &WitnessKey, &Witness)> {
+        self.witness_table
+            .iter()
+            .map(|((concept, key), witness)| (concept, key, witness))
+    }
+
     /// Insert a witness under its key, returning the previous occupant's declaring module on a collision (the caller reports `DuplicateWitness`, which reports modules rather than the anonymous witnesses' compiler-minted names). The façade stamps the write on an actual insert.
     pub(crate) fn insert_witness(
         &mut self,

@@ -314,12 +314,16 @@ impl Context {
                                 .witness_hole(&goal.this)
                                 .or_else(|| self.witness_hole(&goal.that))
                             {
-                                Some((origin, witness_goal)) => Error::no_witness(
-                                    resolved_for_display(self, &witness_goal),
-                                    origin.func,
-                                    origin.binder,
-                                )
-                                .at_opt(parked.origin.span()),
+                                Some((origin, witness_goal)) => {
+                                    let embedding = super::diagnose_embedding(self, &witness_goal);
+                                    Error::no_witness(
+                                        resolved_for_display(self, &witness_goal),
+                                        origin.func,
+                                        origin.binder,
+                                        embedding,
+                                    )
+                                    .at_opt(parked.origin.span())
+                                }
                                 None => {
                                     display_mismatch(self, &parked.origin, &goal.this, &goal.that)
                                         .at_opt(parked.origin.span())
@@ -336,12 +340,16 @@ impl Context {
                         },
                         ParkedWork::Witness {
                             goal, provenance, ..
-                        } => Error::no_witness(
-                            resolved_for_display(self, &goal),
-                            provenance.func,
-                            provenance.binder,
-                        )
-                        .at_opt(parked.origin.span()),
+                        } => {
+                            let embedding = super::diagnose_embedding(self, &goal);
+                            Error::no_witness(
+                                resolved_for_display(self, &goal),
+                                provenance.func,
+                                provenance.binder,
+                                embedding,
+                            )
+                            .at_opt(parked.origin.span())
+                        }
                     });
                 }
                 return Ok(());

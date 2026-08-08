@@ -77,10 +77,80 @@ fn a_missing_edge_reports_the_lift_witness() {
         "#;
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
-    // The former-eta display fold renders the goal's monads as bare heads, not binder lambdas.
+    // The former-eta display fold renders the goal's monads as bare heads, and the embedding diagnosis speaks in terms of the sequencing rather than the synthesized wrapper.
     assert!(
-        error.contains("no witness of Lift(Async, /Job)"),
-        "expected the missing Lift witness with folded formers, got: {error}"
+        error.contains("no witness of Lift(Async, /Job)")
+            && error.contains("needed to sequence an Async action in this /Job region"),
+        "expected the embedding report with folded formers, got: {error}"
+    );
+}
+
+/// A chain of declared edges that reaches the target without a composite is reported hop by hop — embeddings never chain automatically, and the report says where each hop lives.
+#[test]
+fn a_missing_composite_reports_the_declared_chain() {
+    let source = r#"
+        use /std/{Monad, Lift, Io, print};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        satisfy Lift(Io, Job) {
+            lift(action) = Job { action },
+        }
+        pub struct Sched(A: Type): pub Type {
+            Job(A),
+        }
+        pub let spure(@A: Type, a: A) -> Sched(A) =
+            Sched { jpure(a) };
+        pub let sbind(@A: Type, @B: Type, m: Sched(A), f: (A) -> Sched(B)) -> Sched(B) =
+            Sched { jbind(m.0, (a) => f(a).0) };
+        satisfy Monad(Sched) {
+            pure = spure,
+            bind = sbind,
+        }
+        satisfy Lift(Job, Sched) {
+            lift(action) = Sched { action },
+        }
+        pub let prog: Sched({}) =
+            let _ = print("io into sched")!;
+            spure(());
+        prog.0.0
+        "#;
+
+    let error = typecheck(source).expect_err("no composite Io-into-Sched edge exists");
+    assert!(
+        error.contains("declared embeddings chain from Io to Sched")
+            && error.contains("embeddings never chain automatically"),
+        "expected the chain report, got: {error}"
+    );
+}
+
+/// An action whose head is not a monad at all is called out as such — suggesting an edge that could never be declared would be a trap.
+#[test]
+fn a_non_monad_action_is_called_out() {
+    let source = r#"
+        use /std/{Io, Nat, print};
+        pub struct Box(A: Type): pub Type {
+            A,
+        }
+        pub let main: Io({}) =
+            let b: Box(Nat) = Box { 1 };
+            let _ = b!;
+            print("unreachable");
+        main
+        "#;
+
+    let error = typecheck(source).expect_err("a non-monad action must refuse");
+    assert!(
+        error.contains("Box is not a monad"),
+        "expected the non-monad refinement, got: {error}"
     );
 }
 
