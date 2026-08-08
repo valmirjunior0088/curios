@@ -209,14 +209,14 @@ pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> 
     }
 }
 
-/// One step of the `Lst` front decode — the element-typed analogue of [`Front`]. `Empty` is the identity (`[]`); `Cons` peels the leading element and the residual tail; `Opaque` is a value exposing no leading element (a variable, a slice, an append). Unlike `Bin`, the head needs no reflection — an `Lst` generator IS its element term, used directly by both the eliminator and the operations.
+/// One step of the `Lst` front decode — the element-typed analogue of [`Front`]. `Empty` is the identity (`[]`); `Cons` peels the leading element and the residual tail; `Opaque` is a value exposing no leading element (a variable, a slice). Unlike `Bin`, the head needs no reflection — an `Lst` generator IS its element term, used directly by both the eliminator and the operations.
 enum LstFront {
     Empty,
     Cons { head: Term, tail: Term },
     Opaque,
 }
 
-/// The structural traversal shared by both `Lst` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_elem`] for `Lst/get`/`Lst/slice`) — the element-typed twin of [`peel_front`]. Peel the leading element off an already-reduced value: a literal run yields its first element; a symbolic cons `concat([h], t)` yields `h` off its leading non-empty literal segment, the residual elements rejoining the rest exactly as `LstConcat` collapses them. The empty list is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
+/// The structural traversal shared by both `Lst` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_elem`] for `Lst/get`/`Lst/slice`) — the element-typed twin of [`peel_front`]. Peel the leading element off an already-reduced value: a literal run yields its first element; `append(base, e)` decodes through its base, the appended element rejoining the residual; a concatenation recurses into its first segment — so the symbolic cons `concat([h], t)`, a cons-led concat, and an append over a decodable base all expose their first element, the residual renormalised (an empty first-segment tail drops, a lone survivor collapses) so each decodes to the same tail its flattened form would. The empty list is `Empty`; anything else (a variable, a slice) is `Opaque`.
 fn peel_front_lst(lst: &Term) -> LstFront {
     match &**lst {
         Subterm::Intrinsic(Intrinsic::Lst(elem, elems)) => match elems.split_first() {
@@ -226,33 +226,53 @@ fn peel_front_lst(lst: &Term) -> LstFront {
                 tail: Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), rest.to_vec())).into(),
             },
         },
-        // A symbolic cons: decode the head off the leading non-empty literal segment; its remaining elements stay ahead of the rest.
-        Subterm::Intrinsic(Intrinsic::LstConcat(elem, segments)) => match segments.split_first() {
-            Some((first, rest)) if is_nonempty_lst_literal(first) => {
-                let mut lead = match &**first {
-                    Subterm::Intrinsic(Intrinsic::Lst(_, elems)) => elems.clone(),
-                    _ => unreachable!("guard checked a non-empty `Lst` literal lead segment"),
-                };
-
-                let head = lead.remove(0);
-
-                let mut segments = Vec::with_capacity(rest.len() + 1);
-
-                if !lead.is_empty() {
-                    segments.push(Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), lead)).into());
-                }
-
-                segments.extend(rest.iter().cloned());
-
-                let tail = match segments.len() {
-                    0 => Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), vec![])).into(),
-                    1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Intrinsic(Intrinsic::LstConcat(elem.clone(), segments)).into(),
-                };
-                LstFront::Cons { head, tail }
+        // `append(base, e) = base ++ [e]`: peel the base's leading element, and the appended element rejoins the residual. An empty base's front is the appended element itself; a decodable base exposes its own head instead. The element-typed twin of the `BinAppend` arm above, closing the same gap: `core::spine`'s two-value peel decodes an append as `concat(base, [e])`, so without this arm the same term was transparent to conversion and opaque to reduction.
+        Subterm::Intrinsic(Intrinsic::LstAppend(elem, base, appended)) => {
+            match peel_front_lst(base) {
+                LstFront::Empty => LstFront::Cons {
+                    head: appended.clone(),
+                    tail: Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), vec![])).into(),
+                },
+                LstFront::Cons { head, tail } => LstFront::Cons {
+                    head,
+                    tail: Subterm::Intrinsic(Intrinsic::LstAppend(
+                        elem.clone(),
+                        tail,
+                        appended.clone(),
+                    ))
+                    .into(),
+                },
+                LstFront::Opaque => LstFront::Opaque,
             }
-            _ => LstFront::Opaque,
-        },
+        }
+        // A concatenation: peel the leading element off its first segment; the residual first-segment tail rejoins the rest.
+        Subterm::Intrinsic(Intrinsic::LstConcat(elem, segments)) => {
+            match segments.split_first() {
+                Some((first, rest)) => match peel_front_lst(first) {
+                    LstFront::Cons {
+                        head,
+                        tail: first_tail,
+                    } => {
+                        let mut kept = Vec::with_capacity(segments.len());
+                        if !is_empty_lst(&first_tail) {
+                            kept.push(first_tail);
+                        }
+                        kept.extend(rest.iter().cloned());
+                        let tail = match kept.len() {
+                            0 => Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), vec![])).into(),
+                            1 => kept.into_iter().next().unwrap(),
+                            _ => {
+                                Subterm::Intrinsic(Intrinsic::LstConcat(elem.clone(), kept)).into()
+                            }
+                        };
+                        LstFront::Cons { head, tail }
+                    }
+                    // A reduced `LstConcat` has no empty segments, so a first segment that exposes no element is opaque (a leading variable/slice).
+                    LstFront::Empty | LstFront::Opaque => LstFront::Opaque,
+                },
+                None => LstFront::Empty,
+            }
+        }
         _ => LstFront::Opaque,
     }
 }
@@ -270,9 +290,9 @@ fn is_empty_bin(grain: Grain, term: &Term) -> bool {
     matches!(&**term, Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain && bytes.is_empty())
 }
 
-// `cons` injects an element at the front as the singleton literal `[h]`; the `Lst` eliminator recognizes a non-empty literal lead segment to decode a symbolic cons.
-fn is_nonempty_lst_literal(term: &Term) -> bool {
-    matches!(&**term, Subterm::Intrinsic(Intrinsic::Lst(_, elems)) if !elems.is_empty())
+// `cons` injects an element at the front as the singleton literal `[h]`; `peel_front_lst`'s concat recursion decodes that encoding through the literal case.
+fn is_empty_lst(term: &Term) -> bool {
+    matches!(&**term, Subterm::Intrinsic(Intrinsic::Lst(_, elems)) if elems.is_empty())
 }
 
 /// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared verbatim by `BinConcat` and `LstConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `[]`), merge adjacent literal runs into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` borrows an operand's run when it is a literal (`None` for a symbolic chunk); `into_literal`/`into_concat` rebuild the result in the carrier's intrinsics.
