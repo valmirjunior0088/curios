@@ -4,7 +4,7 @@
 //!
 //! The abstract case is the one reduction cannot reach. Where the operand type is concrete the projection reduces to its primitive and prints infix without any of this, so the fold only earns its keep under a `use Add(A)` parameter — exactly where the reader has least else to go on.
 //!
-//! The folded term reintroduces the elaboration-transient [`Subterm::Infix`] node purely for observation: it only ever meets the printer, never checking, reduction, or erasure.
+//! The folded term reintroduces the elaboration-transient `Infix` node (under [`Subterm::Transient`]) purely for observation: it only ever meets the printer, never checking, reduction, or erasure.
 
 use {
     super::{Context, TermBuilders},

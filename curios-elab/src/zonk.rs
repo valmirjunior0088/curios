@@ -995,9 +995,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 .collect::<Result<_, _>>()?,
         }),
 
-        // `Infix`/`NumLit` are elaboration-transient: `elaborate` replaces every occurrence with a concrete `Prim` before zonk ever runs.
-        Subterm::Infix(_) => unreachable!("infix node survived elaboration into zonk"),
-        Subterm::NumLit(_) => unreachable!("numeric-literal node survived elaboration into zonk"),
+        // Transients are consumed by `elaborate` before zonk ever runs.
+        Subterm::Transient(_) => unreachable!("transient node survived elaboration into zonk"),
 
         Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim)?),
 

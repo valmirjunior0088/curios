@@ -32,10 +32,10 @@ use {
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
     curios_core::{
-        Apply, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix, Let, MetaId,
-        Metavar, MetavarOrigin, Nat, NumLit, One, Prim, Proj, Rec, Scope, Struct, StructDecl,
-        StructEntry, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
-        WitnessOrigin, instantiate_universe_levels_scoped,
+        Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix, Let,
+        MetaId, Metavar, MetavarOrigin, Nat, NumLit, One, Prim, Proj, Rec, Scope, Struct,
+        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, TupleType,
+        Variant, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -256,8 +256,15 @@ fn elaborate_subterm(
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
-        Subterm::Infix(infix) => return elaborate_infix(context, infix, term, mode),
-        Subterm::NumLit(num_lit) => return elaborate_num_lit(context, num_lit, term, mode),
+        Subterm::Transient(Transient::Infix(infix)) => {
+            return elaborate_infix(context, infix, term, mode);
+        }
+        Subterm::Transient(Transient::NumLit(num_lit)) => {
+            return elaborate_num_lit(context, num_lit, term, mode);
+        }
+        Subterm::Transient(Transient::Bang(bang)) => {
+            return elaborate_bang(context, bang, term, mode);
+        }
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,

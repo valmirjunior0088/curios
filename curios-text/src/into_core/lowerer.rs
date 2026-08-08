@@ -833,9 +833,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Wraps `body` in one `/syn/Monad/bind` application per collected bang. The first-collected bang (`binds[0]`) becomes the outermost bind, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. Elaborating each application inserts fresh implicits and a fresh `use` witness slot per `!` site: the action's type pins the constructor (via the flex-apply imitation rule), which resolves the `Monad` witness — so a region can sequence actions of differing result types, and different regions can use different monads.
+    /// Wraps `body` in one [`curios_core::Bang`] transient per collected bang. The first-collected bang (`binds[0]`) becomes the outermost node, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. `elaborate_bang` later replaces each node with its `/syn/Monad/bind` application, inserting fresh implicits and a fresh `use` witness slot per `!` site: the action's type pins the constructor (via the flex-apply imitation rule), which resolves the `Monad` witness — so a region can sequence actions of differing result types, and different regions can use different monads.
     ///
-    /// Each application carries the span of the `!` that produced it (see [`Hoisted`]), so a region that cannot accept the sequencing reports against the written `!` rather than against nothing.
+    /// Each node carries the span of the `!` that produced it (see [`Hoisted`]), so a region that cannot accept the sequencing reports against the written `!` rather than against nothing.
     pub(super) fn wrap(
         &self,
         binds: Vec<Hoisted>,
@@ -849,11 +849,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             } = hoisted;
             let domain = curios_core::Term::metavar(self.context.fresh_metavar());
             let cont = curios_core::Term::func([(binder, domain)], acc);
-            // The already-resolved core name: the `Monad` concept at `/syn`'s top level, method wrapper `bind`.
-            let bind = Self::syn_call(self.context.syntax().monad().bind(), [action, cont]);
+            let bang = curios_core::Term::bang(action, cont);
             Ok(match span {
-                Some(span) => curios_core::Term::spanned(span, bind),
-                None => bind,
+                Some(span) => curios_core::Term::spanned(span, bang),
+                None => bang,
             })
         })
     }

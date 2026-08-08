@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Free, Func, FuncType, Global, InductType,
-        Infix, Let, Level, Match, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
+        Apply, Arity, Atom, Bang, Bound, Carrier, Cases, Field, Free, Func, FuncType, Global,
+        InductType, Infix, Let, Level, Match, Nat, Prim, Proj, Rec, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
         Flt, Grain, Plicity, Qualifier,
@@ -299,16 +299,16 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
         }
         Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
         Subterm::UniverseInst(instance) => collect_labels(&instance.head, out),
-        Subterm::Infix(Infix { left, right, .. }) => {
-            collect_labels(left, out);
-            collect_labels(right, out);
+        Subterm::Transient(transient) => {
+            transient
+                .subterms()
+                .for_each(|child| collect_labels(child, out));
         }
         Subterm::Var(_)
         | Subterm::Type(_)
         | Subterm::Prop
         | Subterm::Prim(_)
-        | Subterm::Foreign(..)
-        | Subterm::NumLit(_) => {}
+        | Subterm::Foreign(..) => {}
     }
 }
 
@@ -525,7 +525,7 @@ fn print_infix(
 fn print_operand(term: Term, depth: usize, spelling: &Rc<Spelling>) -> Printer {
     let parenthesize = match &*term {
         Subterm::Prim(prim) => infix_symbol(prim).is_some(),
-        Subterm::Infix(_) => true,
+        Subterm::Transient(Transient::Infix(_)) => true,
         _ => false,
     };
 
@@ -1366,7 +1366,7 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             ])
         }
         Subterm::Var(var) => print_var(var, spelling),
-        Subterm::NumLit(num_lit) => {
+        Subterm::Transient(Transient::NumLit(num_lit)) => {
             let sign = if num_lit.negative {
                 "-"
             } else if num_lit.signed {
@@ -1377,9 +1377,18 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
             pure(format!("{sign}{}", num_lit.magnitude))
         }
         // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the prim operators; display folds (`denoise`) nest these nodes.
-        Subterm::Infix(Infix { op, left, right }) => {
+        Subterm::Transient(Transient::Infix(Infix { op, left, right })) => {
             print_infix(op.symbol(), left, right, depth, spelling)
         }
+        // A `!` sequencing site prints as the written bang followed by its hoisted continuation, so a lowered-stage dump reads close to the source region.
+        Subterm::Transient(Transient::Bang(Bang {
+            action,
+            continuation,
+        })) => flat([
+            sub(action.clone(), depth, spelling),
+            pure("!; "),
+            sub(continuation.clone(), depth, spelling),
+        ]),
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing.
         Subterm::Metavar(metavar) => {
             if metavar

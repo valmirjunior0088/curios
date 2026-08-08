@@ -28,7 +28,7 @@ use {
     crate::{Env, forceable},
     curios_core::{
         Apply, Arity, Atom, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductArm,
-        InductType, Infix, Layer, Let, Many, Match, Nat, Prim, Proj, Rec, RecGroup, Scope, Struct,
+        InductType, Layer, Let, Many, Match, Nat, Prim, Proj, Rec, RecGroup, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst,
         Variant,
     },
@@ -404,11 +404,7 @@ impl<E: Env> Walk<'_, E> {
     fn walk(&mut self, term: &Term) {
         match &**term {
             // Nothing here can contain a call.
-            Subterm::Type(_)
-            | Subterm::Prop
-            | Subterm::NumLit(_)
-            | Subterm::Var(_)
-            | Subterm::Metavar(_) => {}
+            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) | Subterm::Metavar(_) => {}
 
             // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
             Subterm::Rec(_)
@@ -493,9 +489,11 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
-            Subterm::Infix(Infix { left, right, .. }) => {
-                self.walk(left);
-                self.walk(right);
+            // The early-mention net walks *written* (lowered, pre-elaboration) terms, so transients are legitimate here; their children may name definitions.
+            Subterm::Transient(transient) => {
+                for child in transient.subterms() {
+                    self.walk(child);
+                }
             }
 
             Subterm::Prim(prim) => {

@@ -5,11 +5,11 @@ use {curios_cont::CpsModule, curios_text::Entrypoint, std::fmt};
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 pub enum Stage<'a> {
     Text(&'a Entrypoint),
-    /// Core as `curios_text::into_core` produced it: syntax that nothing has checked. It carries term metavariables, lowering-time universe seeds, and unresolved `Infix` and `NumLit` nodes, and its registries are unelaborated. Useful for debugging the lowering; not a typed program.
+    /// Core as `curios_text::into_core` produced it: syntax that nothing has checked. It carries term metavariables, lowering-time universe seeds, and unresolved `Transient` nodes (`Infix`, `NumLit`), and its registries are unelaborated. Useful for debugging the lowering; not a typed program.
     Core(&'a curios_core::Module),
     /// Core after elaboration and zonking, which is the module every later stage consumes. Metavariable-free by construction — `zonk_module` errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. The prelude prefix is spliced back in from the archive.
     ///
-    /// The difference from [`Stage::Core`] is the absence of `Metavar`, `Infix`, and `NumLit`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::recheck_module` takes, and [`Stage::Core`] is not.
+    /// The difference from [`Stage::Core`] is the absence of `Metavar` and every `Transient`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::recheck_module` takes, and [`Stage::Core`] is not.
     CoreElab(&'a curios_core::Module),
     Ersd(&'a curios_ersd::Module),
     ErsdOptm(&'a curios_ersd::Module),

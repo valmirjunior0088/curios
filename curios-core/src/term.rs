@@ -1595,6 +1595,66 @@ pub struct NumLit {
     pub negative: bool,
 }
 
+/// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/syn/Monad/bind` application the lowerer once spelled directly — the construction moved behind elaboration so the sequencing survives to the stage that can make type-directed decisions about it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct Bang {
+    pub action: Term,
+    pub continuation: Term,
+}
+
+/// A lowering-born constructor consumed by elaboration: born in `into_core`, eliminated by `elaborate`, never legitimate in reduced, converted, zonked, or erased terms, and refused at the kernel boundary. Grouping the members under one `Subterm` variant lets every post-elaboration consumer dismiss the class wholesale — one refusal arm at the kernel, one `unreachable!` in each downstream stage — so a future transient extends lowering, elaboration, and display without touching them. `Metavar` is deliberately not a member: conversion parks on metavariables and zonk consumes them, so its lifecycle is elaboration-internal rather than pre-elaboration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub enum Transient {
+    /// An unresolved infix operator application; consumed by `elaborate_infix`.
+    Infix(Infix),
+    /// A polymorphic numeric literal; consumed by `elaborate_numlit`.
+    NumLit(NumLit),
+    /// A postfix `!` sequencing site; consumed by `elaborate_bang`.
+    Bang(Bang),
+}
+
+impl Transient {
+    /// The direct child terms, for the structural walks that must traverse a lowered (or display-folded) term. Transients are plain data over their children — none binds a variable of its own (`Bang`'s continuation is an ordinary `Func`, which carries the binder) — so the walks need no scope handling here.
+    pub fn subterms(&self) -> impl Iterator<Item = &Term> {
+        let children = match self {
+            Transient::Infix(Infix { left, right, .. }) => [Some(left), Some(right)],
+            Transient::NumLit(_) => [None, None],
+            Transient::Bang(Bang {
+                action,
+                continuation,
+            }) => [Some(action), Some(continuation)],
+        };
+        children.into_iter().flatten()
+    }
+
+    /// Rebuild this transient with every child term mapped, for the structural rewrites.
+    pub fn map_subterms(&self, f: &mut impl FnMut(&Term) -> Term) -> Transient {
+        match self {
+            Transient::Infix(Infix { op, left, right }) => Transient::Infix(Infix {
+                op: *op,
+                left: f(left),
+                right: f(right),
+            }),
+            Transient::NumLit(num_lit) => Transient::NumLit(num_lit.clone()),
+            Transient::Bang(Bang {
+                action,
+                continuation,
+            }) => Transient::Bang(Bang {
+                action: f(action),
+                continuation: f(continuation),
+            }),
+        }
+    }
+}
+
 /// `plicities` parallels the telescope, one mark per binder; the builder asserts the lengths agree. `Telescope` itself is unchanged. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
@@ -2186,7 +2246,7 @@ pub struct UniverseInst {
     pub levels: Vec<Level>,
 }
 
-/// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final two variants (`Infix`, `NumLit`) are elaboration-transient: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
+/// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final variant groups the elaboration-transient constructors under [`Transient`]: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2216,10 +2276,8 @@ pub enum Subterm {
     UniverseInst(UniverseInst),
     Var(Var),
     Metavar(Metavar),
-    /// An unresolved infix operator application; consumed by `elaborate_infix`.
-    Infix(Infix),
-    /// A polymorphic numeric literal; consumed by `elaborate_numlit`.
-    NumLit(NumLit),
+    /// The elaboration-transient constructors, grouped so post-elaboration consumers dismiss the class with one arm.
+    Transient(Transient),
 }
 
 impl Subterm {
@@ -2303,10 +2361,10 @@ impl Subterm {
             Subterm::UniverseInst(UniverseInst { head, .. }) => {
                 head.collect_construction_names(names);
             }
-            Subterm::NumLit(_) => {}
-            Subterm::Infix(Infix { left, right, .. }) => {
-                left.collect_construction_names(names);
-                right.collect_construction_names(names);
+            Subterm::Transient(transient) => {
+                transient
+                    .subterms()
+                    .for_each(|child| child.collect_construction_names(names));
             }
             Subterm::Metavar(Metavar { spine, .. }) => {
                 spine
@@ -2466,9 +2524,9 @@ impl Subterm {
             }
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.any_metavar(pred),
-            Subterm::NumLit(_) => false,
-            Subterm::Infix(Infix { left, right, .. }) => {
-                left.any_metavar(pred) || right.any_metavar(pred)
+            Subterm::Transient(transient) => {
+                let mut children = transient.subterms();
+                children.any(|child| child.any_metavar(pred))
             }
             Subterm::Prim(prim) => prim.any_metavar(pred),
             Subterm::Foreign(_, args) => args.iter().any(|arg| arg.any_metavar(pred)),
@@ -2561,8 +2619,10 @@ impl Subterm {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
             Subterm::UniverseInst(UniverseInst { head, .. }) => pred(head),
-            Subterm::NumLit(_) => false,
-            Subterm::Infix(Infix { left, right, .. }) => pred(left) || pred(right),
+            Subterm::Transient(transient) => {
+                let mut children = transient.subterms();
+                children.any(&mut *pred)
+            }
             Subterm::Prim(prim) => prim.any_term(pred),
             Subterm::Foreign(_, args) => args.iter().any(&mut *pred),
             Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
@@ -2769,12 +2829,9 @@ impl Bound for Subterm {
                 telescope: telescope.traverse(visit),
                 plicities: plicities.clone(),
             }),
-            Subterm::NumLit(num_lit) => Subterm::NumLit(num_lit.clone()),
-            Subterm::Infix(Infix { op, left, right }) => Subterm::Infix(Infix {
-                op: *op,
-                left: visit.visit_subterm(left),
-                right: visit.visit_subterm(right),
-            }),
+            Subterm::Transient(transient) => {
+                Subterm::Transient(transient.map_subterms(&mut |child| visit.visit_subterm(child)))
+            }
             Subterm::Apply(Apply {
                 head,
                 params,
@@ -3006,8 +3063,10 @@ impl Bound for Subterm {
         match self {
             Subterm::Type(_) => 0,
             Subterm::Prop => 0,
-            Subterm::NumLit(_) => 0,
-            Subterm::Infix(Infix { left, right, .. }) => left.reach().max(right.reach()),
+            Subterm::Transient(transient) => transient
+                .subterms()
+                .map(|child| child.reach())
+                .fold(0, usize::max),
             Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.reach(),
             Subterm::Var(var) => match var.as_bound() {

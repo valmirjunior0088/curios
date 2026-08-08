@@ -452,10 +452,8 @@ fn infer_node(
             }
         }
 
-        // Elaboration-only syntax. Reaching one means a term arrived here before elaboration was finished with it.
-        Subterm::Metavar(_) | Subterm::Infix(_) | Subterm::NumLit(_) => {
-            Err(KernelError::NotCore(term.clone()))
-        }
+        // Elaboration-only syntax. Reaching a metavariable or any transient means a term arrived here before elaboration was finished with it.
+        Subterm::Metavar(_) | Subterm::Transient(_) => Err(KernelError::NotCore(term.clone())),
     }
 }
 

@@ -279,7 +279,7 @@ pub(super) fn elaborate_num_lit(
 ///
 /// A free function rather than an inherent method on [`Infix`]: the node is representation and lives in `curios-core`, while literal defaulting is an elaboration decision.
 pub(super) fn infix_default_type(infix: &Infix) -> Prim {
-    let signed = |operand: &Term| matches!(&**operand, Subterm::NumLit(num_lit) if num_lit.signed);
+    let signed = |operand: &Term| matches!(&**operand, Subterm::Transient(Transient::NumLit(num_lit)) if num_lit.signed);
 
     if signed(&infix.left) || signed(&infix.right) {
         Prim::IntType
@@ -382,6 +382,22 @@ fn infix_method(
     }))
 }
 
+/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/syn/Monad/bind` application and elaborate the result — exactly the application `into_core`'s `wrap` used to spell, so behavior is unchanged; constructing it here instead keeps the transient in play until the stage with types in hand, where a type-directed decision about the sequencing has a place to live. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
+pub(super) fn elaborate_bang(
+    context: &mut Context,
+    bang: &Bang,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    let head = Term::free_var(&Free::global(context.syntax().monad().bind().qualifier()));
+    let app = Term::apply(head, vec![bang.action.clone(), bang.continuation.clone()]);
+    let app = match term.span() {
+        Some(span) => Term::spanned(span, app),
+        None => app,
+    };
+    elaborate(context, &app, mode)
+}
+
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
 ///
 /// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/syn` concept ([`OperatorSyntax::concept_field`](curios_base::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known primitive witnesses collapse back to bare `Prim` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
@@ -416,8 +432,8 @@ pub(super) fn elaborate_infix(
         expect(context, term, &operand_type, expected)?;
     }
 
-    let left_is_literal = matches!(&*infix.left, Subterm::NumLit(_));
-    let right_is_literal = matches!(&*infix.right, Subterm::NumLit(_));
+    let left_is_literal = matches!(&*infix.left, Subterm::Transient(Transient::NumLit(_)));
+    let right_is_literal = matches!(&*infix.right, Subterm::Transient(Transient::NumLit(_)));
 
     // Phase 1: the non-literal operands pin `?T` from their own types.
     let mut left = match left_is_literal {

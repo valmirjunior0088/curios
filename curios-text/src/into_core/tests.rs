@@ -1963,24 +1963,21 @@ fn distinct_goals_get_distinct_ids() {
 }
 
 #[test]
-fn bang_desugars_through_syn_monad_bind() {
-    // Every value body is a region root: `x!` hoists to it and sequences through the `/syn/Monad/bind` wrapper applied to the action and the continuation over a gensym'd binder. The witness slot and implicits are inserted during core elaboration.
-    let expected = curios_core::Term::apply(
-        curios_core::Term::var(curios_core::Var::free(global("/syn/Monad/bind"))),
-        [
-            // `x` resolves to nothing, so it lowers to a binder identity that core will report as unbound — never to a global that a same-named root-level definition could satisfy.
-            curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
-                0,
-                Some("x"),
-            ))),
-            curios_core::Term::func(
-                [(
-                    curios_core::Free::local(1, None),
-                    curios_core::Term::metavar(0),
-                )],
-                curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(1, None))),
-            ),
-        ],
+fn bang_lowers_to_the_bang_transient() {
+    // Every value body is a region root: `x!` hoists to it as a `Bang` transient holding the action and the continuation over a gensym'd binder. `elaborate_bang` later replaces the node with the `/syn/Monad/bind` application, inserting the witness slot and implicits during core elaboration.
+    let expected = curios_core::Term::bang(
+        // `x` resolves to nothing, so it lowers to a binder identity that core will report as unbound — never to a global that a same-named root-level definition could satisfy.
+        curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
+            0,
+            Some("x"),
+        ))),
+        curios_core::Term::func(
+            [(
+                curios_core::Free::local(1, None),
+                curios_core::Term::metavar(0),
+            )],
+            curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(1, None))),
+        ),
     );
     assert_eq!(run("x!"), expected);
 }

@@ -489,8 +489,8 @@ impl<E: Env> Walk<'_, E> {
 
         let term = self.forced(term);
         match &*term {
-            // Sorts and unresolved literals name nothing.
-            Subterm::Type(_) | Subterm::Prop | Subterm::NumLit(_) => {}
+            // Sorts name nothing.
+            Subterm::Type(_) | Subterm::Prop => {}
 
             Subterm::Var(var) => {
                 if let Some(free) = var.as_free()
@@ -539,7 +539,7 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Rec(_)
             | Subterm::UniverseInst(_)
             | Subterm::Metavar(_)
-            | Subterm::Infix(_) => self.opaque(&term),
+            | Subterm::Transient(_) => self.opaque(&term),
         }
     }
 

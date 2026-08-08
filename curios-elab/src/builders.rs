@@ -5,8 +5,9 @@
 use {
     curios_base::NumOp,
     curios_core::{
-        Apply, Free, Func, FuncType, Global, Infix, Level, Many, MetaId, Metavar, MetavarOrigin,
-        NumLit, Prim, Scope, Struct, StructEntry, StructType, Subterm, Term, Tuple,
+        Apply, Bang, Free, Func, FuncType, Global, Infix, Level, Many, MetaId, Metavar,
+        MetavarOrigin, NumLit, Prim, Scope, Struct, StructEntry, StructType, Subterm, Term,
+        Transient, Tuple,
     },
     num_bigint::BigUint,
     std::rc::Rc,
@@ -618,6 +619,9 @@ pub trait TermBuilders {
     /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.
     fn infix(op: NumOp, left: Term, right: Term) -> Self;
 
+    /// A postfix `!` sequencing site ([`Bang`]) — elaboration-transient, consumed by `elaborate_bang`. `action` is the sequenced description; `continuation` is the hoisted rest of the region as an ordinary one-parameter function.
+    fn bang(action: Term, continuation: Term) -> Self;
+
     /// Carry a *written* motive — the surface term `into_core` lowered, before elaboration has closed it into a scope — as an arity-0 [`Scope`].
     ///
     /// Lowering cannot close the scope itself: the motive's arity is `n_indices + 1`, and the eliminated family is only known once the scrutinee's type is inferred. Arity 0 is a free tag for "not yet scoped" because no elaborated motive can have it — every eliminator binds at least the scrutinee, so `check_motive` always re-closes at arity 1 or more. `Scope::constant` performs no capture, so the term goes in and comes back out of `body()` untouched.
@@ -698,7 +702,18 @@ impl TermBuilders for Term {
     }
 
     fn infix(op: NumOp, left: Term, right: Term) -> Self {
-        Self::from(Subterm::Infix(Infix { op, left, right }))
+        Self::from(Subterm::Transient(Transient::Infix(Infix {
+            op,
+            left,
+            right,
+        })))
+    }
+
+    fn bang(action: Term, continuation: Term) -> Self {
+        Self::from(Subterm::Transient(Transient::Bang(Bang {
+            action,
+            continuation,
+        })))
     }
 
     fn match_motive_written<M>(motive: M) -> Scope<Many>
@@ -709,11 +724,11 @@ impl TermBuilders for Term {
     }
 
     fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self {
-        Self::from(Subterm::NumLit(NumLit {
+        Self::from(Subterm::Transient(Transient::NumLit(NumLit {
             magnitude,
             signed,
             negative,
-        }))
+        })))
     }
 
     fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self

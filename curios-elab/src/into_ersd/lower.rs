@@ -435,9 +435,8 @@ impl Lowering {
             Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
             // Erasure runs downstream of zonking and elaboration.
             Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
-            Subterm::Infix(_) => unreachable!("infix node survived elaboration into erasure"),
-            Subterm::NumLit(_) => {
-                unreachable!("numeric-literal node survived elaboration into erasure")
+            Subterm::Transient(_) => {
+                unreachable!("transient node survived elaboration into erasure")
             }
         }
     }
