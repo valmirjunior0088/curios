@@ -7,7 +7,7 @@ mod tests;
 
 use {
     curios_base::{Grain, Qualifier, RootId},
-    curios_core::{Global, Intrinsic, Subterm, Telescope, Term, UniverseContext},
+    curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, UniverseContext},
     std::fmt,
 };
 
@@ -97,6 +97,20 @@ impl HeadKey {
                         Some(HeadKey::Nominal(struct_decl.name.clone()))
                     }
                     Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
+                    // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. Its head names the former — a registry entry and its type-former definition share one finalized context, so the reference's global *is* the declaration's key — and the universes riding a `UniverseInst` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
+                    Subterm::Apply(apply) => {
+                        let head = match &*apply.head {
+                            Subterm::UniverseInst(instance) => &instance.head,
+                            _ => &apply.head,
+                        };
+                        match &**head {
+                            Subterm::Var(var) => match var.as_free()? {
+                                Free::Global(global) => Some(HeadKey::Nominal(global.clone())),
+                                Free::Local(_) => None,
+                            },
+                            _ => None,
+                        }
+                    }
                     _ => None,
                 }
             }

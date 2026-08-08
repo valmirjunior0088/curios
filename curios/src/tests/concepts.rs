@@ -959,3 +959,63 @@ fn a_higher_kinded_type_field_projects_through_an_explicit_dictionary() {
 
     assert_eq!(run(source), b"3");
 }
+
+// A witness over a *partially applied* family: `(A : Type) => Box(S, A)` leaves a stuck application under the binder, and the key reads that application's head — so a two-parameter monad can register its parametric witness. Resolution then finds it when a goal's parameter is pinned to the same partial lambda, unifying the arguments below the head.
+#[test]
+fn a_witness_keys_through_a_partially_applied_family() {
+    let source = r#"
+        use /std/{Nat, Str, Monad};
+        induct Box(S : Type, A : Type) : Type
+        | wrap(A)
+        end
+        satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
+            pure(@A, a) = Box/wrap(a),
+            bind(@A, @B, m, f) =
+                match m : (_) => Box(S, B)
+                | wrap(a) => f(a)
+                end,
+        }
+        let unwrap(@S : Type, @A : Type, m : Box(S, A)) -> A =
+            match m : (_) => A
+            | wrap(a) => a
+            end;
+        let doubled(@M : (Type) -> Type, use Monad(M), m : M(Nat)) -> M(Nat) =
+            Monad/bind(m, (n) => Monad/pure(Nat/add(n, n)));
+        let boxed : Box(Str, Nat) = Box/wrap(21);
+        /std/print(Nat/to_str(unwrap(doubled(@(A : Type) => Box(Str, A), boxed))))
+        "#;
+
+    assert_eq!(run(source), b"42");
+}
+
+// The single-occupancy rule holds through the new keying: two parametric witnesses over the same family collide on the family's head, whatever their prefix arguments.
+#[test]
+fn parametric_witnesses_over_one_family_still_collide() {
+    let source = r#"
+        use /std/{Nat, Str, Monad};
+        induct Box(S : Type, A : Type) : Type
+        | wrap(A)
+        end
+        satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
+            pure(@A, a) = Box/wrap(a),
+            bind(@A, @B, m, f) =
+                match m : (_) => Box(S, B)
+                | wrap(a) => f(a)
+                end,
+        }
+        satisfy Monad((A : Type) => Box(Str, A)) {
+            pure(@A, a) = Box/wrap(a),
+            bind(@A, @B, m, f) =
+                match m : (_) => Box(Str, B)
+                | wrap(a) => f(a)
+                end,
+        }
+        /std/print("unreachable")
+        "#;
+
+    let message = error(source);
+    assert!(
+        message.contains("duplicate witness"),
+        "expected the key collision, got: {message}"
+    );
+}
