@@ -25,9 +25,10 @@ Every explicitly supplied implicit argument in `curios-prelude/std/` and `curios
 | `Async.crs:399`, `Async/Future.crs:15` | 2 | embedded-metavariable postponement chains that never commit | Item 3 |
 | `Async.crs:615` | 1 | list-literal elaboration refuses a ground solution eagerly | defect (a) below, not an item |
 | `Str/utf8.crs:180` | 1 | refinement-suppressed solving postpones unrecoverably | none; Item 1 makes its report honest |
-| `Async.crs:454`; `Str/utf8.crs:9`, `:205`, `:211-213` | 9 | nothing — already inferable | droppable now |
+| `Async.crs:454` | 1 | droppable in an isolated replica, but the drop strands an unrelated postponement chain (`parked`, `Async.crs:398`) in `block_on`'s larger goal graph — defect (b) order sensitivity | defect (b)'s resolution |
+| `Str/utf8.crs:9`, `:205`, `:211-213` | 8 | nothing — already inferable | dropped 2026-08-08 |
 
-The corpus sites double as acceptance tests: each item's retirement includes dropping the explicit arguments it unlocks, so the prelude stays calibrated to the solver instead of drifting stale again — the condition the measurement found it in, with nine arguments of accumulated slack.
+The corpus sites double as acceptance tests: each item's retirement includes dropping the explicit arguments it unlocks, so the prelude stays calibrated to the solver instead of drifting stale again — the condition the measurement found it in, with eight arguments of accumulated slack (a ninth, `Async.crs:454`, looked stale in isolation and fell to defect (b) in context).
 
 ## Status ledger
 
@@ -128,7 +129,7 @@ let probe(@A: Type, body: Async(A)) -> Async({Nat, Option(A)}) =
     Async/select([Async/map(body, (a) => Option/some(a))]);
 ```
 
-**(b) Wake-cascade fragility.** In the reproduction below, every parked goal's blockers eventually receive solutions — `Option/some(1)` pins the element type, and the chain to the `Cell/new` argument is three rigid decompositions — yet the first goal survives to the drain and reports. `drain_parked` (`typing.rs:292`) documents retry-to-fixpoint with a final sweep, which should have resolved it; either the watch sets miss transitive blockers, or a retry re-parks watching a stale set, or the cascade genuinely runs and something narrower blocks. Resolving which is part of Item 1, and Item 3's acceptance depends on the answer.
+**(b) Wake-cascade fragility.** In the reproduction below, every parked goal's blockers eventually receive solutions — `Option/some(1)` pins the element type, and the chain to the `Cell/new` argument is three rigid decompositions — yet the first goal survives to the drain and reports. `drain_parked` (`typing.rs:292`) documents retry-to-fixpoint with a final sweep, which should have resolved it; either the watch sets miss transitive blockers, or a retry re-parks watching a stale set, or the cascade genuinely runs and something narrower blocks. Resolving which is part of Item 1, and Item 3's acceptance depends on the answer. The fragility is order-sensitive: dropping `Async.crs:454`'s `@Job` — inferable in an isolated replica — perturbs `block_on`'s goal graph enough to strand the *unrelated* `parked` cell's chain (`Async.crs:398`), so the same drain that resolves a chain in one goal population reports it unresolved in another.
 
 ```crs
 use /std/{Cell, Option, Io, Nat};
@@ -210,7 +211,7 @@ Items touching `convert.rs` should additionally be weighed against `SOUNDNESS.md
 Each item is retired individually; the file is deleted when all are. (Right-biased partial imitation and partially-applied witness keying retired 2026-08-08: semantics in `SYNTAX.md`, rules on `imitate_flex_apply` and `HeadKey::of_whnf`, obligations as `curios/src/tests/concepts.rs`'s partial-family tests.)
 
 - Solver, parking, and retry invariants are recorded in the owning `curios-elab` module documentation and tests.
-- The corpus explicits an item unlocks are dropped from `curios-prelude/std/` as part of that item's landing. The nine already-stale arguments — `Async.crs:454`, `Str/utf8.crs:9`, `:205`, `:211-213` — need no item and may be dropped as standalone cleanup at any time.
+- The corpus explicits an item unlocks are dropped from `curios-prelude/std/` as part of that item's landing. The eight already-stale arguments — `Str/utf8.crs:9`, `:205`, `:211-213` — were dropped as standalone cleanup on 2026-08-08; `Async.crs:454` waits on defect (b).
 - Cross-cutting rationale — notably that imitation is a deliberate guess, that packed views are solving-only, and that η-metavariable heads were dropped for lack of demand — is recorded in `DESIGN.md` or `curios-elab/README.md` as appropriate.
 - Both defect-ledger entries are resolved or reclassified with their reproductions pinned as tests.
 - Each roadmap entry is a checked, unlinked summary, and no reference to this filename remains.

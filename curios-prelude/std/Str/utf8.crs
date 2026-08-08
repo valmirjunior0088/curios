@@ -6,7 +6,7 @@ use /std/{Char, Nat, Byte, Bytes, Eq, Option};
 rec seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s, x[..a, ..b]) =
     match va: (q, x, w) => Utf8(q, x[..x, ..b])
     | stop() => vb
-    | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(@step(c, st), @t, @b, rest, vb))
+    | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
     end;
 
 pub let concat_closed(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a, ..b]) =
@@ -202,15 +202,12 @@ let scan_of_class(cl: Class) -> Scan =
     end;
 
 let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) =
-    Eq/refl(@Scan, @step(c, Scan/lead()));
+    Eq/refl();
 
 -- The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
 pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Nat =
     let peeled =
         Eq/subst(
-            @Scan,
-            @step(c, Scan/lead()),
-            @scan_of_class(classify(c)),
             (sc: Scan) => Utf8(sc, t),
             step_scans(c),
             peel_byte(@Scan/lead(), @x[c, ..t], True/qed(), w));
