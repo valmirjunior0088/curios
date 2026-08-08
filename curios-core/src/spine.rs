@@ -188,14 +188,10 @@ pub fn peel_bin(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     })
 }
 
-/// `Lst` is the free monoid on its elements — the same peel as `peel_bin`, with two differences. Its literal runs hold *terms*, not decided bytes, so two leading runs whose heads disagree are NOT a clash (the elements may still be convertible): the peel defers, and the caller's structural element-wise comparison settles it. And its concatenation carries an element type, recovered here to rebuild a residual `LstConcat`. A leftover literal run against the empty identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
+/// `Lst` is the free monoid on its elements — the same peel as `peel_bin`, with two differences. Its literal runs hold *terms*, not decided bytes, so two leading runs whose heads disagree are NOT a clash (the elements may still be convertible): the peel defers, and the caller's structural element-wise comparison settles it. And every `Lst`-valued producer carries its element type, recovered here to rebuild residuals. A leftover literal run against the empty identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
 pub fn peel_lst(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
-    if !lst_valued(left) || !lst_valued(right) {
-        return None;
-    }
-
-    // The element type for a rebuilt `LstConcat` residual — present whenever a side is itself an `LstConcat`, which is exactly when a multi-segment residual (the only thing that rebuilds an `LstConcat`) can arise.
-    let elem = lst_elem(left).or_else(|| lst_elem(right));
+    let elem = lst_elem(left)?;
+    lst_elem(right)?;
 
     let mut left = lst_atoms(left);
     let mut right = lst_atoms(right);
@@ -235,18 +231,7 @@ fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
     }
 }
 
-/// The `Lst` analogue of [`bin_grain`]: `Lst` and `LstConcat` carry the monoid's literals and juxtaposition, `LstSlice` rides in as a measured `Window` (like `BinSlice`), and `LstAppend` rides in as its base followed by a length-1 literal run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer stays an opaque chunk left to the caller's comparison.
-fn lst_valued(intrinsic: &Intrinsic) -> bool {
-    matches!(
-        intrinsic,
-        Intrinsic::Lst(..)
-            | Intrinsic::LstConcat(_, _)
-            | Intrinsic::LstSlice(..)
-            | Intrinsic::LstAppend(..)
-    )
-}
-
-/// The element type carried by an `LstConcat`, `LstSlice`, or `LstAppend`, for rebuilding residuals (every atom of an `Lst(T)` value shares `T`, so one suffices for the whole list). `None` for a bare `Lst` literal, which rebuilds as a single run that never needs it.
+/// The `Lst` analogue of [`bin_grain`] — [`peel_lst`]'s gate, doubling as the element type residuals rebuild with (every atom of an `Lst(T)` value shares `T`, so one suffices for the whole list). `Lst` and `LstConcat` carry the monoid's literals and juxtaposition, `LstSlice` rides in as a measured `Window` (like `BinSlice`), and `LstAppend` rides in as its base followed by a length-1 literal run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer is `None` and stays an opaque chunk left to the caller's comparison.
 fn lst_elem(intrinsic: &Intrinsic) -> Option<Term> {
     match intrinsic {
         Intrinsic::Lst(elem, _)
@@ -370,24 +355,13 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
     }
 }
 
-/// Rebuild an `Lst` term from a residual segment list — [`reassemble_bin`] over element runs, restoring the element type `Lst`'s `LstConcat`/`LstSlice` carry. `elem` is `Some` whenever the residual has more than one segment or holds a slice window — both can only come from an input carrying the element type.
-fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
-    fn into_term(atom: Atom<Term>, elem: &Option<Term>) -> Term {
+/// Rebuild an `Lst` term from a residual segment list — [`reassemble_bin`] over element runs, restoring the element type every `Lst`-valued producer carries.
+fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Term) -> Term {
+    fn into_term(atom: Atom<Term>, elem: &Term) -> Term {
         match atom {
-            Atom::Literal(elems) => {
-                let elem = elem
-                    .clone()
-                    .expect("every Lst-valued producer carries its element type");
-
-                Term::intrinsic(Intrinsic::Lst(elem, elems))
-            }
-            // A slice window rebuilds with the value's element type, threaded through `elem` (every atom of an `Lst(T)` shares `T`).
+            Atom::Literal(elems) => Term::intrinsic(Intrinsic::Lst(elem.clone(), elems)),
             Atom::Window { base, lo, hi } => {
-                let elem = elem
-                    .clone()
-                    .expect("an Lst slice window carries its element type via `elem`");
-
-                Term::intrinsic(Intrinsic::lst_slice(elem, base, lo, hi))
+                Term::intrinsic(Intrinsic::lst_slice(elem.clone(), base, lo, hi))
             }
             Atom::Symbolic(term) => term,
         }
@@ -400,7 +374,6 @@ fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
                 .into_iter()
                 .map(|atom| into_term(atom, &elem))
                 .collect::<Vec<Term>>();
-            let elem = elem.expect("a multi-segment Lst residual implies an LstConcat operand");
 
             Term::intrinsic(Intrinsic::LstConcat(elem, parts))
         }
