@@ -106,15 +106,15 @@ fn dispatch() -> Result<(), Failure> {
             });
 
             println!("total_ms\tcalls\tmin_ms\tmax_ms\ttarget\tname");
-            for summary in report.summaries() {
+            for summary in &report.summaries {
                 println!(
                     "{:.3}\t{}\t{:.3}\t{:.3}\t{}\t{}",
-                    summary.total().as_secs_f64() * 1_000.0,
-                    summary.calls(),
-                    summary.min().as_secs_f64() * 1_000.0,
-                    summary.max().as_secs_f64() * 1_000.0,
-                    summary.target(),
-                    summary.name(),
+                    summary.total.as_secs_f64() * 1_000.0,
+                    summary.calls,
+                    summary.min.as_secs_f64() * 1_000.0,
+                    summary.max.as_secs_f64() * 1_000.0,
+                    summary.target,
+                    summary.name,
                 );
             }
 

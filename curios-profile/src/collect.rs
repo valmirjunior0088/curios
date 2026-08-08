@@ -11,83 +11,27 @@ use {
 };
 
 /// Aggregate timings collected during one call to [`capture`].
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ProfileReport {
-    summaries: Vec<ProfileSummary>,
-}
-
-impl ProfileReport {
-    /// Create a report from aggregate span summaries.
-    pub fn new(summaries: Vec<ProfileSummary>) -> Self {
-        Self { summaries }
-    }
-
     /// Timings ordered from greatest to least total duration.
-    pub fn summaries(&self) -> &[ProfileSummary] {
-        &self.summaries
-    }
+    pub summaries: Vec<ProfileSummary>,
 }
 
 /// Aggregate timing statistics for every span with the same target and name.
 #[derive(Debug)]
 pub struct ProfileSummary {
-    target: &'static str,
-    name: &'static str,
-    calls: u64,
-    total: Duration,
-    min: Duration,
-    max: Duration,
-}
-
-impl ProfileSummary {
-    /// Create aggregate timing statistics for one span target and name.
-    pub fn new(
-        target: &'static str,
-        name: &'static str,
-        calls: u64,
-        total: Duration,
-        min: Duration,
-        max: Duration,
-    ) -> Self {
-        Self {
-            target,
-            name,
-            calls,
-            total,
-            min,
-            max,
-        }
-    }
-
     /// The tracing target that owns the span.
-    pub fn target(&self) -> &'static str {
-        self.target
-    }
-
+    pub target: &'static str,
     /// The static span name.
-    pub fn name(&self) -> &'static str {
-        self.name
-    }
-
+    pub name: &'static str,
     /// Number of completed spans included in the aggregate.
-    pub fn calls(&self) -> u64 {
-        self.calls
-    }
-
+    pub calls: u64,
     /// Sum of the time for which the spans were entered.
-    pub fn total(&self) -> Duration {
-        self.total
-    }
-
+    pub total: Duration,
     /// Shortest completed span.
-    pub fn min(&self) -> Duration {
-        self.min
-    }
-
+    pub min: Duration,
     /// Longest completed span.
-    pub fn max(&self) -> Duration {
-        self.max
-    }
+    pub max: Duration,
 }
 
 /// Run `operation` with a profiling subscriber on the current thread and return aggregate timings for every span it emits.
@@ -130,14 +74,14 @@ impl Aggregate {
     }
 
     fn summary(&self, target: &'static str, name: &'static str) -> ProfileSummary {
-        ProfileSummary::new(
+        ProfileSummary {
             target,
             name,
-            self.calls,
-            self.total,
-            self.min.unwrap_or_default(),
-            self.max,
-        )
+            calls: self.calls,
+            total: self.total,
+            min: self.min.unwrap_or_default(),
+            max: self.max,
+        }
     }
 }
 
@@ -254,13 +198,13 @@ fn finish_report(aggregates: &Aggregates) -> ProfileReport {
 
     summaries.sort_by(|left, right| {
         right
-            .total()
-            .cmp(&left.total())
-            .then_with(|| left.target().cmp(right.target()))
-            .then_with(|| left.name().cmp(right.name()))
+            .total
+            .cmp(&left.total)
+            .then_with(|| left.target.cmp(right.target))
+            .then_with(|| left.name.cmp(right.name))
     });
 
-    ProfileReport::new(summaries)
+    ProfileReport { summaries }
 }
 
 #[cfg(test)]
@@ -282,18 +226,18 @@ mod tests {
         let (_, report) = capture(outer);
 
         let outer = report
-            .summaries()
+            .summaries
             .iter()
-            .find(|summary| summary.name() == "outer")
+            .find(|summary| summary.name == "outer")
             .expect("outer span was collected");
         let inner = report
-            .summaries()
+            .summaries
             .iter()
-            .find(|summary| summary.name() == "inner")
+            .find(|summary| summary.name == "inner")
             .expect("inner spans were collected");
 
-        assert_eq!(outer.calls(), 1);
-        assert_eq!(outer.target(), module_path!());
-        assert_eq!(inner.calls(), 2);
+        assert_eq!(outer.calls, 1);
+        assert_eq!(outer.target, module_path!());
+        assert_eq!(inner.calls, 2);
     }
 }

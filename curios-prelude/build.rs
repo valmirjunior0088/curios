@@ -33,13 +33,13 @@ fn main() {
         let ((), report) = curios_profile::capture(build);
         let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("profile.tsv");
         let mut rendered = String::from("total_ms\tcalls\ttarget\tname\n");
-        for summary in report.summaries() {
+        for summary in &report.summaries {
             rendered.push_str(&format!(
                 "{:.3}\t{}\t{}\t{}\n",
-                summary.total().as_secs_f64() * 1_000.0,
-                summary.calls(),
-                summary.target(),
-                summary.name(),
+                summary.total.as_secs_f64() * 1_000.0,
+                summary.calls,
+                summary.target,
+                summary.name,
             ));
         }
         fs::write(&out, rendered).expect("failed to write the build profile");
