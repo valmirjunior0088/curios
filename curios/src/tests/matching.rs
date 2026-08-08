@@ -10,14 +10,14 @@ fn a_fold_hypothesis_destructures_directly() {
         use /std/{Nat, Bool, Byte, Bytes, Handle};
         let count(n : Nat) -> Nat =
             let (total, _) =
-                match n
+                match n : (_) => {Nat, Bool}
                 | 0 => (0, true)
                 | pred + 1; (t, live) => (t + 1, live)
                 end;
             total;
         let sum(b : Bytes) -> Nat =
             let (s, _) =
-                match b
+                match b : (_) => {Nat, Bool}
                 | x[] => (0, true)
                 | x[h, ..t]; (acc, live) => (acc + Byte/to_nat(h), live)
                 end;
