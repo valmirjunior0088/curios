@@ -8,7 +8,7 @@ use {
     super::{
         EmissionBlockName, EmissionBody, EmissionCallTarget, EmissionHostTarget, EmissionTail,
     },
-    std::collections::{HashMap, HashSet},
+    std::collections::{BTreeSet, HashMap, HashSet},
 };
 
 /// The control-flow graph of one region over its sibling blocks plus a virtual entry node. Blocks are numbered by their position in `region.blocks`; the entry node — the region's prologue and tail transfer — is numbered one past the last block. The entry has no predecessors and is the root every block is reached from.
@@ -138,14 +138,14 @@ pub(crate) enum LayoutItem {
 pub(crate) fn region_layout(region: &EmissionBody) -> Vec<LayoutItem> {
     let cfg = RegionCfg::new(region);
     let all = (0..cfg.block_count()).collect();
-    structure_set(&cfg, &all, &std::collections::BTreeSet::new())
+    structure_set(&cfg, &all, &BTreeSet::new())
 }
 
 /// A view of the region CFG restricted to `nodes`, with every edge *into* a `suppressed` node removed. Suppressing a loop header's incoming edges turns its back edges into non-edges, exposing the interior — nested loops and the header itself — as a smaller acyclic-or-cyclic graph to structure.
 struct Subgraph<'a> {
     cfg: &'a RegionCfg,
-    nodes: &'a std::collections::BTreeSet<usize>,
-    suppressed: &'a std::collections::BTreeSet<usize>,
+    nodes: &'a BTreeSet<usize>,
+    suppressed: &'a BTreeSet<usize>,
 }
 
 impl Subgraph<'_> {
@@ -230,7 +230,7 @@ impl Subgraph<'_> {
             }
         }
 
-        let mut successors = vec![std::collections::BTreeSet::new(); components.len()];
+        let mut successors = vec![BTreeSet::new(); components.len()];
         let mut indegree = vec![0usize; components.len()];
         for (source, members) in components.iter().enumerate() {
             for &member in members {
@@ -245,7 +245,7 @@ impl Subgraph<'_> {
 
         let mut ready = (0..components.len())
             .filter(|&component| indegree[component] == 0)
-            .collect::<std::collections::BTreeSet<_>>();
+            .collect::<BTreeSet<_>>();
         let mut order = Vec::with_capacity(components.len());
         while let Some(&component) = ready.iter().next() {
             ready.remove(&component);
@@ -263,8 +263,8 @@ impl Subgraph<'_> {
 
 fn structure_set(
     cfg: &RegionCfg,
-    nodes: &std::collections::BTreeSet<usize>,
-    suppressed: &std::collections::BTreeSet<usize>,
+    nodes: &BTreeSet<usize>,
+    suppressed: &BTreeSet<usize>,
 ) -> Vec<LayoutItem> {
     let subgraph = Subgraph {
         cfg,
