@@ -380,7 +380,8 @@ pub(super) fn inline_call(
                     CpsCallee::Closure(value) => match map_atom(&CpsAtom::Value(*value)) {
                         CpsAtom::Value(value) => CpsCallee::Closure(value),
                         CpsAtom::Fun(function) => CpsCallee::Known(function),
-                        CpsAtom::Literal(_) => return false,
+                        // The pre-minting bail above already rejected every literal-mapped closure callee, and bailing here would leak the minted values and reserved slots.
+                        CpsAtom::Literal(_) => unreachable!(),
                     },
                 },
                 args: args.iter().map(&map_atom).collect(),
@@ -430,7 +431,8 @@ pub(super) fn inline_call(
                 value: value.as_ref().map(&map_atom),
             },
             CpsNode::Unreachable => CpsNode::Unreachable,
-            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => return false,
+            // `inline_known_calls` inlines only bodies free of function definitions, and bailing here would leak the minted values and reserved slots.
+            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
         };
         cloned_nodes.insert(node_map[&old], cloned);
     }

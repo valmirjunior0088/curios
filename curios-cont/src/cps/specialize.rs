@@ -632,7 +632,8 @@ pub(super) fn clone_scc(
                 value: value.as_ref().map(&map_atom),
             },
             CpsNode::Unreachable => CpsNode::Unreachable,
-            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => return None,
+            // The pre-minting check above already rejected bodies nesting function definitions, and bailing here would leak the minted values and reserved slots.
+            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
         };
         cloned_nodes.push((nodes[&old], cloned));
     }
