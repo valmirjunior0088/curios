@@ -78,7 +78,7 @@ impl Span {
         (line, column)
     }
 
-    /// Renders the span as a compiler diagnostic: a `--> path:line:column` header when the source is a file (omitted for inline sources), the 1-based-numbered source line containing the span's start, and a caret underline. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
+    /// Renders the span as a compiler diagnostic: a `--> path:line:column` header when the source is a file (omitted for inline sources), the 1-based-numbered source line containing the span's start, and a caret underline positioned and sized by Unicode scalar count, matching [`Span::line_column`]. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
     pub fn render_snippet(&self) -> String {
         let source = &self.source.text;
         let start = self.start;
@@ -96,10 +96,10 @@ impl Span {
 
         let (number, column) = self.line_column();
 
-        let width = end.max(start.saturating_add(1)).min(line_end) - start;
+        let width = source[start..end.min(line_end)].chars().count();
         let caret = format!(
             "{}{}",
-            " ".repeat(start - line_start),
+            " ".repeat(source[line_start..start].chars().count()),
             "^".repeat(width.max(1))
         );
 
@@ -151,5 +151,23 @@ mod tests {
         // The very first byte.
         let span = Span::new(source, 0, 1);
         assert_eq!(span.line_column(), (1, 1));
+    }
+
+    #[test]
+    fn caret_aligns_by_scalar_count_on_non_ascii_lines() {
+        let source = Source::inline("sécond line\n");
+
+        // "line" starts at byte 8 but after seven scalars — seven spaces of padding, four carets.
+        let offset = source.text.find("line").unwrap();
+        let span = Span::new(Rc::clone(&source), offset, offset + 4);
+        assert_eq!(
+            span.render_snippet(),
+            "    1 | sécond line\n      |        ^^^^"
+        );
+
+        // A span covering the two-byte `é` is one scalar wide — one caret, one space of padding.
+        let offset = source.text.find('é').unwrap();
+        let span = Span::new(source, offset, offset + 'é'.len_utf8());
+        assert_eq!(span.render_snippet(), "    1 | sécond line\n      |  ^");
     }
 }
