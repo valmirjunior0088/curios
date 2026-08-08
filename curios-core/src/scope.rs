@@ -673,25 +673,37 @@ impl<B: Bound> Telescope<B> {
 
     /// Replace the display hints along the spine, leaving each binder's identity alone. Pure metadata: the de Bruijn structure is untouched and no occurrence changes what it refers to — this restores source labels after a rebuild that had to re-mint its binders (tuple-type labels are part of the type's identity and the target of `.label` resolution, so they must survive elaboration verbatim).
     pub fn relabel(self, labels: &[&str]) -> Self {
-        match self {
-            Telescope::Done(body) => Telescope::Done(body),
-            Telescope::Cons(ty, rest) => {
-                let (label, rest_labels) = labels.split_first().expect("relabel arity");
-                let names = rest
-                    .names
-                    .as_ref()
-                    .map(|names| names.iter().map(|name| name.relabelled(label)).collect());
-                let Scope { arity, body, .. } = rest;
+        let mut entries = Vec::new();
+        let mut labels = labels.iter();
+        let mut current = self;
+        let body = loop {
+            match current {
+                Telescope::Done(body) => break body,
+                Telescope::Cons(ty, rest) => {
+                    let label = labels.next().expect("relabel arity");
+                    let names = rest
+                        .names
+                        .as_ref()
+                        .map(|names| names.iter().map(|name| name.relabelled(label)).collect());
+                    entries.push((ty, names));
+                    current = *rest.body;
+                }
+            }
+        };
+
+        entries
+            .into_iter()
+            .rev()
+            .fold(Telescope::Done(body), |rest, (ty, names)| {
                 Telescope::Cons(
                     ty,
                     Scope {
-                        arity,
+                        arity: One,
                         names,
-                        body: Box::new((*body).relabel(rest_labels)),
+                        body: Box::new(rest),
                     },
                 )
-            }
-        }
+            })
     }
 
     pub fn open(&self, args: &[&Term]) -> B {
@@ -757,25 +769,20 @@ impl<B: Bound> Telescope<B> {
     where
         F: FnMut(usize) -> Term,
     {
-        fn go<B: Bound, F: FnMut(usize) -> Term>(
-            tele: Telescope<B>,
-            index: usize,
-            j: usize,
-            sub: &mut F,
-        ) -> Option<Term> {
+        let mut tele = self;
+        let mut j = 0;
+        loop {
             match tele {
-                Telescope::Done(_) => None,
+                Telescope::Done(_) => return None,
                 Telescope::Cons(ty, rest) => {
                     if j == index {
-                        Some(ty)
-                    } else {
-                        go(rest.open(&[&sub(j)]), index, j + 1, sub)
+                        return Some(ty);
                     }
+                    tele = rest.open(&[&sub(j)]);
+                    j += 1;
                 }
             }
         }
-
-        go(self, index, 0, &mut sub)
     }
 }
 
