@@ -166,7 +166,6 @@ pub enum Intrinsic {
 }
 
 impl Intrinsic {
-    /// A `NatAdd` node from anything term-shaped.
     /// A `NatEql` node from anything term-shaped.
     pub fn nat_eql<F, S>(left: F, right: S) -> Self
     where
@@ -212,6 +211,7 @@ impl Intrinsic {
         Self::NatNeq(left.into(), right.into())
     }
 
+    /// A `NatAdd` node from anything term-shaped.
     pub fn nat_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
