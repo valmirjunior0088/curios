@@ -1,6 +1,6 @@
 use {
-    crate::{Kernel, Sort},
-    curios_base::{Plicity, Qualifier, RootId},
+    crate::{Kernel, KernelError, Sort},
+    curios_base::{Qualifier, RootId},
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
         Telescope, Term, UniverseContext,
@@ -80,7 +80,7 @@ fn a_nominal_types_sort_is_the_one_its_declaration_states() {
 fn a_function_into_a_proposition_is_a_proposition() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
-    let binder = curios_core::Free::local(0, Some("n"));
+    let binder = Free::local(0, Some("n"));
 
     let pi = Term::func_type([(binder, Term::intrinsic(Intrinsic::NatType))], proposition);
 
@@ -90,7 +90,7 @@ fn a_function_into_a_proposition_is_a_proposition() {
 #[test]
 fn a_function_into_data_takes_the_join_of_its_parts() {
     let mut kernel = kernel();
-    let binder = curios_core::Free::local(0, Some("n"));
+    let binder = Free::local(0, Some("n"));
 
     let pi = Term::func_type(
         [(binder, Term::intrinsic(Intrinsic::NatType))],
@@ -112,7 +112,7 @@ fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
     ]);
     assert_eq!(Sort::of(&mut kernel, &all_props), Ok(Sort::Prop));
 
-    let unit = Term::tuple_type(Vec::<(curios_core::Free, Term)>::new());
+    let unit = Term::tuple_type(Vec::<(Free, Term)>::new());
     assert_eq!(Sort::of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
 }
 
@@ -170,15 +170,13 @@ fn a_groups_claim_about_its_member_does_not_decide_that_members_sort() {
 #[test]
 fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let mut kernel = kernel();
-    let proposition = declare(&mut kernel, "P", Term::prop());
-    let hypothesis = curios_core::Free::local(0, Some("h"));
+    let hypothesis = Free::local(0, Some("h"));
 
-    // `h : P`, so `Sort::of(P)` is `Prop` and the *type of h* is `P`.
+    // `h : Prop`: the hypothesis names a proposition, so its sort is the universe it was opened at.
     kernel.assume(&hypothesis, &Term::prop());
     let sort = Sort::of(&mut kernel, &Term::free_var(&hypothesis));
 
     assert_eq!(sort, Ok(Sort::Prop));
-    let _ = proposition;
 }
 
 /// Refusing beats guessing: an unregistered nominal type has no sort the kernel can determine, and inventing one is the unsound direction.
@@ -190,7 +188,7 @@ fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
 
     assert_eq!(
         Sort::of(&mut kernel, &type_),
-        Err(crate::KernelError::Undeclared(name)),
+        Err(KernelError::Undeclared(name)),
     );
 }
 
@@ -201,16 +199,10 @@ fn a_value_in_type_position_is_refused() {
 
     assert!(matches!(
         Sort::of(&mut kernel, &Term::intrinsic(Intrinsic::Bool(true))),
-        Err(crate::KernelError::Unclassified(_)),
+        Err(KernelError::Unclassified(_)),
     ));
 }
 
-/// Unused today, kept because a plicity mark is part of a function type's identity and the constructor above takes one.
-#[allow(dead_code)]
-fn explicit() -> Plicity {
-    Plicity::Explicit
-}
-
-fn binder(index: u32, hint: &str) -> curios_core::Free {
-    curios_core::Free::local(index, Some(hint))
+fn binder(index: u32, hint: &str) -> Free {
+    Free::local(index, Some(hint))
 }
