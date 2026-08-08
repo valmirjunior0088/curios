@@ -367,7 +367,8 @@ impl HostOps for MockHost {
             Some(MockResource::Outbound(conn)) => {
                 serve_from(&conn.response, &mut conn.position, count)
             }
-            _ => (Status::Eof, vec![]),
+            // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
+            _ => (Status::NotFound, vec![]),
         }
     }
 
@@ -648,6 +649,11 @@ mod tests {
         assert!(matches!(
             host.write(handle.clone(), b"y"),
             (Status::NotFound, 0)
+        ));
+        // ...read after close is the same loud miss, never a quiet `Eof` drain...
+        assert!(matches!(
+            host.read(handle.clone(), 8),
+            (Status::NotFound, bytes) if bytes.is_empty()
         ));
         // ...and a double close is a no-op, not a panic.
         host.close(handle.clone());

@@ -496,7 +496,8 @@ impl HostOps for OsHost {
                     Some(OsResource::Connected(socket)) => socket,
                     Some(OsResource::ClientTls(tls)) => tls,
                     Some(OsResource::ServerTls(tls)) => tls,
-                    _ => return (Status::Eof, vec![]),
+                    // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
+                    _ => return (Status::NotFound, vec![]),
                 };
 
                 stream.read(&mut buffer)
