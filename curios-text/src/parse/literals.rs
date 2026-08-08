@@ -128,6 +128,14 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
             })
             .and_drop(parse_whitespace()),
     )
+    .flat_map::<f32, _>(|value: f32| {
+        // Rust's float parse saturates an overflowing magnitude to infinity, a value the grammar has no spelling for — refused here, past the catch, so the digits that committed this branch as a float literal cannot silently reparse as something else.
+        if value.is_finite() {
+            pure(value)
+        } else {
+            fail("Float literal overflows Flt")
+        }
+    })
     .map(|value| Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(value))))
     .map(Into::into)
 }

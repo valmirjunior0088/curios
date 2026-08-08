@@ -80,6 +80,18 @@ fn parse_integer_literals_are_polymorphic_num_lits() {
 }
 
 #[test]
+fn parse_rejects_a_float_literal_that_overflows_to_infinity() {
+    // Rust's float parse saturates overflow to infinity, which the grammar cannot spell — the literal is refused outright rather than backtracked into a different parse of the same digits.
+    assert!("1.0e999".parse::<Term>().is_err());
+    assert!("-1.0e999".parse::<Term>().is_err());
+    // The largest finite magnitudes still parse.
+    assert_eq!(
+        "3.4e38".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(3.4e38))))
+    );
+}
+
+#[test]
 fn parse_intrinsic() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
     assert_eq!(
