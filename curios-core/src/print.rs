@@ -936,11 +936,15 @@ pub(crate) fn print_term(term: Term, depth: usize, spelling: &Rc<Spelling>) -> P
                             _ => "",
                         };
                         let typed = sub(ty, depth + total, spelling);
-                        let printer = match raw {
-                            Some(_) => {
-                                flat([pure(mark), pure(spelling.label(&label)), pure(": "), typed])
-                            }
-                            None => flat([pure(mark), typed]),
+                        // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
+                        let named = match raw {
+                            Some(name) => name.hint().is_some() || rest.uses(0),
+                            None => false,
+                        };
+                        let printer = if named {
+                            flat([pure(mark), pure(spelling.label(&label)), pure(": "), typed])
+                        } else {
+                            flat([pure(mark), typed])
                         };
                         printers.push(printer);
                         let next = rest.open(&[&Term::free_var(&label)]);
