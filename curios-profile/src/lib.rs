@@ -5,6 +5,7 @@
 //! - [`profile!`] as the first statement of a function times the whole function, the successor of the retired `#[cfg_attr(feature = "profile", tracing::instrument(…))]` attribute — which could not survive re-export, because its expansion requires a crate literally named `tracing` in the invoking crate's extern prelude.
 //! - [`profile_span!`] wraps one expression, for the per-step breakdown of a loop where timing the stepped function would aggregate every call.
 //! - [`capture`] runs a closure under a thread-local subscriber and returns aggregate per-span timings, without touching the process-global subscriber. It is the only consumer; profiling is configured where it is used, in code — there is deliberately no environment-variable switch, because a measurement is already specified at its call sites and a second, out-of-band specification could only disagree with the first.
+//! - [`CountingAllocator`] adds the memory half of that report. A binary installs it as its `#[global_allocator]` under its own `profile` feature and every span gains what it retained and what it allocated; a binary that installs nothing still gets its timings, with the memory columns reading zero.
 //!
 //! Both macros are token templates gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation, removed once the question is answered, never left as a metrics API.
 
@@ -46,3 +47,7 @@ macro_rules! profile_span {
 mod collect;
 #[cfg(feature = "enabled")]
 pub use collect::*;
+#[cfg(feature = "enabled")]
+mod count;
+#[cfg(feature = "enabled")]
+pub use count::*;

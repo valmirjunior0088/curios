@@ -24,6 +24,11 @@ use {
 #[cfg(feature = "profile")]
 use {curios::load, curios_pipeline::compile_entrypoint, curios_profile::capture};
 
+// Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
+#[cfg(feature = "profile")]
+#[global_allocator]
+static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
+
 /// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
 enum Failure {
     Incomplete(String),
@@ -119,14 +124,19 @@ fn dispatch() -> Result<(), Failure> {
             let (compilation, report) =
                 capture(|| compile_entrypoint(budget, &entrypoint, loader, |_| {}));
 
-            println!("total_ms\tcalls\tmin_ms\tmax_ms\ttarget\tname");
+            println!(
+                "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\ttarget\tname\t(peak {:.1} MiB)",
+                report.peak as f64 / (1024.0 * 1024.0),
+            );
             for summary in &report.summaries {
                 println!(
-                    "{:.3}\t{}\t{:.3}\t{:.3}\t{}\t{}",
+                    "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}",
                     summary.total.as_secs_f64() * 1_000.0,
                     summary.calls,
                     summary.min.as_secs_f64() * 1_000.0,
                     summary.max.as_secs_f64() * 1_000.0,
+                    summary.retained as f64 / (1024.0 * 1024.0),
+                    summary.allocated as f64 / (1024.0 * 1024.0),
                     summary.target,
                     summary.name,
                 );
