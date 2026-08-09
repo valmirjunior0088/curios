@@ -8,7 +8,7 @@ use {
     super::{check, infer},
     crate::{Kernel, KernelError, sort_of_intrinsic},
     curios_base::Grain,
-    curios_core::{Intrinsic, Subterm, Term},
+    curios_core::{Intrinsic, Reducer, Subterm, Term},
 };
 
 fn bool_type() -> Term {
@@ -332,16 +332,10 @@ pub(super) fn infer_intrinsic(
 fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     let inferred = infer(kernel, term)?;
 
-    match &*kernel_reduce(kernel, &inferred)? {
+    match &*kernel.reduce_forced(inferred.clone())? {
         Subterm::Type(_) | Subterm::Prop => Ok(term.clone()),
         _ => Err(KernelError::NotASort(inferred)),
     }
-}
-
-fn kernel_reduce(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
-    use curios_core::Reducer;
-
-    Ok(kernel.reduce_forced(term.clone())?)
 }
 
 fn unary(
