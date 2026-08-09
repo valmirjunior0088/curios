@@ -1,6 +1,7 @@
-//! Scoped collection of profiling spans: [`capture`] owns one subscriber on the current thread and returns aggregate timings for every span the operation emitted, without changing the process-global subscriber.
+//! Scoped collection of profiling spans: [`capture`] owns one subscriber on the current thread and returns aggregate timings and allocation figures for every span the operation emitted, without changing the process-global subscriber.
 
 use {
+    crate::{allocated_bytes, live_bytes, peak_bytes},
     std::{
         collections::BTreeMap,
         sync::{Arc, Mutex},
@@ -10,14 +11,18 @@ use {
     tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan},
 };
 
-/// Aggregate timings collected during one call to [`capture`].
+/// Aggregate timings and allocation figures collected during one call to [`capture`].
 #[derive(Debug)]
 pub struct ProfileReport {
     /// Timings ordered from greatest to least total duration.
     pub summaries: Vec<ProfileSummary>,
+    /// The greatest live-byte total the process reached, from [`peak_bytes`]. Process-wide and not scoped to the capture, so a peak set before it is reported here too.
+    pub peak: usize,
 }
 
-/// Aggregate timing statistics for every span with the same target and name.
+/// Aggregate statistics for every span with the same target and name.
+///
+/// Every figure counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns read [`live_bytes`] and [`allocated_bytes`], so they are all zero unless the binary installed [`CountingAllocator`](crate::CountingAllocator).
 #[derive(Debug)]
 pub struct ProfileSummary {
     /// The tracing target that owns the span.
@@ -32,6 +37,10 @@ pub struct ProfileSummary {
     pub min: Duration,
     /// Longest completed span.
     pub max: Duration,
+    /// Net bytes still held at exit: what the spans took minus what they returned. Negative where they freed more than they took, which is how a pass that consumes a representation reports itself.
+    pub retained: i64,
+    /// Bytes the spans took while entered, whether or not later returned. A pass that allocates heavily and frees as it goes shows large `allocated` beside near-zero [`retained`](Self::retained).
+    pub allocated: u64,
 }
 
 /// Run `operation` with a profiling subscriber on the current thread and return aggregate timings for every span it emits.
@@ -54,6 +63,8 @@ struct Aggregate {
     total: Duration,
     min: Option<Duration>,
     max: Duration,
+    retained: i64,
+    allocated: u64,
 }
 
 impl Aggregate {
@@ -63,14 +74,19 @@ impl Aggregate {
             total: Duration::ZERO,
             min: None,
             max: Duration::ZERO,
+            retained: 0,
+            allocated: 0,
         }
     }
 
-    fn record(&mut self, elapsed: Duration) {
+    fn record(&mut self, timing: &SpanTiming) {
+        let elapsed = timing.elapsed();
         self.calls += 1;
         self.total += elapsed;
         self.min = Some(self.min.map_or(elapsed, |minimum| minimum.min(elapsed)));
         self.max = self.max.max(elapsed);
+        self.retained = self.retained.saturating_add(timing.retained);
+        self.allocated = self.allocated.saturating_add(timing.allocated);
     }
 
     fn summary(&self, target: &'static str, name: &'static str) -> ProfileSummary {
@@ -81,14 +97,25 @@ impl Aggregate {
             total: self.total,
             min: self.min.unwrap_or_default(),
             max: self.max,
+            retained: self.retained,
+            allocated: self.allocated,
         }
     }
 }
 
+/// What one entry into a span sampled on the way in, popped and differenced against the same three readings on the way out.
+struct Entry {
+    at: Instant,
+    live: usize,
+    allocated: usize,
+}
+
 struct SpanTiming {
     metadata: &'static Metadata<'static>,
-    entered: Vec<Instant>,
+    entered: Vec<Entry>,
     elapsed: Duration,
+    retained: i64,
+    allocated: u64,
 }
 
 impl SpanTiming {
@@ -97,16 +124,24 @@ impl SpanTiming {
             metadata,
             entered: Vec::new(),
             elapsed: Duration::ZERO,
+            retained: 0,
+            allocated: 0,
         }
     }
 
     fn enter(&mut self) {
-        self.entered.push(Instant::now());
+        self.entered.push(Entry {
+            at: Instant::now(),
+            live: live_bytes(),
+            allocated: allocated_bytes(),
+        });
     }
 
     fn exit(&mut self) {
         if let Some(entered) = self.entered.pop() {
-            self.elapsed += entered.elapsed();
+            self.elapsed += entered.at.elapsed();
+            self.retained += live_bytes() as i64 - entered.live as i64;
+            self.allocated += allocated_bytes().saturating_sub(entered.allocated) as u64;
         }
     }
 
@@ -137,7 +172,7 @@ impl ProfileLayer {
         aggregates
             .entry(timing.key())
             .or_insert_with(Aggregate::new)
-            .record(timing.elapsed());
+            .record(&timing);
     }
 }
 
@@ -204,7 +239,10 @@ fn finish_report(aggregates: &Aggregates) -> ProfileReport {
             .then_with(|| left.name.cmp(right.name))
     });
 
-    ProfileReport { summaries }
+    ProfileReport {
+        summaries,
+        peak: peak_bytes(),
+    }
 }
 
 #[cfg(test)]
@@ -219,6 +257,38 @@ mod tests {
 
     fn inner() {
         let _span = tracing::trace_span!("inner").entered();
+    }
+
+    // The workspace's test binaries do not install `CountingAllocator`, so this asserts the shape of the accounting rather than concrete byte counts: a span that holds an allocation to its exit retains, and one that drops it does not. Under the system allocator every reading is zero and both sides hold trivially.
+    #[test]
+    fn capture_accounts_retained_and_allocated_bytes() {
+        let (_, report) = capture(|| {
+            let held = {
+                let _span = tracing::trace_span!("holds").entered();
+                vec![0_u8; 4 * 1024 * 1024]
+            };
+
+            {
+                let _span = tracing::trace_span!("drops").entered();
+                drop(vec![0_u8; 4 * 1024 * 1024]);
+            }
+
+            drop(held);
+        });
+
+        let holds = report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == "holds")
+            .expect("the holding span was collected");
+        let drops = report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == "drops")
+            .expect("the dropping span was collected");
+
+        assert!(holds.retained >= drops.retained);
+        assert!(holds.allocated >= drops.retained.unsigned_abs());
     }
 
     #[test]

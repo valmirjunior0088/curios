@@ -1672,9 +1672,11 @@ impl Convert {
                 "failed: re-validation",
             );
             context.rollback_solutions(mark);
+            context.end_solutions(mark);
             return Ok(Solved::Failed);
         }
 
+        context.end_solutions(mark);
         context.solve_metavar(id, inverted);
         self.progress = true;
         Ok(Solved::Done)

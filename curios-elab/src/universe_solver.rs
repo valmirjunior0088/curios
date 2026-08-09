@@ -3,7 +3,7 @@
 //! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `universe`, which knows nothing about any of this.
 
 mod constraints;
-use constraints::{ConstraintStore, StoreMark};
+use constraints::{ConstraintStore, StoreMark, StoreScope};
 
 #[cfg(test)]
 mod tests;
@@ -19,7 +19,7 @@ use {
 /// A stable point to which all universe assignments and constraints can be rolled back after a speculative elaboration branch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UniverseMark {
-    constraints: StoreMark,
+    constraints: StoreScope,
     solution_log_len: usize,
 }
 
@@ -508,11 +508,17 @@ impl UniverseSolver {
             .and_then(|entry| entry.origin.as_ref())
     }
 
-    pub fn mark(&self) -> UniverseMark {
+    /// Open a speculative scope, which [`UniverseSolver::release`] closes. Paired by hand at every site — see `Context::solution_mark` for why a closure bracket is not used here.
+    pub fn mark(&mut self) -> UniverseMark {
         UniverseMark {
-            constraints: self.constraints.mark(),
+            constraints: self.constraints.enter(),
             solution_log_len: self.solution_log.len(),
         }
+    }
+
+    /// End a scope, keeping whatever it left in place. Restoring rather than decrementing, so closing an outer scope also closes any inner one left open.
+    pub fn release(&mut self, mark: UniverseMark) {
+        self.constraints.release(mark.constraints);
     }
 
     pub(crate) fn state_token(&self) -> UniverseStateToken {
@@ -550,38 +556,74 @@ impl UniverseSolver {
             .and_then(|entry| entry.solution.as_ref())
     }
 
+    /// Substitute every solved metavariable in `level`, and in whatever those solutions name, to a fixed point.
+    ///
+    /// Walked on an explicit stack rather than natively. The depth here is the length of a chain of metavariables each solved to a level naming the next, which the fixed prelude drives deep enough that this was the tallest native recursion in the whole build — deep enough to leave the elaborator within about a megabyte of the default stack, so any frame added anywhere else in the crate overflowed it.
+    ///
+    /// The cycle guard stays *path*-scoped, exactly as the recursion had it: a metavariable already open on the current path resolves to itself, unsubstituted. That is what forbids memoizing a completed level and reusing it elsewhere — off that path the same metavariable does substitute, so a shared answer would be wrong.
+    ///
+    /// Each frame rebuilds its level through [`Level::substitute`] once its children have landed, so the offset, `max`, and constant arithmetic stays in one place and this walk only decides *what* each head resolves to.
     pub fn zonk(&self, level: &Level) -> Result<Level, UniverseError> {
-        fn go(
-            solver: &UniverseSolver,
-            level: &Level,
-            visiting: &mut BTreeSet<UniverseMetaId>,
-        ) -> Result<Level, UniverseError> {
-            // The substitution closure can only answer with a level or not at all, so a nested failure parks here and re-raises outside — quietly leaving the head unsubstituted would hand back a level that still names a solved meta, violating the store's normalized invariant.
-            let mut failure = None;
-            let zonked = level.substitute(|head| match head {
-                LevelHead::Param(_) => None,
-                LevelHead::Meta(meta) => {
-                    let solution = solver.solution(meta)?.clone();
-                    if !visiting.insert(meta) {
-                        return None;
-                    }
-                    let zonked = match go(solver, &solution, visiting) {
-                        Ok(zonked) => Some(zonked),
-                        Err(error) => {
-                            failure = Some(error);
-                            None
-                        }
-                    };
-                    visiting.remove(&meta);
-                    zonked
-                }
-            });
-            match failure {
-                Some(error) => Err(error),
-                None => zonked,
+        /// One level being rebuilt: the heads still to visit, the substitutions its children have supplied, and the metavariable it was entered through — which leaves the path when the frame pops.
+        struct Frame {
+            level: Level,
+            pending: std::vec::IntoIter<LevelHead>,
+            resolved: BTreeMap<LevelHead, Level>,
+            entered: Option<UniverseMetaId>,
+        }
+
+        fn frame(level: Level, entered: Option<UniverseMetaId>) -> Frame {
+            let pending = level
+                .atoms()
+                .map(|(head, _)| head)
+                .collect::<Vec<_>>()
+                .into_iter();
+
+            Frame {
+                level,
+                pending,
+                resolved: BTreeMap::new(),
+                entered,
             }
         }
-        go(self, level, &mut BTreeSet::new())
+
+        let mut visiting = BTreeSet::new();
+        let mut stack = vec![frame(level.clone(), None)];
+        let mut folded: Option<(LevelHead, Level)> = None;
+
+        loop {
+            let next = {
+                let top = stack.last_mut().expect("the root frame outlives the walk");
+                if let Some((head, zonked)) = folded.take() {
+                    top.resolved.insert(head, zonked);
+                }
+                top.pending.next()
+            };
+
+            // A head with nothing to resolve to — a parameter, an unsolved metavariable, or one already on the path — records no substitution, and the rebuild below leaves it standing as itself.
+            if let Some(head) = next {
+                if let LevelHead::Meta(meta) = head
+                    && !visiting.contains(&meta)
+                    && let Some(solution) = self.solution(meta)
+                {
+                    let solution = solution.clone();
+                    visiting.insert(meta);
+                    stack.push(frame(solution, Some(meta)));
+                }
+                continue;
+            }
+
+            let done = stack.pop().expect("the frame was just inspected");
+            if let Some(meta) = done.entered {
+                visiting.remove(&meta);
+            }
+            let resolved = done.resolved;
+            let rebuilt = done.level.substitute(|head| resolved.get(&head).cloned())?;
+            match done.entered {
+                Some(meta) => folded = Some((LevelHead::Meta(meta), rebuilt)),
+                None => return Ok(rebuilt),
+            }
+        }
     }
 
     pub fn add_leq(
@@ -603,19 +645,24 @@ impl UniverseSolver {
         right: Level,
         origin: UniverseConstraintOrigin,
     ) -> Result<(), UniverseError> {
+        // Hand-paired rather than bracketed: conversion reaches this from inside its own recursion, where a closure body is a stack frame per level.
         let mark = self.mark();
         if let Err(error) = self.default_shape_equal(&left, &right) {
             self.rollback(mark);
+            self.release(mark);
             return Err(error);
         }
         if let Err(error) = self.add_leq(left.clone(), right.clone(), origin.clone()) {
             self.rollback(mark);
+            self.release(mark);
             return Err(error);
         }
         if let Err(error) = self.add_leq(right, left, origin) {
             self.rollback(mark);
+            self.release(mark);
             return Err(error);
         }
+        self.release(mark);
         Ok(())
     }
 
@@ -918,10 +965,12 @@ impl UniverseSolver {
                 .try_for_each(|(meta, floor)| self.assign(meta, floor))
                 .and_then(|()| self.check_consistent())
                 .is_ok();
+            if !committed {
+                self.rollback(mark);
+            }
+            self.release(mark);
             if committed {
                 woken.extend(dependents);
-            } else {
-                self.rollback(mark);
             }
         }
         Ok(woken)
@@ -1055,19 +1104,28 @@ impl UniverseSolver {
                     LevelHead::Meta(_) => None,
                 })
             };
-            let instantiated = UniverseConstraint {
-                lower: substitute(&constraint.lower)?,
-                upper: substitute(&constraint.upper)?,
-                origin: UniverseConstraintOrigin {
-                    kind: UniverseConstraintKind::SchemeInstantiation,
-                    ..constraint.origin.clone()
+            let instantiated = match (substitute(&constraint.lower), substitute(&constraint.upper))
+            {
+                (Ok(lower), Ok(upper)) => UniverseConstraint {
+                    lower,
+                    upper,
+                    origin: UniverseConstraintOrigin {
+                        kind: UniverseConstraintKind::SchemeInstantiation,
+                        ..constraint.origin.clone()
+                    },
                 },
+                (Err(error), _) | (_, Err(error)) => {
+                    self.release(mark);
+                    return Err(error);
+                }
             };
             if let Err(error) = self.add_constraint(instantiated) {
                 self.rollback(mark);
+                self.release(mark);
                 return Err(error);
             }
         }
+        self.release(mark);
         Ok(())
     }
 

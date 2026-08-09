@@ -26,26 +26,35 @@ use {
     },
 };
 
+// Installed for the whole build script so the capture's memory columns are populated; the counters are what make this build's own footprint measurable, which is the question the prelude build most often raises.
+#[cfg(feature = "profile")]
+#[global_allocator]
+static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
+
 fn main() {
     // Under the `profile` feature the whole build runs inside a programmatic capture — the report lands in `OUT_DIR/profile.tsv`, announced with one warning. There is deliberately no environment switch: the feature is the switch, and it is specified where every other build input is.
     #[cfg(feature = "profile")]
     {
         let ((), report) = curios_profile::capture(build);
         let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("profile.tsv");
-        let mut rendered = String::from("total_ms\tcalls\ttarget\tname\n");
+        let mut rendered =
+            String::from("total_ms\tcalls\tretained_mb\tallocated_mb\ttarget\tname\n");
         for summary in &report.summaries {
             rendered.push_str(&format!(
-                "{:.3}\t{}\t{}\t{}\n",
+                "{:.3}\t{}\t{:.1}\t{:.1}\t{}\t{}\n",
                 summary.total.as_secs_f64() * 1_000.0,
                 summary.calls,
+                summary.retained as f64 / (1024.0 * 1024.0),
+                summary.allocated as f64 / (1024.0 * 1024.0),
                 summary.target,
                 summary.name,
             ));
         }
         fs::write(&out, rendered).expect("failed to write the build profile");
         println!(
-            "cargo:warning=prelude build profile written to {}",
-            out.display()
+            "cargo:warning=prelude build profile written to {} (peak {:.1} MiB)",
+            out.display(),
+            report.peak as f64 / (1024.0 * 1024.0),
         );
     }
     #[cfg(not(feature = "profile"))]

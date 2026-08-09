@@ -238,6 +238,7 @@ fn apply_fit(
         _ => None,
     };
     context.rollback_solutions(mark);
+    context.end_solutions(mark);
     fit
 }
 
@@ -315,6 +316,7 @@ fn constructor_fits(
                     Ok(Invert::Impossible) | Err(_) => None,
                 };
                 context.rollback_solutions(mark);
+                context.end_solutions(mark);
 
                 if let Some((term, holes)) = candidate {
                     candidates.push(Candidate {
@@ -358,5 +360,6 @@ fn verifies(
         })
     });
     context.rollback_solutions(mark);
+    context.end_solutions(mark);
     verdict
 }
