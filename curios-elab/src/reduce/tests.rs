@@ -1,9 +1,7 @@
-use crate::IntrinsicBuilders;
 use curios_core::*;
 use {
     crate::*,
     curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
-    curios_core::{Intrinsic, Nat, Subterm, Term},
     std::time::Instant,
 };
 
