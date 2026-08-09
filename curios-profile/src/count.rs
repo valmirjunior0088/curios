@@ -11,6 +11,7 @@ use std::{
 
 static LIVE: AtomicUsize = AtomicUsize::new(0);
 static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 
 /// A `GlobalAlloc` forwarding every request to the system allocator and counting the bytes that pass through it.
@@ -23,6 +24,11 @@ static PEAK: AtomicUsize = AtomicUsize::new(0);
 pub struct CountingAllocator;
 
 impl CountingAllocator {
+    /// One trip through the allocator, whatever it was for. Counted separately from the bytes because the two choose different fixes: many small requests want fewer allocations, one large request wants a smaller structure, and a byte total alone cannot tell them apart.
+    fn requested() {
+        ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+    }
+
     fn grew(size: usize) {
         ALLOCATED.fetch_add(size, Ordering::Relaxed);
         let live = LIVE.fetch_add(size, Ordering::Relaxed) + size;
@@ -39,6 +45,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let pointer = unsafe { System.alloc(layout) };
         if !pointer.is_null() {
+            Self::requested();
             Self::grew(layout.size());
         }
         pointer
@@ -47,6 +54,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let pointer = unsafe { System.alloc_zeroed(layout) };
         if !pointer.is_null() {
+            Self::requested();
             Self::grew(layout.size());
         }
         pointer
@@ -61,6 +69,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
         let moved = unsafe { System.realloc(pointer, layout, size) };
         if !moved.is_null() {
+            Self::requested();
             match size.checked_sub(layout.size()) {
                 Some(growth) => Self::grew(growth),
                 None => Self::shrank(layout.size() - size),
@@ -78,6 +87,11 @@ pub fn live_bytes() -> usize {
 /// Bytes taken since the process started, counting each reallocation's growth once and never decreasing.
 pub fn allocated_bytes() -> usize {
     ALLOCATED.load(Ordering::Relaxed)
+}
+
+/// Trips through the allocator since the process started, never decreasing. Read against [`allocated_bytes`] for the average request size.
+pub fn allocation_count() -> usize {
+    ALLOCATIONS.load(Ordering::Relaxed)
 }
 
 /// The greatest [`live_bytes`] the process ever reached.

@@ -36,7 +36,7 @@ pub(super) struct StoreMark {
 
 /// Where a speculative scope began: the position to unwind to, and the depth to *restore* rather than decrement.
 ///
-/// Restoring is what makes the depth self-healing. A bracket that returns early without closing leaves its scope open, and a decrementing counter would then stay above zero for the rest of the declaration, silently disarming the journal's one economy. Because closing an enclosing scope assigns the depth outright, any scope left open inside it is closed with it, and a declaration boundary resets whatever survives that.
+/// Restoring is what makes the depth self-healing. A bracket that returns early without closing leaves its scope open, and a decrementing counter would then stay above zero for the rest of the declaration, silently disarming the journal's one economy. Because closing an enclosing scope assigns the depth outright, any scope left open inside it is closed with it.
 ///
 /// Deliberately not part of [`StoreMark`]: a state token compares marks to decide whether the store changed, and entering a scope is not a change to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,9 +196,21 @@ impl ConstraintStore {
             .filter(|atom| *atom != head)
             .collect::<Vec<_>>();
 
+        // Temporary instrumentation: does this walk cost what it does because it touches many constraints, because each is wide, or because the solution it splices in is itself wide? Remove once answered.
+        curios_profile::sample!("universe::substitute_positions", positions.len());
+        curios_profile::sample!(
+            "universe::substitute_solution_atoms",
+            solution.atoms().count()
+        );
+        curios_profile::sample!("universe::store_len", self.constraints.len());
+
         for position in positions {
             let rebuilt = {
                 let constraint = &self.constraints[position];
+                curios_profile::sample!(
+                    "universe::rewritten_level_atoms",
+                    constraint.lower.atoms().count() + constraint.upper.atoms().count()
+                );
                 let lower = constraint
                     .lower
                     .substitute(|found| (found == head).then(|| solution.clone()))?;

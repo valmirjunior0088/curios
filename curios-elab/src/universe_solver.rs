@@ -1233,6 +1233,12 @@ impl UniverseSolver {
             .filter(|meta| !interface.contains(meta))
             .collect::<BTreeSet<_>>();
         let relevant = self.connected_metas(interface.iter().chain(&internal).copied());
+
+        // Temporary instrumentation: how much universe machinery does one declaration actually demand? Remove once answered.
+        curios_profile::sample!("universe::finalize_interface_metas", interface.len());
+        curios_profile::sample!("universe::finalize_internal_metas", internal.len());
+        curios_profile::sample!("universe::finalize_connected_metas", relevant.len());
+        curios_profile::sample!("universe::finalize_store_len", self.constraints.len());
         self.minimize(&internal, &relevant)?;
         let metas = relevant
             .iter()
