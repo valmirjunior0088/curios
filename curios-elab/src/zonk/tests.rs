@@ -15,6 +15,7 @@ fn nat_lit(n: usize) -> Term {
 
 fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
     Module {
+        mounts: Vec::new(),
         items: Vec::new(),
         universe_seeds,
         induct_decls: Default::default(),

@@ -1,7 +1,7 @@
 use {
     super::subsumes,
     crate::{Kernel, KernelError, check, check_definition, infer},
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, MetaId, Nat, Polarity,
         StructDecl, StructType, Subterm, Telescope, Term, UniverseConstraint,
@@ -282,7 +282,6 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
             )],
             result_sort: Term::type_ground(),
             module: Qualifier::from(["Wrapped"]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -313,7 +312,6 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
             )],
             result_sort: Term::type_ground(),
             module: Qualifier::from(["Wrapped"]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -527,7 +525,6 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
             constructors: Vec::new(),
             result_sort: Term::prop(),
             module: Qualifier::from(["False"]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -687,7 +684,6 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
             constructors: Vec::new(),
             result_sort: Term::prop(),
             module: Qualifier::from(["P"]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -751,7 +747,6 @@ fn parameterized_struct(kernel: &mut Kernel) -> Global {
         arity: Telescope::build([(param, Term::type_ground())], fields),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: vec![Polarity::Strict],
     };

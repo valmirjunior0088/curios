@@ -7,7 +7,7 @@ use {
     crate::{Globals, KernelError},
     curios_abi::{ForeignFunction, WireSignature, WireType},
     curios_analysis::Erased,
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductDecl, InductParam,
         Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope, StructDecl,
@@ -43,13 +43,13 @@ fn an_unsatisfiable_universe_context_is_refused() {
         kind: DefinitionKind::Authored,
         universe_context,
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -87,13 +87,13 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         kind: DefinitionKind::Authored,
         universe_context,
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -135,7 +135,6 @@ fn authored(name: &Global, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        root: RootId::Entry,
         // Non-recursive and `ProcExit`-free, so the honest flag; `partial_definitions` recomputes it.
         totality: Totality::Total,
         type_,
@@ -162,7 +161,6 @@ fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
         constructors,
         result_sort: Term::prop(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     }
@@ -407,6 +405,7 @@ fn forgery() -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![unbox, boxes_equal, types_equal, cast, forged],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
@@ -487,6 +486,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     }]);
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![authored_partial(
             &Global::Authored(Qualifier::from(["ok"])),
             Term::func_type([(n, nat.clone())], nat),
@@ -526,6 +526,7 @@ fn selection_module(body: Term) -> Module {
     }]);
 
     Module {
+        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["bad"])),
             absurd.clone(),
@@ -602,12 +603,12 @@ fn indexed_module(target: Term) -> Module {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
 
     Module {
+        mounts: Vec::new(),
         items: Vec::new(),
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -672,13 +673,13 @@ fn level_definition(level: &Level) -> Module {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
     };
 
     Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -700,12 +701,12 @@ fn level_registry(level: &Level) -> Module {
         constructors: Vec::new(),
         result_sort: Term::type_at(level.clone()),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
 
     Module {
+        mounts: Vec::new(),
         items: Vec::new(),
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -788,7 +789,6 @@ fn indexed_by_proof(diverging: bool) -> Module {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -802,6 +802,7 @@ fn indexed_by_proof(diverging: bool) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: Vec::new(),
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(held_name, proposition(vec![qed])), (family, declaration)]),
@@ -868,7 +869,6 @@ fn clashing_index_decls(carrier_sort: Term) -> (Global, Global, BTreeMap<Global,
         constructors: vec![nullary("a"), nullary("b")],
         result_sort: carrier_sort,
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -890,7 +890,6 @@ fn clashing_index_decls(carrier_sort: Term) -> (Global, Global, BTreeMap<Global,
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -952,6 +951,7 @@ fn aliased_sort_forgery() -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![held, forged],
         universe_seeds: Vec::new(),
         induct_decls: decls,
@@ -1004,6 +1004,7 @@ fn relevant_index_control() -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![vacuous],
         universe_seeds: Vec::new(),
         induct_decls: decls,
@@ -1089,7 +1090,6 @@ fn shadowed_constructor(tags: [&str; 2]) -> Module {
         constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1103,7 +1103,6 @@ fn shadowed_constructor(tags: [&str; 2]) -> Module {
         ],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1130,6 +1129,7 @@ fn shadowed_constructor(tags: [&str; 2]) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![vacuous],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
@@ -1213,13 +1213,13 @@ fn scheme_definition(level: &Level, parameter_count: usize) -> Module {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
     };
 
     Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -1244,12 +1244,12 @@ fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         constructors: Vec::new(),
         result_sort: Term::type_at(level.clone()),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
 
     Module {
+        mounts: Vec::new(),
         items: Vec::new(),
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -1307,7 +1307,6 @@ fn instance_of_width(width: usize) -> Module {
         constructors: Vec::new(),
         result_sort: Term::type_at(Level::param(UniverseParam(1))),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1321,7 +1320,6 @@ fn instance_of_width(width: usize) -> Module {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(
@@ -1333,6 +1331,7 @@ fn instance_of_width(width: usize) -> Module {
     };
 
     Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -1410,13 +1409,13 @@ fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: claimed.clone(),
         body: Term::foreign(row, Vec::new()),
     };
 
     Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(false_name.clone(), proposition(Vec::new()))]),
@@ -1471,7 +1470,6 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         // The sort is the *second* parameter, so an occurrence's second level decides it.
         result_sort: Term::type_at(Level::param(UniverseParam(1))),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1485,7 +1483,6 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::induct_type_at(
@@ -1497,6 +1494,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     };
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -1531,7 +1529,6 @@ fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
         constructors: Vec::new(),
         result_sort: Term::type_at(Level::param(UniverseParam(0))),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1545,7 +1542,6 @@ fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(
@@ -1557,6 +1553,7 @@ fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
     };
 
     Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(former)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -1638,7 +1635,6 @@ fn lying_motive(sort: Term) -> Module {
         constructors: vec![nullary("mk"), nullary("mk2")],
         result_sort: Term::prop(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1677,6 +1673,7 @@ fn lying_motive(sort: Term) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![extract],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -1725,7 +1722,6 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1742,7 +1738,6 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         constructors: vec![nullary("mk", vec![at("a")])],
         result_sort: Term::prop(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1788,6 +1783,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     );
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![vacuous],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
@@ -1898,7 +1894,6 @@ fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -1910,6 +1905,7 @@ fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![held],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -2001,7 +1997,6 @@ fn struct_value_module(params: Vec<Term>) -> Module {
         ),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -2024,6 +2019,7 @@ fn struct_value_module(params: Vec<Term>) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![held],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -2058,7 +2054,6 @@ fn variant_value_module(params: Vec<Term>) -> Module {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -2079,6 +2074,7 @@ fn variant_value_module(params: Vec<Term>) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![held],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
@@ -2163,6 +2159,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     );
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![former_def, held],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -2193,6 +2190,7 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], result)
     };
     let module_of = |items: Vec<Item>| Module {
+        mounts: Vec::new(),
         items,
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
@@ -2340,7 +2338,6 @@ fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -2357,6 +2354,7 @@ fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["held"])),
             declared,
@@ -2399,6 +2397,7 @@ fn rec_apply_module() -> Module {
     let selection = Term::rec([(f.clone(), member_type, member_body)], Term::free_var(&f));
 
     Module {
+        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["held"])),
             Term::apply(selection, [three.clone()]),
@@ -2469,7 +2468,6 @@ fn proof_carrying_unit(exiting: bool) -> Module {
         )],
         result_sort: Term::prop(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -2485,6 +2483,7 @@ fn proof_carrying_unit(exiting: bool) -> Module {
     induct_decls.insert(held_name.clone(), declaration);
 
     Module {
+        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["bad"])),
             held,
@@ -2558,7 +2557,6 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -2571,6 +2569,7 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
     induct_decls.insert(held_name.clone(), declaration);
 
     Module {
+        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["value"])),
             held,
@@ -2601,7 +2600,6 @@ fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) ->
         )],
         result_sort,
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     }
@@ -2725,6 +2723,7 @@ fn index_forgery() -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![forged, cast, held_value, boom],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
@@ -2788,6 +2787,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     );
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![held],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(held_name, held_decl)]),
@@ -2850,6 +2850,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     );
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![wrapped],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
@@ -2918,6 +2919,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
 
     let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
     let module = Module {
+        mounts: Vec::new(),
         items: vec![wrapped_at_true(&wrap_name, qed)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(true_name, true_decl)]),
@@ -2993,6 +2995,7 @@ fn lying_type_positions() -> Vec<(&'static str, Module)> {
     let lie = lying_type(&b);
 
     let probe_module = |body: Term, type_: Term| Module {
+        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["probe"])),
             type_,
@@ -3100,7 +3103,6 @@ fn computed_field_wrapper(false_case: Term, true_case: Term) -> StructDecl {
         ),
         result_sort: Term::prop(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     }
@@ -3240,6 +3242,7 @@ fn computed_field_forgery() -> Module {
     );
 
     Module {
+        mounts: Vec::new(),
         items: vec![forged, cast, held_value, boom],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
@@ -3275,7 +3278,6 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         kind: DefinitionKind::StructType,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::func_type_marked(
             [(Plicity::Implicit, parameter, Term::type_ground())],
@@ -3285,6 +3287,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     };
 
     let module = Module {
+        mounts: Vec::new(),
         items: vec![Item::Let(constructor)],
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),

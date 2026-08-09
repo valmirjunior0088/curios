@@ -1,6 +1,6 @@
 use {
     crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
         UniverseContext,
@@ -34,7 +34,6 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
         )],
         result_sort,
         module: Qualifier::from(["Fam"]),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -97,7 +96,6 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Vec"]),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -144,7 +142,6 @@ fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Fam"]),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -185,7 +182,6 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Fam"]),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -249,7 +245,6 @@ fn proposition(kernel: &mut Kernel, path: &str) -> Term {
             constructors: Vec::new(),
             result_sort: Term::prop(),
             module: Qualifier::from([path]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -269,7 +264,6 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
         )),
         result_sort: Term::prop(),
         module: Qualifier::default(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };

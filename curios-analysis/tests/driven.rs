@@ -10,7 +10,7 @@ use {
     curios_analysis::{
         Coverage, Declarations, Invert, group_totality, invert_indices, positivity_vectors,
     },
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     curios_cert::Kernel,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, MetaId, Metavar, Nat, Polarity,
@@ -57,7 +57,6 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
                 .collect(),
             result_sort,
             module: Qualifier::from([path]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -184,7 +183,6 @@ fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
         )],
         result_sort,
         module: Qualifier::from(["T"]),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     }

@@ -1,7 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Grain, Int, PackedBin, Plicity, Qualifier, RootId},
+    curios_base::{Grain, Int, PackedBin, Plicity, Qualifier},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -955,7 +955,6 @@ fn convert_struct_unit_field_is_irrelevant() {
                 )),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },
@@ -1006,7 +1005,6 @@ fn convert_variant_unit_payload_is_irrelevant() {
                 )]),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },
@@ -1649,7 +1647,6 @@ fn register_list(context: &mut Context) {
                 constructors: Vec::new(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },
@@ -1673,7 +1670,6 @@ fn register_vec(context: &mut Context) {
                 constructors: Vec::new(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },
@@ -1797,7 +1793,6 @@ fn imitation_solves_against_struct_type() {
                 ),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },

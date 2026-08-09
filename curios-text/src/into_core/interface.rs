@@ -1,7 +1,7 @@
 use {
     super::{ModuleInfo, Scoped},
     crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
-    curios_base::{Qualifier, RootId},
+    curios_base::{Mount, Qualifier},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
@@ -210,6 +210,7 @@ pub(super) fn resolve<'a>(
     entrypoint: &Entrypoint,
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
     let mut public = Scoped::default();
     let mut pub_uses = Vec::new();
@@ -223,14 +224,14 @@ pub(super) fn resolve<'a>(
         &mut pub_uses,
     )?;
 
-    fixed_point(&mut public, table, &pub_uses)?;
-    classify_dead(&public, table, &pub_uses)?;
+    fixed_point(&mut public, table, mounts, &pub_uses)?;
+    classify_dead(&public, table, mounts, &pub_uses)?;
 
     Ok(public)
 }
 
 pub(super) fn resolve_prelude<'a>(
-    roots: &[(String, RootId)],
+    mounts: &[Mount],
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut Scoped<'_, ModuleInfo>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
@@ -247,14 +248,13 @@ pub(super) fn resolve_prelude<'a>(
         &mut pub_uses,
     )?;
 
-    for (name, _) in roots {
-        let path = Qualifier::empty().with(name);
+    for mount in mounts {
         let content = modules
-            .get(&path)
+            .get(&mount.prefix)
             .expect("prelude root loaded during discovery");
         seed(
             &content.items,
-            &path,
+            &mount.prefix,
             modules,
             table,
             &mut public,
@@ -262,8 +262,8 @@ pub(super) fn resolve_prelude<'a>(
         )?;
     }
 
-    fixed_point(&mut public, table, &pub_uses)?;
-    classify_dead(&public, table, &pub_uses)?;
+    fixed_point(&mut public, table, mounts, &pub_uses)?;
+    classify_dead(&public, table, mounts, &pub_uses)?;
     Ok(public)
 }
 
@@ -271,6 +271,7 @@ pub(super) fn resolve_with_prelude<'a>(
     entrypoint: &Entrypoint,
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     prepared: Scoped<'a, PublicInterface>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
     let mut public = prepared;
@@ -284,8 +285,8 @@ pub(super) fn resolve_with_prelude<'a>(
         &mut public,
         &mut pub_uses,
     )?;
-    fixed_point(&mut public, table, &pub_uses)?;
-    classify_dead(&public, table, &pub_uses)?;
+    fixed_point(&mut public, table, mounts, &pub_uses)?;
+    classify_dead(&public, table, mounts, &pub_uses)?;
     Ok(public)
 }
 
@@ -302,8 +303,6 @@ fn seed(
     let info = table
         .get(prefix)
         .expect("module info present from discovery");
-    // The root every synthetic namespace this walk materializes belongs to — an inductive's constructor module, a concept's method-wrapper module. Read off the parent, which discovery already stamped, rather than re-derived from `prefix`'s leading segment: a segment names a root only while the entry is the one non-embedded root, and a mounted package's prefix is indistinguishable from a module the entry declares.
-    let root = info.root;
 
     for label in info.public_children() {
         let target = prefix.with(&label);
@@ -375,7 +374,7 @@ fn seed(
                     let ctor = prefix.with(&induct_decl.label);
 
                     // Constructor bindings are public within their synthetic namespace. The parent's child bit, seeded separately as `vis_pub && rep_pub`, gates all external walks while the declaring module retains direct access.
-                    let mut direct = ModuleInfo::new(root);
+                    let mut direct = ModuleInfo::new();
                     for case in &induct_decl.cases {
                         direct.insert_binding(case.label.clone(), true)?;
                     }
@@ -399,7 +398,7 @@ fn seed(
                 // A concept's method wrappers live in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
                 let namespace = prefix.with(&concept.label);
 
-                let mut direct = ModuleInfo::new(root);
+                let mut direct = ModuleInfo::new();
                 // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
                 for field in concept.fields.iter().filter(|field| !field.is_super) {
                     direct.insert_binding(field.label.clone(), true)?;
@@ -444,13 +443,14 @@ fn seed(
 fn fixed_point(
     public: &mut Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     loop {
         let mut changed = false;
 
         for use_ in pub_uses {
-            for (ns, label, target, representation) in resolvable(public, table, use_) {
+            for (ns, label, target, representation) in resolvable(public, table, mounts, use_) {
                 let entry = Entry {
                     target,
                     representation,
@@ -471,9 +471,10 @@ fn fixed_point(
 fn resolvable(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     use_: &PubUse,
 ) -> Vec<(Ns, String, Qualifier, Option<Qualifier>)> {
-    let Some(provider) = provider(public, table, &use_.module, &use_.name) else {
+    let Some(provider) = provider(public, table, mounts, &use_.module, &use_.name) else {
         return Vec::new();
     };
 
@@ -540,10 +541,11 @@ fn resolvable(
 fn provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     module: &Qualifier,
     name: &Name,
 ) -> Option<Qualifier> {
-    resolve_provider(public, table, module, name).ok()
+    resolve_provider(public, table, mounts, module, name).ok()
 }
 
 // Insert one resolved entry into a slot. Returns whether the map changed.
@@ -575,10 +577,11 @@ fn insert(
 fn classify_dead(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     for use_ in pub_uses {
-        let provider = resolve_provider(public, table, &use_.module, &use_.name)?;
+        let provider = resolve_provider(public, table, mounts, &use_.module, &use_.name)?;
 
         let interface = public.get(&provider).expect("seeded module");
 
@@ -609,7 +612,7 @@ fn classify_dead(
                     if !resolved {
                         let ns = if in_binding { Ns::Binding } else { Ns::Module };
                         return Err(classify_label(
-                            public, table, pub_uses, &provider, ns, label,
+                            public, table, mounts, pub_uses, &provider, ns, label,
                         ));
                     }
                 }
@@ -624,6 +627,7 @@ fn classify_dead(
 fn classify_label(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -639,7 +643,7 @@ fn classify_label(
             };
         }
 
-        match producer(public, table, pub_uses, &current, ns, label) {
+        match producer(public, table, mounts, pub_uses, &current, ns, label) {
             Some(next) => current = next,
             None => {
                 return Error::NoSuchUseTarget {
@@ -655,6 +659,7 @@ fn classify_label(
 fn producer(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -674,7 +679,7 @@ fn producer(
             }),
         };
 
-        if names && let Some(provider) = provider(public, table, module, &use_.name) {
+        if names && let Some(provider) = provider(public, table, mounts, module, &use_.name) {
             return Some(provider);
         }
     }
@@ -686,6 +691,7 @@ fn producer(
 fn resolve_provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     module: &Qualifier,
     name: &Name,
 ) -> Result<Qualifier, Error> {
@@ -719,13 +725,13 @@ fn resolve_provider(
         (start, &segments[1..])
     };
 
-    super::guard_internal_root(table, module, current.segments())?;
+    super::guard_internal_root(mounts, module, current.segments())?;
     for segment in walk {
         match visible_child(public, table, module, &current, segment) {
             Some(target) => current = target,
             None => return Err(segment_error(table, &current, segment)),
         }
-        super::guard_internal_root(table, module, current.segments())?;
+        super::guard_internal_root(mounts, module, current.segments())?;
     }
 
     Ok(current)

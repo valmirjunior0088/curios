@@ -1,6 +1,6 @@
 use {
     crate::{Kernel, KernelError, convert},
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     curios_core::{
         Free, FuncType, Global, InductDecl, Intrinsic, Level, MetaId, Nat, StructDecl, StructType,
         Subterm, Telescope, Term, UniverseContext,
@@ -37,7 +37,6 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
             constructors: Vec::new(),
             result_sort,
             module: Qualifier::from([path]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },
@@ -152,7 +151,6 @@ fn a_short_struct_literal_does_not_convert_with_a_neutral() {
             )),
             result_sort: Term::type_ground(),
             module: Qualifier::from(["S"]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },

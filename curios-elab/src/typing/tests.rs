@@ -1,7 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Qualifier, RootId},
+    curios_base::Qualifier,
     curios_cert::{Kernel, carries_information},
 };
 
@@ -69,7 +69,6 @@ fn both_checkers_decide_non_informativeness_alike() {
         constructors: Vec::new(),
         result_sort: Term::prop(),
         module: Qualifier::from(["Held"]),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };

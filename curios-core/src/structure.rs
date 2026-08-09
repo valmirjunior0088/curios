@@ -1,6 +1,6 @@
 use {
     super::{Polarity, Telescope, Term, UniverseContext},
-    curios_base::{Qualifier, RootId},
+    curios_base::Qualifier,
 };
 
 /// One struct declaration's registry entry: the metadata a `struct` declaration produces alongside its type-former binding.
@@ -18,8 +18,6 @@ pub struct StructDecl {
     pub result_sort: Term,
     /// The declaring module's qualifier (e.g. `Foo/Bar`); the root module is the empty qualifier. Compared against the use-site module for the representation-privacy checks.
     pub module: Qualifier,
-    /// The compilation root (`sys`/`syn`/`std`/the entry program/…) that declares this struct — orthogonal to `module`, which is fine-grained per-module privacy. Consulted by the orphan-rule ownership check, not by representation privacy.
-    pub root: RootId,
     /// The inner `pub`: whether the representation — construction and projection — is exported.
     pub rep_public: bool,
     /// How this struct uses each of its `params`, one entry per parameter in declaration order. See [`InductDecl::polarities`](super::InductDecl).
@@ -60,7 +58,6 @@ impl StructDecl {
             arity: sharing.share(&self.arity),
             result_sort: sharing.share(&self.result_sort),
             module: self.module.clone(),
-            root: self.root,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
         }

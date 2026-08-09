@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_base::{Qualifier, RootId},
+    curios_base::Qualifier,
     curios_core::{DefinitionKind, Free, Nat, UniverseContext},
 };
 
@@ -16,7 +16,6 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        root: RootId::Entry,
         totality: Totality::default(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&Free::from(&name(mentions))),
@@ -25,6 +24,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
 
 fn module(items: Vec<Item>) -> Module {
     Module {
+        mounts: Vec::new(),
         items,
         universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),

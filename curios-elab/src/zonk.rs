@@ -151,7 +151,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         .collect::<Result<_, Error>>()?,
                     result_sort: zonk_term(context, &induct_decl.result_sort)?,
                     module: induct_decl.module.clone(),
-                    root: induct_decl.root,
                     rep_public: induct_decl.rep_public,
                     polarities: induct_decl.polarities.clone(),
                 },
@@ -171,7 +170,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     arity: zonk_arity(context, &struct_decl.arity)?,
                     result_sort: zonk_term(context, &struct_decl.result_sort)?,
                     module: struct_decl.module.clone(),
-                    root: struct_decl.root,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities.clone(),
                 },
@@ -181,6 +179,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
 
     let module = Module {
         items,
+        mounts: module.mounts.clone(),
         universe_seeds: Vec::new(),
         induct_decls,
         struct_decls,
@@ -196,7 +195,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         params: zonk_field_telescope(context, &concept.params)?,
                         fields: concept.fields.clone(),
                         supers: concept.supers.clone(),
-                        root: concept.root,
                     },
                 ))
             })
@@ -684,7 +682,6 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
         kind: def.kind.clone(),
         universe_context: def.universe_context.clone(),
         island: def.island.clone(),
-        root: def.root,
         totality: def.totality,
         type_,
         body,

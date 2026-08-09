@@ -2,7 +2,7 @@ use super::super::{Entrypoint, Error, PreludeModules, RootSource};
 use curios_abi::{WireType, host_ops};
 use curios_base::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
-    RootId, StringSyntax, SyntaxName, SyntaxRegistry,
+    RootKind, StringSyntax, SyntaxName, SyntaxRegistry,
 };
 use curios_elab::TermBuilders;
 use std::{
@@ -169,10 +169,10 @@ fn run_err(src: &str) -> String {
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     let mut modules = PreludeModules::new();
-    modules.insert_root("sys", RootId::Sys, crate::sys_module(&host_ops()));
+    modules.insert_root("sys", RootKind::Internal, crate::sys_module(&host_ops()));
     modules.insert_root(
         "std",
-        RootId::Std,
+        RootKind::Privileged,
         r#"
             pub mod Str
                 pub let Valid : Type = Type;

@@ -69,7 +69,6 @@ fn project_definition(definition: &Definition) -> Definition {
         kind: definition.kind.clone(),
         universe_context: Default::default(),
         island: definition.island.clone(),
-        root: definition.root,
         // Totality is elaboration-only metadata, projected out here alongside the universe context: the gates run before erasure and nothing past it reads the flag, so archiving a second copy per definition would pay for a fact no consumer of this representation asks.
         totality: Default::default(),
         type_: project_erased_universes(&definition.type_),
@@ -89,6 +88,7 @@ fn project_module(module: &Module) -> Module {
                 Item::Rec(rec) => Item::Rec(rec.projected()),
             })
             .collect(),
+        mounts: module.mounts.clone(),
         universe_seeds: Vec::new(),
         induct_decls: module
             .induct_decls
@@ -114,7 +114,6 @@ fn project_module(module: &Module) -> Module {
                             .collect(),
                         result_sort: project_erased_universes(&declaration.result_sort),
                         module: declaration.module.clone(),
-                        root: declaration.root,
                         rep_public: declaration.rep_public,
                         // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
@@ -133,7 +132,6 @@ fn project_module(module: &Module) -> Module {
                         arity: project_erased_universes(&declaration.arity),
                         result_sort: project_erased_universes(&declaration.result_sort),
                         module: declaration.module.clone(),
-                        root: declaration.root,
                         rep_public: declaration.rep_public,
                         // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
@@ -152,7 +150,6 @@ fn project_module(module: &Module) -> Module {
                         params: project_erased_universes(&concept.params),
                         fields: concept.fields.clone(),
                         supers: concept.supers.clone(),
-                        root: concept.root,
                     },
                 )
             })

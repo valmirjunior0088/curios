@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    curios_base::{Grain, Qualifier, RootId},
+    curios_base::{Grain, Qualifier},
     curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, UniverseContext},
     std::fmt,
 };
@@ -20,8 +20,6 @@ pub(crate) struct Witness {
     pub module: Qualifier,
     pub universe_context: UniverseContext,
     pub signature: Term,
-    /// The compilation root that declares this witness — consulted by the orphan-rule ownership check alongside `ConceptDecl::root` and the key's head roots. Derived from `Context::island()` at registration, the same source `module_of` reads for the (unrelated) representation-privacy check.
-    pub root: RootId,
 }
 
 /// The tuple of rigid heads a witness is keyed on: one [`HeadKey`] per concept parameter, in declaration order. Displays bare for arity one (`Nat`) and as a tuple otherwise (`(Nat, Str)`).

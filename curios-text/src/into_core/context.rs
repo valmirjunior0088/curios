@@ -2,7 +2,7 @@ use {
     super::PublicInterface,
     super::Scoped,
     crate::{Error, Name},
-    curios_base::{Entropy, Qualifier, RootId, Span, SyntaxRegistry},
+    curios_base::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{HashMap, HashSet},
@@ -14,7 +14,6 @@ pub(super) struct FlatLet {
     pub name: curios_core::Global,
     pub kind: curios_core::DefinitionKind,
     pub island: Qualifier,
-    pub root: RootId,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
 }
@@ -22,7 +21,6 @@ pub(super) struct FlatLet {
 impl FlatLet {
     pub(super) fn into_core(self) -> curios_core::Definition {
         curios_core::Definition {
-            root: self.root,
             island: self.island,
             name: self.name,
             kind: self.kind,
@@ -42,14 +40,17 @@ pub(super) enum FlatItem {
 }
 
 impl FlatItem {
-    /// Whether this flat item belongs to the fixed embedded prelude — every let in it is declared under a privileged root. Read off the root each let already carries, never re-derived from its name.
-    pub(super) fn in_prelude(&self) -> bool {
+    /// Whether this flat item belongs to the fixed embedded prelude — every let in it is declared under a privileged mount. Asked of each let's declaring module against the mount table, so the answer comes from what this compilation actually mounted rather than from the spelling of a leading segment.
+    pub(super) fn in_prelude(&self, mounts: &[Mount]) -> bool {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
             FlatItem::Rec(lets) => lets.as_slice(),
         };
 
-        !lets.is_empty() && lets.iter().all(|let_| let_.root.kind().is_privileged())
+        !lets.is_empty()
+            && lets
+                .iter()
+                .all(|let_| Mount::privileged(mounts, &let_.island))
     }
 
     pub(super) fn names(&self) -> Vec<curios_core::Global> {
@@ -114,7 +115,6 @@ impl ChildInfo {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub(super) struct ModuleInfo {
-    pub(super) root: RootId,
     #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
     children: HashMap<String, ChildInfo>,
     #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
@@ -122,9 +122,8 @@ pub(super) struct ModuleInfo {
 }
 
 impl ModuleInfo {
-    pub(super) fn new(root: RootId) -> Self {
+    pub(super) fn new() -> Self {
         Self {
-            root,
             children: HashMap::new(),
             bindings: HashMap::new(),
         }
@@ -218,8 +217,8 @@ pub(super) struct UseResolved {
 // The per-body elaboration context. `table`/`public` are frozen interface views, shared read-only across all nested contexts. `qualifiers`/`bindings` are the lexical scope of the module body being elaborated, populated source-ordered by declarations and `use` imports.
 pub(super) struct Context<'a> {
     prefix: Qualifier,
-    // The root this module's own subtree belongs to — set explicitly once, where a root is mounted (`Context::new`/`nested_root`), and inherited unchanged by ordinary nesting (`nested`). Never re-derived from `prefix`'s string content past that point.
-    root: RootId,
+    // Every prefix this compilation mounts, with its privilege tier. Shared read-only by every nested context, like `table`/`public`: which mount owns a module is `Mount::owning` over its qualifier, so nesting carries nothing about roots and nothing re-derives one from a string.
+    mounts: &'a [Mount],
     table: &'a Scoped<'a, ModuleInfo>,
     public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
@@ -242,7 +241,7 @@ impl<'a> Context<'a> {
     pub(super) fn new(
         table: &'a Scoped<'a, ModuleInfo>,
         public: &'a Scoped<'a, PublicInterface>,
-        root: RootId,
+        mounts: &'a [Mount],
         metavars: &'a Entropy,
         universes: &'a Entropy,
         universe_role: &'a Cell<curios_core::UniverseRole>,
@@ -254,7 +253,7 @@ impl<'a> Context<'a> {
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
-            root,
+            mounts,
             table,
             public,
             qualifiers: HashMap::new(),
@@ -273,7 +272,7 @@ impl<'a> Context<'a> {
     pub(super) fn nested(&self, label: &str) -> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
-            root: self.root,
+            mounts: self.mounts,
             table: self.table,
             public: self.public,
             qualifiers: HashMap::new(),
@@ -287,19 +286,6 @@ impl<'a> Context<'a> {
             witnesses: self.witnesses,
             syntax: self.syntax,
         }
-    }
-
-    /// Like `nested`, but for descending into one of the fixed roots (`sys`/`syn`/`std`) mounted under the entry program: `root` overrides rather than inherits, since the fixed root's own subtree belongs to a different root than its mounting context. Used only at the three `into_core::FIXED_ROOTS` mount points — every deeper `nested` call within that subtree inherits the overridden root unchanged.
-    pub(super) fn nested_root(&self, label: &str, root: RootId) -> Context<'a> {
-        Context {
-            root,
-            ..self.nested(label)
-        }
-    }
-
-    /// The `RootId` this module itself belongs to — the value every `FlatLet` declared directly in this module's body stamps as its own root.
-    pub(super) fn root(&self) -> RootId {
-        self.root
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
@@ -463,7 +449,7 @@ impl<'a> Context<'a> {
             self.walk_children(start, &segments[1..upto])?
         };
 
-        super::guard_internal_root(self.table, &self.prefix, resolved.segments())?;
+        super::guard_internal_root(self.mounts, &self.prefix, resolved.segments())?;
         Ok(resolved)
     }
 

@@ -1,7 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Flt, Plicity, Qualifier, RootId},
+    curios_base::{Flt, Plicity, Qualifier},
     num_bigint::BigUint,
 };
 
@@ -56,7 +56,6 @@ fn register_opt(context: &mut Context) {
                 ]),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },
@@ -373,7 +372,6 @@ fn register_flag(context: &mut Context) {
                 ]),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
-                root: RootId::Entry,
                 rep_public: true,
                 polarities: Vec::new(),
             },

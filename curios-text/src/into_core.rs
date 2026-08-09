@@ -20,7 +20,7 @@ mod tests;
 use {
     super::*,
     curios_abi::ForeignStore,
-    curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind, SyntaxRegistry},
+    curios_base::{Entropy, Mount, Plicity, Qualifier, RootKind, SyntaxRegistry},
     curios_core::Bound,
     std::{
         cell::{Cell, RefCell},
@@ -31,7 +31,7 @@ use {
 
 // Reject a reference that *resolves into* an internal root (`sys`) when the consuming module lies outside the privileged roots. `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A non-internal target or a privileged consumer passes through.
 fn guard_internal_root(
-    table: &Scoped<'_, ModuleInfo>,
+    mounts: &[Mount],
     consumer: &Qualifier,
     resolved: &[String],
 ) -> Result<(), Error> {
@@ -39,11 +39,11 @@ fn guard_internal_root(
         return Ok(());
     };
 
-    if !is_internal_root(table, root) {
+    if !is_internal_root(mounts, root) {
         return Ok(());
     }
 
-    if privileged(table, consumer) {
+    if Mount::privileged(mounts, consumer) {
         Ok(())
     } else {
         Err(Error::InternalRootModule {
@@ -52,18 +52,13 @@ fn guard_internal_root(
     }
 }
 
-// Whether `label` names an internal root: discoverable so the standard library can resolve it by absolute path, but unreachable from user code.
-fn is_internal_root(table: &Scoped<'_, ModuleInfo>, label: &str) -> bool {
-    table
-        .get(&Qualifier::from([label]))
-        .is_some_and(|info| info.root.kind() == RootKind::Internal)
-}
+// Whether `label` names an internal root: discoverable so the standard library can resolve it by absolute path, but unreachable from user code. Asked of the mount itself rather than of the name it owns, because only a whole mount is internal — a module inside one is reachable exactly as far as its mount is.
+fn is_internal_root(mounts: &[Mount], label: &str) -> bool {
+    let prefix = Qualifier::from([label]);
 
-// Whether `consumer` is rooted in a privileged root (the standard library or an internal root itself), and so may reference internal roots.
-fn privileged(table: &Scoped<'_, ModuleInfo>, consumer: &Qualifier) -> bool {
-    table
-        .get(consumer)
-        .is_some_and(|info| info.root.kind().is_privileged())
+    mounts
+        .iter()
+        .any(|mount| mount.prefix == prefix && mount.kind == RootKind::Internal)
 }
 
 struct Resolved<'a> {
@@ -74,30 +69,27 @@ struct Resolved<'a> {
 
 /// Build-time source set for the fixed compilation roots. The prelude owner supplies already parsed modules keyed by canonical qualifier; `curios-text` retains no embedded `/syn` or `/std` source table.
 pub struct PreludeModules {
-    roots: Vec<(String, RootId)>,
+    mounts: Vec<Mount>,
     modules: BTreeMap<Qualifier, Module>,
 }
 
 impl PreludeModules {
     pub fn new() -> Self {
         Self {
-            roots: Vec::new(),
+            mounts: Vec::new(),
             modules: BTreeMap::new(),
         }
     }
 
-    pub fn insert_root(&mut self, name: impl Into<String>, root: RootId, module: Module) {
-        let name = name.into();
+    pub fn insert_root(&mut self, name: impl Into<String>, kind: RootKind, module: Module) {
+        let prefix = Qualifier::from([name.into()]);
         assert!(
-            root != RootId::Entry,
-            "a prepared root cannot be the entry root"
+            !self.mounts.iter().any(|mount| mount.prefix == prefix),
+            "prelude root '{}' is already registered",
+            prefix.join()
         );
-        assert!(
-            !self.roots.iter().any(|(existing, _)| existing == &name),
-            "prelude root '{name}' is already registered"
-        );
-        self.modules.insert(Qualifier::from([name.clone()]), module);
-        self.roots.push((name, root));
+        self.modules.insert(prefix.clone(), module);
+        self.mounts.push(Mount::new(prefix, kind));
     }
 
     pub fn insert_module(&mut self, path: Qualifier, module: Module) {
@@ -109,8 +101,8 @@ impl PreludeModules {
         );
     }
 
-    fn roots(&self) -> Vec<(String, RootId)> {
-        self.roots.clone()
+    fn mounts(&self) -> Vec<Mount> {
+        self.mounts.clone()
     }
 
     fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
@@ -133,7 +125,7 @@ impl Default for PreludeModules {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub struct PreparedPrelude {
-    roots: Vec<(String, RootId)>,
+    mounts: Vec<Mount>,
     table: BTreeMap<Qualifier, ModuleInfo>,
     public: BTreeMap<Qualifier, PublicInterface>,
     core: curios_core::Module,
@@ -191,56 +183,48 @@ impl Resolved<'_> {
         Ok(resolved)
     }
 
-    // No synthesized `mod sys;`-style declarations here: the entry program's own `ModuleInfo` is built directly from its own raw items, then sys/syn/std are registered as its children *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with this registration, in either direction.
+    // No synthesized `mod sys;`-style declarations here: the entry program's own `ModuleInfo` is built directly from its own raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with this registration, in either direction.
     fn resolve(
         &mut self,
         entrypoint: &Entrypoint,
         loader: &RootSource,
-        mounted_roots: &[(String, RootId)],
+        mounted: &[Mount],
     ) -> Result<(), Error> {
-        let mut root_info = scan_module_info(&entrypoint.module.items, RootId::Entry)?;
+        let mut root_info = scan_module_info(&entrypoint.module.items)?;
 
-        for (name, _) in mounted_roots {
-            root_info.insert_child(name.clone(), true)?;
+        for mount in mounted {
+            root_info.insert_child(mount.prefix.head().to_string(), true)?;
         }
 
         self.table.insert(Qualifier::empty(), root_info);
 
-        self.discover_children(
-            &entrypoint.module.items,
-            &Qualifier::empty(),
-            loader,
-            RootId::Entry,
-        )
+        self.discover_children(&entrypoint.module.items, &Qualifier::empty(), loader)
     }
 
-    // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse. `root` is inherited unchanged through the whole recursion — set once by the caller (`resolve`, at one of the four real roots), never re-derived from `prefix`'s string content here.
+    // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse.
     fn discover(
         &mut self,
         items: &[TopItem],
         prefix: &Qualifier,
         loader: &RootSource,
-        root: RootId,
     ) -> Result<(), Error> {
-        self.table
-            .insert(prefix.clone(), scan_module_info(items, root)?);
-        self.discover_children(items, prefix, loader, root)
+        self.table.insert(prefix.clone(), scan_module_info(items)?);
+        self.discover_children(items, prefix, loader)
     }
 
-    // The child-recursion half of `discover`, split out so `resolve` can build the entry root's `ModuleInfo` itself (with sys/syn/std pre-registered as children) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
+    // The child-recursion half of `discover`, split out so `resolve` can build the entry root's `ModuleInfo` itself (with every mounted prefix pre-registered as a child) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
     fn discover_children(
         &mut self,
         items: &[TopItem],
         prefix: &Qualifier,
         loader: &RootSource,
-        root: RootId,
     ) -> Result<(), Error> {
         for item in items {
             if let TopItem::Mod(module_item) = item {
                 let path = prefix.with(&module_item.label);
 
                 match &module_item.module {
-                    Some(module) => self.discover(&module.items, &path, loader, root)?,
+                    Some(module) => self.discover(&module.items, &path, loader)?,
                     None => {
                         let module =
                             Rc::new(loader.load(&path).map_err(
@@ -251,7 +235,7 @@ impl Resolved<'_> {
                             )?);
 
                         self.modules.insert(path.clone(), Rc::clone(&module));
-                        self.discover(&module.items, &path, loader, root)?;
+                        self.discover(&module.items, &path, loader)?;
                     }
                 }
             }
@@ -260,23 +244,25 @@ impl Resolved<'_> {
         Ok(())
     }
 
-    fn for_prelude(input: &PreludeModules) -> Result<(Self, Vec<(String, RootId)>), Error> {
+    fn for_prelude(input: &PreludeModules) -> Result<(Self, Vec<Mount>), Error> {
         let mut resolved = Self::new();
-        let roots = input.roots();
-        let mut root_info = ModuleInfo::new(RootId::Entry);
-        for (name, _) in &roots {
-            root_info.insert_child(name.clone(), true)?;
+        let mounts = input.mounts();
+        // The synthetic compilation root: it belongs to no unit, which is why it is built here rather than scanned from anyone's items. Its children are exactly the mounted prefixes.
+        let mut root_info = ModuleInfo::new();
+        for mount in &mounts {
+            root_info.insert_child(mount.prefix.head().to_string(), true)?;
         }
         resolved.table.insert(Qualifier::empty(), root_info);
 
-        for (name, root) in &roots {
-            let path = Qualifier::empty().with(name);
-            let content = Rc::new(input.load(&path)?);
-            resolved.modules.insert(path.clone(), Rc::clone(&content));
-            resolved.discover_input(&content.items, &path, input, *root)?;
+        for mount in &mounts {
+            let content = Rc::new(input.load(&mount.prefix)?);
+            resolved
+                .modules
+                .insert(mount.prefix.clone(), Rc::clone(&content));
+            resolved.discover_input(&content.items, &mount.prefix, input)?;
         }
 
-        Ok((resolved, roots))
+        Ok((resolved, mounts))
     }
 
     fn discover_input(
@@ -284,15 +270,13 @@ impl Resolved<'_> {
         items: &[TopItem],
         prefix: &Qualifier,
         input: &PreludeModules,
-        root: RootId,
     ) -> Result<(), Error> {
-        self.table
-            .insert(prefix.clone(), scan_module_info(items, root)?);
+        self.table.insert(prefix.clone(), scan_module_info(items)?);
         for item in items {
             if let TopItem::Mod(module_item) = item {
                 let path = prefix.with(&module_item.label);
                 match &module_item.module {
-                    Some(module) => self.discover_input(&module.items, &path, input, root)?,
+                    Some(module) => self.discover_input(&module.items, &path, input)?,
                     None => {
                         let module =
                             Rc::new(input.load(&path).map_err(
@@ -302,7 +286,7 @@ impl Resolved<'_> {
                                 },
                             )?);
                         self.modules.insert(path.clone(), Rc::clone(&module));
-                        self.discover_input(&module.items, &path, input, root)?;
+                        self.discover_input(&module.items, &path, input)?;
                     }
                 }
             }
@@ -311,8 +295,8 @@ impl Resolved<'_> {
     }
 }
 
-fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error> {
-    let mut info = ModuleInfo::new(root);
+fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
+    let mut info = ModuleInfo::new();
 
     for item in items {
         match item {
@@ -523,7 +507,6 @@ fn process_items(
                     kind: curios_core::DefinitionKind::Authored,
                     name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                     island: context.island(),
-                    root: context.root(),
                     type_,
                     body: lower.value(&let_item.signature.body())?,
                 }));
@@ -539,7 +522,6 @@ fn process_items(
                     kind: curios_core::DefinitionKind::Authored,
                     name: curios_core::Global::Authored(path),
                     island: context.island(),
-                    root: context.root(),
                     type_,
                     body: lower.value(&signature.body())?,
                 }));
@@ -554,7 +536,6 @@ fn process_items(
                             kind: curios_core::DefinitionKind::Authored,
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
-                            root: context.root(),
                             type_,
                             body: lower.value(&let_item.signature.body())?,
                         })
@@ -691,7 +672,6 @@ fn process_items(
                                 constructors,
                                 result_sort: result_sort.clone(),
                                 module: context.island(),
-                                root: context.root(),
                                 rep_public: u.rep_pub,
                                 // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                                 polarities: Vec::new(),
@@ -727,7 +707,6 @@ fn process_items(
                             kind: curios_core::DefinitionKind::InductiveType,
                             name: curios_core::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
-                            root: context.root(),
                             type_,
                             body,
                         })
@@ -834,7 +813,6 @@ fn process_items(
                                 context.prefixed(&u.label).with(&c.label),
                             ),
                             island: context.island(),
-                            root: context.root(),
                             type_: ctor_type,
                             body: ctor_body,
                         }));
@@ -848,7 +826,6 @@ fn process_items(
                 let name = curios_core::Global::Authored(context.prefixed(&s.label));
                 // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                 let module = context.prefixed(&s.label).without_last();
-                let root = context.root();
 
                 let param_binders = lower.mint(s.params.iter().map(|(_, n, _)| n.clone()));
                 let param_tys = s
@@ -902,7 +879,6 @@ fn process_items(
                         ),
                         result_sort: result_sort.clone(),
                         module,
-                        root,
                         rep_public: s.rep_pub,
                         // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                         polarities: Vec::new(),
@@ -924,7 +900,6 @@ fn process_items(
                     kind: curios_core::DefinitionKind::StructType,
                     name: curios_core::Global::Authored(context.prefixed(&s.label)),
                     island: context.island(),
-                    root: context.root(),
                     type_,
                     body,
                 }));
@@ -933,7 +908,6 @@ fn process_items(
             TopItem::Concept(concept) => {
                 let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                 let module = context.prefixed(&concept.label).without_last();
-                let root = context.root();
 
                 let lower = Lowerer::new(context);
                 let param_binders = lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
@@ -997,7 +971,6 @@ fn process_items(
                         ),
                         result_sort: result_sort.clone(),
                         module,
-                        root,
                         rep_public: concept.rep_pub,
                         // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                         polarities: Vec::new(),
@@ -1027,7 +1000,6 @@ fn process_items(
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),
                         supers,
-                        root,
                     },
                 );
 
@@ -1045,7 +1017,6 @@ fn process_items(
                     kind: curios_core::DefinitionKind::ConceptType,
                     name: curios_core::Global::Authored(context.prefixed(&concept.label)),
                     island: context.island(),
-                    root: context.root(),
                     type_,
                     body,
                 }));
@@ -1087,7 +1058,6 @@ fn process_items(
                             context.prefixed(&concept.label).with(&field.label),
                         ),
                         island: context.island(),
-                        root: context.root(),
                         // The wrapper re-lowers the field type in its *output* position, but that type's written-`Type` spans already seeded universes in the record pass above, under `input_type`'s lexical `Generalizable`. The span-keyed seeds are shared across the two lowerings — the wrapper must speak the concept's inherited levels — and `fresh_universe` asserts the roles agree, so the whole signature lowers `Generalizable`: the record's reading, not the output-position default that panicked on a field whose result spine spells `Type`.
                         type_: context
                             .with_universe_role(curios_core::UniverseRole::Generalizable, || {
@@ -1138,7 +1108,6 @@ fn process_items(
                     kind: curios_core::DefinitionKind::Witness,
                     name: name.clone(),
                     island: context.island(),
-                    root: context.root(),
                     type_: lower.term(&signature.type_())?,
                     body: lower.value(&signature.body())?,
                 }));
@@ -1261,6 +1230,7 @@ fn prelude_permutation(
 
 fn order_flat_items(
     items: Vec<FlatItem>,
+    mounts: &[Mount],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
 ) -> Vec<FlatItem> {
@@ -1268,7 +1238,7 @@ fn order_flat_items(
 
     let is_prelude = items
         .iter()
-        .map(FlatItem::in_prelude)
+        .map(|item| item.in_prelude(mounts))
         .collect::<Vec<bool>>();
     let prelude_nodes = (0..count)
         .filter(|&i| is_prelude[i])
@@ -1648,7 +1618,9 @@ pub fn into_core(
 ) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     curios_profile::profile!("into_core");
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
-    let public = interface::resolve(entrypoint, &modules, &mut table)?;
+    // The entry program alone, at the empty prefix — which is what makes it the entry. No scope, so nothing else is mounted.
+    let mounts = vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)];
+    let public = interface::resolve(entrypoint, &modules, &mut table, &mounts)?;
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
@@ -1660,7 +1632,7 @@ pub fn into_core(
     let mut context = Context::new(
         &table,
         &public,
-        RootId::Entry,
+        &mounts,
         &metavars,
         &universes,
         &universe_role,
@@ -1708,7 +1680,7 @@ pub fn into_core(
     )?;
 
     // Emit the program as a flat list of named top-level definitions rather than folding it into one N-deep nested `let`/`rec` term. Cross-references (and the references in the entrypoint `body` and its `type_` annotation) stay free `Var`s keyed by the definition's joined name; the core passes `define` each one into the `Context`, so both the body and its annotation reduce through those definitions and agree — no shared binder scope required.
-    let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
+    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
@@ -1716,6 +1688,7 @@ pub fn into_core(
     Ok((
         curios_core::Module {
             items,
+            mounts: mounts.clone(),
             universe_seeds: universe_seeds.into_inner(),
             induct_decls,
             struct_decls,
@@ -1737,8 +1710,8 @@ pub fn prepare_prelude(
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedPrelude, Error> {
     curios_profile::profile!("prepare_prelude");
-    let (Resolved { mut table, modules }, roots) = Resolved::for_prelude(input)?;
-    let public = interface::resolve_prelude(&roots, &modules, &mut table)?;
+    let (Resolved { mut table, modules }, mounts) = Resolved::for_prelude(input)?;
+    let public = interface::resolve_prelude(&mounts, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
@@ -1749,7 +1722,7 @@ pub fn prepare_prelude(
     let mut context = Context::new(
         &table,
         &public,
-        RootId::Entry,
+        &mounts,
         &metavars,
         &universes,
         &universe_role,
@@ -1759,8 +1732,8 @@ pub fn prepare_prelude(
         &witness_ids,
         syntax,
     );
-    for (name, _) in &roots {
-        context.insert_scope(name.clone(), Qualifier::empty().with(name))?;
+    for mount in &mounts {
+        context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
     }
 
     let mut flat_items = Vec::new();
@@ -1770,14 +1743,13 @@ pub fn prepare_prelude(
     let mut witnesses = BTreeSet::new();
     let mut foreigns = ForeignStore::new();
 
-    for (name, root) in &roots {
-        let path = Qualifier::empty().with(name);
+    for mount in &mounts {
         let content = modules
-            .get(&path)
+            .get(&mount.prefix)
             .expect("prelude root loaded during discovery");
         process_items(
             &content.items,
-            &mut context.nested_root(name, *root),
+            &mut context.nested(mount.prefix.head()),
             &mut flat_items,
             &mut induct_decls,
             &mut struct_decls,
@@ -1794,12 +1766,13 @@ pub fn prepare_prelude(
         &flat_items,
         NominalScope::new(None, &induct_decls, &struct_decls),
     )?;
-    let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
+    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
     let core = curios_core::Module {
         items,
+        mounts: mounts.clone(),
         universe_seeds: universe_seeds.into_inner(),
         induct_decls,
         struct_decls,
@@ -1811,7 +1784,7 @@ pub fn prepare_prelude(
     };
 
     Ok(PreparedPrelude {
-        roots,
+        mounts,
         table: table.into_own().into_iter().collect(),
         public: public.into_own().into_iter().collect(),
         core,
@@ -1835,12 +1808,21 @@ pub fn into_core_with_prelude(
         modules: HashMap::new(),
         table: Scoped::over(&prepared.table),
     };
-    resolved.resolve(entrypoint, loader, &prepared.roots)?;
+    resolved.resolve(entrypoint, loader, &prepared.mounts)?;
     let Resolved { mut table, modules } = resolved;
+    // The entry claims the empty prefix and nothing else — that claim alone is what the lowered module carries, since a module records what its own unit provides. Resolution needs the whole compilation's, so `mounts` below is the scope's plus this one.
+    let own = vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)];
+    let mounts = prepared
+        .mounts
+        .iter()
+        .cloned()
+        .chain(own.iter().cloned())
+        .collect::<Vec<_>>();
     let public = interface::resolve_with_prelude(
         entrypoint,
         &modules,
         &mut table,
+        &mounts,
         Scoped::over(&prepared.public),
     )?;
 
@@ -1858,7 +1840,7 @@ pub fn into_core_with_prelude(
     let mut context = Context::new(
         &table,
         &public,
-        RootId::Entry,
+        &mounts,
         &metavars,
         &universes,
         &universe_role,
@@ -1868,8 +1850,8 @@ pub fn into_core_with_prelude(
         &witness_ids,
         syntax,
     );
-    for (name, _) in &prepared.roots {
-        context.insert_scope(name.clone(), Qualifier::empty().with(name))?;
+    for mount in &prepared.mounts {
+        context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
     }
 
     let mut flat_items = Vec::new();
@@ -1908,7 +1890,7 @@ pub fn into_core_with_prelude(
     // The entry's own items alone. The prelude reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its 1052 items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
     //
     // The registries above are a different question and are still merged: a user declaration may reach a prelude one, so strict positivity and declaration sizing need the whole set, which is why they read a map rather than this list.
-    let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
+    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
@@ -1916,6 +1898,7 @@ pub fn into_core_with_prelude(
     Ok((
         curios_core::Module {
             items,
+            mounts: own,
             universe_seeds: universe_seeds.into_inner(),
             induct_decls,
             struct_decls,

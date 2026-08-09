@@ -41,6 +41,8 @@ impl<'a> Established<'a> {
             return Ok(());
         };
 
+        // Before the registries, because a mount is what a privilege question is answered out of and the unit's own items may ask one while they elaborate. What this scope mounted is what it declares its prefixes to be — the elaborator never derives a mount from a name.
+        context.mount(&module.mounts);
         context.seed_totality(&recorded_totality(module));
         for (name, induct_decl) in &module.induct_decls {
             context.register_induct(name, induct_decl.clone())?;
@@ -80,7 +82,6 @@ impl<'a> Established<'a> {
                             &def.type_,
                             def.universe_context.clone(),
                             &def.island,
-                            def.root,
                         )?;
                     }
                 }

@@ -7,7 +7,7 @@ use {
     curios_text::PreparedPrelude,
 };
 
-pub(crate) const SCHEMA: u32 = 23;
+pub(crate) const SCHEMA: u32 = 24;
 
 // Unconditional rather than `#[curios_archive::archived]`: this crate always archives, so there is no feature to gate on and nothing for the macro to do but forward bounds.
 #[derive(curios_archive::Archive, curios_archive::Serialize, curios_archive::Deserialize)]

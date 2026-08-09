@@ -12,7 +12,7 @@ use {
         RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext,
         UniverseError, UniverseSeed, build_shorten, project_erased_universes,
     },
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Mount, Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -67,8 +67,6 @@ pub struct Definition {
     pub universe_context: UniverseContext,
     /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `Structure::module` carries for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
-    /// This definition's declaring root — `island`'s leading segment, precomputed once by `into_core` the same way `ConceptDecl`/`StructDecl`/ `InductDecl` are, so `Context::set_island` (and, downstream, the orphan-rule check) never has to re-derive it from `island` itself.
-    pub root: RootId,
     /// Whether this definition terminates on every input, together with everything it reaches. Written back by `crate::record_totality` after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
     ///
     /// This is the cross-module summary the erasure gates read. A user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure".
@@ -84,7 +82,6 @@ pub struct RecDefinition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub island: Qualifier,
-    pub root: RootId,
     /// Per member, not per group. The group's *descent* is decided once for all of them, but the transitive closure is not: an accepted group can still have one member that reaches something partial while its sibling does not. See [`Definition::totality`].
     pub totality: Totality,
 }
@@ -148,7 +145,6 @@ impl RecItem {
                 name: definition.name,
                 kind: definition.kind,
                 island: definition.island,
-                root: definition.root,
                 totality: definition.totality,
             })
             .collect();
@@ -175,7 +171,6 @@ impl RecItem {
                 kind: definition.kind.clone(),
                 universe_context: self.group.universe_context().clone(),
                 island: definition.island.clone(),
-                root: definition.root,
                 totality: definition.totality,
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
@@ -276,6 +271,10 @@ impl Item {
 #[curios_archive::archived]
 pub struct Module {
     pub items: Vec<Item>,
+    /// The prefixes this module's compilation unit claims, and the privilege tier each carries.
+    ///
+    /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name only ever restated the name's leading segment — and being archived, it meant something solely in the compilation that wrote it. A later stage that needs a privilege tier reads it out of this list; nothing derives one from a string.
+    pub mounts: Vec<Mount>,
     /// Lowering-time metadata for every universe metavariable id in this module. Finalized, zonked modules clear this vector.
     pub universe_seeds: Vec<UniverseSeed>,
     /// Inductive declarations' registry entries, keyed by the type's qualified name. Carried on the module — not on a `Context` — because elaboration and erasure each run with their *own* `Context` (see `run::compile`); both seed their context's flat inductive store from here on entry.
@@ -306,7 +305,6 @@ impl Module {
             kind: definition.kind.clone(),
             universe_context: definition.universe_context.clone(),
             island: definition.island.clone(),
-            root: definition.root,
             totality: definition.totality,
             type_: sharing.share(&definition.type_),
             body: sharing.share(&definition.body),
@@ -326,7 +324,6 @@ impl Module {
                                 name: member.name.clone(),
                                 kind: member.kind.clone(),
                                 island: member.island.clone(),
-                                root: member.root,
                                 totality: member.totality,
                             })
                             .collect(),
@@ -335,6 +332,7 @@ impl Module {
                     }),
                 })
                 .collect(),
+            mounts: self.mounts.clone(),
             universe_seeds: self.universe_seeds.clone(),
             induct_decls: self
                 .induct_decls
@@ -553,7 +551,6 @@ mod tests {
             kind: DefinitionKind::Authored,
             universe_context,
             island: Qualifier::empty(),
-            root: RootId::Entry,
             totality: Totality::default(),
             type_: Term::type_ground(),
             body: Term::free_var(&Free::from(&global)),
@@ -615,7 +612,6 @@ mod tests {
             kind: DefinitionKind::Authored,
             universe_context: UniverseContext::empty(),
             island: Qualifier::default(),
-            root: RootId::Entry,
             totality: Totality::Total,
             type_: Term::intrinsic(crate::Intrinsic::NatType),
             body: Term::free_var(&mentioned),
@@ -623,6 +619,7 @@ mod tests {
 
         let module = Module {
             items: vec![Item::Let(definition)],
+            mounts: Vec::new(),
             universe_seeds: Vec::new(),
             induct_decls: BTreeMap::new(),
             struct_decls: BTreeMap::new(),

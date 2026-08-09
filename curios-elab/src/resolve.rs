@@ -12,7 +12,7 @@ use {
         Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedGoal, ParkedWork, Witness,
         WitnessKey, convert_outcome, reduce_with,
     },
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Mount, Plicity, Qualifier},
     curios_core::{
         ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType,
         Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
@@ -705,14 +705,13 @@ pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Err
     Ok(())
 }
 
-/// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type; `root` is its declaring `Definition`'s own precomputed root (consulted by the orphan-rule check below, never re-derived here). Registration ignores `pub`: visibility governs the name, never table membership.
+/// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type, and `module` its declaring `Definition`'s own island, which the orphan-rule check below resolves to a mount. Registration ignores `pub`: visibility governs the name, never table membership.
 pub(crate) fn register_witness(
     context: &mut Context,
     name: &Global,
     signature: &Term,
     universe_context: UniverseContext,
     module: &Qualifier,
-    root: RootId,
 ) -> Result<(), Error> {
     let reduced = reduce_with(context, signature)?;
 
@@ -811,13 +810,18 @@ pub(crate) fn register_witness(
     // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/ROADMAP.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
     //
     // A privileged root (`sys`/`syn`/`std`) is exempt: the three are one coordinated standard library, not independent unrelated packages, so e.g. a `/std`-declared `Eql(Str)` witness bridging `/sys`'s `Eql` concept and `/syn`'s `Str` type is exactly the sanctioned pattern (`/std` facades for `/sys`/`/syn`-homed concepts and types), not an orphan instance. The check only bites an ordinary root — the entry program today, an untrusted external package once one exists.
-    let concept_root = context
-        .concept(concept_name)
-        .expect("the concept was looked up above")
-        .root;
-    if !root.kind().is_privileged()
-        && root != concept_root
-        && !key.0.iter().any(|head| context.root_of_head(head) == root)
+    //
+    // Ownership is compared by *mount prefix*, which is what makes the rule bite between two ordinary units at all. It used to compare `RootId`s, and every ordinary root was the one value `RootId::Entry` — so two packages compared equal and the rule went inert exactly where two independent authors could collide.
+    //
+    // A declaration owned by no mount matches nothing, including another unowned one: `owns` answers `false` unless both sides name a mount. That is the conservative direction — such a witness can only be refused, never admitted by an accidental `None == None`.
+    let declaring = context.mount_of(&Global::Authored(module.clone()));
+    let owns = |other: Option<&Mount>| match (declaring, other) {
+        (Some(here), Some(there)) => here.prefix == there.prefix,
+        _ => false,
+    };
+    if !declaring.is_some_and(|mount| mount.kind.is_privileged())
+        && !owns(context.mount_of(concept_name))
+        && !key.0.iter().any(|head| owns(context.mount_of_head(head)))
     {
         return Err(Error::orphan_witness(
             concept_name.symbol(),
@@ -834,7 +838,6 @@ pub(crate) fn register_witness(
             module: module.clone(),
             universe_context,
             signature: signature.clone(),
-            root,
         },
     ) {
         return Err(Error::duplicate_witness(

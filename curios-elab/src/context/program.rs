@@ -4,7 +4,7 @@
 
 use {
     crate::{Error, HeadKey, Witness, WitnessKey},
-    curios_base::{Qualifier, RootId},
+    curios_base::{Mount, Qualifier},
     curios_core::{ConceptDecl, Global, InductDecl, StructDecl, Term, Totality, UniverseContext},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -24,6 +24,8 @@ pub(crate) struct Program {
     witness_table: BTreeMap<(Global, WitnessKey), Witness>,
     /// Each definition's totality, recorded as it is defined. The whole-module pass recomputes these post-zonk; this copy exists so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
     totality: BTreeMap<Global, Totality>,
+    /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
+    mounts: Vec<Mount>,
 }
 
 impl Program {
@@ -124,15 +126,30 @@ impl Program {
         &self.concepts
     }
 
-    /// The compilation root that declares one witness key's rigid head — a nominal head's own `root` (looked up from whichever registry has it, struct or inductive), or the fixed `RootId::Sys` for an intrinsic head, which is never user-declarable. Consulted by the orphan-rule check in `register_witness`.
-    pub(crate) fn root_of_head(&self, head: &HeadKey) -> RootId {
+    /// Record the prefixes one seeded module's unit claims. Called once per module as it enters the context — the scope's, then the unit's own.
+    pub(crate) fn mount(&mut self, mounts: &[Mount]) {
+        for mount in mounts {
+            if !self.mounts.contains(mount) {
+                self.mounts.push(mount.clone());
+            }
+        }
+    }
+
+    /// The mount owning `name`, or `None` for a name no mounted prefix claims — an anonymous witness above all, whose declaring module is carried separately.
+    pub(crate) fn mount_of(&self, name: &Global) -> Option<&Mount> {
+        match name {
+            Global::Authored(qualifier) => Mount::owning(&self.mounts, qualifier),
+            Global::Witness(_) => None,
+        }
+    }
+
+    /// The mount owning one witness key's rigid head, or `None` for an intrinsic head, which is never user-declarable. Consulted by the orphan-rule check in `register_witness`.
+    ///
+    /// `None` is not "unknown" — it is "claimed by no authored mount", which no declaring mount can equal. That is exactly what the previous `RootId::Sys` answer achieved: an ordinary consumer never *matched* it, it only ever failed to, so the verdict is unchanged and the answer no longer names a root it was standing in for.
+    pub(crate) fn mount_of_head(&self, head: &HeadKey) -> Option<&Mount> {
         match head {
-            HeadKey::Nominal(name) => self
-                .struct_decl(name)
-                .map(|struct_decl| struct_decl.root)
-                .or_else(|| self.induct_decl(name).map(|induct_decl| induct_decl.root))
-                .expect("a nominal head names a registered structure or inductive"),
-            _ => RootId::Sys,
+            HeadKey::Nominal(name) => self.mount_of(name),
+            _ => None,
         }
     }
 

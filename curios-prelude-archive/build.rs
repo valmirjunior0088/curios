@@ -9,7 +9,7 @@ use syntax::SYNTAX;
 
 use {
     curios_abi::host_ops,
-    curios_base::{Qualifier, RootId},
+    curios_base::{Qualifier, RootKind},
     curios_core::Item,
     curios_core::{Global, Sharing, derived_binder_floor},
     curios_elab::{
@@ -94,9 +94,17 @@ fn build() {
     );
 
     let mut modules = PreludeModules::new();
-    modules.insert_root("sys", RootId::Sys, sys_module(&host_ops()));
-    modules.insert_root("syn", RootId::Syn, parse_module(manifest.join("syn.crs")));
-    modules.insert_root("std", RootId::Std, parse_module(manifest.join("std.crs")));
+    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops()));
+    modules.insert_root(
+        "syn",
+        RootKind::Privileged,
+        parse_module(manifest.join("syn.crs")),
+    );
+    modules.insert_root(
+        "std",
+        RootKind::Privileged,
+        parse_module(manifest.join("std.crs")),
+    );
 
     for source in sources.iter().filter(|path| {
         path.starts_with(manifest.join("syn")) || path.starts_with(manifest.join("std"))

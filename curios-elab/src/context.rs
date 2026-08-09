@@ -17,7 +17,7 @@ use {
     super::{
         Error, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
     },
-    curios_base::{Entropy, Qualifier, RootId, Span, SyntaxRegistry},
+    curios_base::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     curios_core::ReduceError,
     curios_core::{
         Bound, ConceptDecl, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl,
@@ -769,8 +769,17 @@ impl Context {
         self.program.concepts()
     }
 
-    pub(crate) fn root_of_head(&self, head: &HeadKey) -> RootId {
-        self.program.root_of_head(head)
+    /// Record the prefixes one seeded module's unit claims. See [`Program::mount`].
+    pub(crate) fn mount(&mut self, mounts: &[Mount]) {
+        self.program.mount(mounts);
+    }
+
+    pub(crate) fn mount_of(&self, name: &Global) -> Option<&Mount> {
+        self.program.mount_of(name)
+    }
+
+    pub(crate) fn mount_of_head(&self, head: &HeadKey) -> Option<&Mount> {
+        self.program.mount_of_head(head)
     }
 
     pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {

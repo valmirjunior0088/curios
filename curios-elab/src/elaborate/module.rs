@@ -234,7 +234,6 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
             constructors: induct_decl.constructors,
             result_sort: induct_decl.result_sort,
             module: induct_decl.module,
-            root: induct_decl.root,
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
         },
@@ -299,7 +298,6 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             constructors,
             result_sort: induct_decl.result_sort,
             module: induct_decl.module,
-            root: induct_decl.root,
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
         },
@@ -391,7 +389,6 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             arity,
             result_sort: struct_decl.result_sort,
             module: struct_decl.module,
-            root: struct_decl.root,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
         },
@@ -517,7 +514,6 @@ fn finalize_definition(
                 arity,
                 result_sort,
                 module: struct_decl.module,
-                root: struct_decl.root,
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
             },
@@ -531,7 +527,6 @@ fn finalize_definition(
                 params: zonk_solved_term_metas(context, &concept.params),
                 fields: concept.fields,
                 supers: concept.supers,
-                root: concept.root,
             },
         );
     }
@@ -582,7 +577,6 @@ fn finalize_definition(
                     &levels,
                 ),
                 module: struct_decl.module,
-                root: struct_decl.root,
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
             },
@@ -601,7 +595,6 @@ fn finalize_definition(
                 ),
                 fields: concept.fields,
                 supers: concept.supers,
-                root: concept.root,
             },
         );
     }
@@ -625,7 +618,6 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
             &type_,
             def.universe_context.clone(),
             &def.island,
-            def.root,
         )
         .map_err(|error| error.at_opt(def.type_.span()))?;
     }
@@ -655,7 +647,6 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
         kind: def.kind.clone(),
         universe_context,
         island: def.island.clone(),
-        root: def.root,
         totality: def.totality,
         type_,
         body,
@@ -768,7 +759,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     .collect(),
                 result_sort: zonk_solved_term_metas(context, &induct_decl.result_sort),
                 module: induct_decl.module,
-                root: induct_decl.root,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
             },
@@ -861,7 +851,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 constructors,
                 result_sort,
                 module: induct_decl.module,
-                root: induct_decl.root,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
             },
@@ -877,7 +866,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             kind: def.kind.clone(),
             universe_context: universe_context.clone(),
             island: def.island.clone(),
-            root: def.root,
             totality: def.totality,
             type_,
             body,
@@ -965,6 +953,8 @@ fn elaborate_module_suffix(
     curios_profile::profile!("elaborate_module_suffix");
     // What is already in scope goes in before any item is checked; `register_*` rejects a duplicate key, and the unit declares only its own, so the two cannot collide.
     established.seed_registries(context)?;
+    // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
+    context.mount(&module.mounts);
 
     // Kept so the rebuilt entries can be pulled back out below. `module` declares only its own, prefix or no prefix, so this is every key it has.
     let induct_keys = module.induct_decls.keys().cloned().collect::<Vec<_>>();
@@ -1056,6 +1046,7 @@ fn elaborate_module_suffix(
 
     let module = Module {
         items,
+        mounts: module.mounts.clone(),
         universe_seeds: module.universe_seeds.clone(),
         induct_decls,
         struct_decls,

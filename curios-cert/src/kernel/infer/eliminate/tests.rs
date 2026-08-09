@@ -1,6 +1,6 @@
 use {
     crate::{Kernel, KernelError, infer},
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Scope, Telescope, Term,
         UniverseContext,
@@ -90,7 +90,6 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec
             constructors: entries,
             result_sort,
             module: Qualifier::from([path]),
-            root: RootId::Entry,
             rep_public: true,
             polarities: Vec::new(),
         },

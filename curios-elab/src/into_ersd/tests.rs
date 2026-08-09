@@ -1,7 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -29,7 +29,6 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        root: RootId::Entry,
         totality: Totality::default(),
         type_,
         body,
@@ -38,6 +37,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
 
 fn module(items: Vec<Item>, body: Term) -> Module {
     Module {
+        mounts: Vec::new(),
         items,
         universe_seeds: vec![],
         induct_decls: BTreeMap::new(),
@@ -267,7 +267,6 @@ fn universe_erasure_is_a_validated_structural_projection() {
             constraints: Vec::new(),
         },
         island: Qualifier::empty(),
-        root: RootId::Entry,
         totality: Totality::default(),
         type_: Term::type_at(parameter.succ().unwrap()),
         body: Term::induct_type_at(
@@ -440,7 +439,6 @@ fn opt_induct() -> InductDecl {
         ]),
         result_sort: Term::type_ground(),
         module: Qualifier::empty(),
-        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     }
@@ -460,6 +458,7 @@ fn a_variant_constructs_with_its_registered_schema() {
     let erased = erase_module(
         &mut context,
         &Module {
+            mounts: Vec::new(),
             items: Vec::new(),
             universe_seeds: vec![],
             induct_decls,
@@ -748,6 +747,7 @@ fn a_variant_match_binds_payload_without_projections() {
     let erased = erase_module(
         &mut context,
         &Module {
+            mounts: Vec::new(),
             items: Vec::new(),
             universe_seeds: vec![],
             induct_decls,
@@ -942,7 +942,6 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        root: RootId::Entry,
         totality: Totality::default(),
         type_: func_type.clone(),
         body: Term::func(

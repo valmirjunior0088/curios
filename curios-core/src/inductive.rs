@@ -1,6 +1,6 @@
 use {
     super::{Atom, Polarity, Telescope, Term, UniverseContext},
-    curios_base::{Plicity, Qualifier, RootId},
+    curios_base::{Plicity, Qualifier},
 };
 
 /// One constructor's registry signature: its full telescope.
@@ -33,10 +33,8 @@ pub struct InductDecl {
     pub constructors: Vec<(Atom, InductParam)>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the type-constructor's kind. A fully-applied `InductType { name, .. }` has this sort, which `Sort::of` reads to decide propositional irrelevance.
     pub result_sort: Term,
-    /// The exact source module that owns construction and elimination rights. This is finer-grained than `root`: nested modules in the same compilation root do not share representation access.
+    /// The exact source module that owns construction and elimination rights. This is finer-grained than the mount that owns the declaration: nested modules under one mount do not share representation access.
     pub module: Qualifier,
-    /// The compilation root that declares this inductive — consulted by the orphan-rule ownership check in `register_witness`.
-    pub root: RootId,
     /// Whether construction and elimination are available outside `module`. This metadata is elaboration-only and does not affect erased layouts.
     pub rep_public: bool,
     /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact positivity composes through when a recursive occurrence travels via this type. Computed by `check_positivity` after elaboration and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
@@ -92,7 +90,6 @@ impl InductDecl {
                 .collect(),
             result_sort: sharing.share(&self.result_sort),
             module: self.module.clone(),
-            root: self.root,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
         }
