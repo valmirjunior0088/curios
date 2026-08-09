@@ -125,21 +125,39 @@ fn dispatch() -> Result<(), Failure> {
                 capture(|| compile_entrypoint(budget, &entrypoint, loader, |_| {}));
 
             println!(
-                "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\ttarget\tname\t(peak {:.1} MiB)",
+                "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",
                 report.peak as f64 / (1024.0 * 1024.0),
             );
             for summary in &report.summaries {
                 println!(
-                    "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}",
+                    "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}\t{}",
                     summary.total.as_secs_f64() * 1_000.0,
                     summary.calls,
                     summary.min.as_secs_f64() * 1_000.0,
                     summary.max.as_secs_f64() * 1_000.0,
                     summary.retained as f64 / (1024.0 * 1024.0),
                     summary.allocated as f64 / (1024.0 * 1024.0),
+                    summary.allocations,
                     summary.target,
                     summary.name,
                 );
+            }
+
+            if !report.samples.is_empty() {
+                println!();
+                println!("count\ttotal\tmin\tmean\tmax\ttarget\tname");
+                for sample in &report.samples {
+                    println!(
+                        "{}\t{}\t{}\t{:.1}\t{}\t{}\t{}",
+                        sample.count,
+                        sample.total,
+                        sample.min,
+                        sample.mean(),
+                        sample.max,
+                        sample.target,
+                        sample.name,
+                    );
+                }
             }
 
             compilation.map(|_| ())?;
