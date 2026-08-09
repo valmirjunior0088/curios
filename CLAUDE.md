@@ -155,9 +155,13 @@ Run the same gate as CI, in order. All commands must pass, and Clippy warnings a
 make curios/runtime
 cargo fmt --all -- --check
 cargo check --workspace --all-targets --all-features
-RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
 ```
+
+The Clippy denial is passed *after* `--`, not as `RUSTFLAGS`, and the difference is the whole cost of running this gate locally. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. CI does not pay this, because its `check`, `clippy` and `test` jobs are separate jobs that never share a target directory; a local sequential run does. Measured on this workspace: three prelude builds per gate with `RUSTFLAGS`, one without.
+
+For the same reason, keep the feature set constant while iterating. `--all-features` enables `profile`, and a plain `cargo build --package curios` does not, so alternating between them maintains two archives that evict each other. Pick one for a work session.
 
 Documentation-only changes do not require rebuilding the compiler unless they alter documented commands or make claims that need executable verification. Check their diff, links, filenames, and hardwrapping directly.
 
