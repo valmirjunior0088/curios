@@ -913,9 +913,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         self.flush_lst_run(&mut operands, &mut run);
 
         match operands.len() {
-            // A lone append is the value itself; the concatenation would only be normalised away.
+            // A lone list-shaped operand is the value itself; the concatenation would only be normalised away. Only the family the literal builds may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`[..b]`) against a list type instead of adopting the operand's own — `[..true]` once collapsed to `true` and typechecked as `Bool`.
             1 => match &*operands[0] {
-                curios_core::Subterm::Intrinsic(intrinsic) => Ok(intrinsic.clone()),
+                curios_core::Subterm::Intrinsic(
+                    intrinsic @ (curios_core::Intrinsic::Lst(..)
+                    | curios_core::Intrinsic::LstAppend(..)
+                    | curios_core::Intrinsic::LstConcat(..)),
+                ) => Ok(intrinsic.clone()),
                 _ => Ok(curios_core::Intrinsic::LstConcat(element(), operands)),
             },
             _ => Ok(curios_core::Intrinsic::LstConcat(element(), operands)),
@@ -1026,9 +1030,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
         }
 
-        // A lone operand is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away.
+        // A lone packed-shaped operand at this literal's own grain is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` once collapsed to `true`, and a bits value spread into a bytes literal adopted the wrong grain.
         if operands.len() == 1
             && let curios_core::Subterm::Intrinsic(intrinsic) = &*operands[0]
+            && matches!(
+                intrinsic,
+                curios_core::Intrinsic::Bin(g, _)
+                | curios_core::Intrinsic::BinAppend(g, ..)
+                | curios_core::Intrinsic::BinConcat(g, ..)
+                if *g == grain
+            )
         {
             return Ok(intrinsic.clone());
         }

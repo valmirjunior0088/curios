@@ -2096,6 +2096,18 @@ fn constant_atoms_fold_into_the_packed_run() {
 }
 
 #[test]
+fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
+    // `[..true]` once collapsed to the bare operand: the literal lowered to `true` and typechecked as `Bool`, never having been a list at all. Only the family the literal itself builds may collapse; anything else keeps its `LstConcat`/`BinConcat` wrapper so elaboration checks the spread against the sequence type — grain included, since a bits value spread into a bytes literal is not a bytes value. (Names need not resolve: lowering precedes name resolution.)
+    assert!(format!("{:?}", run("[..true]")).contains("LstConcat"));
+    assert!(format!("{:?}", run(r"x[..true]")).contains("BinConcat"));
+    assert!(format!("{:?}", run(r"x[..b[\1]]")).contains("BinConcat"));
+
+    // A lone sequence-shaped spread still collapses to the value it already is.
+    assert_eq!(run("[..[1, 2]]"), run("[1, 2]"));
+    assert!(!format!("{:?}", run(r"x[..x[\48]]")).contains("BinConcat"));
+}
+
+#[test]
 fn bang_in_a_type_is_rejected() {
     // Types have no region to hoist an action to, so a `!` in an annotation is rejected during desugaring.
     assert!(run_err("let a : e! = x; a").contains("not allowed inside a type"));
