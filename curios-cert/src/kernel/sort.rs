@@ -20,8 +20,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
-        Apply, Bound, Field, FuncType, Intrinsic, Level, Proj, Reducer, StructType,
-        Subterm, Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
+        Apply, Bound, Field, FuncType, Intrinsic, Level, Proj, Reducer, StructType, Subterm,
+        Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
     },
 };
 
