@@ -653,7 +653,6 @@ pub trait TermBuilders {
         P: Into<Term>;
 
     /// A tuple literal carrying its written field names from `into_core`; elaboration checks them against the expected tuple type's labels and rebuilds the literal name-free. An all-`None` name list collapses to the positional normal form of [`Term::tuple`], so syntactic equality never splits on how the literal was spelled.
-    // A literal with no written names is the same term as a positional one — keep the all-positional normal form (`names` empty) so syntactic equality does not split on how the literal was spelled.
     fn tuple_named<I, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = (Option<String>, T)>,
