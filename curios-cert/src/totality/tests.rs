@@ -1,7 +1,9 @@
 use {
     super::*,
     crate::Kernel,
-    curios_base::{Grain, PackedBin},
+    curios_base::{Grain, PackedBin, Qualifier},
+    curios_core::{Global, MetaId, Metavar},
+    std::rc::Rc,
 };
 
 /// Build a matrix from a row-major grid of size grades.
@@ -371,4 +373,218 @@ fn mutual_recursion_is_caught_only_by_the_closure() {
         .collect::<Vec<_>>();
     assert!(!cycles.is_empty());
     assert!(cycles.iter().all(|(_, _, matrix)| matrix.descends()));
+}
+
+/// The member every probe below plants a call to.
+fn planted() -> Free {
+    Free::local(1, Some("f"))
+}
+
+/// Whether the engine finds a nullary self-call planted at one child position.
+///
+/// The group is `rec f : Nat = <plant(f)>`, whose member takes no lambda and so has an empty parameter vector: a self-call from it is a 0x0 matrix, idempotent with no diagonal, so the verdict is `Partial` exactly when [`Walk::walk`] reached the planted occurrence and `Total` exactly when it did not. Nothing here needs to be well typed — the engine is a total function of post-zonk terms and types nothing — which is what lets one probe cover every child position of every variant.
+fn call_is_seen(body: Term) -> bool {
+    let mut kernel = Kernel::new(100_000);
+    let rec = Term::rec(
+        vec![(planted(), Term::intrinsic(Intrinsic::NatType), body)],
+        Term::free_var(&planted()),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    group_totality(&mut kernel, group) == Totality::Partial
+}
+
+/// The differential `documentation/SOUNDNESS.md` asks for: `Walk::walk` visits every child position `Subterm::any_child_term` does, minus a named whitelist.
+///
+/// This matters more here than anywhere else on the perimeter because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. Route eight of this row's history was exactly that and nothing else: a projected inner group went unwalked, `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` closed to no call whatsoever, both groups classified `Total`, and `f(0)` diverged through `g` while (V) read the verdict.
+///
+/// The probe needs no instrumentation because the engine types nothing: it is a total function of post-zonk terms, so an ill-typed fixture is a legitimate input. Each row plants a *nullary* self-call at one child position — the member takes no lambda, so a self-call from it is a 0x0 matrix, idempotent with no diagonal — which makes the verdict `Partial` exactly when the walk reached the plant and `Total` exactly when it did not.
+///
+/// **The whitelist is three, where the prose audit this replaces counted two.** Its two are a `Metavar`'s spine, which `zonk_module` refuses before this pass runs, and a nested `Rec` member's declared type. The third is a separate mechanism the audit names but folds into the second: `Member::of` peels the member body's *leading* lambdas and discards their domain annotations at `Telescope::Cons(_, rest)`, so a call planted there is invisible while the same lambda one node deeper is walked — which is why every row below is wrapped in a tuple, and why the two spellings are asserted against each other at the end.
+///
+/// All three are type positions, and the argument that they are safe is the audit's: a call in one is consumed by β or read only by typing, never reduced, and an edge the engine misses is dangerous only where it can complete a reduction cycle. That argument is not what this test checks. What it checks is that the set does not quietly grow — a new term-bearing field on an existing variant is absorbed by the `..` in both patterns without a compile error, and would otherwise widen what the engine accepts in silence.
+#[test]
+fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
+    let filler = || Term::intrinsic(Intrinsic::NatType);
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let name = || Global::Authored(Qualifier::from(["N"]));
+    let binder = |index: u32| Free::local(500 + index, None);
+    let call = || Term::free_var(&planted());
+
+    // Every child position `Subterm::any_child_term` visits, and what the walk must say about it.
+    let positions: Vec<(&str, Term, bool)> = vec![
+        (
+            "a universe instance's head",
+            Subterm::UniverseInst(UniverseInst {
+                head: call(),
+                levels: Vec::new(),
+            })
+            .into(),
+            true,
+        ),
+        (
+            "an intrinsic's operand",
+            Term::intrinsic(Intrinsic::ListType(call())),
+            true,
+        ),
+        (
+            "a lambda's domain",
+            Term::func([(binder(1), call())], zero()),
+            true,
+        ),
+        (
+            "a lambda's body",
+            Term::func([(binder(1), filler())], call()),
+            true,
+        ),
+        (
+            "a function type's domain",
+            Term::func_type([(binder(1), call())], zero()),
+            true,
+        ),
+        (
+            "a function type's codomain",
+            Term::func_type([(binder(1), filler())], call()),
+            true,
+        ),
+        ("an application's head", Term::apply(call(), [zero()]), true),
+        (
+            "an application's argument",
+            Term::apply(zero(), [call()]),
+            true,
+        ),
+        (
+            "a tuple type's component",
+            Term::tuple_type(vec![(binder(1), call())]),
+            true,
+        ),
+        ("a tuple's field", Term::tuple([call()]), true),
+        ("a projection's head", Term::proj(call(), 0), true),
+        (
+            "a nominal type's parameter",
+            Term::induct_type(name(), [call()], Vec::<Term>::new()),
+            true,
+        ),
+        (
+            "a nominal type's index",
+            Term::induct_type(name(), Vec::<Term>::new(), [call()]),
+            true,
+        ),
+        (
+            "a constructor's parameter",
+            Term::variant(name(), [call()], "mk", Vec::<Term>::new()),
+            true,
+        ),
+        (
+            "a constructor's payload",
+            Term::variant(name(), Vec::<Term>::new(), "mk", [call()]),
+            true,
+        ),
+        (
+            "a structure type's parameter",
+            Subterm::StructType(StructType {
+                name: name(),
+                universes: Vec::new(),
+                params: vec![call()],
+            })
+            .into(),
+            true,
+        ),
+        (
+            "a structure literal's parameter",
+            Term::struct_(name(), [call()], Vec::<Term>::new()),
+            true,
+        ),
+        (
+            "a structure literal's field",
+            Term::struct_(name(), Vec::<Term>::new(), [call()]),
+            true,
+        ),
+        (
+            "a match's scrutinee",
+            Term::bool_match(call(), None, filler(), zero(), zero()),
+            true,
+        ),
+        (
+            "a match's motive",
+            Term::bool_match(zero(), None, call(), zero(), zero()),
+            true,
+        ),
+        (
+            "a boolean arm",
+            Term::bool_match(zero(), None, filler(), call(), zero()),
+            true,
+        ),
+        (
+            "a let binding's type",
+            Term::let_(&binder(1), call(), zero(), zero()),
+            true,
+        ),
+        (
+            "a let binding's value",
+            Term::let_(&binder(1), filler(), call(), zero()),
+            true,
+        ),
+        (
+            "a let's tail",
+            Term::let_(&binder(1), filler(), zero(), call()),
+            true,
+        ),
+        (
+            "a nested group's member body",
+            Term::rec(vec![(binder(1), filler(), call())], zero()),
+            true,
+        ),
+        (
+            "a nested group's tail",
+            Term::rec(vec![(binder(1), filler(), zero())], call()),
+            true,
+        ),
+        // The two positions the audit names, and the reason each is safe to skip.
+        (
+            "a metavariable's spine",
+            Subterm::Metavar(Metavar {
+                id: MetaId::from(0usize),
+                spine: Rc::new(vec![call()]),
+                origin: None,
+            })
+            .into(),
+            false,
+        ),
+        (
+            "a nested group's member type",
+            Term::rec(vec![(binder(1), call(), zero())], zero()),
+            false,
+        ),
+    ];
+
+    // The harness itself, first: a bare self-call must be seen and a call-free body must not, or every row below passes for the wrong reason.
+    assert!(call_is_seen(call()), "the bare self-call was not seen");
+    assert!(
+        !call_is_seen(zero()),
+        "a call-free body was read as recursive"
+    );
+
+    // Wrapped in a tuple so the member body is never itself a lambda: `Member::of` peels a *leading* lambda and discards its domain annotations, which is a separate divergence with its own row below, and leaving it in the way would hide what `Walk::step` does with every other position.
+    for (position, plant, expected) in positions {
+        assert_eq!(
+            call_is_seen(Term::tuple([plant])),
+            expected,
+            "{position}: the walk {} the planted self-call",
+            if expected { "missed" } else { "reached" },
+        );
+    }
+
+    // The third divergence, stated as the pair that separates it from `Walk::step`: the same lambda is invisible at the top of a member body and visited one node deeper.
+    let lambda = || Term::func([(binder(1), call())], zero());
+    assert!(
+        !call_is_seen(lambda()),
+        "a peeled lambda domain: the walk reached the planted self-call",
+    );
+    assert!(
+        call_is_seen(Term::tuple([lambda()])),
+        "a lambda domain below the peel: the walk missed the planted self-call",
+    );
 }
