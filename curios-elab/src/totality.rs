@@ -1,12 +1,6 @@
-//! Size-change termination: which `rec` groups descend, and therefore which definitions erasure may safely delete.
+//! The elaborator's driver for the shared size-change totality analysis.
 //!
-//! Curios keeps general recursion. What it cannot keep is general recursion in the places erasure *removes*, because a divergent type breaks type formation and a divergent proof proves anything, while a program that loops is only a program that loops. This module supplies the fact both gates need: whether a recursive group terminates on every call path.
-//!
-//! A group is accepted by the size-change principle (Lee–Jones–Ben-Amram, in the shape Abel's `foetus` gave it for dependent types). Each recursive call contributes a **call matrix** grading every callee argument against every caller parameter as strictly smaller, equal, or unrelated. The matrices are closed transitively under composition, and the group is accepted when every **idempotent** matrix in that closure carries a strict decrease on its diagonal — an idempotent matrix describes a call path that can repeat forever, so a decrease on it is a decrease that cannot be sustained.
-//!
-//! Size-change rather than structural recursion because the corpus needs it. `/std/BigNat/add/raw` descends on *either* of two `Bits` arguments depending on the arm, `add/raw_assoc` does the same over three, and `add/raw_comm` needs the mutual closure across two members. A rule keyed to one designated argument rejects all of them, and a fold cannot express them either, because a fold cannot short-circuit.
-//!
-//! **Match refinement is part of the size order, not an optimization.** A parameter scrutinized by an enclosing arm is expanded through that arm's constructor before it is compared, so in `add/raw`'s empty-`x` arm the literal argument `b[]` grades *equal* to `x` rather than unknown. Without that, the two nil-arm matrices compose to an all-unknown matrix, which is idempotent with no decrease anywhere on its diagonal, and `add/raw` is rejected on a call path that cannot actually occur.
+//! The analysis itself lives in `curios-cert` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving: seeding the two erased-half obligations — (T) from written type positions, (V) from the proof positions elaboration recorded — and classifying every top-level definition transitively against the group verdicts, with `ProcExit` and inherited prelude partiality folded in.
 //!
 //! Rejection is a **classification, not an error**. `/std/Async` is corecursive, `/std/Json/decode`'s parsers are nullary and productive, and `/std/BigNat/convert/to_str_go` recurses on a computed quotient; none passes this check and none needs to. They stay usable everywhere erasure keeps them. Only [`crate::check_type_totality`] and [`crate::check_proof_totality`] turn a `Partial` classification into a rejection, and only for the positions that erase.
 
