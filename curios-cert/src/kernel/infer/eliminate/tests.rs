@@ -2,7 +2,7 @@ use {
     crate::{Kernel, KernelError, infer},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Scope, Telescope, Term,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Scope, Telescope, Term,
         UniverseContext,
     },
 };
@@ -18,7 +18,7 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 fn nat_type() -> Term {
@@ -134,7 +134,7 @@ fn eliminate(
 
 /// A successor over `tail`, in the successor-floor form reduction keeps.
 fn succ(tail: Term) -> Term {
-    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::Succ(1u32.into(), tail)))
+    Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), tail)))
 }
 
 /// An opaque `P : (n : Nat, x : family(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index.
