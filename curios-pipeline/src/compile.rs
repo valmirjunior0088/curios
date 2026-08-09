@@ -7,8 +7,8 @@ use {
     curios_cont::{into_wasm, optimize},
     curios_core::{Intrinsic, Term},
     curios_elab::{
-        Context, Mode, elaborate_and_zonk_with_prelude, elaborate_and_zonk_with_prelude_reporting,
-        erase_module_with_prelude,
+        Context, Mode, Resumed, elaborate_and_zonk_with_prelude,
+        elaborate_and_zonk_with_prelude_reporting, erase_module_with_prelude,
     },
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
@@ -224,10 +224,9 @@ where
     let ersd_module = with_prelude(|prelude| {
         erase_module_with_prelude(
             &mut Context::new(budget, SYNTAX),
-            prelude.core(),
+            Resumed::of(prelude.core(), prelude.ersd()),
             &module,
             &core_type,
-            prelude.ersd(),
         )
     })
     .map_err(|error| {

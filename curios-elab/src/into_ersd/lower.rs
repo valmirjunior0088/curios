@@ -3,6 +3,7 @@
 //! The walk mirrors the legacy recursive erasure's control structure (its stack behavior is the no-regression baseline) but produces operands under the operand law instead of terms: [`Outcome::Emitted`] carries the atom a subexpression erased to, [`Outcome::Diverged`] carries the terminator that seals the innermost block when the subexpression provably never yields a value. Every non-atomic computation is bound by the builder at the point the walk reaches it, so evaluation order is statement order by construction.
 
 use {
+    super::Resumed,
     super::{
         Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Subterm,
         Telescope, Term, emitted, intrinsic, reduce_with,
@@ -480,18 +481,15 @@ pub fn erase_prelude_prefix(
 
 /// Replay an erased prelude prefix and erase `module`'s own items and entrypoint body. The Core context is re-seeded with the prelude's definitions (so the module's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every prelude reference is already bound.
 ///
-/// One thing about `prelude` is the caller's to guarantee, and it holds for the archived prelude that `curios-prelude` restores — the only prelude this is called with: its universes are taken as already validated, at the restore boundary where the bytes became a `Module`. That is what lets this skip re-deriving the standard library on every compilation.
-///
-/// What used to sit beside it was a second, unstated guarantee — that `module` was the prelude *extended in place*, its items the prelude's own followed by the user's — which nothing checked and which the item count below was an index into. `module` now carries only its own items, so the requirement has no content left to state.
+/// Nothing here is the caller's to guarantee any more, which is the point. Two contracts used to sit on this signature and neither was checked: that `module` was the prelude *extended in place*, discharged when the unit stopped carrying the prelude's items; and that the Core prelude and the erased arena described the same program, discharged by [`Resumed`] pairing them. What survives is a property of the archive rather than of a caller — its universes were validated at the restore boundary, where untrusted bytes became a `Module`.
 pub fn erase_module_with_prelude(
     context: &mut Context,
-    prelude: &Module,
+    resumed: Resumed<'_>,
     module: &Module,
     expected: &Term,
-    prefix: ErasedPrelude,
 ) -> Result<curios_ersd::Module, Error> {
     curios_profile::profile!("erase_module_with_prelude");
-    let prelude = UniverseErased::<Module>::project_validated(prelude).into_inner();
+    let prelude = resumed.projected_core();
     let module = UniverseErased::<Module>::project(module)?.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module`).
@@ -533,6 +531,7 @@ pub fn erase_module_with_prelude(
             }
         }
 
+        let prefix = resumed.into_arena();
         let mut lowering = Lowering {
             builder: curios_ersd::ErsdBuilder::resume(prefix.module),
             environment: prefix.environment,

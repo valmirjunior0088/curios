@@ -1,11 +1,11 @@
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        check_concept_registry, check_is_sort, check_positivity, check_proof_totality,
+        Established, check_concept_registry, check_is_sort, check_positivity, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality,
         collect_goal_reports, finish_deferred_witnesses, is_prop, record_definition_totality,
-        record_totality, recorded_totality, reduce_with, register_witness,
-        retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
+        record_totality, reduce_with, register_witness, retry_deferred_witnesses, sort_term, zonk,
+        zonk_arity, zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_base::Qualifier,
@@ -947,36 +947,24 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     Ok(elaborated)
 }
 
-/// Elaborate a [`Module`] against an already-elaborated *prefix*, returning the suffix it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
+/// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is what `zonk_module` then makes meta-free for `erase`.
 ///
-/// **One protocol serves both entry points**, and that is the point. `prefix` is `None` for a from-scratch elaboration and the cached prelude for a replay; every step below degenerates to the whole-module reading when it is `None`, so there is no second implementation to keep in agreement. There used to be: the replay path transcribed this function's thirteen steps inline and threaded the prelude through them, and the two copies agreeing was maintained by reading. That is the shape every configuration-dependent defect in this subsystem has had — a rule correct in the configuration its author was looking at and wrong in the other one.
+/// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the cached prelude for a replay; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement. There used to be: the replay path transcribed this function's thirteen steps inline and threaded the prelude through them, and the two copies agreeing was maintained by reading. That is the shape every configuration-dependent defect in this subsystem has had — a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
-/// The prefix diverges at exactly one point: after [`check_concept_registry`], its items are *replayed* into the context rather than elaborated.
+/// The scope diverges at exactly one point: after [`check_concept_registry`], its definitions are *replayed* into the context rather than elaborated.
 fn elaborate_module_suffix(
     context: &mut Context,
-    prefix: Option<&Module>,
+    established: Established<'_>,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     curios_profile::profile!("elaborate_module_suffix");
-    // Seed the context's registries before any item is checked: an inductive's type-constructor and value-constructor definitions reference their own registry entry (`elaborate_induct_type`/`elaborate_variant`), and `elaborate_struct`/`elaborate_proj` consult the struct registry (which `elaborate_struct` rebuilds). The prefix's entries go in verbatim, then the suffix's own — `register_*` rejects a duplicate key, so the suffix must exclude what the prefix already holds.
-    if let Some(prefix) = prefix {
-        // The prefix's verdicts, settled when its archive was built, so a user item's written type can be refused against them before it reduces.
-        context.seed_totality(&recorded_totality(prefix));
-        for (name, induct_decl) in &prefix.induct_decls {
-            context.register_induct(name, induct_decl.clone())?;
-        }
-        for (name, struct_decl) in &prefix.struct_decls {
-            context.register_struct(name, struct_decl.clone())?;
-        }
-        for (name, concept) in &prefix.concepts {
-            context.register_concept(name, concept.clone())?;
-        }
-    }
+    // What is already in scope goes in before any item is checked; `register_*` rejects a duplicate key, and the unit declares only its own, so the two cannot collide.
+    established.seed_registries(context)?;
 
     // Kept so the rebuilt entries can be pulled back out below. `module` declares only its own, prefix or no prefix, so this is every key it has.
     let induct_keys = module.induct_decls.keys().cloned().collect::<Vec<_>>();
@@ -997,47 +985,7 @@ fn elaborate_module_suffix(
     }
     check_concept_registry(context)?;
 
-    // Replay the cached prefix into the persistent base frame: `define_assuming` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind (assume the type, define the body), but with no re-checking — these terms are already elaborated. A prefix witness re-registers its (already elaborated) signature into the witness table, which is per-elaboration state and not cached on the module.
-    if let Some(prefix) = prefix {
-        for item in &prefix.items {
-            match item {
-                Item::Let(def) => {
-                    context.define_assuming_scheme(
-                        &Free::from(&def.name),
-                        &def.type_,
-                        &def.body,
-                        Some(&def.kind),
-                        def.universe_context.clone(),
-                    );
-                    if prefix.witnesses.contains(&def.name) {
-                        register_witness(
-                            context,
-                            &def.name,
-                            &def.type_,
-                            def.universe_context.clone(),
-                            &def.island,
-                            def.root,
-                        )?;
-                    }
-                }
-                Item::Rec(rec) => {
-                    for (index, definition) in rec.definitions.iter().enumerate() {
-                        let name = Free::from(&definition.name);
-                        context.assume(&name, &rec.group.member_type(index));
-                        context.set_assumption_universe_context(
-                            &name,
-                            rec.group.universe_context().clone(),
-                        );
-                        context.define(
-                            &name,
-                            &Term::rec_proj(rec.group.clone(), index),
-                            Some(&definition.kind),
-                        );
-                    }
-                }
-            }
-        }
-    }
+    established.replay_definitions(context)?;
 
     // Implicit-argument insertion mints metavariables during elaboration; floor the counter above `into_core`'s (which returns the count alongside the lowered module) so the id spaces never collide. A cached prefix is meta-free, so its ids never collide with the user range either.
     context.seed_metavars(metavar_floor);
@@ -1200,8 +1148,14 @@ pub fn elaborate_and_zonk_module(
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
-    let (module, body_type) =
-        elaborate_module_suffix(context, None, module, metavar_floor, universe_floor, mode)?;
+    let (module, body_type) = elaborate_module_suffix(
+        context,
+        Established::nothing(),
+        module,
+        metavar_floor,
+        universe_floor,
+        mode,
+    )?;
     // Nothing is inherited: `module` is the whole program, so every name it mentions it also defines.
     raise(finalize_and_check(
         context,
@@ -1250,16 +1204,17 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     mode: Mode,
 ) -> Result<(Module, Term, Vec<Error>), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
+    let established = Established::of(prelude);
     let (suffix, body_type) = elaborate_module_suffix(
         context,
-        Some(prelude),
+        established,
         module,
         metavar_floor,
         universe_floor,
         mode,
     )?;
-    // The prelude's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
-    let inherited = recorded_totality(prelude);
+    // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
+    let inherited = established.recorded_totality();
     let (suffix, body_type, obligations) =
         finalize_and_check(context, suffix, body_type, &inherited)?;
 

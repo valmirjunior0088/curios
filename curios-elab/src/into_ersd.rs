@@ -28,7 +28,10 @@ use environment::*;
 
 mod lower;
 pub use lower::{ErasedPrelude, erase_module, erase_module_with_prelude, erase_prelude_prefix};
+
+mod resumed;
 use lower::{Lowering, Outcome};
+pub use resumed::*;
 
 mod binding;
 

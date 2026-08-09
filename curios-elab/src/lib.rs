@@ -52,6 +52,9 @@ pub(crate) use resolve::*;
 mod suggest;
 pub(crate) use suggest::*;
 
+mod established;
+pub use established::*;
+
 mod elaborate;
 pub use elaborate::*;
 
