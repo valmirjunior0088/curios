@@ -838,16 +838,13 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
 
     for (name, concept) in concepts {
         for (_, target) in &concept.supers {
-            if target == name {
-                return Err(Error::cyclic_superclass(name.symbol()));
-            }
             if !concepts.contains_key(target) {
                 return Err(Error::unknown_superclass(name.symbol(), target.symbol()));
             }
         }
     }
 
-    // Three-color DFS over the superclass edges.
+    // Three-color DFS over the superclass edges. A direct self-edge is just the shortest cycle: it revisits its own name while `visiting` still holds it, so no separate check precedes the walk. Every target was proven present above, which is what lets the lookup expect.
     fn visit(
         concepts: &BTreeMap<Global, ConceptDecl>,
         name: &Global,
@@ -860,10 +857,11 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
         if !visiting.insert(name.clone()) {
             return Err(Error::cyclic_superclass(name.symbol()));
         }
-        if let Some(concept) = concepts.get(name) {
-            for (_, target) in &concept.supers {
-                visit(concepts, target, visiting, done)?;
-            }
+        let concept = concepts
+            .get(name)
+            .expect("every superclass target is a registered concept");
+        for (_, target) in &concept.supers {
+            visit(concepts, target, visiting, done)?;
         }
         visiting.remove(name);
         done.insert(name.clone());
