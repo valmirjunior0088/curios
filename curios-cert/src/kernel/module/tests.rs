@@ -125,6 +125,38 @@ fn a_parameter_prefix_that_disagrees_with_the_family_is_refused() {
     ));
 }
 
+/// A constructor telescope shorter than the family's parameter prefix is refused, not crashed on.
+///
+/// The prefix walk takes `param_count` entries, so a shorter telescope used to end the loop early without complaint and hand the short parameter list to `indices_at`, which panics on `Telescope::open`'s arity assert. A malformed registry entry is the program's fault, and the kernel answers for the program's faults with a refusal.
+#[test]
+fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
+    let mut kernel = kernel();
+    let t = Free::local(0, Some("T"));
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::done(Vec::new()),
+                plicities: Vec::new(),
+            },
+        )],
+        result_sort: Term::type_ground(),
+        module: Qualifier::from(["Fam"]),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+    kernel.declare_induct(&fam(), &declaration);
+
+    assert!(matches!(
+        check_induct_decl(&mut kernel, &declaration),
+        Err(KernelError::Arity { .. }),
+    ));
+}
+
 /// The control for the fixture above: a prefix that does agree stays admitted.
 #[test]
 fn a_matching_parameter_prefix_is_admitted() {

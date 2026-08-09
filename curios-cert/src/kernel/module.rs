@@ -290,15 +290,21 @@ fn check_constructed(
     targets: &[Term],
 ) -> Result<(), KernelError> {
     // The prefix must be the declaration's parameters, not merely as many binders. `instantiate` substitutes the family's actual parameters into these slots, so a constructor declaring one at a different domain types its payload against a family this declaration does not describe — and closed telescopes are why the prefix is repeated here at all, which makes the agreement something to enforce rather than something to assume.
+    //
+    // Refused before the walk, because `take` would end it early without complaint: a telescope too short to hold the prefix would hand `indices_at` a short parameter list and panic in `Telescope::open`, and a malformed entry deserves a refusal rather than a crash.
+    if entries.len() < declaration.param_count() {
+        return Err(KernelError::Arity {
+            expected: declaration.param_count(),
+            actual: entries.len(),
+        });
+    }
+
     let mut arity = declaration.arity.clone();
     let mut declared = Vec::with_capacity(declaration.param_count());
 
     for (binder, domain) in entries.iter().take(declaration.param_count()) {
         let Telescope::Cons(expected, rest) = arity else {
-            return Err(KernelError::Arity {
-                expected: declaration.param_count(),
-                actual: entries.len(),
-            });
+            unreachable!("the arity holds exactly `param_count` binders")
         };
         if !convert(kernel, &Term::type_ground(), domain, &expected)? {
             return Err(KernelError::Mismatch {
@@ -322,8 +328,9 @@ fn check_constructed(
 
     let mut telescope = declaration.indices_at(&declared);
     for target in targets {
+        // Loud rather than a `break`, because the quiet exit fails open: every target past it would stand unchecked, and inversion and the arm rule read them.
         let Telescope::Cons(domain, rest) = telescope else {
-            break;
+            unreachable!("the index telescope holds exactly `index_count` binders")
         };
 
         check(kernel, target, &domain)?;
