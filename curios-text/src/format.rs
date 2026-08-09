@@ -46,8 +46,9 @@ impl Formatted {
         Self::from_source(&source).map_err(located)
     }
 
-    /// The canonical text, either way.
-    pub fn into_text(self) -> String {
+    /// The canonical text, either way. Production callers match the variants directly (changed-ness decides the exit path); only the round-trip tests want the text alone.
+    #[cfg(test)]
+    pub(crate) fn into_text(self) -> String {
         match self {
             Formatted::Unchanged(text) | Formatted::Changed(text) => text,
         }

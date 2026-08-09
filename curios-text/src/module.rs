@@ -208,8 +208,10 @@ impl Module {
         Self::parse_with_comments(source).map(|(module, _)| module)
     }
 
-    /// [`Module::parse`] (by way of `FromStr`), additionally returning every comment the parse consumed — spans into `source`, ascending — the parse product a formatter needs to reprint a file without deleting its comments. Comments are not syntax: they live beside the module, never in it, so the parsed module is identical either way and nothing downstream changes.
-    pub fn parse_with_comments(source: &Rc<Source>) -> Result<(Self, Vec<Span>), ParserError> {
+    /// [`Module::parse`] (by way of `FromStr`), additionally returning every comment the parse consumed — spans into `source`, ascending. (The formatter itself goes through `parse_for_format`, whose `FormatInput` carries its own comment list; this pairing exists for the comment-visibility tests.) Comments are not syntax: they live beside the module, never in it, so the parsed module is identical either way and nothing downstream changes.
+    pub(crate) fn parse_with_comments(
+        source: &Rc<Source>,
+    ) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
         let module = run_parser(
             parse_whitespace()
@@ -279,7 +281,9 @@ impl Entrypoint {
     }
 
     /// The entrypoint counterpart of [`Module::parse_with_comments`]: parse plus every consumed comment as spans into `source`, ascending.
-    pub fn parse_with_comments(source: &Rc<Source>) -> Result<(Self, Vec<Span>), ParserError> {
+    pub(crate) fn parse_with_comments(
+        source: &Rc<Source>,
+    ) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
         let entrypoint = run_parser(
             parse_whitespace()

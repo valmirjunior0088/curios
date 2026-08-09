@@ -9,7 +9,7 @@ use {
     std::{collections::HashMap, hash::Hash},
 };
 
-pub struct OrderedMap;
+pub(crate) struct OrderedMap;
 
 fn ordered<K, V>(map: &HashMap<K, V>) -> Vec<(K, V)>
 where
