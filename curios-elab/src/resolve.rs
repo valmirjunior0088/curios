@@ -90,8 +90,8 @@ fn lift_chain(
     lift: &Global,
     from: &HeadKey,
     to: &HeadKey,
-) -> Vec<(String, String)> {
-    let mut edges: Vec<(HeadKey, HeadKey, String, String)> = Vec::new();
+) -> Vec<(String, Qualifier)> {
+    let mut edges: Vec<(HeadKey, HeadKey, String, Qualifier)> = Vec::new();
     for (concept, key, witness) in context.witness_keyed_entries() {
         if concept != lift {
             continue;
@@ -99,11 +99,7 @@ fn lift_chain(
         let [m, n] = key.0.as_slice() else {
             continue;
         };
-        let module = match witness.module.is_root() {
-            true => "the entry module".to_string(),
-            false => witness.module.join(),
-        };
-        edges.push((m.clone(), n.clone(), key.to_string(), module));
+        edges.push((m.clone(), n.clone(), key.to_string(), witness.module.clone()));
     }
 
     let mut parents: BTreeMap<HeadKey, usize> = BTreeMap::new();

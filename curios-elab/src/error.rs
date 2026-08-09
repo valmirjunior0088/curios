@@ -31,8 +31,8 @@ pub struct EmbeddingDiagnosis {
     pub target: Box<Term>,
     /// Whether any `Monad` witness exists for the source's head: an edge out of a non-monad could never be declared, so suggesting one would be a trap.
     pub source_is_monad: bool,
-    /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically.
-    pub chain: Vec<(String, String)>,
+    /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically. The module rides as its [`Qualifier`] so rendering stays with [`declaring_module`], the one spelling of "declared in …".
+    pub chain: Vec<(String, Qualifier)>,
 }
 
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
@@ -1606,6 +1606,7 @@ impl fmt::Display for Displayed<'_> {
                                 "\n  declared embeddings chain from {source} to {target}:"
                             )?;
                             for (pair, module) in &diagnosis.chain {
+                                let module = declaring_module(module);
                                 write!(f, "\n    Lift{pair} — declared in {module}")?;
                             }
                             write!(
