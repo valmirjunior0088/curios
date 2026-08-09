@@ -1,4 +1,5 @@
 use {
+    super::subsumes,
     crate::{Kernel, KernelError, check, check_definition, infer},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
@@ -875,4 +876,83 @@ fn each_intrinsic_elimination_at_its_own_carrier_is_still_accepted() {
 
     let dispatch = Term::switch(nat(0), None, nat_type(), [(0u32, nat(1))], nat(2));
     assert_eq!(infer(&mut kernel, &dispatch), Ok(nat_type()));
+}
+
+/// The subsumption fork, which the perimeter records as having no fixture in either direction.
+///
+/// `subsumes` compares a Π's **domains by conversion** and its **codomains cumulatively**. Only one of those two choices can be got wrong in the admitting direction, and it is the domain: reading it *covariantly* would accept `(x : Type 0) -> B` where `(x : Type 1) -> B'` is wanted, so a function that only handles small arguments would be applied to a large one, which is the shape the hierarchy exists to forbid. Contravariance would be sound and strictly more permissive; invariance is what ships, and it is the freely-revisable side precisely because widening later breaks nothing already accepted.
+///
+/// Both directions are asserted, because invariance is the conjunction of two refusals and a rule that had drifted to covariance would still refuse the other one. The head cases are the control: without them a `subsumes` that refused every function type would satisfy the two assertions above, and cumulativity would be dead while the test stayed green.
+#[test]
+fn a_function_types_domain_is_invariant() {
+    let mut kernel = kernel();
+    let x = binder(900, "x");
+    let pi = |domain: Term| Term::func_type([(x.clone(), domain)], Term::tuple_type_unit());
+
+    // Neither direction: the domains are compared by conversion, and `Type 0` is not convertible with `Type 1`.
+    assert_eq!(
+        subsumes(
+            &mut kernel,
+            &pi(Term::type_ground()),
+            &pi(Term::type_at(one()))
+        ),
+        Ok(false),
+    );
+    assert_eq!(
+        subsumes(
+            &mut kernel,
+            &pi(Term::type_at(one())),
+            &pi(Term::type_ground())
+        ),
+        Ok(false),
+    );
+}
+
+/// The other half of the same fork, and the direction the language needs: under a binder the codomains are still compared cumulatively, `Prop` included.
+#[test]
+fn a_function_types_codomain_is_cumulative() {
+    let mut kernel = kernel();
+    let x = binder(901, "x");
+    let pi = |codomain: Term| Term::func_type([(x.clone(), nat_type())], codomain);
+
+    assert_eq!(
+        subsumes(
+            &mut kernel,
+            &pi(Term::type_ground()),
+            &pi(Term::type_at(one()))
+        ),
+        Ok(true),
+    );
+    assert_eq!(
+        subsumes(
+            &mut kernel,
+            &pi(Term::type_at(one())),
+            &pi(Term::type_ground())
+        ),
+        Ok(false),
+    );
+    // A proposition stands wherever a type is wanted, under a binder as at the head.
+    assert_eq!(
+        subsumes(&mut kernel, &pi(Term::prop()), &pi(Term::type_ground())),
+        Ok(true),
+    );
+}
+
+/// The control for both fixtures above: the same three verdicts at the head, where no telescope is walked at all. A `subsumes` that had stopped descending into function types would pass those two and fail these.
+#[test]
+fn the_head_rules_still_decide_a_bare_sort() {
+    let mut kernel = kernel();
+
+    assert_eq!(
+        subsumes(&mut kernel, &Term::type_ground(), &Term::type_at(one())),
+        Ok(true),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &Term::type_at(one()), &Term::type_ground()),
+        Ok(false),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &Term::prop(), &Term::type_ground()),
+        Ok(true),
+    );
 }

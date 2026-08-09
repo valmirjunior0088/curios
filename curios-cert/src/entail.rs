@@ -137,6 +137,69 @@ mod tests {
         assert!(entails(&[], &three, &raised));
     }
 
+    /// Every level over two parameters with constants and offsets below three — enough to reach every clause either predicate has.
+    fn levels() -> Vec<Level> {
+        let mut levels = Vec::new();
+        for constant in 0..3u32 {
+            for first in [None, Some(0), Some(1), Some(2)] {
+                for second in [None, Some(0), Some(1), Some(2)] {
+                    let mut parts = vec![Level::constant(constant)];
+                    for (index, offset) in [(0usize, first), (1usize, second)] {
+                        if let Some(offset) = offset {
+                            parts.push(
+                                param(index)
+                                    .checked_add(offset)
+                                    .expect("the offset is small"),
+                            );
+                        }
+                    }
+                    levels.push(Level::max(parts));
+                }
+            }
+        }
+        levels
+    }
+
+    /// `Kernel::level_leq` is `structurally_leq(..) || entails(..)`, and the fast path runs first on every goal — so where the two diverge, the answer is decided by which one is asked. Only one divergence can admit: the structural test accepting a goal the oracle refuses.
+    ///
+    /// It cannot happen, and the reason is structural rather than empirical: `atom_entailed` opens with exactly `structurally_leq`'s per-atom test and returns before it spends any fuel, and `level_entailed`'s constant clause is `structurally_leq`'s character for character. So the oracle contains the fast path whatever the hypotheses are, and the disjunction is `entails`. This sweeps the claim over every pair of levels above, under four hypothesis sets including a cyclic one and one that gains an offset.
+    ///
+    /// The second assertion is what keeps this from being vacuous: the two predicates really do differ, so the containment is a fact about the pair rather than about them being the same function. That is the same guard `a_binder_forced_twice_survives_only_when_its_forcings_convert` needs for the same reason — a differential over two predicates that never disagree establishes nothing.
+    #[test]
+    fn the_structural_fast_path_never_outruns_the_oracle() {
+        let (u, v) = (param(0), param(1));
+        let raised = u.checked_add(1).expect("the offset is small");
+        let hypotheses = [
+            Vec::new(),
+            vec![leq(&u, &v)],
+            vec![leq(&u, &v), leq(&v, &u)],
+            vec![leq(&raised, &v)],
+        ];
+
+        let mut oracle_reaches_further = 0usize;
+        for assumed in &hypotheses {
+            for lower in levels() {
+                for upper in levels() {
+                    let fast = lower.structurally_leq(&upper);
+                    let oracle = entails(assumed, &lower, &upper);
+
+                    assert!(
+                        !fast || oracle,
+                        "the fast path accepted {lower:?} <= {upper:?} where the oracle refused it",
+                    );
+                    if oracle && !fast {
+                        oracle_reaches_further += 1;
+                    }
+                }
+            }
+        }
+
+        assert!(
+            oracle_reaches_further > 0,
+            "the two predicates never disagreed, so the containment above establishes nothing",
+        );
+    }
+
     #[test]
     fn cyclic_hypotheses_terminate_and_refuse_the_unrelated() {
         let (u, v, w) = (param(0), param(1), param(2));
