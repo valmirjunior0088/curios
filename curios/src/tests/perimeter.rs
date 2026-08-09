@@ -402,6 +402,84 @@ const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
+const A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION: &str = r#"
+        use /std/{Nat, Eq};
+
+        struct Holder : pub Prop {
+            field : {Eq(0, 0), Eq(1, 1)}
+        }
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+const THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION: &str = r#"
+        struct Holder : pub Prop {
+            field : {}
+        }
+
+        /std/Io/pure(())
+        "#;
+
+const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
+        use /std/{Nat, Eq};
+
+        struct Holder : pub Prop {
+            field : (A : Type) -> Eq(0, 0)
+        }
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+const A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION: &str = r#"
+        struct Holder : pub Prop {
+            field : (A : Type) -> A
+        }
+
+        /std/Io/pure(())
+        "#;
+
+const A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION: &str = r#"
+        use /std/{Nat, Eq};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        let into_record(t : Two) -> {Eq(0, 0), Eq(1, 1)} =
+            match t
+            | a() => (Eq/refl(), Eq/refl())
+            | b() => (Eq/refl(), Eq/refl())
+            end;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+const A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE: &str = r#"
+        use /std/{Nat};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        let into_record(t : Two) -> {Nat, Nat} =
+            match t
+            | a() => (0, 0)
+            | b() => (1, 1)
+            end;
+
+        /std/Io/pure(())
+        "#;
+
+const A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED: &str = r#"
+        induct Bad : pub Type
+        | mk(f : {((Bad) -> Prop) -> Prop})
+        end
+
+        /std/Io/pure(())
+        "#;
+
 // The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
 #[test]
 fn a_multi_constructor_proposition_cannot_be_eliminated_into_data() {
@@ -1229,6 +1307,49 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
+    // Sort formation. Both accepting rungs reach the kernel, which is unusual on this map: most rows below refuse during elaboration and leave the certifier nothing to judge.
+    (
+        "record_of_propositions",
+        A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "empty_record_is_unit",
+        THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION,
+        Expect::Refuses("is informative"),
+        Expect::NotAsked,
+    ),
+    (
+        "function_into_proposition",
+        A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "function_into_type",
+        A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION,
+        Expect::Refuses("is informative"),
+        Expect::NotAsked,
+    ),
+    (
+        "prop_into_formed_prop",
+        A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "prop_into_formed_type",
+        A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE,
+        Expect::Refuses("cannot eliminate the proposition"),
+        Expect::NotAsked,
+    ),
+    (
+        "non_strict_behind_record",
+        A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED,
+        Expect::Refuses("positively, but not strictly"),
+        Expect::NotAsked,
+    ),
 ];
 
 fn agrees(name: &str, checker: &str, expected: &Expect, actual: &Verdict) {
@@ -1251,6 +1372,61 @@ impl std::fmt::Debug for Expect {
             Expect::Refuses(fragment) => write!(formatter, "refuses({fragment})"),
         }
     }
+}
+
+// Sort formation, the row that had an argument and no program. Both of its rules are *accepting* — a Π into a proposition is a proposition whatever it quantifies over, and a record of propositions is one — so they widen what counts as a proof, and everything irrelevance and erasure do downstream turns on that verdict.
+//
+// The pair below is `tuple_sort`. A record is `Prop`-sorted only where every component pushed no level, which is what makes an anonymous Σ non-informative *by formation* where a declared `struct` needs `check_non_informative` to make it so — and the two predicates are the same one, so the declaration gate is what these fixtures read the formation verdict through. The empty record is the carve-out and has to fall the other way: `{}` is the unit type an effect returns, so calling it a proposition would erase a value the runtime needs.
+#[test]
+fn a_record_of_propositions_is_a_proposition() {
+    assert_eq!(run(A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION), b"1");
+}
+
+#[test]
+fn the_empty_record_is_not_a_proposition() {
+    rejected_by(THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION, "is informative");
+}
+
+// `func_sort`, and the half that makes `Prop` impredicative: the domain's level is discarded when the codomain is a proposition, so quantifying over a universe still yields one. That is what puts Coquand–Paulin's construction in range, which is why this rule's soundness is not its own — see the positivity fixture below.
+#[test]
+fn a_function_into_a_proposition_is_a_proposition() {
+    assert_eq!(run(A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION), b"1");
+}
+
+#[test]
+fn a_function_into_a_type_is_not_a_proposition() {
+    rejected_by(
+        A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION,
+        "is informative",
+    );
+}
+
+// The row's stated attack shape, answered: "a proposition arrived at by *formation* rather than by declaration, carrying something the guards above only ever check where a declaration is consulted". The large-elimination guard is one of those guards, and it does *not* only check where a declaration is consulted — it asks `Sort::of`, which computes formation. So eliminating a two-constructor proposition into an anonymous Σ of `Nat`s is refused exactly as into a bare `Nat`, and the control is the same elimination into an anonymous Σ of proofs, which must stay legal because a proposition eliminated into a proposition needs no condition at all.
+#[test]
+fn a_proposition_may_not_be_eliminated_into_a_formed_type() {
+    rejected_by(
+        A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE,
+        "cannot eliminate the proposition",
+    );
+}
+
+#[test]
+fn a_proposition_still_eliminates_into_a_formed_proposition() {
+    assert_eq!(
+        run(A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION),
+        b"1"
+    );
+}
+
+// The other support the argument names, at a shape positivity's own twelve probes did not spell: they run the negative and the double negative bare, through an `induct` parameter, through a `struct` parameter, through a type alias, under `List`, behind a type-level `match`, and at a higher-kinded parameter — never behind an anonymous Σ, which is the construct this row is about.
+//
+// The diagnostic is what makes this more than a repeat. It reads *positively, but not strictly* rather than *negatively*, which is the same verdict the bare spelling gets: the polarity lattice is computed through the tuple component rather than the component being answered opaquely, since an opaque answer would join to `Mixed` and refuse with the other message. Refusing a merely-`Pos` diagonal is precisely what keeps `℘℘` out while `Prop` is impredicative, so this is the pairing the row rests on, checked where the row lives.
+#[test]
+fn a_non_strict_occurrence_behind_a_record_is_still_refused() {
+    rejected_by(
+        A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED,
+        "positively, but not strictly",
+    );
 }
 
 /// Every perimeter fixture, put to both checkers, asserting what each says.
