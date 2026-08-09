@@ -277,24 +277,24 @@ pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> Parser<'a, Term> {
 }
 
 pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term> {
-    let here = left.clone();
+    // One `many0` loop per precedence level, folded by move. The previous spelling recursed once per operator *and* deep-cloned the accumulated left spine at every link (`let here = left.clone()` before the catch), so an N-operator chain cost N native frame nests and O(N²) cloned nodes — the same per-element-recursion class the flat `let` block in `parse_let` was rebuilt to avoid. Native depth is now bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
+    many0(move || {
+        catch(parse_infix_op().flat_map(move |op| {
+            let precedence = op_precedence(op);
 
-    catch(parse_infix_op().flat_map(move |op| {
-        let precedence = op_precedence(op);
+            if precedence < min_prec {
+                // Binds looser than the caller's level: backtrack, leaving the operator for an enclosing `parse_infix_rest` to consume.
+                return fail("operator below current precedence level");
+            }
 
-        if precedence < min_prec {
-            // Binds looser than the caller's level: backtrack, leaving the operator for an enclosing `parse_infix_rest` to consume.
-            return fail("operator below current precedence level");
-        }
-
-        let left = here;
-
-        parse_infix_expr(precedence + 1).flat_map(move |right| {
-            let combined: Term = Subterm::Infix(Infix { op, left, right }).into();
-            parse_infix_rest(combined, min_prec)
+            parse_infix_expr(precedence + 1).map(move |right| (op, right))
+        }))
+    })
+    .map(move |pairs| {
+        pairs.into_iter().fold(left, |left, (op, right)| {
+            Subterm::Infix(Infix { op, left, right }).into()
         })
-    }))
-    .or(pure(left))
+    })
 }
 
 pub(crate) fn parse_term<'a>() -> Parser<'a, Term> {

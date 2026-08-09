@@ -80,16 +80,16 @@ pub(crate) fn parse_optional_term<'a>() -> Parser<'a, Option<Term>> {
 }
 
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
+    // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner used to nest N native frames.
     take_while(|char| char.is_whitespace())
-        .and(
+        .and(many0(|| {
             catch(
                 // The span covers `--` through the end of the line, newline excluded. Recording is sound here because this parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
                 spanned(take_exact("--").and_keep(take_while(|char| char != '\n')))
                     .map(|(span, _)| record_comment(span))
-                    .and_keep(lazy(parse_whitespace)),
+                    .and_drop(take_while(|char| char.is_whitespace())),
             )
-            .or(pure(())),
-        )
+        }))
         .map(|_| ())
 }
 

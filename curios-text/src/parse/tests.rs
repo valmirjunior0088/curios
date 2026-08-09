@@ -200,6 +200,28 @@ fn character_literal_is_not_a_natural_pattern() {
 }
 
 #[test]
+fn a_long_operator_chain_parses_without_native_recursion() {
+    // One native frame nest per operator (plus an O(N²) left-spine clone) once made chain length a stack bound: the recursive spelling aborted at exactly this depth on the default test-thread stack, and the infix loop folds it by move with native depth bounded by the precedence table. A smaller linear residue remains somewhere in the shared parse machinery (threshold ~3k elements), recorded for a separate hunt.
+    let depth = 1_000;
+    let source = "1".to_string() + &" + 1".repeat(depth);
+    let mut term = source.parse::<Term>().unwrap();
+    let mut count = 0;
+    // Dismantle by value, one level per iteration: each round frees one `Infix` shell and its leaf right operand, so the deep left spine never hits a recursive drop.
+    while let Subterm::Infix(infix) = term.into_subterm() {
+        count += 1;
+        term = infix.left;
+    }
+    assert_eq!(count, depth);
+}
+
+#[test]
+fn a_comment_banner_parses_without_native_recursion() {
+    // One native frame per `--` line once made banner height a stack bound; the whitespace loop absorbs any run.
+    let source = "-- banner\n".repeat(50_000) + "0";
+    assert!(source.parse::<Term>().is_ok());
+}
+
+#[test]
 fn a_path_admits_no_whitespace_and_division_requires_it() {
     // Paths are whitespace-free and infix operators require whitespace on both sides (SYNTAX.md's lexical rule), so `a/b` is only ever the path, `a / b` only ever the division, and the asymmetric spellings satisfy neither grammar.
     assert_eq!("a/b".parse::<Term>().unwrap().to_string(), "a/b");
